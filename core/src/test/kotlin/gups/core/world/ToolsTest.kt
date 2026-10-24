@@ -157,7 +157,7 @@ class ToolsTest {
         f.input(i, "@stats")
         assertContains(f.out(i), "Sessions: local 2.")
         f.input(i, "@deploy")
-        assertContains(f.out(i), "M6.5")
+        assertContains(f.out(i), "This server can't deploy")
         f.input(i, "@snapshot")
         assertContains(f.out(i), "Snapshot failed: this world has no database to back up")
         f.input(i, "@audit item 5")

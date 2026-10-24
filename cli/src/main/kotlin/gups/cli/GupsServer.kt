@@ -8,6 +8,7 @@ import gups.auth.DEFAULT_LADDER
 import gups.auth.LoginLimiter
 import gups.auth.LoginSettings
 import gups.auth.WebLogins
+import gups.auth.applyAccount
 import gups.auth.syncScopes
 import gups.core.Account
 import gups.core.Label
@@ -63,7 +64,19 @@ class ProdOptions(
     val tls: TlsListener? = null,
     /** HTTPS with the web client and WebSocket (M6 design §6). */
     val web: TlsListener? = null,
+    /** The admin port (M6 design §7.1); null for none. */
+    val admin: AdminListener? = null,
+    /** Where deploys fetch from (M6 design §7.2). */
+    val deploy: DeploySettings = DeploySettings(),
+    /** Start even if the working tree isn't at `meta.world_commit` (M6 design §7.2 step 7). */
+    val forceCommit: Boolean = false,
 )
+
+/** Where the admin port listens, and its bearer token (null: only `/healthz` works). */
+class AdminListener(val host: String, val port: Int, val token: String?)
+
+/** `/healthz` fails once the world thread hasn't pulsed for this long (M6 design §7.1). */
+private const val STALL_NANOS = 5_000_000_000L
 
 /** Where telnet over TLS listens, and its certificate. */
 class TlsListener(val host: String, val port: Int, val tls: ServerTls)
@@ -89,6 +102,12 @@ class GupsServer(
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
     private var persistence: SqlitePersistence? = null
+    private var metrics: Metrics? = null
+    private val startedNanos = System.nanoTime()
+
+    @Volatile private var lastPulseNanos = System.nanoTime()
+
+    @Volatile private var lastPulse = 0L
     private val background = Dispatchers.IO.limitedParallelism(BACKGROUND_THREADS).asExecutor()
 
     /** The world's CODEOWNERS as last read (M6 design §4.1). */
@@ -153,9 +172,17 @@ class GupsServer(
             log("--prod needs a database.")
             return false
         }
+        if (prod != null && !Git.available()) {
+            log("--prod needs the git binary for deploys (Q10); install git.")
+            return false
+        }
         val host = StarlarkHost(result, ScriptLimits(), loader)
         val saved = db?.let { SqlitePersistence.open(it, log) }
         persistence = saved
+        if (prod != null && !checkCommit(saved!!)) {
+            saved.close()
+            return false
+        }
         val boot = saved?.boot(protos, fresh) ?: Boot()
         // --prod checks invariants only at world ticks, before capture (M6 design §3.5).
         val config = WorldConfig(
@@ -179,12 +206,25 @@ class GupsServer(
         world.onDiagnostic = { d ->
             val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":")
             log("[${d.kind}] ${if (where.isEmpty()) "" else "$where: "}${d.message}")
+            metrics?.diagnostic(d)
         }
         world.fireOnLoad()
         if (saved != null) world.checkpointNow("boot")
         loop = WorldLoop(world)
         world.background = background
         world.post = loop::submit
+        val m = Metrics(world, saved?.writer) { loop.overruns }
+        metrics = m
+        world.onPulse = { nanos ->
+            lastPulseNanos = System.nanoTime()
+            lastPulse = world.pulse
+            m.pulsed(nanos)
+        }
+        if (prod != null && saved != null && Git(dir.root).isWorkTree()) {
+            world.deploys = Deployer(dir.root, prod.deploy, world, host, saved, loop::submit, { resyncCodeOwners() }, log)
+        } else if (prod != null) {
+            log("warning: ${dir.root} isn't a git working tree, so this server can't deploy.")
+        }
         saved?.accounts?.let { accounts ->
             syncCodeOwners(accounts, packages)
             world.restrictions = accounts.restrictions()
@@ -209,13 +249,85 @@ class GupsServer(
      * Reads CODEOWNERS and replaces every account's builder scope (M6 design §4.1). Runs at
      * startup; deploys (M6.5) will run it again.
      */
-    private fun syncCodeOwners(accounts: gups.core.AccountStore, packages: List<String>) {
+    private fun syncCodeOwners(accounts: gups.core.AccountStore, packages: List<String>): gups.auth.SyncReport {
         val file = CodeOwners.LOCATIONS.map { dir.root.resolve(it) }.firstOrNull { java.nio.file.Files.isRegularFile(it) }
         codeOwners = file?.let { CodeOwners.parse(java.nio.file.Files.readString(it), dir.root.relativize(it).toString()) } ?: CodeOwners.EMPTY
         val report = syncScopes(accounts, codeOwners, packages)
         report.warnings.forEach { log("warning: $it") }
         log(if (file == null) "No CODEOWNERS file; builders have only the packages given with @role." else "CODEOWNERS: ${report.changed.size} accounts' packages changed.")
+        return report
     }
+
+    /** After a deploy: CODEOWNERS again, from the live tree, with the new scopes on characters in play (M6 design §4.1). */
+    private fun resyncCodeOwners() {
+        val accounts = persistence?.accounts ?: return
+        val report = syncCodeOwners(accounts, dir.packages())
+        loop.submit(WorldControlEvent.Task { w -> report.changed.forEach { w.applyAccount(it) } })
+    }
+
+    /**
+     * `--prod` refuses to start unless the working tree is at `meta.world_commit` and has no
+     * uncommitted changes, which would mean someone edited the live world by hand (M6 design
+     * §7.2 step 7). `--force-commit` adopts what is there. A first start records the commit.
+     */
+    private fun checkCommit(saved: SqlitePersistence): Boolean {
+        val git = Git(dir.root)
+        if (!git.isWorkTree()) return true
+        val head = runCatching { git.head() }.getOrElse {
+            log("warning: ${dir.root} has no commits yet, so deploys can't start from it.")
+            return true
+        }
+        val dirty = git.dirtyFiles()
+        val recorded = saved.worldCommit
+        val force = prod?.forceCommit == true
+        if (!force && dirty.isNotEmpty()) {
+            log("The world has changes nobody committed (${dirty.joinToString()}). Commit or discard them, or start with --force-commit.")
+            return false
+        }
+        if (!force && recorded != null && recorded != head) {
+            log("The world is at $head, but the database was saved at $recorded. Check out $recorded, or start with --force-commit to adopt $head.")
+            return false
+        }
+        if (recorded != head) log("Recording world commit $head.")
+        saved.worldCommit = head
+        return true
+    }
+
+    /** `/healthz` and the other admin endpoints (M6 design §7.1). */
+    private val admin = object : gups.net.Admin {
+        override fun health(): Pair<Boolean, Map<String, Any?>> {
+            val writerOk = persistence?.writer?.healthy ?: true
+            val stalled = System.nanoTime() - lastPulseNanos > STALL_NANOS
+            return (writerOk && !stalled) to mapOf(
+                "pulse" to lastPulse,
+                "uptime_s" to (System.nanoTime() - startedNanos) / 1_000_000_000,
+                "writer_healthy" to writerOk,
+            )
+        }
+
+        override fun metrics(): String = metrics?.scrape().orEmpty()
+
+        override fun deploy(commit: String?, progress: (Map<String, Any?>) -> Unit, done: (Map<String, Any?>) -> Unit) {
+            val d = world.deploys ?: return done(mapOf("ok" to false, "commit" to commit, "packages" to emptyList<String>(), "errors" to listOf("This server can't deploy.")))
+            d.start(commit, { progress(mapOf("progress" to it)) }) { o ->
+                done(mapOf("ok" to o.ok, "commit" to o.commit, "packages" to o.packages, "errors" to o.errors))
+            }
+        }
+
+        override fun roster(csv: String): Pair<Int, String> {
+            val accounts = persistence?.accounts ?: return 503 to "This server has no database.\n"
+            val (entries, problems) = gups.auth.Roster.parse(csv)
+            if (problems.isNotEmpty()) return 400 to problems.joinToString("\n", postfix = "\n")
+            val r = AccountService(accounts).importRoster(entries)
+            return 200 to (listOf("login,setup_code") + r.codes.map { (l, c) -> "$l,$c" }).joinToString("\n", postfix = "\n")
+        }
+
+        override fun snapshot(target: Path) {
+            requireNotNull(persistence) { "this server has no database" }.sanitizedCopy(target)
+        }
+    }
+
+    private val adminServer by lazy { prod?.admin?.let { gups.net.AdminServer(admin, it.token, it.host, it.port) } }
 
     /** Runs until [stop]. [ready] gets the first listener's bound port once all are up; [ports] has each. */
     suspend fun run(ready: (Int) -> Unit = {}) = coroutineScope {
@@ -224,7 +336,7 @@ class GupsServer(
             // Shutdown ends with a final checkpoint (SPEC §5.11).
             if (persistence != null) world.checkpointNow("shutdown")
         }
-        ports = listeners.associate { it.transport to it.start() } + listOfNotNull(webServer?.let { "ws" to it.start() })
+        ports = listeners.associate { it.transport to it.start() } + listOfNotNull(webServer?.let { "ws" to it.start() }, adminServer?.let { "admin" to it.start() })
         val certs = prod?.tls?.tls ?: prod?.web?.tls
         // Renewed certificates are picked up without a restart (M6 design §5.1).
         val certChecks = launch(Dispatchers.IO) {
@@ -260,6 +372,7 @@ class GupsServer(
         certChecks.cancel()
         listeners.forEach { it.stop() }
         webServer?.stop()
+        adminServer?.stop()
         persistence?.close()?.let { ok -> if (!ok) log("Some changes could not be saved before shutdown.") }
         stopped.countDown()
     }

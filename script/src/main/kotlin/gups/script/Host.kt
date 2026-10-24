@@ -289,6 +289,38 @@ class StarlarkHost(
             return ReloadResult(false, listOf("Reload of $named failed; the old version stays live.") + next.errors.map { it.render() })
         }
         if (next.prototypes().rooms.isEmpty()) return ReloadResult(false, listOf("Reload of $named failed: the world would have no rooms."))
+        val notes = swapIn(world, next, packages)
+        val head = "Reloaded $named." + if (gone.isNotEmpty()) " Removed ${gone.joinToString(", ") { "//$it" }}." else ""
+        return ReloadResult(true, listOf(head) + notes)
+    }
+
+    /**
+     * Loads every package of [dir], a deploy's staging tree, and checks it as one batch (M6
+     * design §7.2 step 4). It touches no world, so it runs off the world thread.
+     */
+    fun stage(dir: WorldDir): StagedWorld {
+        val packages = dir.packages()
+        val next = ScriptLoader(dir, limits).load(packages)
+        val errors = when {
+            !next.ok -> next.errors.map { it.render() }
+            next.prototypes().rooms.isEmpty() -> listOf("The world would have no rooms.")
+            else -> emptyList()
+        }
+        return StagedWorld(next, packages, errors)
+    }
+
+    /**
+     * Swaps a checked [staged] world in on the world thread (M6 design §7.2 step 5), as a
+     * reload does, and clears the quarantine of the [changed] packages (SPEC §5.10).
+     */
+    fun swap(world: World, staged: StagedWorld, changed: List<String>): ReloadResult {
+        if (!staged.ok) return ReloadResult(false, staged.errors)
+        val notes = swapIn(world, staged.result, changed)
+        return ReloadResult(true, listOf("Deployed ${staged.packages.size} packages.") + notes)
+    }
+
+    /** Swaps [next] in: prototypes, global commands, reconciliation, dead timers, quarantine and new rooms' `on_load`. */
+    private fun swapIn(world: World, next: LoadResult, cleared: List<String>): List<String> {
         scripts = next
         val report = world.applyPrototypes(next.prototypes())
         world.commands.clearGlobals()
@@ -304,10 +336,9 @@ class StarlarkHost(
                 notes += message
             }
         }
-        packages.forEach(::unquarantine)
+        cleared.forEach(::unquarantine)
         for (room in report.created.sortedBy { it.id }) invokeHook(world, room, HookName.ON_LOAD, HookContext(room = room))
-        val head = "Reloaded $named." + if (gone.isNotEmpty()) " Removed ${gone.joinToString(", ") { "//$it" }}." else ""
-        return ReloadResult(true, listOf(head) + notes)
+        return notes
     }
 
     // ---- migrate (SPEC §3.4) --------------------------------------------------------------------
@@ -507,4 +538,9 @@ internal class ScriptThink(private val ref: HookRef, private val pkg: String) : 
 /** A skill's custom `resolve(ctx)` (SPEC §4.3). */
 internal class ScriptResolve(private val ref: HookRef, private val pkg: String) : SkillResolver {
     override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?) = hostOf(world).resolve(world, caster, target, item, ref, pkg)
+}
+
+/** A world loaded from a deploy's staging tree (M6 design §7.2): [ok] when every package loaded. */
+class StagedWorld internal constructor(internal val result: LoadResult, val packages: List<String>, val errors: List<String>) {
+    val ok: Boolean get() = errors.isEmpty()
 }

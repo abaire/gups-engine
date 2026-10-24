@@ -11,6 +11,7 @@ sqlite = "3.53.4.0"
 bouncycastle = "1.83"
 netty = "4.2.17.Final"
 selenium = "4.49.0"
+micrometer = "1.17.0"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -30,6 +31,8 @@ starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark"
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
+# Prometheus metrics on the admin port (SPEC §4.14).
+micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 # The headless browser test of the web client, Linux CI only (M6 design §6.3).
 selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }

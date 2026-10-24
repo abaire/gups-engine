@@ -1,0 +1,3 @@
+# Only the installed distribution goes into the image (docker/Dockerfile).
+*
+!cli/build/install/gups/

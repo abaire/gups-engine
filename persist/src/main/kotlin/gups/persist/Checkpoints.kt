@@ -106,8 +106,8 @@ class CheckpointWriter(
     @Volatile var committed: Long = 0
         private set
 
-    /** Called after each commit with the committed batch, on the writer thread. */
-    @Volatile var onCommit: ((Batch) -> Unit)? = null
+    /** Called after each commit with the committed batch and how long it took in nanoseconds, on the writer thread. */
+    @Volatile var onCommit: ((Batch, Long) -> Unit)? = null
 
     private val thread = Thread(::loop, "gups-checkpoint-writer").apply {
         isDaemon = true
@@ -159,6 +159,7 @@ class CheckpointWriter(
                 if (queue.isEmpty()) return
                 queue.first().also { inFlight = it }
             }
+            val started = System.nanoTime()
             try {
                 write(b)
                 lock.withLock {
@@ -170,7 +171,7 @@ class CheckpointWriter(
                 healthy = true
                 lastError = null
                 backoff = 50L
-                onCommit?.invoke(b)
+                onCommit?.invoke(b, System.nanoTime() - started)
             } catch (e: Exception) {
                 lock.withLock { inFlight = null }
                 if (healthy) log("checkpoint write failed, will retry: $e")

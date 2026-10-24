@@ -94,7 +94,22 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M6.4 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §6): the web client.
+M6.5 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §7): operations.
+
+- **Admin port** (default `127.0.0.1:9090`, bearer token from `admin_token_file`):
+  - `/healthz` and Prometheus `/metrics`.
+  - `/deploy`, `/roster` for `gups import-roster --admin`, and a sanitized `/snapshot`.
+- **Deploys:** `gups deploy [--commit SHA]` (from CI) or `@deploy` fetches the deploy branch.
+  The commit is checked and loaded off the world thread, and only then swapped in, so a bad
+  commit changes nothing. Afterwards the server's working tree is moved to it, and
+  CODEOWNERS is re-read. `--prod` won't start on a working tree that differs from the
+  commit the database was saved at, unless `--force-commit`.
+- **Images:**
+  - `./gradlew :cli:jlinkArchive` builds a self-contained `gups` with its own runtime.
+  - CI builds one for every platform and attaches them to tagged releases.
+  - Tags also publish `ghcr.io/<owner>/gups:<version>`, built from `docker/Dockerfile`.
+
+M6.4: the web client.
 
 - **HTTPS:** `--https` serves the bundled client, with the same certificate as telnet over
   TLS. The client is plain JavaScript modules with no build step. It shows the game text in
@@ -168,7 +183,7 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6.5–M6.6: the admin port, metrics and deploys, and the course world CI gates.
+- M6.6: the course world template and its CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
-`lint`, `docs` and `deploy` still exit with status 3 ("not implemented").
+`lint` and `docs` still exit with status 3 ("not implemented").

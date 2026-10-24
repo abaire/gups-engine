@@ -55,7 +55,14 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     private var held: Batch? = null
     private var alerted = false
 
+    /**
+     * The course repository commit the live world was loaded from (`meta.world_commit`, M6
+     * design §7.2), saved with every checkpoint. Set by deploys and at first startup.
+     */
+    @Volatile var worldCommit: String? = null
+
     init {
+        worldCommit = db.meta()["world_commit"]
         db.entityRows().forEach { entityRows[it.id] = it }
         db.playerRows().forEach { playerRows[it.id] = it }
         zoneRows.putAll(db.zoneStates())
@@ -187,6 +194,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         b.meta["pulse"] = world.pulse.toString()
         b.meta["next_entity_id"] = nextId.toString()
         b.meta["next_handle"] = nextHandle.toString()
+        worldCommit?.let { b.meta["world_commit"] = it }
         val excluded = world.checkpointExclusions
         for (e in world.allEntities) {
             // Debug spawns are never saved (M6 design §4.2).
@@ -281,9 +289,18 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     override val backlog: Int get() = writer.backlog
 
     /** Waits for what is queued, then takes a `manual` snapshot (`@snapshot`). */
-    override fun backup(): String {
+    override fun backup(): String = backup(Backups.Kind.MANUAL).toString()
+
+    /** Waits for what is queued, then takes a snapshot of [kind], such as `predeploy` (M6 design §7.2). Blocks. */
+    fun backup(kind: Backups.Kind): Path {
         writer.flush()
-        return Backups(db).snapshot(Backups.Kind.MANUAL).toString()
+        return Backups(db).snapshot(kind)
+    }
+
+    /** A sanitized copy of the database at [target], for the CI migration check (M6 design §7.1, §8.4). Blocks. */
+    fun sanitizedCopy(target: Path): Path {
+        writer.flush()
+        return db.sanitizedCopy(target)
     }
 
     private val reads = lazy { readOnlyConnection(db.file) }

@@ -58,9 +58,10 @@ class CommandsTest {
     }
 
     @Test
-    fun `deploy requires a commit`() {
-        assertEquals(1, gupsCommand().test("deploy").statusCode)
-        assertEquals(EXIT_NOT_IMPLEMENTED, gupsCommand().test("deploy --commit abc123").statusCode)
+    fun `deploy needs the admin token`() {
+        val noToken = gupsCommand().test("deploy --commit abc123")
+        assertEquals(1, noToken.statusCode)
+        assertContains(noToken.stderr, "needs its token")
     }
 
     @Test

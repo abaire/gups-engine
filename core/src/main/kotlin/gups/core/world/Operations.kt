@@ -186,3 +186,14 @@ internal fun World.shutdownWarnings() {
 }
 
 private val SHUTDOWN_WARNINGS = setOf(60L, 30L, 10L, 5L)
+
+/**
+ * Starts a production deploy (M6 design §7.2), implemented by the server. [start] returns at
+ * once; [progress] gets each step's line off the world thread, and [done] the outcome.
+ */
+fun interface Deploys {
+    fun start(commit: String?, progress: (String) -> Unit, done: (DeployOutcome) -> Unit)
+}
+
+/** How a deploy ended (M6 design §7.1 `POST /deploy`). */
+data class DeployOutcome(val ok: Boolean, val commit: String?, val packages: List<String>, val errors: List<String>)

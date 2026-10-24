@@ -49,8 +49,10 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
         is WorldControlEvent.Disconnect -> disconnect(event.session)
         is WorldControlEvent.Shutdown -> scheduleShutdown(event.delayPulses, event.reason)
         is WorldControlEvent.Reload -> reload(event.packages)
-        // Deploy needs the deploy pipeline (M6).
-        is WorldControlEvent.Deploy -> diagnose("control", "$event is not supported by this engine build")
+        is WorldControlEvent.Deploy -> {
+            val d = deploys ?: return diagnose("control", "$event: this server can't deploy")
+            d.start(event.commit.ifEmpty { null }, {}) {}
+        }
         is WorldControlEvent.AuthResult -> {
             // A session that closed meanwhile simply drops its result.
             val s = sessions[event.session] ?: return

@@ -104,6 +104,7 @@ class WorldLoop(
             val skipped = timer.pulseFinished(finished)
             overruns += skipped
             world.pulseStats.record(finished - started, finished - started > pulseNanos)
+            world.onPulse?.invoke(finished - started)
             world.checkOverruns()
         }
     }

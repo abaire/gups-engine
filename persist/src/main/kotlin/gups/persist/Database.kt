@@ -302,6 +302,31 @@ class Database private constructor(val file: Path, private val conn: Connection)
         DriverManager.getConnection(url(file)).use { c -> c.createStatement().use { it.executeUpdate("backup to '${target.absolutePathString().replace("'", "''")}'") } }
     }
 
+    /**
+     * A copy of this database at [target] with nothing personal in it (M6 design §8.4, D-163):
+     * `accounts`, `session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events`
+     * emptied, characters renamed `Player1`, `Player2`, ... by id and detached from accounts.
+     */
+    fun sanitizedCopy(target: Path): Path {
+        Files.deleteIfExists(target)
+        backupTo(target)
+        DriverManager.getConnection(url(target)).use { c ->
+            c.autoCommit = false
+            c.createStatement().use { st ->
+                for (t in listOf("accounts", "session_tokens", "invites", "restrictions", "diagnostics", "item_events")) st.executeUpdate("DELETE FROM $t")
+                // Two steps, so the new names never collide with old ones under UNIQUE.
+                st.executeUpdate("UPDATE players SET name = '#' || id, account_id = NULL")
+                st.executeUpdate(
+                    "UPDATE players SET name = 'Player' || (SELECT COUNT(*) FROM players p WHERE p.id <= players.id)",
+                )
+            }
+            c.commit()
+            c.autoCommit = true
+            c.createStatement().use { it.execute("VACUUM") }
+        }
+        return target
+    }
+
     override fun close() = conn.close()
 
     private fun <T> query(sql: String, row: (java.sql.ResultSet) -> T): List<T> = conn.createStatement().use { st ->

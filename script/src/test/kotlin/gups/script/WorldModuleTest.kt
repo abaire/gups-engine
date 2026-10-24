@@ -58,7 +58,6 @@ class WorldModuleTest {
         val (c, error) = ServerConfig.read(dir.resolve("server.gups"))
         assertNull(error)
         assertEquals(ServerConfig(world = "/srv/gups/world", telnet = ":4000", telnetTls = ":4443", openSignup = true, maxCharacters = 3, reservedNames = listOf("Gandalf")), c)
-        assertEquals(emptyList(), c.unused())
         assertEquals(ServerConfig(), ServerConfig.read(dir.resolve("empty.gups")).first)
         assertContains(assertNotNull(ServerConfig.read(dir.resolve("bad.gups")).second).message, "at least 1")
         assertContains(assertNotNull(ServerConfig.read(dir.resolve("twice.gups")).second).message, "more than once")

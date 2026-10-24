@@ -871,8 +871,8 @@ when it logs in.
 ### D-097 Backups — `open`
 - **Naming:** snapshots are `<kind>-<UTC yyyyMMdd-HHmmss>.db` in `backups/` next to the
   database.
-- **Kinds:** `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup`, never pruned)
-  and `predeploy` (for M6).
+- **Kinds:** `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup` and `@snapshot`,
+  never pruned) and `predeploy` (each deploy, D-162, never pruned).
 - **Schedule:** the server checks every 5 minutes whether the newest snapshot of a kind is
   older than its period, and also once at startup.
 - **Restore:** `gups restore FILE` replaces the database with SQLite's restore API. The
@@ -1310,9 +1310,10 @@ canonical form. They are random enough that an unsalted fast hash is enough.
   standard error. `--days N` sets the codes' lifetime.
 - **Existing accounts** without a password get no new code, so a re-import stays idempotent;
   `@role <account> reset` issues a fresh one.
-- **Offline only:** `gups import-roster` and `gups invite` write the database directly. With
-  the admin port (M6.5) they will go through a running server instead; until then, running
-  them beside a server is safe because SQLite serializes the writes (D-128).
+- **Where it runs:** `gups import-roster --admin ADDR` goes through a running server's admin
+  port (D-160); without `--admin` it and `gups invite` write the database directly. Running
+  the offline tools beside a server is still safe, because SQLite serializes the writes
+  (D-128).
 *Code:* `Roster`, `AccountService.importRoster`, `ImportRoster`, `Invite`.
 
 ### D-135 `--prod` and the server configuration in M6.1 — `open`
@@ -1540,8 +1541,8 @@ restart.
 with `--telnet-tls`/`telnet_tls`, and HTTPS with the web client with `--https`/`https`. At
 least one is required. Both TLS listeners use one certificate: `--tls-cert` and `--tls-key`
 (or `tls_cert` and `tls_key`), or `--self-signed`, which needs a TLS listener.
-`GupsServer.ports` reports the bound port per transport (`telnet`, `tls`, `ws`), and the
-startup message lists each. `--dev` stays raw telnet on 127.0.0.1.
+`GupsServer.ports` reports the bound port per transport (`telnet`, `tls`, `ws`, and `admin`
+for the admin port, D-160), and the startup message lists each. `--dev` stays raw telnet on 127.0.0.1.
 *Code:* `Serve.prodServer`, `GupsServer`, `ProdOptions`, `TlsListener`.
 
 ## WebSocket and the web client (§4.10, §5.12; M6 design §6) — M6.4
@@ -1634,3 +1635,116 @@ signs up without a code, even with `open_signup`.
   against the address, as over telnet (D-132), and a locked-out address gets 429 without its
   code being looked at.
 *Code:* `WebAccounts.checkCode`, `signup`, `WebLogins`, `WebServer.checkCode`, `signup`.
+
+## Operations (§4.14, §5.10; M6 design §7) — M6.5
+
+### D-160 The admin port — `open`
+- **Listener:** plain HTTP on Ktor's Netty engine, always on in `--prod`, at `--admin`/`admin`
+  (default `127.0.0.1:9090`).
+- **Token:** read from `--admin-token-file`, `admin_token_file` or the file
+  `GUPS_ADMIN_TOKEN_FILE` names, trimmed. Without one the server starts with a warning, and
+  every endpoint but `/healthz` answers 403.
+- **Checking:** a missing or wrong bearer token gets 401 with `WWW-Authenticate: Bearer`.
+  Tokens are compared as SHA-256 digests with `MessageDigest.isEqual`, so neither content nor
+  length leaks through timing.
+- **`/healthz`:** `{"pulse", "uptime_s", "writer_healthy"}`, where `pulse` is the last
+  finished pulse. It answers 503 when no pulse has finished for 5 s or the writer is
+  unhealthy.
+- **`/deploy`:** answers `application/x-ndjson`: one `{"progress": line}` per step, then
+  `{"ok", "commit", "packages", "errors"}`.
+- **`/roster`:** takes the CSV as the body and answers the `login,setup_code` lines (200) or
+  the problems (400). Setup codes last the default 7 days, so `import-roster --admin` refuses
+  `--days`.
+- **`/snapshot`:** a sanitized copy of the database (D-163), as a download.
+- **CLI:** `gups deploy [--commit SHA]` and `gups import-roster --admin ADDR` take
+  `--admin-token-file` or `GUPS_ADMIN_TOKEN_FILE`. `gups deploy` defaults to
+  `127.0.0.1:9090`, prints each progress line, and exits 1 unless the deploy succeeded.
+*Code:* `AdminServer`, `GupsServer.admin`, `AdminClient`, `Deploy`, `ImportRoster`.
+
+### D-161 Metrics — `open`
+- **Library:** Micrometer's Prometheus registry. Its naming gives §4.14's names: the
+  `gups.pulse.duration` timer becomes `gups_pulse_duration_seconds` and so on.
+- **Histograms:** pulse and checkpoint durations publish percentile histograms. Pulse
+  buckets run from 0.1 ms to 2 s.
+- **Threads:** the world loop records each pulse's duration. Every second of game time the
+  world thread publishes a snapshot for the gauges, so a scrape never reads the world:
+  quarantined packages, simulated rooms (every room when the bubble is off), simulated
+  entities, sessions by transport, and script steps by package.
+- **Series:** `gups_sessions` counts sessions playing a character; logins in progress don't
+  count. Its `telnet`, `tls`, `ws` and `local` series exist from the start.
+  `gups_script_steps_total` and `gups_script_errors_total{kind="script_error"}` are
+  registered for every loaded package at startup, so they exist before any script runs.
+- **Meanings:**
+  - `gups_pulse_overruns_total` counts skipped pulse boundaries.
+  - `gups_script_errors_total` counts script-kind diagnostics (`script_error`, `step_limit`,
+    `wall_clock`, `alloc_limit`, `missing`).
+  - `gups_checkpoint_entities` is the rows in the last committed batch.
+  - `gups_checkpoint_duration_seconds` times every commit, account batches included.
+*Code:* `Metrics`, `World.onPulse`, `CheckpointWriter.onCommit`.
+
+### D-162 The deploy pipeline — `open`
+- **Running:** one deploy at a time, each on a thread of its own; a second is refused at once.
+  It runs only in `--prod` when the world is a git working tree (otherwise `World.deploys`
+  is null and `@deploy` says why). `@deploy`, `POST /deploy` and the old
+  `WorldControlEvent.Deploy` all start it.
+- **Fetch:** `git fetch --no-tags <repository or origin>
+  +refs/heads/<branch>:refs/remotes/gups-deploy/<branch>`, with the deploy key through
+  `GIT_SSH_COMMAND` (`IdentitiesOnly`, `StrictHostKeyChecking=accept-new`). Only that branch is
+  fetched, so a commit the server doesn't know is reported as not on the branch.
+- **Checks:** before anything is staged, the deploy is refused if:
+  - the commit isn't an ancestor of the fetched tip;
+  - the live tree has uncommitted changes to tracked files;
+  - `MODULE.gups` differs between `meta.world_commit` (or `HEAD` if none) and the commit.
+- **Changed packages:** each changed file is charged to the deepest package directory, old or
+  new, that contains it.
+- **Staging:** a `predeploy` backup, then `git worktree add --detach` into a temporary
+  directory. `StarlarkHost.stage` loads every package there off the world thread, and any
+  error refuses the whole deploy. The worktree is always removed afterwards.
+- **Swapping:** a `WorldControlEvent.Task` runs `StarlarkHost.swap` on the world thread. This
+  is the reload's swap, so prototypes swap, live instances reconcile (D-080), and the changed
+  packages leave quarantine. M6 design §2.2's `DeployStaged` event is this `Task` (D-142).
+- **After the swap:** `git checkout --detach` moves the live tree, and then:
+  - `meta.world_commit` is set, saved with every checkpoint;
+  - CODEOWNERS is synced from the live tree, with new scopes applied to characters in play;
+  - a routine checkpoint is taken, and online instructors get an alert.
+- **Failure:** the world is unchanged. The errors go to the response, to a `deploy`
+  diagnostic (so `@errors`), and to an instructor alert.
+*Code:* `Deployer`, `Git`, `StarlarkHost.stage`, `swap`.
+
+### D-163 The sanitized snapshot — `open`
+The copy is made with SQLite's backup API after the writer catches up. Then `accounts`,
+`session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events` are emptied,
+characters are renamed `Player1`, `Player2`, ... in id order and detached from accounts, and
+the file is vacuumed. World rows, zone states, characters' payloads and their items are kept,
+which is what the migration check (M6 design §8.4) needs.
+*Code:* `Database.sanitizedCopy`, `SqlitePersistence.sanitizedCopy`.
+
+### D-164 Release images — `open`
+- **jlink images:** `:cli:jlinkImage` builds `build/image/gups`: a jlink runtime, the jars and
+  a `bin/gups` launcher. The runtime's modules are what jdeps finds in the plain jars, plus
+  the non-static `requires` of the modular jars' descriptors (jdeps can't resolve Netty's
+  optional requirements), plus `jdk.crypto.ec`, `jdk.naming.dns`, `jdk.unsupported`,
+  `java.management` and `java.naming`, which are loaded reflectively. The list is written to
+  `modules.txt`.
+- **Archive:** `:cli:jlinkArchive` packs `gups-<version>-<platform>.tar.gz`. Every CI platform
+  builds it and smoke-tests it with `gups test`; a `v*` tag attaches the archives to the
+  GitHub release.
+- **OCI image:** `docker/Dockerfile` is `eclipse-temurin:21-jre-noble` with `git`,
+  `openssh-client` and `curl` added, and `installDist` copied in. Because the jars are the
+  same everywhere, one build makes both `linux/amd64` and `linux/arm64`.
+  - It declares the volumes `/world`, `/data` and `/etc/gups`, and marks `/world` a git
+    `safe.directory`.
+  - It runs `gups serve --prod --config /etc/gups/server.gups`, with a healthcheck that curls
+    `/healthz`.
+  - A `v*` tag pushes it as `ghcr.io/<owner>/gups:<version>`, the tag without its `v`.
+*Code:* `cli/build.gradle.kts`, `docker/Dockerfile`, `.github/workflows/ci.yml`.
+
+### D-165 Starting `--prod` against its commit — `open`
+`--prod` refuses to start without a `git` binary (Q10). When the world is a git working tree
+it also refuses if tracked files have uncommitted changes, or if `HEAD` isn't the
+`meta.world_commit` the database was saved at. `--force-commit` adopts what is there. The
+first start records `HEAD`. A world that isn't a working tree starts with a warning and can't
+deploy, as can one with no commits. The deploy settings `--repository`, `--deploy-branch`
+and `--deploy-key-file` (or `GUPS_DEPLOY_KEY_FILE`) have configuration keys of the same
+names.
+*Code:* `GupsServer.checkCommit`, `Serve.prodServer`.

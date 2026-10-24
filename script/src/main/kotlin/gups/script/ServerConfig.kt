@@ -33,14 +33,6 @@ data class ServerConfig(
     val restrictionLadder: List<String> = listOf("1d", "7d", "permanent"),
     val reservedNames: List<String> = emptyList(),
 ) {
-    /** Settings that are set but that this engine build doesn't use yet, with the stage that brings them (D-135). */
-    fun unused(): List<String> = buildList {
-        if (admin != null) add("admin (M6.5)")
-        if (adminTokenFile != null) add("admin_token_file (M6.5)")
-        if (repository != null) add("repository (M6.5)")
-        if (deployKeyFile != null) add("deploy_key_file (M6.5)")
-    }
-
     companion object {
         /** Reads [path]. Errors are [LoadError]s naming the file. */
         fun read(path: Path): Pair<ServerConfig, LoadError?> {

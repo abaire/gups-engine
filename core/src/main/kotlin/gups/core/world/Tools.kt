@@ -38,7 +38,7 @@ internal object Tools {
         FastCommand("@errors", role = Role.BUILDER) { errors(it) },
         // Instructors.
         FastCommand("@reload", role = Role.INSTRUCTOR) { reload(it) },
-        FastCommand("@deploy", role = Role.INSTRUCTOR) { it.world.send(it.actor, "Deploys arrive with the deploy pipeline (M6.5).") },
+        FastCommand("@deploy", role = Role.INSTRUCTOR) { deploy(it) },
         FastCommand("@quarantine", role = Role.INSTRUCTOR) { quarantine(it, on = true) },
         FastCommand("@unquarantine", role = Role.INSTRUCTOR) { quarantine(it, on = false) },
         FastCommand("@bubble", role = Role.INSTRUCTOR) { bubble(it) },
@@ -164,6 +164,19 @@ internal object Tools {
         packages.firstOrNull { known.isNotEmpty() && it !in known }?.let { return w.send(c.actor, "There is no package //$it.") }
         w.send(c.actor, "Reloading ${packages.joinToString(", ") { "//$it" }}.")
         w.reload(packages)
+    }
+
+    /** `@deploy [commit]` (M6 design §4.3, §7.2): progress is reported in game as it happens. */
+    private fun deploy(c: CommandCall) {
+        val w = c.world
+        val p = c.actor as? Player ?: return
+        val d = w.deploys ?: return w.send(p, "This server can't deploy: it needs --prod, git, and a world that is a git working tree.")
+        val commit = c.args.trim().ifEmpty { null }
+        val tell = { line: String -> w.post?.invoke(gups.core.WorldControlEvent.Task { it.send(p, "[deploy] $line") }) ?: Unit }
+        w.send(p, "Deploying ${commit ?: "the tip of the deploy branch"}...")
+        d.start(commit, tell) { o ->
+            tell(if (o.ok) "Deployed ${o.commit}: ${o.packages.joinToString().ifEmpty { "no packages changed" }}." else "The deploy failed; nothing changed.\n" + o.errors.joinToString("\n"))
+        }
     }
 
     private fun quarantine(c: CommandCall, on: Boolean) {

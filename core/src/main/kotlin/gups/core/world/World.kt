@@ -150,6 +150,12 @@ class World(
     /** Input lines waiting for the world thread, as the world loop counts them. */
     var queueDepth: () -> Int = { 0 }
 
+    /** Called by the world loop after each pulse with its duration in nanoseconds, for metrics (M6 design §7.1). */
+    var onPulse: ((Long) -> Unit)? = null
+
+    /** Production deploys (M6 design §7.2), when the server can run them. */
+    var deploys: Deploys? = null
+
     // Alert rate limits, the engine-error window and step samples (M6 design §4.5).
     internal val alertTimes = HashMap<String, Long>()
     internal val ownerAlertTimes = HashMap<String, Long>()
