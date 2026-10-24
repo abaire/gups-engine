@@ -1,0 +1,13 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="gups --help" type="JetRunConfigurationType" folderName="gups CLI">
+    <option name="MAIN_CLASS_NAME" value="gups.cli.MainKt" />
+    <module name="gups-engine.cli.main" />
+    <option name="PROGRAM_PARAMETERS" value="--help" />
+    <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

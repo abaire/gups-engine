@@ -1,0 +1,259 @@
+package gups.core.model
+
+import gups.core.AttrValue
+import gups.core.EntityId
+import gups.core.HookRef
+import gups.core.Label
+import gups.core.SessionId
+import gups.core.world.Action
+import gups.core.world.SpawnState
+import gups.core.world.TickCommand
+import java.util.TreeMap
+
+// Live entities (SPEC §3.3). Static data is read through `proto`; everything mutable lives
+// on the instance. Only the world mutates these, on the world thread.
+
+sealed class Entity(val id: EntityId, val protoLabel: Label) {
+    var protoVersion: Int = 1
+    val customAttributes: MutableMap<String, AttrValue> = linkedMapOf()
+    val timers: MutableList<ScriptTimer> = mutableListOf()
+    val activeReasons: MutableSet<String> = linkedSetOf()
+    val anchorReasons: MutableSet<String> = linkedSetOf()
+    var dirty: Boolean = true
+
+    abstract val name: String
+
+    override fun toString(): String = "$name$id"
+}
+
+class Door(proto: DoorProto) {
+    var state: DoorState = proto.state
+    val key: Label? = proto.key
+    val openBlocks: Set<Channel> = proto.openBlocks
+    val closedBlocks: Set<Channel> = proto.closedBlocks
+
+    val blocks: Set<Channel> get() = if (state == DoorState.OPEN) openBlocks else closedBlocks
+}
+
+class Exit(proto: ExitProto) {
+    val direction: Direction = proto.direction
+    val to: Label = proto.to
+    val entryIndex: Int = proto.entryIndex
+    var blocks: Set<Channel> = proto.blocks
+    val door: Door? = proto.door?.let(::Door)
+    val oneWay: Boolean = proto.oneWay
+
+    /** The exit's own blocks plus the door's set for its current state. */
+    val effectiveBlocks: Set<Channel> get() = door?.let { blocks + it.blocks } ?: blocks
+
+    /** Closed and locked doors cannot be walked through. */
+    val passable: Boolean get() = door == null || door.state == DoorState.OPEN
+}
+
+class Room(id: EntityId, val proto: RoomProto) : Entity(id, proto.label) {
+    init {
+        protoVersion = proto.version
+    }
+
+    override val name: String get() = proto.name
+    val label: Label get() = proto.label
+    val trackSize: Int get() = proto.size.slots
+    val regions: Set<String> get() = proto.regions
+    val exits: Map<Direction, Exit> = proto.exits.associateTo(LinkedHashMap()) { it.direction to Exit(it) }
+
+    internal val actorIndex = TreeMap<EntityId, Actor>()
+    internal val itemIndex = TreeMap<EntityId, Item>()
+
+    /** Actors here, ascending [EntityId]. */
+    val actors: List<Actor> get() = actorIndex.values.toList()
+
+    /** Items on the ground here, ascending [EntityId]. */
+    val items: List<Item> get() = itemIndex.values.toList()
+
+    fun hasFlag(flag: String): Boolean = flag in proto.flags
+}
+
+/** A timed buff or debuff (SPEC §3.3). */
+class Affect(
+    val id: Long,
+    val name: String,
+    val source: EntityId?,
+    val appliedAt: Long,
+    val expiresAt: Long,
+    val statDeltas: Map<String, Int> = emptyMap(),
+    val flags: Set<String> = emptySet(),
+    val tickEvery: Int? = null,
+    val onTick: HookRef? = null,
+    val onExpire: HookRef? = null,
+    val expireMessage: String = "",
+)
+
+/** A pending script callback (SPEC §3.3). Exactly one of [due] and [remaining] is set. */
+class ScriptTimer(
+    val id: Long,
+    val fn: HookRef,
+    val args: Map<String, AttrValue>,
+    var due: Long?,
+    var remaining: Int? = null,
+)
+
+/** An action in its warmup (SPEC §5.3). */
+class CastState(val action: Action, val startedAt: Long, val endsAt: Long)
+
+/** A tick-lane command waiting in an actor's queue. Parsed into an [Action] when popped. */
+class QueuedAction(val command: TickCommand, val verb: String, val args: String) {
+    override fun toString(): String = "$verb $args".trim()
+}
+
+sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int) : Entity(id, protoLabel) {
+    abstract val keywords: List<String>
+    abstract val isPlayer: Boolean
+
+    var room: Room = room
+        internal set
+    var trackIndex: Int = trackIndex
+        internal set
+
+    val baseStats: MutableMap<String, Int> = LinkedHashMap(DEFAULT_STATS)
+    var hp: Int = 1
+    var maxHp: Int = 1
+    var mana: Int = 0
+    var maxMana: Int = 0
+    var move: Int = 0
+    var maxMove: Int = 0
+    var level: Int = 1
+    var xp: Long = 0
+    var armor: Int = 0
+    val resists: MutableMap<DamageType, Int> = linkedMapOf()
+    val skills: MutableMap<Label, Int> = linkedMapOf()
+    val affects: MutableList<Affect> = mutableListOf()
+
+    val actionQueue: ArrayDeque<QueuedAction> = ArrayDeque()
+    var waitState: Int = 0
+    var casting: CastState? = null
+    val fighting: java.util.TreeSet<EntityId> = java.util.TreeSet()
+    var primaryTarget: EntityId? = null
+
+    /** This round's initiative, or null if the actor was not engaged when it was rolled. */
+    var initiative: Int? = null
+        internal set
+
+    /** Who last damaged this actor; receives the kill. */
+    var lastAttacker: EntityId? = null
+        internal set
+
+    /** False once the actor has left the world (death of a mob, quit). */
+    var inWorld: Boolean = false
+        internal set
+
+    internal val inventoryIndex = TreeMap<EntityId, Item>()
+    internal val equipmentIndex = LinkedHashMap<String, Item>()
+
+    val inventory: List<Item> get() = inventoryIndex.values.toList()
+    val equipment: Map<String, Item> get() = LinkedHashMap(equipmentIndex)
+
+    fun equipped(slot: String): Item? = equipmentIndex[slot]
+
+    /** Effective attribute: base plus affect and equipment deltas. */
+    fun stat(name: String): Int =
+        (baseStats[name] ?: 0) +
+            affects.sumOf { it.statDeltas[name] ?: 0 } +
+            equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 }
+
+    fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
+
+    val isStunned: Boolean get() = hasFlag("stunned")
+    val isEngaged: Boolean get() = fighting.isNotEmpty()
+    val isCasting: Boolean get() = casting != null
+    val isIdle: Boolean get() = casting == null && waitState == 0 && actionQueue.isEmpty()
+
+    fun matches(keyword: String): Boolean {
+        val k = keyword.lowercase()
+        return keywords.any { it.lowercase().startsWith(k) }
+    }
+}
+
+class Player(
+    id: EntityId,
+    override val name: String,
+    room: Room,
+    trackIndex: Int,
+    var recallRoom: Label,
+    val accountId: Long? = null,
+) : Actor(id, Prototypes.PLAYER, room, trackIndex) {
+    override val keywords: List<String> = listOf(name.lowercase())
+    override val isPlayer: Boolean get() = true
+
+    /** Null while link-dead. */
+    var session: SessionId? = null
+        internal set
+    var linkDeadSince: Long? = null
+        internal set
+    var lastInputPulse: Long = 0
+        internal set
+
+    /** Instructors are exempt from the idle auto-quit (SPEC §5.12). */
+    var idleExempt: Boolean = false
+}
+
+class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Actor(id, proto.label, room, trackIndex) {
+    init {
+        protoVersion = proto.version
+    }
+
+    override val name: String get() = proto.name
+    override val keywords: List<String> get() = proto.keywords
+    override val isPlayer: Boolean get() = false
+
+    var thinkEvery: Int = proto.thinkEvery
+    var lastThink: Long = Long.MIN_VALUE / 2
+        internal set
+    val homeRoom: Label = room.label
+    var dormantRecovery: DormantRecovery = proto.dormantRecovery
+
+    internal var spawnedBy: SpawnState? = null
+}
+
+sealed interface ItemLocation {
+    data class InRoom(val room: EntityId, val trackIndex: Int) : ItemLocation
+    data class Carried(val actor: EntityId) : ItemLocation
+    data class Equipped(val actor: EntityId, val slot: String) : ItemLocation
+    data class Contained(val container: EntityId) : ItemLocation
+}
+
+class ContainerState(proto: ContainerProto) {
+    val capacity: Int = proto.capacity
+    val maxWeight: Int = proto.maxWeight
+    var state: DoorState = proto.state
+    val key: Label? = proto.key
+}
+
+class Item(id: EntityId, var proto: ItemProto, location: ItemLocation, var count: Int = 1) : Entity(id, proto.label) {
+    init {
+        protoVersion = proto.version
+    }
+
+    /** Changed only through the world's item verbs, which keep every index consistent. */
+    var location: ItemLocation = location
+        internal set
+
+    var nameOverride: String? = null
+    override val name: String get() = nameOverride ?: proto.name
+    val keywords: List<String> get() = proto.keywords
+    val kind: String get() = proto.kind
+    val range: Band get() = proto.range
+    val weight: Int get() = proto.weight * count + contentsIndex.values.sumOf { it.weight }
+    val container: ContainerState? = proto.container?.let(::ContainerState)
+    var decayAt: Long? = null
+
+    /** Builder-spawned items are never persisted. */
+    var debug: Boolean = false
+
+    internal val contentsIndex = TreeMap<EntityId, Item>()
+    val contents: List<Item> get() = contentsIndex.values.toList()
+
+    fun matches(keyword: String): Boolean {
+        val k = keyword.lowercase()
+        return keywords.any { it.lowercase().startsWith(k) }
+    }
+}
