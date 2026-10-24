@@ -12,6 +12,7 @@ bouncycastle = "1.83"
 netty = "4.2.17.Final"
 selenium = "4.49.0"
 micrometer = "1.17.0"
+slf4j = "2.0.19"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -33,6 +34,8 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 # Prometheus metrics on the admin port (SPEC §4.14).
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
+# Libraries such as sqlite-jdbc log through SLF4J; the CLI discards it rather than warn about a missing provider.
+slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 # The headless browser test of the web client, Linux CI only (M6 design §6.3).
 selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }

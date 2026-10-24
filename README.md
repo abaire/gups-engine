@@ -49,6 +49,8 @@ work:
 ```bash
 cli/build/install/gups/bin/gups serve --dev --world template-world   # then: telnet localhost 4000
 cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
+cli/build/install/gups/bin/gups lint --world template-world //...
+cli/build/install/gups/bin/gups fuzz --world template-world --pulses 1000 //zones/tutorial/...
 ```
 
 To try the shared-server login locally, import a roster, then start `--prod` on raw telnet:
@@ -93,6 +95,19 @@ metadata), the `rules` package, the shared `lib` package, and `zones/tutorial`, 
 commented reference zone whose tests run on every engine commit.
 
 ## Status
+
+M6.6 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §8): course world template and CI gates.
+
+- **Static checks:** `gups lint [--base REF] <patterns>` runs static checks on rooms (dead ends, reverse exits,
+  door symmetry), schema version bumps since `--base` (presentation and code exempt per Q13),
+  attribute keys written but never read, catalog hook names, and regions.
+- **Fuzz walker:** `gups fuzz [--pulses N] [--seed S] <patterns>` runs headless with fixed seeds,
+  simulating bot players that explore zones, and asserts zero forbidden diagnostics or invariant
+  violations. Fails with exact rerun command and repro bundle.
+- **Migration check:** `gups snapshot --sanitized --out FILE [--admin ADDR]` and
+  `gups migrate-check --snapshot FILE` verify PR compatibility against a production snapshot.
+- **Course world template:** `template-world/` provides `MODULE.gups`, `CODEOWNERS`,
+  `.github/workflows/gates.yml` and `README.md`. A release job stamps version pins and image tags.
 
 M6.5 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §7): operations.
 
@@ -183,7 +198,6 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6.6: the course world template and its CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
-`lint` and `docs` still exit with status 3 ("not implemented").
+`docs` still exits with status 3 ("not implemented").

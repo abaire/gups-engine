@@ -372,7 +372,12 @@ internal class DeclarationBuiltins {
         }
         for (ns in p.sharedNamespaces) if (!Regex("[a-z0-9_]+").matches(ns)) fail("package(shared_namespaces): '$ns' is not a valid namespace")
         p.modifiers = modifiers(kw["modifiers"], kw.what("modifiers"))
-        kw.notYet("expected_tombstones", "M6")
+        p.expectedTombstones = strList(kw["expected_tombstones"], kw.what("expected_tombstones")).map {
+            label(it, p.path, kw.what("expected_tombstones"))
+        }
+        p.migrateNoop = strList(kw["migrate_noop"], kw.what("migrate_noop")).map {
+            label(it, p.path, kw.what("migrate_noop"))
+        }
         kw.finish()
         return Starlark.NONE
     }

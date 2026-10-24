@@ -39,8 +39,20 @@ jobs:
       # Also validates the Gradle wrapper checksum.
       - uses: gradle/actions/setup-gradle@v5
 
+      - name: Determine build properties
+        id: props
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version_arg=-Pversion=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version_arg=" >> "$GITHUB_OUTPUT"
+          fi
+          echo "owner_arg=-PimageOwner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and test
-        run: ./gradlew check :cli:installDist --console=plain
+        env:
+          VERSION_ARG: ${{ steps.props.outputs.version_arg }}
+        run: ./gradlew check :cli:installDist $VERSION_ARG --console=plain
 
       - name: Smoke-test the gups binary
         run: |
@@ -56,7 +68,10 @@ jobs:
           path: "**/build/reports/tests/"
 
       - name: Build the jlink image
-        run: ./gradlew :cli:jlinkArchive -Pplatform=${{ matrix.platform }} --console=plain
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION_ARG: ${{ steps.props.outputs.version_arg }}
+        run: ./gradlew :cli:jlinkArchive -Pplatform="$PLATFORM" $VERSION_ARG --console=plain
 
       - name: Smoke-test the jlink image
         run: |
@@ -67,7 +82,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gups-${{ matrix.platform }}
-          path: cli/build/distributions/*.tar.gz
+          path: cli/build/distributions/gups-*.tar.gz
+
+      - name: Build the course-world-template archive
+        if: matrix.platform == 'linux-x64'
+        env:
+          VERSION_ARG: ${{ steps.props.outputs.version_arg }}
+          OWNER_ARG: ${{ steps.props.outputs.owner_arg }}
+        run: ./gradlew :cli:courseWorldTemplateArchive "$OWNER_ARG" $VERSION_ARG --console=plain
+
+      - name: Upload course-world-template archive
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.platform == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: course-world-template
+          path: cli/build/distributions/course-world-template-*.tar.gz
 
   release:
     name: GitHub release
@@ -79,16 +108,58 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: gups-*
           merge-multiple: true
 
-      - name: Attach the images to the release
+      - name: Attach artifacts to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber ./*.tar.gz
+
+  template-release:
+    name: Sync course-world-template
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare stamped template
+        run: ./gradlew :cli:prepareCourseWorldTemplate -Pversion="${GITHUB_REF_NAME#v}" -PimageOwner="${GITHUB_REPOSITORY_OWNER,,}" --console=plain
+
+      - name: Sync to course-world-template repository
+        env:
+          TEMPLATE_DEPLOY_KEY: ${{ secrets.COURSE_WORLD_TEMPLATE_DEPLOY_KEY }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ -n "$TEMPLATE_DEPLOY_KEY" ]; then
+            mkdir -p ~/.ssh
+            echo "$TEMPLATE_DEPLOY_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no"
+            git clone "git@github.com:${GITHUB_REPOSITORY_OWNER}/course-world-template.git" /tmp/template-repo
+            rsync -av --delete --exclude='.git' cli/build/template/course-world-template/ /tmp/template-repo/
+            cd /tmp/template-repo
+            git config user.name "gups-bot"
+            git config user.email "bot@gups.dev"
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m "Release $VERSION"
+              git tag "$VERSION"
+              git push origin main --tags
+            fi
+          else
+            echo "No COURSE_WORLD_TEMPLATE_DEPLOY_KEY configured; template archive attached to GitHub release."
+          fi
 
   image:
     name: OCI image
@@ -109,7 +180,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
 
       - name: Build the distribution
-        run: ./gradlew :cli:installDist --console=plain
+        run: ./gradlew :cli:installDist -Pversion="${GITHUB_REF_NAME#v}" --console=plain
 
       - uses: docker/setup-qemu-action@v3
 

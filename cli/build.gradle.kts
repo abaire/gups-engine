@@ -16,6 +16,7 @@ dependencies {
     implementation(project(":harness"))
     implementation(project(":plugin-api"))
     runtimeOnly(project(":webclient"))
+    runtimeOnly(libs.slf4j.nop)
     implementation(libs.clikt)
     implementation(libs.micrometer.prometheus)
     testImplementation(libs.selenium.java)
@@ -124,4 +125,53 @@ val jlinkArchive by tasks.registering(Tar::class) {
     // Keep the launcher and the runtime's binaries executable.
     filePermissions { unix("rw-r--r--") }
     eachFile { if (path.contains("/bin/")) permissions { unix("rwxr-xr-x") } }
+}
+
+val templateDir = layout.buildDirectory.dir("template/course-world-template")
+
+val imageOwner: String = (findProperty("imageOwner") as String?)?.lowercase()
+    ?: System.getenv("GITHUB_REPOSITORY_OWNER")?.lowercase()?.takeIf { it.isNotBlank() }
+    ?: "gups"
+
+/**
+ * Prepares the course world template for release (SPEC_MILESTONE6 §8.1), stamping
+ * the engine version pin into MODULE.gups and the image owner and tag into gates.yml.
+ */
+val prepareCourseWorldTemplate = tasks.register<Sync>("prepareCourseWorldTemplate") {
+    group = "distribution"
+    description = "Prepares course-world-template with stamped engine version pin and gates workflow."
+    val src = rootProject.layout.projectDirectory.dir("template-world")
+    val v = project.version.toString()
+    val owner = imageOwner
+    inputs.property("version", v)
+    inputs.property("imageOwner", owner)
+    from(src)
+    into(templateDir)
+    // Stamp MODULE.gups with engine version pin
+    filesMatching("MODULE.gups") {
+        filter { line ->
+            if (line.trim() == "module(") {
+                "module(\n    # Pinned engine version (SPEC §2.3, SPEC_MILESTONE6 §8.1).\n    engine = \"$v\",\n"
+            } else {
+                line
+            }
+        }
+    }
+    // Stamp gates.yml image owner and tag with engine publisher and version
+    filesMatching(".github/workflows/gates.yml") {
+        filter { line ->
+            line.replace("ghcr.io/OWNER/gups:VERSION", "ghcr.io/$owner/gups:$v")
+        }
+    }
+}
+
+val courseWorldTemplateArchive = tasks.register<Tar>("courseWorldTemplateArchive") {
+    group = "distribution"
+    description = "Packs the course-world-template for release."
+    dependsOn(prepareCourseWorldTemplate)
+    archiveFileName = "course-world-template-${project.version}.tar.gz"
+    destinationDirectory = layout.buildDirectory.dir("distributions")
+    compression = Compression.GZIP
+    into("course-world-template")
+    from(templateDir)
 }

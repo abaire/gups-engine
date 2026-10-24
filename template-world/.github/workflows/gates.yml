@@ -1,0 +1,219 @@
+name: Course World Gates
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gates:
+    name: Gates
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/OWNER/gups:VERSION
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed packages
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
+          BASE_SHA=$(git rev-parse "refs/remotes/origin/$BASE_REF")
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+
+          # Check if shared world infrastructure changed
+          SHARED_CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD | grep -E '^(lib/|rules/|skills/|MODULE\.gups)' || true)
+          if [ -n "$SHARED_CHANGED" ]; then
+            echo "Shared infrastructure changed ($SHARED_CHANGED); testing all packages."
+            echo "test_targets=//..." >> "$GITHUB_OUTPUT"
+            echo "fuzz_targets=//zones/..." >> "$GITHUB_OUTPUT"
+          else
+            # Find packages containing changed files that still exist on disk
+            CHANGED_PKGS=""
+            for f in $(git diff --name-only "$BASE_SHA"...HEAD | grep '^zones/' || true); do
+              d=$(dirname "$f")
+              while [ "$d" != "zones" ] && [ "$d" != "." ] && [ -d "$d" ]; do
+                if [ -f "$d/package.star" ]; then
+                  CHANGED_PKGS="$CHANGED_PKGS //$d/..."
+                  break
+                fi
+                d=$(dirname "$d")
+              done
+            done
+            TARGETS=$(echo "$CHANGED_PKGS" | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)
+            echo "Changed zone targets: $TARGETS"
+            echo "test_targets=$TARGETS" >> "$GITHUB_OUTPUT"
+            echo "fuzz_targets=$TARGETS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gate 1 & 2 - Load and Lint
+        id: lint
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          if gups lint --base "$BASE_SHA" --format github //... > lint.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "icon=✅" >> "$GITHUB_OUTPUT"
+            echo "details=All static checks passed (0 errors)" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "icon=❌" >> "$GITHUB_OUTPUT"
+            ERRS=$(grep -c '::error' lint.log || true)
+            echo "details=$ERRS lint error(s) found" >> "$GITHUB_OUTPUT"
+          fi
+          cat lint.log
+
+      - name: Gate 3 - Zone Tests
+        id: test
+        env:
+          TARGETS: ${{ steps.diff.outputs.test_targets }}
+        run: |
+          if [ -z "$TARGETS" ]; then
+            echo "status=skip" >> "$GITHUB_OUTPUT"
+            echo "icon=⏭️" >> "$GITHUB_OUTPUT"
+            echo "details=No changed zones in PR" >> "$GITHUB_OUTPUT"
+          elif gups test $TARGETS > test.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "icon=✅" >> "$GITHUB_OUTPUT"
+            SUMMARY=$(grep -E '[0-9]+ passed' test.log | tail -n 1 || echo "All tests passed")
+            echo "details=$SUMMARY" >> "$GITHUB_OUTPUT"
+            cat test.log
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "icon=❌" >> "$GITHUB_OUTPUT"
+            echo "details=Zone test failures" >> "$GITHUB_OUTPUT"
+            cat test.log
+          fi
+
+      - name: Gate 4 - World Smoke (Fuzz Walker)
+        id: fuzz
+        env:
+          TARGETS: ${{ steps.diff.outputs.fuzz_targets }}
+        run: |
+          if [ -z "$TARGETS" ]; then
+            TARGETS="//zones/..."
+          fi
+          if gups fuzz --pulses 10000 $TARGETS > fuzz.log 2>&1; then
+            echo "status=pass" >> "$GITHUB_OUTPUT"
+            echo "icon=✅" >> "$GITHUB_OUTPUT"
+            SUMMARY=$(grep -E 'completed [0-9]+ pulses' fuzz.log | tail -n 1 || echo "10,000 pulses completed cleanly")
+            echo "details=$SUMMARY" >> "$GITHUB_OUTPUT"
+            cat fuzz.log
+          else
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "icon=❌" >> "$GITHUB_OUTPUT"
+            FAIL_LINE=$(grep -E 'gups fuzz failed:' fuzz.log | head -n 1 | tr '\r\n' ' ' || echo "Fuzz invariant/diagnostic failure")
+            echo "details=$FAIL_LINE" >> "$GITHUB_OUTPUT"
+            cat fuzz.log
+          fi
+
+      - name: Gate 5 - Migration Check
+        id: migrate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/release.json -w "%{http_code}" -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/migration-snapshot" || echo "000")
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "No migration-snapshot release found; skipping migration check."
+            echo "status=skip" >> "$GITHUB_OUTPUT"
+            echo "icon=⚠️" >> "$GITHUB_OUTPUT"
+            echo "details=Skipped (no snapshot uploaded yet)" >> "$GITHUB_OUTPUT"
+          elif [ "$HTTP_CODE" != "200" ]; then
+            echo "Error fetching migration-snapshot release: HTTP $HTTP_CODE" >&2
+            cat /tmp/release.json >&2 || true
+            echo "status=fail" >> "$GITHUB_OUTPUT"
+            echo "icon=❌" >> "$GITHUB_OUTPUT"
+            echo "details=Failed to fetch migration snapshot release (HTTP $HTTP_CODE)" >> "$GITHUB_OUTPUT"
+          else
+            ASSET_URL=$(jq -r '.assets[]? | select(.name == "snapshot.db") | .url' /tmp/release.json | head -n 1 || true)
+            if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+              echo "migration-snapshot release exists but has no snapshot.db asset!" >&2
+              echo "status=fail" >> "$GITHUB_OUTPUT"
+              echo "icon=❌" >> "$GITHUB_OUTPUT"
+              echo "details=migration-snapshot release missing snapshot.db" >> "$GITHUB_OUTPUT"
+            elif ! curl -sSfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" "$ASSET_URL" -o snapshot.db; then
+              echo "Failed to download snapshot.db asset from $ASSET_URL" >&2
+              echo "status=fail" >> "$GITHUB_OUTPUT"
+              echo "icon=❌" >> "$GITHUB_OUTPUT"
+              echo "details=Failed to download snapshot.db asset" >> "$GITHUB_OUTPUT"
+            elif gups migrate-check --snapshot snapshot.db > migrate.log 2>&1; then
+              echo "status=pass" >> "$GITHUB_OUTPUT"
+              echo "icon=✅" >> "$GITHUB_OUTPUT"
+              AGE_INFO=$(grep -E 'Checking migrations against snapshot' migrate.log | head -n 1 || true)
+              PASS_INFO=$(grep -E 'Migration check passed:' migrate.log | head -n 1 || echo "Migration check passed")
+              echo "details=$AGE_INFO - $PASS_INFO" >> "$GITHUB_OUTPUT"
+              cat migrate.log
+            else
+              echo "status=fail" >> "$GITHUB_OUTPUT"
+              echo "icon=❌" >> "$GITHUB_OUTPUT"
+              echo "details=Migration check failed" >> "$GITHUB_OUTPUT"
+              cat migrate.log
+            fi
+          fi
+
+      - name: Gate 6 - Combined PR Summary
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LINT_ICON: ${{ steps.lint.outputs.icon }}
+          LINT_STATUS: ${{ steps.lint.outputs.status }}
+          LINT_DETAILS: ${{ steps.lint.outputs.details }}
+          TEST_ICON: ${{ steps.test.outputs.icon }}
+          TEST_STATUS: ${{ steps.test.outputs.status }}
+          TEST_DETAILS: ${{ steps.test.outputs.details }}
+          FUZZ_ICON: ${{ steps.fuzz.outputs.icon }}
+          FUZZ_STATUS: ${{ steps.fuzz.outputs.status }}
+          FUZZ_DETAILS: ${{ steps.fuzz.outputs.details }}
+          MIGRATE_ICON: ${{ steps.migrate.outputs.icon }}
+          MIGRATE_STATUS: ${{ steps.migrate.outputs.status }}
+          MIGRATE_DETAILS: ${{ steps.migrate.outputs.details }}
+        run: |
+          SUMMARY=$(cat << EOF
+          <!-- gups-gates-summary -->
+          ## 🏛️ Course World CI Gates Summary
+
+          | Gate | Status | Details |
+          |---|---|---|
+          | **1 & 2. Load & Lint** | ${LINT_ICON} ${LINT_STATUS} | ${LINT_DETAILS//|/\\|} |
+          | **3. Zone Tests** | ${TEST_ICON} ${TEST_STATUS} | ${TEST_DETAILS//|/\\|} |
+          | **4. World Smoke (Fuzz)** | ${FUZZ_ICON} ${FUZZ_STATUS} | ${FUZZ_DETAILS//|/\\|} |
+          | **5. Migration Check** | ${MIGRATE_ICON} ${MIGRATE_STATUS} | ${MIGRATE_DETAILS//|/\\|} |
+          EOF
+          )
+
+          echo "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+
+          # Post or update a single comment on the PR using GitHub API
+          if [ -n "$PR_NUMBER" ]; then
+            COMMENT_PAYLOAD=$(jq -n --arg body "$SUMMARY" '{body: $body}')
+            COMMENTS_URL="https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments"
+            EXISTING_ID=$(curl -sSf -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$COMMENTS_URL?per_page=100" \
+              | jq -r '.[] | select(.body | contains("<!-- gups-gates-summary -->")) | .id' | head -n 1 || true)
+            if [ -n "$EXISTING_ID" ]; then
+              curl -s -X PATCH -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/comments/$EXISTING_ID" \
+                -d "$COMMENT_PAYLOAD" >/dev/null || true
+            else
+              curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                "$COMMENTS_URL" \
+                -d "$COMMENT_PAYLOAD" >/dev/null || true
+            fi
+          fi
+
+          # Fail workflow if any gate failed (or failed to report a status)
+          for s in "$LINT_STATUS" "$TEST_STATUS" "$FUZZ_STATUS" "$MIGRATE_STATUS"; do
+            if [ "$s" != "pass" ] && [ "$s" != "skip" ]; then
+              echo "One or more gates failed." >&2
+              exit 1
+            fi
+          done

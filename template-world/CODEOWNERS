@@ -1,0 +1,11 @@
+# Course world CODEOWNERS (SPEC §4.1, SPEC_MILESTONE6 §8.1).
+# IMPORTANT: Replace @CHANGE_ME_INSTRUCTOR with the instructor's GitHub account or team.
+# Changing core rules, shared libraries, skills or world settings needs instructor review.
+/MODULE.gups @CHANGE_ME_INSTRUCTOR
+/rules/ @CHANGE_ME_INSTRUCTOR
+/lib/ @CHANGE_ME_INSTRUCTOR
+/skills/ @CHANGE_ME_INSTRUCTOR
+/zones/tutorial/ @CHANGE_ME_INSTRUCTOR
+
+# Example zone ownership for student teams:
+# /zones/goblin_caves/ @student1 @student2

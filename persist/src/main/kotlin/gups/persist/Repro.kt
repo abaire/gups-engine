@@ -2,8 +2,14 @@ package gups.persist
 
 import gups.core.EntityId
 import gups.core.Label
+import gups.core.model.Item
+import gups.core.model.ItemLocation
+import gups.core.model.Mob
+import gups.core.model.Player
+import gups.core.world.Diagnostic
 import gups.core.world.InputRecord
 import gups.core.world.World
+import gups.core.world.recentInputs
 import gups.core.world.restoreMob
 import gups.core.world.restorePlayer
 import kotlinx.serialization.SerialName
@@ -85,3 +91,62 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
     placeItems(world, rows.filter { it.kind == "item" }, tombstones = true, LinkedHashSet(), notes)
     return notes
 }
+
+/**
+ * Builds a repro bundle from a live [world] for [d] (SPEC §6.2, SPEC_MILESTONE6 §8.3, D-167).
+ * When [playerStartRooms] is provided, sets player starting rooms to their pulse-0 positions
+ * and preserves all inputs so room-transition failures reproduce cleanly.
+ */
+fun buildReproBundle(
+    world: World,
+    d: Diagnostic,
+    playerStartRooms: Map<EntityId, Label> = emptyMap(),
+): ReproBundle {
+    val roomLabel = d.room ?: world.rooms.firstOrNull()?.label
+    val room = roomLabel?.let { world.roomOrNull(it) }
+    val roomV = roomLabel?.v ?: "//unknown:room"
+    val pkg = d.pkg ?: (roomLabel?.pkg ?: "")
+    val roomRow = room?.let { world.encode(it) }?.let(::RowJson)
+
+    val mobs = world.actors.filterIsInstance<Mob>().filter { it.room.label == roomLabel }
+    val mobRows = mobs.mapNotNull { world.encode(it) }.map(::RowJson)
+
+    val players = if (playerStartRooms.isNotEmpty()) world.players else world.players.filter { it.room.label == roomLabel }
+    val playerRows = players.map {
+        val encoded = world.encodePlayer(it)
+        val payload = if (playerStartRooms.containsKey(it.id)) {
+            val decoded = JSON.decodeFromString(PlayerPayload.serializer(), encoded.payload)
+            JSON.encodeToString(PlayerPayload.serializer(), decoded.copy(room = playerStartRooms.getValue(it.id).v, index = 0))
+        } else {
+            encoded.payload
+        }
+        PlayerRowJson(encoded.id, encoded.name, payload)
+    }
+
+    val holders = (mobs.map { it.id } + players.map { it.id }).toSet()
+    val items = world.allEntities.filterIsInstance<Item>().filter { item ->
+        val loc = item.location
+        room?.id != null && loc is ItemLocation.InRoom && loc.room == room.id ||
+            loc is ItemLocation.Carried && loc.actor in holders ||
+            loc is ItemLocation.Equipped && loc.actor in holders
+    }
+    val itemRows = items.mapNotNull { world.encode(it) }.map(::RowJson)
+
+    val inputs = world.recentInputs.map {
+        InputJson(it.pulse, it.actor.v, it.actorName, it.room.v, it.line)
+    }
+
+    return ReproBundle(
+        seed = d.seed ?: world.config.seed,
+        pulse = d.pulse,
+        checkpointPulse = 0,
+        pkg = pkg,
+        room = roomV,
+        hook = d.hook,
+        message = d.message,
+        entities = listOfNotNull(roomRow) + mobRows + itemRows,
+        players = playerRows,
+        inputs = inputs,
+    )
+}
+

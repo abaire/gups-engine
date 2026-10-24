@@ -508,9 +508,8 @@ compact JSON.
 - **New builtins:** `container(capacity, max_weight, state, key)` makes an item a container.
 - **Constants:** `CRAMPED`, `NORMAL` and `LARGE` are the strings `"cramped"`, `"normal"` and
   `"large"`; `ALL` is the list of all channel names.
-- **Not yet supported:** `expected_tombstones` (M6) is refused with "planned for M6" when
-  non-empty. `behaviors`, `modifiers`, `equip_affects` and `region()` arrived in M5 (D-111,
-  D-112, D-113, D-121).
+- **Not yet supported:** `behaviors`, `modifiers`, `equip_affects` and `region()` arrived
+  in M5 (D-111, D-112, D-113, D-121), and `expected_tombstones` and `migrate_noop` in M6.6 (D-168).
 - **When builtins work:** declaration builtins work only while a package loads; effect
   primitives work anywhere.
 *Code:* `DeclarationBuiltins`, `Kw`.
@@ -1730,7 +1729,7 @@ which is what the migration check (M6 design §8.4) needs.
   builds it and smoke-tests it with `gups test`; a `v*` tag attaches the archives to the
   GitHub release.
 - **OCI image:** `docker/Dockerfile` is `eclipse-temurin:21-jre-noble` with `git`,
-  `openssh-client` and `curl` added, and `installDist` copied in. Because the jars are the
+  `openssh-client`, `curl` and `jq` added, and `installDist` copied in. Because the jars are the
   same everywhere, one build makes both `linux/amd64` and `linux/arm64`.
   - It declares the volumes `/world`, `/data` and `/etc/gups`, and marks `/world` a git
     `safe.directory`.
@@ -1748,3 +1747,78 @@ deploy, as can one with no commits. The deploy settings `--repository`, `--deplo
 and `--deploy-key-file` (or `GUPS_DEPLOY_KEY_FILE`) have configuration keys of the same
 names.
 *Code:* `GupsServer.checkCommit`, `Serve.prodServer`.
+
+## Course world template and CI gates (§7.3, M6 design §8) — M6.6
+
+### D-166 `gups lint` — `open`
+- **Checks:**
+  - Dead-end rooms (1 exit or fewer) without `dead_end_ok` (error).
+  - Every exit has a reverse exit unless marked `one_way`, and doors must match on both sides (error).
+  - A prototype whose declaration changed since `--base` without a `version` bump (error). Presentation
+    and code don't count (Q13): `name`, `desc`, `keywords`, hooks, `commands`, `think` and `resolve`.
+    Comparison clears presentation/code fields by construction (`withoutPresentation()`) so future fields
+    are tracked automatically, and built-in behaviors (`Wander`, `Aggressive`, `Assist`, `Flee`, `Guard`,
+    `Follow`, `Pursue`, `Sentinel`, `Scavenge`, `ActorFilter`) are data classes/objects with value equality.
+    If `--base` fails to load, `lint` fails loudly rather than failing open.
+  - Static scan of `set_attr`/`get_attr` string literals warns if any key is written but never read
+    anywhere in the repository (warning). Dynamic keys are skipped.
+  - Hook catalog errors and duplicate namespaces from loader are reported as errors. Gates 1 (load) and 2
+    (lint) are merged into `gups lint`.
+  - Regions applied to rooms but never declared, and declared regions never applied to rooms (warning).
+- **Execution:** `gups lint [--base REF] [--format text|github] [patterns...]`. Defaults to `//...` if no
+  patterns are passed. When `--base` is given, the base commit is staged via a temporary git worktree.
+- **Output:** human-readable lines, GitHub Actions annotations (using repository paths with `%`, `\r`, `\n`
+  percent-encoded and label names in messages), and Markdown summaries appended to `$GITHUB_STEP_SUMMARY`.
+  Exits 1 on any error.
+*Code:* `Linter`, `Lint`, `Behaviors.kt`.
+
+### D-167 The fuzz walker (`gups fuzz`) — `open`
+- **Execution:** `gups fuzz [--pulses N] [--seed S] <pattern...>` loads the full world in the harness
+  with bubble off and a fixed default seed of 42. Spawns one bot player per changed zone matching pattern(s).
+- **Bot behavior:** At each pulse, dead or absent bots respawn in a zone room (re-connecting a session if needed),
+  and bots near death heal to max vitals. If `wait_state > 50` pulses, lag is cleared to prevent indefinite stalls.
+  Idle bots pick randomly among exits, zone/item commands with empty arguments, get/drop/wear/use, kill on a random
+  actor, or say.
+- **Assertions:** The run fails immediately if an invariant is violated or if any diagnostic of kind
+  `script_error`, `step_limit`, `wall_clock`, `quarantine`, `alloc_limit`, `invariant` or `missing` occurs.
+  On failure, prints the exact rerun command (`gups fuzz --seed S --pulses P <patterns>`) and exports a
+  `ReproBundle` with initial bot positions and all inputs so the failure reproduces cleanly in `gups repro`.
+*Code:* `FuzzWalker`, `Fuzz`, `buildReproBundle`.
+
+### D-168 Migration check (`gups migrate-check` and `gups snapshot`) — `open`
+- **`gups snapshot`:** `gups snapshot --sanitized --out FILE [--admin ADDR]`. Sanitized is the only mode,
+  and `--sanitized` is required so every call says so; without it the command refuses. Against a running admin port it calls `GET /snapshot`.
+  Offline it copies the database through SQLite's online-backup API on a plain connection (including the
+  WAL without running schema migrations), sanitizes the copy in place, and records the epoch timestamp in
+  `meta.snapshot_taken_at`.
+- **`gups migrate-check`:** `gups migrate-check --snapshot FILE`. If `FILE` does not exist, CI warns
+  and skips the gate (Q12). If it exists, reports the snapshot age (from `meta.snapshot_taken_at`) and checks:
+  - Version bumps on entities in `world_entities` require a `migrate()` hook or membership in
+    `package(migrate_noop = [...])`.
+  - Newly produced tombstones for items in player custody must be listed in
+    `package(expected_tombstones = [...])`.
+  - Verifies full restoration against the snapshot without script errors.
+*Code:* `SnapshotCmd`, `MigrateCheck`, `MigrationChecker`, `Database.backup`, `Database.sanitizedCopy`, `DeclarationBuiltins.pkg`.
+
+### D-169 Course world template repository and gates workflow — `open`
+- **Template world:** `template-world/` in the engine source repository keeps `MODULE.gups` unpinned to
+  avoid mismatch warnings during development. `prepareCourseWorldTemplate` stamps `project.version` into
+  `MODULE.gups` and both the image owner (`-PimageOwner`) and version tag into `.github/workflows/gates.yml`.
+  Release jobs pass `-Pversion=${GITHUB_REF_NAME#v}` so the engine, archives, OCI image and template agree.
+- **Ownership:** `CODEOWNERS` sets `@CHANGE_ME_INSTRUCTOR` as a clear placeholder for instructors to replace.
+  Dead-end rooms (`gate`, `armory`, `arena`) have `flags = ["dead_end_ok"]`.
+*Code:* `template-world/`, `prepareCourseWorldTemplate`, `courseWorldTemplateArchive`, `.github/workflows/ci.yml`.
+
+### D-170 Changed-package detection and combined PR summary — `open`
+- **Package detection:** In `.github/workflows/gates.yml`, changed files under `zones/` are mapped to
+  packages by searching parent directories for `package.star` while verifying the directory exists on disk
+  (so deleted zones do not cause missing package errors). If shared code (`lib/`, `rules/`, `skills/`, or
+  `MODULE.gups`) changes, all packages are tested and fuzzed.
+- **Snapshot download:** Gate 5 resolves the `snapshot.db` asset's API `url` via `jq` and downloads it with
+  `Accept: application/octet-stream` so private course repositories work with `GH_TOKEN`.
+- **Combined PR summary:** Step outputs are passed into `run:` scripts through `env:`. The workflow generates
+  a single Markdown table posted to `$GITHUB_STEP_SUMMARY` and posts or updates a single PR comment identified
+  by `<!-- gups-gates-summary -->` via the GitHub API (`pull-requests: write`). If any gate failed, the
+  workflow exits 1 after posting the summary.
+*Code:* `template-world/.github/workflows/gates.yml`.
+

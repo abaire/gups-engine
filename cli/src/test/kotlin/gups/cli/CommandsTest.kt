@@ -20,7 +20,7 @@ class CommandsTest {
         val result = gupsCommand().test("--help")
         assertEquals(0, result.statusCode)
         for (name in listOf(
-            "serve", "test", "lint", "docs", "repro", "backup", "restore", "deploy", "invite", "import-roster",
+            "serve", "test", "lint", "fuzz", "snapshot", "migrate-check", "docs", "repro", "backup", "restore", "deploy", "invite", "import-roster",
         )) {
             assertContains(result.stdout, name)
         }
@@ -28,7 +28,7 @@ class CommandsTest {
 
     @Test
     fun `stub commands exit with not implemented`() {
-        val result = gupsCommand().test("lint //zones/...")
+        val result = gupsCommand().test("docs")
         assertEquals(EXIT_NOT_IMPLEMENTED, result.statusCode)
         assertContains(result.stderr, "not implemented yet")
     }
@@ -55,6 +55,62 @@ class CommandsTest {
         val result = gupsCommand().test(listOf("test", "--world", world, "//zones/nowhere"))
         assertEquals(EXIT_TESTS_FAILED, result.statusCode)
         assertContains(result.stderr, "no package matches //zones/nowhere")
+    }
+
+    @Test
+    fun `lint checks template-world packages`() {
+        val world = System.getProperty("gups.templateWorld")
+        val result = gupsCommand().test(listOf("lint", "--world", world, "//..."))
+        assertEquals(0, result.statusCode, result.output)
+    }
+
+    @Test
+    fun `fuzz runs against the tutorial zone`() {
+        val world = System.getProperty("gups.templateWorld")
+        val result = gupsCommand().test(listOf("fuzz", "--pulses", "10", "--world", world, "//zones/tutorial/..."))
+        assertEquals(0, result.statusCode, result.output)
+        assertContains(result.stdout, "Fuzz walker completed 10 pulses with 1 bots")
+    }
+
+    @Test
+    fun `snapshot creates a sanitized database copy including WAL data`() {
+        val db = tempDb()
+        val pw = PersistWorld(db, P.protos())
+        try {
+            val acc = pw.persistence.accounts.create(gups.core.Account(id = 0, login = "ann", pwHash = "secret-hash", role = gups.core.Role.PLAYER, createdAt = 1L))!!
+            val p = pw.login("Ann")
+            p.accountId = acc.id
+            p.dirty = true
+            pw.save()
+
+            // Take the snapshot while pw is still open, so the data sits in world.db-wal.
+            val snapFile = java.nio.file.Files.createTempFile("snap-out", ".db").toFile()
+            val refused = gupsCommand().test(listOf("snapshot", "--db", db.toString(), "--out", snapFile.path))
+            assertEquals(1, refused.statusCode, "--sanitized is required")
+            assertContains(refused.stderr, "only sanitized snapshots are supported")
+            val result = gupsCommand().test(listOf("snapshot", "--sanitized", "--db", db.toString(), "--out", snapFile.path))
+            assertEquals(0, result.statusCode, result.output)
+            assertTrue(snapFile.length() > 0)
+
+            java.sql.DriverManager.getConnection("jdbc:sqlite:${snapFile.path}").use { c ->
+                c.createStatement().use { st ->
+                    fun one(sql: String) = st.executeQuery(sql).use { it.next(); it.getString(1) }
+                    assertEquals("0", one("SELECT COUNT(*) FROM accounts"))
+                    assertEquals("Player1", one("SELECT name FROM players"))
+                    assertEquals(null, one("SELECT account_id FROM players"))
+                    assertTrue(one("SELECT COUNT(*) FROM world_entities").toInt() > 0)
+                }
+            }
+        } finally {
+            pw.close()
+        }
+    }
+
+    @Test
+    fun `migrate-check skips with warning if snapshot does not exist`() {
+        val result = gupsCommand().test(listOf("migrate-check", "--snapshot", "missing_snapshot.db"))
+        assertEquals(0, result.statusCode, result.output)
+        assertContains(result.stderr, "skipping migration check")
     }
 
     @Test
@@ -87,6 +143,78 @@ class CommandsTest {
         assertEquals(0, invite.statusCode, invite.output)
         assertTrue(Regex("[A-Z0-9]{5}-[A-Z0-9]{5}").matches(invite.stdout.trim()), invite.stdout)
         assertEquals(1, gupsCommand().test(listOf("invite", "--role", "wizard", "--world", root.toString())).statusCode)
+    }
+
+    @Test
+    fun `fuzz walker failure outputs rerun command and repro bundle that reproduces in repro`() {
+        val root = tempWorld(
+            mapOf(
+                "zones/trap/package.star" to "package(api_version = 1, kind = \"zone\")\n",
+                "zones/trap/rooms.star" to """
+                    def _trap(actor, from_exit):
+                        fail("trap room triggered")
+
+                    room("start", name = "Start", flags = ["dead_end_ok"], exits = [exit("north", to = ":death")])
+                    room("death", name = "Death", flags = ["dead_end_ok"], exits = [exit("south", to = ":start")], on_enter = _trap)
+                """.trimIndent(),
+            ),
+        )
+
+        val result = gupsCommand().test(listOf("fuzz", "--pulses", "50", "--seed", "1", "--world", root.toString(), "//zones/trap/..."))
+        assertEquals(1, result.statusCode, result.output)
+        assertContains(result.stderr, "gups fuzz failed:")
+        assertContains(result.stdout, "Failed at pulse")
+        assertContains(result.stdout, "Reproduce with: gups fuzz --seed 1 --pulses")
+        assertContains(result.stdout, "Repro bundle:")
+
+        val bundleJson = result.stdout.substringAfter("Repro bundle:\n").trim()
+        val bundleFile = root.resolve("bundle.json").toFile().apply { writeText(bundleJson) }
+
+        val reproResult = gupsCommand().test(listOf("repro", bundleFile.path, "--world", root.toString()))
+        assertEquals(0, reproResult.statusCode, reproResult.output)
+        assertContains(reproResult.stdout, "Replaying")
+        assertContains(reproResult.stdout, "Reproduced at pulse")
+    }
+
+    @Test
+    fun `lint --base compares prototypes against git base ref`() {
+        val root = tempWorld(
+            mapOf(
+                "zones/z/package.star" to "package(api_version = 1, kind = \"zone\")\n",
+                "zones/z/rooms.star" to """
+                    room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
+                    mob("goblin", name = "Goblin", hp = 10, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+                """.trimIndent(),
+            ),
+        )
+        val git = Git(root)
+        git.run("init")
+        git.run("config", "user.name", "Test")
+        git.run("config", "user.email", "test@test.com")
+        git.run("add", "-A")
+        git.run("commit", "-m", "initial")
+
+        val r1 = gupsCommand().test(listOf("lint", "--base", "HEAD", "--world", root.toString()))
+        assertEquals(0, r1.statusCode, r1.output)
+
+        root.resolve("zones/z/rooms.star").toFile().writeText("""
+            room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
+            mob("goblin", name = "Goblin", hp = 20, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+        """.trimIndent() + "\n")
+        val r2 = gupsCommand().test(listOf("lint", "--base", "HEAD", "--world", root.toString()))
+        assertEquals(1, r2.statusCode, r2.output)
+        assertContains(r2.stdout, "mob prototype declaration changed since base without a version bump")
+
+        root.resolve("zones/z/rooms.star").toFile().writeText("""
+            room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
+            mob("goblin", name = "Fierce Goblin", desc = "A scary goblin", hp = 10, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+        """.trimIndent() + "\n")
+        val r3 = gupsCommand().test(listOf("lint", "--base", "HEAD", "--world", root.toString()))
+        assertEquals(0, r3.statusCode, r3.output)
+
+        val r4 = gupsCommand().test(listOf("lint", "--base", "nonexistent-ref", "--world", root.toString()))
+        assertEquals(1, r4.statusCode)
+        assertContains(r4.stderr, "failed to load base commit")
     }
 
     @Test

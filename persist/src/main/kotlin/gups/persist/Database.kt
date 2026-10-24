@@ -297,35 +297,18 @@ class Database private constructor(val file: Path, private val conn: Connection)
     }
 
     /** A consistent snapshot through SQLite's online-backup API, safe while the world writes (SPEC §5.11). */
-    fun backupTo(target: Path) {
-        Files.createDirectories(target.toAbsolutePath().parent)
-        DriverManager.getConnection(url(file)).use { c -> c.createStatement().use { it.executeUpdate("backup to '${target.absolutePathString().replace("'", "''")}'") } }
-    }
+    fun backupTo(target: Path) = backup(file, target)
 
     /**
      * A copy of this database at [target] with nothing personal in it (M6 design §8.4, D-163):
      * `accounts`, `session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events`
      * emptied, characters renamed `Player1`, `Player2`, ... by id and detached from accounts.
      */
-    fun sanitizedCopy(target: Path): Path {
-        Files.deleteIfExists(target)
-        backupTo(target)
-        DriverManager.getConnection(url(target)).use { c ->
-            c.autoCommit = false
-            c.createStatement().use { st ->
-                for (t in listOf("accounts", "session_tokens", "invites", "restrictions", "diagnostics", "item_events")) st.executeUpdate("DELETE FROM $t")
-                // Two steps, so the new names never collide with old ones under UNIQUE.
-                st.executeUpdate("UPDATE players SET name = '#' || id, account_id = NULL")
-                st.executeUpdate(
-                    "UPDATE players SET name = 'Player' || (SELECT COUNT(*) FROM players p WHERE p.id <= players.id)",
-                )
-            }
-            c.commit()
-            c.autoCommit = true
-            c.createStatement().use { it.execute("VACUUM") }
-        }
-        return target
-    }
+    fun sanitizedCopy(target: Path): Path = sanitizedCopy(file, target)
+
+    /** The time the snapshot was taken, recorded in `meta.snapshot_taken_at` (M6 design §8.4). */
+    fun snapshotTakenAt(): java.time.Instant? =
+        meta()["snapshot_taken_at"]?.toLongOrNull()?.let { java.time.Instant.ofEpochSecond(it) }
 
     override fun close() = conn.close()
 
@@ -350,6 +333,67 @@ class Database private constructor(val file: Path, private val conn: Connection)
 
     companion object {
         private fun url(file: Path) = "jdbc:sqlite:${file.absolutePathString()}"
+
+        /**
+         * Copies [source] to [target] through SQLite's online-backup API on a plain connection
+         * (no migrations run), including any data in `world.db-wal`.
+         */
+        fun backup(source: Path, target: Path) {
+            require(Files.isRegularFile(source)) { "No database at $source" }
+            target.toAbsolutePath().parent?.let { Files.createDirectories(it) }
+            Files.deleteIfExists(target)
+            DriverManager.getConnection(url(source)).use { c ->
+                c.createStatement().use {
+                    it.executeUpdate("backup to '${target.absolutePathString().replace("'", "''")}'")
+                }
+            }
+        }
+
+        /**
+         * Copies [source] to [target] via [backup] and sanitizes [target] in place without running
+         * schema migrations on [source] (M6 design §8.4, D-163, D-168).
+         */
+        fun sanitizedCopy(source: Path, target: Path): Path {
+            backup(source, target)
+            try {
+                sanitizeInPlace(target)
+            } catch (e: Exception) {
+                runCatching { Files.deleteIfExists(target) }
+                throw e
+            }
+            return target
+        }
+
+        /**
+         * Sanitizes a copy of a database in place at [target] without opening it through [Database.open]
+         * (so no migrations run). Empties personal tables, renames players, and records `snapshot_taken_at`.
+         */
+        fun sanitizeInPlace(target: Path) {
+            DriverManager.getConnection(url(target)).use { c ->
+                if (readSchemaVersion(c) == 0) throw SQLException("$target is not an initialized GUPS database")
+                c.autoCommit = false
+                c.createStatement().use { st ->
+                    val existingTables = c.createStatement().use { q ->
+                        q.executeQuery("SELECT name FROM sqlite_master WHERE type = 'table'").use { rs ->
+                            buildSet { while (rs.next()) add(rs.getString(1)) }
+                        }
+                    }
+                    for (t in listOf("accounts", "session_tokens", "invites", "restrictions", "diagnostics", "item_events")) {
+                        if (t in existingTables) st.executeUpdate("DELETE FROM $t")
+                    }
+                    // Two steps, so the new names never collide with old ones under UNIQUE.
+                    st.executeUpdate("UPDATE players SET name = '#' || id, account_id = NULL")
+                    st.executeUpdate(
+                        "UPDATE players SET name = 'Player' || (SELECT COUNT(*) FROM players p WHERE p.id <= players.id)",
+                    )
+                    val now = java.time.Instant.now().epochSecond
+                    st.executeUpdate("INSERT OR REPLACE INTO meta (key, value) VALUES ('snapshot_taken_at', '$now')")
+                }
+                c.commit()
+                c.autoCommit = true
+                c.createStatement().use { it.execute("VACUUM") }
+            }
+        }
 
         private fun readSchemaVersion(conn: Connection): Int {
             val hasMeta = conn.createStatement().use { st ->

@@ -17,8 +17,10 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.options.switch
 import com.github.ajalt.clikt.parameters.options.versionOption
+import com.github.ajalt.clikt.parameters.types.choice
 import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
+import com.github.ajalt.clikt.parameters.types.long
 import gups.auth.AccountService
 import gups.auth.DEFAULT_INVITE_DAYS
 import gups.auth.parseDuration
@@ -27,6 +29,7 @@ import gups.auth.Roster
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.Role
+import gups.harness.FuzzWalker
 import gups.harness.ReproRunner
 import gups.harness.TestRunner
 import gups.harness.render
@@ -34,7 +37,11 @@ import gups.persist.Backups
 import gups.persist.Database
 import gups.persist.ReproBundle
 import gups.persist.SqliteAccountStore
+import gups.persist.buildReproBundle
 import gups.persist.restoreBundle
+import gups.script.Linter
+import gups.script.ScriptLimits
+import gups.script.ScriptLoader
 import gups.script.ServerConfig
 import gups.script.WorldDir
 import gups.net.ServerTls
@@ -44,7 +51,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.runBlocking
 
 /** Builds the `gups` command tree (SPEC §4.13). */
@@ -52,6 +62,9 @@ fun gupsCommand(): CliktCommand = Gups().subcommands(
     Serve(),
     TestCmd(),
     Lint(),
+    Fuzz(),
+    SnapshotCmd(),
+    MigrateCheck(),
     Docs(),
     Repro(),
     Backup(),
@@ -243,8 +256,151 @@ class TestCmd : CliktCommand(name = "test") {
     }
 }
 
-class Lint : StubCommand("lint", "Run the static checks.", "M6") {
+class Lint : CliktCommand(name = "lint") {
+    val patterns by argument("label-pattern").multiple(required = false)
+    val base by option("--base", metavar = "REF", help = "Base git ref to compare prototype declarations against.")
+    val format by option("--format", help = "Output format: text or github.").choice("text", "github").default("text")
+    val world by option("--world", help = "Course world directory (default: the current directory).")
+        .file(mustExist = true, canBeFile = false)
+
+    override fun help(context: Context) = "Run static checks on course world packages (SPEC §7.3 gate 2)."
+
+    override fun run() {
+        val dir = WorldDir((world ?: File(".")).toPath())
+        val patternList = patterns.ifEmpty { listOf("//...") }
+
+        val basePrototypes = base?.let { ref ->
+            val git = Git(dir.root)
+            if (!git.isWorkTree()) throw UsageError("--base requires the world to be a git working tree")
+            val commit = try {
+                git.commit(ref)
+            } catch (e: GitException) {
+                throw UsageError("failed to load base commit '$ref': ${e.message}")
+            }
+            val staging = Files.createTempDirectory("gups-lint-base")
+            try {
+                git.run("worktree", "add", "--detach", "--quiet", staging.toString(), commit)
+                val baseDir = WorldDir(staging)
+                val baseLoader = ScriptLoader(baseDir, ScriptLimits())
+                val baseResult = baseLoader.load(baseDir.packages())
+                if (!baseResult.ok) {
+                    val errs = baseResult.errors.joinToString("\n") { it.render() }
+                    throw UsageError("failed to load base commit '$ref':\n$errs")
+                }
+                baseResult.prototypes()
+            } finally {
+                runCatching { git.run("worktree", "remove", "--force", staging.toString()) }
+                runCatching { Files.deleteIfExists(staging) }
+            }
+        }
+
+        val report = Linter(dir, basePrototypes).lint(patternList)
+
+        if (format == "github") {
+            for (f in report.findings) echo(f.renderGithub())
+        } else {
+            for (f in report.findings) echo(f.renderText())
+            if (report.findings.isNotEmpty()) echo("\n" + report.summary())
+        }
+
+        System.getenv("GITHUB_STEP_SUMMARY")?.takeIf { it.isNotBlank() }?.let { path ->
+            runCatching {
+                File(path).appendText(report.renderMarkdown())
+            }
+        }
+
+        if (!report.ok) throw ProgramResult(1)
+    }
+}
+
+class Fuzz : CliktCommand(name = "fuzz") {
     val patterns by argument("label-pattern").multiple(required = true)
+    val pulses by option("--pulses", metavar = "N", help = "Number of pulses to run (default 10000).").int().default(10000)
+    val seed by option("--seed", metavar = "S", help = "Random seed (default 42).").long().default(42L)
+    val world by option("--world", help = "Course world directory (default: the current directory).")
+        .file(mustExist = true, canBeFile = false)
+
+    override fun help(context: Context) = "Run the fuzz walker against changed zones (SPEC §7.3 gate 4)."
+
+    override fun run() {
+        val dir = WorldDir((world ?: File(".")).toPath())
+        val outcome = FuzzWalker(dir).run(patterns, pulses, seed) { p ->
+            if (pulses >= 2000) echo("... pulse $p / $pulses")
+        }
+        if (!outcome.ok) {
+            echo("gups fuzz failed: ${outcome.failureMessage}", err = true)
+            val failPulse = outcome.failedPulse ?: outcome.pulsesRun.toLong()
+            echo("Failed at pulse $failPulse. Reproduce with: gups fuzz --seed $seed --pulses $failPulse ${patterns.joinToString(" ")}")
+            val w = outcome.world
+            val d = outcome.diagnostic
+            if (d != null && w != null) {
+                val bundle = buildReproBundle(w, d, outcome.botStartRooms)
+                echo("Repro bundle:")
+                echo(bundle.toJson())
+            }
+            throw ProgramResult(1)
+        }
+        echo("Fuzz walker completed ${outcome.pulsesRun} pulses with ${outcome.bots} bots across ${outcome.zones.size} zones. 0 errors.")
+    }
+}
+
+class SnapshotCmd : CliktCommand(name = "snapshot") {
+    val sanitized by option("--sanitized", help = "Required: strip accounts, tokens, invites, restrictions, diagnostics and the item audit, and rename characters.").flag()
+    val out by option("--out", metavar = "FILE", help = "Output database file.").file(canBeDir = false).required()
+    val admin by option("--admin", metavar = "ADDR", help = "Download from a running server's admin port, e.g. $DEFAULT_ADMIN.")
+    val adminTokenFile by option("--admin-token-file", metavar = "FILE", help = "File holding the admin token (default: \$GUPS_ADMIN_TOKEN_FILE).").file(canBeDir = false)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to read directly when offline (default: the world's).").file(canBeDir = false)
+
+    override fun help(context: Context) = "Make a sanitized snapshot of the world database for migrations (SPEC §7.3 gate 5)."
+
+    override fun run() {
+        // Only sanitized snapshots exist; the flag makes that explicit at every call (M6 design §8.4, D-168).
+        if (!sanitized) throw UsageError("only sanitized snapshots are supported: run gups snapshot --sanitized --out FILE")
+        admin?.let { address ->
+            val status = AdminClient(address, adminTokenFile).download("/snapshot", out)
+            if (status != 200) throw UsageError("failed to download snapshot from admin port (HTTP $status)")
+            echo("Sanitized snapshot saved to ${out.path} from admin port.")
+            return
+        }
+        val path = dbPath(world, db)
+        if (!path.toFile().isFile) throw UsageError("no database at $path")
+        try {
+            Database.sanitizedCopy(path, out.toPath())
+        } catch (e: Exception) {
+            throw UsageError("failed to create snapshot from $path: ${e.message}")
+        }
+        echo("Sanitized snapshot saved to ${out.path}.")
+    }
+}
+
+class MigrateCheck : CliktCommand(name = "migrate-check") {
+    val snapshot by option("--snapshot", metavar = "FILE", help = "Sanitized production snapshot database file.").file(canBeDir = false).required()
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+
+    override fun help(context: Context) = "Check migrations and reconciliation against a production snapshot (SPEC §7.3 gate 5)."
+
+    override fun run() {
+        if (!snapshot.isFile) {
+            echo("warning: no snapshot file at ${snapshot.path}; skipping migration check", err = true)
+            return
+        }
+        val tempDb = Files.createTempFile("gups-migrate-check", ".db")
+        try {
+            Files.copy(snapshot.toPath(), tempDb, StandardCopyOption.REPLACE_EXISTING)
+            val dir = WorldDir((world ?: File(".")).toPath())
+            val outcome = MigrationChecker(dir, tempDb).check()
+            val ageStr = outcome.snapshotAgeText ?: "unknown age"
+            echo("Checking migrations against snapshot ${snapshot.name} ($ageStr)...")
+            if (!outcome.ok) {
+                for (p in outcome.problems) echo("error: $p", err = true)
+                throw ProgramResult(1)
+            }
+            echo("Migration check passed: ${outcome.entitiesChecked} entities, ${outcome.charactersChecked} characters, ${outcome.versionUpgrades} version upgrades, ${outcome.expectedTombstones} expected tombstones.")
+        } finally {
+            runCatching { Files.deleteIfExists(tempDb) }
+        }
+    }
 }
 
 class Docs : StubCommand("docs", "Generate the API reference.", "M7") {

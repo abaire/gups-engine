@@ -278,6 +278,27 @@ class OperationsTest {
                     assertTrue(one("SELECT COUNT(*) FROM world_entities").toInt() > 0, "the world is kept")
                 }
             }
+
+            // CLI snapshot --admin creates sanitized snapshot
+            val cliSnapFile = Files.createTempFile("cli-snap", ".db")
+            Files.deleteIfExists(cliSnapFile)
+            val snapRes = gupsCommand().test(listOf("snapshot", "--sanitized", "--out", cliSnapFile.toString(), "--admin", address, "--admin-token-file", tokenFile.toString()))
+            assertEquals(0, snapRes.statusCode, snapRes.output)
+            assertTrue(Files.exists(cliSnapFile))
+            java.sql.DriverManager.getConnection("jdbc:sqlite:$cliSnapFile").use { c ->
+                c.createStatement().use { st ->
+                    fun one(sql: String) = st.executeQuery(sql).use { it.next(); it.getString(1) }
+                    assertEquals("0", one("SELECT COUNT(*) FROM accounts"))
+                    assertEquals("Player1", one("SELECT name FROM players"))
+                }
+            }
+
+            // CLI snapshot --admin with wrong token fails and does NOT leave a file
+            val failSnapFile = Files.createTempFile("cli-snap-fail", ".db")
+            Files.deleteIfExists(failSnapFile)
+            val failRes = gupsCommand().test(listOf("snapshot", "--sanitized", "--out", failSnapFile.toString(), "--admin", address, "--admin-token-file", wrong.toString()))
+            assertEquals(1, failRes.statusCode)
+            assertFalse(Files.exists(failSnapFile), "Failed snapshot download should not leave a file")
         }
     }
 }

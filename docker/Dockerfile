@@ -4,7 +4,7 @@
 FROM eclipse-temurin:21-jre-noble
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl \
+ && apt-get install -y --no-install-recommends git openssh-client ca-certificates curl jq \
  && rm -rf /var/lib/apt/lists/* \
  # The world volume is owned by whoever mounts it; let git work there anyway.
  && git config --system --add safe.directory /world

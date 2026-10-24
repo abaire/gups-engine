@@ -112,7 +112,7 @@ data class LoadError(
 internal data class FileInfo(val label: Label, val pkg: String, val test: Boolean = false)
 
 /** A `global_command` registered by a privileged package (SPEC §4.9). */
-class GlobalCommandDecl(val name: String, val fn: HookRef, val lane: Lane, val pkg: String)
+data class GlobalCommandDecl(val name: String, val fn: HookRef, val lane: Lane, val pkg: String)
 
 /** Everything one package declared. Built while the package evaluates, then read-only. */
 class ScriptPackage internal constructor(val path: String) {
@@ -147,6 +147,14 @@ class ScriptPackage internal constructor(val path: String) {
 
     /** The package's `migrate(old_version, attrs)`, if one of its files defines it (SPEC §3.4). */
     var migrate: HookRef? = null
+        internal set
+
+    /** Expected tombstones declared for this package (M6 design §8.4, D-070). */
+    var expectedTombstones: List<Label> = emptyList()
+        internal set
+
+    /** Labels whose version bumped without requiring a `migrate()` function (M6 design §8.4). */
+    var migrateNoop: List<Label> = emptyList()
         internal set
 
     /** Labels this package refers to, checked once every package has loaded. */

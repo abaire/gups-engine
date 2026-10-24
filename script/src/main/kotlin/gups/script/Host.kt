@@ -524,19 +524,19 @@ private fun hostOf(world: World): StarlarkHost =
     world.scripts as? StarlarkHost ?: error("Starlark prototypes need a StarlarkHost; this world has ${world.scripts}")
 
 /** A room or item `commands[verb]` entry (SPEC §4.4). */
-internal class ScriptCommand(private val verb: String, private val ref: HookRef, private val pkg: String) : ZoneCommand {
+internal data class ScriptCommand(private val verb: String, private val ref: HookRef, private val pkg: String) : ZoneCommand {
     override fun run(world: World, actor: Actor, args: String, owner: Entity) =
         hostOf(world).runCommand(world, verb, ref, pkg, actor, args, owner)
 }
 
 /** A mob's `think` hook (SPEC §4.8). */
-internal class ScriptThink(private val ref: HookRef, private val pkg: String) : ThinkFn {
+internal data class ScriptThink(private val ref: HookRef, private val pkg: String) : ThinkFn {
     override fun think(world: World, mob: Mob, proposals: List<Proposal>): ThinkResult =
         hostOf(world).think(world, mob, proposals, ref, pkg)
 }
 
 /** A skill's custom `resolve(ctx)` (SPEC §4.3). */
-internal class ScriptResolve(private val ref: HookRef, private val pkg: String) : SkillResolver {
+internal data class ScriptResolve(private val ref: HookRef, private val pkg: String) : SkillResolver {
     override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?) = hostOf(world).resolve(world, caster, target, item, ref, pkg)
 }
 

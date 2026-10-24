@@ -28,7 +28,7 @@ const val PRIORITY_SCAVENGE = 5
  * `//zones/caves:goblin_*` with `*` wildcards. A pattern without a package matches the label's
  * name in any package.
  */
-class ActorFilter(val patterns: List<String>) {
+data class ActorFilter(val patterns: List<String>) {
     constructor(vararg patterns: String) : this(patterns.toList())
 
     fun matches(a: Actor): Boolean = patterns.any { p ->
@@ -55,7 +55,7 @@ private fun World.others(mob: Mob): List<Actor> =
     mob.room.actorIndex.values.filter { it !== mob && it.inWorld && it.hp > 0 && isSimulated(it) }
 
 /** `wander(radius, chance)`: with probability [chance] per think, steps through a random open exit that stays within [radius] exits of home. */
-class Wander(val radius: Int, val chance: Double) : Behavior {
+data class Wander(val radius: Int, val chance: Double) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged || world.rng.fraction() >= chance) return null
         val home = world.roomOrNull(mob.homeRoom) ?: mob.room
@@ -88,7 +88,7 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
 }
 
 /** `aggressive(toward, unless_level_above)`: attacks the first matching actor in the room. */
-class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null) : Behavior {
+data class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged) return null
         val target = world.others(mob).firstOrNull { toward.matches(it) && (unlessLevelAbove == null || it.level <= unlessLevelAbove) }
@@ -98,7 +98,7 @@ class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null) : B
 }
 
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
-class Assist(val allies: ActorFilter) : Behavior {
+data class Assist(val allies: ActorFilter) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged) return null
         for (ally in world.others(mob)) {
@@ -112,7 +112,7 @@ class Assist(val allies: ActorFilter) : Behavior {
 }
 
 /** `flee(at_hp_pct)`: flees once hit points are at or below the threshold, engaged or not (D-121). */
-class Flee(val atHpPct: Int) : Behavior {
+data class Flee(val atHpPct: Int) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.hp.toLong() * 100 > atHpPct.toLong() * mob.maxHp) return null
         if (mob.room.exits.values.none { it.passable }) return null
@@ -124,7 +124,7 @@ class Flee(val atHpPct: Int) : Behavior {
  * `guard(exit)`: denies [exit] to everyone but [allies] while the guard is in the room and
  * able to act. A built-in `before_exit` observer, not a proposal.
  */
-class Guard(val exit: Direction, val allies: ActorFilter = ActorFilter("mobs")) : Behavior {
+data class Guard(val exit: Direction, val allies: ActorFilter = ActorFilter("mobs")) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? = null
 
     fun denies(world: World, guard: Mob, actor: Actor, dir: Direction): Boolean =
@@ -144,7 +144,7 @@ internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String
  * `follow(target)`: picks the first matching actor in its room as leader, then follows it
  * along the shortest path while it is within [BUBBLE_RADIUS] exits; farther away, it gives up.
  */
-class Follow(val target: ActorFilter) : Behavior {
+data class Follow(val target: ActorFilter) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged) return null
         val leader = mob.leader?.let(world::actor)?.takeIf { it.inWorld && target.matches(it) }
@@ -163,7 +163,7 @@ class Follow(val target: ActorFilter) : Behavior {
 }
 
 /** `pursue(target)`: heads for the nearest matching actor anywhere in the world by `path_to`. */
-class Pursue(val target: ActorFilter) : Behavior {
+data class Pursue(val target: ActorFilter) : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged) return null
         if (world.others(mob).any { target.matches(it) }) return null
@@ -178,14 +178,14 @@ class Pursue(val target: ActorFilter) : Behavior {
 }
 
 /** `sentinel()`: never leaves its room. Removes other behaviors' moves and flights. */
-object Sentinel : Behavior {
+data object Sentinel : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? = null
 
     fun allows(p: Proposal): Boolean = p.action !is MoveAction && p.action !== FleeAction
 }
 
 /** `scavenge()`: picks up the first item on the ground it can reach and carry. Corpses are left alone. */
-object Scavenge : Behavior {
+data object Scavenge : Behavior {
     override fun propose(world: World, mob: Mob): Proposal? {
         if (mob.isEngaged) return null
         val item = mob.room.items.firstOrNull { world.canScavenge(mob, it) } ?: return null

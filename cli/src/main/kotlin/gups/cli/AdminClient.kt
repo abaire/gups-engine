@@ -36,6 +36,28 @@ class AdminClient(address: String, tokenFile: File?) {
         res.body().use { lines -> lines.forEach { line(res.statusCode(), it) } }
         return res.statusCode()
     }
+
+    /** GETs [path] and saves the response body to [target]; returns the HTTP status. */
+    fun download(path: String, target: File): Int {
+        val req = HttpRequest.newBuilder(URI("$base$path"))
+            .header("Authorization", "Bearer $token")
+            .GET()
+            .build()
+        val temp = java.nio.file.Files.createTempFile("gups-admin-dl", ".tmp")
+        try {
+            val res = try {
+                http.send(req, HttpResponse.BodyHandlers.ofFile(temp))
+            } catch (e: java.io.IOException) {
+                throw UsageError("can't reach the admin port at $base: ${e.message}")
+            }
+            if (res.statusCode() == 200) {
+                java.nio.file.Files.move(temp, target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            return res.statusCode()
+        } finally {
+            runCatching { java.nio.file.Files.deleteIfExists(temp) }
+        }
+    }
 }
 
 /** A secret read from [file], or from the file the environment variable [env] names (M6 design §2.1). */
