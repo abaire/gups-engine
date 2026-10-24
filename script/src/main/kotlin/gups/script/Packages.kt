@@ -138,6 +138,10 @@ class ScriptPackage internal constructor(val path: String) {
     /** Declaration names, unique across kinds within the package (SPEC §2.3). */
     internal val names = HashSet<String>()
 
+    /** The package's `migrate(old_version, attrs)`, if one of its files defines it (SPEC §3.4). */
+    var migrate: HookRef? = null
+        internal set
+
     /** Labels this package refers to, checked once every package has loaded. */
     internal val refs = mutableListOf<LabelRef>()
 

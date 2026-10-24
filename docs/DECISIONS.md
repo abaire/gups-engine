@@ -63,10 +63,11 @@ A pulse that ends at or before the following boundary is on time. The next bound
 an overrun may be "now", in which case the next pulse runs immediately.
 *Code:* `PulseTimer.pulseFinished`.
 
-### D-010 Shutdown has no final checkpoint yet — `open`
-`Shutdown(delayPulses, reason)` broadcasts the reason and stops the loop once the delay
-has passed. The final checkpoint (§5.11) arrives with persistence in M4.
-*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`.
+### D-010 Shutdown — `open`
+`Shutdown(delayPulses, reason)` broadcasts the reason and stops the loop once the delay has
+passed. The server then takes the final checkpoint (§5.11) on the world thread and waits up
+to 30 s for the writer to commit it, including on a JVM shutdown (Ctrl-C).
+*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`, `DevServer.run`.
 
 ## Commands (§4.9, §5.2)
 
@@ -360,9 +361,11 @@ corpse container, always present in the item table.
 Changing it changes every replay.
 *Code:* `Rng`.
 
-### D-055 `AttrValue` has no serialization yet — `open`
-JSON serialization arrives with persistence in M4.
-*Code:* `AttrValue.kt`.
+### D-055 `AttrValue` is serialized in `persist`, not annotated in `core` — `open`
+§3.2 shows `AttrValue` as `@Serializable`. Instead `core` stays free of kotlinx.serialization,
+and `persist` maps values to JSON itself: ints and bools as JSON numbers and booleans,
+strings as strings, lists as arrays and dicts as objects.
+*Code:* `AttrValue.toJson`, `JsonElement.toAttr`.
 
 ### D-056 Player names are unique among in-world players — `open`
 `spawnPlayer` rejects a duplicate name, case-insensitively. Account-level uniqueness
@@ -405,9 +408,10 @@ restock them from `on_reset` (the tutorial's armory does).
 ### D-062 When `on_load` fires — `open`
 `World.fireOnLoad()` fires `on_load` once on every entity, ascending id, after the world is
 built and global commands are installed. Spawns filled while the world is built fire
-`on_spawn` first, during construction. The harness calls it in `t.world()`; `serve` will in
-M3. After reload (M3) and restore (M4) it will fire on reconciled instances.
-*Code:* `World.fireOnLoad`, `TestCtx.world`.
+`on_spawn` first, during construction. The harness calls it in `t.world()`, and `serve`
+calls it once a saved world has been restored (so restored entities get it too). A reload
+fires `on_load` only on rooms it creates. Characters restored at login don't get it.
+*Code:* `World.fireOnLoad`, `TestCtx.world`, `DevServer.boot`.
 
 ### D-063 `path_to` is an uncached BFS — `open`
 Breadth-first over exits in declaration order, through open doors only (closed and locked
@@ -480,10 +484,12 @@ compact JSON.
   failures of Kotlin-hosted handlers.
 - **Fields:** each diagnostic carries the package, prototype label, hook, file label, line,
   Starlark stack, a one-line ctx summary and the seed.
-- **Not yet:** the repro bundle needs checkpoints, so it and `gups repro` move to M4 (the
-  CLI stub said M2). The in-game owner alert, at most one per package per 10 s, needs
-  package ownership (M6).
-- **Storage:** diagnostics live in `World.diagnostics` until the diagnostics table (M4).
+- **Room:** a script diagnostic also names the room its owner was in, which the repro
+  bundle snapshots (D-098).
+- **Not yet:** the in-game owner alert, at most one per package per 10 s, needs package
+  ownership (M6).
+- **Storage:** diagnostics are kept in `World.diagnostics` and written to the `diagnostics`
+  table with the next checkpoint batch, periodic or immediate.
 *Code:* `Diagnostic`, `StarlarkHost.report`.
 
 ### D-070 Declaration details — `open`
@@ -666,7 +672,8 @@ other field keeps its live value.
 - **Skills:** actors forget skills whose prototype is gone.
 - **Spawns:** spawn rules carry their live mobs over by label. New rooms fill their spawns,
   then get `on_load`.
-- **Not yet:** `migrate()` and version bumps arrive with persistence in M4.
+- **Versions:** when an instance's prototype version goes up, the package's `migrate()`
+  runs (D-094).
 *Code:* `World.applyPrototypes`.
 
 ### D-081 How a reload runs — `open`
@@ -681,15 +688,18 @@ other field keeps its live value.
   diagnostic.
 - **Quarantine:** a successful reload clears the reloaded packages' quarantine. §6.3 only
   says a deploy does this; `--dev` saves are treated the same.
-- **Not yet:** the post-reload checkpoint arrives in M4, and `@reload` in M6 with the other
-  instructor commands.
+- **Checkpoint:** a successful reload ends with a periodic checkpoint (§5.10 step 6).
+- **Not yet:** `@reload` arrives in M6 with the other instructor commands.
 *Code:* `StarlarkHost.reload`, `World.reload`.
 
 ### D-082 The `--dev` login and world — `open`
 - **Prompting:** the server asks for a name: 2 to 16 letters, capitalized.
 - **Characters:** every character belongs to the local instructor account, so it gets
   `Role.INSTRUCTOR` and is idle-exempt. Naming a character that is already playing takes it
-  over and closes the old connection. Characters aren't saved until M4.
+  over and closes the old connection. Otherwise a saved character is restored (D-095), or a
+  new one is created and saved at once.
+- **Maintenance:** while the database can't be written, new logins are refused with a
+  maintenance message (§6.4); taking over a character still works.
 - **Connections:** a remote address that isn't loopback is refused and closed.
 - **Starting room:** new characters start in `--start`, else `//zones/tutorial:gate` if it
   exists, else the first room by label.
@@ -791,7 +801,174 @@ from one `AtomicLong` shared by listeners.
   M6.
 *Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `EngineCommands.errors`.
 
-### D-092 `gups serve` options in M3 — `open`
-`--prod` exits with status 3 until M6. `--fresh` and `--db` are accepted but do nothing
-until persistence (M4). Two options are new: `--port` (default 4000) and `--start` (D-082).
+### D-092 `gups serve` options — `open`
+`--prod` exits with status 3 until M6. `--fresh` and `--db` work from M4 (D-099, D-101).
+Two options are new: `--port` (default 4000) and `--start` (D-082).
 *Code:* `Serve`.
+
+## Persistence (§3.4, §3.6, §5.11, §6.4) — M4
+
+### D-093 Persistence seams — `open`
+- **`Persistence`:** §4.11's `CheckpointSink` becomes a `core` interface with four parts:
+  `checkpoint(world, cause, immediate)`, `loadCharacter`, `diagnostic` and `maintenance`.
+  Capture (serialization) happens inside `persist`, on the world thread.
+- **`Boot`:** a saved world starts from a `Boot`: the saved pulse, the id counters, the
+  saved room ids, and no fresh spawns. A small restore API rebuilds entities with their
+  saved ids: `restorePlayer`, `restoreMob`, `restoreItem`, `bindSpawn`, `setRespawn` and
+  `setZoneReset`.
+- **Script host:** `ScriptHost` gains `migrate`, `quarantinedPackages` and `quarantine`.
+- **Immediate checkpoints:** `World.requestImmediate(cause)` asks for one. It is submitted
+  at the end of the current cascade: after each input line, after each actor's action in a
+  tier, after the timer phase, and after the action phase.
+*Code:* `world/Persistence.kt`, `world/Restore.kt`, `Boot`.
+
+### D-094 `migrate()` — `open`
+- **Where:** a package defines at most one top-level `migrate(old_version, attrs)`, in any
+  of its files.
+- **When:** it runs for each instance whose saved prototype version is below the current
+  one. That covers mobs, items and rooms restored at startup, items restored with a
+  character at login, and live instances after a reload.
+- **Arguments:** `attrs` is a dict of the package's own attributes by short name. The dict
+  it returns replaces them; other packages' attributes are untouched.
+- **Failures:** an error, or a return value that isn't a dict of storable values, leaves
+  the attributes as they were and logs a diagnostic. The version still moves up.
+*Code:* `StarlarkHost.migrate`, `World.upgrade`.
+
+### D-095 Characters load at login, from an in-memory mirror — `open`
+§5.11 startup says "load `players` and `world_entities`", but §5.12 places a character only
+when it logs in.
+- **Startup:** only world state is restored at startup. A player's row, and every item
+  whose location chain ends in that player, are restored when the player logs in.
+- **The mirror:** `SqlitePersistence` keeps the last captured row of every entity and
+  player in memory. Logins and repro bundles read the mirror, so they never wait on the
+  database or miss a batch that isn't committed yet.
+- **Logout and creation:** on logout the character and everything it carries are captured
+  in an immediate batch, then removed from the world; their rows stay. Creating a
+  character also triggers an immediate checkpoint.
+*Code:* `SqlitePersistence.loadCharacter`, `World.quit`, `DevLogin`.
+
+### D-096 The checkpoint writer — `open`
+- **Thread:** it is a dedicated thread, not a coroutine on `Dispatchers.IO`. It is still the
+  only writer, it commits in FIFO order with one transaction per batch, and the world never
+  waits for it.
+- **Merging:** a batch merges into the last queued one unless that one is being written
+  right now. Immediate captures reach the writer already folded into a periodic batch
+  (§5.11).
+- **Failures:** a failed write stays at the head of the queue. It is retried with backoff
+  from 50 ms doubling up to 5 s, and later periodic captures may merge into it.
+- **Health:** a failure makes the writer unhealthy until a write succeeds. While unhealthy,
+  `maintenance` refuses new logins.
+- **Alerts:** if a submitted batch is still uncommitted three world ticks later, one
+  `checkpoint` diagnostic is logged until the backlog clears.
+- **SQLite settings:** WAL with `synchronous = NORMAL`, which survives process kills
+  (tested) but may lose the last commits on power loss. `busy_timeout` is 5 s.
+*Code:* `CheckpointWriter`, `Database.open`.
+
+### D-097 Backups — `open`
+- **Naming:** snapshots are `<kind>-<UTC yyyyMMdd-HHmmss>.db` in `backups/` next to the
+  database.
+- **Kinds:** `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup`, never pruned)
+  and `predeploy` (for M6).
+- **Schedule:** the server checks every 5 minutes whether the newest snapshot of a kind is
+  older than its period, and also once at startup.
+- **Restore:** `gups restore FILE` replaces the database with SQLite's restore API. The
+  server must be stopped first; nothing enforces it.
+*Code:* `Backups`, `Backup`, `Restore`.
+
+### D-098 Repro bundles and `gups repro` — `open`
+- **Contents:** a bundle holds the seed, the failure pulse, the pulse of the last periodic
+  checkpoint, the hook and message, and the failing room's rows as of that checkpoint: the
+  room, the mobs and players there, and every item in it or held by them, transitively.
+  It also holds the tick-lane commands and `say`s since that checkpoint, by actors in rooms
+  of the failing package.
+- **Replay world:** `gups repro <id|bundle.json>` builds a headless world from today's
+  packages with the bundle's seed. It starts at the checkpoint pulse, with ids above the
+  bundle's and no spawns, and doesn't fire `on_load`. Then it restores the bundle and
+  replays each input by actor id at its pulse.
+- **Verdict:** the run goes 16 pulses past the failure. It counts as reproduced when a
+  diagnostic with the same hook and message appears. `--save FILE` exports the bundle.
+  Exit status is 1 when not reproduced.
+- **Players:** players come back without a connection, so output to them is dropped.
+*Code:* `SqlitePersistence.bundle`, `ReproRunner`, `restoreBundle`, `Repro`.
+
+### D-099 Where the database lives — `open`
+`--db` defaults to `<world>/.gups/world.db`. The hidden directory is skipped by the package
+scan and the file watcher. `gups backup`, `restore` and `repro` take the same `--world` and
+`--db`.
+*Code:* `DevServer.defaultDb`.
+
+### D-100 Row formats — `open`
+- **References:**
+  - An item's location names a room by label (with a track index) and an actor or
+    container by id.
+  - Rooms keep their saved ids across restarts (`Boot.roomIds`), so ids stay unique, but
+    nothing refers to a room by id.
+- **Deltas:**
+  - Rooms store door states and exit blocks that differ from the prototype, plus
+    attributes and timers.
+  - Mobs always store position, vitals, xp, home room and spawn binding. Level, maxima,
+    armor, stats, resists, skills, `think_every` and `dormant_recovery` are stored only
+    when they differ from the prototype, each as a whole value.
+  - Items store count, decay, name override, container state, attributes, timers and
+    their prototype name.
+- **Players:** they store everything, role included.
+- **JSON:** field names are camelCase except `format_version` (§3.6).
+- **`item_events`:** `from_json` and `to_json` hold location JSON. The cause is `spawn`,
+  `move` or `destroy`.
+- **`meta`:** it also stores `next_handle`, the timer and affect id counter.
+*Code:* `Codec.kt`, `Database.kt`.
+
+### D-101 Restore details — `open`
+- **Rooms:** room rows whose room is gone (or got a different id) are deleted.
+- **Items:** they are placed holders first, containers before contents. Rows that can't
+  be placed are dropped.
+- **Deleted prototypes:**
+  - Mobs and ground items are dropped.
+  - Items in a player's custody become tombstones when that player logs in. A tombstone
+    keeps the payload it had when its prototype vanished.
+- **Players:** a player whose room is gone is placed in their recall room, or else the
+  first room.
+- **Spawns:** saved spawn bindings and respawn deadlines are restored. A rule that is short
+  with no respawn pending (for example a new rule) fills at once.
+- **Quarantine:** it is restored from `zone_states`.
+- **`--fresh`:** it deletes every saved row that isn't a player's or a player-owned item,
+  and rewrites zone state. It keeps the pulse and the id counters, so saved characters'
+  ids and deadlines stay valid.
+*Code:* `SqlitePersistence.restore`, `placeItems`.
+
+### D-102 Invariants before every capture — `open`
+The world tick always runs the §3.8 check before its checkpoint. Entities named in a
+violation are left out of that capture and stay dirty. Worlds that don't check every pulse
+(`--prod`, M6) also log each violation then; `--dev` already logs them every pulse
+(D-084).
+*Code:* `World.runWorldTick`, `World.invariantViolations`.
+
+### D-103 The crash test — `open`
+A child JVM shuffles 20 gems between four players (who log in and out), two bags and the
+ground. It checkpoints every few pulses, immediate and periodic mixed, and is killed with
+SIGKILL at a random moment. Each restart must open cleanly, hold exactly 20 gems once all
+players log in, and pass §3.8. It calls `checkpoint` directly, far more often than a server would, so kills land mid-write.
+`./gradlew check` runs 20 iterations;
+`-Dgups.crashIterations=300` runs the full "hundreds" of §7.1. This also covers the
+checkpoint/kill/restore property test.
+*Code:* `CrashTest`.
+
+### D-104 Immediate checkpoint triggers in M4 — `open`
+- **Implemented:** an item moving from one player's custody to another's, a player
+  levelling up, character creation, and logout or quit. Each captures at once; the write
+  waits for the next periodic checkpoint (§5.11).
+- **Not yet:** shops and banks don't exist yet.
+- **Audit log:** custody changes involving a player go to `item_events`.
+*Code:* `World.moveItem`, `World.awardXp`, `DevLogin`, `World.quit`.
+
+### D-107 The `MODULE.gups` format — `open`
+§2.3 says `MODULE.gups` pins the engine version and `api_version` and holds world settings
+such as `checkpoint_minutes`, but gives no syntax.
+- **Syntax:** it is Starlark with exactly one `module(engine, api_version,
+  checkpoint_minutes)` call, all optional. A world without the file gets the defaults
+  (`checkpoint_minutes` 30).
+- **Pins:** a pinned `api_version` this engine doesn't support stops the server. A different
+  pinned `engine` version only warns.
+- **Changes:** changing the file needs a restart (§5.10). The file watcher and reload never
+  read it.
+*Code:* `WorldModule`, `DevServer.boot`.

@@ -20,10 +20,16 @@ import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
 import gups.core.EngineInfo
 import gups.core.Label
+import gups.harness.ReproRunner
 import gups.harness.TestRunner
 import gups.harness.render
+import gups.persist.Backups
+import gups.persist.Database
+import gups.persist.ReproBundle
+import gups.persist.restoreBundle
 import gups.script.WorldDir
 import java.io.File
+import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
 
 /** Builds the `gups` command tree (SPEC §4.13). */
@@ -87,11 +93,16 @@ class Serve : CliktCommand(name = "serve") {
             echo("gups serve --prod: not implemented yet (planned for M6).", err = true)
             throw ProgramResult(EXIT_NOT_IMPLEMENTED)
         }
-        if (fresh || db != null) echo("gups serve: --fresh and --db take effect once persistence lands (M4).", err = true)
         val startLabel = start?.let { runCatching { Label(it) }.getOrNull() ?: throw UsageError("--start: '$it' is not a label") }
-        val server = DevServer(WorldDir((world ?: File(".")).toPath()), port, startLabel) { echo(it, err = true) }
+        val dir = WorldDir((world ?: File(".")).toPath())
+        val server = DevServer(dir, port, startLabel, db?.toPath() ?: DevServer.defaultDb(dir), fresh) { echo(it, err = true) }
         if (!server.boot()) throw ProgramResult(1)
-        Runtime.getRuntime().addShutdownHook(Thread { server.stop() })
+        Runtime.getRuntime().addShutdownHook(
+            Thread {
+                server.stop()
+                server.awaitStopped(SHUTDOWN_WAIT_MS)
+            },
+        )
         runBlocking {
             server.run { bound -> echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound") }
         }
@@ -132,14 +143,79 @@ class Docs : StubCommand("docs", "Generate the API reference.", "M7") {
     val out by option("--out", help = "Output directory.").file(canBeFile = false)
 }
 
-class Repro : StubCommand("repro", "Replay a diagnostic in the harness.", "M4") {
+/** How long a shutdown waits for the final checkpoint. */
+const val SHUTDOWN_WAIT_MS = 30_000L
+
+/** `--db`, defaulting to the database of `--world` (D-099). */
+private fun dbPath(world: File?, db: File?): Path = db?.toPath() ?: DevServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
+
+class Repro : CliktCommand(name = "repro") {
     val source by argument("diagnostic-id|bundle.json")
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to read the diagnostic from (default: the world's).").file(canBeDir = false)
+    val save by option("--save", help = "Also write the bundle to this file.").file(canBeDir = false)
+
+    override fun help(context: Context) = "Replay a diagnostic in the harness."
+
+    override fun run() {
+        val json = source.toLongOrNull()?.let { id ->
+            val path = dbPath(world, db)
+            if (!path.toFile().isFile) throw UsageError("no database at $path")
+            Database.open(path).use { d ->
+                val row = d.diagnostic(id) ?: throw UsageError("no diagnostic $id in $path")
+                row.reproJson ?: throw UsageError("diagnostic $id has no repro bundle (only script errors in a room have one)")
+            }
+        } ?: File(source).takeIf { it.isFile }?.readText() ?: throw UsageError("'$source' is neither a diagnostic id nor a bundle file")
+        val bundle = runCatching { ReproBundle.parse(json) }.getOrElse { throw UsageError("not a repro bundle: ${it.message}") }
+        save?.writeText(bundle.toJson())
+        echo("Replaying ${bundle.hook ?: "the failure"} in ${bundle.room} (seed ${bundle.seed}, pulses ${bundle.checkpointPulse}..${bundle.pulse}, ${bundle.inputs.size} inputs)")
+        val outcome = ReproRunner(WorldDir((world ?: File(".")).toPath())).run(
+            seed = bundle.seed,
+            startPulse = bundle.checkpointPulse,
+            firstFreeId = bundle.maxId + 1,
+            setup = { w -> restoreBundle(w, bundle) },
+            inputs = bundle.records,
+            untilPulse = bundle.pulse,
+            matches = { it.hook == bundle.hook && it.message == bundle.message },
+        )
+        outcome.notes.forEach { echo("  note: $it") }
+        if (outcome.reproduced) {
+            val d = outcome.matching.first()
+            echo("Reproduced at pulse ${d.pulse}: ${d.message}")
+            d.stack?.let { echo(it) }
+        } else {
+            echo("Not reproduced. The replay logged ${outcome.diagnostics.size} other diagnostics:")
+            outcome.diagnostics.forEach { echo("  [${it.kind}] ${it.message}") }
+            throw ProgramResult(1)
+        }
+    }
 }
 
-class Backup : StubCommand("backup", "Back up the database.", "M4")
+class Backup : CliktCommand(name = "backup") {
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to back up (default: the world's).").file(canBeDir = false)
 
-class Restore : StubCommand("restore", "Restore the database from a backup.", "M4") {
+    override fun help(context: Context) = "Back up the database."
+
+    override fun run() {
+        val path = dbPath(world, db)
+        if (!path.toFile().isFile) throw UsageError("no database at $path")
+        Database.open(path).use { echo("Backed up to ${Backups(it).snapshot(Backups.Kind.MANUAL)}") }
+    }
+}
+
+class Restore : CliktCommand(name = "restore") {
     val file by argument("file").file(mustExist = true, canBeDir = false)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to overwrite (default: the world's).").file(canBeDir = false)
+
+    override fun help(context: Context) = "Restore the database from a backup. Stop the server first."
+
+    override fun run() {
+        val path = dbPath(world, db)
+        Database.restore(file.toPath(), path)
+        echo("Restored $path from $file")
+    }
 }
 
 class Deploy : StubCommand("deploy", "Deploy a course world commit (called by CI).", "M6") {

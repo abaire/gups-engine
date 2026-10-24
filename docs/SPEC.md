@@ -157,7 +157,8 @@ gups-engine/
 
 ```
 <course-world>/
-  MODULE.gups              pins engine version and api_version
+  MODULE.gups              pins engine version and api_version; world settings such as
+                           checkpoint_minutes (§5.11)
   CODEOWNERS               package ownership → builder roles
   rules/                   instructor-owned; package kind "rules"
     package.star
@@ -870,7 +871,7 @@ boundaries come from `System.nanoTime()`.
      - Fire `on_tick` for active entities.
      - Process zone resets and respawns that are due.
      - Advance item decay.
-     - Capture a checkpoint (§5.11).
+     - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11).
   5. **Deferred perception:** Dispatch the `on_nearby` events queued during this pulse
      (§5.7).
   6. **Bubble maintenance:** Apply bubble changes recorded during this pulse (§5.9).
@@ -1195,27 +1196,30 @@ reload is refused for it.
 
 - **Dirty tracking:** Any change, whether through a verb or engine code, sets the entity's
   `dirty` flag.
-- **Periodic checkpoint** (every world tick):
+- **Periodic checkpoint** (every `checkpoint_minutes`, default 30, set in `MODULE.gups`;
+  checked at world ticks). Writes are kept rare to spare the disk: crashes are expected to
+  be rare, and every graceful shutdown and reload saves.
   1. The world thread serializes all dirty, non-`debug` entities, plus `zone_states`, the
      `meta` pulse, and `next_entity_id`, into a `CheckpointBatch` of JSON bytes.
   2. It clears the dirty flags and submits the batch.
   3. The writer commits each batch in **one transaction**, in FIFO order.
-- **Immediate checkpoint** (submitted at the end of the triggering action's cascade): it
-  includes every entity dirtied during that cascade, plus `item_events` rows.
+- **Immediate capture** (at the end of the triggering action's cascade): it captures every
+  entity dirtied during that cascade, plus `item_events` rows, at once. The capture is held
+  in memory and written in the same transaction as the next periodic checkpoint (or the
+  final one at shutdown).
   - Triggers: an item changing hands between players, a shop purchase, a bank deposit, a
     level-up, character creation or deletion, and logout or quit.
-  - The receive and the give always land together, which closes the classic
-    give-then-crash duplication exploit.
+  - The receive and the give are always captured at the same moment and land in the same
+    transaction, which closes the classic give-then-crash duplication exploit.
 - **Back-pressure:**
   - If a batch is still pending when the next periodic capture happens, the new capture
     is **merged** into the pending batch (last write wins per entity). It isn't queued
     separately.
-  - Immediate batches are never merged past one another.
-  - If any change is still uncommitted after 3 world ticks, an alert fires.
+  - If a submitted batch is still uncommitted after 3 world ticks, an alert fires.
 - **Crash guarantee:**
-  - At most about 30 s of routine state is lost (vitals, mob positions, ground items).
-  - Ownership transfers are lost only if their own transaction didn't commit, and then
-    both sides are lost together.
+  - At most one checkpoint interval of state is lost (by default 30 minutes), including
+    held immediate captures.
+  - An ownership transfer is either saved with both sides or lost with both sides.
   - The database is never inconsistent.
 - **Shutdown and reload:** `@shutdown` and a successful reload both perform a final
   checkpoint (§5.10).

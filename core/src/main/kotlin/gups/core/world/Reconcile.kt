@@ -1,6 +1,6 @@
 package gups.core.world
 
-import gups.core.model.Actor
+import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.ItemLocation
@@ -57,6 +57,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
         for (i in gone.items) destroy(i)
         roomsByLabel.remove(gone.label)
         entities.remove(gone.id)
+        removed += gone.id
         notes += "room ${gone.label} removed"
     }
     for (room in roomsByLabel.values) {
@@ -81,7 +82,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
         when {
             p != null -> {
                 item.proto = p
-                item.protoVersion = p.version
+                upgrade(item, p.version)
             }
             item.proto.kind == TOMBSTONE -> Unit
             custodian(item) is Player -> {
@@ -110,7 +111,8 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
 /** Kind of the inert items left when a carried item's prototype is deleted (SPEC §3.4). */
 const val TOMBSTONE = "tombstone"
 
-private fun tombstone(was: ItemProto) = ItemProto(
+/** The inert prototype an item falls back to when its own is deleted (SPEC §3.4). */
+fun tombstone(was: ItemProto) = ItemProto(
     label = was.label,
     name = was.name,
     keywords = was.keywords,
@@ -120,14 +122,6 @@ private fun tombstone(was: ItemProto) = ItemProto(
     stackable = was.stackable,
     container = was.container,
 )
-
-/** The actor whose custody [item] ends in, if any. */
-private fun World.custodian(item: Item): Actor? = when (val loc = item.location) {
-    is ItemLocation.Carried -> actor(loc.actor)
-    is ItemLocation.Equipped -> actor(loc.actor)
-    is ItemLocation.Contained -> item(loc.container)?.let { custodian(it) }
-    is ItemLocation.InRoom -> null
-}
 
 private fun World.despawn(m: Mob) {
     disengageAll(m)
@@ -139,7 +133,7 @@ private fun World.despawn(m: Mob) {
 private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
     val oldExits = room.exits
     room.proto = p
-    room.protoVersion = p.version
+    upgrade(room, p.version)
     room.exits = p.exits.associateTo(LinkedHashMap()) { ep ->
         val exit = Exit(ep)
         val live = oldExits[ep.direction]
@@ -155,12 +149,18 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
     room.dirty = true
 }
 
+/** Moves [e] to prototype [version], running the package's `migrate` if it went up (SPEC §3.4). */
+fun World.upgrade(e: Entity, version: Int) {
+    if (e.protoVersion < version) guarded("migrate of $e") { scripts.migrate(this, e, e.protoVersion) }
+    e.protoVersion = version
+}
+
 /** A field the instance hasn't changed from its old prototype follows the new one. */
 private fun <T> follow(live: T, was: T, now: T): T = if (live == was) now else live
 
 private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
     m.proto = p
-    m.protoVersion = p.version
+    upgrade(m, p.version)
     m.level = follow(m.level, was.level, p.level)
     val full = m.hp == m.maxHp
     m.maxHp = follow(m.maxHp, was.hp, p.hp)

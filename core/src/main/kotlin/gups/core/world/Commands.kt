@@ -135,6 +135,8 @@ fun World.submit(actor: Actor, line: String): Boolean {
         send(actor, "Huh?")
         return false
     }
+    // Tick-lane commands and says (never tells) feed repro bundles (SPEC §6.2).
+    if (def is TickCommand || def.name == "say") inputs += InputRecord(pulse, actor.id, actor.name, actor.room.label, line)
     when (def) {
         is FastCommand -> guarded("command '$verb' of $actor") { def.run(CommandCall(this, actor, verb, args)) }
         is TickCommand -> {

@@ -93,6 +93,18 @@ interface ScriptHost {
     fun reload(world: World, packages: List<String>): ReloadResult =
         ReloadResult(false, listOf("This world has no script host to reload ${packages.joinToString()} with."))
 
+    /**
+     * Runs the package's `migrate(old_version, attrs)` for [entity], saved at prototype version
+     * [fromVersion] (SPEC §3.4). The host rewrites the package's own attributes in place.
+     */
+    fun migrate(world: World, entity: Entity, fromVersion: Int) = Unit
+
+    /** Packages whose scripts are disabled, saved in `zone_states` (SPEC §6.3). */
+    val quarantinedPackages: Set<String> get() = emptySet()
+
+    /** Puts a package back in quarantine, as restored from a checkpoint. */
+    fun quarantine(world: World, pkg: String, why: String) = Unit
+
     companion object {
         /** No scripts: every hook allows. */
         val NONE: ScriptHost = object : ScriptHost {

@@ -27,6 +27,7 @@ import gups.core.world.applyPrototypes
 import gups.core.world.findActor
 import gups.core.world.opponentsOf
 import gups.core.world.send
+import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Module
 import net.starlark.java.eval.Mutability
@@ -125,6 +126,8 @@ class StarlarkHost(
     /** Packages whose scripts are disabled. */
     val quarantined: Set<String> get() = quarantinedSet
 
+    override val quarantinedPackages: Set<String> get() = quarantinedSet
+
     /** Receives one event per script call, verb and error while set (`@trace`, `w.trace`). */
     var tracer: ((TraceEvent) -> Unit)? = null
 
@@ -160,7 +163,7 @@ class StarlarkHost(
 
     // ---- Quarantine (SPEC §6.3) ----------------------------------------------------------------
 
-    fun quarantine(world: World, pkg: String, why: String = "by request") {
+    override fun quarantine(world: World, pkg: String, why: String) {
         if (!quarantinedSet.add(pkg)) return
         val message = "package //$pkg quarantined $why: its hooks, think, commands and timers are disabled"
         world.record(Diagnostic(world.pulse, "quarantine", message, pkg = pkg, seed = world.config.seed))
@@ -201,7 +204,7 @@ class StarlarkHost(
         val pkg = chargeTo(owner, ref)
         val what = if (ctx.affect != null) "affect ${ctx.affect!!.name} ${ref.name}" else "timer ${ref.name}"
         val site = Site(pkg, owner.protoLabel.takeIf { it.pkg in scripts.packages }, what, vetoable = false, owner.id)
-        call(world, site, ref, { Ctx(it, owner, ctx, CtxExtras()) }) { f -> ctx.args.mapValues { fromAttr(it.value, f.thread.mutability()) } }
+        call(world, site, ref, { Ctx(it, owner, ctx, CtxExtras()) }, kwargs = { f -> ctx.args.mapValues { fromAttr(it.value, f.thread.mutability()) } })
     }
 
     override fun isSuspended(owner: Entity, ref: HookRef): Boolean = chargeTo(owner, ref) in quarantinedSet
@@ -278,6 +281,35 @@ class StarlarkHost(
         return ReloadResult(true, listOf(head) + notes)
     }
 
+    // ---- migrate (SPEC §3.4) --------------------------------------------------------------------
+
+    /**
+     * Calls the package's `migrate(old_version, attrs)` with [entity]'s own attributes by short
+     * name, and stores the dict it returns in their place. Other packages' keys are untouched.
+     * A failing migrate leaves the attributes as they were and logs a diagnostic (D-094).
+     */
+    override fun migrate(world: World, entity: Entity, fromVersion: Int) {
+        val pkg = entity.protoLabel.pkg
+        val ref = scripts.packages[pkg]?.migrate ?: return
+        val ns = scripts.packages.getValue(pkg).namespace
+        val site = Site(pkg, entity.protoLabel, "migrate", vetoable = false, entity.id)
+        val own = entity.customAttributes.filterKeys { it.startsWith("$ns:") }
+        val result = call(world, site, ref, { f -> Ctx(f, entity, HookContext(), CtxExtras()) }, positional = { f ->
+            val attrs = own.entries.associate { it.key.removePrefix("$ns:") to fromAttr(it.value, f.thread.mutability()) }
+            listOf(sInt(fromVersion), Dict.copyOf(f.thread.mutability(), attrs))
+        })
+        val value = (result as? CallResult.Ok)?.value ?: return
+        val next = try {
+            dict(value, "migrate() return value").mapValues { (k, v) -> toAttr(v, "migrate()[\"$k\"]", limits) }
+        } catch (e: EvalException) {
+            report(world, site, "script_error", "migrate must return a dict of storable values: ${e.message}", e, null)
+            return
+        }
+        for (k in own.keys) entity.customAttributes.remove(k)
+        for ((k, v) in next) if (v != null) entity.customAttributes["$ns:$k"] = v
+        entity.dirty = true
+    }
+
     // ---- @eval (SPEC §5.13) --------------------------------------------------------------------
 
     /**
@@ -331,6 +363,8 @@ class StarlarkHost(
         ref: HookRef,
         ctxOf: (Frame) -> Ctx,
         kwargs: (Frame) -> Map<String, Any> = { emptyMap() },
+        /** Arguments in place of the ctx, for `migrate`; the ctx is still made for verbs' sake. */
+        positional: ((Frame) -> List<Any>)? = null,
     ): CallResult {
         if (site.pkg in quarantinedSet) return CallResult.Skipped
         val fn = scripts.function(ref) ?: run {
@@ -355,7 +389,7 @@ class StarlarkHost(
             var ctx: Ctx? = null
             try {
                 ctx = ctxOf(frame)
-                value = Starlark.call(thread, fn, listOf(ctx), kwargs(frame))
+                value = Starlark.call(thread, fn, positional?.invoke(frame) ?: listOf(ctx), kwargs(frame))
                 checkValue(value, "${site.hook} return value", limits)
             } catch (e: EvalException) {
                 failure = e
@@ -400,6 +434,7 @@ class StarlarkHost(
             stack = e?.let(::formatStack),
             ctx = ctx?.summary(),
             seed = world.config.seed,
+            room = site.owner?.let(world::entity)?.let { world.roomOfEntity(it) }?.label,
         )
         world.record(d)
         trace(site, world.pulse, "  ERROR ${d.file ?: ""}${d.line?.let { ":$it" } ?: ""}: ${d.message}")

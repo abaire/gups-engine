@@ -87,6 +87,7 @@ fun World.handle(event: ClientInputEvent) {
         return
     }
     submit(player, event.line)
+    flushImmediate()
     flush(s)
 }
 
@@ -115,6 +116,11 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
     }
     player.session = null
     disengageAll(player)
+    // Logout saves the character and everything it carries, at once (SPEC §5.11).
+    player.dirty = true
+    for (item in player.inventory + player.equipment.values) markDirtyTree(item)
+    immediateCause = null
+    guarded("checkpoint") { persistence.checkpoint(this, "quit", immediate = true) }
     val room = player.room
     removeActor(player)
     echo(room, "${player.name} has left the game.")
@@ -185,6 +191,8 @@ internal fun World.reload(packages: List<String>) {
         ReloadResult(false, listOf("reload of ${packages.joinToString()} crashed: $e"))
     }
     if (!result.ok) record(Diagnostic(pulse, "reload", result.messages.joinToString("\n")))
+    // A successful reload ends with a checkpoint (SPEC §5.10 step 6).
+    if (result.ok) checkpointNow("reload")
     for (p in players) if (p.role.atLeast(Role.BUILDER)) result.messages.forEach { send(p, it) }
     flushOutput()
 }

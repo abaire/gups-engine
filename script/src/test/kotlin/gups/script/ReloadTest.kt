@@ -131,7 +131,7 @@ class ReloadTest {
             ),
         )
         f.w
-        f.host.quarantine(f.w, "zones/z")
+        f.host.quarantine(f.w, "zones/z", "by test")
         reload(f, "zones/z")
         assertFalse("zones/z" in f.host.quarantined)
         // Removing //zones/y breaks //zones/z's exit, so that reload is refused.

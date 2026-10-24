@@ -6,9 +6,17 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Room
 
+/** One broken state contract, and the entity it is about if there is one. */
+data class Violation(val entity: EntityId?, val message: String) {
+    override fun toString(): String = message
+}
+
 /** Checks the state contracts of SPEC §3.8. Returns one line per violation. */
-fun World.checkInvariants(): List<String> {
-    val out = mutableListOf<String>()
+fun World.checkInvariants(): List<String> = invariantViolations().map { it.message }
+
+/** Like [checkInvariants], keeping which entity each violation is about (SPEC §6.5). */
+fun World.invariantViolations(): List<Violation> {
+    val out = ViolationList()
     for (e in entities.values) {
         if (e !is Item) continue
         val held = when (val loc = e.location) {
@@ -42,5 +50,15 @@ fun World.checkInvariants(): List<String> {
         if (a.actionQueue.size > ACTION_QUEUE_MAX) out += "$a: action queue holds ${a.actionQueue.size}"
         for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id)) out += "$a lists stray $item"
     }
-    return out
+    return out.list
+}
+
+/** Collects `entity: message` lines, remembering the entity. */
+private class ViolationList {
+    val list = mutableListOf<Violation>()
+
+    operator fun plusAssign(message: String) {
+        val id = Regex("#(\\d+)").find(message)?.groupValues?.get(1)?.toLongOrNull()?.let(::EntityId)
+        list += Violation(id, message)
+    }
 }

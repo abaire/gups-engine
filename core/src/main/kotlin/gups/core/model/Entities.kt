@@ -217,7 +217,8 @@ class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Acto
     var thinkEvery: Int = proto.thinkEvery
     var lastThink: Long = Long.MIN_VALUE / 2
         internal set
-    val homeRoom: Label = room.label
+    /** Where it was spawned; restored from a checkpoint (SPEC §5.11). */
+    var homeRoom: Label = room.label
     var dormantRecovery: DormantRecovery = proto.dormantRecovery
 
     internal var spawnedBy: SpawnState? = null
@@ -257,6 +258,9 @@ class Item(id: EntityId, var proto: ItemProto, location: ItemLocation, var count
 
     /** Builder-spawned items are never persisted. */
     var debug: Boolean = false
+
+    /** For a tombstone: the payload the item was last saved with, kept as is (SPEC §3.4). */
+    var savedPayload: String? = null
 
     internal val contentsIndex = TreeMap<EntityId, Item>()
     val contents: List<Item> get() = contentsIndex.values.toList()

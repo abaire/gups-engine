@@ -147,7 +147,18 @@ class ScriptLoader(
                 st.contentDone = true
                 for (file in dir.files(p, tests = false)) loadFile(file, st)
                 for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
+                findMigrate(st)
             }
+        }
+
+        /** One file of the package may define a top-level `migrate`. */
+        fun findMigrate(st: PkgState) {
+            val defs = dir.files(st.pkg.path, tests = false).filter { file ->
+                val m = modules[file]
+                (m?.globals?.get("migrate") as? StarlarkFunction)?.module === m
+            }
+            if (defs.size > 1) st.errors += LoadError(st.pkg.path, "migrate", "migrate() is defined in more than one file: ${defs.joinToString(", ")}")
+            defs.singleOrNull()?.let { st.pkg.migrate = HookRef(it, "migrate") }
         }
 
         fun dependOn(st: PkgState, dep: String) {

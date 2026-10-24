@@ -153,6 +153,7 @@ fun World.awardXp(a: Actor, amount: Long) {
     while (a.xp >= rules.xpToLevel(a.level)) {
         a.level++
         send(a, "You have reached level ${a.level}!")
+        if (a is Player) requestImmediate("level")
     }
     a.dirty = true
 }

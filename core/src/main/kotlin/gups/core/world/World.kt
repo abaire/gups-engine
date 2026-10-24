@@ -5,6 +5,7 @@ import gups.core.COMBAT_ROUND_PULSES
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.PULSE_MS
 import gups.core.Rng
 import gups.core.SessionId
 import gups.core.WORLD_TICK_PULSES
@@ -30,7 +31,15 @@ class WorldConfig(
     val checkInvariants: Boolean = false,
     /** Rethrow engine exceptions instead of logging them. For tests. */
     val strict: Boolean = false,
+    /**
+     * Pulses between routine checkpoints, rounded up to world ticks. The default is 30 minutes;
+     * a world sets it with `checkpoint_minutes` in `MODULE.gups` (SPEC §5.11).
+     */
+    val checkpointPulses: Long = DEFAULT_CHECKPOINT_PULSES,
 )
+
+/** 30 minutes of pulses (SPEC §5.11). */
+const val DEFAULT_CHECKPOINT_PULSES = 30L * 60 * 1000 / PULSE_MS
 
 /**
  * A logged engine or script problem (SPEC §3.6, §6.2). Persisted to the diagnostics table
@@ -47,6 +56,8 @@ data class Diagnostic(
     /** The prototype whose hook failed. */
     val label: Label? = null,
     val hook: String? = null,
+    /** The room the failing code ran for, which a repro bundle snapshots (SPEC §6.2). */
+    val room: Label? = null,
     /** The file label, for example `//zones/tutorial:rooms.star`. */
     val file: String? = null,
     val line: Int? = null,
@@ -70,19 +81,37 @@ class SpawnState internal constructor(val room: Room, val rule: SpawnRule) {
  * The world graph and its scheduler (SPEC §5.1). Not thread-safe by design: everything runs
  * on the world thread, driven by [gups.core.loop.WorldLoop] or directly by a headless test.
  */
+/**
+ * How a world starts (SPEC §5.11 startup): fresh from its prototypes, or as the shell that
+ * saved state is restored into. Saved rooms keep their ids so references to them survive a
+ * restart; new ids start above everything ever saved.
+ */
+class Boot(
+    val pulse: Long = 0,
+    val nextEntityId: Long = 1,
+    val nextHandle: Long = 1,
+    val roomIds: Map<Label, EntityId> = emptyMap(),
+    /** False when restoring, so saved mobs come back instead of fresh spawns. */
+    val fillSpawns: Boolean = true,
+)
+
 class World(
     protos: Prototypes,
     val rules: RulesEngine = DefaultRules(),
     val scripts: ScriptHost = ScriptHost.NONE,
     val config: WorldConfig = WorldConfig(),
+    boot: Boot = Boot(),
 ) {
     /** The live prototype table; a reload swaps it (SPEC §5.10). */
     var protos: Prototypes = protos
         internal set
 
     /** Game time (SPEC §3.1). */
-    var pulse: Long = 0
+    var pulse: Long = boot.pulse
         private set
+
+    /** Where checkpoints go (SPEC §5.11); nowhere until a persistence layer is attached. */
+    var persistence: Persistence = Persistence.NONE
 
     /** Handles sessions that have no character yet; null answers "You are not playing a character." */
     var login: LoginHandler? = null
@@ -93,8 +122,8 @@ class World(
     val rng = Rng(config.seed)
     val commands = CommandRegistry()
 
-    private var nextEntityId = 1L
-    private var nextHandle = 1L
+    internal var nextEntityId = maxOf(boot.nextEntityId, (boot.roomIds.values.maxOfOrNull { it.v } ?: 0) + 1)
+    internal var nextHandle = boot.nextHandle
     internal val entities = HashMap<EntityId, Entity>()
     internal val actorIndex = TreeMap<EntityId, Actor>()
     internal val roomsByLabel = LinkedHashMap<Label, Room>()
@@ -104,6 +133,16 @@ class World(
 
     /** Next zone reset per package that declares `reset_pulses` (SPEC §4.1). */
     internal val zoneResets = TreeMap<String, Long>()
+
+    // Persistence bookkeeping (SPEC §5.11), drained by each checkpoint capture.
+    internal val removed = LinkedHashSet<EntityId>()
+    internal val itemEvents = mutableListOf<ItemEvent>()
+    internal val inputs = mutableListOf<InputRecord>()
+    internal var immediateCause: String? = null
+
+    /** Entities the last world tick's invariant check found broken; kept out of checkpoints (SPEC §6.5). */
+    var checkpointExclusions: Set<EntityId> = emptySet()
+        private set
 
     // Initiative-tier state (SPEC §5.4.1).
     internal var snapshot: TierSnapshot? = null
@@ -117,7 +156,7 @@ class World(
 
     init {
         for (proto in protos.rooms.values) {
-            val room = Room(allocateId(), proto)
+            val room = Room(boot.roomIds[proto.label] ?: allocateId(), proto)
             register(room)
             roomsByLabel[proto.label] = room
         }
@@ -127,7 +166,7 @@ class World(
             }
             for (rule in room.proto.spawns) {
                 protos.mob(rule.label)
-                spawnStates += SpawnState(room, rule).also(::fillSpawn)
+                spawnStates += SpawnState(room, rule).also { if (boot.fillSpawns) fillSpawn(it) }
             }
         }
         for (zone in protos.zones.values) zone.resetPulses?.let { zoneResets[zone.pkg] = pulse + it }
@@ -155,6 +194,24 @@ class World(
 
     internal fun allocateId(): EntityId = EntityId(nextEntityId++)
 
+    /** Ids to save: the next entity id and the next timer/affect handle (SPEC §3.6 `meta`). */
+    val nextIds: Pair<Long, Long> get() = nextEntityId to nextHandle
+
+    /**
+     * Asks for an immediate checkpoint once the current action's cascade ends (SPEC §5.11), for
+     * example after an item changes hands between players.
+     */
+    fun requestImmediate(cause: String) {
+        if (immediateCause == null) immediateCause = cause
+    }
+
+    /** Submits the requested immediate checkpoint, if any. */
+    internal fun flushImmediate() {
+        val cause = immediateCause ?: return
+        immediateCause = null
+        guarded("checkpoint") { persistence.checkpoint(this, cause, immediate = true) }
+    }
+
     /** Ids for timers and affects, which share one `(due, id)` ordering. */
     internal fun allocateHandle(): Long = nextHandle++
 
@@ -170,6 +227,7 @@ class World(
     fun record(d: Diagnostic) {
         diagnosticLog += d
         onDiagnostic?.invoke(d)
+        persistence.diagnostic(this, d)
     }
 
     /** Runs [block], logging an engine exception and aborting only that action (SPEC §6.4). */
@@ -254,6 +312,11 @@ class World(
         entities.remove(a.id)
         a.inWorld = false
         removedThisPhase += a.id
+        // A player who quits keeps their row and their items' rows; a mob is gone for good.
+        if (a is Mob) {
+            removed += a.id
+            for (item in a.inventoryIndex.values + a.equipmentIndex.values) markRemoved(item)
+        }
         for (item in a.inventoryIndex.values + a.equipmentIndex.values) forgetItemTree(item)
         if (a is Mob) {
             a.spawnedBy?.let { s ->
@@ -292,8 +355,10 @@ class World(
     fun runPulse() {
         pulse++
         runTimers()
+        flushImmediate()
         runTiers(actorIndex.values.toList(), ::actionPulse)
         if (pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
+        flushImmediate()
         if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
         // Phase 5 (deferred perception) and phase 6 (bubble maintenance) arrive with M5. Until
         // then every room is simulated.
@@ -391,6 +456,22 @@ class World(
             val at = item.decayAt ?: continue
             if (at <= pulse) guarded("decay of $item") { decay(item) }
         }
+        // Checked every world tick; broken entities stay out of the next checkpoint (SPEC §6.5).
+        val broken = invariantViolations()
+        if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))
+        checkpointExclusions = broken.mapNotNullTo(HashSet()) { it.entity }
+        if (pulse - lastCheckpoint >= config.checkpointPulses) checkpointNow("scheduled")
+    }
+
+    private var lastCheckpoint = boot.pulse
+
+    /**
+     * Writes a routine checkpoint now, as the schedule, a successful reload and shutdown do
+     * (SPEC §5.10, §5.11). Restarts the schedule.
+     */
+    fun checkpointNow(cause: String) {
+        lastCheckpoint = pulse
+        guarded("checkpoint") { persistence.checkpoint(this, cause, immediate = false) }
     }
 
     /**
@@ -430,7 +511,10 @@ class World(
             val snap = TierSnapshot(actorIndex.values)
             snapshot = snap
             try {
-                for (a in members) if (snap.canAct(a)) guarded("action of $a") { act(a) }
+                for (a in members) {
+                    if (snap.canAct(a)) guarded("action of $a") { act(a) }
+                    flushImmediate()
+                }
             } finally {
                 snapshot = null
             }

@@ -4,6 +4,7 @@ import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.Player
 import gups.core.model.Room
 
 // Item custody (SPEC §3.3, §3.8). An item's location lives only on the item; the per-room,
@@ -17,6 +18,7 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1): Item {
     checkTarget(item, at)
     register(item)
     index(item, at)
+    if (custodian(item) is Player) itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
     invokeOn(item, HookName.ON_SPAWN, HookContext(item = item))
     return item
 }
@@ -25,16 +27,34 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1): Item {
 fun World.moveItem(item: Item, to: ItemLocation) {
     require(item.id in entities) { "$item is not in the world" }
     checkTarget(item, to)
+    val before = custodian(item) as? Player
+    val from = item.location
     unindex(item)
     item.location = to
     index(item, to)
     item.dirty = true
+    val after = custodian(item) as? Player
+    if (before !== after) {
+        itemEvents += ItemEvent(item.id, pulse, from, to, "move")
+        // An item changing hands between players is saved at once, both sides together (SPEC §5.11).
+        if (before != null && after != null) requestImmediate("transfer")
+    }
 }
 
 /** The `destroy` verb: removes [item] and everything inside it. */
 fun World.destroy(item: Item) {
+    if (custodian(item) is Player) itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
     unindex(item)
+    markRemoved(item)
     forgetItemTree(item)
+}
+
+/** The actor whose custody [item] ends in, following containers; null for items on the ground. */
+fun World.custodian(item: Item): Actor? = when (val loc = item.location) {
+    is ItemLocation.Carried -> actor(loc.actor)
+    is ItemLocation.Equipped -> actor(loc.actor)
+    is ItemLocation.Contained -> item(loc.container)?.let { custodian(it) }
+    is ItemLocation.InRoom -> null
 }
 
 /** Decay drops a container's contents where it lay, then removes it. */
@@ -99,3 +119,8 @@ val Item.groundIndex: Int? get() = (location as? ItemLocation.InRoom)?.trackInde
 
 /** Total carried weight, inventory and equipment. */
 fun Actor.carriedWeight(): Int = inventoryIndex.values.sumOf { it.weight } + equipmentIndex.values.sumOf { it.weight }
+
+internal fun markDirtyTree(item: Item) {
+    item.dirty = true
+    for (inner in item.contentsIndex.values) markDirtyTree(inner)
+}

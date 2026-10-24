@@ -4,3 +4,6 @@ build/
 .idea/
 *.iml
 .DS_Store
+
+# Dev-server databases and backups (D-099)
+.gups/

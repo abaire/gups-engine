@@ -43,7 +43,7 @@ test, click the gutter icon next to the test. For a new tool configuration, copy
 the `gups CLI` entries and tick **Store as project file** so it lands in `.run/` and can
 be committed.
 
-Most `gups` subcommands are still stubs that exit with status 3 (see Status below). Two
+Some `gups` subcommands are still stubs that exit with status 3 (see Status below). These
 work:
 
 ```bash
@@ -70,31 +70,34 @@ outside these rules. The allowed graph is defined in the root `build.gradle.kts`
 
 `docs/` holds `SPEC.md`, `DECISIONS.md`, `CHANGELOG.md` and `MIGRATING.md`.
 
-`template-world/` is the seed of the course world template. It holds `zones/tutorial`, the
-heavily commented reference zone whose tests run on every engine commit.
+`template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
+metadata) and `zones/tutorial`, the heavily commented reference zone whose tests run on
+every engine commit.
 
 ## Status
 
-M3 (SPEC §7.4): the world is playable locally.
+M4 (SPEC §7.4): the world persists.
 
-- **`net`:** a raw telnet listener on Ktor sockets. It negotiates NAWS, TTYPE/MTTS, EOR (or
-  GA), GMCP and CHARSET, renders color markup for each client's color depth, frames and caps
-  input lines, and drops slow clients.
-- **`gups serve --dev`:** loads every package under `--world`, logs you in as the local
-  instructor, and reloads packages when you save. Reload swaps code and data and reconciles
-  live mobs, rooms and items; a broken save keeps the old version and shows the error in
-  game.
-- **Builder tools:** `@trace`, `@eval` (`--dev` only) and `@errors`.
+- **`persist`:** SQLite in WAL mode with schema migrations. Routine checkpoints run every
+  30 minutes (`checkpoint_minutes` in the world's `MODULE.gups`), and a graceful shutdown
+  or reload always saves. Ownership changes, level-ups, character creation and logout are
+  captured at once and written with the next checkpoint. One writer commits batches in
+  order and retries failures without blocking the world.
+- **Restore:** at startup the world reconciles saved instances against today's
+  prototypes: deltas, `migrate()`, tombstones and despawns. Characters and their items come
+  back when they log in. `--fresh` boots from the definitions but keeps characters.
+- **Operations:** hourly, daily and manual backups; `gups backup` / `gups restore`.
+  Script diagnostics are stored with repro bundles that `gups repro` replays in the
+  harness.
+- **Tests:** a crash test kills the server with SIGKILL mid-write over and over.
 - **Earlier milestones:**
-  - M2: the Starlark host (loader, declarations, hooks, ctx verbs, limits, diagnostics,
-    quarantine) and the test harness behind `gups test`.
+  - M3: telnet and `gups serve --dev` with auto-reload, `@trace` and `@eval`.
+  - M2: the Starlark host and `gups test`.
   - M1: the core simulation.
 
 Still to come:
-- M4: persistence, including saved characters and diagnostics, repro bundles, and
-  `--fresh`/`--db`.
 - M5: the Starlark rules module and modifier chain, behaviors, perception and the bubble.
-- M6: TLS, WebSocket, GMCP, accounts and roles, and the instructor commands.
+- M6: TLS, WebSocket, GMCP, accounts and roles, instructor commands, deploys.
 
-All `gups` subcommands except `serve --dev` and `test` still exit with status 3 ("not
-implemented").
+`gups serve --prod`, `lint`, `docs`, `deploy`, `invite` and `import-roster` still exit with
+status 3 ("not implemented").
