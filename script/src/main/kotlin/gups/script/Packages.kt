@@ -1,0 +1,158 @@
+package gups.script
+
+import gups.core.HookRef
+import gups.core.Label
+import gups.core.model.ItemProto
+import gups.core.model.MobProto
+import gups.core.model.RoomProto
+import gups.core.model.SkillProto
+import gups.core.world.HookName
+import gups.core.world.Lane
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.io.path.isDirectory
+import kotlin.io.path.isRegularFile
+import kotlin.io.path.name
+import kotlin.io.path.readText
+
+/**
+ * A course world on disk (SPEC §2.3). Every directory under [root] that holds a
+ * `package.star` is a package, addressed by its relative path: `//zones/forest`.
+ */
+class WorldDir(root: Path) {
+    val root: Path = root.toAbsolutePath().normalize()
+
+    /** Every package path under [root], sorted. Hidden and `build` directories are skipped. */
+    fun packages(): List<String> {
+        if (!root.isDirectory()) return emptyList()
+        Files.walk(root).use { paths ->
+            return paths
+                .filter { it.name == PACKAGE_FILE && it.isRegularFile() }
+                .map { root.relativize(it.parent).joinToString("/") }
+                .filter { p -> p.isNotEmpty() && p.split('/').none { it.startsWith(".") || it == "build" } }
+                .filter { PACKAGE_PATH.matches(it) }
+                .sorted()
+                .toList()
+        }
+    }
+
+    fun packageDir(pkg: String): Path = root.resolve(pkg)
+
+    fun hasPackage(pkg: String): Boolean = PACKAGE_PATH.matches(pkg) && packageDir(pkg).resolve(PACKAGE_FILE).isRegularFile()
+
+    /** The file a load label such as `//lib:quest.star` names. */
+    fun fileOf(label: Label): Path = packageDir(label.pkg).resolve(label.name)
+
+    /** The package's own `.star` files, sorted by name: content files or `*_test.star` files. */
+    fun files(pkg: String, tests: Boolean): List<Label> {
+        val dir = packageDir(pkg)
+        if (!dir.isDirectory()) return emptyList()
+        Files.list(dir).use { paths ->
+            return paths
+                .filter { it.isRegularFile() && it.name.endsWith(".star") && it.name != PACKAGE_FILE }
+                .filter { it.name.endsWith(TEST_SUFFIX) == tests }
+                .map { Label("//$pkg:${it.name}") }
+                .sorted(compareBy { it.v })
+                .toList()
+        }
+    }
+
+    /** One source line, for caret snippets; null if unavailable. */
+    fun sourceLine(file: Label, line: Int): String? =
+        runCatching { fileOf(file).readText().lines().getOrNull(line - 1) }.getOrNull()
+
+    companion object {
+        const val PACKAGE_FILE = "package.star"
+        const val TEST_SUFFIX = "_test.star"
+        private val PACKAGE_PATH = Regex("[a-z0-9_]+(?:/[a-z0-9_]+)*")
+    }
+}
+
+/** Package kinds (SPEC §2.3). Only `lib` and `rules` packages are privileged. */
+enum class PackageKind(val word: String, val privileged: Boolean) {
+    ZONE("zone", false),
+    LIB("lib", true),
+    RULES("rules", true),
+    SKILLS("skills", false),
+    ;
+
+    companion object {
+        fun parse(word: String): PackageKind? = entries.firstOrNull { it.word == word }
+    }
+}
+
+/**
+ * Why a package failed to load (SPEC §1.3, §5.10). [file], [line] and [column] point at the
+ * offending code when there is one; [snippet] is that source line with a caret under it.
+ */
+data class LoadError(
+    val pkg: String,
+    val kind: String,
+    val message: String,
+    val file: String? = null,
+    val line: Int? = null,
+    val column: Int? = null,
+    val snippet: String? = null,
+) {
+    /** `//zones/x:rooms.star:12:5: message`, then the caret snippet. */
+    fun render(): String = buildString {
+        append(file ?: "//$pkg")
+        if (line != null) append(':').append(line)
+        if (line != null && column != null) append(':').append(column)
+        append(": ").append(message)
+        if (snippet != null) append('\n').append(snippet)
+    }
+
+    override fun toString(): String = render()
+}
+
+/** Where a Starlark module came from. Set as the module's client data. */
+internal data class FileInfo(val label: Label, val pkg: String, val test: Boolean = false)
+
+/** A `global_command` registered by a privileged package (SPEC §4.9). */
+class GlobalCommandDecl(val name: String, val fn: HookRef, val lane: Lane, val pkg: String)
+
+/** Everything one package declared. Built while the package evaluates, then read-only. */
+class ScriptPackage internal constructor(val path: String) {
+    var kind: PackageKind = PackageKind.ZONE
+        internal set
+    var title: String = path
+        internal set
+    var apiVersion: Int = 0
+        internal set
+    var resetPulses: Int? = null
+        internal set
+    var sharedNamespaces: List<String> = emptyList()
+        internal set
+
+    /** Attribute namespace: the last path segment (SPEC §3.7). */
+    val namespace: String get() = path.substringAfterLast('/')
+
+    internal val roomList = mutableListOf<RoomProto>()
+    internal val mobList = mutableListOf<MobProto>()
+    internal val itemList = mutableListOf<ItemProto>()
+    internal val skillList = mutableListOf<SkillProto>()
+    internal val commandList = mutableListOf<GlobalCommandDecl>()
+    internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
+
+    /** Declaration names, unique across kinds within the package (SPEC §2.3). */
+    internal val names = HashSet<String>()
+
+    /** Labels this package refers to, checked once every package has loaded. */
+    internal val refs = mutableListOf<LabelRef>()
+
+    val rooms: List<RoomProto> get() = roomList
+    val mobs: List<MobProto> get() = mobList
+    val items: List<ItemProto> get() = itemList
+    val skills: List<SkillProto> get() = skillList
+    val globalCommands: List<GlobalCommandDecl> get() = commandList
+
+    /** Hooks per prototype label. */
+    val hooks: Map<Label, Map<HookName, HookRef>> get() = hookMap
+}
+
+/** What a referenced label must name. */
+internal enum class RefKind(val word: String) { ROOM("room"), MOB("mob"), ITEM("item"), SKILL("skill") }
+
+/** A label one declaration refers to, with where it was written for error messages. */
+internal data class LabelRef(val label: Label, val kind: RefKind, val file: String?, val line: Int?, val column: Int?)

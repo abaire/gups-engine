@@ -43,8 +43,9 @@ test, click the gutter icon next to the test. For a new tool configuration, copy
 the `gups CLI` entries and tick **Store as project file** so it lands in `.run/` and can
 be committed.
 
-Most `gups` subcommands are still stubs that exit with status 3 (see Status below). Until
-`serve` lands in M3, the tests are the main thing to run and debug.
+Most `gups` subcommands are still stubs that exit with status 3 (see Status below). `gups
+test` works: it runs the tutorial zone's tests with
+`gups test --world template-world //zones/tutorial/...`.
 
 ## Modules
 
@@ -65,18 +66,30 @@ outside these rules. The allowed graph is defined in the root `build.gradle.kts`
 
 `docs/` holds `SPEC.md`, `DECISIONS.md`, `CHANGELOG.md` and `MIGRATING.md`.
 
+`template-world/` is the seed of the course world template. It holds `zones/tutorial`, the
+heavily commented reference zone whose tests run on every engine commit.
+
 ## Status
 
-M1 (SPEC §7.4): the `core` simulation runs headless. It covers the pulse scheduler
-(phases, combat-round and world-tick cadence, overrun skipping), entities and prototypes,
-the command pipeline (lanes, token bucket, queue cap, `stop`/`clear`), the action lifecycle
-(warmup, interrupt, re-validation, lag), the tactical track (bands, `advance`, `retreat`,
-pinning, `flee`, entry indexes, doors), the Kotlin default ruleset, and combat rounds with
-initiative tiers, death, corpses, XP and respawns. `gups.core.loop.WorldLoop` drives a
-world in real time on a single-threaded dispatcher. The tests under
-`core/src/test/kotlin/gups/core/world/` build a small Kotlin test world (`Fixture.kt`).
+M2 (SPEC §7.4) adds the Starlark script host and the test harness on top of the M1 core.
 
-Still to come: perception and the reality bubble, behaviors, `give`/`put`/`wear`/`use`,
-and the Starlark rules module (all M5). Hot reload and the script host arrive in M2,
-checkpoints in M4, and GMCP in M6. Every `gups` subcommand still exits with status 3
-("not implemented").
+- **`script`:** the package loader (labels, `load()`, `api_version` check,
+  all-or-nothing per package, structured errors with caret snippets) and the content
+  declarations. Evaluation produces frozen prototypes. The host runs hooks, zone and global
+  commands, timers, affect hooks, `think` and `resolve` with a fresh `ctx` of read-only
+  views and engine-validated verbs. It enforces the step, wall-clock and allocation limits
+  (with one budget per event cascade), logs script errors as diagnostics without blocking
+  the action, and quarantines a package after too many errors.
+- **`harness`:** headless worlds with a virtual clock for `*_test.star` files (`t`, `w`,
+  `p` handles), and `gups test`.
+- **`core`** (M1): the pulse scheduler, entities and prototypes, the command pipeline, the
+  action lifecycle, the tactical track, the Kotlin default ruleset, and combat rounds with
+  initiative tiers.
+
+Still to come:
+- M3: telnet and `serve --dev`, auto-reload, `@trace` and `@eval`.
+- M4: persistence, including diagnostics storage and repro bundles.
+- M5: the Starlark rules module and modifier chain, behaviors, perception and the bubble.
+- M6: roles and owner alerts.
+
+All `gups` subcommands except `test` still exit with status 3 ("not implemented").

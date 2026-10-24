@@ -7,8 +7,8 @@ import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
 import gups.core.world.ZoneCommand
 
-// Immutable prototypes (SPEC §3.4). The script host (M2) produces them by evaluating
-// packages; until then they are built directly in Kotlin.
+// Immutable prototypes (SPEC §3.4). The `script` module produces them by evaluating
+// packages; Kotlin tests build them directly.
 
 val STAT_NAMES: List<String> = listOf("str", "dex", "con", "int", "wis")
 val DEFAULT_STATS: Map<String, Int> = STAT_NAMES.associateWith { 10 }
@@ -129,13 +129,19 @@ data class SkillProto(
     val name: String get() = label.name
 }
 
+/** Package-level settings of a zone (SPEC §4.1). [pkg] is a package path such as `zones/forest`. */
+data class ZoneProto(val pkg: String, val title: String = pkg, val resetPulses: Int? = null)
+
 /** The prototype table. Labels are unique per kind. */
 class Prototypes(
     rooms: List<RoomProto> = emptyList(),
     mobs: List<MobProto> = emptyList(),
     items: List<ItemProto> = emptyList(),
     skills: List<SkillProto> = emptyList(),
+    zones: List<ZoneProto> = emptyList(),
 ) {
+    val zones: Map<String, ZoneProto> = zones.associateBy { it.pkg }
+
     val rooms: Map<Label, RoomProto> = unique("room", rooms) { it.label }
     val mobs: Map<Label, MobProto> = unique("mob", mobs) { it.label }
     val items: Map<Label, ItemProto> = unique("item", items + CORPSE) { it.label }

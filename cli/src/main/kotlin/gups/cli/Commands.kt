@@ -16,6 +16,11 @@ import com.github.ajalt.clikt.parameters.options.switch
 import com.github.ajalt.clikt.parameters.options.versionOption
 import com.github.ajalt.clikt.parameters.types.file
 import gups.core.EngineInfo
+import gups.core.Label
+import gups.harness.TestRunner
+import gups.harness.render
+import gups.script.WorldDir
+import java.io.File
 
 /** Builds the `gups` command tree (SPEC §4.13). */
 fun gupsCommand(): CliktCommand = Gups().subcommands(
@@ -70,8 +75,30 @@ class Serve : StubCommand("serve", "Run the server.", "M3") {
     val db by option("--db", help = "SQLite database file.").file(canBeDir = false)
 }
 
-class TestCmd : StubCommand("test", "Run *_test.star tests, e.g. //zones/goblin_caves/...", "M2") {
+/** Exit status of `gups test` when a test fails or a pattern matches nothing. */
+const val EXIT_TESTS_FAILED = 1
+
+class TestCmd : CliktCommand(name = "test") {
     val patterns by argument("label-pattern").multiple(required = true)
+    val world by option("--world", help = "Course world directory (default: the current directory).")
+        .file(mustExist = true, canBeFile = false)
+
+    override fun help(context: Context) = "Run *_test.star tests, e.g. //zones/goblin_caves/..."
+
+    override fun run() {
+        val dir = WorldDir((world ?: File(".")).toPath())
+        var file: Label? = null
+        val report = TestRunner(dir).run(patterns) { r ->
+            if (r.file != file) {
+                file = r.file
+                echo(r.file.v)
+            }
+            echo(r.render())
+        }
+        for (p in report.problems) echo("gups test: $p", err = true)
+        if (report.results.isNotEmpty()) echo("\n" + report.summary())
+        if (!report.ok) throw ProgramResult(EXIT_TESTS_FAILED)
+    }
 }
 
 class Lint : StubCommand("lint", "Run the static checks.", "M6") {
@@ -82,7 +109,7 @@ class Docs : StubCommand("docs", "Generate the API reference.", "M7") {
     val out by option("--out", help = "Output directory.").file(canBeFile = false)
 }
 
-class Repro : StubCommand("repro", "Replay a diagnostic in the harness.", "M2") {
+class Repro : StubCommand("repro", "Replay a diagnostic in the harness.", "M4") {
     val source by argument("diagnostic-id|bundle.json")
 }
 

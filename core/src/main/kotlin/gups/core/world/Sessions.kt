@@ -142,8 +142,8 @@ internal fun World.flush(s: Session) {
     s.sink.send(text)
 }
 
-/** Phase 7 (SPEC §5.1). GMCP deltas join this flush in M6. */
-internal fun World.flushOutput() {
+/** Phase 7 (SPEC §5.1). GMCP deltas join this flush in M6. The harness also flushes after input. */
+fun World.flushOutput() {
     for (s in sessions.values.toList()) flush(s)
 }
 

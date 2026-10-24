@@ -306,8 +306,10 @@ actor is excluded from the observers unless it is the primary. Owners are de-dup
 *Code:* `World.dispatch`.
 
 ### D-047 Self-only hooks — `open`
-`on_tick`, `on_combat_tick`, `on_spawn` and `on_tell` fire on their owner only, not
-through observer dispatch. `on_tick` fires on rooms and actors but not items.
+`on_tick`, `on_combat_tick`, `on_spawn`, `on_tell`, `on_load` and `on_reset` fire on their
+owner only, not through observer dispatch. `on_tick` fires on every room, actor and item,
+ascending id. (Until M2 it skipped items; with scripts, an item declaring `on_tick` that
+never fired would be a trap.)
 *Code:* `World.invokeOn`, `World.runWorldTick`.
 
 ### D-048 Hook timing around movement — `open`
@@ -329,17 +331,23 @@ even in strict mode. Strict mode rethrows only engine exceptions.
 
 ### D-051 Seams that differ from §4.11 — `open`
 - `ScriptHost` is `invokeHook(world, owner, hook, ctx)` plus `invokeRef(world, owner, ref,
-  ctx)` for timers and affect hooks. `loadPackages` is deferred to M2.
+  ctx)` for timers and affect hooks, plus `isSuspended(owner, ref)`, which keeps a
+  quarantined package's timers pending (D-068).
+- `loadPackages` is not on `ScriptHost`: `gups.script.ScriptLoader.load(paths)` returns the
+  `LoadResult`, and a `StarlarkHost` is built from it before the `World`. The world will
+  drive loading itself once reload exists (M3).
 - `OutputSink` has `send` and `close(reason)`; `gmcp` is deferred to M6.
 - `CheckpointSink` and `Persistence` are deferred to M4.
 - `CapturingSink` lives in `core` main so the harness can reuse it.
 *Code:* `Hooks.kt`, `Seams.kt`.
 
 ### D-052 Prototypes are Kotlin types in `core` — `open`
-`RoomProto`, `MobProto`, `ItemProto` and `SkillProto` are immutable data classes in `core`.
-Behaviors, `think`, zone commands and custom `resolve` are Kotlin function interfaces that
-the script host will implement in M2.
-*Code:* `model/Protos.kt`.
+`RoomProto`, `MobProto`, `ItemProto`, `SkillProto` and `ZoneProto` are immutable data
+classes in `core`. Behaviors, `think`, zone commands and custom `resolve` are Kotlin function
+interfaces; the script host implements `think`, commands and `resolve` (`ScriptThink`,
+`ScriptCommand`, `ScriptResolve`). Hooks are not on the prototypes: the host looks them up
+by prototype label.
+*Code:* `model/Protos.kt`, `script/Host.kt`.
 
 ### D-053 Reserved engine labels — `open`
 `//engine:player` is the prototype label of every player. `//engine:corpse` is the built-in
@@ -371,5 +379,256 @@ world in the process shares one thread.
 *Code:* `WorldLoop`.
 
 ### D-059 Unsupported control events — `open`
-`Reload` and `Deploy` are accepted but only log a `control` diagnostic until M2 and M6.
+`Reload` and `Deploy` are accepted but only log a `control` diagnostic until M3 (reload)
+and M6 (deploy).
 *Code:* `World.handle(WorldControlEvent)`.
+
+## Script host (§2.2, §4.1–§4.5, §6) — M2
+
+### D-060 The Starlark implementation and its language limits — `open`
+The only Maven Central packaging of `net.starlark.java` is `com.eed3si9n.starlark:starlark`
+4.2.1, Bazel 4.2.1's interpreter (it brings Guava 27). That version rejects `lambda` and
+nested `def`s at parse time. So every hook, command, timer and future modifier is a
+top-level `def`; the lambda modifiers in §4.6's example can't be written, and `ctx.after`'s
+"rejects lambdas" case can't arise. `load` is also a reserved word (see D-072).
+*Code:* `gradle/libs.versions.toml`, `script/build.gradle.kts`.
+
+### D-061 Zone resets — `open`
+A package with `reset_pulses` first resets that many pulses after the world is built, then
+every `reset_pulses`. Resets are processed in the world tick, so the effective interval
+rounds up to a world tick. A reset refills every spawn rule in the package to its count,
+then fires `on_reset` on the package's rooms, ascending id. Items have no spawn rules; zones
+restock them from `on_reset` (the tutorial's armory does).
+*Code:* `World.resetZone`, `ZoneProto`.
+
+### D-062 When `on_load` fires — `open`
+`World.fireOnLoad()` fires `on_load` once on every entity, ascending id, after the world is
+built and global commands are installed. Spawns filled while the world is built fire
+`on_spawn` first, during construction. The harness calls it in `t.world()`; `serve` will in
+M3. After reload (M3) and restore (M4) it will fire on reconciled instances.
+*Code:* `World.fireOnLoad`, `TestCtx.world`.
+
+### D-063 `path_to` is an uncached BFS — `open`
+Breadth-first over exits in declaration order, through open doors only (closed and locked
+doors block), so ties resolve the same way every time. Empty list if already there, None if
+unreachable. The `(source, dest)` cache of §5.9 arrives with the bubble work in M5.
+*Code:* `World.pathTo`.
+
+### D-064 What loading a package loads — `open`
+- Loading a package also loads every package it refers to by label (exits, spawns, keys,
+  loot, skills, summons) or by `load()`, transitively. A referenced package that isn't on
+  disk is a label error.
+- A package fails if any of its files fails, if any label doesn't resolve to a declaration
+  of the right kind, or if anything it depends on failed.
+- `package.star` must call `package()` exactly once and holds nothing else; it can't be
+  `load()`ed. Content files evaluate in alphabetical order. Only test files may load
+  `*_test.star` files.
+- The 5,000,000-step load limit is per package, across its files.
+- Global commands may not shadow an engine command or alias, or another package's global
+  command. An attribute namespace used by two packages (or a package and a shared
+  namespace) fails every package involved.
+*Code:* `ScriptLoader`.
+
+### D-065 What a script call is charged to — `open`
+Package charging decides the step budget's diagnostics, the quarantine count, and the
+quarantine check.
+- A hook is charged to its owner's prototype package, even when the function lives in a
+  loaded library file.
+- Timers and affect hooks are charged to the owner's package if it is a script package,
+  otherwise to the package of the function's file (for example, a timer on a player).
+- Zone commands are charged to the declaring package, global commands to the registering
+  package.
+
+At run time, relative labels and attribute keys resolve against the package of the
+innermost running function, so a `//lib` helper writes the lib's own namespace (and its
+shared namespaces) even when a zone hook calls it.
+*Code:* `StarlarkHost.chargeTo`, `Ctx.attrKey`, `callerFile`.
+
+### D-066 Where the wall-clock backstop is checked — `open`
+The 20 ms (hooks) and 2 s (load) limits are measured from the start of the top-level event
+or package load, and checked at every `ctx` verb call and every declaration call. A hook
+that loops without calling the engine is stopped by the step limit only. The harness turns
+the wall clock off (`ScriptLimits.HARNESS`), so test results never depend on machine speed.
+*Code:* `Frame.checkClock`, `LoadCtx.tick`.
+
+### D-067 Allocation caps apply at the engine boundary — `open`
+Starlark-Java has no allocation hook. The 1 MB cap is enforced where values reach the
+engine: verb arguments, hook return values, stored attributes and timer arguments. A string
+over 1,048,576 characters, or a list or dict over 131,072 elements (1 MB at 8 bytes each),
+is an `alloc_limit` error. A hook can build larger values internally as long as it doesn't
+hand them over; the step limit bounds that work. The 64 KB attribute cap is measured as
+compact JSON.
+*Code:* `checkString`, `checkSize`, `jsonSize`.
+
+### D-068 Quarantine details — `open`
+- The 60 s window is 240 pulses of game time, so the harness and production agree. The
+  21st error inside the window quarantines.
+- While a package is quarantined, its hooks allow, its zone and global commands answer
+  "Nothing happens.", its `think` falls back to the top proposal, and its affects' `on_tick`
+  and `on_expire` are skipped (the affects still tick down and expire).
+- Its timers stay pending: the world skips them while due, and they fire on the first
+  timer phase after the quarantine clears.
+- `@quarantine` and `@unquarantine` (M6) will call `StarlarkHost.quarantine` and
+  `unquarantine`. Persisting the state in `zone_states` arrives with M4.
+- Notifications go to `StarlarkHost.alerts` until roles exist (M6).
+*Code:* `StarlarkHost`, `World.runTimers`.
+
+### D-069 Script diagnostics — `open`
+- **Kinds:** `script_error`, `step_limit`, `wall_clock`, `alloc_limit`, `missing` (a hook
+  or timer function no longer exists) and `quarantine`. The kind `script` remains for
+  failures of Kotlin-hosted handlers.
+- **Fields:** each diagnostic carries the package, prototype label, hook, file label, line,
+  Starlark stack, a one-line ctx summary and the seed.
+- **Not yet:** the repro bundle needs checkpoints, so it and `gups repro` move to M4 (the
+  CLI stub said M2). The in-game owner alert, at most one per package per 10 s, needs
+  package ownership (M6).
+- **Storage:** diagnostics live in `World.diagnostics` until the diagnostics table (M4).
+*Code:* `Diagnostic`, `StarlarkHost.report`.
+
+### D-070 Declaration details — `open`
+- **Arguments:** every declaration takes its name positionally, everything else by
+  keyword. Unknown arguments are errors with a spelling suggestion.
+- **Defaults:** the display `name` defaults to the declaration name with `_` as spaces.
+  `keywords` default to the display name's words minus articles, or else the declaration
+  name.
+- **Item slots:** an item's slot is `wear = "<slot>"`; `wield = "<slot>"`, as in the
+  spec's example, is an alias.
+- **New builtins:** `container(capacity, max_weight, state, key)` makes an item a container.
+- **Constants:** `CRAMPED`, `NORMAL` and `LARGE` are the strings `"cramped"`, `"normal"` and
+  `"large"`; `ALL` is the list of all channel names.
+- **Not yet supported:** these arguments are refused with "planned for Mx" when non-empty:
+  `behaviors` (M5), `modifiers` (M5), `equip_affects` (M5) and `expected_tombstones` (M6).
+  `region()` (M5) and `migrate()` (M4) are not available yet.
+- **When builtins work:** declaration builtins work only while a package loads; effect
+  primitives work anywhere.
+*Code:* `DeclarationBuiltins`, `Kw`.
+
+### D-071 Harness details — `open`
+- **`p.do(line)`:**
+  - Submits the line directly, bypassing the session rate limiter.
+  - Runs pulses until the player's queue is empty and it isn't casting (at most 1000; more
+    is an error).
+  - Returns all output since the last `do()` or `output()`.
+- **Players and worlds:**
+  - Harness players are exempt from the idle auto-quit.
+  - Worlds run in strict mode with the invariant check after every pulse.
+- **Test code:** a test function's own code may spend 10,000,000 steps; pulses it runs
+  don't count.
+- **Diagnostics:** script diagnostics from a test's worlds are reported as warnings and
+  don't fail the test. Tests assert on `w.diagnostics()` explicitly.
+- **`t.eq` and `t.ne`:** an entity view equals a label string that resolves (relative to
+  the calling package) to its prototype label. Players are excluded.
+- **`t.world`:** `t.world(rules=...)` is refused until M5. `packages` defaults to the test's
+  own package.
+- **Beyond §4.12:**
+  - `spawn_player` takes `hp`, `mana`, `move`, `index`, `stats` and `skills`.
+  - `w.damage` takes `amount` or `pct`, and `type`.
+  - `w` also has `get_attr`, `quarantined()` and `pulse`.
+  - `w.trace()` keeps the last 400 lines and prints them when the test fails.
+- **`gups test`:**
+  - `--world DIR` defaults to the current directory.
+  - Patterns are `//...`, `//a/...`, `//a`, `//a:file_test.star` and `//a:test_name`.
+  - Exits 1 if any test fails or errors, or a pattern matches nothing.
+*Code:* `gups.harness`, `TestCmd`.
+
+### D-072 `t.world(load=...)` is spelled `t.world(packages=...)` — `open`
+`load` is a reserved word in Starlark, so §4.12's `t.world(seed=42, load=[...])` doesn't
+parse. The tutorial and docs use `packages`.
+*Code:* `TestCtx.world`.
+
+### D-073 `ctx` semantics the spec leaves open — `open`
+- **Errors:**
+  - A bad verb argument raises a script error at once.
+  - Core `IllegalArgumentException`/`IllegalStateException` from a verb become script
+    errors too.
+- **Timers:**
+  - Timer callbacks are called as `fn(ctx, **args)` and also see the arguments as
+    `ctx.args`.
+  - The owner is the scheduling hook's `ctx.self`.
+- **Combat verbs:** `ctx.damage(target, amount, type, source=None)` is raw: no to-hit roll
+  and no mitigation.
+- **`ctx.deny`:** raises unless the running hook is a `before_*` hook.
+- **Item verbs:**
+  - `spawn` returns a view, or a list when it makes several entities. For items, `at` may
+    be a room or room label (ground, at `index`), an actor (carried) or a container.
+  - `give(actor, label_or_item, count=1)` spawns or moves the item into the inventory and
+    fires no hooks (`on_give` comes with the `give` command in M5).
+  - `move_item` takes `index=0` for rooms.
+- **Door verbs:** they set both sides at once (D-031) and print nothing.
+  - `open_door` also unlocks.
+  - `close_door` leaves a locked door locked.
+  - `lock_door` closes the door.
+  - `unlock_door` leaves the door closed.
+- **Queries:**
+  - `here(keyword)` searches the owner's room: actors first, then ground items.
+  - `find(label, scope)` counts entities whose location ends in the room, so items carried
+    there count. `"zone"` means rooms of the owner's room's package.
+  - `enemies_near` returns engaged opponents. `allies_near` returns actors on the same side
+    (players with players, mobs with mobs) not engaged with the actor.
+- **Mob actions:**
+  - `move_toward(mob, x)` takes a direction, advances on an actor in the same room, or
+    takes the first step of `path_to`. It returns False when there is no way.
+  - `act_cast` requires the mob to know the skill.
+  - Mob verbs return whether the action was queued.
+- **Command ctx:**
+  - `ctx.args` is the argument text.
+  - `ctx.target` is the actor in the room matching the first argument word.
+  - `ctx.item` is the item, for item commands.
+  - `ctx.self` is the room or item, or the actor for global commands.
+- **Fields beyond §4.5:**
+  - `ctx` also has `from_room`, `to_room`, `affect` (affect hooks) and `targets`
+    (`on_combat_tick`).
+  - `event`, `source_room` and `via_exit` are None until perception (M5).
+  - Views also expose `xp`, `in_world`, `keywords`, `wait_state`, `home_room`, `desc`,
+    `track_size`, `flags`, `contents()` and an exit view.
+- **Views:**
+  - Views read live state.
+  - Views compare equal when they show the same entity.
+  - `attrs` shows the reader's own keys by short name.
+  - Using a ctx or view after its hook returned is an error.
+- **Attributes:**
+  - Short keys are `[A-Za-z0-9_]+`.
+  - `get_attr` returns a mutable copy.
+- **Simulation verbs:** `set_active` and friends only edit the reason sets until the bubble
+  (M5).
+*Code:* `Ctx`, `Views.kt`.
+
+### D-074 Hook catalog enforcement — `open`
+A hook kwarg must be a catalog name (a typo suggests the right one) and must be attachable
+to that kind of entity per §4.4's "Attach to" column. The engine doesn't fire some hooks
+yet:
+- `on_wake` and `on_nearby` arrive with the bubble and perception (M5).
+- `before_use`, `on_use` and `on_give` arrive with the `use` and `give` commands (M5).
+*Code:* `HookCatalog`.
+
+### D-075 `think` works before behaviors — `open`
+§7.4 puts `think` in M5, but the core seam already existed. Mobs may declare
+`think = fn` now. `ctx.proposals` is empty until behaviors arrive.
+- If `think` queued an action for its own mob through `ctx.act*`, the top proposal is not
+  queued as well.
+- Returning `"idle"` skips the turn.
+- A failing `think` falls back to the top proposal.
+*Code:* `StarlarkHost.think`.
+
+### D-076 Engine verbs added to `core` — `open`
+Verbs without a player command are public core functions:
+- `say` and `emote`.
+- `setDoor`, `setExitBlocks` and `splitItem`.
+- `pathTo`.
+- `enqueue`, `actMove`, `actAttack`, `actCast`, `actAdvance` and `actRetreat`.
+
+`kill` is now a `KillAction`, and `CastAction` can take a fixed target. `split` copies the
+stack's attributes and decay deadline to the new item, and refuses equipped stacks.
+*Code:* `core/world/Verbs.kt`.
+
+### D-077 The tutorial lives in the engine repository — `open`
+§2.3 places `zones/tutorial` in the course world. Its tests must pass on every engine
+commit (§7.2), so the canonical copy is `template-world/zones/tutorial` in this repository.
+The course world template (M6) will start from `template-world/`. The harness and CLI
+tests run it.
+*Code:* `template-world/`, `TutorialTest`.
+
+### D-078 `print()` — `open`
+In hooks, `print()` output goes to the trace. In tests it goes to the test's report, shown
+when the test fails. At load time it is dropped.
+*Code:* `StarlarkHost.call`, `TestRunner.runTest`, `ScriptLoader`.

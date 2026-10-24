@@ -44,6 +44,7 @@ jobs:
         run: |
           cli/build/install/gups/bin/gups --version
           cli/build/install/gups/bin/gups --help
+          cli/build/install/gups/bin/gups test --world template-world //...
 
       - name: Upload test reports
         if: failure()

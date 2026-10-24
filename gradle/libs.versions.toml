@@ -4,8 +4,11 @@ jvm = "21"
 clikt = "5.1.0"
 junit = "6.1.3"
 kotlinx-coroutines = "1.10.2"
+starlark = "4.2.1"
 
 [libraries]
+# Bazel's net.starlark.java, as packaged for Maven Central (D-060).
+starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }

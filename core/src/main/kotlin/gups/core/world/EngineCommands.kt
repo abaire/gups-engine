@@ -72,9 +72,7 @@ internal object EngineCommands {
 
     private fun say(c: CommandCall) {
         if (c.args.isEmpty()) return c.world.send(c.actor, "Say what?")
-        c.world.send(c.actor, "You say, '${c.args}'")
-        c.world.echo(c.actor.room, "${c.actor.name.cap()} says, '${c.args}'", c.actor)
-        c.world.dispatch(HookName.ON_SAY, null, c.actor.room, HookContext(actor = c.actor, text = c.args))
+        c.world.say(c.actor, c.args)
     }
 
     private fun tell(c: CommandCall) {
@@ -178,22 +176,7 @@ internal object EngineCommands {
         val w = c.world
         if (c.args.isEmpty()) return null.also { w.send(c.actor, "Kill whom?") }
         val target = w.findActor(c.actor, c.args) ?: return null.also { w.send(c.actor, "They aren't here.") }
-        return object : Action {
-            override fun validate(w: World, actor: Actor): String? = when {
-                target === actor -> "You can't attack yourself."
-                !w.isPresent(target, w.roomOf(actor)) -> "They aren't here."
-                actor.primaryTarget == target.id -> "You're already fighting ${target.name}!"
-                else -> null
-            }
-
-            override fun resolve(w: World, actor: Actor): Int {
-                w.startCombat(actor, target)
-                actor.primaryTarget = target.id
-                w.send(actor, "You attack ${target.name}!")
-                w.send(target, "${actor.name.cap()} attacks you!")
-                return 0
-            }
-        }
+        return KillAction(target)
     }
 
     private fun planCast(c: CommandCall): Action? {
@@ -308,13 +291,10 @@ internal object EngineCommands {
 
             override fun resolve(w: World, actor: Actor): Int {
                 val exit = actor.room.exits.getValue(dir)
-                exit.door!!.state = verb.to
-                actor.room.dirty = true
+                w.setDoor(actor.room, dir, verb.to)
                 w.send(actor, "You ${verb.word} the door $dir.")
                 w.echo(actor.room, "${actor.name.cap()} ${verb.word}s the door $dir.", actor)
                 w.reverseExit(actor.room, exit)?.let { (other, back) ->
-                    back.door!!.state = verb.to
-                    other.dirty = true
                     w.echo(other, "The door ${back.direction} ${if (verb.to == DoorState.OPEN) "opens" else "closes"}.")
                 }
                 return 0
@@ -354,8 +334,33 @@ internal object EngineCommands {
     }
 }
 
-/** A skill cast with the full action lifecycle (SPEC §4.3, §5.3). */
-internal class CastAction(val skill: SkillProto, private val targetWord: String?) : Action {
+/** `kill <target>`: engages and switches the primary target (D-034). */
+internal class KillAction(private val target: Actor) : Action {
+    override fun validate(w: World, actor: Actor): String? = when {
+        target === actor -> "You can't attack yourself."
+        !w.isPresent(target, w.roomOf(actor)) -> "They aren't here."
+        actor.primaryTarget == target.id -> "You're already fighting ${target.name}!"
+        else -> null
+    }
+
+    override fun resolve(w: World, actor: Actor): Int {
+        w.startCombat(actor, target)
+        actor.primaryTarget = target.id
+        w.send(actor, "You attack ${target.name}!")
+        w.send(target, "${actor.name.cap()} attacks you!")
+        return 0
+    }
+}
+
+/**
+ * A skill cast with the full action lifecycle (SPEC §4.3, §5.3). The target is found by
+ * [targetWord] at the first validation, unless the script verb `act_cast` fixed it up front.
+ */
+internal class CastAction(
+    val skill: SkillProto,
+    private val targetWord: String?,
+    private val fixedTarget: Actor? = null,
+) : Action {
     override val warmup: Int get() = skill.warmup
     override val lag: Int get() = skill.lag
     override val interrupt get() = skill.interrupt
@@ -367,7 +372,7 @@ internal class CastAction(val skill: SkillProto, private val targetWord: String?
 
     private fun chooseTarget(w: World, caster: Actor): Result<Actor?> {
         if (targetChosen) return Result.success(target)
-        val t = when (skill.target) {
+        val t = if (fixedTarget != null && skill.target in setOf(TargetKind.ENEMY, TargetKind.ALLY)) fixedTarget else when (skill.target) {
             TargetKind.SELF -> caster
             TargetKind.NONE -> null
             TargetKind.ITEM -> return Result.failure(IllegalArgumentException("You can't cast that on items yet."))

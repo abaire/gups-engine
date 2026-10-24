@@ -39,6 +39,24 @@ class CommandsTest {
     }
 
     @Test
+    fun `test runs the tutorial zone`() {
+        val world = System.getProperty("gups.templateWorld")
+        val result = gupsCommand().test(listOf("test", "--world", world, "//zones/tutorial/..."))
+        assertEquals(0, result.statusCode, result.output)
+        assertContains(result.stdout, "//zones/tutorial:tutorial_test.star")
+        assertContains(result.stdout, "PASS  test_the_guide_blocks_the_arena_until_ready")
+        assertContains(result.stdout, "0 failed, 0 errors")
+    }
+
+    @Test
+    fun `test fails when nothing matches`() {
+        val world = System.getProperty("gups.templateWorld")
+        val result = gupsCommand().test(listOf("test", "--world", world, "//zones/nowhere"))
+        assertEquals(EXIT_TESTS_FAILED, result.statusCode)
+        assertContains(result.stderr, "no package matches //zones/nowhere")
+    }
+
+    @Test
     fun `deploy requires a commit`() {
         assertEquals(1, gupsCommand().test("deploy").statusCode)
         assertEquals(EXIT_NOT_IMPLEMENTED, gupsCommand().test("deploy --commit abc123").statusCode)

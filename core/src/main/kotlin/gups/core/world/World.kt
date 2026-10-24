@@ -32,8 +32,30 @@ class WorldConfig(
     val strict: Boolean = false,
 )
 
-/** A logged engine or script problem. Persisted to the diagnostics table from M4. */
-data class Diagnostic(val pulse: Long, val kind: String, val message: String, val cause: Throwable? = null)
+/**
+ * A logged engine or script problem (SPEC §3.6, §6.2). Persisted to the diagnostics table
+ * from M4. Script diagnostics fill in where the failing code lives; engine ones leave the
+ * script fields null.
+ */
+data class Diagnostic(
+    val pulse: Long,
+    val kind: String,
+    val message: String,
+    val cause: Throwable? = null,
+    /** The package the failure is charged to, for example `zones/tutorial`. */
+    val pkg: String? = null,
+    /** The prototype whose hook failed. */
+    val label: Label? = null,
+    val hook: String? = null,
+    /** The file label, for example `//zones/tutorial:rooms.star`. */
+    val file: String? = null,
+    val line: Int? = null,
+    /** The Starlark call stack. */
+    val stack: String? = null,
+    /** A one-line summary of the hook's `ctx`. */
+    val ctx: String? = null,
+    val seed: Long? = null,
+)
 
 class InvariantViolation(val violations: List<String>) :
     IllegalStateException("World invariants violated:\n  " + violations.joinToString("\n  "))
@@ -70,6 +92,9 @@ class World(
     internal val spawnStates = mutableListOf<SpawnState>()
     private val diagnosticLog = mutableListOf<Diagnostic>()
 
+    /** Next zone reset per package that declares `reset_pulses` (SPEC §4.1). */
+    private val zoneResets = TreeMap<String, Long>()
+
     // Initiative-tier state (SPEC §5.4.1).
     internal var snapshot: TierSnapshot? = null
     internal val deferred = mutableListOf<Deferred>()
@@ -95,6 +120,7 @@ class World(
                 spawnStates += SpawnState(room, rule).also(::fillSpawn)
             }
         }
+        for (zone in protos.zones.values) zone.resetPulses?.let { zoneResets[zone.pkg] = pulse + it }
     }
 
     val rooms: Collection<Room> get() = roomsByLabel.values
@@ -114,6 +140,9 @@ class World(
 
     fun item(id: EntityId): Item? = entities[id] as? Item
 
+    /** Every entity in the world, in no particular order. */
+    val allEntities: Collection<Entity> get() = entities.values
+
     internal fun allocateId(): EntityId = EntityId(nextEntityId++)
 
     /** Ids for timers and affects, which share one `(due, id)` ordering. */
@@ -124,7 +153,12 @@ class World(
     }
 
     internal fun diagnose(kind: String, message: String, cause: Throwable? = null) {
-        diagnosticLog += Diagnostic(pulse, kind, message, cause)
+        record(Diagnostic(pulse, kind, message, cause))
+    }
+
+    /** Logs a diagnostic built elsewhere, for example by the script host. */
+    fun record(d: Diagnostic) {
+        diagnosticLog += d
     }
 
     /** Runs [block], logging an engine exception and aborting only that action (SPEC §6.4). */
@@ -269,7 +303,8 @@ class World(
         for (e in entities.values) {
             for (t in e.timers) {
                 val at = t.due ?: continue
-                if (at <= pulse) {
+                // A quarantined package's timers stay pending, neither fired nor dropped (SPEC §6.3).
+                if (at <= pulse && !scripts.isSuspended(e, t.fn)) {
                     due += Due(at, t.id) {
                         if (e.timers.remove(t)) {
                             e.dirty = true
@@ -329,7 +364,10 @@ class World(
                 a.dirty = true
             }
         }
-        for (e in entities.values.toList()) if (e !is Item) invokeOn(e, HookName.ON_TICK, HookContext())
+        for (e in entities.values.sortedBy { it.id }) if (e.id in entities) invokeOn(e, HookName.ON_TICK, HookContext())
+        for ((pkg, at) in zoneResets.entries.toList()) {
+            if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
+        }
         for (s in spawnStates) {
             val at = s.respawnAt ?: continue
             if (at <= pulse) guarded("respawn in ${s.room.label}") { fillSpawn(s) }
@@ -337,6 +375,26 @@ class World(
         for (item in entities.values.filterIsInstance<Item>()) {
             val at = item.decayAt ?: continue
             if (at <= pulse) guarded("decay of $item") { decay(item) }
+        }
+    }
+
+    /**
+     * A zone reset (D-061): refill every spawn rule in the package, then fire `on_reset` on its
+     * rooms, ascending id.
+     */
+    private fun resetZone(pkg: String) {
+        val interval = protos.zones.getValue(pkg).resetPulses ?: return
+        zoneResets[pkg] = pulse + interval
+        for (s in spawnStates) if (s.room.label.pkg == pkg) fillSpawn(s)
+        for (room in roomsByLabel.values.filter { it.label.pkg == pkg }.sortedBy { it.id }) {
+            invokeOn(room, HookName.ON_RESET, HookContext(room = room))
+        }
+    }
+
+    /** Fires `on_load` on every entity, ascending id, once the world is built (D-062). */
+    fun fireOnLoad() {
+        for (e in entities.values.sortedBy { it.id }) {
+            if (e.id in entities) invokeOn(e, HookName.ON_LOAD, HookContext(room = e as? Room))
         }
     }
 

@@ -21,3 +21,9 @@ application {
     // The terminal library loads JNA; allow it without the JDK 22+ restricted-method warning.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
+
+tasks.test {
+    val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
+    inputs.dir(templateWorld).withPropertyName("templateWorld")
+    systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
+}

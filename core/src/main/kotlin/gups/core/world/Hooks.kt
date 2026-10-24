@@ -71,7 +71,7 @@ sealed interface HookOutcome {
 }
 
 /**
- * The script seam (SPEC §4.11), implemented by the `script` module in M2. The engine decides
+ * The script seam (SPEC §4.11), implemented by `gups.script.StarlarkHost`. The engine decides
  * dispatch order; the host runs whatever hook the owner's prototype defines, if any.
  */
 interface ScriptHost {
@@ -79,6 +79,9 @@ interface ScriptHost {
 
     /** Runs a timer callback or an affect's `on_tick`/`on_expire`. */
     fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext)
+
+    /** True while [owner]'s timer callback [ref] must not run, for example under quarantine. */
+    fun isSuspended(owner: Entity, ref: HookRef): Boolean = false
 
     companion object {
         /** No scripts: every hook allows. */
