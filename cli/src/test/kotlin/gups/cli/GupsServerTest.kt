@@ -183,6 +183,60 @@ class GupsServerTest {
     }
 
     @Test
+    fun `builders and instructors get their tools on a --prod server`() {
+        val root = copyTemplate()
+        root.resolve("CODEOWNERS").writeText("* @nobody-here\n/zones/tutorial/ @Bea-gh\n")
+        val db = GupsServer.defaultDb(WorldDir(root))
+        gups.persist.Database.open(db).use { d ->
+            gups.persist.SqliteAccountStore(db, d::write).use { store ->
+                val h = gups.auth.Argon2Hasher(memoryKiB = 8, iterations = 1)
+                store.create(gups.core.Account(0, "bea", h.hash("correct horse"), gups.core.Role.BUILDER, githubHandle = "bea-gh"))
+                store.create(gups.core.Account(0, "ida", h.hash("correct horse"), gups.core.Role.INSTRUCTOR))
+            }
+        }
+        val prod = ProdOptions("127.0.0.1")
+        fun Socket.enter(login: String, name: String) {
+            readUntil("invite code)")
+            line(login)
+            readUntil("Password: ")
+            line("correct horse")
+            readUntil("Type a name to play")
+            line("new")
+            readUntil("called? ")
+            line(name)
+            readUntil("Exits: north.")
+        }
+        val logs = withServer(root, prod = prod) { s ->
+            s.enter("bea", "Bea")
+            s.line("@where")
+            s.readUntil("//zones/tutorial:gate: ")
+            s.line("@stat here")
+            s.readUntil("(room, version")
+            s.line("@stats")
+            s.readUntil("Huh?")
+            s.line("quit")
+            s.readUntil("Goodbye.")
+        }
+        assertContains(logs, "CODEOWNERS: 1 accounts' packages changed.")
+        assertContains(logs, "warning: CODEOWNERS owner @nobody-here matches no account's GitHub handle")
+        withServer(root, prod = prod) { s ->
+            s.enter("ida", "Ida")
+            s.line("@who")
+            s.readUntil("instructor")
+            s.line("@role bea")
+            s.readUntil("CODEOWNERS packages: zones/tutorial")
+            s.line("@restrict bea spawn 1d testing")
+            s.readUntil("bea can't use spawn until")
+            s.line("@restrictions bea")
+            s.readUntil("set by ida")
+            s.line("@reload //zones/tutorial")
+            s.readUntil("changes go live with @deploy")
+            s.line("@snapshot")
+            s.readUntil("Snapshot saved: ")
+        }
+    }
+
+    @Test
     fun `play the tutorial over telnet and see a save reload it`() {
         val root = copyTemplate()
         val logs = StringBuffer()

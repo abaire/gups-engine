@@ -118,7 +118,7 @@ receives `on_tell`. `shout` reaches the room and every room whose exit toward it
 ### D-019 Commands not in M1 — `open`
 `give`, `put`, `wear` and `use` arrived in M5 (D-114), and `wield` and `remove` handle every
 slot. `quests` comes from `//lib:quest.star` (D-126). The builder and instructor `@` commands
-other than `@trace`, `@eval` and `@errors` arrive in M6.
+arrived in M6.2 (D-143, D-144).
 *Code:* `EngineCommands`.
 
 ## Action lifecycle (§5.3)
@@ -476,9 +476,10 @@ compact JSON.
   and `on_expire` are skipped (the affects still tick down and expire).
 - Its timers stay pending: the world skips them while due, and they fire on the first
   timer phase after the quarantine clears.
-- `@quarantine` and `@unquarantine` (M6) will call `StarlarkHost.quarantine` and
-  `unquarantine`. Persisting the state in `zone_states` arrives with M4.
-- Notifications go to `StarlarkHost.alerts` until roles exist (M6).
+- `@quarantine` and `@unquarantine` call `ScriptHost.quarantine` and `unquarantine`, then
+  checkpoint so the state persists in `zone_states` (D-146).
+- Notifications go to `StarlarkHost.alerts`, which the server routes to instructor alerts
+  (D-145).
 *Code:* `StarlarkHost`, `World.runTimers`.
 
 ### D-069 Script diagnostics — `open`
@@ -489,8 +490,9 @@ compact JSON.
   Starlark stack, a one-line ctx summary and the seed.
 - **Room:** a script diagnostic also names the room its owner was in, which the repro
   bundle snapshots (D-098).
-- **Not yet:** the in-game owner alert, at most one per package per 10 s, needs package
-  ownership (M6).
+- **Owner alerts:** the kinds `script_error`, `step_limit`, `wall_clock` and `missing` send
+  a one-line alert to the package's online builders, at most one per package per 10 s
+  (D-145).
 - **Storage:** diagnostics are kept in `World.diagnostics` and written to the `diagnostics`
   table with the next checkpoint batch, periodic or immediate.
 *Code:* `Diagnostic`, `StarlarkHost.report`.
@@ -790,19 +792,18 @@ from one `AtomicLong` shared by listeners.
   exist: they get "Huh?", and `help` leaves it out.
 - **Registration:** `@` commands from outside `core` register as tools. An `@` prefix only
   matches other `@` commands.
-- **Scope:** builder scope (own packages only) arrives with CODEOWNERS sync in M6; until
-  then builders and instructors see everything. `@trace` streams everything in `--dev`.
-- **`@trace` filters:** `@trace [all|zone|entity <target>|hook <name>|rules|off]`.
-  - `zone` means the package of the caller's room.
+- **Scope:** builders see and act on their own packages only (D-143). Instructors and
+  admins see everything, as does `--dev`'s local instructor.
+- **`@trace` filters:** `@trace [all|zone [package]|entity <target>|hook <name>|rules|off]`.
+  - `zone` means the given package, or else the package of the caller's room.
   - `entity here` traces the room itself.
   - `hook` matches a hook name, or a command or timer prefix such as `command` or `timer`.
   - `rules` streams rules functions, modifiers and each evaluation's chain (D-127).
 - **`@trace` rate limit:** past 50 lines per pulse, the rest are counted. The count is
   reported with the next traced line or at `@trace off`.
 - **`@errors [package]`:** shows the last 10 diagnostics.
-- **Not yet:** the other builder commands (`@goto`, `@stat`, `@spawn`, `@where`) arrive in
-  M6.
-*Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `EngineCommands.errors`.
+- The other builder commands are M6.2's (D-143).
+*Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `Tools.errors`.
 
 ### D-092 `gups serve` options — `open`
 `--prod` exits with status 3 until M6. `--fresh` and `--db` work from M4 (D-099, D-101).
@@ -1218,8 +1219,8 @@ affect passability (D-029).
 ### D-127 `@trace rules` — `open`
 It streams each rules function and modifier call, and one line per evaluation with its full
 chain. Auto-attacks add the to-hit roll and the mitigated damage; each combat round adds
-the initiative order. `w.trace()` in the harness records the same lines. Builder scoping of
-what is traced arrives with roles in M6.
+the initiative order. `w.trace()` in the harness records the same lines. Builders see only
+their own character's rules lines (D-091).
 *Code:* `World.onRules`, `DevTools`, `WorldHandle.trace`.
 
 ## Accounts and login (§3.5, §3.6, §5.12; M6 design §2–§3) — M6.1
@@ -1237,8 +1238,9 @@ what is traced arrives with roles in M6.
   loop. That also makes single use hold across processes.
 - **Reads:** a read-only connection of the store's own, serialized, beside the writer (WAL).
   Accounts aren't cached, so the CLI tools writing the same database directly are safe.
-- **Schema migration 2:** `invites.account_id`, the account a setup code is bound to. M6.2's
-  `restrictions` table therefore becomes migration 3.
+- **Schema migrations:** 2 adds `invites.account_id`, the account a setup code is bound to,
+  so M6.2's `restrictions` table is migration 3 (`id`, `account_id`, `capability`, `until`,
+  `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`).
 - **Characters:** `Persistence.characters(accountId)` and `savedCharacter(name)` read the
   in-memory player rows (D-095). `Player.accountId` became a `var` and `spawnPlayer` takes it.
 - **`update`** writes role, scope, GitHub handle and the disabled flag, never the password;
@@ -1307,7 +1309,7 @@ canonical form. They are random enough that an unsalted fast hash is enough.
 - **Output:** a `login,setup_code` header, then one line per new account; a summary goes to
   standard error. `--days N` sets the codes' lifetime.
 - **Existing accounts** without a password get no new code, so a re-import stays idempotent;
-  a lost code waits for `@role <account> reset` (M6.2).
+  `@role <account> reset` issues a fresh one.
 - **Offline only:** `gups import-roster` and `gups invite` write the database directly. With
   the admin port (M6.5) they will go through a running server instead; until then, running
   them beside a server is safe because SQLite serializes the writes (D-128).
@@ -1322,9 +1324,8 @@ canonical form. They are random enough that an unsalted fast hash is enough.
   warned about when set.
 - **`reserved_names`** in the server configuration adds character names to refuse.
 - **Database:** `--prod` defaults to the world's `.gups/world.db`, as `--dev` does (D-099).
-- **Not yet:** `@invite` arrives with the other instructor commands in M6.2. Nothing disables
-  an account yet, so quitting a disabled account's online characters waits for a command
-  that disables (DESIGN_NEEDED.md).
+- **Not yet:** nothing disables an account yet, so quitting a disabled account's online
+  characters waits for a command that disables (DESIGN_NEEDED.md).
 *Code:* `Serve.prodServer`, `ServerConfig`, `GupsServer`.
 
 ### D-136 Reserved character names — `open`
@@ -1347,3 +1348,127 @@ echo.
 profiles. `--start` overrides it. Without either, it is the tutorial gate if it exists, else
 the first room by label, as in D-082. A `start_room` that isn't a room stops the server.
 *Code:* `WorldModule`, `GupsServer.boot`.
+
+## Roles and in-game tools (§3.5, §4.9, §6.2; M6 design §4) — M6.2
+
+### D-139 CODEOWNERS — `open`
+- **File:** the first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS` in the
+  world, GitHub's order. No file means no CODEOWNERS scope.
+- **Patterns:** gitignore-style, matched against package directories. A leading `/` or a
+  slash inside anchors to the world root; otherwise the name matches at any depth. `*` stays
+  within a directory, `**` crosses them, and a directory pattern also owns the packages below
+  it. File patterns such as `*.star` own no package. Inline `#` comments aren't supported, as
+  on GitHub.
+- **Owners:** `@user` handles, compared in lowercase with accounts' `github_handle`. Team and
+  email owners are warnings, as are handles that match no account.
+- **Sync:** at startup only until deploys (M6.5). Instructors and admins have both scopes
+  cleared. Every other account, players included, gets its CODEOWNERS packages, so promoting a
+  player with `@role` scopes them at once. Online characters get new scopes when they next
+  enter the game.
+*Code:* `CodeOwners`, `syncScopes`, `GupsServer.syncCodeOwners`.
+
+### D-140 Hand scope — `open`
+`@role <account> builder <packages>` sets a scope of its own, stored as `manual` in
+`roles_json` beside the CODEOWNERS `scope`. A builder may work on the union. Packages
+CODEOWNERS covers are refused there, and a sync drops any that CODEOWNERS later covers.
+Packages are comma- or space-separated, with or without `//`, and must be loaded packages.
+Giving a role without packages keeps the old hand scope. Instructors and admins have none.
+*Code:* `Account.manualScope`, `RolesJson`, `AccountTools.setRole`.
+
+### D-141 `@role` — `open`
+- `@role <account>` shows the role, GitHub handle, both scopes and whether a password is set.
+- Instructors may set player, builder and instructor; only admins may make, change or reset
+  admins, or invite them. Nobody may change their own role.
+- A change applies at once to the account's characters in the world: role, scope and idle
+  exemption.
+- `reset` clears the password, revokes web tokens and shows a 7-day setup code bound to the
+  account. `revoke` deletes the account's web tokens only.
+*Code:* `AccountTools`, `World.applyAccount`.
+
+### D-142 Slow work for commands — `open`
+`World.later(work, then)` runs `work` on `World.background` and `then` with its result on the
+world thread, through a new `WorldControlEvent.Task` posted with `World.post`. A world
+without them (headless tests) runs both at once. Account commands, `@snapshot` and `@audit`
+use it. Their replies are flushed when they arrive. The server uses one 4-thread pool for
+logins and these.
+*Code:* `World.later`, `WorldControlEvent.Task`, `GupsServer`.
+
+### D-143 Builder commands — `open`
+- **Ownership:** a builder owns a package in its scope. Rooms belong to their package, mobs
+  and items to their prototype's. Players and engine items (corpses) belong to the package
+  of the room they are in. Every builder command is refused outside it with "That isn't one
+  of your packages."; `@where` checks the room the builder stands in.
+- **Labels:** `//pkg:name`, or `:name` for the package of the builder's room.
+- **`@goto`:** a player's name wins over a label; you land at their track index. A room
+  lands you at index 0.
+- **`@stat`:** a keyword (actors first, then carried and ground items), `here` or `#id`.
+  It shows identity and version, location, vitals, effective and base stats, resists,
+  skills, affects with seconds left, what the actor is doing, carried and worn items,
+  timers, attributes grouped by namespace, and simulation state with reasons. Mobs also show
+  their debug owner; players their account, role and scope.
+- **`@spawn`:** 1 to 10 at a time. Mobs appear at the builder's index; items go into the
+  builder's inventory (a stackable item as one stack). Debug entities have no audit trail.
+  A debug mob also despawns at the first world tick after its spawner is gone. Items in its
+  inventory when it despawns or dies become debug too.
+- **Debug on every entity:** `debug` moved from `Item` to `Entity`.
+*Code:* `Tools`, `World.packageOf`, `World.statLines`.
+
+### D-144 Instructor commands — `open`
+- **`@reload`:** refused when `WorldConfig.production` is set (`--prod`). In `--dev` it
+  reloads the named packages, which must be loaded.
+- **`@deploy`:** answers that deploys arrive with M6.5's pipeline.
+- **`@quarantine`/`@unquarantine`:** packages must be loaded. Each takes a routine
+  checkpoint so the change persists.
+- **`@bubble`:** active rooms per package, every anchor with its reasons and room, entities
+  with active reasons in dormant rooms, and dormant-room counts per package.
+- **`@stats`:** p50 and p99 of the last minute's pulse durations, its overruns (pulses longer
+  than 250 ms), input lines waiting, active rooms, sessions per transport, the writer's
+  backlog in batches, and the package with the most script steps this minute.
+- **`@who`:** each player's role, transport and address (or link-dead time) and idle time.
+- **`@snapshot`:** takes a routine checkpoint, waits for the writer, then a `manual` backup.
+- **`@shutdown [seconds] [reason]`:** a first word that isn't a number is part of the reason.
+  It warns at once, then at 60, 30, 10 and 5 seconds left. The existing `Shutdown` event
+  uses the same countdown.
+- **`@audit item <id>`:** the item's committed `item_events` with UTC wall times, plus where
+  it is now if it is in the world. Changes not yet checkpointed don't show.
+*Code:* `Tools`, `World.scheduleShutdown`, `SqlitePersistence.backup`, `itemHistory`.
+
+### D-145 Alerts — `open`
+- **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always to
+  the server log. Script host alerts (quarantine, rules fallback) are keyed by their text,
+  so the same message repeats at most once a minute. The other kinds are `checkpoint` (the
+  writer-backlog diagnostic of D-096), `engine_errors` and `overrun`.
+- **Engine errors:** more than 100 `engine` diagnostics within the last 240 pulses.
+- **Overruns:** the world loop records each pulse's duration, and a pulse overruns when it
+  takes longer than 250 ms. The alert fires when a full minute is recorded and more than 10%
+  of it overran. Script steps per package are sampled every combat round, and the package
+  with the largest increase over the sampled minute is named. Steps of every script call
+  count, rules functions included.
+- **Owner alerts** go to online builders (not instructors) whose scope has the package:
+  `[error] <file:line>: <first line of the message> (@errors <pkg>)`.
+- Alerts are queued like other output and flushed with the pulse or the command.
+*Code:* `World.alert`, `World.alertFor`, `World.checkOverruns`, `PulseStats`, `StarlarkHost.stepsByPackage`.
+
+### D-146 Saving quarantine and debug entities — `open`
+`zone_states` also gets a row for a quarantined package that isn't a zone (a library, the
+rules), holding only its quarantine flag, and keeps updating rows it once had. Debug
+entities are skipped by every checkpoint, so they are never saved and are gone after a
+restart.
+*Code:* `SqlitePersistence.zoneStates`, `restore`, `checkpoint`.
+
+### D-147 Restrictions — `open`
+- **Lengths:** `<n>m`, `<n>h`, `<n>d`, `<n>w` or `permanent`. A third word that isn't a
+  length starts the reason.
+- **Ladder:** every earlier restriction of the same capability on the account counts,
+  whatever its state; past the end of the ladder its last step repeats. The server
+  configuration's ladder is checked at startup.
+- **Checking:** the world keeps every restriction in memory, loaded at startup and updated by
+  the commands, and checks them against the wall clock (`World.wallClock`). The `gossip`
+  capability guards the `gossip` command; `goto` guards `@goto` as a whole and
+  `goto_player` going to a player.
+- **Message:** "You can't do that right now.", plus "That changes <UTC time>." for a timed
+  restriction. The restricted player isn't told when one is set.
+- **`@restrictions`** without an account lists those in effect; with one, the full history:
+  state, who set it and when, the reason, and who lifted it.
+- **Set by:** the instructor's account, or none for `--dev` characters without one.
+*Code:* `AccountTools`, `World.restriction`, `World.refuseRestricted`, `Capabilities`.

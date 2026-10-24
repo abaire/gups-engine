@@ -3,6 +3,7 @@ package gups.persist
 import gups.core.Account
 import gups.core.AccountStore
 import gups.core.Invite
+import gups.core.Restriction
 import gups.core.Role
 import kotlinx.serialization.Serializable
 import org.sqlite.SQLiteConfig
@@ -14,9 +15,15 @@ import kotlin.io.path.absolutePathString
 
 /** `accounts.roles_json` (M6 design §3.1): one role, and the builder scope CODEOWNERS fills. */
 @Serializable
-internal class RolesJson(val role: String, val scope: List<String> = emptyList())
+internal class RolesJson(val role: String, val scope: List<String> = emptyList(), val manual: List<String> = emptyList())
 
-internal fun rolesJson(a: Account): String = JSON.encodeToString(RolesJson.serializer(), RolesJson(a.role.name, a.scope))
+internal fun rolesJson(a: Account): String = JSON.encodeToString(RolesJson.serializer(), RolesJson(a.role.name, a.scope, a.manualScope))
+
+/** A read-only connection beside the writer, which WAL allows (M6 design §2.3). */
+internal fun readOnlyConnection(file: Path): Connection = SQLiteConfig().apply {
+    setReadOnly(true)
+    busyTimeout = 5000
+}.createConnection("jdbc:sqlite:${file.absolutePathString()}")
 
 /** How long an account write waits for the checkpoint writer before giving up. */
 private const val WRITE_TIMEOUT_S = 30L
@@ -28,10 +35,7 @@ private const val WRITE_TIMEOUT_S = 30L
  * running server, or [Database.write] directly for the offline CLI tools.
  */
 class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) : AccountStore, AutoCloseable {
-    private val read: Connection = SQLiteConfig().apply {
-        setReadOnly(true)
-        busyTimeout = 5000
-    }.createConnection("jdbc:sqlite:${file.absolutePathString()}")
+    private val read: Connection = readOnlyConnection(file)
 
     override fun byLogin(login: String): Account? = accounts("WHERE login = ?", login).firstOrNull()
 
@@ -68,6 +72,35 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) : Accou
         return op.result.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS)
     }
 
+    override fun revokeTokens(id: Long) = submit(AccountOp.RevokeTokens(id))
+
+    override fun restrictions(accountId: Long?): List<Restriction> = synchronized(read) {
+        val where = if (accountId == null) "" else "WHERE account_id = ?"
+        read.prepareStatement("SELECT id, account_id, capability, until, reason, set_by, created_at, lifted_by, lifted_at FROM restrictions $where ORDER BY id").use { st ->
+            if (accountId != null) st.setLong(1, accountId)
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        add(
+                            Restriction(
+                                rs.getLong(1), rs.getLong(2), rs.getString(3), rs.nullableLong(4), rs.getString(5),
+                                rs.nullableLong(6), rs.getLong(7), rs.nullableLong(8), rs.nullableLong(9),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    override fun addRestriction(r: Restriction): Restriction {
+        val op = AccountOp.AddRestriction(r)
+        submit(op)
+        return r.copy(id = op.result.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS))
+    }
+
+    override fun liftRestriction(id: Long, by: Long?, at: Long) = submit(AccountOp.LiftRestriction(id, by, at))
+
     override fun close() = synchronized(read) { read.close() }
 
     private fun submit(op: AccountOp) {
@@ -90,6 +123,7 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) : Accou
                                 pwHash = rs.getString(3),
                                 role = Role.valueOf(roles.role),
                                 scope = roles.scope,
+                                manualScope = roles.manual,
                                 githubHandle = rs.getString(5),
                                 disabled = rs.getInt(6) != 0,
                                 createdAt = rs.getLong(7),

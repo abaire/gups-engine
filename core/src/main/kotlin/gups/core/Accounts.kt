@@ -10,13 +10,43 @@ data class Account(
     val login: String,
     val pwHash: String?,
     val role: Role = Role.PLAYER,
-    /** Packages a builder may change, filled by CODEOWNERS sync (M6.2). */
+    /** Packages a builder may change, from CODEOWNERS; every sync replaces it (M6 design §4.1). */
     val scope: List<String> = emptyList(),
+    /** Packages given by hand with `@role`, for packages CODEOWNERS doesn't cover (D-140). */
+    val manualScope: List<String> = emptyList(),
     val githubHandle: String? = null,
     val disabled: Boolean = false,
     /** Wall-clock milliseconds. */
     val createdAt: Long = 0,
-)
+) {
+    /** Everything a builder of this account may work on. */
+    val packages: Set<String> get() = (scope + manualScope).toSortedSet()
+}
+
+/** Capabilities an instructor can take away from one account (M6 design §4.4). */
+object Capabilities {
+    const val GOTO_PLAYER = "goto_player"
+    val ALL: List<String> = listOf(GOTO_PLAYER, "goto", "spawn", "stat", "where", "trace", "errors", "gossip")
+}
+
+/**
+ * One restriction of one capability on one account (M6 design §4.4, §3.6 `restrictions`).
+ * Times are wall-clock milliseconds, so restrictions run out while the server is down.
+ */
+data class Restriction(
+    val id: Long,
+    val accountId: Long,
+    val capability: String,
+    /** When it ends; null is permanent. */
+    val until: Long?,
+    val reason: String?,
+    val setBy: Long?,
+    val createdAt: Long,
+    val liftedBy: Long? = null,
+    val liftedAt: Long? = null,
+) {
+    fun activeAt(now: Long): Boolean = liftedAt == null && (until == null || until > now)
+}
 
 /**
  * An invite or setup code (SPEC §3.6 `invites`). Only the code's hash is stored. A setup code
@@ -49,7 +79,7 @@ interface AccountStore {
     /** Stores a new account and returns it with its id, or returns null if the login is taken. [Account.id] is ignored. */
     fun create(account: Account): Account?
 
-    /** Stores [account]'s role, scope, GitHub handle and disabled flag. The password is never touched. */
+    /** Stores [account]'s role, both scopes, GitHub handle and disabled flag. The password is never touched. */
     fun update(account: Account)
 
     /** Sets or clears an account's password and revokes its web session tokens (SPEC §5.12). */
@@ -61,4 +91,16 @@ interface AccountStore {
 
     /** Marks an unused invite as used by [accountId]. Returns false if it was already used. */
     fun useInvite(codeHash: String, accountId: Long): Boolean
+
+    /** Revokes every web session token of the account (`@role <account> revoke`). */
+    fun revokeTokens(id: Long)
+
+    /** Restrictions, oldest first: all of them, or one account's full history. */
+    fun restrictions(accountId: Long? = null): List<Restriction>
+
+    /** Stores a new restriction and returns it with its id. [Restriction.id] is ignored. */
+    fun addRestriction(r: Restriction): Restriction
+
+    /** Lifts restriction [id]. */
+    fun liftRestriction(id: Long, by: Long?, at: Long)
 }

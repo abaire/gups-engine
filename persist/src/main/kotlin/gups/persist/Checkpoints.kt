@@ -2,6 +2,7 @@ package gups.persist
 
 import gups.core.Account
 import gups.core.Invite
+import gups.core.Restriction
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -53,6 +54,15 @@ sealed interface AccountOp {
     class SetPassword(val id: Long, val pwHash: String?) : AccountOp
 
     class AddInvite(val invite: Invite) : AccountOp
+
+    class RevokeTokens(val id: Long) : AccountOp
+
+    /** [result] gets the new restriction's id. */
+    class AddRestriction(val restriction: Restriction) : AccountOp {
+        val result: CompletableFuture<Long> = CompletableFuture()
+    }
+
+    class LiftRestriction(val id: Long, val by: Long?, val at: Long) : AccountOp
 
     /** [result] is false if the invite was already used. */
     class UseInvite(val codeHash: String, val accountId: Long) : AccountOp {

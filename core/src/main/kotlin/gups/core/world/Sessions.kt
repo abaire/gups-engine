@@ -41,10 +41,7 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
             login?.connected(this, s)
         }
         is WorldControlEvent.Disconnect -> disconnect(event.session)
-        is WorldControlEvent.Shutdown -> {
-            shutdownAt = pulse + event.delayPulses
-            for (p in players) send(p, "The world is shutting down: ${event.reason}")
-        }
+        is WorldControlEvent.Shutdown -> scheduleShutdown(event.delayPulses, event.reason)
         is WorldControlEvent.Reload -> reload(event.packages)
         // Deploy needs the deploy pipeline (M6).
         is WorldControlEvent.Deploy -> diagnose("control", "$event is not supported by this engine build")
@@ -53,6 +50,10 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
             val s = sessions[event.session] ?: return
             login?.completed(this, s, event.outcome)
             flush(s)
+        }
+        is WorldControlEvent.Task -> {
+            guarded("background task") { event.run(this) }
+            flushOutput()
         }
     }
 }
@@ -123,6 +124,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
     }
     player.session = null
     disengageAll(player)
+    despawnDebugMobs(player)
     // Logout saves the character and everything it carries, at once (SPEC §5.11).
     player.dirty = true
     for (item in player.inventory + player.equipment.values) markDirtyTree(item)

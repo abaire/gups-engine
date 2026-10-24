@@ -5,12 +5,14 @@ import gups.core.PULSE_MS
 import gups.core.WorldControlEvent
 import gups.core.WorldInbox
 import gups.core.world.World
+import gups.core.world.checkOverruns
 import gups.core.world.handle
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.nanoseconds
 
 /**
@@ -49,6 +51,11 @@ class WorldLoop(
     private val input = Channel<ClientInputEvent>(Channel.UNLIMITED)
     private val control = Channel<WorldControlEvent>(Channel.UNLIMITED)
     private val wake = Channel<Unit>(Channel.CONFLATED)
+    private val waiting = AtomicInteger()
+
+    init {
+        world.queueDepth = waiting::get
+    }
 
     @Volatile
     private var stopped = false
@@ -60,7 +67,7 @@ class WorldLoop(
 
     /** Safe to call from any thread. */
     override fun submit(event: ClientInputEvent) {
-        input.trySend(event)
+        if (input.trySend(event).isSuccess) waiting.incrementAndGet()
     }
 
     /** Safe to call from any thread. */
@@ -83,13 +90,21 @@ class WorldLoop(
                     select {
                         wake.onReceive {}
                         control.onReceive { world.handle(it, nanoTime()) }
-                        input.onReceive { world.handle(it) }
+                        input.onReceive {
+                            waiting.decrementAndGet()
+                            world.handle(it)
+                        }
                     }
                 }
                 continue
             }
+            val started = nanoTime()
             world.runPulse()
-            overruns += timer.pulseFinished(nanoTime())
+            val finished = nanoTime()
+            val skipped = timer.pulseFinished(finished)
+            overruns += skipped
+            world.pulseStats.record(finished - started, finished - started > pulseNanos)
+            world.checkOverruns()
         }
     }
 

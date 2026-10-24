@@ -76,9 +76,12 @@ class LoginTest {
         f.input(p, "@errors")
         assertEquals("Huh?\n", f.out(p))
         p.role = Role.BUILDER
+        p.scope = setOf("t")
         f.input(p, "@errors")
         assertEquals("No diagnostics.\n", f.out(p))
         f.w.record(Diagnostic(f.w.pulse, "script_error", "on_enter: boom", pkg = "t", file = "//t:rooms.star", line = 3))
+        f.w.flushOutput()
+        assertEquals("{red}[error]{/} //t:rooms.star:3: on_enter: boom (@errors t)\n", f.out(p), "owners hear of their package's errors")
         f.input(p, "@err t")
         assertEquals("[0] script_error //t:rooms.star:3: on_enter: boom\n", f.out(p))
         assertTrue(CapturingSink().closedReason == null)

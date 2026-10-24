@@ -6,6 +6,7 @@ import gups.core.ClientInputEvent
 import gups.core.Invite
 import gups.core.Label
 import gups.core.OutputSink
+import gups.core.Restriction
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Direction
@@ -67,6 +68,22 @@ class MemoryAccountStore : AccountStore {
         if (i.usedBy != null) return false
         invites[codeHash] = i.copy(usedBy = accountId)
         return true
+    }
+
+    val revoked = mutableListOf<Long>()
+    val restrictionRows = mutableListOf<Restriction>()
+
+    @Synchronized override fun revokeTokens(id: Long) {
+        revoked += id
+    }
+
+    @Synchronized override fun restrictions(accountId: Long?) = restrictionRows.filter { accountId == null || it.accountId == accountId }
+
+    @Synchronized override fun addRestriction(r: Restriction) = r.copy(id = restrictionRows.size + 1L).also { restrictionRows += it }
+
+    @Synchronized override fun liftRestriction(id: Long, by: Long?, at: Long) {
+        val i = restrictionRows.indexOfFirst { it.id == id }
+        if (i >= 0 && restrictionRows[i].liftedAt == null) restrictionRows[i] = restrictionRows[i].copy(liftedBy = by, liftedAt = at)
     }
 }
 

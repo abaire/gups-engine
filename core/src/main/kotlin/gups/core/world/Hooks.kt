@@ -122,8 +122,17 @@ interface ScriptHost {
     /** Packages whose scripts are disabled, saved in `zone_states` (SPEC §6.3). */
     val quarantinedPackages: Set<String> get() = emptySet()
 
-    /** Puts a package back in quarantine, as restored from a checkpoint. */
+    /** Puts a package in quarantine: on errors, as restored from a checkpoint, or by `@quarantine`. */
     fun quarantine(world: World, pkg: String, why: String) = Unit
+
+    /** Lifts a package's quarantine (`@unquarantine`, M6 design §4.3). */
+    fun unquarantine(world: World, pkg: String) = Unit
+
+    /** Every loaded package path, for checking `@quarantine` and `@reload` arguments. */
+    val packages: Set<String> get() = emptySet()
+
+    /** Script steps used so far per package, ever increasing (M6 design §4.5, `gups_script_steps_total`). */
+    val stepsByPackage: Map<String, Long> get() = emptyMap()
 
     companion object {
         /** No scripts: every hook allows. */

@@ -36,6 +36,15 @@ val MIGRATIONS: List<Migration> = listOf(
     ),
     // Setup codes are invites bound to an account (M6 design §3.3, D-128).
     Migration(2, listOf("ALTER TABLE invites ADD COLUMN account_id INTEGER")),
+    // Per-account restrictions of capabilities (M6 design §4.4, D-128).
+    Migration(
+        3,
+        listOf(
+            """CREATE TABLE restrictions (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, capability TEXT NOT NULL,
+                until INTEGER, reason TEXT, set_by INTEGER, created_at INTEGER NOT NULL, lifted_by INTEGER, lifted_at INTEGER)""",
+            "CREATE INDEX restrictions_account ON restrictions (account_id)",
+        ),
+    ),
 )
 
 /** A diagnostics row (SPEC §3.6). */
@@ -148,6 +157,30 @@ class Database private constructor(val file: Path, private val conn: Connection)
                     st.setLong(3, op.invite.expiresAt)
                     val bound = op.invite.accountId
                     if (bound == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, bound)
+                    st.executeUpdate()
+                }
+                is AccountOp.RevokeTokens -> prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
+                    st.setLong(1, op.id)
+                    st.executeUpdate()
+                }
+                is AccountOp.AddRestriction -> prepare(
+                    "INSERT INTO restrictions (account_id, capability, until, reason, set_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ) { st ->
+                    val r = op.restriction
+                    st.setLong(1, r.accountId)
+                    st.setString(2, r.capability)
+                    st.setObject(3, r.until)
+                    st.setString(4, r.reason)
+                    st.setObject(5, r.setBy)
+                    st.setLong(6, r.createdAt)
+                    st.executeUpdate()
+                    val id = scalar("SELECT last_insert_rowid()")
+                    results += { op.result.complete(id) }
+                }
+                is AccountOp.LiftRestriction -> prepare("UPDATE restrictions SET lifted_by = ?, lifted_at = ? WHERE id = ? AND lifted_at IS NULL") { st ->
+                    st.setObject(1, op.by)
+                    st.setLong(2, op.at)
+                    st.setLong(3, op.id)
                     st.executeUpdate()
                 }
                 is AccountOp.UseInvite -> prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL") { st ->

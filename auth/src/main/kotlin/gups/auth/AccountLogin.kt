@@ -419,6 +419,7 @@ class AccountLogin(
     private fun enter(world: World, s: Session, c: Conn, p: Player, welcome: String?) {
         val a = c.account!!
         p.role = a.role
+        p.scope = a.packages
         // Idle quit applies to everyone below instructor (SPEC §5.12).
         p.idleExempt = a.role.atLeast(Role.INSTRUCTOR)
         conns.remove(s.id)

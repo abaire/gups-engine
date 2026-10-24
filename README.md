@@ -87,7 +87,21 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M6.1 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §3): accounts and login.
+M6.2 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §4): roles and in-game tools.
+
+- **Builder scope:** `CODEOWNERS` in the course world gives builders their packages at
+  startup, and `@role` can add packages it doesn't cover. Builders' `@goto`, `@stat`,
+  `@spawn` (debug mobs and items, never saved), `@where`, `@trace` and `@errors` work only
+  on their own packages.
+- **Instructor commands:** `@role`, `@invite`, `@reload` (`--dev` only), `@quarantine`,
+  `@unquarantine`, `@bubble`, `@stats`, `@who`, `@snapshot`, `@shutdown` and
+  `@audit item`. `@deploy` waits for M6.5.
+- **Restrictions:** `@restrict`, `@unrestrict` and `@restrictions` take a capability away
+  from one account for a while or for good, escalating along `restriction_ladder`.
+- **Alerts:** script errors reach the package's online builders; quarantines, checkpoint
+  backlog, bursts of engine errors and pulse overruns reach online instructors.
+
+M6.1: accounts and login.
 
 - **Accounts:** stored in SQLite, written through the checkpoint writer. Each account has one
   role. Passwords are Argon2id hashes.
@@ -123,8 +137,8 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6.2–M6.6: roles and instructor commands, TLS and GMCP, WebSocket, the admin port and
-  deploys, and the course world CI gates.
+- M6.3–M6.6: TLS and GMCP, WebSocket, the admin port and deploys, and the course world CI
+  gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
 `lint`, `docs` and `deploy` still exit with status 3 ("not implemented").

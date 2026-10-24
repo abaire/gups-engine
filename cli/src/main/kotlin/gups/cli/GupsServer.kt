@@ -2,7 +2,11 @@ package gups.cli
 
 import gups.auth.AccountLogin
 import gups.auth.AccountService
+import gups.auth.AccountTools
+import gups.auth.CodeOwners
+import gups.auth.DEFAULT_LADDER
 import gups.auth.LoginSettings
+import gups.auth.syncScopes
 import gups.core.Account
 import gups.core.Label
 import gups.core.Role
@@ -12,6 +16,7 @@ import gups.core.world.Boot
 import gups.core.world.DevLogin
 import gups.core.world.World
 import gups.core.world.WorldConfig
+import gups.core.world.alert
 import gups.net.TelnetServer
 import gups.persist.Backups
 import gups.persist.SqlitePersistence
@@ -42,10 +47,15 @@ private const val BACKUP_CHECK_MS = 5 * 60_000L
 private const val WATCH_INTERVAL_MS = 100L
 
 /** What `--prod` adds (M6 design §3.5): where raw telnet listens, and the account login's settings. */
-class ProdOptions(val telnetHost: String, val login: LoginSettings = LoginSettings())
+class ProdOptions(
+    val telnetHost: String,
+    val login: LoginSettings = LoginSettings(),
+    /** `restriction_ladder` of the server configuration (M6 design §4.4). */
+    val ladder: List<String> = DEFAULT_LADDER,
+)
 
-/** Password checks and other slow login work run here, never on the world thread (M6 design §2.2). */
-private const val AUTH_THREADS = 4
+/** Password checks, account changes and other slow work run here, never on the world thread (M6 design §2.2). */
+private const val BACKGROUND_THREADS = 4
 
 /**
  * A running server (SPEC §2.4). Without [prod] it is the `--dev` profile: raw telnet on
@@ -65,6 +75,11 @@ class GupsServer(
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
     private var persistence: SqlitePersistence? = null
+    private val background = Dispatchers.IO.limitedParallelism(BACKGROUND_THREADS).asExecutor()
+
+    /** The world's CODEOWNERS as last read (M6 design §4.1). */
+    @Volatile var codeOwners: CodeOwners = CodeOwners.EMPTY
+        private set
     private val stopped = CountDownLatch(1)
     lateinit var world: World
         private set
@@ -108,7 +123,13 @@ class GupsServer(
         persistence = saved
         val boot = saved?.boot(protos, fresh) ?: Boot()
         // --prod checks invariants only at world ticks, before capture (M6 design §3.5).
-        val config = WorldConfig(seed = System.nanoTime(), checkInvariants = prod == null, checkpointPulses = module.checkpointPulses, bubble = true)
+        val config = WorldConfig(
+            seed = System.nanoTime(),
+            checkInvariants = prod == null,
+            checkpointPulses = module.checkpointPulses,
+            bubble = true,
+            production = prod != null,
+        )
         world = World(protos, host.rules(), host, config, boot)
         host.install(world)
         if (saved != null) {
@@ -117,7 +138,9 @@ class GupsServer(
             log("Restored ${report.restored} entities from $db at pulse ${world.pulse}" + if (report.dropped > 0) "; dropped ${report.dropped}." else ".")
         }
         DevTools.install(world, host, eval = prod == null)
-        host.alerts = { log("alert: $it") }
+        // Script alerts (quarantine, rules fallback) reach online instructors too (M6 design §4.5).
+        host.alerts = { world.alert(it, it) }
+        world.onAlert = { log("alert: $it") }
         world.onDiagnostic = { d ->
             val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":")
             log("[${d.kind}] ${if (where.isEmpty()) "" else "$where: "}${d.message}")
@@ -125,10 +148,17 @@ class GupsServer(
         world.fireOnLoad()
         if (saved != null) world.checkpointNow("boot")
         loop = WorldLoop(world)
+        world.background = background
+        world.post = loop::submit
+        saved?.accounts?.let { accounts ->
+            syncCodeOwners(accounts, packages)
+            world.restrictions = accounts.restrictions()
+            AccountTools.install(world, AccountService(accounts), prod?.ladder ?: DEFAULT_LADDER) { codeOwners }
+        }
         world.login = if (prod != null) {
             val accounts = saved!!.accounts
             if (accounts.all().isEmpty()) log("There are no accounts yet. Create some with gups import-roster or gups invite.")
-            AccountLogin(AccountService(accounts), at, Dispatchers.IO.limitedParallelism(AUTH_THREADS).asExecutor(), loop::submit, prod.login)
+            AccountLogin(AccountService(accounts), at, background, loop::submit, prod.login)
         } else {
             // The local instructor is a real account once there is a database (M6 design §3.4).
             val instructor = saved?.accounts?.let { a ->
@@ -138,6 +168,18 @@ class GupsServer(
         }
         log("Loaded ${result.packages.size} of ${packages.size} packages; new characters start in $at; checkpoints every ${module.checkpointMinutes} min.")
         return true
+    }
+
+    /**
+     * Reads CODEOWNERS and replaces every account's builder scope (M6 design §4.1). Runs at
+     * startup; deploys (M6.5) will run it again.
+     */
+    private fun syncCodeOwners(accounts: gups.core.AccountStore, packages: List<String>) {
+        val file = CodeOwners.LOCATIONS.map { dir.root.resolve(it) }.firstOrNull { java.nio.file.Files.isRegularFile(it) }
+        codeOwners = file?.let { CodeOwners.parse(java.nio.file.Files.readString(it), dir.root.relativize(it).toString()) } ?: CodeOwners.EMPTY
+        val report = syncScopes(accounts, codeOwners, packages)
+        report.warnings.forEach { log("warning: $it") }
+        log(if (file == null) "No CODEOWNERS file; builders have only the packages given with @role." else "CODEOWNERS: ${report.changed.size} accounts' packages changed.")
     }
 
     /** Runs until [stop]. [ready] gets the bound port once the listener is up. */

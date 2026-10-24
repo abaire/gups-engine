@@ -21,6 +21,7 @@ import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
 import gups.auth.AccountService
 import gups.auth.DEFAULT_INVITE_DAYS
+import gups.auth.parseDuration
 import gups.auth.LoginSettings
 import gups.auth.Roster
 import gups.core.EngineInfo
@@ -150,7 +151,9 @@ class Serve : CliktCommand(name = "serve") {
         )
         if (login.maxCharacters < 1) throw UsageError("--max-characters must be at least 1")
         val dbPath = db?.toPath() ?: cfg.db?.let { Path.of(it) } ?: GupsServer.defaultDb(dir)
-        return GupsServer(dir, telnetPort, startLabel, dbPath, fresh, ProdOptions(host, login)) { echo(it, err = true) }
+        cfg.restrictionLadder.firstOrNull { parseDuration(it).isFailure }?.let { throw UsageError("restriction_ladder: '$it' is not a length such as 1d, 7d or permanent") }
+        if (cfg.restrictionLadder.isEmpty()) throw UsageError("restriction_ladder needs at least one step")
+        return GupsServer(dir, telnetPort, startLabel, dbPath, fresh, ProdOptions(host, login, cfg.restrictionLadder)) { echo(it, err = true) }
     }
 }
 

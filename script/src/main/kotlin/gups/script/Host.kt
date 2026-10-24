@@ -180,10 +180,18 @@ class StarlarkHost(
         alerts(message)
     }
 
+    override fun unquarantine(world: World, pkg: String) = unquarantine(pkg)
+
     fun unquarantine(pkg: String) {
         quarantinedSet.remove(pkg)
         errorPulses.remove(pkg)
     }
+
+    override val packages: Set<String> get() = scripts.packages.keys
+
+    private val steps = HashMap<String, Long>()
+
+    override val stepsByPackage: Map<String, Long> get() = HashMap(steps)
 
     private fun countError(world: World, pkg: String) {
         val times = errorPulses.getOrPut(pkg) { ArrayDeque() }
@@ -427,6 +435,7 @@ class StarlarkHost(
                 frame.valid = false
                 stack.removeAt(stack.size - 1)
                 val used = thread.executedSteps
+                steps.merge(site.pkg, used, Long::plus)
                 if (budget == null) {
                     for (outer in stack) {
                         outer.maxSteps -= used

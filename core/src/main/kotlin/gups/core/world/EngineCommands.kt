@@ -51,9 +51,7 @@ internal object EngineCommands {
         TickCommand("close") { planDoor(it, DoorVerb.CLOSE) },
         TickCommand("lock") { planDoor(it, DoorVerb.LOCK) },
         TickCommand("unlock") { planDoor(it, DoorVerb.UNLOCK) },
-        // Builder tools (SPEC §4.9). The script host adds @trace and @eval.
-        FastCommand("@errors", role = Role.BUILDER) { errors(it) },
-    )
+    ) + Tools.all()
 
     fun move(dir: Direction): TickCommand = TickCommand(dir.name) { MoveAction(dir) }
 
@@ -99,6 +97,7 @@ internal object EngineCommands {
 
     private fun gossip(c: CommandCall) {
         if (c.args.isEmpty()) return c.world.send(c.actor, "Gossip what?")
+        if (c.actor is Player && c.world.refuseRestricted(c.actor, "gossip")) return
         for (p in c.world.players) c.world.send(p, "[gossip] ${c.actor.name}: ${c.args}")
     }
 
@@ -173,20 +172,6 @@ internal object EngineCommands {
             },
         )
     }
-
-    /** `@errors [package]`: the most recent diagnostics, newest last. */
-    private fun errors(c: CommandCall) {
-        val pkg = c.args.trim().removePrefix("//").ifEmpty { null }
-        val recent = c.world.diagnostics.filter { pkg == null || it.pkg == pkg }.takeLast(ERRORS_SHOWN)
-        if (recent.isEmpty()) return c.world.send(c.actor, if (pkg == null) "No diagnostics." else "No diagnostics for //$pkg.")
-        val lines = recent.map { d ->
-            val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":").ifEmpty { d.pkg?.let { "//$it" } ?: "engine" }
-            "[${d.pulse}] ${d.kind} $where: ${d.message}"
-        }
-        c.world.send(c.actor, lines.joinToString("\n"))
-    }
-
-    private const val ERRORS_SHOWN = 10
 
     private fun quit(c: CommandCall) {
         val p = c.actor as? Player ?: return

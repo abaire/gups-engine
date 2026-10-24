@@ -3,6 +3,7 @@ package gups.persist
 import gups.core.Account
 import gups.core.Invite
 import gups.core.Role
+import gups.core.world.spawnItem
 import java.nio.file.Path
 import java.sql.DriverManager
 import java.util.concurrent.TimeUnit
@@ -48,7 +49,7 @@ class AccountStoreTest {
         store.setPassword(ann.id, "hash1")
         store.update(ann.copy(role = Role.INSTRUCTOR, scope = emptyList(), githubHandle = null, disabled = true))
         val changed = store.byId(ann.id)!!
-        assertEquals(Account(ann.id, "ann", "hash1", Role.INSTRUCTOR, emptyList(), null, true, 5), changed, "update never touches the password")
+        assertEquals(Account(ann.id, "ann", "hash1", Role.INSTRUCTOR, githubHandle = null, disabled = true, createdAt = 5), changed, "update never touches the password")
 
         DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
             c.createStatement().use { it.execute("INSERT INTO session_tokens VALUES ('t', ${ann.id}, 0)") }
@@ -99,5 +100,55 @@ class AccountStoreTest {
                 assertEquals(Triple("ann", Role.BUILDER, "\$argon2id\$fake"), Triple(a.login, a.role, a.pwHash))
             }
         }
+    }
+
+    @Test
+    fun `restrictions and hand scope survive a restart`() {
+        val file = tempDb()
+        val first = SqlitePersistence.open(file)
+        val ann = first.accounts.create(Account(0, "ann", null, Role.BUILDER, scope = listOf("zones/a"), manualScope = listOf("lib")))!!
+        val r = first.accounts.addRestriction(gups.core.Restriction(0, ann.id, "goto", 5_000, "why", 9, 1_000))
+        val forever = first.accounts.addRestriction(gups.core.Restriction(0, ann.id, "spawn", null, null, null, 1_000))
+        first.accounts.liftRestriction(forever.id, 9, 2_000)
+        first.accounts.revokeTokens(ann.id)
+        assertTrue(first.close())
+
+        val second = SqlitePersistence.open(file)
+        assertEquals(listOf("lib"), second.accounts.byId(ann.id)!!.manualScope)
+        assertEquals(setOf("lib", "zones/a"), second.accounts.byId(ann.id)!!.packages)
+        assertEquals(
+            listOf(r, forever.copy(liftedBy = 9, liftedAt = 2_000)),
+            second.accounts.restrictions(ann.id),
+        )
+        assertEquals(2, second.accounts.restrictions().size)
+        assertTrue(second.close())
+    }
+
+    @Test
+    fun `debug spawns are never saved, and a library's quarantine is`() {
+        val file = tempDb()
+        val quarantined = linkedSetOf<String>()
+        val host = object : gups.core.world.ScriptHost by gups.core.world.ScriptHost.NONE {
+            override val packages = setOf("t", "lib")
+            override val quarantinedPackages: Set<String> get() = quarantined
+
+            override fun quarantine(world: gups.core.world.World, pkg: String, why: String) {
+                quarantined += pkg
+            }
+        }
+        val pw = PersistWorld(file, scripts = host)
+        val rat = pw.w.spawnMob(P.RAT, pw.w.room(P.HALL)).also { it.debug = true }
+        val ann = pw.login("Ann")
+        pw.w.spawnItem(P.GEM, gups.core.model.ItemLocation.Carried(ann.id), debug = true)
+        quarantined += "lib"
+        pw.save()
+        pw.close()
+        quarantined.clear()
+        val again = PersistWorld(file, scripts = host)
+        assertTrue(again.w.actors.none { it.id == rat.id })
+        assertEquals(setOf("lib"), quarantined)
+        val back = again.login("Ann")
+        assertTrue(back.inventory.none { it.protoLabel == P.GEM })
+        again.close()
     }
 }

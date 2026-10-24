@@ -23,6 +23,9 @@ sealed interface WorldControlEvent {
      * (M6 design §2.2). The world hands [outcome] back to the `LoginHandler` that started it.
      */
     data class AuthResult(val session: SessionId, val outcome: Any) : WorldControlEvent
+
+    /** The rest of some slow work, such as an account change, to run on the world thread (D-142). */
+    class Task(val run: (gups.core.world.World) -> Unit) : WorldControlEvent
 }
 
 /** Where listeners deliver input and connection events; thread-safe. In practice a `WorldLoop`. */

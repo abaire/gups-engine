@@ -41,12 +41,24 @@ interface Persistence {
      */
     val accounts: AccountStore? get() = null
 
+    /** Batches waiting for the database writer, for `@stats` (M6 design §4.3). */
+    val backlog: Int get() = 0
+
+    /** Takes a `manual` backup and says where it went (`@snapshot`). Blocks, so never on the world thread. */
+    fun backup(): String = throw UnsupportedOperationException("this world has no database to back up")
+
+    /** An item's committed `item_events`, oldest first (`@audit item`). Blocks, so never on the world thread. */
+    fun itemHistory(itemId: Long): List<ItemHistory> = emptyList()
+
     companion object {
         val NONE: Persistence = object : Persistence {
             override fun checkpoint(world: World, cause: String, immediate: Boolean) = Unit
         }
     }
 }
+
+/** One committed custody change of an item; [from] and [to] are the saved location JSON. */
+data class ItemHistory(val pulse: Long, val wallTime: Long, val from: String?, val to: String?, val cause: String)
 
 /** A saved character's exact name and owning account. */
 data class SavedCharacter(val name: String, val accountId: Long?)

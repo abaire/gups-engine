@@ -12,14 +12,16 @@ import gups.core.rules.RulesContext
 // per-actor and per-container indexes are derived and changed only here.
 
 /** The `spawn` verb for items. */
-fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1): Item {
+fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boolean = false): Item {
     val proto = protos.item(label)
     val item = Item(allocateId(), proto, at, if (proto.stackable) count else 1)
+    item.debug = debug
     proto.decayPulses?.let { item.decayAt = pulse + it }
     checkTarget(item, at)
     register(item)
     index(item, at)
-    if (custodian(item) is Player) itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
+    // Debug items are never saved, so they have no audit trail (M6 design §4.2).
+    if (custodian(item) is Player && !debug) itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
     custodian(item)?.let { updateEncumbrance(it) }
     invokeOn(item, HookName.ON_SPAWN, HookContext(item = item))
     return item
@@ -36,7 +38,7 @@ fun World.moveItem(item: Item, to: ItemLocation) {
     index(item, to)
     item.dirty = true
     val after = custodian(item) as? Player
-    if (before !== after) {
+    if (before !== after && !item.debug) {
         itemEvents += ItemEvent(item.id, pulse, from, to, "move")
         // An item changing hands between players is saved at once, both sides together (SPEC §5.11).
         if (before != null && after != null) requestImmediate("transfer")
