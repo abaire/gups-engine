@@ -57,6 +57,11 @@ sealed interface AccountOp {
 
     class RevokeTokens(val id: Long) : AccountOp
 
+    /** Also deletes tokens that expired before [now]. */
+    class AddToken(val tokenHash: String, val accountId: Long, val expiresAt: Long, val now: Long) : AccountOp
+
+    class RemoveToken(val tokenHash: String) : AccountOp
+
     /** [result] gets the new restriction's id. */
     class AddRestriction(val restriction: Restriction) : AccountOp {
         val result: CompletableFuture<Long> = CompletableFuture()

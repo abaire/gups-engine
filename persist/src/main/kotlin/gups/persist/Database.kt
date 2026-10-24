@@ -163,6 +163,22 @@ class Database private constructor(val file: Path, private val conn: Connection)
                     st.setLong(1, op.id)
                     st.executeUpdate()
                 }
+                is AccountOp.AddToken -> {
+                    prepare("DELETE FROM session_tokens WHERE expires_at <= ?") { st ->
+                        st.setLong(1, op.now)
+                        st.executeUpdate()
+                    }
+                    prepare("INSERT OR REPLACE INTO session_tokens (token_hash, account_id, expires_at) VALUES (?, ?, ?)") { st ->
+                        st.setString(1, op.tokenHash)
+                        st.setLong(2, op.accountId)
+                        st.setLong(3, op.expiresAt)
+                        st.executeUpdate()
+                    }
+                }
+                is AccountOp.RemoveToken -> prepare("DELETE FROM session_tokens WHERE token_hash = ?") { st ->
+                    st.setString(1, op.tokenHash)
+                    st.executeUpdate()
+                }
                 is AccountOp.AddRestriction -> prepare(
                     "INSERT INTO restrictions (account_id, capability, until, reason, set_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 ) { st ->

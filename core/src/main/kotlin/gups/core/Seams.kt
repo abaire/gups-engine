@@ -5,12 +5,17 @@ data class ClientInputEvent(val session: SessionId, val line: String, val receiv
 
 /** Non-input events posted to the world (SPEC §4.11). */
 sealed interface WorldControlEvent {
-    /** [remote] is the peer address, for example `127.0.0.1`; [transport] is `telnet`, `tls` or `ws`. */
+    /**
+     * [remote] is the peer address, for example `127.0.0.1`; [transport] is `telnet`, `tls` or
+     * `ws`. A web socket that authenticated with a session token carries its [account], so the
+     * login starts at character selection (M6 design §6.1).
+     */
     data class Connect(
         val session: SessionId,
         val sink: OutputSink,
         val remote: String = "local",
         val transport: String = "local",
+        val account: Long? = null,
     ) : WorldControlEvent
     data class Disconnect(val session: SessionId) : WorldControlEvent
     /** Re-evaluates and swaps in these packages, by path such as `zones/forest` (D-079). */

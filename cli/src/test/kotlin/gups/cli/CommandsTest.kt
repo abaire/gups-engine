@@ -95,8 +95,8 @@ class CommandsTest {
         assertEquals(1, noTelnet.statusCode)
         assertContains(noTelnet.stderr, "--telnet :4000")
         assertContains(gupsCommand().test(listOf("serve", "--prod", "--port", "4000")).stderr, "--port is for --dev")
-        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--self-signed")).stderr, "--self-signed needs --telnet-tls")
-        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet-tls", ":0")).stderr, "needs --tls-cert and --tls-key")
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--self-signed")).stderr, "--self-signed needs --telnet-tls or --https")
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet-tls", ":0")).stderr, "TLS needs --tls-cert and --tls-key")
         assertContains(gupsCommand().test(listOf("serve", "--dev", "--telnet", ":4000")).stderr, "are for --prod")
         val cfg = java.nio.file.Files.createTempFile("server", ".gups").toFile().apply { writeText("server(telnet = \":4000\", colour = 1)\n") }
         assertContains(gupsCommand().test(listOf("serve", "--prod", "--config", cfg.path)).stderr, "unexpected argument 'colour'")

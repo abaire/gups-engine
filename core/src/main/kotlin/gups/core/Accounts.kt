@@ -103,4 +103,54 @@ interface AccountStore {
 
     /** Lifts restriction [id]. */
     fun liftRestriction(id: Long, by: Long?, at: Long)
+
+    /** Stores a web session token's hash (SPEC §3.6 `session_tokens`), dropping those expired at wall time [now]. */
+    fun addToken(tokenHash: String, accountId: Long, expiresAt: Long, now: Long)
+
+    /** The account of an unexpired token hash at wall time [now], or null. */
+    fun tokenAccount(tokenHash: String, now: Long): Long?
+
+    /** Revokes one token (logout). */
+    fun removeToken(tokenHash: String)
+}
+
+/** A web login's outcome (M6 design §6.1). [status] is the HTTP status to answer with. */
+sealed interface WebLogin {
+    data class Ok(val token: String, val expiresAt: Long, val accountId: Long) : WebLogin
+
+    data class Refused(val status: Int, val message: String) : WebLogin
+}
+
+/** What a sign-up code is good for (M6 design §6.1). */
+sealed interface CodeCheck {
+    /** A usable code: [login] is the account a setup code sets up, or null when the new account's login is the user's choice. */
+    data class Valid(val login: String?) : CodeCheck
+
+    data class Refused(val status: Int, val message: String) : CodeCheck
+}
+
+/**
+ * What the web listener needs from accounts (M6 design §6.1), implemented by `auth` so `net`
+ * depends only on `core`. Every call may hash or block on the database, so never on the
+ * world thread.
+ */
+interface WebAccounts {
+    /** Checks a password, rate-limited like telnet (M6 design §3.2), and issues a 30-day token. */
+    fun login(login: String, password: String, remote: String): WebLogin
+
+    /** Says whether a sign-up code is usable and which login it is bound to, rate-limited per IP like failed logins. */
+    fun checkCode(code: String, remote: String): CodeCheck
+
+    /**
+     * Redeems an instructor's one-time code (M6 design §3.3, §6.1): a setup code sets its
+     * account's password, an invite creates [login] (ignored for setup codes). Then a token,
+     * as [login] gives.
+     */
+    fun signup(code: String, login: String?, password: String, remote: String): WebLogin
+
+    /** Revokes [token]. */
+    fun logout(token: String)
+
+    /** The account [token] belongs to, or null if it is unknown, expired or revoked. */
+    fun accountFor(token: String): Long?
 }

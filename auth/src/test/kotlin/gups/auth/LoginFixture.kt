@@ -55,6 +55,7 @@ class MemoryAccountStore : AccountStore {
 
     @Synchronized override fun setPassword(id: Long, pwHash: String?) {
         accounts[id] = accounts.getValue(id).copy(pwHash = pwHash)
+        tokens.values.removeIf { it.first == id }
     }
 
     @Synchronized override fun addInvite(invite: Invite) {
@@ -75,6 +76,21 @@ class MemoryAccountStore : AccountStore {
 
     @Synchronized override fun revokeTokens(id: Long) {
         revoked += id
+        tokens.values.removeIf { it.first == id }
+    }
+
+    /** Token hash to (account, expiry). */
+    val tokens = LinkedHashMap<String, Pair<Long, Long>>()
+
+    @Synchronized override fun addToken(tokenHash: String, accountId: Long, expiresAt: Long, now: Long) {
+        tokens.values.removeIf { it.second <= now }
+        tokens[tokenHash] = accountId to expiresAt
+    }
+
+    @Synchronized override fun tokenAccount(tokenHash: String, now: Long) = tokens[tokenHash]?.takeIf { it.second > now }?.first
+
+    @Synchronized override fun removeToken(tokenHash: String) {
+        tokens.remove(tokenHash)
     }
 
     @Synchronized override fun restrictions(accountId: Long?) = restrictionRows.filter { accountId == null || it.accountId == accountId }

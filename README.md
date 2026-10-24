@@ -56,12 +56,17 @@ To try the shared-server login locally, import a roster, then start `--prod` on 
 ```bash
 printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
 cli/build/install/gups/bin/gups import-roster roster.csv --world template-world   # prints ann's setup code
-cli/build/install/gups/bin/gups serve --prod --world template-world --telnet-tls 127.0.0.1:4443 --self-signed
+cli/build/install/gups/bin/gups serve --prod --world template-world --telnet-tls 127.0.0.1:4443 --https 127.0.0.1:8443 --self-signed
 ```
 
 Then connect Mudlet (or `openssl s_client -connect localhost:4443`) to port 4443 with TLS,
 accept the self-signed certificate, type `new`, enter the setup code and choose a password.
-Add `--telnet 127.0.0.1:4000` to serve raw telnet as well.
+Or open `https://localhost:8443/` in a browser, choose "Sign up with your code", and do the
+same there. Add
+`--telnet 127.0.0.1:4000` to serve raw telnet as well.
+
+`./gradlew :cli:test -Dgups.browserTest=true` also runs the headless Firefox test of the web
+client, which otherwise runs only on Linux CI.
 
 ## Modules
 
@@ -74,7 +79,7 @@ Add `--telnet 127.0.0.1:4000` to serve raw telnet as well.
 | `auth` | accounts, roles, invites | `core` |
 | `harness` | headless test world and runners | `core`, `script` |
 | `plugin-api` | `.jar` plugin extension points | `core`, `script` |
-| `webclient` | static browser client (resources) | nothing |
+| `webclient` | the browser client: plain JavaScript modules, served as resources | nothing |
 | `cli` | the `gups` binary; wires everything | anything |
 
 `./gradlew checkModuleGraph` (part of `check`) fails if a module declares a dependency
@@ -89,7 +94,20 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M6.3 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §5): TLS and GMCP.
+M6.4 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §6): the web client.
+
+- **HTTPS:** `--https` serves the bundled client, with the same certificate as telnet over
+  TLS. The client is plain JavaScript modules with no build step. It shows the game text in
+  color, vitals bars, affects, and who is in melee, near and far.
+- **Logins:** `POST /api/login` checks the password, rate-limited like telnet, and issues a
+  30-day session token in a secure cookie. Logout, password changes and `@role revoke` end
+  it.
+- **Sign-up:** students can redeem their roster setup code or an invite code in the browser
+  to choose their password, instead of over telnet.
+- **WebSocket:** `/ws` plays with the same login state machine as telnet, starting at
+  character selection.
+
+M6.3: TLS and GMCP.
 
 - **Listeners:** both run on Netty. `--prod` serves telnet over TLS (`--telnet-tls`, TLS 1.2
   and 1.3) and, only when asked, raw telnet.
@@ -150,8 +168,7 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6.4–M6.6: WebSocket and the web client, the admin port and deploys, and the course world
-  CI gates.
+- M6.5–M6.6: the admin port, metrics and deploys, and the course world CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
 `lint`, `docs` and `deploy` still exit with status 3 ("not implemented").

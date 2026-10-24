@@ -35,7 +35,6 @@ data class ServerConfig(
 ) {
     /** Settings that are set but that this engine build doesn't use yet, with the stage that brings them (D-135). */
     fun unused(): List<String> = buildList {
-        if (https != null) add("https (M6.4)")
         if (admin != null) add("admin (M6.5)")
         if (adminTokenFile != null) add("admin_token_file (M6.5)")
         if (repository != null) add("repository (M6.5)")

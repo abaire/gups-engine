@@ -318,19 +318,16 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
         val space = message.indexOf(' ')
         val pkg = if (space < 0) message else message.substring(0, space)
         val body = if (space < 0) null else runCatching { Json.parseToJsonElement(message.substring(space + 1)) }.getOrElse { return run { errors++ } }
-        fun modules(): List<String> = (body as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.substringBefore(' ') } ?: emptyList()
-        when (pkg.lowercase()) {
-            "core.hello" -> gmcpClient = (body as? JsonObject)?.let { o ->
+        if (pkg.equals("core.hello", ignoreCase = true)) {
+            gmcpClient = (body as? JsonObject)?.let { o ->
                 listOfNotNull(o["client"], o["version"]).mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.joinToString(" ")
             }
-            "core.supports.set" -> gmcpSupports = modules().toSet()
-            "core.supports.add" -> gmcpSupports = gmcpSupports + modules()
-            "core.supports.remove" -> gmcpSupports = gmcpSupports - modules().toSet()
         }
+        gmcpSupports = updateSupports(gmcpSupports, pkg, body)
     }
 
     /** True if GMCP is on and the client supports [pkg] or a module above it (`Char` covers `Char.Vitals`). */
-    fun wantsGmcp(pkg: String): Boolean = gmcp && gmcpSupports.any { pkg.equals(it, ignoreCase = true) || pkg.startsWith("$it.", ignoreCase = true) }
+    fun wantsGmcp(pkg: String): Boolean = gmcp && supportsGmcp(gmcpSupports, pkg)
 
     /** `IAC SB GMCP <pkg> <json> IAC SE`, with any IAC byte in the payload doubled. */
     fun encodeGmcp(pkg: String, data: Any?): ByteArray {
@@ -373,3 +370,18 @@ fun toJson(v: Any?): JsonElement = when (v) {
     is Array<*> -> JsonArray(v.map(::toJson))
     else -> JsonPrimitive(v.toString())
 }
+
+/** [supports] after the client's `Core.Supports.Set`, `Add` or `Remove` message [pkg] (M6 design §5.2); unchanged for others. */
+fun updateSupports(supports: Set<String>, pkg: String, body: JsonElement?): Set<String> {
+    fun modules(): List<String> = (body as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.substringBefore(' ') } ?: emptyList()
+    return when (pkg.lowercase()) {
+        "core.supports.set" -> modules().toSet()
+        "core.supports.add" -> supports + modules()
+        "core.supports.remove" -> supports - modules().toSet()
+        else -> supports
+    }
+}
+
+/** True if [supports] lists [pkg] or a module above it, ignoring case. */
+fun supportsGmcp(supports: Set<String>, pkg: String): Boolean =
+    supports.any { pkg.equals(it, ignoreCase = true) || pkg.startsWith("$it.", ignoreCase = true) }

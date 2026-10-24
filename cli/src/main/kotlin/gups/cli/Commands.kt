@@ -98,6 +98,7 @@ class Serve : CliktCommand(name = "serve") {
     val config by option("--config", metavar = "FILE", help = "--prod: server configuration file.").file(mustExist = true, canBeDir = false)
     val telnet by option("--telnet", metavar = "ADDR", help = "--prod: raw telnet address, e.g. :4000 or 127.0.0.1:4000 (default: off).")
     val telnetTls by option("--telnet-tls", metavar = "ADDR", help = "--prod: telnet over TLS address, e.g. :4443.")
+    val https by option("--https", metavar = "ADDR", help = "--prod: HTTPS address for the web client and WebSocket, e.g. :443.")
     val tlsCert by option("--tls-cert", metavar = "FILE", help = "--prod: PEM certificate chain, e.g. fullchain.pem.").file(canBeDir = false)
     val tlsKey by option("--tls-key", metavar = "FILE", help = "--prod: PEM PKCS#8 private key, e.g. privkey.pem.").file(canBeDir = false)
     val selfSigned by option("--self-signed", help = "--prod: use a throwaway self-signed certificate, for local testing.").flag()
@@ -111,8 +112,8 @@ class Serve : CliktCommand(name = "serve") {
         val server = if (profile == Profile.PROD) {
             prodServer(startLabel)
         } else {
-            if (config != null || telnet != null || telnetTls != null || tlsCert != null || tlsKey != null || selfSigned || openSignup != null || maxCharacters != null) {
-                throw UsageError("--config, --telnet, --telnet-tls, --tls-cert, --tls-key, --self-signed, --open-signup and --max-characters are for --prod")
+            if (config != null || telnet != null || telnetTls != null || https != null || tlsCert != null || tlsKey != null || selfSigned || openSignup != null || maxCharacters != null) {
+                throw UsageError("--config, --telnet, --telnet-tls, --https, --tls-cert, --tls-key, --self-signed, --open-signup and --max-characters are for --prod")
             }
             val dir = WorldDir((world ?: File(".")).toPath())
             GupsServer(dir, port ?: 4000, startLabel, db?.toPath() ?: GupsServer.defaultDb(dir), fresh) { echo(it, err = true) }
@@ -127,7 +128,8 @@ class Serve : CliktCommand(name = "serve") {
         runBlocking {
             server.run { bound ->
                 if (profile == Profile.PROD) {
-                    echo("GUPS server: " + server.ports.entries.joinToString(", ") { (t, p) -> "${if (t == "tls") "telnet over TLS" else "raw telnet"} on port $p" } + ".")
+                    val words = mapOf("telnet" to "raw telnet", "tls" to "telnet over TLS", "ws" to "HTTPS and the web client")
+                    echo("GUPS server: " + server.ports.entries.joinToString(", ") { (t, p) -> "${words[t]} on port $p" } + ".")
                 } else {
                     echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound")
                 }
@@ -148,11 +150,15 @@ class Serve : CliktCommand(name = "serve") {
         if (!dir.root.toFile().isDirectory) throw UsageError("no world directory at ${dir.root}")
         val raw = (telnet ?: cfg.telnet)?.let(::parseAddress)
         val secure = (telnetTls ?: cfg.telnetTls)?.let(::parseAddress)
-        if (raw == null && secure == null) {
-            throw UsageError("--prod needs a listener: --telnet-tls :4443 with --tls-cert and --tls-key (or --self-signed), or --telnet :4000")
+        val web = (https ?: cfg.https)?.let(::parseAddress)
+        if (raw == null && secure == null && web == null) {
+            throw UsageError("--prod needs a listener: --telnet-tls :4443 and --https :443 with --tls-cert and --tls-key (or --self-signed), or --telnet :4000")
         }
-        if (selfSigned && secure == null) throw UsageError("--self-signed needs --telnet-tls")
-        val tls = secure?.let { (host, port) -> TlsListener(host, port, serverTls(cfg, host)) }
+        if (selfSigned && secure == null && web == null) throw UsageError("--self-signed needs --telnet-tls or --https")
+        // One certificate serves both TLS listeners.
+        val cert = if (secure != null || web != null) serverTls(cfg, (secure ?: web)!!.first) else null
+        val tls = secure?.let { (host, port) -> TlsListener(host, port, cert!!) }
+        val site = web?.let { (host, port) -> TlsListener(host, port, cert!!) }
         val login = LoginSettings(
             openSignup = openSignup ?: cfg.openSignup,
             maxCharacters = maxCharacters ?: cfg.maxCharacters,
@@ -162,7 +168,7 @@ class Serve : CliktCommand(name = "serve") {
         val dbPath = db?.toPath() ?: cfg.db?.let { Path.of(it) } ?: GupsServer.defaultDb(dir)
         cfg.restrictionLadder.firstOrNull { parseDuration(it).isFailure }?.let { throw UsageError("restriction_ladder: '$it' is not a length such as 1d, 7d or permanent") }
         if (cfg.restrictionLadder.isEmpty()) throw UsageError("restriction_ladder needs at least one step")
-        return GupsServer(dir, raw?.second ?: 0, startLabel, dbPath, fresh, ProdOptions(raw?.first, login, cfg.restrictionLadder, tls)) { echo(it, err = true) }
+        return GupsServer(dir, raw?.second ?: 0, startLabel, dbPath, fresh, ProdOptions(raw?.first, login, cfg.restrictionLadder, tls, site)) { echo(it, err = true) }
     }
 
     /** The certificate: a throwaway self-signed one, or the PEM files of the flags or configuration (M6 design §5.1). */
@@ -175,7 +181,7 @@ class Serve : CliktCommand(name = "serve") {
         }
         val cert = tlsCert?.toPath() ?: cfg.tlsCert?.let { Path.of(it) }
         val key = tlsKey?.toPath() ?: cfg.tlsKey?.let { Path.of(it) }
-        if (cert == null || key == null) throw UsageError("telnet over TLS needs --tls-cert and --tls-key (or tls_cert and tls_key), or --self-signed")
+        if (cert == null || key == null) throw UsageError("TLS needs --tls-cert and --tls-key (or tls_cert and tls_key), or --self-signed")
         return runCatching { ServerTls(cert, key) }.getOrElse { throw UsageError("can't load the TLS certificate $cert and key $key: ${it.message}") }
     }
 }

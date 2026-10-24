@@ -151,4 +151,25 @@ class AccountStoreTest {
         assertTrue(back.inventory.none { it.protoLabel == P.GEM })
         again.close()
     }
+
+    @Test
+    fun `session tokens expire, prune, and are revoked with the password`() {
+        val sp = SqlitePersistence.open(tempDb())
+        val s = sp.accounts
+        val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+        s.addToken("old", ann.id, 50, 0)
+        s.addToken("a", ann.id, 1_000, 100)
+        assertNull(s.tokenAccount("old", 100), "pruned when it expired")
+        assertEquals(ann.id, s.tokenAccount("a", 999))
+        assertNull(s.tokenAccount("a", 1_000))
+        s.removeToken("a")
+        assertNull(s.tokenAccount("a", 0))
+        s.addToken("b", ann.id, 1_000, 0)
+        s.revokeTokens(ann.id)
+        assertNull(s.tokenAccount("b", 0))
+        s.addToken("c", ann.id, 1_000, 0)
+        s.setPassword(ann.id, "h2")
+        assertNull(s.tokenAccount("c", 0))
+        assertTrue(sp.close())
+    }
 }

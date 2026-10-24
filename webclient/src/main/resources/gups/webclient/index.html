@@ -4,8 +4,48 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GUPS</title>
+  <link rel="stylesheet" href="%ASSETS%/style.css">
+  <script type="module" src="%ASSETS%/app.js"></script>
 </head>
 <body>
-  <p>The GUPS web client is not available yet.</p>
+  <form id="login" class="login" hidden>
+    <h1>GUPS</h1>
+    <label>Login <input id="login-name" name="login" autocomplete="username" required></label>
+    <label>Password <input id="login-password" name="password" type="password" autocomplete="current-password" required></label>
+    <button id="login-submit" type="submit">Log in</button>
+    <p id="login-error" class="error" role="alert"></p>
+    <p class="hint">New here? <button id="to-signup" type="button" class="link">Sign up with your code</button></p>
+  </form>
+
+  <form id="signup" class="login" hidden>
+    <h1>Sign up</h1>
+    <p class="hint">Use the one-time code your instructor gave you.</p>
+    <label>Code <input id="signup-code" name="code" autocomplete="one-time-code" placeholder="XXXXX-XXXXX" required></label>
+    <p id="signup-bound" class="hint" hidden></p>
+    <label id="signup-login-label" hidden>Choose a login <input id="signup-login" name="login" autocomplete="username"></label>
+    <label id="signup-password-label" hidden>Choose a password <input id="signup-password" type="password" autocomplete="new-password" minlength="10"></label>
+    <label id="signup-again-label" hidden>Password again <input id="signup-again" type="password" autocomplete="new-password"></label>
+    <button id="signup-submit" type="submit">Check code</button>
+    <p id="signup-error" class="error" role="alert"></p>
+    <p class="hint">Already set up? <button id="to-login" type="button" class="link">Log in</button></p>
+  </form>
+
+  <main id="game" class="game" hidden>
+    <section class="play">
+      <div id="output" class="output" role="log" aria-live="polite"></div>
+      <form id="command" class="command">
+        <span id="prompt" class="prompt"></span>
+        <input id="input" autocomplete="off" spellcheck="false" aria-label="Command">
+      </form>
+    </section>
+    <aside class="side">
+      <div id="vitals" class="vitals"></div>
+      <h2>Affects</h2>
+      <ul id="affects" class="affects"></ul>
+      <h2 id="room-name">Room</h2>
+      <div id="bands" class="bands"></div>
+      <button id="logout" type="button">Log out</button>
+    </aside>
+  </main>
 </body>
 </html>

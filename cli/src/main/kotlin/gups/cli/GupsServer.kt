@@ -5,7 +5,9 @@ import gups.auth.AccountService
 import gups.auth.AccountTools
 import gups.auth.CodeOwners
 import gups.auth.DEFAULT_LADDER
+import gups.auth.LoginLimiter
 import gups.auth.LoginSettings
+import gups.auth.WebLogins
 import gups.auth.syncScopes
 import gups.core.Account
 import gups.core.Label
@@ -20,6 +22,8 @@ import gups.core.world.alert
 import gups.net.CERT_CHECK_INTERVAL
 import gups.net.ServerTls
 import gups.net.TelnetServer
+import gups.net.WebAssets
+import gups.net.WebServer
 import gups.persist.Backups
 import gups.persist.SqlitePersistence
 import gups.script.DevTools
@@ -57,6 +61,8 @@ class ProdOptions(
     val ladder: List<String> = DEFAULT_LADDER,
     /** Telnet over TLS (M6 design §5.1). */
     val tls: TlsListener? = null,
+    /** HTTPS with the web client and WebSocket (M6 design §6). */
+    val web: TlsListener? = null,
 )
 
 /** Where telnet over TLS listens, and its certificate. */
@@ -102,7 +108,16 @@ class GupsServer(
         )
     }
 
-    /** Bound ports by transport (`telnet`, `tls`), once [run] has started the listeners. */
+    /** Failed logins are counted once for telnet and the web (M6 design §6.1). */
+    private val limiter = LoginLimiter()
+
+    private val webServer by lazy {
+        prod?.web?.let { w ->
+            WebServer(loop, WebLogins(AccountService(persistence!!.accounts), limiter), WebAssets.fromClasspath(), w.host, w.port, sessionIds, w.tls)
+        }
+    }
+
+    /** Bound ports by transport (`telnet`, `tls`, `ws`), once [run] has started the listeners. */
     @Volatile var ports: Map<String, Int> = emptyMap()
         private set
 
@@ -178,7 +193,7 @@ class GupsServer(
         world.login = if (prod != null) {
             val accounts = saved!!.accounts
             if (accounts.all().isEmpty()) log("There are no accounts yet. Create some with gups import-roster or gups invite.")
-            AccountLogin(AccountService(accounts), at, background, loop::submit, prod.login)
+            AccountLogin(AccountService(accounts), at, background, loop::submit, prod.login, limiter)
         } else {
             // The local instructor is a real account once there is a database (M6 design §3.4).
             val instructor = saved?.accounts?.let { a ->
@@ -209,8 +224,8 @@ class GupsServer(
             // Shutdown ends with a final checkpoint (SPEC §5.11).
             if (persistence != null) world.checkpointNow("shutdown")
         }
-        ports = listeners.associate { it.transport to it.start() }
-        val certs = prod?.tls?.tls
+        ports = listeners.associate { it.transport to it.start() } + listOfNotNull(webServer?.let { "ws" to it.start() })
+        val certs = prod?.tls?.tls ?: prod?.web?.tls
         // Renewed certificates are picked up without a restart (M6 design §5.1).
         val certChecks = launch(Dispatchers.IO) {
             while (isActive && certs != null) {
@@ -244,6 +259,7 @@ class GupsServer(
         backingUp.cancel()
         certChecks.cancel()
         listeners.forEach { it.stop() }
+        webServer?.stop()
         persistence?.close()?.let { ok -> if (!ok) log("Some changes could not be saved before shutdown.") }
         stopped.countDown()
     }

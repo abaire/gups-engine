@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":plugin-api"))
     runtimeOnly(project(":webclient"))
     implementation(libs.clikt)
+    testImplementation(libs.selenium.java)
 }
 
 application {
@@ -26,4 +27,6 @@ tasks.test {
     val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
     inputs.dir(templateWorld).withPropertyName("templateWorld")
     systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
+    // -Dgups.browserTest=true runs the headless Firefox test outside Linux CI too.
+    systemProperty("gups.browserTest", System.getProperty("gups.browserTest") ?: "false")
 }

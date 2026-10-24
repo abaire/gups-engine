@@ -99,7 +99,17 @@ class AccountLogin(
         val c = Conn(world.pulse)
         conns[session.id] = c
         world.sendSession(session, "Welcome to GUPS.")
-        ask(world, session, c, Step.LOGIN, LOGIN_PROMPT)
+        val proven = session.account ?: return ask(world, session, c, Step.LOGIN, LOGIN_PROMPT)
+        // A web session token already proved the account: straight to the characters (M6 design §6.1).
+        later(world, session, c, { accounts.store.byId(proven) }) { w, s, a ->
+            if (a == null || a.disabled) {
+                w.sendSession(s, if (a == null) "That account no longer exists." else "This account is disabled.")
+                return@later w.closeSession(s, "Goodbye.")
+            }
+            c.account = a
+            c.login = a.login
+            menu(w, s, c)
+        }
     }
 
     override fun disconnected(world: World, session: SessionId) {

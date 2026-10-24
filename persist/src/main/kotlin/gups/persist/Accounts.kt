@@ -101,6 +101,19 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) : Accou
 
     override fun liftRestriction(id: Long, by: Long?, at: Long) = submit(AccountOp.LiftRestriction(id, by, at))
 
+    override fun addToken(tokenHash: String, accountId: Long, expiresAt: Long, now: Long) =
+        submit(AccountOp.AddToken(tokenHash, accountId, expiresAt, now))
+
+    override fun tokenAccount(tokenHash: String, now: Long): Long? = synchronized(read) {
+        read.prepareStatement("SELECT account_id FROM session_tokens WHERE token_hash = ? AND expires_at > ?").use { st ->
+            st.setString(1, tokenHash)
+            st.setLong(2, now)
+            st.executeQuery().use { rs -> if (rs.next()) rs.getLong(1) else null }
+        }
+    }
+
+    override fun removeToken(tokenHash: String) = submit(AccountOp.RemoveToken(tokenHash))
+
     override fun close() = synchronized(read) { read.close() }
 
     private fun submit(op: AccountOp) {

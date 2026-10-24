@@ -10,6 +10,7 @@ kotlinx-serialization = "1.11.0"
 sqlite = "3.53.4.0"
 bouncycastle = "1.83"
 netty = "4.2.17.Final"
+selenium = "4.49.0"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -21,11 +22,16 @@ bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "boun
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 # Telnet and telnet-over-TLS listeners (M6 design §2.5); the version Ktor 3.6 uses.
 netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
+# HTTPS, the web client and WebSocket (M6 design §6).
+ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
 # Bazel's net.starlark.java, as packaged for Maven Central (D-060).
 starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
+# The headless browser test of the web client, Linux CI only (M6 design §6.3).
+selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }

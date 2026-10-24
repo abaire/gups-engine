@@ -19,6 +19,8 @@ class Session internal constructor(
     /** Peer address, for example `127.0.0.1`. */
     val remote: String = "local",
     val transport: String = "local",
+    /** The account a web session token already proved, if any (M6 design §6.1). */
+    val account: Long? = null,
 ) {
     var player: Player? = null
         internal set
@@ -40,7 +42,7 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
     when (event) {
         is WorldControlEvent.Connect -> {
             require(event.session !in sessions) { "${event.session} is already connected" }
-            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport)
+            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport, event.account)
             sessions[event.session] = s
             login?.connected(this, s)
         }

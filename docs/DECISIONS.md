@@ -1536,9 +1536,101 @@ restart.
 *Code:* `World.gmcpPayload`, `World.channel`, `DevTools.line`.
 
 ### D-152 `--prod` listeners — `open`
-`--prod` serves raw telnet only when asked (`--telnet` or `telnet = ...`) and telnet over TLS
-with `--telnet-tls`/`telnet_tls`. At least one is required. TLS needs `--tls-cert` and
-`--tls-key` (or `tls_cert` and `tls_key`), or `--self-signed`, and `--self-signed` needs a
-TLS address. `GupsServer.ports` reports the bound port per transport. The startup message
-lists both listeners. `--dev` stays raw telnet on 127.0.0.1.
+`--prod` serves raw telnet only when asked (`--telnet` or `telnet = ...`), telnet over TLS
+with `--telnet-tls`/`telnet_tls`, and HTTPS with the web client with `--https`/`https`. At
+least one is required. Both TLS listeners use one certificate: `--tls-cert` and `--tls-key`
+(or `tls_cert` and `tls_key`), or `--self-signed`, which needs a TLS listener.
+`GupsServer.ports` reports the bound port per transport (`telnet`, `tls`, `ws`), and the
+startup message lists each. `--dev` stays raw telnet on 127.0.0.1.
 *Code:* `Serve.prodServer`, `GupsServer`, `ProdOptions`, `TlsListener`.
+
+## WebSocket and the web client (§4.10, §5.12; M6 design §6) — M6.4
+
+### D-153 Web logins and session tokens — `open`
+- **Seam:** `WebAccounts` in `core` (`login`, `logout`, `accountFor`), implemented by
+  `auth.WebLogins`, so `net` still depends only on `core`.
+- **Checks:** the password check, dummy hash and lockouts are the telnet login's, sharing one
+  `LoginLimiter`, so failures on either count against both. Logins are trimmed and
+  lowercased.
+- **Statuses:** 401 for a wrong login or password, 429 while locked out, 403 for a disabled
+  account, 400 for a body that isn't `{"login", "password"}`. The body is always
+  `{"error": message}`.
+- **Tokens:** 32 random bytes as unpadded base64url, stored as SHA-256 hex with a 30-day wall
+  expiry. Expired rows are pruned whenever a token is added.
+- **Validity:** a token stops working when it expires, at logout, when the password is
+  changed or reset, at `@role revoke`, and while its account is disabled.
+*Code:* `WebLogins`, `AccountStore.addToken`, `tokenAccount`, `removeToken`.
+
+### D-154 HTTPS on Ktor — `open`
+The web listener is Ktor's Netty engine with a plain connector and our own `SslHandler`
+added first through `channelPipelineConfig`. HTTPS therefore uses the same `ServerTls` as
+telnet over TLS, with the same protocols and hourly reload. Because Ktor sees plain HTTP
+behind it, the `Set-Cookie` header is written by hand: `gups_session=<token>; Path=/;
+Max-Age=<seconds left>; HttpOnly; Secure; SameSite=Strict`. Logout clears it with
+`Max-Age=0`. Without a certificate `WebServer` serves plain HTTP, which only tests use;
+`--prod` always passes one.
+*Code:* `WebServer.start`, `login`, `logout`.
+
+### D-155 The WebSocket protocol — `open`
+- **Authentication:** the session cookie, or else a first `{"t":"auth","d":token}` frame
+  within 30 seconds. Otherwise the server sends `{"t":"error","d":"Please log in first; your
+  session may have expired."}` and closes with code 1008. An `auth` frame after that is
+  ignored.
+- **Frames added to §4.10:**
+  - From the server: `prompt`, `hide` (true or false, for password prompts), and `error`
+    before a close.
+  - From the client: `auth`, and `gmcp` (which only reads `Core.Supports.*`, as over telnet).
+    GMCP is sent only for supported packages, as `{"t":"gmcp","p":..., "d":...}`.
+- **Text:** `text` frames carry the markup unrendered (D-087); the client renders it.
+- **Input:** control characters are dropped, and a line over 512 UTF-8 bytes is cut with
+  telnet's notice. Five malformed frames end the socket.
+- **Limits:** the 256 KiB output limit counts queued JSON characters. Frames are at most
+  64 KiB. Pings every 30 seconds, with a 60-second timeout.
+- **Ending:** every minute each live socket's token is checked again, and an expired or
+  revoked one gets `{"t":"error","d":"Your session has ended. Please log in again."}` and is
+  closed. Logout closes that token's sockets at once. The character goes link-dead as for
+  any dropped link.
+- **The world:** a socket is a session with transport `ws` and the token's account, so
+  `AccountLogin` greets it and goes straight to the character menu.
+*Code:* `WebServer.serve`, `Socket`, `Connect.account`, `AccountLogin.connected`.
+
+### D-156 Serving the client — `open`
+The `webclient` module lists its files in `files.txt`. The server serves `index.html` at `/`
+with `no-cache`, and every other file under `/assets/<hash>/`, cached for a year as
+immutable. `<hash>` is the first 16 hex digits of a SHA-256 over all the files' names and
+contents. One hash for the whole bundle keeps the modules' relative imports working, and
+any change to any file changes every URL. `index.html` refers to `%ASSETS%`. `net` reads the
+files through a class loader handed in by `cli`, so it doesn't depend on `webclient`.
+*Code:* `WebAssets`, `webclient/src/main/resources/gups/webclient/`.
+
+### D-157 The web client — `open`
+Plain ES modules (`app.js`, `markup.js`, `panels.js`) and `style.css`, documented with JSDoc
+(Q8).
+- **Start:** on load the client opens the socket, so a valid cookie goes straight to the game.
+  An `error` frame shows the login form.
+- **Input:** it echoes commands locally and keeps 100 lines of history (up and down arrows).
+  It switches the input to a password field on `hide`.
+- **Output:** at most 2,000 lines.
+- **GMCP:** it asks for `Char`, `Room`, `Comm.Channel` and `Gups`.
+- **Sign-up:** a second form takes an instructor's one-time code, checks it, and then asks
+  for a login (unless the code names one) and a password twice (D-159). The two passwords
+  are compared in the browser before anything is sent.
+*Code:* `webclient`.
+
+### D-159 Web sign-up — `open`
+The web client can redeem the same one-time codes as the telnet `new` flow: roster setup
+codes and invite codes (`gups invite`, `@invite`), both made by an instructor. It never
+signs up without a code, even with `open_signup`.
+- **`POST /api/code`:** `{"code"}` answers `{"login": "ann"}` for a setup code (the account
+  it sets up), `{"login": null}` for an invite, or 404. It lets the form ask for a login only
+  when one is needed.
+- **`POST /api/signup`:** `{"code", "login", "password"}` redeems the code exactly as the
+  telnet flow does. A setup code sets its account's password and ignores `login`; an invite
+  creates `login` with the invite's role. On success it answers like `/api/login`, with a
+  token and the session cookie, so the socket starts at character selection (M6 design
+  §6.1).
+- **Refusals:** 400 for a bad login or a weak password (the telnet rules), 409 for a taken
+  login, and 404 for a code that is unknown, used or expired. A bad code counts as a failure
+  against the address, as over telnet (D-132), and a locked-out address gets 429 without its
+  code being looked at.
+*Code:* `WebAccounts.checkCode`, `signup`, `WebLogins`, `WebServer.checkCode`, `signup`.
