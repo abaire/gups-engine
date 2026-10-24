@@ -1448,4 +1448,4 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
 | **M4** | `persist`: checkpoints, reconciliation, backups, `--fresh`, crash tests |
 | **M5** | Rules module, modifier chain, skills and affects, behaviors and `think`, perception, reality bubble, items/equipment/containers, `//lib:quest.star` |
 | **M6** | `auth`, TLS telnet, WebSocket with the web client, GMCP, roles, CODEOWNERS sync, deploy pipeline, metrics, admin commands. Load test. Course world template and CI gates. Staged and designed in detail in [SPEC_MILESTONE6.md](SPEC_MILESTONE6.md). |
-| **M7** | `gups docs`, `MIGRATING.md`, `plugin-api` with one sample plugin |
+| **M7** | `gups docs`, `MIGRATING.md`, `plugin-api` with one sample plugin. Staged and designed in detail in [SPEC_MILESTONE7.md](SPEC_MILESTONE7.md). |
