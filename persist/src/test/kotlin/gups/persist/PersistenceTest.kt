@@ -41,12 +41,13 @@ class PersistenceTest {
     @Test
     fun `schema migrations run once, in order, and newer databases are refused`() {
         val file = tempDb()
-        Database.open(file).use { assertEquals(1, it.schemaVersion) }
-        val v2 = MIGRATIONS + Migration(2, listOf("ALTER TABLE players ADD COLUMN nickname TEXT"))
-        Database.open(file, v2).use { assertEquals(2, it.schemaVersion) }
-        Database.open(file, v2).use { assertEquals(2, it.schemaVersion) }
+        val current = MIGRATIONS.size
+        Database.open(file).use { assertEquals(current, it.schemaVersion) }
+        val next = MIGRATIONS + Migration(current + 1, listOf("ALTER TABLE players ADD COLUMN nickname TEXT"))
+        Database.open(file, next).use { assertEquals(current + 1, it.schemaVersion) }
+        Database.open(file, next).use { assertEquals(current + 1, it.schemaVersion) }
         val e = assertFailsWith<SQLException> { Database.open(file) }
-        assertContains(e.message!!, "schema version 2; this engine knows up to 1")
+        assertContains(e.message!!, "schema version ${current + 1}; this engine knows up to $current")
         assertEquals(1, count(file, "SELECT COUNT(*) FROM pragma_table_info('players') WHERE name = 'nickname'"))
     }
 

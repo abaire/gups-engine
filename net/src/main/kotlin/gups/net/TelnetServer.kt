@@ -95,6 +95,11 @@ class TelnetServer(
 
             override fun prompt(text: String) = enqueue(conn.encodePrompt(text))
 
+            override fun hideInput(hidden: Boolean) {
+                val bytes = conn.encodeEcho(hidden)
+                if (bytes.isNotEmpty()) enqueue(bytes)
+            }
+
             override fun close(reason: String) {
                 enqueue(conn.encodeText(reason + "\n"))
                 if (closed.compareAndSet(false, true)) outbox.close()

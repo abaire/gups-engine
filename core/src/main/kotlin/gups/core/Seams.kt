@@ -17,6 +17,12 @@ sealed interface WorldControlEvent {
     data class Reload(val packages: List<String>) : WorldControlEvent
     data class Deploy(val commit: String) : WorldControlEvent
     data class Shutdown(val delayPulses: Long, val reason: String) : WorldControlEvent
+
+    /**
+     * Slow login work for [session], such as a password hash, finished off the world thread
+     * (M6 design §2.2). The world hands [outcome] back to the `LoginHandler` that started it.
+     */
+    data class AuthResult(val session: SessionId, val outcome: Any) : WorldControlEvent
 }
 
 /** Where listeners deliver input and connection events; thread-safe. In practice a `WorldLoop`. */
@@ -38,6 +44,12 @@ interface OutputSink {
      * it apart from text; headless sinks ignore prompts (D-083).
      */
     fun prompt(text: String) = Unit
+
+    /**
+     * Asks the client to stop echoing typed input, or to start again, around a password prompt
+     * (M6 design §3.4). Telnet sends `IAC WILL ECHO` / `IAC WONT ECHO`; headless sinks ignore it.
+     */
+    fun hideInput(hidden: Boolean) = Unit
 
     /** Ends the session, for example after `quit` or a rate-limit disconnect. */
     fun close(reason: String)

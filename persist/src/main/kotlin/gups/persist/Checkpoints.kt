@@ -1,5 +1,8 @@
 package gups.persist
 
+import gups.core.Account
+import gups.core.Invite
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -20,14 +23,40 @@ class Batch(
     val zones: LinkedHashMap<String, String> = LinkedHashMap(),
     val events: MutableList<ItemEventRow> = mutableListOf(),
     val diagnostics: MutableList<DiagnosticRow> = mutableListOf(),
+    /** Account changes, written before the world rows in the same transaction (D-128). */
+    val accounts: MutableList<AccountOp> = mutableListOf(),
 ) {
+    /** Completed once this batch is committed. */
+    val done: CompletableFuture<Unit> = CompletableFuture()
+
     internal fun merge(next: Batch) {
+        require(next.accounts.isEmpty()) { "account batches never merge" }
         meta.putAll(next.meta)
         entities.putAll(next.entities)
         players.putAll(next.players)
         zones.putAll(next.zones)
         events += next.events
         diagnostics += next.diagnostics
+    }
+}
+
+/** One account, password or invite change (SPEC §3.6, M6 design §2.3). */
+sealed interface AccountOp {
+    /** Inserts [account] unless its login is taken; [result] gets the new id, or null. */
+    class Create(val account: Account) : AccountOp {
+        val result: CompletableFuture<Long?> = CompletableFuture()
+    }
+
+    class Update(val account: Account) : AccountOp
+
+    /** Also revokes the account's session tokens. */
+    class SetPassword(val id: Long, val pwHash: String?) : AccountOp
+
+    class AddInvite(val invite: Invite) : AccountOp
+
+    /** [result] is false if the invite was already used. */
+    class UseInvite(val codeHash: String, val accountId: Long) : AccountOp {
+        val result: CompletableFuture<Boolean> = CompletableFuture()
     }
 }
 
@@ -77,8 +106,8 @@ class CheckpointWriter(
         changed.signalAll()
     }
 
-    /** The capture pulse of the oldest change not yet committed, or null if all is written. */
-    val oldestPending: Long? get() = lock.withLock { queue.minOfOrNull { it.firstPulse } }
+    /** The capture pulse of the oldest world change not yet committed, or null if all is written. */
+    val oldestPending: Long? get() = lock.withLock { queue.filter { it.accounts.isEmpty() }.minOfOrNull { it.firstPulse } }
 
     /** Batches waiting, including one being written. */
     val backlog: Int get() = lock.withLock { queue.size }

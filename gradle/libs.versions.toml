@@ -8,11 +8,14 @@ starlark = "4.2.1"
 ktor = "3.6.0"
 kotlinx-serialization = "1.11.0"
 sqlite = "3.53.4.0"
+bouncycastle = "1.83"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 kotlin-serialization-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
+# Pure-Java Argon2id for password hashing (M6 design §3.2).
+bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }
 # Bazel's net.starlark.java, as packaged for Maven Central (D-060).
 starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark" }

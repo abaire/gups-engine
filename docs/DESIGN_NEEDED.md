@@ -165,3 +165,15 @@ never perceived.
 **Today:** `pursue` asks for a path to every matching actor on each think cycle, using cached
 BFS (D-121, D-124). With hundreds of players and many pursuers this may cost too much.
 **Question:** should `pursue` have a maximum range, or a slower think cadence?
+
+## Accounts
+
+### Disabling an account
+**Spec:** §3.6 (`accounts.disabled`), M6 design §3.1 ("a disabled account's characters that
+are online are quit"), §4.3 (`@role`).
+**Today:** a disabled account can't log in (D-130), but no command or tool sets the flag, so
+nothing ever quits a disabled account's online characters (D-135).
+**Questions:**
+- Which command disables and re-enables an account: a `@role <account> disable` form, a
+  restriction (§4.4), or a CLI tool?
+- Does disabling also revoke web tokens and drop link-dead characters at once?

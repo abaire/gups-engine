@@ -12,21 +12,29 @@ import com.github.ajalt.clikt.parameters.groups.required
 import com.github.ajalt.clikt.parameters.groups.single
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.nullableFlag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.options.switch
 import com.github.ajalt.clikt.parameters.options.versionOption
 import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
+import gups.auth.AccountService
+import gups.auth.DEFAULT_INVITE_DAYS
+import gups.auth.LoginSettings
+import gups.auth.Roster
 import gups.core.EngineInfo
 import gups.core.Label
+import gups.core.Role
 import gups.harness.ReproRunner
 import gups.harness.TestRunner
 import gups.harness.render
 import gups.persist.Backups
 import gups.persist.Database
 import gups.persist.ReproBundle
+import gups.persist.SqliteAccountStore
 import gups.persist.restoreBundle
+import gups.script.ServerConfig
 import gups.script.WorldDir
 import java.io.File
 import java.nio.file.Path
@@ -83,19 +91,26 @@ class Serve : CliktCommand(name = "serve") {
     val fresh by option("--fresh", help = "Ignore saved world state and boot from the .star definitions.").flag()
     val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
     val db by option("--db", help = "SQLite database file.").file(canBeDir = false)
-    val port by option("--port", help = "Telnet port (--dev: 4000).").int().default(4000)
-    val start by option("--start", metavar = "LABEL", help = "Room new characters start in (--dev: //zones/tutorial:gate, else the first room).")
+    val port by option("--port", help = "--dev: telnet port on 127.0.0.1 (default 4000).").int()
+    val start by option("--start", metavar = "LABEL", help = "Room new characters start in (default: MODULE.gups start_room, else //zones/tutorial:gate, else the first room).")
+    val config by option("--config", metavar = "FILE", help = "--prod: server configuration file.").file(mustExist = true, canBeDir = false)
+    val telnet by option("--telnet", metavar = "ADDR", help = "--prod: raw telnet address, e.g. :4000 or 127.0.0.1:4000.")
+    val openSignup by option("--open-signup", help = "--prod: let new logins be made without an invite code.").nullableFlag("--no-open-signup")
+    val maxCharacters by option("--max-characters", metavar = "N", help = "--prod: characters per account (default 5; instructors unlimited).").int()
 
     override fun help(context: Context) = "Run the server."
 
     override fun run() {
-        if (profile == Profile.PROD) {
-            echo("gups serve --prod: not implemented yet (planned for M6).", err = true)
-            throw ProgramResult(EXIT_NOT_IMPLEMENTED)
-        }
         val startLabel = start?.let { runCatching { Label(it) }.getOrNull() ?: throw UsageError("--start: '$it' is not a label") }
-        val dir = WorldDir((world ?: File(".")).toPath())
-        val server = DevServer(dir, port, startLabel, db?.toPath() ?: DevServer.defaultDb(dir), fresh) { echo(it, err = true) }
+        val server = if (profile == Profile.PROD) {
+            prodServer(startLabel)
+        } else {
+            if (config != null || telnet != null || openSignup != null || maxCharacters != null) {
+                throw UsageError("--config, --telnet, --open-signup and --max-characters are for --prod")
+            }
+            val dir = WorldDir((world ?: File(".")).toPath())
+            GupsServer(dir, port ?: 4000, startLabel, db?.toPath() ?: GupsServer.defaultDb(dir), fresh) { echo(it, err = true) }
+        }
         if (!server.boot()) throw ProgramResult(1)
         Runtime.getRuntime().addShutdownHook(
             Thread {
@@ -104,9 +119,48 @@ class Serve : CliktCommand(name = "serve") {
             },
         )
         runBlocking {
-            server.run { bound -> echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound") }
+            server.run { bound ->
+                if (profile == Profile.PROD) {
+                    echo("GUPS server: raw telnet on port $bound.")
+                } else {
+                    echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound")
+                }
+            }
         }
     }
+
+    /** `--prod` (M6 design §2.1, §3.5): the configuration file, with each flag overriding it (D-135). */
+    private fun prodServer(startLabel: Label?): GupsServer {
+        if (port != null) throw UsageError("--port is for --dev; use --telnet with --prod")
+        val cfg = config?.let { f ->
+            val (c, error) = ServerConfig.read(f.toPath())
+            if (error != null) throw UsageError(error.render())
+            c
+        } ?: ServerConfig()
+        cfg.unused().forEach { echo("warning: ${config?.name} sets $it, which this engine build doesn't use yet", err = true) }
+        val dir = WorldDir((world?.toPath() ?: cfg.world?.let { Path.of(it) } ?: Path.of(".")))
+        if (!dir.root.toFile().isDirectory) throw UsageError("no world directory at ${dir.root}")
+        val address = telnet ?: cfg.telnet
+            ?: throw UsageError("--prod serves only raw telnet until TLS arrives (M6.3): give --telnet :4000 or set telnet in the configuration")
+        val (host, telnetPort) = parseAddress(address)
+        val login = LoginSettings(
+            openSignup = openSignup ?: cfg.openSignup,
+            maxCharacters = maxCharacters ?: cfg.maxCharacters,
+            reservedNames = cfg.reservedNames.mapTo(HashSet()) { it.lowercase() },
+        )
+        if (login.maxCharacters < 1) throw UsageError("--max-characters must be at least 1")
+        val dbPath = db?.toPath() ?: cfg.db?.let { Path.of(it) } ?: GupsServer.defaultDb(dir)
+        return GupsServer(dir, telnetPort, startLabel, dbPath, fresh, ProdOptions(host, login)) { echo(it, err = true) }
+    }
+}
+
+/** `host:port`, `[v6]:port` or `:port` (every interface) as a bind host and port. */
+internal fun parseAddress(address: String): Pair<String, Int> {
+    val colon = address.lastIndexOf(':')
+    val port = address.substring(colon + 1).toIntOrNull()
+    if (colon < 0 || port == null || port !in 0..65535) throw UsageError("'$address' is not an address such as :4000 or 127.0.0.1:4000")
+    val host = address.substring(0, colon).removePrefix("[").removeSuffix("]").ifEmpty { "0.0.0.0" }
+    return host to port
 }
 
 /** Exit status of `gups test` when a test fails or a pattern matches nothing. */
@@ -147,7 +201,7 @@ class Docs : StubCommand("docs", "Generate the API reference.", "M7") {
 const val SHUTDOWN_WAIT_MS = 30_000L
 
 /** `--db`, defaulting to the database of `--world` (D-099). */
-private fun dbPath(world: File?, db: File?): Path = db?.toPath() ?: DevServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
+private fun dbPath(world: File?, db: File?): Path = db?.toPath() ?: GupsServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
 
 class Repro : CliktCommand(name = "repro") {
     val source by argument("diagnostic-id|bundle.json")
@@ -222,10 +276,52 @@ class Deploy : StubCommand("deploy", "Deploy a course world commit (called by CI
     val commit by option("--commit", metavar = "SHA", help = "Commit to deploy.").required()
 }
 
-class Invite : StubCommand("invite", "Create an invite code.", "M6") {
-    val role by option("--role", metavar = "R", help = "Role granted by the invite.").required()
+/** Runs [block] on the account store of the world's database, written directly: the CLI tools work offline (D-134). */
+private fun <T> withAccounts(world: File?, db: File?, block: (AccountService) -> T): T {
+    val path = dbPath(world, db)
+    return Database.open(path).use { d -> SqliteAccountStore(path, d::write).use { block(AccountService(it)) } }
 }
 
-class ImportRoster : StubCommand("import-roster", "Create accounts from a roster CSV.", "M6") {
+private fun parseRole(text: String): Role =
+    Role.entries.firstOrNull { it.name.equals(text, ignoreCase = true) }
+        ?: throw UsageError("--role: '$text' is not one of ${Role.entries.joinToString { it.name.lowercase() }}")
+
+class Invite : CliktCommand(name = "invite") {
+    val role by option("--role", metavar = "R", help = "Role granted by the invite: player, builder, instructor or admin.").required()
+    val days by option("--days", metavar = "N", help = "Days until the code expires (default $DEFAULT_INVITE_DAYS).").int().default(DEFAULT_INVITE_DAYS)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to add the invite to (default: the world's).").file(canBeDir = false)
+
+    override fun help(context: Context) = "Create an invite code."
+
+    override fun run() {
+        val r = parseRole(role)
+        if (days < 1) throw UsageError("--days must be at least 1")
+        val code = withAccounts(world, db) { it.createInvite(r, days) }
+        echo(code)
+        echo("Invite for a new ${r.name.lowercase()} account; it works once and expires in $days days.", err = true)
+    }
+}
+
+class ImportRoster : CliktCommand(name = "import-roster") {
     val roster by argument("roster.csv").file(mustExist = true, canBeDir = false)
+    val days by option("--days", metavar = "N", help = "Days until the setup codes expire (default $DEFAULT_INVITE_DAYS).").int().default(DEFAULT_INVITE_DAYS)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to add the accounts to (default: the world's).").file(canBeDir = false)
+
+    override fun help(context: Context) =
+        "Create accounts from a roster CSV (columns login,github_handle,role) and print each new login's setup code."
+
+    override fun run() {
+        if (days < 1) throw UsageError("--days must be at least 1")
+        val (entries, problems) = Roster.parse(roster.readText())
+        if (problems.isNotEmpty()) {
+            problems.forEach { echo("${roster.name}: $it", err = true) }
+            throw ProgramResult(1)
+        }
+        val result = withAccounts(world, db) { it.importRoster(entries, days) }
+        echo("login,setup_code")
+        for ((login, code) in result.codes) echo("$login,$code")
+        echo("${result.codes.size} accounts created, ${result.updated} updated, ${result.unchanged} unchanged. Setup codes expire in $days days.", err = true)
+    }
 }

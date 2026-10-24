@@ -70,6 +70,9 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     var utf8Accepted: Boolean = false
         private set
 
+    /** True while we have asked the client not to echo, around a password prompt (D-137). */
+    @Volatile private var echoHidden = false
+
     /** Malformed sequences seen so far. */
     var errors: Int = 0
         private set
@@ -192,7 +195,10 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
                 send(Telnet.IAC, Telnet.DONT, opt)
             }
             Telnet.WONT -> if (himOn.remove(opt)) send(Telnet.IAC, Telnet.DONT, opt)
-            Telnet.DO -> if (opt == Telnet.OPT_EOR || opt == Telnet.OPT_GMCP || opt == Telnet.OPT_CHARSET) {
+            // ECHO is ours only while a password prompt hides input; refuse it otherwise (D-137).
+            Telnet.DO -> if (opt == Telnet.OPT_ECHO) {
+                if (!echoHidden && offered.add(opt)) send(Telnet.IAC, Telnet.WONT, opt)
+            } else if (opt == Telnet.OPT_EOR || opt == Telnet.OPT_GMCP || opt == Telnet.OPT_CHARSET) {
                 if (usOn.add(opt)) {
                     if (opt !in offered) send(Telnet.IAC, Telnet.WILL, opt)
                     when (opt) {
@@ -207,6 +213,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
                 send(Telnet.IAC, Telnet.WONT, opt)
             }
             Telnet.DONT -> {
+                if (opt == Telnet.OPT_ECHO) return
                 if (usOn.remove(opt)) send(Telnet.IAC, Telnet.WONT, opt)
                 if (opt == Telnet.OPT_EOR) eor = false
                 if (opt == Telnet.OPT_GMCP) gmcp = false
@@ -287,6 +294,16 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
             speaksTelnet -> body + byteArrayOf(Telnet.IAC, Telnet.GA)
             else -> body
         }
+    }
+
+    /**
+     * `IAC WILL ECHO` to hide typed input, `IAC WONT ECHO` to show it again (M6 design §3.4).
+     * Clients that refuse simply keep echoing. Plain `nc` gets nothing (D-088).
+     */
+    fun encodeEcho(hidden: Boolean): ByteArray {
+        if (!speaksTelnet || hidden == echoHidden) return ByteArray(0)
+        echoHidden = hidden
+        return byteArrayOf(Telnet.IAC, if (hidden) Telnet.WILL else Telnet.WONT, Telnet.OPT_ECHO)
     }
 
     private fun send(vararg bytes: Int) = write(byteArrayOf(*bytes))

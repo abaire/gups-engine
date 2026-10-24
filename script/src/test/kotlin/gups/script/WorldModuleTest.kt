@@ -29,4 +29,39 @@ class WorldModuleTest {
         assertContains(assertNotNull(read("x = 1").second).message, "must call module(")
         assertContains(read("module(api_version = 2)").first.problems().single(), "pins api_version 2")
     }
+
+    @Test
+    fun `start_room names where new characters start`() {
+        assertNull(read(null).first.startRoom)
+        assertEquals(gups.core.Label("//zones/town:square"), read("module(start_room = \"//zones/town:square\")").first.startRoom)
+        assertContains(assertNotNull(read("module(start_room = \"square\")").second).message, "is not a label")
+    }
+
+    @Test
+    fun `the server configuration file`() {
+        val dir = tempWorld(
+            mapOf(
+                "server.gups" to """
+                server(
+                    world = "/srv/gups/world",
+                    telnet = ":4000",
+                    telnet_tls = ":4443",
+                    open_signup = True,
+                    max_characters = 3,
+                    reserved_names = ["Gandalf"],
+                )
+                """.trimIndent(),
+                "bad.gups" to "server(max_characters = 0)",
+                "twice.gups" to "server()\nserver()",
+            ),
+        )
+        val (c, error) = ServerConfig.read(dir.resolve("server.gups"))
+        assertNull(error)
+        assertEquals(ServerConfig(world = "/srv/gups/world", telnet = ":4000", telnetTls = ":4443", openSignup = true, maxCharacters = 3, reservedNames = listOf("Gandalf")), c)
+        assertEquals(listOf("telnet_tls (M6.3)"), c.unused())
+        assertEquals(ServerConfig(), ServerConfig.read(dir.resolve("empty.gups")).first)
+        assertContains(assertNotNull(ServerConfig.read(dir.resolve("bad.gups")).second).message, "at least 1")
+        assertContains(assertNotNull(ServerConfig.read(dir.resolve("twice.gups")).second).message, "more than once")
+        assertContains(assertNotNull(ServerConfig.read(dir.resolve("missing.gups")).second).message, "no server configuration")
+    }
 }

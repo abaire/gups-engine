@@ -34,6 +34,8 @@ val MIGRATIONS: List<Migration> = listOf(
                 stack TEXT, ctx_json TEXT, seed INTEGER, repro_json TEXT)""",
         ),
     ),
+    // Setup codes are invites bound to an account (M6 design §3.3, D-128).
+    Migration(2, listOf("ALTER TABLE invites ADD COLUMN account_id INTEGER")),
 )
 
 /** A diagnostics row (SPEC §3.6). */
@@ -91,8 +93,76 @@ class Database private constructor(val file: Path, private val conn: Connection)
 
     fun diagnostic(id: Long): DiagnosticRow? = diagnostics().firstOrNull { it.id == id }
 
-    /** Applies one checkpoint batch in a single transaction (SPEC §5.11). */
-    fun write(b: Batch) = transaction {
+    /**
+     * Applies one checkpoint batch in a single transaction (SPEC §5.11), then completes the
+     * batch's futures: [Batch.done] and the results of its account operations.
+     */
+    fun write(b: Batch) {
+        val results = mutableListOf<() -> Unit>()
+        transaction {
+            writeAccounts(b.accounts, results)
+            writeWorld(b)
+        }
+        results.forEach { it() }
+        b.done.complete(Unit)
+    }
+
+    /** Account changes (D-128). Conflicts are reported through results, never thrown, so a taken login can't wedge the writer. */
+    private fun writeAccounts(ops: List<AccountOp>, results: MutableList<() -> Unit>) {
+        for (op in ops) {
+            when (op) {
+                is AccountOp.Create -> prepare(
+                    "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ) { st ->
+                    val a = op.account
+                    st.setString(1, a.login)
+                    st.setString(2, a.pwHash)
+                    st.setString(3, rolesJson(a))
+                    st.setString(4, a.githubHandle)
+                    st.setInt(5, if (a.disabled) 1 else 0)
+                    st.setLong(6, a.createdAt)
+                    val id = if (st.executeUpdate() == 1) scalar("SELECT last_insert_rowid()") else null
+                    results += { op.result.complete(id) }
+                }
+                is AccountOp.Update -> prepare("UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ? WHERE id = ?") { st ->
+                    st.setString(1, rolesJson(op.account))
+                    st.setString(2, op.account.githubHandle)
+                    st.setInt(3, if (op.account.disabled) 1 else 0)
+                    st.setLong(4, op.account.id)
+                    st.executeUpdate()
+                }
+                is AccountOp.SetPassword -> {
+                    prepare("UPDATE accounts SET pw_hash = ? WHERE id = ?") { st ->
+                        st.setString(1, op.pwHash)
+                        st.setLong(2, op.id)
+                        st.executeUpdate()
+                    }
+                    prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
+                        st.setLong(1, op.id)
+                        st.executeUpdate()
+                    }
+                }
+                is AccountOp.AddInvite -> prepare("INSERT OR IGNORE INTO invites (code_hash, role, expires_at, used_by, account_id) VALUES (?, ?, ?, NULL, ?)") { st ->
+                    st.setString(1, op.invite.codeHash)
+                    st.setString(2, op.invite.role.name)
+                    st.setLong(3, op.invite.expiresAt)
+                    val bound = op.invite.accountId
+                    if (bound == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, bound)
+                    st.executeUpdate()
+                }
+                is AccountOp.UseInvite -> prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL") { st ->
+                    st.setLong(1, op.accountId)
+                    st.setString(2, op.codeHash)
+                    val used = st.executeUpdate() == 1
+                    results += { op.result.complete(used) }
+                }
+            }
+        }
+    }
+
+    private fun scalar(sql: String): Long = conn.createStatement().use { st -> st.executeQuery(sql).use { it.next(); it.getLong(1) } }
+
+    private fun writeWorld(b: Batch) {
         prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)") { st ->
             for ((k, v) in b.meta) {
                 st.setString(1, k)

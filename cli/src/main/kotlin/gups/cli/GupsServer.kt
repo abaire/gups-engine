@@ -1,6 +1,11 @@
 package gups.cli
 
+import gups.auth.AccountLogin
+import gups.auth.AccountService
+import gups.auth.LoginSettings
+import gups.core.Account
 import gups.core.Label
+import gups.core.Role
 import gups.core.WorldControlEvent
 import gups.core.loop.WorldLoop
 import gups.core.world.Boot
@@ -18,6 +23,7 @@ import gups.script.WorldDir
 import gups.script.WorldModule
 import gups.script.WorldWatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -26,7 +32,7 @@ import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Where `--dev` puts new characters unless `--start` says otherwise (D-082). */
+/** Where new characters start unless `--start` or `start_room` says otherwise (D-082, D-138). */
 val TUTORIAL_START = Label("//zones/tutorial:gate")
 
 /** How often the server checks whether an hourly or daily backup is due. */
@@ -35,18 +41,27 @@ private const val BACKUP_CHECK_MS = 5 * 60_000L
 /** How often the `--dev` file watcher looks for changes. */
 private const val WATCH_INTERVAL_MS = 100L
 
+/** What `--prod` adds (M6 design §3.5): where raw telnet listens, and the account login's settings. */
+class ProdOptions(val telnetHost: String, val login: LoginSettings = LoginSettings())
+
+/** Password checks and other slow login work run here, never on the world thread (M6 design §2.2). */
+private const val AUTH_THREADS = 4
+
 /**
- * The `--dev` profile (SPEC §2.4): every package of the world, raw telnet on localhost, the
- * passwordless local instructor, auto-reload on save, `@eval`, and checkpoints and backups
- * as in production.
+ * A running server (SPEC §2.4). Without [prod] it is the `--dev` profile: raw telnet on
+ * localhost, the passwordless local instructor, auto-reload on save and `@eval`. With [prod]
+ * it is `--prod`: the account login, telnet on the configured address, and no `@eval`,
+ * auto-reload or per-pulse invariant check (M6 design §3.5). Both load every package of the
+ * world and keep checkpoints and backups.
  */
-class DevServer(
+class GupsServer(
     private val dir: WorldDir,
     private val port: Int = 4000,
     private val start: Label? = null,
-    /** The database; null runs without saving anything (tests). */
+    /** The database; null runs without saving anything (`--dev` tests only). */
     private val db: Path? = defaultDb(dir),
     private val fresh: Boolean = false,
+    private val prod: ProdOptions? = null,
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
     private var persistence: SqlitePersistence? = null
@@ -54,7 +69,7 @@ class DevServer(
     lateinit var world: World
         private set
     private lateinit var loop: WorldLoop
-    private val telnet by lazy { TelnetServer(loop, "127.0.0.1", port) }
+    private val telnet by lazy { TelnetServer(loop, prod?.telnetHost ?: "127.0.0.1", port) }
 
     /** Loads the world. Returns false, after logging why, if there is nothing to play. */
     fun boot(): Boolean {
@@ -79,16 +94,21 @@ class DevServer(
             log("No package loaded any rooms; nothing to play.")
             return false
         }
-        val at = start ?: TUTORIAL_START.takeIf { it in protos.rooms } ?: protos.rooms.keys.minBy { it.v }
+        val at = start ?: module.startRoom ?: TUTORIAL_START.takeIf { it in protos.rooms } ?: protos.rooms.keys.minBy { it.v }
         if (at !in protos.rooms) {
-            log("--start $at is not a room.")
+            log("${if (start != null) "--start" else "MODULE.gups start_room"} $at is not a room.")
+            return false
+        }
+        if (prod != null && db == null) {
+            log("--prod needs a database.")
             return false
         }
         val host = StarlarkHost(result, ScriptLimits(), loader)
         val saved = db?.let { SqlitePersistence.open(it, log) }
         persistence = saved
         val boot = saved?.boot(protos, fresh) ?: Boot()
-        val config = WorldConfig(seed = System.nanoTime(), checkInvariants = true, checkpointPulses = module.checkpointPulses, bubble = true)
+        // --prod checks invariants only at world ticks, before capture (M6 design §3.5).
+        val config = WorldConfig(seed = System.nanoTime(), checkInvariants = prod == null, checkpointPulses = module.checkpointPulses, bubble = true)
         world = World(protos, host.rules(), host, config, boot)
         host.install(world)
         if (saved != null) {
@@ -96,9 +116,8 @@ class DevServer(
             report.notes.forEach(log)
             log("Restored ${report.restored} entities from $db at pulse ${world.pulse}" + if (report.dropped > 0) "; dropped ${report.dropped}." else ".")
         }
-        DevTools.install(world, host, eval = true)
+        DevTools.install(world, host, eval = prod == null)
         host.alerts = { log("alert: $it") }
-        world.login = DevLogin(at)
         world.onDiagnostic = { d ->
             val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":")
             log("[${d.kind}] ${if (where.isEmpty()) "" else "$where: "}${d.message}")
@@ -106,6 +125,17 @@ class DevServer(
         world.fireOnLoad()
         if (saved != null) world.checkpointNow("boot")
         loop = WorldLoop(world)
+        world.login = if (prod != null) {
+            val accounts = saved!!.accounts
+            if (accounts.all().isEmpty()) log("There are no accounts yet. Create some with gups import-roster or gups invite.")
+            AccountLogin(AccountService(accounts), at, Dispatchers.IO.limitedParallelism(AUTH_THREADS).asExecutor(), loop::submit, prod.login)
+        } else {
+            // The local instructor is a real account once there is a database (M6 design §3.4).
+            val instructor = saved?.accounts?.let { a ->
+                a.byLogin(DEV_ACCOUNT) ?: a.create(Account(0, DEV_ACCOUNT, null, Role.INSTRUCTOR, createdAt = System.currentTimeMillis()))
+            }
+            DevLogin(at, instructor?.id)
+        }
         log("Loaded ${result.packages.size} of ${packages.size} packages; new characters start in $at; checkpoints every ${module.checkpointMinutes} min.")
         return true
     }
@@ -119,8 +149,9 @@ class DevServer(
         }
         val bound = telnet.start()
         val watcher = WorldWatcher(dir)
+        // --prod changes only through deploys (SPEC §1.4, §5.10).
         val watching = launch(Dispatchers.IO) {
-            while (isActive) {
+            while (isActive && prod == null) {
                 delay(WATCH_INTERVAL_MS)
                 val changed = watcher.poll()
                 if (changed.isNotEmpty()) {
@@ -151,6 +182,9 @@ class DevServer(
     fun awaitStopped(timeoutMs: Long): Boolean = stopped.await(timeoutMs, TimeUnit.MILLISECONDS)
 
     companion object {
+        /** The `--dev` local instructor's account (M6 design §3.4). */
+        const val DEV_ACCOUNT = "instructor"
+
         /** `--db` defaults to a hidden directory in the world, which the package scan skips (D-099). */
         fun defaultDb(dir: WorldDir): Path = dir.root.resolve(".gups").resolve("world.db")
     }

@@ -67,7 +67,7 @@ an overrun may be "now", in which case the next pulse runs immediately.
 `Shutdown(delayPulses, reason)` broadcasts the reason and stops the loop once the delay has
 passed. The server then takes the final checkpoint (§5.11) on the world thread and waits up
 to 30 s for the writer to commit it, including on a JVM shutdown (Ctrl-C).
-*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`, `DevServer.run`.
+*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`, `GupsServer.run`.
 
 ## Commands (§4.9, §5.2)
 
@@ -414,7 +414,7 @@ built and global commands are installed. Spawns filled while the world is built 
 `on_spawn` first, during construction. The harness calls it in `t.world()`, and `serve`
 calls it once a saved world has been restored (so restored entities get it too). A reload
 fires `on_load` only on rooms it creates. Characters restored at login don't get it.
-*Code:* `World.fireOnLoad`, `TestCtx.world`, `DevServer.boot`.
+*Code:* `World.fireOnLoad`, `TestCtx.world`, `GupsServer.boot`.
 
 ### D-063 `path_to` is an uncached BFS — `open`
 Breadth-first over exits in declaration order, through open doors only (closed and locked
@@ -696,20 +696,20 @@ other field keeps its live value.
 
 ### D-082 The `--dev` login and world — `open`
 - **Prompting:** the server asks for a name: 2 to 16 letters, capitalized.
-- **Characters:** every character belongs to the local instructor account, so it gets
+- **Characters:** every character belongs to the local instructor account (D-131), so it gets
   `Role.INSTRUCTOR` and is idle-exempt. Naming a character that is already playing takes it
   over and closes the old connection. Otherwise a saved character is restored (D-095), or a
   new one is created and saved at once.
 - **Maintenance:** while the database can't be written, new logins are refused with a
   maintenance message (§6.4); taking over a character still works.
 - **Connections:** a remote address that isn't loopback is refused and closed.
-- **Starting room:** new characters start in `--start`, else `//zones/tutorial:gate` if it
-  exists, else the first room by label.
+- **Starting room:** new characters start in `--start`, else `start_room` (D-138), else
+  `//zones/tutorial:gate` if it exists, else the first room by label.
 - **Starting stats:** they are the engine defaults. §5.12 calls them rules-defined, but §4.6
   has no rules export for them, so the rules module (M5) doesn't set them either.
 - **Loading:** `--dev` loads every package under `--world` (default: the current
   directory). Packages that fail to load are reported and left out.
-*Code:* `DevLogin`, `DevServer`.
+*Code:* `DevLogin`, `GupsServer`.
 
 ### D-083 Prompts — `open`
 After each burst of output, a playing session gets `<{hp}hp {mana}m {move}mv> `. Telnet ends
@@ -740,7 +740,7 @@ Every 100 ms it compares the modification time and size of every non-test `.star
 Changes are reported once nothing has changed for 200 ms, grouped by package: the nearest
 directory with a `package.star`, or the file's own directory if that file was just deleted.
 It doesn't use `WatchService`, which polls every few seconds on macOS.
-*Code:* `WorldWatcher`, `DevServer.run`.
+*Code:* `WorldWatcher`, `GupsServer.run`.
 
 ### D-087 Color markup and color depth — `open`
 §2.2 asks for ANSI rendering but defines no markup.
@@ -898,7 +898,7 @@ when it logs in.
 `--db` defaults to `<world>/.gups/world.db`. The hidden directory is skipped by the package
 scan and the file watcher. `gups backup`, `restore` and `repro` take the same `--world` and
 `--db`.
-*Code:* `DevServer.defaultDb`.
+*Code:* `GupsServer.defaultDb`.
 
 ### D-100 Row formats — `open`
 - **References:**
@@ -974,7 +974,7 @@ such as `checkpoint_minutes`, but gives no syntax.
   pinned `engine` version only warns.
 - **Changes:** changing the file needs a restart (§5.10). The file watcher and reload never
   read it.
-*Code:* `WorldModule`, `DevServer.boot`.
+*Code:* `WorldModule`, `GupsServer.boot`.
 
 ## Rules, simulation and content (§4.2–§4.7, §5.7–§5.9) — M5
 
@@ -1221,3 +1221,129 @@ chain. Auto-attacks add the to-hit roll and the mitigated damage; each combat ro
 the initiative order. `w.trace()` in the harness records the same lines. Builder scoping of
 what is traced arrives with roles in M6.
 *Code:* `World.onRules`, `DevTools`, `WorldHandle.trace`.
+
+## Accounts and login (§3.5, §3.6, §5.12; M6 design §2–§3) — M6.1
+
+### D-128 Account storage and its writes — `open`
+- **Seam:** `AccountStore` lives in `core` (`Accounts.kt`) with `Account` and `Invite`.
+  `Persistence.accounts` exposes it; `SqliteAccountStore` in `persist` implements it, and
+  `auth` uses only the interface.
+- **Writes:** each change is a `Batch` of its own carrying `AccountOp`s, submitted to the
+  checkpoint writer as an immediate batch so it never merges with world captures. The caller
+  blocks (off the world thread) until it commits, for at most 30 s. Account batches don't
+  count toward the checkpoint-backlog alert.
+- **Conflicts:** a taken login (`INSERT OR IGNORE`) and a used invite (`UPDATE … WHERE used_by
+  IS NULL`) are reported as results, never thrown, so they can't wedge the writer's retry
+  loop. That also makes single use hold across processes.
+- **Reads:** a read-only connection of the store's own, serialized, beside the writer (WAL).
+  Accounts aren't cached, so the CLI tools writing the same database directly are safe.
+- **Schema migration 2:** `invites.account_id`, the account a setup code is bound to. M6.2's
+  `restrictions` table therefore becomes migration 3.
+- **Characters:** `Persistence.characters(accountId)` and `savedCharacter(name)` read the
+  in-memory player rows (D-095). `Player.accountId` became a `var` and `spawnPlayer` takes it.
+- **`update`** writes role, scope, GitHub handle and the disabled flag, never the password;
+  `setPassword` also deletes the account's `session_tokens`.
+*Code:* `Accounts.kt` (core, persist), `AccountOp`, `Database.writeAccounts`, `SqlitePersistence`.
+
+### D-129 Slow login work and the `LoginHandler` seam — `open`
+- **Outcome:** `WorldControlEvent.AuthResult(session, outcome: Any)` carries the handler's own
+  continuation; the world passes it to `LoginHandler.completed`, then flushes the session. A
+  result for a session that has closed is dropped.
+- **New hooks:** `LoginHandler.disconnected` (called by `disconnect` and `closeSession`) drops
+  per-session state; `LoginHandler.pulse` runs each pulse, before the idle checks, for prompt
+  timeouts.
+- **Held input:** lines typed while work is pending are held (at most 20) and replayed in
+  order when it finishes: to the login, or as game commands once a character is playing.
+- **Executor:** `--prod` uses `Dispatchers.IO.limitedParallelism(4)`. Everything that touches
+  the store runs there, not only hashing: login lookups, code checks and login-taken checks.
+- **Helpers:** `World.takeOver` and `World.enterGame` are shared by `DevLogin` and
+  `AccountLogin`; `World.flush` became public.
+*Code:* `Seams.kt`, `Login.kt`, `Sessions.kt`, `AccountLogin.later`.
+
+### D-130 Login flow details — `open`
+- **Prompts:** the login prompt is the M6 design's text. The character menu prompt is `> `.
+  `quit` at the menu closes the connection. An empty answer at a prompt asks again; at the
+  character-name prompt it goes back to the menu.
+- **Accounts without a password** (roster accounts not set up yet) fail like a wrong password,
+  after a dummy hash, so they look like any other wrong login.
+- **Strikes:** the three per connection count wrong passwords, refused locked-out attempts,
+  bad codes and a wrong current password when changing it.
+- **Password change:** current, new, new again, then one background step that verifies and
+  rehashes. A wrong current password counts as a failed login for the limiter.
+- **Disabled accounts** get "This account is disabled." after a correct password.
+- **`new`:** a bound setup code shows which login it sets up and skips the login prompt.
+  Logins are lowercased. A redeem that loses a race reports it and goes back a step.
+- **Characters:** the menu lists saved characters plus any of the account's characters in the
+  world not saved yet. Loading a saved character respects maintenance mode, as D-082 does.
+  The role and idle exemption come from the account each time a character is entered.
+*Code:* `AccountLogin`.
+
+### D-131 The `--dev` instructor account — `open`
+With a database, `--dev` creates the account `instructor` (role instructor, no password) on
+first boot. Its characters get its id, and dev characters saved before it existed join it.
+`--dev` doesn't apply one-character-at-a-time (Q9): it is a single-user tool where several
+characters at once help testing. Without a database (tests) characters have no account.
+*Code:* `GupsServer.boot`, `DevLogin`.
+
+### D-132 Lockout counting — `open`
+Failures are counted per lowercased login (whether or not it exists) and per peer address.
+The count resets after 15 minutes without a failure, so failures spaced less than 15 minutes
+apart keep accumulating. The fifth starts a 1-minute lockout and each later one restarts the
+lockout at double length, capped at 15 minutes. A successful login clears the account's
+count but not the address's. Bad invite codes count against the address only.
+*Code:* `LoginLimiter`.
+
+### D-133 Invite and setup codes — `open`
+The alphabet is `23456789ABCDEFGHJKMNPQRSTWXYZ` (no 0/O, 1/I/L, U/V). Codes are compared
+after uppercasing and removing spaces and dashes, and stored as the SHA-256 hex of that
+canonical form. They are random enough that an unsalted fast hash is enough.
+*Code:* `Codes`.
+
+### D-134 Roster import — `open`
+- **CSV:** a header row in any column order; blank lines and `#` lines skipped; double quotes
+  allowed; a leading `@` on a GitHub handle dropped; roles case-insensitive. Any bad row
+  (unknown column or role, bad or repeated login, too many fields) fails the whole import
+  with every problem listed, and nothing is written.
+- **Output:** a `login,setup_code` header, then one line per new account; a summary goes to
+  standard error. `--days N` sets the codes' lifetime.
+- **Existing accounts** without a password get no new code, so a re-import stays idempotent;
+  a lost code waits for `@role <account> reset` (M6.2).
+- **Offline only:** `gups import-roster` and `gups invite` write the database directly. With
+  the admin port (M6.5) they will go through a running server instead; until then, running
+  them beside a server is safe because SQLite serializes the writes (D-128).
+*Code:* `Roster`, `AccountService.importRoster`, `ImportRoster`, `Invite`.
+
+### D-135 `--prod` and the server configuration in M6.1 — `open`
+- **Listener:** raw telnet is the only one until M6.3, so `--prod` refuses to start without a
+  telnet address (`--telnet` or `telnet = ...`). `:4000` binds every interface.
+- **Flags:** `--config`, `--telnet`, `--open-signup`/`--no-open-signup`, `--max-characters`,
+  plus the existing `--world`, `--db`, `--start` and `--fresh`, each overriding the file.
+  `--port` stays `--dev`-only. The settings of later stages are read and checked but only
+  warned about when set.
+- **`reserved_names`** in the server configuration adds character names to refuse.
+- **Database:** `--prod` defaults to the world's `.gups/world.db`, as `--dev` does (D-099).
+- **Not yet:** `@invite` arrives with the other instructor commands in M6.2. Nothing disables
+  an account yet, so quitting a disabled account's online characters waits for a command
+  that disables (DESIGN_NEEDED.md).
+*Code:* `Serve.prodServer`, `ServerConfig`, `GupsServer`.
+
+### D-136 Reserved character names — `open`
+Built in: `self`, `me`, `all`, `someone`, `here`, the menu words `new`, `password` and `quit`,
+`guest`, `instructor`, `admin`, and every standard direction with its abbreviation. Added per
+world: the name and aliases of every engine, global and tool command (without `@`), and the
+server configuration's `reserved_names`. Logins only reserve `new`.
+*Code:* `Names`.
+
+### D-137 Telnet echo for passwords — `open`
+`OutputSink.hideInput` sends `IAC WILL ECHO` / `IAC WONT ECHO`, only to clients that have sent
+some telnet command (D-088), and only when the state changes. `DO ECHO` is accepted silently
+while input is hidden and refused once otherwise; `DONT ECHO` is never answered, so the
+exchange can't loop. After each hidden line the server sends the newline the client didn't
+echo.
+*Code:* `TelnetConnection.encodeEcho`, `TelnetServer`.
+
+### D-138 `start_room` in `MODULE.gups` — `open`
+`module(start_room = "//zones/tutorial:gate")` sets where new characters start, in both
+profiles. `--start` overrides it. Without either, it is the tutorial gate if it exists, else
+the first room by label, as in D-082. A `start_room` that isn't a room stops the server.
+*Code:* `WorldModule`, `GupsServer.boot`.

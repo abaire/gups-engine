@@ -48,6 +48,12 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
         is WorldControlEvent.Reload -> reload(event.packages)
         // Deploy needs the deploy pipeline (M6).
         is WorldControlEvent.Deploy -> diagnose("control", "$event is not supported by this engine build")
+        is WorldControlEvent.AuthResult -> {
+            // A session that closed meanwhile simply drops its result.
+            val s = sessions[event.session] ?: return
+            login?.completed(this, s, event.outcome)
+            flush(s)
+        }
     }
 }
 
@@ -94,6 +100,7 @@ fun World.handle(event: ClientInputEvent) {
 /** The connection dropped: the character goes link-dead and keeps auto-attacking (SPEC §5.12). */
 fun World.disconnect(id: SessionId) {
     val s = sessions.remove(id) ?: return
+    login?.disconnected(this, id)
     val p = s.player ?: return
     if (p.session != id) return
     p.session = null
@@ -128,6 +135,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
 
 /** Link-dead and idle auto-quit (SPEC §5.12). */
 internal fun World.expireSessions() {
+    login?.let { guarded("login timeouts") { it.pulse(this) } }
     for (p in players) {
         val dead = p.linkDeadSince
         when {
@@ -152,7 +160,8 @@ fun World.echo(room: Room, text: String, vararg exclude: Actor) {
     for (a in room.actorIndex.values) if (exclude.none { it === a }) send(a, text)
 }
 
-internal fun World.flush(s: Session) {
+/** Sends [s] its queued output, then its prompt if it is playing. */
+fun World.flush(s: Session) {
     if (s.out.isEmpty()) return
     val text = s.out.toString()
     s.out.setLength(0)
@@ -174,6 +183,7 @@ fun World.closeSession(s: Session, reason: String) {
     s.player?.let { p -> if (p.session == s.id) p.session = null }
     s.player = null
     sessions.remove(s.id)
+    login?.disconnected(this, s.id)
     s.sink.close(reason)
 }
 

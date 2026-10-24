@@ -1,0 +1,110 @@
+package gups.persist
+
+import gups.core.Account
+import gups.core.AccountStore
+import gups.core.Invite
+import gups.core.Role
+import kotlinx.serialization.Serializable
+import org.sqlite.SQLiteConfig
+import java.nio.file.Path
+import java.sql.Connection
+import java.sql.ResultSet
+import java.util.concurrent.TimeUnit
+import kotlin.io.path.absolutePathString
+
+/** `accounts.roles_json` (M6 design §3.1): one role, and the builder scope CODEOWNERS fills. */
+@Serializable
+internal class RolesJson(val role: String, val scope: List<String> = emptyList())
+
+internal fun rolesJson(a: Account): String = JSON.encodeToString(RolesJson.serializer(), RolesJson(a.role.name, a.scope))
+
+/** How long an account write waits for the checkpoint writer before giving up. */
+private const val WRITE_TIMEOUT_S = 30L
+
+/**
+ * SQLite account storage (M6 design §2.3, D-128). Reads go to a read-only connection of
+ * their own, which WAL lets run beside the writer. Writes are single-purpose [Batch]es handed
+ * to [write], which returns once the batch is committed: through the [CheckpointWriter] in a
+ * running server, or [Database.write] directly for the offline CLI tools.
+ */
+class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) : AccountStore, AutoCloseable {
+    private val read: Connection = SQLiteConfig().apply {
+        setReadOnly(true)
+        busyTimeout = 5000
+    }.createConnection("jdbc:sqlite:${file.absolutePathString()}")
+
+    override fun byLogin(login: String): Account? = accounts("WHERE login = ?", login).firstOrNull()
+
+    override fun byId(id: Long): Account? = accounts("WHERE id = ?", id).firstOrNull()
+
+    override fun all(): List<Account> = accounts("")
+
+    override fun create(account: Account): Account? {
+        val op = AccountOp.Create(account)
+        submit(op)
+        val id = op.result.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS) ?: return null
+        return account.copy(id = id)
+    }
+
+    override fun update(account: Account) = submit(AccountOp.Update(account))
+
+    override fun setPassword(id: Long, pwHash: String?) = submit(AccountOp.SetPassword(id, pwHash))
+
+    override fun addInvite(invite: Invite) = submit(AccountOp.AddInvite(invite))
+
+    override fun invite(codeHash: String): Invite? = synchronized(read) {
+        read.prepareStatement("SELECT code_hash, role, expires_at, account_id, used_by FROM invites WHERE code_hash = ?").use { st ->
+            st.setString(1, codeHash)
+            st.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                Invite(rs.getString(1), Role.valueOf(rs.getString(2)), rs.getLong(3), rs.nullableLong(4), rs.nullableLong(5))
+            }
+        }
+    }
+
+    override fun useInvite(codeHash: String, accountId: Long): Boolean {
+        val op = AccountOp.UseInvite(codeHash, accountId)
+        submit(op)
+        return op.result.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS)
+    }
+
+    override fun close() = synchronized(read) { read.close() }
+
+    private fun submit(op: AccountOp) {
+        val b = Batch(immediate = true, cause = "account", firstPulse = 0, accounts = mutableListOf(op))
+        write(b)
+        b.done.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS)
+    }
+
+    private fun accounts(where: String, vararg args: Any): List<Account> = synchronized(read) {
+        read.prepareStatement("SELECT id, login, pw_hash, roles_json, github_handle, disabled, created_at FROM accounts $where ORDER BY id").use { st ->
+            args.forEachIndexed { i, a -> st.setObject(i + 1, a) }
+            st.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        val roles = JSON.decodeFromString(RolesJson.serializer(), rs.getString(4))
+                        add(
+                            Account(
+                                id = rs.getLong(1),
+                                login = rs.getString(2),
+                                pwHash = rs.getString(3),
+                                role = Role.valueOf(roles.role),
+                                scope = roles.scope,
+                                githubHandle = rs.getString(5),
+                                disabled = rs.getInt(6) != 0,
+                                createdAt = rs.getLong(7),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    companion object {
+        /** A store for a running server: writes go through [writer] (SPEC §2.5). */
+        fun through(file: Path, writer: CheckpointWriter) = SqliteAccountStore(file) { writer.submit(it) }
+    }
+}
+
+private fun ResultSet.nullableLong(i: Int): Long? = getLong(i).takeUnless { wasNull() }

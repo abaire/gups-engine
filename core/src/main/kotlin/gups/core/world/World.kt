@@ -280,10 +280,11 @@ class World(
         move: Int = 100,
         stats: Map<String, Int> = DEFAULT_STATS,
         index: Int = 0,
+        accountId: Long? = null,
     ): Player {
         require(players.none { it.name.equals(name, ignoreCase = true) }) { "A player named $name is already in the world" }
         val room = room(at)
-        val p = Player(allocateId(), name, room, index.coerceIn(0, room.trackSize - 1), recallRoom = at)
+        val p = Player(allocateId(), name, room, index.coerceIn(0, room.trackSize - 1), recallRoom = at, accountId = accountId)
         p.level = level
         p.baseStats.putAll(stats)
         p.hp = hp

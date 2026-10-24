@@ -51,6 +51,16 @@ cli/build/install/gups/bin/gups serve --dev --world template-world   # then: tel
 cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
 ```
 
+To try the shared-server login locally, import a roster, then start `--prod` on raw telnet:
+
+```bash
+printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
+cli/build/install/gups/bin/gups import-roster roster.csv --world template-world   # prints ann's setup code
+cli/build/install/gups/bin/gups serve --prod --world template-world --telnet 127.0.0.1:4000
+```
+
+Then `telnet localhost 4000`, type `new`, enter the setup code and choose a password.
+
 ## Modules
 
 | Module | Scope | May depend on |
@@ -77,7 +87,18 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M5 (SPEC §7.4): the world runs on rules builders can change.
+M6.1 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §3): accounts and login.
+
+- **Accounts:** stored in SQLite, written through the checkpoint writer. Each account has one
+  role. Passwords are Argon2id hashes.
+- **Logins:** failed logins are rate-limited per account and per IP.
+- **Creating accounts:** `gups import-roster` creates accounts and prints a one-time setup
+  code for each. `gups invite` makes invite codes.
+- **`gups serve --prod`:** students log in over raw telnet, set their passwords, and pick or
+  create characters, one at a time. `--dev` keeps its passwordless local instructor, now as an
+  `instructor` account.
+
+M5: the world runs on rules builders can change.
 
 - **Rules module:** `//rules:combat.star` supplies the combat, movement and regen formulas.
   Anything it leaves out or gets wrong falls back to the built-in Kotlin ruleset.
@@ -102,8 +123,8 @@ M5 (SPEC §7.4): the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6: TLS, WebSocket, GMCP, accounts and roles, instructor commands, deploys.
+- M6.2–M6.6: roles and instructor commands, TLS and GMCP, WebSocket, the admin port and
+  deploys, and the course world CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
-`gups serve --prod`, `lint`, `docs`, `deploy`, `invite` and `import-roster` still exit with
-status 3 ("not implemented").
+`lint`, `docs` and `deploy` still exit with status 3 ("not implemented").

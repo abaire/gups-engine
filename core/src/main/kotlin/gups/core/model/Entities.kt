@@ -202,7 +202,8 @@ class Player(
     room: Room,
     trackIndex: Int,
     var recallRoom: Label,
-    val accountId: Long? = null,
+    /** The owning account (SPEC §3.6 `players.account_id`); null for characters without one. */
+    var accountId: Long? = null,
 ) : Actor(id, Prototypes.PLAYER, room, trackIndex) {
     override val keywords: List<String> = listOf(name.lowercase())
     override val isPlayer: Boolean get() = true

@@ -1,5 +1,6 @@
 package gups.persist
 
+import gups.core.AccountStore
 import gups.core.EntityId
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
@@ -12,6 +13,7 @@ import gups.core.model.Room
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
 import gups.core.world.Persistence
+import gups.core.world.SavedCharacter
 import gups.core.world.World
 import gups.core.world.bindSpawn
 import gups.core.world.clearInputs
@@ -258,6 +260,17 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         }
     }
 
+    override fun characters(accountId: Long): List<String> =
+        playerRows.values.filter { it.accountId == accountId }.sortedBy { it.id }.map { it.name }
+
+    override fun savedCharacter(name: String): SavedCharacter? =
+        playerRows.values.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { SavedCharacter(it.name, it.accountId) }
+
+    private val accountStore = lazy { SqliteAccountStore.through(db.file, writer) }
+
+    /** Account storage over this database; account writes join the checkpoint writer's queue (D-128). */
+    override val accounts: AccountStore get() = accountStore.value
+
     override val maintenance: String?
         get() = if (writer.healthy) null else "The world can't save right now, so new logins are paused. Please try again in a few minutes."
 
@@ -335,6 +348,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     fun close(timeoutMs: Long = 30_000): Boolean {
         held?.let { writer.submit(combined(Batch(false, "close", it.firstPulse))) }
         val ok = writer.close(timeoutMs)
+        if (accountStore.isInitialized()) accountStore.value.close()
         db.close()
         return ok
     }

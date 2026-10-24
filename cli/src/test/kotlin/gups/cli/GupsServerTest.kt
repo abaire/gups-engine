@@ -17,7 +17,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class DevServerTest {
+class GupsServerTest {
     private fun copyTemplate(): Path {
         val from = Path.of(System.getProperty("gups.templateWorld"))
         val to = Files.createTempDirectory("gups-dev")
@@ -50,10 +50,10 @@ class DevServerTest {
 
     private fun Socket.line(text: String) = getOutputStream().write("$text\r\n".toByteArray())
 
-    /** Runs a dev server on [root] until [play] returns, then shuts it down cleanly. */
-    private fun withServer(root: Path, start: gups.core.Label? = null, play: (Socket) -> Unit): String {
+    /** Runs a dev server, or a --prod one with [prod], on [root] until [play] returns, then shuts it down cleanly. */
+    private fun withServer(root: Path, start: gups.core.Label? = null, prod: ProdOptions? = null, play: (Socket) -> Unit): String {
         val logs = StringBuffer()
-        val server = DevServer(WorldDir(root), port = 0, start = start) { logs.append(it).append('\n') }
+        val server = GupsServer(WorldDir(root), port = 0, start = start, prod = prod) { logs.append(it).append('\n') }
         assertTrue(server.boot(), logs.toString())
         val port = CompletableFuture<Int>()
         val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
@@ -114,7 +114,7 @@ class DevServerTest {
             s.line("quit")
             s.readUntil("Goodbye.")
         }
-        val db = DevServer.defaultDb(WorldDir(root))
+        val db = GupsServer.defaultDb(WorldDir(root))
         val id = gups.persist.Database.open(db).use { d -> d.diagnostics().first { it.kind == "script_error" }.id }
         val bundle = root.resolve("bundle.json")
         val result = gupsCommand().test(listOf("repro", "$id", "--world", root.toString(), "--save", bundle.toString()))
@@ -132,10 +132,61 @@ class DevServerTest {
     }
 
     @Test
+    fun `a roster student logs in to a --prod server`() {
+        val root = copyTemplate()
+        val roster = root.resolve("roster.csv").also { it.writeText("login,github_handle\nann,ann-gh\n") }
+        val imported = gupsCommand().test(listOf("import-roster", roster.toString(), "--world", root.toString()))
+        assertEquals(0, imported.statusCode, imported.output)
+        val code = imported.stdout.lines()[1].substringAfter("ann,")
+        val prod = ProdOptions("127.0.0.1", gups.auth.LoginSettings())
+        val logs = withServer(root, prod = prod) { s ->
+            s.readUntil("invite code)")
+            s.line("new")
+            s.readUntil("setup code: ")
+            s.line(code)
+            s.readUntil("Password: ")
+            s.line("correct horse")
+            s.readUntil("again: ")
+            s.line("correct horse")
+            s.readUntil("Type a name to play")
+            s.line("new")
+            s.readUntil("called? ")
+            s.line("Tess")
+            assertContains(s.readUntil("Exits: north."), "The Tutorial Gate")
+            s.line("@eval 1 + 1")
+            s.readUntil("Huh?")
+            s.line("quit")
+            s.readUntil("Goodbye.")
+        }
+        assertContains(logs, "Loaded")
+        withServer(root, prod = prod) { s ->
+            s.readUntil("invite code)")
+            s.line("ann")
+            s.readUntil("Password: ")
+            s.line("correct horse")
+            s.readUntil("Your characters: Tess.")
+            s.line("tess")
+            s.readUntil("Welcome back, Tess.")
+        }
+        // --dev keeps its passwordless local instructor, now a real account.
+        withServer(root) { s ->
+            s.readUntil("known?")
+            s.line("Cleo")
+            s.readUntil("Exits: north.")
+        }
+        gups.persist.Database.open(GupsServer.defaultDb(WorldDir(root))).use { d ->
+            gups.persist.SqliteAccountStore(d.file, d::write).use { store ->
+                assertEquals(listOf("ann", "instructor"), store.all().map { it.login }.sorted())
+                assertEquals(gups.core.Role.INSTRUCTOR, store.byLogin("instructor")!!.role)
+            }
+        }
+    }
+
+    @Test
     fun `play the tutorial over telnet and see a save reload it`() {
         val root = copyTemplate()
         val logs = StringBuffer()
-        val server = DevServer(WorldDir(root), port = 0) { logs.append(it).append('\n') }
+        val server = GupsServer(WorldDir(root), port = 0) { logs.append(it).append('\n') }
         assertTrue(server.boot(), logs.toString())
         val port = CompletableFuture<Int>()
         val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
