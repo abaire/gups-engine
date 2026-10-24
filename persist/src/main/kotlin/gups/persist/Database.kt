@@ -34,6 +34,17 @@ val MIGRATIONS: List<Migration> = listOf(
                 stack TEXT, ctx_json TEXT, seed INTEGER, repro_json TEXT)""",
         ),
     ),
+    // Setup codes are invites bound to an account (M6 design §3.3, D-128).
+    Migration(2, listOf("ALTER TABLE invites ADD COLUMN account_id INTEGER")),
+    // Per-account restrictions of capabilities (M6 design §4.4, D-128).
+    Migration(
+        3,
+        listOf(
+            """CREATE TABLE restrictions (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, capability TEXT NOT NULL,
+                until INTEGER, reason TEXT, set_by INTEGER, created_at INTEGER NOT NULL, lifted_by INTEGER, lifted_at INTEGER)""",
+            "CREATE INDEX restrictions_account ON restrictions (account_id)",
+        ),
+    ),
 )
 
 /** A diagnostics row (SPEC §3.6). */
@@ -91,8 +102,116 @@ class Database private constructor(val file: Path, private val conn: Connection)
 
     fun diagnostic(id: Long): DiagnosticRow? = diagnostics().firstOrNull { it.id == id }
 
-    /** Applies one checkpoint batch in a single transaction (SPEC §5.11). */
-    fun write(b: Batch) = transaction {
+    /**
+     * Applies one checkpoint batch in a single transaction (SPEC §5.11), then completes the
+     * batch's futures: [Batch.done] and the results of its account operations.
+     */
+    fun write(b: Batch) {
+        val results = mutableListOf<() -> Unit>()
+        transaction {
+            writeAccounts(b.accounts, results)
+            writeWorld(b)
+        }
+        results.forEach { it() }
+        b.done.complete(Unit)
+    }
+
+    /** Account changes (D-128). Conflicts are reported through results, never thrown, so a taken login can't wedge the writer. */
+    private fun writeAccounts(ops: List<AccountOp>, results: MutableList<() -> Unit>) {
+        for (op in ops) {
+            when (op) {
+                is AccountOp.Create -> prepare(
+                    "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ) { st ->
+                    val a = op.account
+                    st.setString(1, a.login)
+                    st.setString(2, a.pwHash)
+                    st.setString(3, rolesJson(a))
+                    st.setString(4, a.githubHandle)
+                    st.setInt(5, if (a.disabled) 1 else 0)
+                    st.setLong(6, a.createdAt)
+                    val id = if (st.executeUpdate() == 1) scalar("SELECT last_insert_rowid()") else null
+                    results += { op.result.complete(id) }
+                }
+                is AccountOp.Update -> prepare("UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ? WHERE id = ?") { st ->
+                    st.setString(1, rolesJson(op.account))
+                    st.setString(2, op.account.githubHandle)
+                    st.setInt(3, if (op.account.disabled) 1 else 0)
+                    st.setLong(4, op.account.id)
+                    st.executeUpdate()
+                }
+                is AccountOp.SetPassword -> {
+                    prepare("UPDATE accounts SET pw_hash = ? WHERE id = ?") { st ->
+                        st.setString(1, op.pwHash)
+                        st.setLong(2, op.id)
+                        st.executeUpdate()
+                    }
+                    prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
+                        st.setLong(1, op.id)
+                        st.executeUpdate()
+                    }
+                }
+                is AccountOp.AddInvite -> prepare("INSERT OR IGNORE INTO invites (code_hash, role, expires_at, used_by, account_id) VALUES (?, ?, ?, NULL, ?)") { st ->
+                    st.setString(1, op.invite.codeHash)
+                    st.setString(2, op.invite.role.name)
+                    st.setLong(3, op.invite.expiresAt)
+                    val bound = op.invite.accountId
+                    if (bound == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, bound)
+                    st.executeUpdate()
+                }
+                is AccountOp.RevokeTokens -> prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
+                    st.setLong(1, op.id)
+                    st.executeUpdate()
+                }
+                is AccountOp.AddToken -> {
+                    prepare("DELETE FROM session_tokens WHERE expires_at <= ?") { st ->
+                        st.setLong(1, op.now)
+                        st.executeUpdate()
+                    }
+                    prepare("INSERT OR REPLACE INTO session_tokens (token_hash, account_id, expires_at) VALUES (?, ?, ?)") { st ->
+                        st.setString(1, op.tokenHash)
+                        st.setLong(2, op.accountId)
+                        st.setLong(3, op.expiresAt)
+                        st.executeUpdate()
+                    }
+                }
+                is AccountOp.RemoveToken -> prepare("DELETE FROM session_tokens WHERE token_hash = ?") { st ->
+                    st.setString(1, op.tokenHash)
+                    st.executeUpdate()
+                }
+                is AccountOp.AddRestriction -> prepare(
+                    "INSERT INTO restrictions (account_id, capability, until, reason, set_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                ) { st ->
+                    val r = op.restriction
+                    st.setLong(1, r.accountId)
+                    st.setString(2, r.capability)
+                    st.setObject(3, r.until)
+                    st.setString(4, r.reason)
+                    st.setObject(5, r.setBy)
+                    st.setLong(6, r.createdAt)
+                    st.executeUpdate()
+                    val id = scalar("SELECT last_insert_rowid()")
+                    results += { op.result.complete(id) }
+                }
+                is AccountOp.LiftRestriction -> prepare("UPDATE restrictions SET lifted_by = ?, lifted_at = ? WHERE id = ? AND lifted_at IS NULL") { st ->
+                    st.setObject(1, op.by)
+                    st.setLong(2, op.at)
+                    st.setLong(3, op.id)
+                    st.executeUpdate()
+                }
+                is AccountOp.UseInvite -> prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL") { st ->
+                    st.setLong(1, op.accountId)
+                    st.setString(2, op.codeHash)
+                    val used = st.executeUpdate() == 1
+                    results += { op.result.complete(used) }
+                }
+            }
+        }
+    }
+
+    private fun scalar(sql: String): Long = conn.createStatement().use { st -> st.executeQuery(sql).use { it.next(); it.getLong(1) } }
+
+    private fun writeWorld(b: Batch) {
         prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)") { st ->
             for ((k, v) in b.meta) {
                 st.setString(1, k)
@@ -181,6 +300,31 @@ class Database private constructor(val file: Path, private val conn: Connection)
     fun backupTo(target: Path) {
         Files.createDirectories(target.toAbsolutePath().parent)
         DriverManager.getConnection(url(file)).use { c -> c.createStatement().use { it.executeUpdate("backup to '${target.absolutePathString().replace("'", "''")}'") } }
+    }
+
+    /**
+     * A copy of this database at [target] with nothing personal in it (M6 design §8.4, D-163):
+     * `accounts`, `session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events`
+     * emptied, characters renamed `Player1`, `Player2`, ... by id and detached from accounts.
+     */
+    fun sanitizedCopy(target: Path): Path {
+        Files.deleteIfExists(target)
+        backupTo(target)
+        DriverManager.getConnection(url(target)).use { c ->
+            c.autoCommit = false
+            c.createStatement().use { st ->
+                for (t in listOf("accounts", "session_tokens", "invites", "restrictions", "diagnostics", "item_events")) st.executeUpdate("DELETE FROM $t")
+                // Two steps, so the new names never collide with old ones under UNIQUE.
+                st.executeUpdate("UPDATE players SET name = '#' || id, account_id = NULL")
+                st.executeUpdate(
+                    "UPDATE players SET name = 'Player' || (SELECT COUNT(*) FROM players p WHERE p.id <= players.id)",
+                )
+            }
+            c.commit()
+            c.autoCommit = true
+            c.createStatement().use { it.execute("VACUUM") }
+        }
+        return target
     }
 
     override fun close() = conn.close()

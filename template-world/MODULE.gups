@@ -6,4 +6,8 @@ module(
     # Minutes between routine checkpoints. A graceful shutdown or reload always saves, so a
     # longer interval only matters if the server crashes. Defaults to 30.
     checkpoint_minutes = 30,
+
+    # The room new characters start in. Without it they start at //zones/tutorial:gate, or
+    # in the first room by label if there is no tutorial.
+    # start_room = "//zones/tutorial:gate",
 )

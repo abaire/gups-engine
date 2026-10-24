@@ -133,16 +133,20 @@ internal fun World.processDeath(victim: Actor) {
     echo(room, "${victim.name.cap()} is DEAD!", victim)
     perceive("death", Channel.NOISE, room, victim)
     dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
-    if (killer != null) awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
+    // A debug mob is worth nothing, and everything it leaves is debug too (M6 design §4.2).
+    if (killer != null && !victim.debug) awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
 
-    val corpse = spawnItem(gups.core.model.Prototypes.CORPSE.label, ItemLocation.InRoom(room.id, victim.trackIndex))
+    val corpse = spawnItem(gups.core.model.Prototypes.CORPSE.label, ItemLocation.InRoom(room.id, victim.trackIndex), debug = victim.debug)
     corpse.nameOverride = "the corpse of ${victim.name}"
     corpse.decayAt = pulse + CORPSE_DECAY_PULSES
     val into = ItemLocation.Contained(corpse.id)
     when (victim) {
         is Mob -> {
-            for (item in victim.inventory + victim.equipment.values) moveItem(item, into)
-            for (rule in victim.proto.loot) if (rng.fraction() < rule.chance) spawnItem(rule.label, into, rule.count)
+            for (item in victim.inventory + victim.equipment.values) {
+                if (victim.debug) markDebug(item)
+                moveItem(item, into)
+            }
+            for (rule in victim.proto.loot) if (rng.fraction() < rule.chance) spawnItem(rule.label, into, rule.count, debug = victim.debug)
             removeActor(victim)
         }
         is Player -> {

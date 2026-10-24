@@ -41,6 +41,8 @@ class WorldConfig(
      * simulated. Off, every room is always simulated, as headless tests usually want (D-116).
      */
     val bubble: Boolean = false,
+    /** `--prod`: `@reload` is refused in favour of deploys (SPEC §1.4, M6 design §4.3). */
+    val production: Boolean = false,
 )
 
 /** 30 minutes of pulses (SPEC §5.11). */
@@ -126,6 +128,40 @@ class World(
 
     /** Receives each rules evaluation with its modifier chain, for `@trace rules` (SPEC §4.6, §5.13). */
     var onRules: ((Actor?, String) -> Unit)? = null
+
+    // ---- Operations (M6 design §4) -----------------------------------------------------------
+
+    /** Wall-clock milliseconds, for restrictions and audit times. */
+    var wallClock: () -> Long = System::currentTimeMillis
+
+    /** Where slow work runs and how its result comes back (see [later]); null runs it inline. */
+    var background: java.util.concurrent.Executor? = null
+    var post: ((gups.core.WorldControlEvent) -> Unit)? = null
+
+    /** Restrictions of every account, as loaded from the account store and kept by `@restrict` (M6 design §4.4). */
+    var restrictions: List<gups.core.Restriction> = emptyList()
+
+    /** Receives every instructor alert, for the server log (M6 design §4.5). */
+    var onAlert: ((String) -> Unit)? = null
+
+    /** The last minute of pulse durations, fed by the world loop. */
+    val pulseStats = PulseStats()
+
+    /** Input lines waiting for the world thread, as the world loop counts them. */
+    var queueDepth: () -> Int = { 0 }
+
+    /** Called by the world loop after each pulse with its duration in nanoseconds, for metrics (M6 design §7.1). */
+    var onPulse: ((Long) -> Unit)? = null
+
+    /** Production deploys (M6 design §7.2), when the server can run them. */
+    var deploys: Deploys? = null
+
+    // Alert rate limits, the engine-error window and step samples (M6 design §4.5).
+    internal val alertTimes = HashMap<String, Long>()
+    internal val ownerAlertTimes = HashMap<String, Long>()
+    internal val engineErrors = ArrayDeque<Long>()
+    internal val stepSamples = ArrayDeque<Pair<Long, Map<String, Long>>>()
+    internal var shutdownReason: String? = null
 
     internal var slotCache: List<String>? = null
 
@@ -255,6 +291,7 @@ class World(
         diagnosticLog += d
         onDiagnostic?.invoke(d)
         persistence.diagnostic(this, d)
+        alertFor(d)
     }
 
     /** Runs [block], logging an engine exception and aborting only that action (SPEC §6.4). */
@@ -280,10 +317,11 @@ class World(
         move: Int = 100,
         stats: Map<String, Int> = DEFAULT_STATS,
         index: Int = 0,
+        accountId: Long? = null,
     ): Player {
         require(players.none { it.name.equals(name, ignoreCase = true) }) { "A player named $name is already in the world" }
         val room = room(at)
-        val p = Player(allocateId(), name, room, index.coerceIn(0, room.trackSize - 1), recallRoom = at)
+        val p = Player(allocateId(), name, room, index.coerceIn(0, room.trackSize - 1), recallRoom = at, accountId = accountId)
         p.level = level
         p.baseStats.putAll(stats)
         p.hp = hp
@@ -397,6 +435,7 @@ class World(
         guarded("bubble maintenance") { maintainBubble() }
         flushImmediate()
         expireSessions()
+        shutdownWarnings()
         flushOutput()
         if (config.checkInvariants) {
             val violations = checkInvariants()
@@ -503,6 +542,7 @@ class World(
             if (at <= pulse && item.id in entities && isSimulated(item)) guarded("decay of $item") { decay(item) }
         }
         for (a in actorIndex.values) if (isSimulated(a)) updateEncumbrance(a)
+        expireDebugMobs()
         // Checked every world tick; broken entities stay out of the next checkpoint (SPEC §6.5).
         val broken = invariantViolations()
         if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))

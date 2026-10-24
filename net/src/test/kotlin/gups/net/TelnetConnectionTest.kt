@@ -129,4 +129,21 @@ class TelnetConnectionTest {
         assertEquals(listOf("ok" to false), p.lines)
         assertEquals(4, p.conn.errors)
     }
+
+    @Test
+    fun `password prompts turn the client's echo off and back on`() {
+        val p = Probe()
+        p.conn.start()
+        p.take()
+        assertEquals(0, p.conn.encodeEcho(true).size, "nothing for a client that never spoke telnet")
+        p.feed(IAC, 251, 31)
+        p.take()
+        assertContentEquals(bytes(IAC, 251, 1), p.conn.encodeEcho(true))
+        assertEquals(0, p.conn.encodeEcho(true).size, "already hidden")
+        p.feed(IAC, 253, 1)
+        assertEquals(emptyList(), p.take(), "DO ECHO accepted silently")
+        assertContentEquals(bytes(IAC, 252, 1), p.conn.encodeEcho(false))
+        p.feed(IAC, 254, 1)
+        assertEquals(emptyList(), p.take(), "DONT ECHO is never answered, so nothing loops")
+    }
 }

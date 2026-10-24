@@ -5,6 +5,7 @@ import gups.core.EngineInfo
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class CommandsTest {
     @Test
@@ -27,7 +28,7 @@ class CommandsTest {
 
     @Test
     fun `stub commands exit with not implemented`() {
-        val result = gupsCommand().test("serve --prod")
+        val result = gupsCommand().test("lint //zones/...")
         assertEquals(EXIT_NOT_IMPLEMENTED, result.statusCode)
         assertContains(result.stderr, "not implemented yet")
     }
@@ -57,8 +58,51 @@ class CommandsTest {
     }
 
     @Test
-    fun `deploy requires a commit`() {
-        assertEquals(1, gupsCommand().test("deploy").statusCode)
-        assertEquals(EXIT_NOT_IMPLEMENTED, gupsCommand().test("deploy --commit abc123").statusCode)
+    fun `deploy needs the admin token`() {
+        val noToken = gupsCommand().test("deploy --commit abc123")
+        assertEquals(1, noToken.statusCode)
+        assertContains(noToken.stderr, "needs its token")
+    }
+
+    @Test
+    fun `invite and import-roster work on the world's database`() {
+        val root = java.nio.file.Files.createTempDirectory("gups-accounts")
+        val roster = root.resolve("roster.csv").toFile().apply { writeText("login,role\nann,builder\nbob,\n") }
+        val first = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
+        assertEquals(0, first.statusCode, first.output)
+        val lines = first.stdout.trim().lines()
+        assertEquals("login,setup_code", lines[0])
+        assertEquals(listOf("ann", "bob"), lines.drop(1).map { it.substringBefore(',') })
+        assertContains(first.stderr, "2 accounts created, 0 updated, 0 unchanged")
+        val again = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
+        assertEquals("login,setup_code", again.stdout.trim())
+        assertContains(again.stderr, "0 accounts created, 0 updated, 2 unchanged")
+
+        roster.writeText("login\nX\n")
+        val bad = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
+        assertEquals(1, bad.statusCode)
+        assertContains(bad.stderr, "line 2: 'x'")
+
+        val invite = gupsCommand().test(listOf("invite", "--role", "Builder", "--days", "3", "--world", root.toString()))
+        assertEquals(0, invite.statusCode, invite.output)
+        assertTrue(Regex("[A-Z0-9]{5}-[A-Z0-9]{5}").matches(invite.stdout.trim()), invite.stdout)
+        assertEquals(1, gupsCommand().test(listOf("invite", "--role", "wizard", "--world", root.toString())).statusCode)
+    }
+
+    @Test
+    fun `serve --prod checks its flags and configuration`() {
+        val world = System.getProperty("gups.templateWorld")
+        val noTelnet = gupsCommand().test(listOf("serve", "--prod", "--world", world))
+        assertEquals(1, noTelnet.statusCode)
+        assertContains(noTelnet.stderr, "--telnet :4000")
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--port", "4000")).stderr, "--port is for --dev")
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--self-signed")).stderr, "--self-signed needs --telnet-tls or --https")
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet-tls", ":0")).stderr, "TLS needs --tls-cert and --tls-key")
+        assertContains(gupsCommand().test(listOf("serve", "--dev", "--telnet", ":4000")).stderr, "are for --prod")
+        val cfg = java.nio.file.Files.createTempFile("server", ".gups").toFile().apply { writeText("server(telnet = \":4000\", colour = 1)\n") }
+        assertContains(gupsCommand().test(listOf("serve", "--prod", "--config", cfg.path)).stderr, "unexpected argument 'colour'")
+        assertEquals("0.0.0.0" to 4000, parseAddress(":4000"))
+        assertEquals("::1" to 4001, parseAddress("[::1]:4001"))
+        assertEquals("127.0.0.1" to 0, parseAddress("127.0.0.1:0"))
     }
 }

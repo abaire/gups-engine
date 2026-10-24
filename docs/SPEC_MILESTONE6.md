@@ -448,8 +448,15 @@ only the packages a client supports. Field names are lowercase.
 - HTTP login and lockout.
 - Token expiry and revocation close live sockets.
 - A frame-level session through the WebSocket.
-- A headless browser test on Linux CI only, using Selenium's Java bindings with headless
-  Firefox (no Node), that logs in, moves and sees vitals.
+- A headless browser test using Selenium's Java bindings with headless Firefox (no Node),
+  that logs in, moves and sees vitals.
+  - **Where it runs:** on Linux x64 CI only, where the runners have Firefox. It runs when
+    `CI=true` on Linux with `os.arch` `amd64` or `x86_64`, and is skipped elsewhere, including
+    the Linux arm64 and macOS runners.
+  - **Locally:** `./gradlew :cli:test -Dgups.browserTest=true` runs it on any machine with
+    Firefox.
+  - **Driver:** Selenium Manager fetches geckodriver, so neither the build nor CI installs
+    one.
 
 ### 6.4 Settled questions
 

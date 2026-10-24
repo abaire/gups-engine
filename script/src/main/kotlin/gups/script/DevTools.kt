@@ -9,6 +9,9 @@ import gups.core.world.FastCommand
 import gups.core.world.World
 import gups.core.world.findActor
 import gups.core.world.findItem
+import gups.core.world.gmcp
+import gups.core.world.packageOf
+import gups.core.world.refuseRestricted
 import gups.core.world.send
 import gups.core.world.session
 
@@ -62,19 +65,34 @@ class DevTools private constructor(private val world: World, private val host: S
                 subs.remove(sub.player)
                 continue
             }
-            if (!sub.filter.matches(e)) continue
+            if (!sub.filter.matches(e) || !visible(sub.player, e)) continue
             if (sub.pulse != e.pulse) {
-                if (sub.dropped > 0) world.send(sub.player, "[trace] ... ${sub.dropped} more lines at pulse ${sub.pulse}")
+                if (sub.dropped > 0) line(sub.player, "... ${sub.dropped} more lines at pulse ${sub.pulse}")
                 sub.pulse = e.pulse
                 sub.sent = 0
                 sub.dropped = 0
             }
-            if (sub.sent++ < TRACE_LINES_PER_PULSE) world.send(sub.player, "[trace] ${e.text}") else sub.dropped++
+            if (sub.sent++ < TRACE_LINES_PER_PULSE) line(sub.player, e.text) else sub.dropped++
         }
         if (subs.isEmpty()) {
             host.tracer = previous
             world.onRules = null
         }
+    }
+
+    /**
+     * Builders see only their own packages' events, and only their own character's rules lines
+     * (M6 design §4.2, SPEC §5.13). Instructors see everything.
+     */
+    private fun visible(p: Player, e: TraceEvent): Boolean = when {
+        p.role.atLeast(Role.INSTRUCTOR) -> true
+        e.hook == RULES || e.hook.startsWith("rules.") || e.hook.startsWith("modifier ") -> e.owner == p.id
+        else -> p.owns(e.pkg)
+    }
+
+    /** One trace line: `Gups.Trace` when the client supports it, else a `[trace]` text line (M6 design §5.2). */
+    private fun line(p: Player, text: String) {
+        if (!world.gmcp(p, "Gups.Trace", mapOf("line" to text))) world.send(p, "[trace] $text")
     }
 
     /** A rules chain line from the world, traced like a script event. */
@@ -83,14 +101,21 @@ class DevTools private constructor(private val world: World, private val host: S
 
     private fun trace(c: CommandCall) {
         val p = c.actor as? Player ?: return
+        if (world.refuseRestricted(p, "trace")) return
         val words = c.args.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
         val filter: Filter = when (words.firstOrNull()?.lowercase()) {
             null, "all", "on" -> Filter.All
-            "zone" -> Filter.Zone(p.room.label.pkg)
+            "zone" -> {
+                val pkg = words.getOrNull(1)?.removePrefix("//") ?: p.room.label.pkg
+                if (!p.owns(pkg)) return world.send(p, "That isn't one of your packages.")
+                Filter.Zone(pkg)
+            }
             "entity" -> {
                 val word = words.drop(1).joinToString(" ").ifEmpty { return world.send(p, "Trace which entity?") }
                 val e = if (word == "here") p.room else world.findActor(p, word) ?: world.findItem(p, word, inventory = true, ground = true)
-                Filter.Owner((e ?: return world.send(p, "You don't see that here.")).id)
+                val target = e ?: return world.send(p, "You don't see that here.")
+                if (target !== p && world.packageOf(target)?.let(p::owns) != true) return world.send(p, "That isn't one of your packages.")
+                Filter.Owner(target.id)
             }
             "hook" -> Filter.Hook(words.getOrNull(1) ?: return world.send(p, "Trace which hook? For example: @trace hook on_enter"))
             "rules" -> Filter.Rules
@@ -98,7 +123,7 @@ class DevTools private constructor(private val world: World, private val host: S
                 subs.remove(p)?.let { if (it.dropped > 0) world.send(p, "[trace] ... ${it.dropped} more lines at pulse ${it.pulse}") }
                 return world.send(p, "Tracing off.")
             }
-            else -> return world.send(p, "Usage: @trace [all|zone|entity <target>|hook <name>|rules|off]")
+            else -> return world.send(p, "Usage: @trace [all|zone [package]|entity <target>|hook <name>|rules|off]")
         }
         subs[p] = Sub(p, p.session ?: return, filter)
         host.tracer = ::emit

@@ -1,5 +1,6 @@
 package gups.persist
 
+import gups.core.AccountStore
 import gups.core.EntityId
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
@@ -11,7 +12,9 @@ import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
+import gups.core.world.ItemHistory
 import gups.core.world.Persistence
+import gups.core.world.SavedCharacter
 import gups.core.world.World
 import gups.core.world.bindSpawn
 import gups.core.world.clearInputs
@@ -52,7 +55,14 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     private var held: Batch? = null
     private var alerted = false
 
+    /**
+     * The course repository commit the live world was loaded from (`meta.world_commit`, M6
+     * design §7.2), saved with every checkpoint. Set by deploys and at first startup.
+     */
+    @Volatile var worldCommit: String? = null
+
     init {
+        worldCommit = db.meta()["world_commit"]
         db.entityRows().forEach { entityRows[it.id] = it }
         db.playerRows().forEach { playerRows[it.id] = it }
         zoneRows.putAll(db.zoneStates())
@@ -134,10 +144,15 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         val placed = placeItems(world, world0.filter { it.kind == "item" }, tombstones = false, deleted, notes)
         restored += placed.size
         for ((pkg, json) in zoneRows) {
-            if (json.isEmpty() || pkg !in world.protos.zones) continue
+            if (json.isEmpty()) continue
+            val zone = pkg in world.protos.zones
+            // Non-zone packages (libraries, rules) keep a row only for their quarantine (D-146).
+            if (!zone && pkg !in world.scripts.packages) continue
             val z = JSON.decodeFromString(ZonePayload.serializer(), json)
-            z.resetAt?.let { world.setZoneReset(pkg, it) }
-            for (r in z.respawns) world.roomOrNull(Label(r.room))?.let { world.setRespawn(it, r.rule, r.at) }
+            if (zone) {
+                z.resetAt?.let { world.setZoneReset(pkg, it) }
+                for (r in z.respawns) world.roomOrNull(Label(r.room))?.let { world.setRespawn(it, r.rule, r.at) }
+            }
             if (z.quarantined) world.scripts.quarantine(world, pkg, "as it was at the last checkpoint")
         }
         world.fillMissingSpawns()
@@ -179,9 +194,11 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         b.meta["pulse"] = world.pulse.toString()
         b.meta["next_entity_id"] = nextId.toString()
         b.meta["next_handle"] = nextHandle.toString()
+        worldCommit?.let { b.meta["world_commit"] = it }
         val excluded = world.checkpointExclusions
         for (e in world.allEntities) {
-            if (!e.dirty || e.id in excluded) continue
+            // Debug spawns are never saved (M6 design §4.2).
+            if (!e.dirty || e.id in excluded || e.debug) continue
             if (e is Player) {
                 world.encodePlayer(e).also { b.players[it.id] = it; playerRows[it.id] = it }
             } else {
@@ -246,7 +263,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         val resets = world.zoneResetDeadlines()
         val respawns = world.respawnDeadlines()
         val quarantined = world.scripts.quarantinedPackages
-        return world.protos.zones.keys.associateWith { pkg ->
+        return (world.protos.zones.keys + quarantined + zoneRows.keys.filter { it.isNotEmpty() && zoneRows[it]!!.isNotEmpty() }).associateWith { pkg ->
             JSON.encodeToString(
                 ZonePayload.serializer(),
                 ZonePayload(
@@ -255,6 +272,45 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
                     respawns = respawns.filterKeys { it.first.pkg == pkg }.map { (k, at) -> RespawnJson(k.first.v, k.second, at) },
                 ),
             )
+        }
+    }
+
+    override fun characters(accountId: Long): List<String> =
+        playerRows.values.filter { it.accountId == accountId }.sortedBy { it.id }.map { it.name }
+
+    override fun savedCharacter(name: String): SavedCharacter? =
+        playerRows.values.firstOrNull { it.name.equals(name, ignoreCase = true) }?.let { SavedCharacter(it.name, it.accountId) }
+
+    private val accountStore = lazy { SqliteAccountStore.through(db.file, writer) }
+
+    /** Account storage over this database; account writes join the checkpoint writer's queue (D-128). */
+    override val accounts: AccountStore get() = accountStore.value
+
+    override val backlog: Int get() = writer.backlog
+
+    /** Waits for what is queued, then takes a `manual` snapshot (`@snapshot`). */
+    override fun backup(): String = backup(Backups.Kind.MANUAL).toString()
+
+    /** Waits for what is queued, then takes a snapshot of [kind], such as `predeploy` (M6 design §7.2). Blocks. */
+    fun backup(kind: Backups.Kind): Path {
+        writer.flush()
+        return Backups(db).snapshot(kind)
+    }
+
+    /** A sanitized copy of the database at [target], for the CI migration check (M6 design §7.1, §8.4). Blocks. */
+    fun sanitizedCopy(target: Path): Path {
+        writer.flush()
+        return db.sanitizedCopy(target)
+    }
+
+    private val reads = lazy { readOnlyConnection(db.file) }
+
+    override fun itemHistory(itemId: Long): List<ItemHistory> = synchronized(reads) {
+        reads.value.prepareStatement("SELECT pulse, wall_time, from_json, to_json, cause FROM item_events WHERE item_id = ? ORDER BY id").use { st ->
+            st.setLong(1, itemId)
+            st.executeQuery().use { rs ->
+                buildList { while (rs.next()) add(ItemHistory(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getString(5))) }
+            }
         }
     }
 
@@ -335,6 +391,8 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     fun close(timeoutMs: Long = 30_000): Boolean {
         held?.let { writer.submit(combined(Batch(false, "close", it.firstPulse))) }
         val ok = writer.close(timeoutMs)
+        if (accountStore.isInitialized()) accountStore.value.close()
+        if (reads.isInitialized()) synchronized(reads) { reads.value.close() }
         db.close()
         return ok
     }

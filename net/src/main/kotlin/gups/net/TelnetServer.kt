@@ -5,24 +5,25 @@ import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.WorldInbox
-import io.ktor.network.selector.SelectorManager
-import io.ktor.network.sockets.InetSocketAddress
-import io.ktor.network.sockets.ServerSocket
-import io.ktor.network.sockets.Socket
-import io.ktor.network.sockets.aSocket
-import io.ktor.network.sockets.openReadChannel
-import io.ktor.network.sockets.openWriteChannel
-import io.ktor.network.sockets.toJavaAddress
-import io.ktor.utils.io.readAvailable
-import io.ktor.utils.io.writeFully
-import kotlinx.coroutines.CoroutineScope
+import io.netty.bootstrap.ServerBootstrap
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
+import io.netty.channel.Channel
+import io.netty.channel.ChannelFutureListener
+import io.netty.channel.ChannelHandlerContext
+import io.netty.channel.ChannelInboundHandlerAdapter
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.ChannelOption
+import io.netty.channel.EventLoopGroup
+import io.netty.channel.MultiThreadIoEventLoopGroup
+import io.netty.channel.nio.NioIoHandler
+import io.netty.channel.socket.SocketChannel
+import io.netty.channel.socket.nio.NioServerSocketChannel
+import io.netty.handler.ssl.SslHandshakeCompletionEvent
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
@@ -30,9 +31,11 @@ import java.util.concurrent.atomic.AtomicLong
 const val OUTPUT_BUFFER_MAX = 256 * 1024
 
 /**
- * The raw telnet listener (SPEC §4.10): `--dev` binds it to `127.0.0.1:4000`. All socket I/O
- * runs on `Dispatchers.IO`; the world only ever sees [ClientInputEvent]s and per-session
- * [OutputSink]s that never block it (SPEC §2.5).
+ * A telnet listener on Netty (SPEC §4.10, M6 design §2.5): raw telnet, or telnet over TLS when
+ * [tls] is set, the two sharing one pipeline with an optional `SslHandler` in front. All
+ * socket I/O runs on Netty's event loops; the world only ever sees [ClientInputEvent]s and
+ * per-session [OutputSink]s that never block it (SPEC §2.5). Option negotiation and framing
+ * stay in [TelnetConnection], byte in and byte out.
  */
 class TelnetServer(
     private val inbox: WorldInbox,
@@ -40,108 +43,131 @@ class TelnetServer(
     private val port: Int = 4000,
     /** Shared with other listeners so session ids never collide. */
     private val sessionIds: AtomicLong = AtomicLong(1),
+    /** Telnet over TLS (M6 design §5.1); null serves raw telnet. */
+    private val tls: ServerTls? = null,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var selector: SelectorManager? = null
-    private var server: ServerSocket? = null
+    private var boss: EventLoopGroup? = null
+    private var workers: EventLoopGroup? = null
+    private var channel: Channel? = null
+
+    /** `telnet` or `tls`, as sessions report their transport. */
+    val transport: String get() = if (tls != null) "tls" else "telnet"
 
     /** Binds and starts accepting. Returns the bound port (useful with port 0). */
-    suspend fun start(): Int {
-        val sel = SelectorManager(Dispatchers.IO)
-        selector = sel
-        val s = aSocket(sel).tcp().bind(host, port)
-        server = s
-        scope.launch {
-            while (isActive) {
-                val socket = try {
-                    s.accept()
-                } catch (_: Exception) {
-                    break
-                }
-                launch { serve(socket) }
-            }
-        }
-        return (s.localAddress as InetSocketAddress).port
+    suspend fun start(): Int = withContext(Dispatchers.IO) {
+        val b = MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory()).also { boss = it }
+        val w = MultiThreadIoEventLoopGroup(NioIoHandler.newFactory()).also { workers = it }
+        val bound = ServerBootstrap()
+            .group(b, w)
+            .channel(NioServerSocketChannel::class.java)
+            .childOption(ChannelOption.TCP_NODELAY, true)
+            .childHandler(
+                object : ChannelInitializer<SocketChannel>() {
+                    override fun initChannel(ch: SocketChannel) {
+                        tls?.let { ch.pipeline().addLast("tls", it.context().newHandler(ch.alloc())) }
+                        ch.pipeline().addLast("telnet", Connection())
+                    }
+                },
+            )
+            .bind(host, port).sync().channel()
+        channel = bound
+        (bound.localAddress() as InetSocketAddress).port
     }
 
     fun stop() {
-        runCatching { server?.close() }
-        scope.cancel()
-        runCatching { selector?.close() }
+        runCatching { channel?.close()?.syncUninterruptibly() }
+        for (g in listOfNotNull(boss, workers)) runCatching { g.shutdownGracefully(0, 1, TimeUnit.SECONDS).syncUninterruptibly() }
     }
 
-    private suspend fun serve(socket: Socket) {
-        val id = SessionId(sessionIds.getAndIncrement())
-        val input = socket.openReadChannel()
-        val output = socket.openWriteChannel(autoFlush = false)
-        val outbox = Channel<ByteArray>(Channel.UNLIMITED)
-        val buffered = AtomicLong()
-        val closed = AtomicBoolean(false)
-        val enqueue = { bytes: ByteArray ->
-            if (!closed.get()) {
-                if (buffered.addAndGet(bytes.size.toLong()) > OUTPUT_BUFFER_MAX) {
-                    // A slow client: drop it; the character goes link-dead (SPEC §6.4).
-                    closed.set(true)
-                    outbox.close()
+    /** One client: bridges Netty's bytes to a [TelnetConnection] and a world session. */
+    private inner class Connection : ChannelInboundHandlerAdapter() {
+        private val id = SessionId(sessionIds.getAndIncrement())
+        private lateinit var ch: Channel
+        private val buffered = AtomicLong()
+        private val closed = AtomicBoolean(false)
+        private var begun = false
+        private val conn = TelnetConnection { enqueue(it) }
+
+        private fun enqueue(bytes: ByteArray) {
+            if (closed.get() || bytes.isEmpty()) return
+            if (buffered.addAndGet(bytes.size.toLong()) > OUTPUT_BUFFER_MAX) {
+                // A slow client: drop it; the character goes link-dead (SPEC §6.4).
+                if (closed.compareAndSet(false, true)) {
+                    ch.close()
                     inbox.submit(WorldControlEvent.Disconnect(id))
-                } else {
-                    outbox.trySend(bytes)
                 }
+                return
             }
+            ch.writeAndFlush(Unpooled.wrappedBuffer(bytes)).addListener { buffered.addAndGet(-bytes.size.toLong()) }
         }
-        val conn = TelnetConnection { enqueue(it) }
-        val sink = object : OutputSink {
+
+        private val sink = object : OutputSink {
             override fun send(text: String) = enqueue(conn.encodeText(text))
 
             override fun prompt(text: String) = enqueue(conn.encodePrompt(text))
 
+            override fun hideInput(hidden: Boolean) = enqueue(conn.encodeEcho(hidden))
+
+            override fun gmcp(pkg: String, data: Any?) {
+                if (conn.wantsGmcp(pkg)) enqueue(conn.encodeGmcp(pkg, data))
+            }
+
+            override fun wantsGmcp(pkg: String): Boolean = conn.wantsGmcp(pkg)
+
             override fun close(reason: String) {
+                if (closed.get()) return
                 enqueue(conn.encodeText(reason + "\n"))
-                if (closed.compareAndSet(false, true)) outbox.close()
+                if (closed.compareAndSet(false, true)) ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE)
             }
         }
-        val writer: Job = scope.launch {
+
+        override fun channelActive(ctx: ChannelHandlerContext) {
+            ch = ctx.channel()
+            // Over TLS the session starts once the handshake succeeds, so failed handshakes make none.
+            if (tls == null) begin()
+            ctx.fireChannelActive()
+        }
+
+        override fun userEventTriggered(ctx: ChannelHandlerContext, evt: Any) {
+            if (evt is SslHandshakeCompletionEvent) {
+                if (evt.isSuccess) begin() else ctx.close()
+            }
+            ctx.fireUserEventTriggered(evt)
+        }
+
+        private fun begin() {
+            if (begun) return
+            begun = true
+            conn.start()
+            val remote = (ch.remoteAddress() as? InetSocketAddress)?.address?.hostAddress ?: "unknown"
+            inbox.submit(WorldControlEvent.Connect(id, sink, remote, transport))
+        }
+
+        override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
+            val buf = msg as ByteBuf
             try {
-                for (first in outbox) {
-                    // Write everything queued so far, then flush once.
-                    var bytes: ByteArray? = first
-                    while (bytes != null) {
-                        output.writeFully(bytes)
-                        buffered.addAndGet(-bytes.size.toLong())
-                        bytes = outbox.tryReceive().getOrNull()
-                    }
-                    output.flush()
-                }
-            } catch (_: Exception) {
-                // The peer went away; the reader notices too.
-            } finally {
-                runCatching { socket.close() }
-            }
-        }
-        conn.start()
-        val remote = (socket.remoteAddress.toJavaAddress() as? java.net.InetSocketAddress)?.address?.hostAddress ?: "unknown"
-        inbox.submit(WorldControlEvent.Connect(id, sink, remote, "telnet"))
-        val buf = ByteArray(4096)
-        try {
-            while (!closed.get()) {
-                val n = input.readAvailable(buf, 0, buf.size)
-                if (n < 0) break
-                if (n == 0) continue
-                conn.receive(buf.copyOf(n)) { line, truncated ->
+                if (!begun || closed.get()) return
+                val bytes = ByteArray(buf.readableBytes()).also(buf::readBytes)
+                conn.receive(bytes) { line, truncated ->
                     if (truncated) sink.send("Your line was longer than $MAX_LINE_BYTES bytes and was cut short.\n")
                     inbox.submit(ClientInputEvent(id, line, System.nanoTime()))
                 }
-                if (conn.errors >= MAX_PROTOCOL_ERRORS) {
-                    sink.close("Too many malformed telnet sequences.")
-                    break
-                }
+                if (conn.errors >= MAX_PROTOCOL_ERRORS) sink.close("Too many malformed telnet sequences.")
+            } finally {
+                buf.release()
             }
-        } catch (_: Exception) {
-            // Connection reset and the like: treated as a dropped link.
-        } finally {
-            inbox.submit(WorldControlEvent.Disconnect(id))
-            if (closed.compareAndSet(false, true)) outbox.close()
-            writer.join()
+        }
+
+        override fun channelInactive(ctx: ChannelHandlerContext) {
+            closed.set(true)
+            // A dropped link makes the character link-dead; after a world-side close it is a no-op.
+            if (begun) inbox.submit(WorldControlEvent.Disconnect(id))
+            ctx.fireChannelInactive()
+        }
+
+        override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
+            // Connection resets, bad TLS records and the like: treated as a dropped link.
+            ctx.close()
         }
     }
 }

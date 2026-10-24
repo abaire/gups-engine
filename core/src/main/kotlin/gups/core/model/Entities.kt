@@ -22,6 +22,9 @@ sealed class Entity(val id: EntityId, val protoLabel: Label) {
     val anchorReasons: MutableSet<String> = linkedSetOf()
     var dirty: Boolean = true
 
+    /** Spawned by a builder's `@spawn`, or dropped by such a mob: never persisted (M6 design §4.2). */
+    var debug: Boolean = false
+
     abstract val name: String
 
     override fun toString(): String = "$name$id"
@@ -202,7 +205,8 @@ class Player(
     room: Room,
     trackIndex: Int,
     var recallRoom: Label,
-    val accountId: Long? = null,
+    /** The owning account (SPEC §3.6 `players.account_id`); null for characters without one. */
+    var accountId: Long? = null,
 ) : Actor(id, Prototypes.PLAYER, room, trackIndex) {
     override val keywords: List<String> = listOf(name.lowercase())
     override val isPlayer: Boolean get() = true
@@ -220,6 +224,12 @@ class Player(
 
     /** The account's role, which gates builder and instructor commands (SPEC §3.5, §4.9). */
     var role: Role = Role.PLAYER
+
+    /** The packages a builder may work on (M6 design §4.1); ignored for instructors and admins. */
+    var scope: Set<String> = emptySet()
+
+    /** True if this player may use builder tools on package [pkg]: an instructor, or a builder whose scope has it. */
+    fun owns(pkg: String): Boolean = role.atLeast(Role.INSTRUCTOR) || (role.atLeast(Role.BUILDER) && pkg in scope)
 }
 
 class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Actor(id, proto.label, room, trackIndex) {
@@ -243,6 +253,12 @@ class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Acto
         internal set
 
     internal var spawnedBy: SpawnState? = null
+
+    /** For a debug mob: the player who spawned it, and the pulse it despawns at (M6 design §4.2). */
+    var debugOwner: EntityId? = null
+        internal set
+    var debugUntil: Long? = null
+        internal set
 }
 
 sealed interface ItemLocation {
@@ -276,9 +292,6 @@ class Item(id: EntityId, var proto: ItemProto, location: ItemLocation, var count
     val weight: Int get() = proto.weight * count + contentsIndex.values.sumOf { it.weight }
     val container: ContainerState? = proto.container?.let(::ContainerState)
     var decayAt: Long? = null
-
-    /** Builder-spawned items are never persisted. */
-    var debug: Boolean = false
 
     /** For a tombstone: the payload the item was last saved with, kept as is (SPEC §3.4). */
     var savedPayload: String? = null

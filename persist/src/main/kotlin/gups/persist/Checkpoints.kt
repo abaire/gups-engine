@@ -1,5 +1,9 @@
 package gups.persist
 
+import gups.core.Account
+import gups.core.Invite
+import gups.core.Restriction
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -20,14 +24,54 @@ class Batch(
     val zones: LinkedHashMap<String, String> = LinkedHashMap(),
     val events: MutableList<ItemEventRow> = mutableListOf(),
     val diagnostics: MutableList<DiagnosticRow> = mutableListOf(),
+    /** Account changes, written before the world rows in the same transaction (D-128). */
+    val accounts: MutableList<AccountOp> = mutableListOf(),
 ) {
+    /** Completed once this batch is committed. */
+    val done: CompletableFuture<Unit> = CompletableFuture()
+
     internal fun merge(next: Batch) {
+        require(next.accounts.isEmpty()) { "account batches never merge" }
         meta.putAll(next.meta)
         entities.putAll(next.entities)
         players.putAll(next.players)
         zones.putAll(next.zones)
         events += next.events
         diagnostics += next.diagnostics
+    }
+}
+
+/** One account, password or invite change (SPEC §3.6, M6 design §2.3). */
+sealed interface AccountOp {
+    /** Inserts [account] unless its login is taken; [result] gets the new id, or null. */
+    class Create(val account: Account) : AccountOp {
+        val result: CompletableFuture<Long?> = CompletableFuture()
+    }
+
+    class Update(val account: Account) : AccountOp
+
+    /** Also revokes the account's session tokens. */
+    class SetPassword(val id: Long, val pwHash: String?) : AccountOp
+
+    class AddInvite(val invite: Invite) : AccountOp
+
+    class RevokeTokens(val id: Long) : AccountOp
+
+    /** Also deletes tokens that expired before [now]. */
+    class AddToken(val tokenHash: String, val accountId: Long, val expiresAt: Long, val now: Long) : AccountOp
+
+    class RemoveToken(val tokenHash: String) : AccountOp
+
+    /** [result] gets the new restriction's id. */
+    class AddRestriction(val restriction: Restriction) : AccountOp {
+        val result: CompletableFuture<Long> = CompletableFuture()
+    }
+
+    class LiftRestriction(val id: Long, val by: Long?, val at: Long) : AccountOp
+
+    /** [result] is false if the invite was already used. */
+    class UseInvite(val codeHash: String, val accountId: Long) : AccountOp {
+        val result: CompletableFuture<Boolean> = CompletableFuture()
     }
 }
 
@@ -62,8 +106,8 @@ class CheckpointWriter(
     @Volatile var committed: Long = 0
         private set
 
-    /** Called after each commit with the committed batch, on the writer thread. */
-    @Volatile var onCommit: ((Batch) -> Unit)? = null
+    /** Called after each commit with the committed batch and how long it took in nanoseconds, on the writer thread. */
+    @Volatile var onCommit: ((Batch, Long) -> Unit)? = null
 
     private val thread = Thread(::loop, "gups-checkpoint-writer").apply {
         isDaemon = true
@@ -77,8 +121,8 @@ class CheckpointWriter(
         changed.signalAll()
     }
 
-    /** The capture pulse of the oldest change not yet committed, or null if all is written. */
-    val oldestPending: Long? get() = lock.withLock { queue.minOfOrNull { it.firstPulse } }
+    /** The capture pulse of the oldest world change not yet committed, or null if all is written. */
+    val oldestPending: Long? get() = lock.withLock { queue.filter { it.accounts.isEmpty() }.minOfOrNull { it.firstPulse } }
 
     /** Batches waiting, including one being written. */
     val backlog: Int get() = lock.withLock { queue.size }
@@ -115,6 +159,7 @@ class CheckpointWriter(
                 if (queue.isEmpty()) return
                 queue.first().also { inFlight = it }
             }
+            val started = System.nanoTime()
             try {
                 write(b)
                 lock.withLock {
@@ -126,7 +171,7 @@ class CheckpointWriter(
                 healthy = true
                 lastError = null
                 backoff = 50L
-                onCommit?.invoke(b)
+                onCommit?.invoke(b, System.nanoTime() - started)
             } catch (e: Exception) {
                 lock.withLock { inFlight = null }
                 if (healthy) log("checkpoint write failed, will retry: $e")

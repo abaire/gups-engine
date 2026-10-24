@@ -19,6 +19,7 @@ import gups.core.model.SkillProto
 fun World.say(speaker: Actor, text: String) {
     send(speaker, "You say, '$text'")
     echo(speaker.room, "${speaker.name.cap()} says, '$text'", speaker)
+    channel("say", speaker, text, speaker.room.actors)
     dispatch(HookName.ON_SAY, null, speaker.room, HookContext(actor = speaker, text = text))
     perceive("say", Channel.SOUND, speaker.room, speaker, text)
 }

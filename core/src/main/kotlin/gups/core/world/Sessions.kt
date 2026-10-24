@@ -19,12 +19,18 @@ class Session internal constructor(
     /** Peer address, for example `127.0.0.1`. */
     val remote: String = "local",
     val transport: String = "local",
+    /** The account a web session token already proved, if any (M6 design §6.1). */
+    val account: Long? = null,
 ) {
     var player: Player? = null
         internal set
     internal val bucket = TokenBucket(startNanos = connectedNanos)
     internal val drops = ArrayDeque<Long>()
     internal val out = StringBuilder()
+
+    /** The last state payload sent per GMCP package, and events waiting for the next flush (M6 design §5.2). */
+    internal val gmcpLast = HashMap<String, Any?>()
+    internal val gmcpOut = mutableListOf<Pair<String, Any?>>()
 }
 
 private const val DROP_WINDOW_NANOS = 60_000_000_000L
@@ -36,18 +42,27 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
     when (event) {
         is WorldControlEvent.Connect -> {
             require(event.session !in sessions) { "${event.session} is already connected" }
-            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport)
+            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport, event.account)
             sessions[event.session] = s
             login?.connected(this, s)
         }
         is WorldControlEvent.Disconnect -> disconnect(event.session)
-        is WorldControlEvent.Shutdown -> {
-            shutdownAt = pulse + event.delayPulses
-            for (p in players) send(p, "The world is shutting down: ${event.reason}")
-        }
+        is WorldControlEvent.Shutdown -> scheduleShutdown(event.delayPulses, event.reason)
         is WorldControlEvent.Reload -> reload(event.packages)
-        // Deploy needs the deploy pipeline (M6).
-        is WorldControlEvent.Deploy -> diagnose("control", "$event is not supported by this engine build")
+        is WorldControlEvent.Deploy -> {
+            val d = deploys ?: return diagnose("control", "$event: this server can't deploy")
+            d.start(event.commit.ifEmpty { null }, {}) {}
+        }
+        is WorldControlEvent.AuthResult -> {
+            // A session that closed meanwhile simply drops its result.
+            val s = sessions[event.session] ?: return
+            login?.completed(this, s, event.outcome)
+            flush(s)
+        }
+        is WorldControlEvent.Task -> {
+            guarded("background task") { event.run(this) }
+            flushOutput()
+        }
     }
 }
 
@@ -57,6 +72,7 @@ fun World.attach(session: SessionId, player: Player) {
     require(player.inWorld) { "$player is not in the world" }
     player.session?.let { old -> if (old != session) sessions[old]?.player = null }
     s.player = player
+    s.gmcpLast.clear()
     player.session = session
     player.linkDeadSince = null
     player.lastInputPulse = pulse
@@ -94,6 +110,7 @@ fun World.handle(event: ClientInputEvent) {
 /** The connection dropped: the character goes link-dead and keeps auto-attacking (SPEC §5.12). */
 fun World.disconnect(id: SessionId) {
     val s = sessions.remove(id) ?: return
+    login?.disconnected(this, id)
     val p = s.player ?: return
     if (p.session != id) return
     p.session = null
@@ -116,6 +133,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
     }
     player.session = null
     disengageAll(player)
+    despawnDebugMobs(player)
     // Logout saves the character and everything it carries, at once (SPEC §5.11).
     player.dirty = true
     for (item in player.inventory + player.equipment.values) markDirtyTree(item)
@@ -128,6 +146,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
 
 /** Link-dead and idle auto-quit (SPEC §5.12). */
 internal fun World.expireSessions() {
+    login?.let { guarded("login timeouts") { it.pulse(this) } }
     for (p in players) {
         val dead = p.linkDeadSince
         when {
@@ -152,12 +171,16 @@ fun World.echo(room: Room, text: String, vararg exclude: Actor) {
     for (a in room.actorIndex.values) if (exclude.none { it === a }) send(a, text)
 }
 
-internal fun World.flush(s: Session) {
-    if (s.out.isEmpty()) return
+/** Sends [s] its queued output, then its prompt if it is playing. */
+fun World.flush(s: Session) {
+    if (s.out.isEmpty() && s.gmcpOut.isEmpty()) return
     val text = s.out.toString()
     s.out.setLength(0)
-    s.sink.send(text)
-    s.player?.let { s.sink.prompt(promptFor(it)) }
+    if (text.isNotEmpty()) s.sink.send(text)
+    // GMCP follows the text it goes with (M6 design §5.2).
+    for ((pkg, data) in s.gmcpOut) s.sink.gmcp(pkg, data)
+    s.gmcpOut.clear()
+    if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
 }
 
 /** The prompt shown after each burst of output (D-083). */
@@ -174,6 +197,7 @@ fun World.closeSession(s: Session, reason: String) {
     s.player?.let { p -> if (p.session == s.id) p.session = null }
     s.player = null
     sessions.remove(s.id)
+    login?.disconnected(this, s.id)
     s.sink.close(reason)
 }
 
@@ -197,9 +221,12 @@ internal fun World.reload(packages: List<String>) {
     flushOutput()
 }
 
-/** Phase 7 (SPEC §5.1). GMCP deltas join this flush in M6. The harness also flushes after input. */
+/** Phase 7 (SPEC §5.1): text, then GMCP events and state deltas. The harness also flushes after input. */
 fun World.flushOutput() {
-    for (s in sessions.values.toList()) flush(s)
+    for (s in sessions.values.toList()) {
+        guarded("GMCP for ${s.id}") { gmcpDeltas(s) }
+        flush(s)
+    }
 }
 
 internal fun String.cap(): String = replaceFirstChar { it.uppercase() }

@@ -71,6 +71,7 @@ class DevToolsTest {
         val f = fixture()
         val p = f.player()
         p.role = Role.BUILDER
+        p.scope = setOf(p.room.label.pkg)
         f.input(p, "@trace hook command")
         f.input(p, "chat")
         f.run()
@@ -85,5 +86,43 @@ class DevToolsTest {
         f.input(p, "chat")
         f.run()
         assertTrue(f.out(p).lines().none { it.startsWith("[trace]") })
+    }
+
+    @Test
+    fun `builders trace only their own packages and their own rules lines`() {
+        val f = fixture()
+        val p = f.player()
+        p.role = Role.BUILDER
+        f.input(p, "@trace zone")
+        assertEquals("That isn't one of your packages.\n", f.out(p))
+        f.input(p, "@trace")
+        f.input(p, "chat")
+        f.run()
+        assertTrue(f.out(p).lines().none { it.startsWith("[trace]") }, "nothing of zones/z without it in scope")
+        p.scope = setOf("zones/z")
+        f.input(p, "chat")
+        f.run()
+        assertTrue(f.out(p).lines().any { it.startsWith("[trace] command") })
+    }
+
+    @Test
+    fun `quarantine and unquarantine through the host, and step counts per package`() {
+        val f = fixture()
+        val p = f.player()
+        p.role = Role.INSTRUCTOR
+        f.input(p, "chat")
+        f.run()
+        assertTrue((f.host.stepsByPackage["zones/z"] ?: 0) > 0)
+        assertEquals(setOf("zones/z"), f.host.packages)
+        f.input(p, "@quarantine //zones/nope")
+        assertEquals("There is no package //zones/nope.\n", f.out(p).lines().last { it.isNotEmpty() } + "\n")
+        f.input(p, "@quarantine zones/z")
+        assertContains(f.out(p), "//zones/z is quarantined.")
+        assertEquals(setOf("zones/z"), f.host.quarantinedPackages)
+        f.input(p, "@quarantine zones/z")
+        assertContains(f.out(p), "already quarantined")
+        f.input(p, "@unquarantine zones/z")
+        assertContains(f.out(p), "//zones/z is running again.")
+        assertEquals(emptySet(), f.host.quarantinedPackages)
     }
 }

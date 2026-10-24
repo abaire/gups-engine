@@ -51,6 +51,23 @@ cli/build/install/gups/bin/gups serve --dev --world template-world   # then: tel
 cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
 ```
 
+To try the shared-server login locally, import a roster, then start `--prod` on raw telnet:
+
+```bash
+printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
+cli/build/install/gups/bin/gups import-roster roster.csv --world template-world   # prints ann's setup code
+cli/build/install/gups/bin/gups serve --prod --world template-world --telnet-tls 127.0.0.1:4443 --https 127.0.0.1:8443 --self-signed
+```
+
+Then connect Mudlet (or `openssl s_client -connect localhost:4443`) to port 4443 with TLS,
+accept the self-signed certificate, type `new`, enter the setup code and choose a password.
+Or open `https://localhost:8443/` in a browser, choose "Sign up with your code", and do the
+same there. Add
+`--telnet 127.0.0.1:4000` to serve raw telnet as well.
+
+`./gradlew :cli:test -Dgups.browserTest=true` also runs the headless Firefox test of the web
+client, which otherwise runs only on Linux CI.
+
 ## Modules
 
 | Module | Scope | May depend on |
@@ -62,7 +79,7 @@ cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
 | `auth` | accounts, roles, invites | `core` |
 | `harness` | headless test world and runners | `core`, `script` |
 | `plugin-api` | `.jar` plugin extension points | `core`, `script` |
-| `webclient` | static browser client (resources) | nothing |
+| `webclient` | the browser client: plain JavaScript modules, served as resources | nothing |
 | `cli` | the `gups` binary; wires everything | anything |
 
 `./gradlew checkModuleGraph` (part of `check`) fails if a module declares a dependency
@@ -77,7 +94,71 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M5 (SPEC §7.4): the world runs on rules builders can change.
+M6.5 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §7): operations.
+
+- **Admin port** (default `127.0.0.1:9090`, bearer token from `admin_token_file`):
+  - `/healthz` and Prometheus `/metrics`.
+  - `/deploy`, `/roster` for `gups import-roster --admin`, and a sanitized `/snapshot`.
+- **Deploys:** `gups deploy [--commit SHA]` (from CI) or `@deploy` fetches the deploy branch.
+  The commit is checked and loaded off the world thread, and only then swapped in, so a bad
+  commit changes nothing. Afterwards the server's working tree is moved to it, and
+  CODEOWNERS is re-read. `--prod` won't start on a working tree that differs from the
+  commit the database was saved at, unless `--force-commit`.
+- **Images:**
+  - `./gradlew :cli:jlinkArchive` builds a self-contained `gups` with its own runtime.
+  - CI builds one for every platform and attaches them to tagged releases.
+  - Tags also publish `ghcr.io/<owner>/gups:<version>`, built from `docker/Dockerfile`.
+
+M6.4: the web client.
+
+- **HTTPS:** `--https` serves the bundled client, with the same certificate as telnet over
+  TLS. The client is plain JavaScript modules with no build step. It shows the game text in
+  color, vitals bars, affects, and who is in melee, near and far.
+- **Logins:** `POST /api/login` checks the password, rate-limited like telnet, and issues a
+  30-day session token in a secure cookie. Logout, password changes and `@role revoke` end
+  it.
+- **Sign-up:** students can redeem their roster setup code or an invite code in the browser
+  to choose their password, instead of over telnet.
+- **WebSocket:** `/ws` plays with the same login state machine as telnet, starting at
+  character selection.
+
+M6.3: TLS and GMCP.
+
+- **Listeners:** both run on Netty. `--prod` serves telnet over TLS (`--telnet-tls`, TLS 1.2
+  and 1.3) and, only when asked, raw telnet.
+- **Certificates:** PEM files that a renewal tool such as certbot can replace; the server
+  picks them up within the hour, without a restart. `--self-signed` makes a throwaway one for
+  local testing.
+- **GMCP:** clients that send `Core.Supports` get `Char.Vitals`, `Char.Status`,
+  `Char.Affects`, `Room.Info` and `Room.Bands` whenever they change. They also get
+  `Comm.Channel.Text` with each message and, for builders tracing, `Gups.Trace`.
+
+M6.2: roles and in-game tools.
+
+- **Builder scope:** `CODEOWNERS` in the course world gives builders their packages at
+  startup, and `@role` can add packages it doesn't cover. Builders' `@goto`, `@stat`,
+  `@spawn` (debug mobs and items, never saved), `@where`, `@trace` and `@errors` work only
+  on their own packages.
+- **Instructor commands:** `@role`, `@invite`, `@reload` (`--dev` only), `@quarantine`,
+  `@unquarantine`, `@bubble`, `@stats`, `@who`, `@snapshot`, `@shutdown` and
+  `@audit item`. `@deploy` waits for M6.5.
+- **Restrictions:** `@restrict`, `@unrestrict` and `@restrictions` take a capability away
+  from one account for a while or for good, escalating along `restriction_ladder`.
+- **Alerts:** script errors reach the package's online builders; quarantines, checkpoint
+  backlog, bursts of engine errors and pulse overruns reach online instructors.
+
+M6.1: accounts and login.
+
+- **Accounts:** stored in SQLite, written through the checkpoint writer. Each account has one
+  role. Passwords are Argon2id hashes.
+- **Logins:** failed logins are rate-limited per account and per IP.
+- **Creating accounts:** `gups import-roster` creates accounts and prints a one-time setup
+  code for each. `gups invite` makes invite codes.
+- **`gups serve --prod`:** students log in over raw telnet, set their passwords, and pick or
+  create characters, one at a time. `--dev` keeps its passwordless local instructor, now as an
+  `instructor` account.
+
+M5: the world runs on rules builders can change.
 
 - **Rules module:** `//rules:combat.star` supplies the combat, movement and regen formulas.
   Anything it leaves out or gets wrong falls back to the built-in Kotlin ruleset.
@@ -102,8 +183,7 @@ M5 (SPEC §7.4): the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6: TLS, WebSocket, GMCP, accounts and roles, instructor commands, deploys.
+- M6.6: the course world template and its CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
-`gups serve --prod`, `lint`, `docs`, `deploy`, `invite` and `import-roster` still exit with
-status 3 ("not implemented").
+`lint` and `docs` still exit with status 3 ("not implemented").

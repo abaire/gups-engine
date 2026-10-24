@@ -67,7 +67,7 @@ an overrun may be "now", in which case the next pulse runs immediately.
 `Shutdown(delayPulses, reason)` broadcasts the reason and stops the loop once the delay has
 passed. The server then takes the final checkpoint (§5.11) on the world thread and waits up
 to 30 s for the writer to commit it, including on a JVM shutdown (Ctrl-C).
-*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`, `DevServer.run`.
+*Code:* `World.handle(WorldControlEvent)`, `WorldLoop.run`, `GupsServer.run`.
 
 ## Commands (§4.9, §5.2)
 
@@ -118,7 +118,7 @@ receives `on_tell`. `shout` reaches the room and every room whose exit toward it
 ### D-019 Commands not in M1 — `open`
 `give`, `put`, `wear` and `use` arrived in M5 (D-114), and `wield` and `remove` handle every
 slot. `quests` comes from `//lib:quest.star` (D-126). The builder and instructor `@` commands
-other than `@trace`, `@eval` and `@errors` arrive in M6.
+arrived in M6.2 (D-143, D-144).
 *Code:* `EngineCommands`.
 
 ## Action lifecycle (§5.3)
@@ -414,7 +414,7 @@ built and global commands are installed. Spawns filled while the world is built 
 `on_spawn` first, during construction. The harness calls it in `t.world()`, and `serve`
 calls it once a saved world has been restored (so restored entities get it too). A reload
 fires `on_load` only on rooms it creates. Characters restored at login don't get it.
-*Code:* `World.fireOnLoad`, `TestCtx.world`, `DevServer.boot`.
+*Code:* `World.fireOnLoad`, `TestCtx.world`, `GupsServer.boot`.
 
 ### D-063 `path_to` is an uncached BFS — `open`
 Breadth-first over exits in declaration order, through open doors only (closed and locked
@@ -476,9 +476,10 @@ compact JSON.
   and `on_expire` are skipped (the affects still tick down and expire).
 - Its timers stay pending: the world skips them while due, and they fire on the first
   timer phase after the quarantine clears.
-- `@quarantine` and `@unquarantine` (M6) will call `StarlarkHost.quarantine` and
-  `unquarantine`. Persisting the state in `zone_states` arrives with M4.
-- Notifications go to `StarlarkHost.alerts` until roles exist (M6).
+- `@quarantine` and `@unquarantine` call `ScriptHost.quarantine` and `unquarantine`, then
+  checkpoint so the state persists in `zone_states` (D-146).
+- Notifications go to `StarlarkHost.alerts`, which the server routes to instructor alerts
+  (D-145).
 *Code:* `StarlarkHost`, `World.runTimers`.
 
 ### D-069 Script diagnostics — `open`
@@ -489,8 +490,9 @@ compact JSON.
   Starlark stack, a one-line ctx summary and the seed.
 - **Room:** a script diagnostic also names the room its owner was in, which the repro
   bundle snapshots (D-098).
-- **Not yet:** the in-game owner alert, at most one per package per 10 s, needs package
-  ownership (M6).
+- **Owner alerts:** the kinds `script_error`, `step_limit`, `wall_clock` and `missing` send
+  a one-line alert to the package's online builders, at most one per package per 10 s
+  (D-145).
 - **Storage:** diagnostics are kept in `World.diagnostics` and written to the `diagnostics`
   table with the next checkpoint batch, periodic or immediate.
 *Code:* `Diagnostic`, `StarlarkHost.report`.
@@ -696,20 +698,20 @@ other field keeps its live value.
 
 ### D-082 The `--dev` login and world — `open`
 - **Prompting:** the server asks for a name: 2 to 16 letters, capitalized.
-- **Characters:** every character belongs to the local instructor account, so it gets
+- **Characters:** every character belongs to the local instructor account (D-131), so it gets
   `Role.INSTRUCTOR` and is idle-exempt. Naming a character that is already playing takes it
   over and closes the old connection. Otherwise a saved character is restored (D-095), or a
   new one is created and saved at once.
 - **Maintenance:** while the database can't be written, new logins are refused with a
   maintenance message (§6.4); taking over a character still works.
 - **Connections:** a remote address that isn't loopback is refused and closed.
-- **Starting room:** new characters start in `--start`, else `//zones/tutorial:gate` if it
-  exists, else the first room by label.
+- **Starting room:** new characters start in `--start`, else `start_room` (D-138), else
+  `//zones/tutorial:gate` if it exists, else the first room by label.
 - **Starting stats:** they are the engine defaults. §5.12 calls them rules-defined, but §4.6
   has no rules export for them, so the rules module (M5) doesn't set them either.
 - **Loading:** `--dev` loads every package under `--world` (default: the current
   directory). Packages that fail to load are reported and left out.
-*Code:* `DevLogin`, `DevServer`.
+*Code:* `DevLogin`, `GupsServer`.
 
 ### D-083 Prompts — `open`
 After each burst of output, a playing session gets `<{hp}hp {mana}m {move}mv> `. Telnet ends
@@ -740,7 +742,7 @@ Every 100 ms it compares the modification time and size of every non-test `.star
 Changes are reported once nothing has changed for 200 ms, grouped by package: the nearest
 directory with a `package.star`, or the file's own directory if that file was just deleted.
 It doesn't use `WatchService`, which polls every few seconds on macOS.
-*Code:* `WorldWatcher`, `DevServer.run`.
+*Code:* `WorldWatcher`, `GupsServer.run`.
 
 ### D-087 Color markup and color depth — `open`
 §2.2 asks for ANSI rendering but defines no markup.
@@ -778,9 +780,9 @@ prompt.
   256 KB disconnects it as too slow, and the character goes link-dead.
 *Code:* `TelnetConnection`, `TelnetServer`.
 
-### D-090 Raw sockets with `ktor-network` — `open`
-§1.5 says "Ktor/Netty raw non-blocking sockets". The listener uses `ktor-network` 3.6.0,
-whose raw TCP sockets run on Ktor's own NIO selector: Netty isn't needed. Session ids come
+### D-090 Raw sockets with `ktor-network` — `rejected`
+Superseded by Q1 of the M6 design: every listener runs on Netty (D-148). Until M6.3 the
+listener used `ktor-network` 3.6.0, which has no server-side TLS. Session ids still come
 from one `AtomicLong` shared by listeners.
 *Code:* `TelnetServer`, `gradle/libs.versions.toml`.
 
@@ -790,19 +792,18 @@ from one `AtomicLong` shared by listeners.
   exist: they get "Huh?", and `help` leaves it out.
 - **Registration:** `@` commands from outside `core` register as tools. An `@` prefix only
   matches other `@` commands.
-- **Scope:** builder scope (own packages only) arrives with CODEOWNERS sync in M6; until
-  then builders and instructors see everything. `@trace` streams everything in `--dev`.
-- **`@trace` filters:** `@trace [all|zone|entity <target>|hook <name>|rules|off]`.
-  - `zone` means the package of the caller's room.
+- **Scope:** builders see and act on their own packages only (D-143). Instructors and
+  admins see everything, as does `--dev`'s local instructor.
+- **`@trace` filters:** `@trace [all|zone [package]|entity <target>|hook <name>|rules|off]`.
+  - `zone` means the given package, or else the package of the caller's room.
   - `entity here` traces the room itself.
   - `hook` matches a hook name, or a command or timer prefix such as `command` or `timer`.
   - `rules` streams rules functions, modifiers and each evaluation's chain (D-127).
 - **`@trace` rate limit:** past 50 lines per pulse, the rest are counted. The count is
   reported with the next traced line or at `@trace off`.
 - **`@errors [package]`:** shows the last 10 diagnostics.
-- **Not yet:** the other builder commands (`@goto`, `@stat`, `@spawn`, `@where`) arrive in
-  M6.
-*Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `EngineCommands.errors`.
+- The other builder commands are M6.2's (D-143).
+*Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `Tools.errors`.
 
 ### D-092 `gups serve` options — `open`
 `--prod` exits with status 3 until M6. `--fresh` and `--db` work from M4 (D-099, D-101).
@@ -870,8 +871,8 @@ when it logs in.
 ### D-097 Backups — `open`
 - **Naming:** snapshots are `<kind>-<UTC yyyyMMdd-HHmmss>.db` in `backups/` next to the
   database.
-- **Kinds:** `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup`, never pruned)
-  and `predeploy` (for M6).
+- **Kinds:** `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup` and `@snapshot`,
+  never pruned) and `predeploy` (each deploy, D-162, never pruned).
 - **Schedule:** the server checks every 5 minutes whether the newest snapshot of a kind is
   older than its period, and also once at startup.
 - **Restore:** `gups restore FILE` replaces the database with SQLite's restore API. The
@@ -898,7 +899,7 @@ when it logs in.
 `--db` defaults to `<world>/.gups/world.db`. The hidden directory is skipped by the package
 scan and the file watcher. `gups backup`, `restore` and `repro` take the same `--world` and
 `--db`.
-*Code:* `DevServer.defaultDb`.
+*Code:* `GupsServer.defaultDb`.
 
 ### D-100 Row formats — `open`
 - **References:**
@@ -974,7 +975,7 @@ such as `checkpoint_minutes`, but gives no syntax.
   pinned `engine` version only warns.
 - **Changes:** changing the file needs a restart (§5.10). The file watcher and reload never
   read it.
-*Code:* `WorldModule`, `DevServer.boot`.
+*Code:* `WorldModule`, `GupsServer.boot`.
 
 ## Rules, simulation and content (§4.2–§4.7, §5.7–§5.9) — M5
 
@@ -1218,6 +1219,532 @@ affect passability (D-029).
 ### D-127 `@trace rules` — `open`
 It streams each rules function and modifier call, and one line per evaluation with its full
 chain. Auto-attacks add the to-hit roll and the mitigated damage; each combat round adds
-the initiative order. `w.trace()` in the harness records the same lines. Builder scoping of
-what is traced arrives with roles in M6.
+the initiative order. `w.trace()` in the harness records the same lines. Builders see only
+their own character's rules lines (D-091).
 *Code:* `World.onRules`, `DevTools`, `WorldHandle.trace`.
+
+## Accounts and login (§3.5, §3.6, §5.12; M6 design §2–§3) — M6.1
+
+### D-128 Account storage and its writes — `open`
+- **Seam:** `AccountStore` lives in `core` (`Accounts.kt`) with `Account` and `Invite`.
+  `Persistence.accounts` exposes it; `SqliteAccountStore` in `persist` implements it, and
+  `auth` uses only the interface.
+- **Writes:** each change is a `Batch` of its own carrying `AccountOp`s, submitted to the
+  checkpoint writer as an immediate batch so it never merges with world captures. The caller
+  blocks (off the world thread) until it commits, for at most 30 s. Account batches don't
+  count toward the checkpoint-backlog alert.
+- **Conflicts:** a taken login (`INSERT OR IGNORE`) and a used invite (`UPDATE … WHERE used_by
+  IS NULL`) are reported as results, never thrown, so they can't wedge the writer's retry
+  loop. That also makes single use hold across processes.
+- **Reads:** a read-only connection of the store's own, serialized, beside the writer (WAL).
+  Accounts aren't cached, so the CLI tools writing the same database directly are safe.
+- **Schema migrations:** 2 adds `invites.account_id`, the account a setup code is bound to,
+  so M6.2's `restrictions` table is migration 3 (`id`, `account_id`, `capability`, `until`,
+  `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`).
+- **Characters:** `Persistence.characters(accountId)` and `savedCharacter(name)` read the
+  in-memory player rows (D-095). `Player.accountId` became a `var` and `spawnPlayer` takes it.
+- **`update`** writes role, scope, GitHub handle and the disabled flag, never the password;
+  `setPassword` also deletes the account's `session_tokens`.
+*Code:* `Accounts.kt` (core, persist), `AccountOp`, `Database.writeAccounts`, `SqlitePersistence`.
+
+### D-129 Slow login work and the `LoginHandler` seam — `open`
+- **Outcome:** `WorldControlEvent.AuthResult(session, outcome: Any)` carries the handler's own
+  continuation; the world passes it to `LoginHandler.completed`, then flushes the session. A
+  result for a session that has closed is dropped.
+- **New hooks:** `LoginHandler.disconnected` (called by `disconnect` and `closeSession`) drops
+  per-session state; `LoginHandler.pulse` runs each pulse, before the idle checks, for prompt
+  timeouts.
+- **Held input:** lines typed while work is pending are held (at most 20) and replayed in
+  order when it finishes: to the login, or as game commands once a character is playing.
+- **Executor:** `--prod` uses `Dispatchers.IO.limitedParallelism(4)`. Everything that touches
+  the store runs there, not only hashing: login lookups, code checks and login-taken checks.
+- **Helpers:** `World.takeOver` and `World.enterGame` are shared by `DevLogin` and
+  `AccountLogin`; `World.flush` became public.
+*Code:* `Seams.kt`, `Login.kt`, `Sessions.kt`, `AccountLogin.later`.
+
+### D-130 Login flow details — `open`
+- **Prompts:** the login prompt is the M6 design's text. The character menu prompt is `> `.
+  `quit` at the menu closes the connection. An empty answer at a prompt asks again; at the
+  character-name prompt it goes back to the menu.
+- **Accounts without a password** (roster accounts not set up yet) fail like a wrong password,
+  after a dummy hash, so they look like any other wrong login.
+- **Strikes:** the three per connection count wrong passwords, refused locked-out attempts,
+  bad codes and a wrong current password when changing it.
+- **Password change:** current, new, new again, then one background step that verifies and
+  rehashes. A wrong current password counts as a failed login for the limiter.
+- **Disabled accounts** get "This account is disabled." after a correct password.
+- **`new`:** a bound setup code shows which login it sets up and skips the login prompt.
+  Logins are lowercased. A redeem that loses a race reports it and goes back a step.
+- **Characters:** the menu lists saved characters plus any of the account's characters in the
+  world not saved yet. Loading a saved character respects maintenance mode, as D-082 does.
+  The role and idle exemption come from the account each time a character is entered.
+*Code:* `AccountLogin`.
+
+### D-131 The `--dev` instructor account — `open`
+With a database, `--dev` creates the account `instructor` (role instructor, no password) on
+first boot. Its characters get its id, and dev characters saved before it existed join it.
+`--dev` doesn't apply one-character-at-a-time (Q9): it is a single-user tool where several
+characters at once help testing. Without a database (tests) characters have no account.
+*Code:* `GupsServer.boot`, `DevLogin`.
+
+### D-132 Lockout counting — `open`
+Failures are counted per lowercased login (whether or not it exists) and per peer address.
+The count resets after 15 minutes without a failure, so failures spaced less than 15 minutes
+apart keep accumulating. The fifth starts a 1-minute lockout and each later one restarts the
+lockout at double length, capped at 15 minutes. A successful login clears the account's
+count but not the address's. Bad invite codes count against the address only.
+*Code:* `LoginLimiter`.
+
+### D-133 Invite and setup codes — `open`
+The alphabet is `23456789ABCDEFGHJKMNPQRSTWXYZ` (no 0/O, 1/I/L, U/V). Codes are compared
+after uppercasing and removing spaces and dashes, and stored as the SHA-256 hex of that
+canonical form. They are random enough that an unsalted fast hash is enough.
+*Code:* `Codes`.
+
+### D-134 Roster import — `open`
+- **CSV:** a header row in any column order; blank lines and `#` lines skipped; double quotes
+  allowed; a leading `@` on a GitHub handle dropped; roles case-insensitive. Any bad row
+  (unknown column or role, bad or repeated login, too many fields) fails the whole import
+  with every problem listed, and nothing is written.
+- **Output:** a `login,setup_code` header, then one line per new account; a summary goes to
+  standard error. `--days N` sets the codes' lifetime.
+- **Existing accounts** without a password get no new code, so a re-import stays idempotent;
+  `@role <account> reset` issues a fresh one.
+- **Where it runs:** `gups import-roster --admin ADDR` goes through a running server's admin
+  port (D-160); without `--admin` it and `gups invite` write the database directly. Running
+  the offline tools beside a server is still safe, because SQLite serializes the writes
+  (D-128).
+*Code:* `Roster`, `AccountService.importRoster`, `ImportRoster`, `Invite`.
+
+### D-135 `--prod` and the server configuration in M6.1 — `open`
+- **Listener:** `--prod` needs at least one listener (D-152). `:4000` binds every interface.
+- **Flags:** `--config`, `--telnet`, `--open-signup`/`--no-open-signup`, `--max-characters`,
+  plus the existing `--world`, `--db`, `--start` and `--fresh`, each overriding the file.
+  `--port` stays `--dev`-only. The settings of later stages are read and checked but only
+  warned about when set.
+- **`reserved_names`** in the server configuration adds character names to refuse.
+- **Database:** `--prod` defaults to the world's `.gups/world.db`, as `--dev` does (D-099).
+- **Not yet:** nothing disables an account yet, so quitting a disabled account's online
+  characters waits for a command that disables (DESIGN_NEEDED.md).
+*Code:* `Serve.prodServer`, `ServerConfig`, `GupsServer`.
+
+### D-136 Reserved character names — `open`
+Built in: `self`, `me`, `all`, `someone`, `here`, the menu words `new`, `password` and `quit`,
+`guest`, `instructor`, `admin`, and every standard direction with its abbreviation. Added per
+world: the name and aliases of every engine, global and tool command (without `@`), and the
+server configuration's `reserved_names`. Logins only reserve `new`.
+*Code:* `Names`.
+
+### D-137 Telnet echo for passwords — `open`
+`OutputSink.hideInput` sends `IAC WILL ECHO` / `IAC WONT ECHO`, only to clients that have sent
+some telnet command (D-088), and only when the state changes. `DO ECHO` is accepted silently
+while input is hidden and refused once otherwise; `DONT ECHO` is never answered, so the
+exchange can't loop. After each hidden line the server sends the newline the client didn't
+echo.
+*Code:* `TelnetConnection.encodeEcho`, `TelnetServer`.
+
+### D-138 `start_room` in `MODULE.gups` — `open`
+`module(start_room = "//zones/tutorial:gate")` sets where new characters start, in both
+profiles. `--start` overrides it. Without either, it is the tutorial gate if it exists, else
+the first room by label, as in D-082. A `start_room` that isn't a room stops the server.
+*Code:* `WorldModule`, `GupsServer.boot`.
+
+## Roles and in-game tools (§3.5, §4.9, §6.2; M6 design §4) — M6.2
+
+### D-139 CODEOWNERS — `open`
+- **File:** the first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS` in the
+  world, GitHub's order. No file means no CODEOWNERS scope.
+- **Patterns:** gitignore-style, matched against package directories. A leading `/` or a
+  slash inside anchors to the world root; otherwise the name matches at any depth. `*` stays
+  within a directory, `**` crosses them, and a directory pattern also owns the packages below
+  it. File patterns such as `*.star` own no package. Inline `#` comments aren't supported, as
+  on GitHub.
+- **Owners:** `@user` handles, compared in lowercase with accounts' `github_handle`. Team and
+  email owners are warnings, as are handles that match no account.
+- **Sync:** at startup only until deploys (M6.5). Instructors and admins have both scopes
+  cleared. Every other account, players included, gets its CODEOWNERS packages, so promoting a
+  player with `@role` scopes them at once. Online characters get new scopes when they next
+  enter the game.
+*Code:* `CodeOwners`, `syncScopes`, `GupsServer.syncCodeOwners`.
+
+### D-140 Hand scope — `open`
+`@role <account> builder <packages>` sets a scope of its own, stored as `manual` in
+`roles_json` beside the CODEOWNERS `scope`. A builder may work on the union. Packages
+CODEOWNERS covers are refused there, and a sync drops any that CODEOWNERS later covers.
+Packages are comma- or space-separated, with or without `//`, and must be loaded packages.
+Giving a role without packages keeps the old hand scope. Instructors and admins have none.
+*Code:* `Account.manualScope`, `RolesJson`, `AccountTools.setRole`.
+
+### D-141 `@role` — `open`
+- `@role <account>` shows the role, GitHub handle, both scopes and whether a password is set.
+- Instructors may set player, builder and instructor; only admins may make, change or reset
+  admins, or invite them. Nobody may change their own role.
+- A change applies at once to the account's characters in the world: role, scope and idle
+  exemption.
+- `reset` clears the password, revokes web tokens and shows a 7-day setup code bound to the
+  account. `revoke` deletes the account's web tokens only.
+*Code:* `AccountTools`, `World.applyAccount`.
+
+### D-142 Slow work for commands — `open`
+`World.later(work, then)` runs `work` on `World.background` and `then` with its result on the
+world thread, through a new `WorldControlEvent.Task` posted with `World.post`. A world
+without them (headless tests) runs both at once. Account commands, `@snapshot` and `@audit`
+use it. Their replies are flushed when they arrive. The server uses one 4-thread pool for
+logins and these.
+*Code:* `World.later`, `WorldControlEvent.Task`, `GupsServer`.
+
+### D-143 Builder commands — `open`
+- **Ownership:** a builder owns a package in its scope. Rooms belong to their package, mobs
+  and items to their prototype's. Players and engine items (corpses) belong to the package
+  of the room they are in. Every builder command is refused outside it with "That isn't one
+  of your packages."; `@where` checks the room the builder stands in.
+- **Labels:** `//pkg:name`, or `:name` for the package of the builder's room.
+- **`@goto`:** a player's name wins over a label; you land at their track index. A room
+  lands you at index 0.
+- **`@stat`:** a keyword (actors first, then carried and ground items), `here` or `#id`.
+  It shows identity and version, location, vitals, effective and base stats, resists,
+  skills, affects with seconds left, what the actor is doing, carried and worn items,
+  timers, attributes grouped by namespace, and simulation state with reasons. Mobs also show
+  their debug owner; players their account, role and scope.
+- **`@spawn`:** 1 to 10 at a time. Mobs appear at the builder's index; items go into the
+  builder's inventory (a stackable item as one stack). Debug entities have no audit trail.
+  A debug mob also despawns at the first world tick after its spawner is gone. Items in its
+  inventory when it despawns or dies become debug too.
+- **Debug on every entity:** `debug` moved from `Item` to `Entity`.
+*Code:* `Tools`, `World.packageOf`, `World.statLines`.
+
+### D-144 Instructor commands — `open`
+- **`@reload`:** refused when `WorldConfig.production` is set (`--prod`). In `--dev` it
+  reloads the named packages, which must be loaded.
+- **`@deploy`:** answers that deploys arrive with M6.5's pipeline.
+- **`@quarantine`/`@unquarantine`:** packages must be loaded. Each takes a routine
+  checkpoint so the change persists.
+- **`@bubble`:** active rooms per package, every anchor with its reasons and room, entities
+  with active reasons in dormant rooms, and dormant-room counts per package.
+- **`@stats`:** p50 and p99 of the last minute's pulse durations, its overruns (pulses longer
+  than 250 ms), input lines waiting, active rooms, sessions per transport, the writer's
+  backlog in batches, and the package with the most script steps this minute.
+- **`@who`:** each player's role, transport and address (or link-dead time) and idle time.
+- **`@snapshot`:** takes a routine checkpoint, waits for the writer, then a `manual` backup.
+- **`@shutdown [seconds] [reason]`:** a first word that isn't a number is part of the reason.
+  It warns at once, then at 60, 30, 10 and 5 seconds left. The existing `Shutdown` event
+  uses the same countdown.
+- **`@audit item <id>`:** the item's committed `item_events` with UTC wall times, plus where
+  it is now if it is in the world. Changes not yet checkpointed don't show.
+*Code:* `Tools`, `World.scheduleShutdown`, `SqlitePersistence.backup`, `itemHistory`.
+
+### D-145 Alerts — `open`
+- **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always to
+  the server log. Script host alerts (quarantine, rules fallback) are keyed by their text,
+  so the same message repeats at most once a minute. The other kinds are `checkpoint` (the
+  writer-backlog diagnostic of D-096), `engine_errors` and `overrun`.
+- **Engine errors:** more than 100 `engine` diagnostics within the last 240 pulses.
+- **Overruns:** the world loop records each pulse's duration, and a pulse overruns when it
+  takes longer than 250 ms. The alert fires when a full minute is recorded and more than 10%
+  of it overran. Script steps per package are sampled every combat round, and the package
+  with the largest increase over the sampled minute is named. Steps of every script call
+  count, rules functions included.
+- **Owner alerts** go to online builders (not instructors) whose scope has the package:
+  `[error] <file:line>: <first line of the message> (@errors <pkg>)`.
+- Alerts are queued like other output and flushed with the pulse or the command.
+*Code:* `World.alert`, `World.alertFor`, `World.checkOverruns`, `PulseStats`, `StarlarkHost.stepsByPackage`.
+
+### D-146 Saving quarantine and debug entities — `open`
+`zone_states` also gets a row for a quarantined package that isn't a zone (a library, the
+rules), holding only its quarantine flag, and keeps updating rows it once had. Debug
+entities are skipped by every checkpoint, so they are never saved and are gone after a
+restart.
+*Code:* `SqlitePersistence.zoneStates`, `restore`, `checkpoint`.
+
+### D-147 Restrictions — `open`
+- **Lengths:** `<n>m`, `<n>h`, `<n>d`, `<n>w` or `permanent`. A third word that isn't a
+  length starts the reason.
+- **Ladder:** every earlier restriction of the same capability on the account counts,
+  whatever its state; past the end of the ladder its last step repeats. The server
+  configuration's ladder is checked at startup.
+- **Checking:** the world keeps every restriction in memory, loaded at startup and updated by
+  the commands, and checks them against the wall clock (`World.wallClock`). The `gossip`
+  capability guards the `gossip` command; `goto` guards `@goto` as a whole and
+  `goto_player` going to a player.
+- **Message:** "You can't do that right now.", plus "That changes <UTC time>." for a timed
+  restriction. The restricted player isn't told when one is set.
+- **`@restrictions`** without an account lists those in effect; with one, the full history:
+  state, who set it and when, the reason, and who lifted it.
+- **Set by:** the instructor's account, or none for `--dev` characters without one.
+*Code:* `AccountTools`, `World.restriction`, `World.refuseRestricted`, `Capabilities`.
+
+## TLS and GMCP (§4.10, §4.11; M6 design §2.4, §2.5, §5) — M6.3
+
+### D-148 Netty listeners — `open`
+- **Stack:** Netty 4.2.17 (the version Ktor 3.6 uses), NIO transport, one boss thread and
+  Netty's default worker count per listener. `ktor-network` is gone.
+- **Pipeline:** raw telnet and telnet over TLS build the same pipeline; TLS adds an
+  `SslHandler` first. `TelnetConnection` is unchanged.
+- **Sessions:** over TLS a session starts, and the world hears `Connect`, only once the
+  handshake succeeds. Its transport is `tls`; raw telnet's stays `telnet`.
+- **Output:** each sink call is written and flushed at once. Bytes not yet written count
+  toward the 256 KiB limit until Netty finishes writing them.
+- **Disconnect:** `Disconnect` is posted whenever the channel closes. After a world-side
+  close it is a no-op.
+*Code:* `TelnetServer`.
+
+### D-149 GMCP seam and delivery — `open`
+- **Seam:** `OutputSink.gmcp(pkg, data)`, plus `wantsGmcp(pkg)`, so the world computes only
+  what the client asked for.
+- **Supports:** a package is wanted when GMCP is on and `Core.Supports` listed it, or a
+  module above it (`Char` covers `Char.Vitals`), compared case-insensitively. Versions in
+  the entries are ignored. `Set` replaces the list and `Add`/`Remove` change it; `DONT GMCP`
+  turns everything off. `Core.Hello`'s client and version are kept. A `Core.*` message with
+  malformed JSON counts as a protocol error (§6.4); other packages are ignored.
+- **Order:** GMCP waits in the session with its text and goes out after the text and before
+  the prompt. A flush with only GMCP sends no prompt.
+- **Deltas:** every phase-7 flush (`World.flushOutput`) recomputes the state packages
+  (`Char.Vitals`, `Char.Status`, `Char.Affects`, `Room.Info`, `Room.Bands`) and sends those
+  whose whole payload changed. The cache resets when a session takes a character, so a
+  reconnect gets everything again. Events (`Comm.Channel.Text`, `Gups.Trace`) are never
+  cached.
+- **Encoding:** `net` turns the plain values into JSON with kotlinx.serialization and
+  doubles IAC bytes in the payload.
+*Code:* `Seams.kt`, `Gmcp.kt`, `World.flush`, `TelnetConnection.gmcpIn`, `encodeGmcp`.
+
+### D-150 TLS certificates — `open`
+- **Files:** a PEM certificate chain and a PEM PKCS#8 key (certbot's `fullchain.pem` and
+  `privkey.pem`), loaded with Netty's JDK provider. TLS 1.3 and 1.2 only, with the JDK's
+  default cipher suites.
+- **Reload:** every hour the server compares both files' modification times. If either
+  changed it rebuilds the context. A pair that fails to load is logged and the old context
+  stays. Open connections keep their certificate.
+- **`--self-signed`:** an EC P-256 certificate signed with SHA-256, valid for 30 days. Its
+  subject alternative names are `localhost`, `127.0.0.1` and the bind host when it is a
+  specific one. It is written to a fresh temporary directory, using Bouncy Castle's
+  `bcpkix`.
+*Code:* `ServerTls`, `Serve.serverTls`.
+
+### D-151 GMCP payloads — `open`
+- **`Char.Status`:** `wait` is the recovery left in pulses, and `xp_next` is the total XP for
+  the next level (`rules.xp_to_level`). `casting.skill` is the skill's name, or `action` for a
+  warmup that isn't a cast, with `progress` 0–100 through the warmup. `fighting` lists names.
+- **`Char.Affects`:** `remaining` is whole seconds; `flags` are sorted.
+- **`Room.Info`:** `exits` maps every exit's direction to its door state, or null when it has
+  no door; `regions` are sorted.
+- **`Room.Bands`:** actors (the viewer excluded) and ground items of the viewer's room, by
+  band from the viewer's index: actors first, then items, each in ascending id.
+- **`Comm.Channel.Text`:** `say` goes to everyone in the room, the speaker included. `tell`
+  and `whisper` go to both ends. `shout` goes to the speaker's room and the rooms that hear
+  it, and `gossip` to every player. `text` is what was said, without the framing.
+- **`Gups.Trace`:** `{"line"}` replaces the `[trace]` line, the per-pulse overflow summary
+  included.
+*Code:* `World.gmcpPayload`, `World.channel`, `DevTools.line`.
+
+### D-152 `--prod` listeners — `open`
+`--prod` serves raw telnet only when asked (`--telnet` or `telnet = ...`), telnet over TLS
+with `--telnet-tls`/`telnet_tls`, and HTTPS with the web client with `--https`/`https`. At
+least one is required. Both TLS listeners use one certificate: `--tls-cert` and `--tls-key`
+(or `tls_cert` and `tls_key`), or `--self-signed`, which needs a TLS listener.
+`GupsServer.ports` reports the bound port per transport (`telnet`, `tls`, `ws`, and `admin`
+for the admin port, D-160), and the startup message lists each. `--dev` stays raw telnet on 127.0.0.1.
+*Code:* `Serve.prodServer`, `GupsServer`, `ProdOptions`, `TlsListener`.
+
+## WebSocket and the web client (§4.10, §5.12; M6 design §6) — M6.4
+
+### D-153 Web logins and session tokens — `open`
+- **Seam:** `WebAccounts` in `core` (`login`, `logout`, `accountFor`), implemented by
+  `auth.WebLogins`, so `net` still depends only on `core`.
+- **Checks:** the password check, dummy hash and lockouts are the telnet login's, sharing one
+  `LoginLimiter`, so failures on either count against both. Logins are trimmed and
+  lowercased.
+- **Statuses:** 401 for a wrong login or password, 429 while locked out, 403 for a disabled
+  account, 400 for a body that isn't `{"login", "password"}`. The body is always
+  `{"error": message}`.
+- **Tokens:** 32 random bytes as unpadded base64url, stored as SHA-256 hex with a 30-day wall
+  expiry. Expired rows are pruned whenever a token is added.
+- **Validity:** a token stops working when it expires, at logout, when the password is
+  changed or reset, at `@role revoke`, and while its account is disabled.
+*Code:* `WebLogins`, `AccountStore.addToken`, `tokenAccount`, `removeToken`.
+
+### D-154 HTTPS on Ktor — `open`
+The web listener is Ktor's Netty engine with a plain connector and our own `SslHandler`
+added first through `channelPipelineConfig`. HTTPS therefore uses the same `ServerTls` as
+telnet over TLS, with the same protocols and hourly reload. Because Ktor sees plain HTTP
+behind it, the `Set-Cookie` header is written by hand: `gups_session=<token>; Path=/;
+Max-Age=<seconds left>; HttpOnly; Secure; SameSite=Strict`. Logout clears it with
+`Max-Age=0`. Without a certificate `WebServer` serves plain HTTP, which only tests use;
+`--prod` always passes one.
+*Code:* `WebServer.start`, `login`, `logout`.
+
+### D-155 The WebSocket protocol — `open`
+- **Authentication:** the session cookie, or else a first `{"t":"auth","d":token}` frame
+  within 30 seconds. Otherwise the server sends `{"t":"error","d":"Please log in first; your
+  session may have expired."}` and closes with code 1008. An `auth` frame after that is
+  ignored.
+- **Frames added to §4.10:**
+  - From the server: `prompt`, `hide` (true or false, for password prompts), and `error`
+    before a close.
+  - From the client: `auth`, and `gmcp` (which only reads `Core.Supports.*`, as over telnet).
+    GMCP is sent only for supported packages, as `{"t":"gmcp","p":..., "d":...}`.
+- **Text:** `text` frames carry the markup unrendered (D-087); the client renders it.
+- **Input:** control characters are dropped, and a line over 512 UTF-8 bytes is cut with
+  telnet's notice. Five malformed frames end the socket.
+- **Limits:** the 256 KiB output limit counts queued JSON characters. Frames are at most
+  64 KiB. Pings every 30 seconds, with a 60-second timeout.
+- **Ending:** every minute each live socket's token is checked again, and an expired or
+  revoked one gets `{"t":"error","d":"Your session has ended. Please log in again."}` and is
+  closed. Logout closes that token's sockets at once. The character goes link-dead as for
+  any dropped link.
+- **The world:** a socket is a session with transport `ws` and the token's account, so
+  `AccountLogin` greets it and goes straight to the character menu.
+*Code:* `WebServer.serve`, `Socket`, `Connect.account`, `AccountLogin.connected`.
+
+### D-156 Serving the client — `open`
+The `webclient` module lists its files in `files.txt`. The server serves `index.html` at `/`
+with `no-cache`, and every other file under `/assets/<hash>/`, cached for a year as
+immutable. `<hash>` is the first 16 hex digits of a SHA-256 over all the files' names and
+contents. One hash for the whole bundle keeps the modules' relative imports working, and
+any change to any file changes every URL. `index.html` refers to `%ASSETS%`. `net` reads the
+files through a class loader handed in by `cli`, so it doesn't depend on `webclient`.
+*Code:* `WebAssets`, `webclient/src/main/resources/gups/webclient/`.
+
+### D-157 The web client — `open`
+Plain ES modules (`app.js`, `markup.js`, `panels.js`) and `style.css`, documented with JSDoc
+(Q8).
+- **Start:** on load the client opens the socket, so a valid cookie goes straight to the game.
+  An `error` frame shows the login form.
+- **Input:** it echoes commands locally and keeps 100 lines of history (up and down arrows).
+  It switches the input to a password field on `hide`.
+- **Output:** at most 2,000 lines.
+- **GMCP:** it asks for `Char`, `Room`, `Comm.Channel` and `Gups`.
+- **Sign-up:** a second form takes an instructor's one-time code, checks it, and then asks
+  for a login (unless the code names one) and a password twice (D-159). The two passwords
+  are compared in the browser before anything is sent.
+*Code:* `webclient`.
+
+### D-159 Web sign-up — `open`
+The web client can redeem the same one-time codes as the telnet `new` flow: roster setup
+codes and invite codes (`gups invite`, `@invite`), both made by an instructor. It never
+signs up without a code, even with `open_signup`.
+- **`POST /api/code`:** `{"code"}` answers `{"login": "ann"}` for a setup code (the account
+  it sets up), `{"login": null}` for an invite, or 404. It lets the form ask for a login only
+  when one is needed.
+- **`POST /api/signup`:** `{"code", "login", "password"}` redeems the code exactly as the
+  telnet flow does. A setup code sets its account's password and ignores `login`; an invite
+  creates `login` with the invite's role. On success it answers like `/api/login`, with a
+  token and the session cookie, so the socket starts at character selection (M6 design
+  §6.1).
+- **Refusals:** 400 for a bad login or a weak password (the telnet rules), 409 for a taken
+  login, and 404 for a code that is unknown, used or expired. A bad code counts as a failure
+  against the address, as over telnet (D-132), and a locked-out address gets 429 without its
+  code being looked at.
+*Code:* `WebAccounts.checkCode`, `signup`, `WebLogins`, `WebServer.checkCode`, `signup`.
+
+## Operations (§4.14, §5.10; M6 design §7) — M6.5
+
+### D-160 The admin port — `open`
+- **Listener:** plain HTTP on Ktor's Netty engine, always on in `--prod`, at `--admin`/`admin`
+  (default `127.0.0.1:9090`).
+- **Token:** read from `--admin-token-file`, `admin_token_file` or the file
+  `GUPS_ADMIN_TOKEN_FILE` names, trimmed. Without one the server starts with a warning, and
+  every endpoint but `/healthz` answers 403.
+- **Checking:** a missing or wrong bearer token gets 401 with `WWW-Authenticate: Bearer`.
+  Tokens are compared as SHA-256 digests with `MessageDigest.isEqual`, so neither content nor
+  length leaks through timing.
+- **`/healthz`:** `{"pulse", "uptime_s", "writer_healthy"}`, where `pulse` is the last
+  finished pulse. It answers 503 when no pulse has finished for 5 s or the writer is
+  unhealthy.
+- **`/deploy`:** answers `application/x-ndjson`: one `{"progress": line}` per step, then
+  `{"ok", "commit", "packages", "errors"}`.
+- **`/roster`:** takes the CSV as the body and answers the `login,setup_code` lines (200) or
+  the problems (400). Setup codes last the default 7 days, so `import-roster --admin` refuses
+  `--days`.
+- **`/snapshot`:** a sanitized copy of the database (D-163), as a download.
+- **CLI:** `gups deploy [--commit SHA]` and `gups import-roster --admin ADDR` take
+  `--admin-token-file` or `GUPS_ADMIN_TOKEN_FILE`. `gups deploy` defaults to
+  `127.0.0.1:9090`, prints each progress line, and exits 1 unless the deploy succeeded.
+*Code:* `AdminServer`, `GupsServer.admin`, `AdminClient`, `Deploy`, `ImportRoster`.
+
+### D-161 Metrics — `open`
+- **Library:** Micrometer's Prometheus registry. Its naming gives §4.14's names: the
+  `gups.pulse.duration` timer becomes `gups_pulse_duration_seconds` and so on.
+- **Histograms:** pulse and checkpoint durations publish percentile histograms. Pulse
+  buckets run from 0.1 ms to 2 s.
+- **Threads:** the world loop records each pulse's duration. Every second of game time the
+  world thread publishes a snapshot for the gauges, so a scrape never reads the world:
+  quarantined packages, simulated rooms (every room when the bubble is off), simulated
+  entities, sessions by transport, and script steps by package.
+- **Series:** `gups_sessions` counts sessions playing a character; logins in progress don't
+  count. Its `telnet`, `tls`, `ws` and `local` series exist from the start.
+  `gups_script_steps_total` and `gups_script_errors_total{kind="script_error"}` are
+  registered for every loaded package at startup, so they exist before any script runs.
+- **Meanings:**
+  - `gups_pulse_overruns_total` counts skipped pulse boundaries.
+  - `gups_script_errors_total` counts script-kind diagnostics (`script_error`, `step_limit`,
+    `wall_clock`, `alloc_limit`, `missing`).
+  - `gups_checkpoint_entities` is the rows in the last committed batch.
+  - `gups_checkpoint_duration_seconds` times every commit, account batches included.
+*Code:* `Metrics`, `World.onPulse`, `CheckpointWriter.onCommit`.
+
+### D-162 The deploy pipeline — `open`
+- **Running:** one deploy at a time, each on a thread of its own; a second is refused at once.
+  It runs only in `--prod` when the world is a git working tree (otherwise `World.deploys`
+  is null and `@deploy` says why). `@deploy`, `POST /deploy` and the old
+  `WorldControlEvent.Deploy` all start it.
+- **Fetch:** `git fetch --no-tags <repository or origin>
+  +refs/heads/<branch>:refs/remotes/gups-deploy/<branch>`, with the deploy key through
+  `GIT_SSH_COMMAND` (`IdentitiesOnly`, `StrictHostKeyChecking=accept-new`). Only that branch is
+  fetched, so a commit the server doesn't know is reported as not on the branch.
+- **Checks:** before anything is staged, the deploy is refused if:
+  - the commit isn't an ancestor of the fetched tip;
+  - the live tree has uncommitted changes to tracked files;
+  - `MODULE.gups` differs between `meta.world_commit` (or `HEAD` if none) and the commit.
+- **Changed packages:** each changed file is charged to the deepest package directory, old or
+  new, that contains it.
+- **Staging:** a `predeploy` backup, then `git worktree add --detach` into a temporary
+  directory. `StarlarkHost.stage` loads every package there off the world thread, and any
+  error refuses the whole deploy. The worktree is always removed afterwards.
+- **Swapping:** a `WorldControlEvent.Task` runs `StarlarkHost.swap` on the world thread. This
+  is the reload's swap, so prototypes swap, live instances reconcile (D-080), and the changed
+  packages leave quarantine. M6 design §2.2's `DeployStaged` event is this `Task` (D-142).
+- **After the swap:** `git checkout --detach` moves the live tree, and then:
+  - `meta.world_commit` is set, saved with every checkpoint;
+  - CODEOWNERS is synced from the live tree, with new scopes applied to characters in play;
+  - a routine checkpoint is taken, and online instructors get an alert.
+- **Failure:** the world is unchanged. The errors go to the response, to a `deploy`
+  diagnostic (so `@errors`), and to an instructor alert.
+*Code:* `Deployer`, `Git`, `StarlarkHost.stage`, `swap`.
+
+### D-163 The sanitized snapshot — `open`
+The copy is made with SQLite's backup API after the writer catches up. Then `accounts`,
+`session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events` are emptied,
+characters are renamed `Player1`, `Player2`, ... in id order and detached from accounts, and
+the file is vacuumed. World rows, zone states, characters' payloads and their items are kept,
+which is what the migration check (M6 design §8.4) needs.
+*Code:* `Database.sanitizedCopy`, `SqlitePersistence.sanitizedCopy`.
+
+### D-164 Release images — `open`
+- **jlink images:** `:cli:jlinkImage` builds `build/image/gups`: a jlink runtime, the jars and
+  a `bin/gups` launcher. The runtime's modules are what jdeps finds in the plain jars, plus
+  the non-static `requires` of the modular jars' descriptors (jdeps can't resolve Netty's
+  optional requirements), plus `jdk.crypto.ec`, `jdk.naming.dns`, `jdk.unsupported`,
+  `java.management` and `java.naming`, which are loaded reflectively. The list is written to
+  `modules.txt`.
+- **Archive:** `:cli:jlinkArchive` packs `gups-<version>-<platform>.tar.gz`. Every CI platform
+  builds it and smoke-tests it with `gups test`; a `v*` tag attaches the archives to the
+  GitHub release.
+- **OCI image:** `docker/Dockerfile` is `eclipse-temurin:21-jre-noble` with `git`,
+  `openssh-client` and `curl` added, and `installDist` copied in. Because the jars are the
+  same everywhere, one build makes both `linux/amd64` and `linux/arm64`.
+  - It declares the volumes `/world`, `/data` and `/etc/gups`, and marks `/world` a git
+    `safe.directory`.
+  - It runs `gups serve --prod --config /etc/gups/server.gups`, with a healthcheck that curls
+    `/healthz`.
+  - A `v*` tag pushes it as `ghcr.io/<owner>/gups:<version>`, the tag without its `v`.
+*Code:* `cli/build.gradle.kts`, `docker/Dockerfile`, `.github/workflows/ci.yml`.
+
+### D-165 Starting `--prod` against its commit — `open`
+`--prod` refuses to start without a `git` binary (Q10). When the world is a git working tree
+it also refuses if tracked files have uncommitted changes, or if `HEAD` isn't the
+`meta.world_commit` the database was saved at. `--force-commit` adopts what is there. The
+first start records `HEAD`. A world that isn't a working tree starts with a warning and can't
+deploy, as can one with no commits. The deploy settings `--repository`, `--deploy-branch`
+and `--deploy-key-file` (or `GUPS_DEPLOY_KEY_FILE`) have configuration keys of the same
+names.
+*Code:* `GupsServer.checkCommit`, `Serve.prodServer`.

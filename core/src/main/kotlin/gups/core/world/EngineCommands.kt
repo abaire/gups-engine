@@ -51,9 +51,7 @@ internal object EngineCommands {
         TickCommand("close") { planDoor(it, DoorVerb.CLOSE) },
         TickCommand("lock") { planDoor(it, DoorVerb.LOCK) },
         TickCommand("unlock") { planDoor(it, DoorVerb.UNLOCK) },
-        // Builder tools (SPEC §4.9). The script host adds @trace and @eval.
-        FastCommand("@errors", role = Role.BUILDER) { errors(it) },
-    )
+    ) + Tools.all()
 
     fun move(dir: Direction): TickCommand = TickCommand(dir.name) { MoveAction(dir) }
 
@@ -90,6 +88,7 @@ internal object EngineCommands {
         val player = w.players.firstOrNull { it.name.equals(name, ignoreCase = true) }
         if (player != null) {
             w.send(player, "${c.actor.name.cap()} tells you, '$text'")
+            w.channel("tell", c.actor, text, setOf(c.actor, player))
             return w.send(c.actor, "You tell ${player.name}, '$text'")
         }
         val mob = w.findActor(c.actor, name) ?: return w.send(c.actor, "Nobody by that name is around.")
@@ -99,7 +98,9 @@ internal object EngineCommands {
 
     private fun gossip(c: CommandCall) {
         if (c.args.isEmpty()) return c.world.send(c.actor, "Gossip what?")
+        if (c.actor is Player && c.world.refuseRestricted(c.actor, "gossip")) return
         for (p in c.world.players) c.world.send(p, "[gossip] ${c.actor.name}: ${c.args}")
+        c.world.channel("gossip", c.actor, c.args, c.world.players)
     }
 
     /** Heard in the room and in every room whose exit toward it lets noise through (SPEC §5.7). */
@@ -110,6 +111,7 @@ internal object EngineCommands {
         w.echo(c.actor.room, "${c.actor.name.cap()} shouts, '${c.args}'", c.actor)
         val near = w.inbound(c.actor.room).filter { (_, exit) -> Channel.NOISE !in exit.effectiveBlocks }.map { it.first }.distinct()
         for (room in near) w.echo(room, "Someone nearby shouts, '${c.args}'")
+        w.channel("shout", c.actor, c.args, c.actor.room.actors + near.flatMap { it.actors })
         w.perceive("shout", Channel.NOISE, c.actor.room, c.actor, c.args)
     }
 
@@ -120,6 +122,7 @@ internal object EngineCommands {
         val target = w.findActor(c.actor, name) ?: return w.send(c.actor, "They aren't here.")
         w.send(c.actor, "You whisper to ${target.name}, '$text'")
         w.send(target, "${c.actor.name.cap()} whispers to you, '$text'")
+        w.channel("whisper", c.actor, text, setOf(c.actor, target))
         w.echo(c.actor.room, "${c.actor.name.cap()} whispers something to ${target.name}.", c.actor, target)
     }
 
@@ -173,20 +176,6 @@ internal object EngineCommands {
             },
         )
     }
-
-    /** `@errors [package]`: the most recent diagnostics, newest last. */
-    private fun errors(c: CommandCall) {
-        val pkg = c.args.trim().removePrefix("//").ifEmpty { null }
-        val recent = c.world.diagnostics.filter { pkg == null || it.pkg == pkg }.takeLast(ERRORS_SHOWN)
-        if (recent.isEmpty()) return c.world.send(c.actor, if (pkg == null) "No diagnostics." else "No diagnostics for //$pkg.")
-        val lines = recent.map { d ->
-            val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":").ifEmpty { d.pkg?.let { "//$it" } ?: "engine" }
-            "[${d.pulse}] ${d.kind} $where: ${d.message}"
-        }
-        c.world.send(c.actor, lines.joinToString("\n"))
-    }
-
-    private const val ERRORS_SHOWN = 10
 
     private fun quit(c: CommandCall) {
         val p = c.actor as? Player ?: return

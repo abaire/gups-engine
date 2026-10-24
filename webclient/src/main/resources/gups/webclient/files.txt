@@ -1,0 +1,7 @@
+# The web client's files (M6 design §6.2), served by gups.net.WebServer. index.html is the
+# page; everything else is served under /assets/<hash>/.
+index.html
+style.css
+app.js
+markup.js
+panels.js

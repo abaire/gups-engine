@@ -12,22 +12,37 @@ import com.github.ajalt.clikt.parameters.groups.required
 import com.github.ajalt.clikt.parameters.groups.single
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
+import com.github.ajalt.clikt.parameters.options.nullableFlag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.options.switch
 import com.github.ajalt.clikt.parameters.options.versionOption
 import com.github.ajalt.clikt.parameters.types.file
 import com.github.ajalt.clikt.parameters.types.int
+import gups.auth.AccountService
+import gups.auth.DEFAULT_INVITE_DAYS
+import gups.auth.parseDuration
+import gups.auth.LoginSettings
+import gups.auth.Roster
 import gups.core.EngineInfo
 import gups.core.Label
+import gups.core.Role
 import gups.harness.ReproRunner
 import gups.harness.TestRunner
 import gups.harness.render
 import gups.persist.Backups
 import gups.persist.Database
 import gups.persist.ReproBundle
+import gups.persist.SqliteAccountStore
 import gups.persist.restoreBundle
+import gups.script.ServerConfig
 import gups.script.WorldDir
+import gups.net.ServerTls
+import gups.net.toJson
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.file.Path
 import kotlinx.coroutines.runBlocking
@@ -83,19 +98,38 @@ class Serve : CliktCommand(name = "serve") {
     val fresh by option("--fresh", help = "Ignore saved world state and boot from the .star definitions.").flag()
     val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
     val db by option("--db", help = "SQLite database file.").file(canBeDir = false)
-    val port by option("--port", help = "Telnet port (--dev: 4000).").int().default(4000)
-    val start by option("--start", metavar = "LABEL", help = "Room new characters start in (--dev: //zones/tutorial:gate, else the first room).")
+    val port by option("--port", help = "--dev: telnet port on 127.0.0.1 (default 4000).").int()
+    val start by option("--start", metavar = "LABEL", help = "Room new characters start in (default: MODULE.gups start_room, else //zones/tutorial:gate, else the first room).")
+    val config by option("--config", metavar = "FILE", help = "--prod: server configuration file.").file(mustExist = true, canBeDir = false)
+    val telnet by option("--telnet", metavar = "ADDR", help = "--prod: raw telnet address, e.g. :4000 or 127.0.0.1:4000 (default: off).")
+    val telnetTls by option("--telnet-tls", metavar = "ADDR", help = "--prod: telnet over TLS address, e.g. :4443.")
+    val https by option("--https", metavar = "ADDR", help = "--prod: HTTPS address for the web client and WebSocket, e.g. :443.")
+    val tlsCert by option("--tls-cert", metavar = "FILE", help = "--prod: PEM certificate chain, e.g. fullchain.pem.").file(canBeDir = false)
+    val tlsKey by option("--tls-key", metavar = "FILE", help = "--prod: PEM PKCS#8 private key, e.g. privkey.pem.").file(canBeDir = false)
+    val selfSigned by option("--self-signed", help = "--prod: use a throwaway self-signed certificate, for local testing.").flag()
+    val adminAddress by option("--admin", metavar = "ADDR", help = "--prod: admin port address (default $DEFAULT_ADMIN).")
+    val adminTokenFile by option("--admin-token-file", metavar = "FILE", help = "--prod: file holding the admin token (default: \$GUPS_ADMIN_TOKEN_FILE).").file(canBeDir = false)
+    val repository by option("--repository", metavar = "URL", help = "--prod: course repository to deploy from (default: the world's origin).")
+    val deployBranch by option("--deploy-branch", metavar = "BRANCH", help = "--prod: branch deploys come from (default main).")
+    val deployKeyFile by option("--deploy-key-file", metavar = "FILE", help = "--prod: SSH key for fetching (default: \$GUPS_DEPLOY_KEY_FILE).").file(canBeDir = false)
+    val forceCommit by option("--force-commit", help = "--prod: start even if the world isn't at the commit the database was saved at.").flag()
+    val openSignup by option("--open-signup", help = "--prod: let new logins be made without an invite code.").nullableFlag("--no-open-signup")
+    val maxCharacters by option("--max-characters", metavar = "N", help = "--prod: characters per account (default 5; instructors unlimited).").int()
 
     override fun help(context: Context) = "Run the server."
 
     override fun run() {
-        if (profile == Profile.PROD) {
-            echo("gups serve --prod: not implemented yet (planned for M6).", err = true)
-            throw ProgramResult(EXIT_NOT_IMPLEMENTED)
-        }
         val startLabel = start?.let { runCatching { Label(it) }.getOrNull() ?: throw UsageError("--start: '$it' is not a label") }
-        val dir = WorldDir((world ?: File(".")).toPath())
-        val server = DevServer(dir, port, startLabel, db?.toPath() ?: DevServer.defaultDb(dir), fresh) { echo(it, err = true) }
+        val server = if (profile == Profile.PROD) {
+            prodServer(startLabel)
+        } else {
+            val prodOnly = listOf(config, telnet, telnetTls, https, tlsCert, tlsKey, openSignup, maxCharacters, adminAddress, adminTokenFile, repository, deployBranch, deployKeyFile)
+            if (prodOnly.any { it != null } || selfSigned || forceCommit) {
+                throw UsageError("--config and the listener, certificate, account, admin and deploy options are for --prod")
+            }
+            val dir = WorldDir((world ?: File(".")).toPath())
+            GupsServer(dir, port ?: 4000, startLabel, db?.toPath() ?: GupsServer.defaultDb(dir), fresh) { echo(it, err = true) }
+        }
         if (!server.boot()) throw ProgramResult(1)
         Runtime.getRuntime().addShutdownHook(
             Thread {
@@ -104,9 +138,83 @@ class Serve : CliktCommand(name = "serve") {
             },
         )
         runBlocking {
-            server.run { bound -> echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound") }
+            server.run { bound ->
+                if (profile == Profile.PROD) {
+                    val words = mapOf("telnet" to "raw telnet", "tls" to "telnet over TLS", "ws" to "HTTPS and the web client", "admin" to "the admin port")
+                    echo("GUPS server: " + server.ports.entries.joinToString(", ") { (t, p) -> "${words[t]} on port $p" } + ".")
+                } else {
+                    echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound")
+                }
+            }
         }
     }
+
+    /** `--prod` (M6 design §2.1, §3.5): the configuration file, with each flag overriding it (D-135). */
+    private fun prodServer(startLabel: Label?): GupsServer {
+        if (port != null) throw UsageError("--port is for --dev; use --telnet with --prod")
+        val cfg = config?.let { f ->
+            val (c, error) = ServerConfig.read(f.toPath())
+            if (error != null) throw UsageError(error.render())
+            c
+        } ?: ServerConfig()
+        val dir = WorldDir((world?.toPath() ?: cfg.world?.let { Path.of(it) } ?: Path.of(".")))
+        if (!dir.root.toFile().isDirectory) throw UsageError("no world directory at ${dir.root}")
+        val raw = (telnet ?: cfg.telnet)?.let(::parseAddress)
+        val secure = (telnetTls ?: cfg.telnetTls)?.let(::parseAddress)
+        val web = (https ?: cfg.https)?.let(::parseAddress)
+        if (raw == null && secure == null && web == null) {
+            throw UsageError("--prod needs a listener: --telnet-tls :4443 and --https :443 with --tls-cert and --tls-key (or --self-signed), or --telnet :4000")
+        }
+        if (selfSigned && secure == null && web == null) throw UsageError("--self-signed needs --telnet-tls or --https")
+        // One certificate serves both TLS listeners.
+        val cert = if (secure != null || web != null) serverTls(cfg, (secure ?: web)!!.first) else null
+        val tls = secure?.let { (host, port) -> TlsListener(host, port, cert!!) }
+        val site = web?.let { (host, port) -> TlsListener(host, port, cert!!) }
+        val login = LoginSettings(
+            openSignup = openSignup ?: cfg.openSignup,
+            maxCharacters = maxCharacters ?: cfg.maxCharacters,
+            reservedNames = cfg.reservedNames.mapTo(HashSet()) { it.lowercase() },
+        )
+        if (login.maxCharacters < 1) throw UsageError("--max-characters must be at least 1")
+        val dbPath = db?.toPath() ?: cfg.db?.let { Path.of(it) } ?: GupsServer.defaultDb(dir)
+        cfg.restrictionLadder.firstOrNull { parseDuration(it).isFailure }?.let { throw UsageError("restriction_ladder: '$it' is not a length such as 1d, 7d or permanent") }
+        if (cfg.restrictionLadder.isEmpty()) throw UsageError("restriction_ladder needs at least one step")
+        val (adminHost, adminPort) = parseAddress(adminAddress ?: cfg.admin ?: DEFAULT_ADMIN)
+        val token = readSecret(adminTokenFile ?: cfg.adminTokenFile?.let(::File), "GUPS_ADMIN_TOKEN_FILE")
+        if (token == null) echo("warning: no admin token (admin_token_file or GUPS_ADMIN_TOKEN_FILE), so the admin port serves only /healthz", err = true)
+        val deploy = DeploySettings(
+            repository = repository ?: cfg.repository,
+            branch = deployBranch ?: cfg.deployBranch,
+            keyFile = (deployKeyFile ?: cfg.deployKeyFile?.let(::File) ?: System.getenv("GUPS_DEPLOY_KEY_FILE")?.takeIf { it.isNotBlank() }?.let(::File))?.toPath(),
+        )
+        return GupsServer(
+            dir, raw?.second ?: 0, startLabel, dbPath, fresh,
+            ProdOptions(raw?.first, login, cfg.restrictionLadder, tls, site, AdminListener(adminHost, adminPort, token), deploy, forceCommit),
+        ) { echo(it, err = true) }
+    }
+
+    /** The certificate: a throwaway self-signed one, or the PEM files of the flags or configuration (M6 design §5.1). */
+    private fun serverTls(cfg: ServerConfig, host: String): ServerTls {
+        if (selfSigned) {
+            val dir = java.nio.file.Files.createTempDirectory("gups-self-signed")
+            val hosts = listOf("localhost", "127.0.0.1") + listOf(host).filter { it != "0.0.0.0" && it != "::" && it !in setOf("localhost", "127.0.0.1") }
+            echo("Using a throwaway self-signed certificate for ${hosts.joinToString()}; clients will warn about it.", err = true)
+            return ServerTls.selfSigned(dir, hosts)
+        }
+        val cert = tlsCert?.toPath() ?: cfg.tlsCert?.let { Path.of(it) }
+        val key = tlsKey?.toPath() ?: cfg.tlsKey?.let { Path.of(it) }
+        if (cert == null || key == null) throw UsageError("TLS needs --tls-cert and --tls-key (or tls_cert and tls_key), or --self-signed")
+        return runCatching { ServerTls(cert, key) }.getOrElse { throw UsageError("can't load the TLS certificate $cert and key $key: ${it.message}") }
+    }
+}
+
+/** `host:port`, `[v6]:port` or `:port` (every interface) as a bind host and port. */
+internal fun parseAddress(address: String): Pair<String, Int> {
+    val colon = address.lastIndexOf(':')
+    val port = address.substring(colon + 1).toIntOrNull()
+    if (colon < 0 || port == null || port !in 0..65535) throw UsageError("'$address' is not an address such as :4000 or 127.0.0.1:4000")
+    val host = address.substring(0, colon).removePrefix("[").removeSuffix("]").ifEmpty { "0.0.0.0" }
+    return host to port
 }
 
 /** Exit status of `gups test` when a test fails or a pattern matches nothing. */
@@ -147,7 +255,7 @@ class Docs : StubCommand("docs", "Generate the API reference.", "M7") {
 const val SHUTDOWN_WAIT_MS = 30_000L
 
 /** `--db`, defaulting to the database of `--world` (D-099). */
-private fun dbPath(world: File?, db: File?): Path = db?.toPath() ?: DevServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
+private fun dbPath(world: File?, db: File?): Path = db?.toPath() ?: GupsServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
 
 class Repro : CliktCommand(name = "repro") {
     val source by argument("diagnostic-id|bundle.json")
@@ -218,14 +326,88 @@ class Restore : CliktCommand(name = "restore") {
     }
 }
 
-class Deploy : StubCommand("deploy", "Deploy a course world commit (called by CI).", "M6") {
-    val commit by option("--commit", metavar = "SHA", help = "Commit to deploy.").required()
+class Deploy : CliktCommand(name = "deploy") {
+    val commit by option("--commit", metavar = "SHA", help = "Commit to deploy (default: the tip of the deploy branch).")
+    val admin by option("--admin", metavar = "ADDR", help = "The server's admin port (default $DEFAULT_ADMIN).").default(DEFAULT_ADMIN)
+    val adminTokenFile by option("--admin-token-file", metavar = "FILE", help = "File holding the admin token (default: \$GUPS_ADMIN_TOKEN_FILE).").file(canBeDir = false)
+
+    override fun help(context: Context) = "Deploy a course world commit to a running server (called by CI)."
+
+    override fun run() {
+        val client = AdminClient(admin, adminTokenFile)
+        var ok = false
+        // The response is NDJSON: {"progress"} lines, then {"ok", "commit", "packages", "errors"} (M6 design §7.1).
+        val status = client.post("/deploy", toJson(mapOf("commit" to commit)).toString(), "application/json") { _, line ->
+            val o = runCatching { Json.parseToJsonElement(line) as JsonObject }.getOrNull()
+            fun text(key: String) = (o?.get(key) as? JsonPrimitive)?.content
+            when {
+                text("progress") != null -> echo(text("progress"))
+                o?.containsKey("ok") == true -> {
+                    ok = text("ok") == "true"
+                    val errors = (o["errors"] as? JsonArray)?.map { (it as JsonPrimitive).content }.orEmpty()
+                    if (ok) echo("Deployed ${text("commit")}.") else errors.forEach { echo("error: $it", err = true) }
+                }
+                else -> echo(line, err = true)
+            }
+        }
+        if (status != 200 || !ok) throw ProgramResult(1)
+    }
 }
 
-class Invite : StubCommand("invite", "Create an invite code.", "M6") {
-    val role by option("--role", metavar = "R", help = "Role granted by the invite.").required()
+/** Runs [block] on the account store of the world's database, written directly: the CLI tools work offline (D-134). */
+private fun <T> withAccounts(world: File?, db: File?, block: (AccountService) -> T): T {
+    val path = dbPath(world, db)
+    return Database.open(path).use { d -> SqliteAccountStore(path, d::write).use { block(AccountService(it)) } }
 }
 
-class ImportRoster : StubCommand("import-roster", "Create accounts from a roster CSV.", "M6") {
+private fun parseRole(text: String): Role =
+    Role.entries.firstOrNull { it.name.equals(text, ignoreCase = true) }
+        ?: throw UsageError("--role: '$text' is not one of ${Role.entries.joinToString { it.name.lowercase() }}")
+
+class Invite : CliktCommand(name = "invite") {
+    val role by option("--role", metavar = "R", help = "Role granted by the invite: player, builder, instructor or admin.").required()
+    val days by option("--days", metavar = "N", help = "Days until the code expires (default $DEFAULT_INVITE_DAYS).").int().default(DEFAULT_INVITE_DAYS)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to add the invite to (default: the world's).").file(canBeDir = false)
+
+    override fun help(context: Context) = "Create an invite code."
+
+    override fun run() {
+        val r = parseRole(role)
+        if (days < 1) throw UsageError("--days must be at least 1")
+        val code = withAccounts(world, db) { it.createInvite(r, days) }
+        echo(code)
+        echo("Invite for a new ${r.name.lowercase()} account; it works once and expires in $days days.", err = true)
+    }
+}
+
+class ImportRoster : CliktCommand(name = "import-roster") {
     val roster by argument("roster.csv").file(mustExist = true, canBeDir = false)
+    val days by option("--days", metavar = "N", help = "Days until the setup codes expire (default $DEFAULT_INVITE_DAYS).").int().default(DEFAULT_INVITE_DAYS)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
+    val db by option("--db", help = "Database to add the accounts to (default: the world's).").file(canBeDir = false)
+    val admin by option("--admin", metavar = "ADDR", help = "Import through a running server's admin port instead, e.g. $DEFAULT_ADMIN.")
+    val adminTokenFile by option("--admin-token-file", metavar = "FILE", help = "File holding the admin token (default: \$GUPS_ADMIN_TOKEN_FILE).").file(canBeDir = false)
+
+    override fun help(context: Context) =
+        "Create accounts from a roster CSV (columns login,github_handle,role) and print each new login's setup code."
+
+    override fun run() {
+        if (days < 1) throw UsageError("--days must be at least 1")
+        admin?.let { address ->
+            if (days != DEFAULT_INVITE_DAYS) throw UsageError("--days works only offline; the admin port uses $DEFAULT_INVITE_DAYS days")
+            val status = AdminClient(address, adminTokenFile).post("/roster", roster.readText(), "text/csv") { status, line -> echo(line, err = status != 200) }
+            if (status != 200) throw ProgramResult(1)
+            return
+        }
+        val (entries, problems) = Roster.parse(roster.readText())
+        if (problems.isNotEmpty()) {
+            problems.forEach { echo("${roster.name}: $it", err = true) }
+            throw ProgramResult(1)
+        }
+        val result = withAccounts(world, db) { it.importRoster(entries, days) }
+        echo("login,setup_code")
+        for ((login, code) in result.codes) echo("$login,$code")
+        echo("${result.codes.size} accounts created, ${result.updated} updated, ${result.unchanged} unchanged. Setup codes expire in $days days.", err = true)
+    }
 }
