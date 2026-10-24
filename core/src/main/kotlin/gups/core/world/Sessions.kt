@@ -25,6 +25,10 @@ class Session internal constructor(
     internal val bucket = TokenBucket(startNanos = connectedNanos)
     internal val drops = ArrayDeque<Long>()
     internal val out = StringBuilder()
+
+    /** The last state payload sent per GMCP package, and events waiting for the next flush (M6 design §5.2). */
+    internal val gmcpLast = HashMap<String, Any?>()
+    internal val gmcpOut = mutableListOf<Pair<String, Any?>>()
 }
 
 private const val DROP_WINDOW_NANOS = 60_000_000_000L
@@ -64,6 +68,7 @@ fun World.attach(session: SessionId, player: Player) {
     require(player.inWorld) { "$player is not in the world" }
     player.session?.let { old -> if (old != session) sessions[old]?.player = null }
     s.player = player
+    s.gmcpLast.clear()
     player.session = session
     player.linkDeadSince = null
     player.lastInputPulse = pulse
@@ -164,11 +169,14 @@ fun World.echo(room: Room, text: String, vararg exclude: Actor) {
 
 /** Sends [s] its queued output, then its prompt if it is playing. */
 fun World.flush(s: Session) {
-    if (s.out.isEmpty()) return
+    if (s.out.isEmpty() && s.gmcpOut.isEmpty()) return
     val text = s.out.toString()
     s.out.setLength(0)
-    s.sink.send(text)
-    s.player?.let { s.sink.prompt(promptFor(it)) }
+    if (text.isNotEmpty()) s.sink.send(text)
+    // GMCP follows the text it goes with (M6 design §5.2).
+    for ((pkg, data) in s.gmcpOut) s.sink.gmcp(pkg, data)
+    s.gmcpOut.clear()
+    if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
 }
 
 /** The prompt shown after each burst of output (D-083). */
@@ -209,9 +217,12 @@ internal fun World.reload(packages: List<String>) {
     flushOutput()
 }
 
-/** Phase 7 (SPEC §5.1). GMCP deltas join this flush in M6. The harness also flushes after input. */
+/** Phase 7 (SPEC §5.1): text, then GMCP events and state deltas. The harness also flushes after input. */
 fun World.flushOutput() {
-    for (s in sessions.values.toList()) flush(s)
+    for (s in sessions.values.toList()) {
+        guarded("GMCP for ${s.id}") { gmcpDeltas(s) }
+        flush(s)
+    }
 }
 
 internal fun String.cap(): String = replaceFirstChar { it.uppercase() }

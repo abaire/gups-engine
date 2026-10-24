@@ -56,10 +56,12 @@ To try the shared-server login locally, import a roster, then start `--prod` on 
 ```bash
 printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
 cli/build/install/gups/bin/gups import-roster roster.csv --world template-world   # prints ann's setup code
-cli/build/install/gups/bin/gups serve --prod --world template-world --telnet 127.0.0.1:4000
+cli/build/install/gups/bin/gups serve --prod --world template-world --telnet-tls 127.0.0.1:4443 --self-signed
 ```
 
-Then `telnet localhost 4000`, type `new`, enter the setup code and choose a password.
+Then connect Mudlet (or `openssl s_client -connect localhost:4443`) to port 4443 with TLS,
+accept the self-signed certificate, type `new`, enter the setup code and choose a password.
+Add `--telnet 127.0.0.1:4000` to serve raw telnet as well.
 
 ## Modules
 
@@ -87,7 +89,18 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M6.2 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §4): roles and in-game tools.
+M6.3 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §5): TLS and GMCP.
+
+- **Listeners:** both run on Netty. `--prod` serves telnet over TLS (`--telnet-tls`, TLS 1.2
+  and 1.3) and, only when asked, raw telnet.
+- **Certificates:** PEM files that a renewal tool such as certbot can replace; the server
+  picks them up within the hour, without a restart. `--self-signed` makes a throwaway one for
+  local testing.
+- **GMCP:** clients that send `Core.Supports` get `Char.Vitals`, `Char.Status`,
+  `Char.Affects`, `Room.Info` and `Room.Bands` whenever they change. They also get
+  `Comm.Channel.Text` with each message and, for builders tracing, `Gups.Trace`.
+
+M6.2: roles and in-game tools.
 
 - **Builder scope:** `CODEOWNERS` in the course world gives builders their packages at
   startup, and `@role` can add packages it doesn't cover. Builders' `@goto`, `@stat`,
@@ -137,8 +150,8 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M6.3–M6.6: TLS and GMCP, WebSocket, the admin port and deploys, and the course world CI
-  gates.
+- M6.4–M6.6: WebSocket and the web client, the admin port and deploys, and the course world
+  CI gates.
 - M7: `gups docs`, `MIGRATING.md`, plugins.
 
 `lint`, `docs` and `deploy` still exit with status 3 ("not implemented").

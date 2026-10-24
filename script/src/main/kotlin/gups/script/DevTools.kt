@@ -9,6 +9,7 @@ import gups.core.world.FastCommand
 import gups.core.world.World
 import gups.core.world.findActor
 import gups.core.world.findItem
+import gups.core.world.gmcp
 import gups.core.world.packageOf
 import gups.core.world.refuseRestricted
 import gups.core.world.send
@@ -66,12 +67,12 @@ class DevTools private constructor(private val world: World, private val host: S
             }
             if (!sub.filter.matches(e) || !visible(sub.player, e)) continue
             if (sub.pulse != e.pulse) {
-                if (sub.dropped > 0) world.send(sub.player, "[trace] ... ${sub.dropped} more lines at pulse ${sub.pulse}")
+                if (sub.dropped > 0) line(sub.player, "... ${sub.dropped} more lines at pulse ${sub.pulse}")
                 sub.pulse = e.pulse
                 sub.sent = 0
                 sub.dropped = 0
             }
-            if (sub.sent++ < TRACE_LINES_PER_PULSE) world.send(sub.player, "[trace] ${e.text}") else sub.dropped++
+            if (sub.sent++ < TRACE_LINES_PER_PULSE) line(sub.player, e.text) else sub.dropped++
         }
         if (subs.isEmpty()) {
             host.tracer = previous
@@ -87,6 +88,11 @@ class DevTools private constructor(private val world: World, private val host: S
         p.role.atLeast(Role.INSTRUCTOR) -> true
         e.hook == RULES || e.hook.startsWith("rules.") || e.hook.startsWith("modifier ") -> e.owner == p.id
         else -> p.owns(e.pkg)
+    }
+
+    /** One trace line: `Gups.Trace` when the client supports it, else a `[trace]` text line (M6 design §5.2). */
+    private fun line(p: Player, text: String) {
+        if (!world.gmcp(p, "Gups.Trace", mapOf("line" to text))) world.send(p, "[trace] $text")
     }
 
     /** A rules chain line from the world, traced like a script event. */

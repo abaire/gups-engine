@@ -17,6 +17,8 @@ import gups.core.world.DevLogin
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.alert
+import gups.net.CERT_CHECK_INTERVAL
+import gups.net.ServerTls
 import gups.net.TelnetServer
 import gups.persist.Backups
 import gups.persist.SqlitePersistence
@@ -48,11 +50,17 @@ private const val WATCH_INTERVAL_MS = 100L
 
 /** What `--prod` adds (M6 design §3.5): where raw telnet listens, and the account login's settings. */
 class ProdOptions(
-    val telnetHost: String,
+    /** Where raw telnet listens, on [GupsServer]'s port; null for none. */
+    val telnetHost: String?,
     val login: LoginSettings = LoginSettings(),
     /** `restriction_ladder` of the server configuration (M6 design §4.4). */
     val ladder: List<String> = DEFAULT_LADDER,
+    /** Telnet over TLS (M6 design §5.1). */
+    val tls: TlsListener? = null,
 )
+
+/** Where telnet over TLS listens, and its certificate. */
+class TlsListener(val host: String, val port: Int, val tls: ServerTls)
 
 /** Password checks, account changes and other slow work run here, never on the world thread (M6 design §2.2). */
 private const val BACKGROUND_THREADS = 4
@@ -84,7 +92,19 @@ class GupsServer(
     lateinit var world: World
         private set
     private lateinit var loop: WorldLoop
-    private val telnet by lazy { TelnetServer(loop, prod?.telnetHost ?: "127.0.0.1", port) }
+    private val sessionIds = java.util.concurrent.atomic.AtomicLong(1)
+
+    /** The listeners: raw telnet unless `--prod` turned it off, and telnet over TLS when configured. */
+    private val listeners by lazy {
+        listOfNotNull(
+            (if (prod == null) "127.0.0.1" else prod.telnetHost)?.let { TelnetServer(loop, it, port, sessionIds) },
+            prod?.tls?.let { TelnetServer(loop, it.host, it.port, sessionIds, it.tls) },
+        )
+    }
+
+    /** Bound ports by transport (`telnet`, `tls`), once [run] has started the listeners. */
+    @Volatile var ports: Map<String, Int> = emptyMap()
+        private set
 
     /** Loads the world. Returns false, after logging why, if there is nothing to play. */
     fun boot(): Boolean {
@@ -182,14 +202,23 @@ class GupsServer(
         log(if (file == null) "No CODEOWNERS file; builders have only the packages given with @role." else "CODEOWNERS: ${report.changed.size} accounts' packages changed.")
     }
 
-    /** Runs until [stop]. [ready] gets the bound port once the listener is up. */
+    /** Runs until [stop]. [ready] gets the first listener's bound port once all are up; [ports] has each. */
     suspend fun run(ready: (Int) -> Unit = {}) = coroutineScope {
         val running = launch(WorldLoop.worldDispatcher) {
             loop.run()
             // Shutdown ends with a final checkpoint (SPEC §5.11).
             if (persistence != null) world.checkpointNow("shutdown")
         }
-        val bound = telnet.start()
+        ports = listeners.associate { it.transport to it.start() }
+        val certs = prod?.tls?.tls
+        // Renewed certificates are picked up without a restart (M6 design §5.1).
+        val certChecks = launch(Dispatchers.IO) {
+            while (isActive && certs != null) {
+                delay(CERT_CHECK_INTERVAL.toMillis())
+                runCatching { if (certs.reloadIfChanged()) log("Reloaded the TLS certificate from ${certs.cert}.") }
+                    .onFailure { log("The TLS certificate didn't reload; keeping the old one: ${it.message}") }
+            }
+        }
         val watcher = WorldWatcher(dir)
         // --prod changes only through deploys (SPEC §1.4, §5.10).
         val watching = launch(Dispatchers.IO) {
@@ -209,11 +238,12 @@ class GupsServer(
                 delay(BACKUP_CHECK_MS)
             }
         }
-        ready(bound)
+        ready(ports.values.first())
         running.join()
         watching.cancel()
         backingUp.cancel()
-        telnet.stop()
+        certChecks.cancel()
+        listeners.forEach { it.stop() }
         persistence?.close()?.let { ok -> if (!ok) log("Some changes could not be saved before shutdown.") }
         stopped.countDown()
     }

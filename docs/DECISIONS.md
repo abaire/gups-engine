@@ -780,9 +780,9 @@ prompt.
   256 KB disconnects it as too slow, and the character goes link-dead.
 *Code:* `TelnetConnection`, `TelnetServer`.
 
-### D-090 Raw sockets with `ktor-network` — `open`
-§1.5 says "Ktor/Netty raw non-blocking sockets". The listener uses `ktor-network` 3.6.0,
-whose raw TCP sockets run on Ktor's own NIO selector: Netty isn't needed. Session ids come
+### D-090 Raw sockets with `ktor-network` — `rejected`
+Superseded by Q1 of the M6 design: every listener runs on Netty (D-148). Until M6.3 the
+listener used `ktor-network` 3.6.0, which has no server-side TLS. Session ids still come
 from one `AtomicLong` shared by listeners.
 *Code:* `TelnetServer`, `gradle/libs.versions.toml`.
 
@@ -1316,8 +1316,7 @@ canonical form. They are random enough that an unsalted fast hash is enough.
 *Code:* `Roster`, `AccountService.importRoster`, `ImportRoster`, `Invite`.
 
 ### D-135 `--prod` and the server configuration in M6.1 — `open`
-- **Listener:** raw telnet is the only one until M6.3, so `--prod` refuses to start without a
-  telnet address (`--telnet` or `telnet = ...`). `:4000` binds every interface.
+- **Listener:** `--prod` needs at least one listener (D-152). `:4000` binds every interface.
 - **Flags:** `--config`, `--telnet`, `--open-signup`/`--no-open-signup`, `--max-characters`,
   plus the existing `--world`, `--db`, `--start` and `--fresh`, each overriding the file.
   `--port` stays `--dev`-only. The settings of later stages are read and checked but only
@@ -1472,3 +1471,74 @@ restart.
   state, who set it and when, the reason, and who lifted it.
 - **Set by:** the instructor's account, or none for `--dev` characters without one.
 *Code:* `AccountTools`, `World.restriction`, `World.refuseRestricted`, `Capabilities`.
+
+## TLS and GMCP (§4.10, §4.11; M6 design §2.4, §2.5, §5) — M6.3
+
+### D-148 Netty listeners — `open`
+- **Stack:** Netty 4.2.17 (the version Ktor 3.6 uses), NIO transport, one boss thread and
+  Netty's default worker count per listener. `ktor-network` is gone.
+- **Pipeline:** raw telnet and telnet over TLS build the same pipeline; TLS adds an
+  `SslHandler` first. `TelnetConnection` is unchanged.
+- **Sessions:** over TLS a session starts, and the world hears `Connect`, only once the
+  handshake succeeds. Its transport is `tls`; raw telnet's stays `telnet`.
+- **Output:** each sink call is written and flushed at once. Bytes not yet written count
+  toward the 256 KiB limit until Netty finishes writing them.
+- **Disconnect:** `Disconnect` is posted whenever the channel closes. After a world-side
+  close it is a no-op.
+*Code:* `TelnetServer`.
+
+### D-149 GMCP seam and delivery — `open`
+- **Seam:** `OutputSink.gmcp(pkg, data)`, plus `wantsGmcp(pkg)`, so the world computes only
+  what the client asked for.
+- **Supports:** a package is wanted when GMCP is on and `Core.Supports` listed it, or a
+  module above it (`Char` covers `Char.Vitals`), compared case-insensitively. Versions in
+  the entries are ignored. `Set` replaces the list and `Add`/`Remove` change it; `DONT GMCP`
+  turns everything off. `Core.Hello`'s client and version are kept. A `Core.*` message with
+  malformed JSON counts as a protocol error (§6.4); other packages are ignored.
+- **Order:** GMCP waits in the session with its text and goes out after the text and before
+  the prompt. A flush with only GMCP sends no prompt.
+- **Deltas:** every phase-7 flush (`World.flushOutput`) recomputes the state packages
+  (`Char.Vitals`, `Char.Status`, `Char.Affects`, `Room.Info`, `Room.Bands`) and sends those
+  whose whole payload changed. The cache resets when a session takes a character, so a
+  reconnect gets everything again. Events (`Comm.Channel.Text`, `Gups.Trace`) are never
+  cached.
+- **Encoding:** `net` turns the plain values into JSON with kotlinx.serialization and
+  doubles IAC bytes in the payload.
+*Code:* `Seams.kt`, `Gmcp.kt`, `World.flush`, `TelnetConnection.gmcpIn`, `encodeGmcp`.
+
+### D-150 TLS certificates — `open`
+- **Files:** a PEM certificate chain and a PEM PKCS#8 key (certbot's `fullchain.pem` and
+  `privkey.pem`), loaded with Netty's JDK provider. TLS 1.3 and 1.2 only, with the JDK's
+  default cipher suites.
+- **Reload:** every hour the server compares both files' modification times. If either
+  changed it rebuilds the context. A pair that fails to load is logged and the old context
+  stays. Open connections keep their certificate.
+- **`--self-signed`:** an EC P-256 certificate signed with SHA-256, valid for 30 days. Its
+  subject alternative names are `localhost`, `127.0.0.1` and the bind host when it is a
+  specific one. It is written to a fresh temporary directory, using Bouncy Castle's
+  `bcpkix`.
+*Code:* `ServerTls`, `Serve.serverTls`.
+
+### D-151 GMCP payloads — `open`
+- **`Char.Status`:** `wait` is the recovery left in pulses, and `xp_next` is the total XP for
+  the next level (`rules.xp_to_level`). `casting.skill` is the skill's name, or `action` for a
+  warmup that isn't a cast, with `progress` 0–100 through the warmup. `fighting` lists names.
+- **`Char.Affects`:** `remaining` is whole seconds; `flags` are sorted.
+- **`Room.Info`:** `exits` maps every exit's direction to its door state, or null when it has
+  no door; `regions` are sorted.
+- **`Room.Bands`:** actors (the viewer excluded) and ground items of the viewer's room, by
+  band from the viewer's index: actors first, then items, each in ascending id.
+- **`Comm.Channel.Text`:** `say` goes to everyone in the room, the speaker included. `tell`
+  and `whisper` go to both ends. `shout` goes to the speaker's room and the rooms that hear
+  it, and `gossip` to every player. `text` is what was said, without the framing.
+- **`Gups.Trace`:** `{"line"}` replaces the `[trace]` line, the per-pulse overflow summary
+  included.
+*Code:* `World.gmcpPayload`, `World.channel`, `DevTools.line`.
+
+### D-152 `--prod` listeners — `open`
+`--prod` serves raw telnet only when asked (`--telnet` or `telnet = ...`) and telnet over TLS
+with `--telnet-tls`/`telnet_tls`. At least one is required. TLS needs `--tls-cert` and
+`--tls-key` (or `tls_cert` and `tls_key`), or `--self-signed`, and `--self-signed` needs a
+TLS address. `GupsServer.ports` reports the bound port per transport. The startup message
+lists both listeners. `--dev` stays raw telnet on 127.0.0.1.
+*Code:* `Serve.prodServer`, `GupsServer`, `ProdOptions`, `TlsListener`.

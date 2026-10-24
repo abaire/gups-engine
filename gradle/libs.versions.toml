@@ -9,6 +9,7 @@ ktor = "3.6.0"
 kotlinx-serialization = "1.11.0"
 sqlite = "3.53.4.0"
 bouncycastle = "1.83"
+netty = "4.2.17.Final"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -16,7 +17,10 @@ sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 kotlin-serialization-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
 # Pure-Java Argon2id for password hashing (M6 design §3.2).
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
-ktor-network = { module = "io.ktor:ktor-network", version.ref = "ktor" }
+# Self-signed certificates for local TLS testing (M6 design §5.1).
+bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
+# Telnet and telnet-over-TLS listeners (M6 design §2.5); the version Ktor 3.6 uses.
+netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
 # Bazel's net.starlark.java, as packaged for Maven Central (D-060).
 starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

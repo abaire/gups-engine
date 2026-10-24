@@ -17,7 +17,7 @@ import kotlin.io.path.name
 data class ServerConfig(
     val world: String? = null,
     val db: String? = null,
-    /** Raw telnet; null is off. In M6.1 it is the only listener (D-135). */
+    /** Raw telnet; null is off. */
     val telnet: String? = null,
     val telnetTls: String? = null,
     val https: String? = null,
@@ -35,11 +35,8 @@ data class ServerConfig(
 ) {
     /** Settings that are set but that this engine build doesn't use yet, with the stage that brings them (D-135). */
     fun unused(): List<String> = buildList {
-        if (telnetTls != null) add("telnet_tls (M6.3)")
         if (https != null) add("https (M6.4)")
         if (admin != null) add("admin (M6.5)")
-        if (tlsCert != null) add("tls_cert (M6.3)")
-        if (tlsKey != null) add("tls_key (M6.3)")
         if (adminTokenFile != null) add("admin_token_file (M6.5)")
         if (repository != null) add("repository (M6.5)")
         if (deployKeyFile != null) add("deploy_key_file (M6.5)")

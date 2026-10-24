@@ -237,6 +237,54 @@ class GupsServerTest {
     }
 
     @Test
+    fun `a student plays over TLS with GMCP vitals`() {
+        val root = copyTemplate()
+        val db = GupsServer.defaultDb(WorldDir(root))
+        gups.persist.Database.open(db).use { d ->
+            gups.persist.SqliteAccountStore(db, d::write).use { store ->
+                store.create(gups.core.Account(0, "ann", gups.auth.Argon2Hasher(memoryKiB = 8, iterations = 1).hash("correct horse")))
+            }
+        }
+        val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory("tls"))
+        val logs = StringBuffer()
+        val server = GupsServer(WorldDir(root), port = 0, prod = ProdOptions(null, tls = TlsListener("127.0.0.1", 0, tls))) { logs.append(it).append('\n') }
+        assertTrue(server.boot(), logs.toString())
+        val port = CompletableFuture<Int>()
+        val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
+        try {
+            val trustAll = arrayOf<javax.net.ssl.TrustManager>(
+                object : javax.net.ssl.X509TrustManager {
+                    override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) = Unit
+
+                    override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>, authType: String) = Unit
+
+                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+                },
+            )
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, trustAll, null) }
+            ctx.socketFactory.createSocket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use { s ->
+                assertEquals(setOf("tls"), server.ports.keys, "no raw telnet unless asked for")
+                val iac = 255.toByte()
+                fun gmcp(m: String) = byteArrayOf(iac, 250.toByte(), 201.toByte()) + m.toByteArray() + byteArrayOf(iac, 240.toByte())
+                s.getOutputStream().write(byteArrayOf(iac, 253.toByte(), 201.toByte()) + gmcp("Core.Supports.Set [\"Char 1\"]"))
+                s.readUntil("invite code)")
+                s.line("ann")
+                s.readUntil("Password: ")
+                s.line("correct horse")
+                s.readUntil("Type a name to play")
+                s.line("new")
+                s.readUntil("called? ")
+                s.line("Tess")
+                s.readUntil("Exits: north.")
+                s.readUntil("Char.Vitals {\"hp\":")
+            }
+        } finally {
+            server.stop()
+            runner.join(10_000)
+        }
+    }
+
+    @Test
     fun `play the tutorial over telnet and see a save reload it`() {
         val root = copyTemplate()
         val logs = StringBuffer()

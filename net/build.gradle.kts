@@ -4,5 +4,7 @@ plugins {
 
 dependencies {
     implementation(project(":core"))
-    implementation(libs.ktor.network)
+    implementation(libs.netty.handler)
+    implementation(libs.bouncycastle.pkix)
+    implementation(libs.kotlinx.serialization.json)
 }

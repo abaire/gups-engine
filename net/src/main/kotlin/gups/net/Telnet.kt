@@ -1,5 +1,12 @@
 package gups.net
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
 
 /** Telnet command and option codes (RFC 854 and the MUD extensions of SPEC §4.10). */
@@ -55,7 +62,15 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     @Volatile var speaksTelnet: Boolean = false
         private set
 
-    var gmcp: Boolean = false
+    @Volatile var gmcp: Boolean = false
+        private set
+
+    /** GMCP modules the client listed with `Core.Supports.*`, such as `Char` or `Char.Vitals` (M6 design §5.2). */
+    @Volatile var gmcpSupports: Set<String> = emptySet()
+        private set
+
+    /** The client's `Core.Hello`: its name and version. */
+    @Volatile var gmcpClient: String? = null
         private set
     var width: Int? = null
         private set
@@ -259,8 +274,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
                 }
                 else -> errors++
             }
-            // GMCP messages from the client (Core.Hello, Core.Supports.*) are read in M6.
-            Telnet.OPT_GMCP -> Unit
+            Telnet.OPT_GMCP -> gmcpIn(String(data, Charsets.UTF_8))
             else -> Unit
         }
     }
@@ -297,6 +311,41 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     }
 
     /**
+     * One GMCP message from the client. Only `Core.*` is read (M6 design §5.2); a malformed
+     * message counts as a protocol error.
+     */
+    private fun gmcpIn(message: String) {
+        val space = message.indexOf(' ')
+        val pkg = if (space < 0) message else message.substring(0, space)
+        val body = if (space < 0) null else runCatching { Json.parseToJsonElement(message.substring(space + 1)) }.getOrElse { return run { errors++ } }
+        fun modules(): List<String> = (body as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.substringBefore(' ') } ?: emptyList()
+        when (pkg.lowercase()) {
+            "core.hello" -> gmcpClient = (body as? JsonObject)?.let { o ->
+                listOfNotNull(o["client"], o["version"]).mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.joinToString(" ")
+            }
+            "core.supports.set" -> gmcpSupports = modules().toSet()
+            "core.supports.add" -> gmcpSupports = gmcpSupports + modules()
+            "core.supports.remove" -> gmcpSupports = gmcpSupports - modules().toSet()
+        }
+    }
+
+    /** True if GMCP is on and the client supports [pkg] or a module above it (`Char` covers `Char.Vitals`). */
+    fun wantsGmcp(pkg: String): Boolean = gmcp && gmcpSupports.any { pkg.equals(it, ignoreCase = true) || pkg.startsWith("$it.", ignoreCase = true) }
+
+    /** `IAC SB GMCP <pkg> <json> IAC SE`, with any IAC byte in the payload doubled. */
+    fun encodeGmcp(pkg: String, data: Any?): ByteArray {
+        val body = (if (data == null && pkg.startsWith("Core.")) pkg else "$pkg ${toJson(data)}").toByteArray(Charsets.UTF_8)
+        val out = ByteArrayOutputStream(body.size + 6)
+        out.write(byteArrayOf(Telnet.IAC, Telnet.SB, Telnet.OPT_GMCP))
+        for (b in body) {
+            out.write(b.toInt())
+            if (b.toInt() and 0xff == Telnet.IAC) out.write(Telnet.IAC)
+        }
+        out.write(byteArrayOf(Telnet.IAC, Telnet.SE))
+        return out.toByteArray()
+    }
+
+    /**
      * `IAC WILL ECHO` to hide typed input, `IAC WONT ECHO` to show it again (M6 design §3.4).
      * Clients that refuse simply keep echoing. Plain `nc` gets nothing (D-088).
      */
@@ -312,3 +361,15 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
 }
 
 private fun byteArrayOf(vararg ints: Int): ByteArray = ByteArray(ints.size) { ints[it].toByte() }
+
+/** A plain value from `core` as JSON (M6 design §2.4). */
+fun toJson(v: Any?): JsonElement = when (v) {
+    null -> JsonNull
+    is String -> JsonPrimitive(v)
+    is Boolean -> JsonPrimitive(v)
+    is Number -> JsonPrimitive(v)
+    is Map<*, *> -> JsonObject(v.entries.associate { (k, value) -> k.toString() to toJson(value) })
+    is Iterable<*> -> JsonArray(v.map(::toJson))
+    is Array<*> -> JsonArray(v.map(::toJson))
+    else -> JsonPrimitive(v.toString())
+}

@@ -35,12 +35,18 @@ interface WorldInbox {
     fun submit(event: WorldControlEvent)
 }
 
-/**
- * Per-session output (SPEC §4.11). Implementations must never block the world thread.
- * GMCP output is added with the GMCP packages in M6.
- */
+/** Per-session output (SPEC §4.11). Implementations must never block the world thread. */
 interface OutputSink {
     fun send(text: String)
+
+    /**
+     * Sends one GMCP message (SPEC §4.10, M6 design §2.4). [data] is a plain value: `String`,
+     * a number, `Boolean`, `List`, `Map<String, *>` or null; the listener encodes it.
+     */
+    fun gmcp(pkg: String, data: Any?) = Unit
+
+    /** True if the client asked for GMCP package [pkg] with `Core.Supports` (M6 design §5.2). */
+    fun wantsGmcp(pkg: String): Boolean = false
 
     /**
      * Sends a prompt after a burst of output. Telnet ends it with EOR or GA so clients can tell
