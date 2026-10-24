@@ -42,8 +42,9 @@ class ScriptFixture(
     seed: Long = 1,
 ) {
     val root: Path = tempWorld(files)
-    val result: LoadResult = ScriptLoader(WorldDir(root), limits).load(load)
-    val host: StarlarkHost by lazy { StarlarkHost(result, limits) }
+    val loader = ScriptLoader(WorldDir(root), limits)
+    val result: LoadResult = loader.load(load)
+    val host: StarlarkHost by lazy { StarlarkHost(result, limits, loader) }
     val w: World by lazy {
         check(result.ok) { "load failed:\n" + result.report() }
         World(result.prototypes(), DefaultRules(), host, WorldConfig(seed = seed, checkInvariants = true, strict = true)).also {
@@ -79,6 +80,9 @@ class ScriptFixture(
         w.runPulse()
         nanos += PULSE_MS * 1_000_000
     }
+
+    /** Rewrites a world file, as a builder saving in their editor would. */
+    fun write(path: String, text: String) = root.resolve(path).writeText(text.trimIndent() + "\n")
 
     fun diagnostics(kind: String? = null) = w.diagnostics.filter { kind == null || it.kind == kind }
 }

@@ -71,14 +71,24 @@ class SpawnState internal constructor(val room: Room, val rule: SpawnRule) {
  * on the world thread, driven by [gups.core.loop.WorldLoop] or directly by a headless test.
  */
 class World(
-    val protos: Prototypes,
+    protos: Prototypes,
     val rules: RulesEngine = DefaultRules(),
     val scripts: ScriptHost = ScriptHost.NONE,
     val config: WorldConfig = WorldConfig(),
 ) {
+    /** The live prototype table; a reload swaps it (SPEC §5.10). */
+    var protos: Prototypes = protos
+        internal set
+
     /** Game time (SPEC §3.1). */
     var pulse: Long = 0
         private set
+
+    /** Handles sessions that have no character yet; null answers "You are not playing a character." */
+    var login: LoginHandler? = null
+
+    /** Called for every diagnostic as it is recorded, for example to log it. */
+    var onDiagnostic: ((Diagnostic) -> Unit)? = null
 
     val rng = Rng(config.seed)
     val commands = CommandRegistry()
@@ -87,13 +97,13 @@ class World(
     private var nextHandle = 1L
     internal val entities = HashMap<EntityId, Entity>()
     internal val actorIndex = TreeMap<EntityId, Actor>()
-    private val roomsByLabel = LinkedHashMap<Label, Room>()
+    internal val roomsByLabel = LinkedHashMap<Label, Room>()
     internal val sessions = LinkedHashMap<SessionId, Session>()
     internal val spawnStates = mutableListOf<SpawnState>()
     private val diagnosticLog = mutableListOf<Diagnostic>()
 
     /** Next zone reset per package that declares `reset_pulses` (SPEC §4.1). */
-    private val zoneResets = TreeMap<String, Long>()
+    internal val zoneResets = TreeMap<String, Long>()
 
     // Initiative-tier state (SPEC §5.4.1).
     internal var snapshot: TierSnapshot? = null
@@ -159,6 +169,7 @@ class World(
     /** Logs a diagnostic built elsewhere, for example by the script host. */
     fun record(d: Diagnostic) {
         diagnosticLog += d
+        onDiagnostic?.invoke(d)
     }
 
     /** Runs [block], logging an engine exception and aborting only that action (SPEC §6.4). */
@@ -252,7 +263,7 @@ class World(
         }
     }
 
-    private fun fillSpawn(s: SpawnState) {
+    internal fun fillSpawn(s: SpawnState) {
         while (s.live.size < s.rule.count) {
             val m = spawnMob(s.rule.label, s.room, s.rule.atIndex)
             m.spawnedBy = s
@@ -290,7 +301,11 @@ class World(
         flushOutput()
         if (config.checkInvariants) {
             val violations = checkInvariants()
-            if (violations.isNotEmpty()) throw InvariantViolation(violations)
+            if (violations.isNotEmpty()) {
+                // The harness fails the test; --dev logs and keeps running (SPEC §6.5, D-084).
+                if (config.strict) throw InvariantViolation(violations)
+                for (v in violations) record(Diagnostic(pulse, "invariant", v, InvariantViolation(listOf(v))))
+            }
         }
     }
 

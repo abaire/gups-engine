@@ -85,7 +85,7 @@ class LoadResult internal constructor(
  * loads every package it refers to by label or `load()` (D-064).
  */
 class ScriptLoader(
-    private val dir: WorldDir,
+    val dir: WorldDir,
     private val limits: ScriptLimits = ScriptLimits(),
     /** Receives `print()` output from top-level code. */
     private val printSink: (String) -> Unit = {},

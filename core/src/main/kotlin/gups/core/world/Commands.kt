@@ -1,11 +1,13 @@
 package gups.core.world
 
 import gups.core.ACTION_QUEUE_MAX
+import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Direction
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.QueuedAction
 
 /** Fast-lane commands run immediately; tick-lane commands queue for action pulses (SPEC §5.2). */
@@ -13,18 +15,29 @@ enum class Lane { FAST, TICK }
 
 data class CommandCall(val world: World, val actor: Actor, val verb: String, val args: String)
 
-sealed class CommandDef(val name: String, val aliases: List<String>) {
+/** A command. Only players whose role is at least [role] can use it; to everyone else it doesn't exist. */
+sealed class CommandDef(val name: String, val aliases: List<String>, val role: Role) {
     abstract val lane: Lane
+
+    fun allows(actor: Actor): Boolean = role == Role.PLAYER || (actor is Player && actor.role.atLeast(role))
 }
 
-class FastCommand(name: String, aliases: List<String> = emptyList(), val run: (CommandCall) -> Unit) :
-    CommandDef(name, aliases) {
+class FastCommand(
+    name: String,
+    aliases: List<String> = emptyList(),
+    role: Role = Role.PLAYER,
+    val run: (CommandCall) -> Unit,
+) : CommandDef(name, aliases, role) {
     override val lane: Lane get() = Lane.FAST
 }
 
 /** [plan] parses arguments into an [Action] when the command is popped, or returns null after messaging. */
-class TickCommand(name: String, aliases: List<String> = emptyList(), val plan: (CommandCall) -> Action?) :
-    CommandDef(name, aliases) {
+class TickCommand(
+    name: String,
+    aliases: List<String> = emptyList(),
+    role: Role = Role.PLAYER,
+    val plan: (CommandCall) -> Action?,
+) : CommandDef(name, aliases, role) {
     override val lane: Lane get() = Lane.TICK
 }
 
@@ -35,6 +48,7 @@ class TickCommand(name: String, aliases: List<String> = emptyList(), val plan: (
 class CommandRegistry {
     private val engine: List<CommandDef> = EngineCommands.all()
     private val global = mutableListOf<CommandDef>()
+    private val tools = mutableListOf<CommandDef>()
     private val moves = HashMap<Direction, TickCommand>()
 
     /** Registers a global command, as privileged packages do with `global_command` (SPEC §4.9). */
@@ -43,11 +57,29 @@ class CommandRegistry {
         global += command
     }
 
+    /** Drops every global command, before a reload registers them again. */
+    fun clearGlobals() = global.clear()
+
+    /**
+     * Registers a builder or instructor `@` command (SPEC §4.9) that the engine provides
+     * outside `core`, such as `@trace` and `@eval` from the script host.
+     */
+    fun registerTool(command: CommandDef) {
+        require(command.name.startsWith("@")) { "Tool commands start with @: ${command.name}" }
+        require((engine + tools).none { it.name == command.name }) { "Tool command ${command.name} already registered" }
+        tools += command
+    }
+
     val engineCommands: List<CommandDef> get() = engine
     val globalCommands: List<CommandDef> get() = global
+    val toolCommands: List<CommandDef> get() = (engine + tools).filter { it.name.startsWith("@") }
 
     fun resolve(actor: Actor, verb: String): CommandDef? {
         val v = verb.lowercase()
+        if (v.startsWith("@")) {
+            val all = (engine + tools).filter { it.name.startsWith("@") && it.allows(actor) }
+            return exact(all, v) ?: all.firstOrNull { it.name.startsWith(v) }
+        }
         exact(engine, v)?.let { return it }
         val dir = Direction.parse(v)
         if (dir in actor.room.exits || dir in Direction.STANDARD) return moves.getOrPut(dir) { EngineCommands.move(dir) }
@@ -60,7 +92,7 @@ class CommandRegistry {
 
     private fun exact(defs: List<CommandDef>, v: String) = defs.firstOrNull { it.name == v || v in it.aliases }
 
-    private fun prefix(defs: List<CommandDef>, v: String) = defs.firstOrNull { it.name.startsWith(v) }
+    private fun prefix(defs: List<CommandDef>, v: String) = defs.firstOrNull { it.name.startsWith(v) && !it.name.startsWith("@") }
 
     private fun zoneCommand(verb: String, owner: Entity, handler: ZoneCommand) = TickCommand(verb) { call ->
         object : Action {

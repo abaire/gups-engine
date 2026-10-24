@@ -1,5 +1,6 @@
 package gups.script
 
+import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.Actor
@@ -14,6 +15,7 @@ import gups.core.world.HookName
 import gups.core.world.HookOutcome
 import gups.core.world.Lane
 import gups.core.world.Proposal
+import gups.core.world.ReloadResult
 import gups.core.world.ScriptHost
 import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
@@ -21,14 +23,18 @@ import gups.core.world.ThinkResult
 import gups.core.world.TickCommand
 import gups.core.world.World
 import gups.core.world.ZoneCommand
+import gups.core.world.applyPrototypes
 import gups.core.world.findActor
 import gups.core.world.opponentsOf
 import gups.core.world.send
 import net.starlark.java.eval.EvalException
+import net.starlark.java.eval.Module
 import net.starlark.java.eval.Mutability
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.syntax.Location
+import net.starlark.java.syntax.ParserInput
+import net.starlark.java.syntax.SyntaxError
 
 /** Where a script call is charged: its package (for budget, errors and quarantine) and what it is. */
 internal class Site(
@@ -36,10 +42,23 @@ internal class Site(
     val label: Label?,
     val hook: String,
     val vetoable: Boolean,
+    /** The entity the call runs for, if any. */
+    val owner: EntityId?,
 )
 
 /** The top-level event a cascade of nested calls belongs to. */
-internal class Root(val deadlineNanos: Long?)
+internal class Root(val deadlineNanos: Long?, val limitMs: Long)
+
+/** One line of script tracing (SPEC §5.13): a call, a verb it ran, its step count, or an error. */
+data class TraceEvent(
+    val pulse: Long,
+    /** The package the call is charged to. */
+    val pkg: String,
+    val owner: EntityId?,
+    /** The hook, command or timer, for example `on_enter` or `command 'pull'`. */
+    val hook: String,
+    val text: String,
+)
 
 /** One running script call. Its views and ctx are valid only while it runs. */
 internal class Frame(
@@ -65,11 +84,11 @@ internal class Frame(
     fun checkClock() {
         val deadline = root.deadlineNanos ?: return
         if (System.nanoTime() > deadline) {
-            limitFail("wall_clock", "${site.hook} ran past the ${host.limits.hookWallNanos / 1_000_000} ms wall-clock limit")
+            limitFail("wall_clock", "${site.hook} ran past the ${root.limitMs} ms wall-clock limit")
         }
     }
 
-    fun trace(line: String) = host.trace(line)
+    fun trace(line: String) = host.trace(site, world.pulse, line)
 }
 
 private sealed interface CallResult {
@@ -89,7 +108,16 @@ private sealed interface CallResult {
  * (SPEC §5.6, §6.1). A failing call is logged as a diagnostic and treated as returning None
  * (SPEC §6.2); too many failures quarantine its package (SPEC §6.3).
  */
-class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLimits()) : ScriptHost {
+class StarlarkHost(
+    scripts: LoadResult,
+    val limits: ScriptLimits = ScriptLimits(),
+    /** Loads replacement packages for [reload]; without one, reload is refused. */
+    private val loader: ScriptLoader? = null,
+) : ScriptHost {
+    /** The packages currently live; a successful reload replaces it. */
+    var scripts: LoadResult = scripts
+        private set
+
     private val stack = ArrayList<Frame>()
     private val errorPulses = HashMap<String, ArrayDeque<Long>>()
     private val quarantinedSet = sortedSetOf<String>()
@@ -97,14 +125,14 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
     /** Packages whose scripts are disabled. */
     val quarantined: Set<String> get() = quarantinedSet
 
-    /** Receives one line per script call and verb while set (`@trace`, `w.trace`). */
-    var tracer: ((String) -> Unit)? = null
+    /** Receives one event per script call, verb and error while set (`@trace`, `w.trace`). */
+    var tracer: ((TraceEvent) -> Unit)? = null
 
     /** Instructor and owner notifications; wired to roles in M6 (D-068). */
     var alerts: (String) -> Unit = {}
 
-    internal fun trace(line: String) {
-        tracer?.invoke(line)
+    internal fun trace(site: Site, pulse: Long, text: String) {
+        tracer?.invoke(TraceEvent(pulse, site.pkg, site.owner, site.hook, text))
     }
 
     /** Registers the packages' global commands with [world]. Call once, before play starts. */
@@ -161,7 +189,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
 
     override fun invokeHook(world: World, owner: Entity, hook: HookName, ctx: HookContext): HookOutcome {
         val ref = scripts.hooks(owner.protoLabel)[hook] ?: return HookOutcome.Allow
-        val site = Site(owner.protoLabel.pkg, owner.protoLabel, hook.scriptName, hook.vetoable)
+        val site = Site(owner.protoLabel.pkg, owner.protoLabel, hook.scriptName, hook.vetoable, owner.id)
         val extras = if (hook == HookName.ON_COMBAT_TICK && owner is Actor) CtxExtras(targets = world.opponentsOf(owner)) else CtxExtras()
         val result = call(world, site, ref, { Ctx(it, owner, ctx, extras) })
         val value = (result as? CallResult.Ok)?.value
@@ -172,7 +200,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
     override fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext) {
         val pkg = chargeTo(owner, ref)
         val what = if (ctx.affect != null) "affect ${ctx.affect!!.name} ${ref.name}" else "timer ${ref.name}"
-        val site = Site(pkg, owner.protoLabel.takeIf { it.pkg in scripts.packages }, what, vetoable = false)
+        val site = Site(pkg, owner.protoLabel.takeIf { it.pkg in scripts.packages }, what, vetoable = false, owner.id)
         call(world, site, ref, { Ctx(it, owner, ctx, CtxExtras()) }) { f -> ctx.args.mapValues { fromAttr(it.value, f.thread.mutability()) } }
     }
 
@@ -183,7 +211,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
     /** A zone or global command. A failure (or quarantine) shows only "Nothing happens." (SPEC §6.2). */
     internal fun runCommand(world: World, verb: String, ref: HookRef, pkg: String, actor: Actor, args: String, owner: Entity) {
         val target = if (args.isBlank()) null else world.findActor(actor, args.trim().substringBefore(' '))
-        val site = Site(pkg, owner.protoLabel.takeIf { it.pkg in scripts.packages }, "command '$verb'", vetoable = false)
+        val site = Site(pkg, owner.protoLabel.takeIf { it.pkg in scripts.packages }, "command '$verb'", vetoable = false, owner.id)
         val hc = HookContext(actor = actor, target = target, item = owner as? Item)
         val extras = CtxExtras(commandArgs = args, commandTarget = target)
         when (call(world, site, ref, { Ctx(it, owner, hc, extras) })) {
@@ -193,7 +221,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
     }
 
     internal fun think(world: World, mob: Mob, proposals: List<Proposal>, ref: HookRef, pkg: String): ThinkResult {
-        val site = Site(pkg, mob.protoLabel, "think", vetoable = false)
+        val site = Site(pkg, mob.protoLabel, "think", vetoable = false, mob.id)
         var frame: Frame? = null
         val result = call(world, site, ref, { f -> Ctx(f, mob, HookContext(room = mob.room), CtxExtras(proposals = proposals)).also { frame = f } })
         val acted = frame?.acted == true
@@ -206,8 +234,89 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
     }
 
     internal fun resolve(world: World, caster: Actor, target: Actor?, ref: HookRef, pkg: String) {
-        val site = Site(pkg, null, "resolve ${ref.name}", vetoable = false)
+        val site = Site(pkg, null, "resolve ${ref.name}", vetoable = false, caster.id)
         call(world, site, ref, { Ctx(it, caster, HookContext(actor = caster, target = target, room = caster.room), CtxExtras()) })
+    }
+
+    // ---- Reload (SPEC §5.10) ---------------------------------------------------------------------
+
+    /**
+     * Re-evaluates the live packages plus [packages] from disk, all together, so every label
+     * still resolves (D-081). Any error keeps the old version live. On success the prototype
+     * table, hooks and global commands are swapped, live instances are reconciled, timers whose
+     * function is gone are dropped, and the reloaded packages leave quarantine.
+     */
+    override fun reload(world: World, packages: List<String>): ReloadResult {
+        val loader = loader ?: return ReloadResult(false, listOf("Reload needs the world directory; this host has none."))
+        val dir = loader.dir
+        val wanted = (scripts.packages.keys + packages).filter(dir::hasPackage).distinct().sorted()
+        val gone = packages.filter { !dir.hasPackage(it) && it in scripts.packages }
+        val next = loader.load(wanted)
+        val named = packages.joinToString(", ") { "//$it" }
+        if (!next.ok) {
+            return ReloadResult(false, listOf("Reload of $named failed; the old version stays live.") + next.errors.map { it.render() })
+        }
+        if (next.prototypes().rooms.isEmpty()) return ReloadResult(false, listOf("Reload of $named failed: the world would have no rooms."))
+        scripts = next
+        val report = world.applyPrototypes(next.prototypes())
+        world.commands.clearGlobals()
+        install(world)
+        val notes = report.notes.toMutableList()
+        for (e in world.allEntities) {
+            val dead = e.timers.filter { next.function(it.fn) == null }
+            for (t in dead) {
+                e.timers.remove(t)
+                e.dirty = true
+                val message = "timer ${t.fn.name} on $e dropped: ${t.fn.file} no longer defines it"
+                world.record(Diagnostic(world.pulse, "reload", message, pkg = t.fn.file.pkg, seed = world.config.seed))
+                notes += message
+            }
+        }
+        packages.forEach(::unquarantine)
+        for (room in report.created.sortedBy { it.id }) invokeHook(world, room, HookName.ON_LOAD, HookContext(room = room))
+        val head = "Reloaded $named." + if (gone.isNotEmpty()) " Removed ${gone.joinToString(", ") { "//$it" }}." else ""
+        return ReloadResult(true, listOf(head) + notes)
+    }
+
+    // ---- @eval (SPEC §5.13) --------------------------------------------------------------------
+
+    /**
+     * Evaluates [code] with a live ctx bound to [actor]: `ctx`, `self` and `room` are
+     * predeclared and verbs change the live world. Relative labels and attribute keys belong to
+     * the package of the actor's room (D-085). Returns what to show the caller.
+     */
+    fun eval(world: World, actor: Actor, code: String): String {
+        val pkg = actor.room.label.pkg
+        val site = Site(pkg, null, "@eval", vetoable = false, actor.id)
+        val root = Root(if (limits.wallClock) System.nanoTime() + limits.evalWallNanos else null, limits.evalWallNanos / 1_000_000)
+        Mutability.create("@eval").use { mu ->
+            val thread = StarlarkThread(mu, SEMANTICS)
+            thread.setMaxExecutionSteps(limits.evalSteps)
+            val printed = StringBuilder()
+            thread.setPrintHandler { _, msg -> printed.append(msg).append('\n') }
+            val frame = Frame(this, world, thread, site, root, limits.evalSteps)
+            val ctx = Ctx(frame, actor, HookContext(actor = actor, room = actor.room), CtxExtras())
+            val module = Module.withPredeclared(SEMANTICS, PACKAGE_GLOBALS + mapOf("ctx" to ctx, "self" to ctx.self(), "room" to ctx.room()))
+            module.clientData = FileInfo(Label("//$pkg:eval.star"), pkg)
+            stack += frame
+            val result = try {
+                val value = try {
+                    Starlark.eval(ParserInput.fromString(code, "@eval"), FILE_OPTIONS, module, thread)
+                } catch (_: SyntaxError.Exception) {
+                    Starlark.execFile(ParserInput.fromString(code, "@eval"), FILE_OPTIONS, module, thread)
+                    Starlark.NONE
+                }
+                if (value === Starlark.NONE) "" else Starlark.repr(value)
+            } catch (e: SyntaxError.Exception) {
+                "Syntax error: " + e.errors().joinToString("; ") { it.message() }
+            } catch (e: EvalException) {
+                "Error: " + if (isStepLimit(e)) "exceeded the ${limits.evalSteps}-step limit" else e.message
+            } finally {
+                frame.valid = false
+                stack.removeAt(stack.size - 1)
+            }
+            return (printed.toString() + result).trimEnd()
+        }
     }
 
     // ---- Calling Starlark ----------------------------------------------------------------------
@@ -233,13 +342,13 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
             report(world, site, "step_limit", "${site.hook} not run: the event's ${limits.hookSteps}-step budget is spent", null, null)
             return CallResult.Failed
         }
-        val root = stack.lastOrNull()?.root ?: Root(if (limits.wallClock) System.nanoTime() + limits.hookWallNanos else null)
+        val root = stack.lastOrNull()?.root ?: Root(if (limits.wallClock) System.nanoTime() + limits.hookWallNanos else null, limits.hookWallNanos / 1_000_000)
         Mutability.create(site.hook).use { mu ->
             val thread = StarlarkThread(mu, SEMANTICS)
             thread.setMaxExecutionSteps(remaining)
-            thread.setPrintHandler { _, msg -> trace("  print: $msg") }
+            thread.setPrintHandler { _, msg -> trace(site, world.pulse, "  print: $msg") }
             val frame = Frame(this, world, thread, site, root, remaining)
-            trace("${site.hook} on ${site.label ?: site.pkg} at pulse ${world.pulse}")
+            trace(site, world.pulse, "${site.hook} on ${site.label ?: site.pkg} at pulse ${world.pulse}")
             stack += frame
             var failure: EvalException? = null
             var value: Any? = null
@@ -258,7 +367,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
                     outer.maxSteps -= used
                     outer.thread.setMaxExecutionSteps(outer.maxSteps)
                 }
-                trace("  ${site.hook} done: $used steps")
+                trace(site, world.pulse, "  ${site.hook} done: $used steps")
             }
             if (failure != null) {
                 report(world, site, classify(failure), messageOf(failure), failure, ctx)
@@ -293,7 +402,7 @@ class StarlarkHost(val scripts: LoadResult, val limits: ScriptLimits = ScriptLim
             seed = world.config.seed,
         )
         world.record(d)
-        trace("  ERROR ${d.file ?: ""}${d.line?.let { ":$it" } ?: ""}: ${d.message}")
+        trace(site, world.pulse, "  ERROR ${d.file ?: ""}${d.line?.let { ":$it" } ?: ""}: ${d.message}")
         countError(world, site.pkg)
     }
 }

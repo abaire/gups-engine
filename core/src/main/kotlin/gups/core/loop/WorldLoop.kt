@@ -3,6 +3,7 @@ package gups.core.loop
 import gups.core.ClientInputEvent
 import gups.core.PULSE_MS
 import gups.core.WorldControlEvent
+import gups.core.WorldInbox
 import gups.core.world.World
 import gups.core.world.handle
 import kotlinx.coroutines.CoroutineDispatcher
@@ -44,7 +45,7 @@ class WorldLoop(
     private val world: World,
     private val pulseNanos: Long = PULSE_MS * 1_000_000,
     private val nanoTime: () -> Long = System::nanoTime,
-) {
+) : WorldInbox {
     private val input = Channel<ClientInputEvent>(Channel.UNLIMITED)
     private val control = Channel<WorldControlEvent>(Channel.UNLIMITED)
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -58,12 +59,12 @@ class WorldLoop(
         private set
 
     /** Safe to call from any thread. */
-    fun submit(event: ClientInputEvent) {
+    override fun submit(event: ClientInputEvent) {
         input.trySend(event)
     }
 
     /** Safe to call from any thread. */
-    fun submit(event: WorldControlEvent) {
+    override fun submit(event: WorldControlEvent) {
         control.trySend(event)
     }
 

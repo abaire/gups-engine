@@ -43,9 +43,13 @@ test, click the gutter icon next to the test. For a new tool configuration, copy
 the `gups CLI` entries and tick **Store as project file** so it lands in `.run/` and can
 be committed.
 
-Most `gups` subcommands are still stubs that exit with status 3 (see Status below). `gups
-test` works: it runs the tutorial zone's tests with
-`gups test --world template-world //zones/tutorial/...`.
+Most `gups` subcommands are still stubs that exit with status 3 (see Status below). Two
+work:
+
+```bash
+cli/build/install/gups/bin/gups serve --dev --world template-world   # then: telnet localhost 4000
+cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
+```
 
 ## Modules
 
@@ -71,25 +75,26 @@ heavily commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M2 (SPEC §7.4) adds the Starlark script host and the test harness on top of the M1 core.
+M3 (SPEC §7.4): the world is playable locally.
 
-- **`script`:** the package loader (labels, `load()`, `api_version` check,
-  all-or-nothing per package, structured errors with caret snippets) and the content
-  declarations. Evaluation produces frozen prototypes. The host runs hooks, zone and global
-  commands, timers, affect hooks, `think` and `resolve` with a fresh `ctx` of read-only
-  views and engine-validated verbs. It enforces the step, wall-clock and allocation limits
-  (with one budget per event cascade), logs script errors as diagnostics without blocking
-  the action, and quarantines a package after too many errors.
-- **`harness`:** headless worlds with a virtual clock for `*_test.star` files (`t`, `w`,
-  `p` handles), and `gups test`.
-- **`core`** (M1): the pulse scheduler, entities and prototypes, the command pipeline, the
-  action lifecycle, the tactical track, the Kotlin default ruleset, and combat rounds with
-  initiative tiers.
+- **`net`:** a raw telnet listener on Ktor sockets. It negotiates NAWS, TTYPE/MTTS, EOR (or
+  GA), GMCP and CHARSET, renders color markup for each client's color depth, frames and caps
+  input lines, and drops slow clients.
+- **`gups serve --dev`:** loads every package under `--world`, logs you in as the local
+  instructor, and reloads packages when you save. Reload swaps code and data and reconciles
+  live mobs, rooms and items; a broken save keeps the old version and shows the error in
+  game.
+- **Builder tools:** `@trace`, `@eval` (`--dev` only) and `@errors`.
+- **Earlier milestones:**
+  - M2: the Starlark host (loader, declarations, hooks, ctx verbs, limits, diagnostics,
+    quarantine) and the test harness behind `gups test`.
+  - M1: the core simulation.
 
 Still to come:
-- M3: telnet and `serve --dev`, auto-reload, `@trace` and `@eval`.
-- M4: persistence, including diagnostics storage and repro bundles.
+- M4: persistence, including saved characters and diagnostics, repro bundles, and
+  `--fresh`/`--db`.
 - M5: the Starlark rules module and modifier chain, behaviors, perception and the bubble.
-- M6: roles and owner alerts.
+- M6: TLS, WebSocket, GMCP, accounts and roles, and the instructor commands.
 
-All `gups` subcommands except `test` still exit with status 3 ("not implemented").
+All `gups` subcommands except `serve --dev` and `test` still exit with status 3 ("not
+implemented").

@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Direction
@@ -45,6 +46,8 @@ internal object EngineCommands {
         TickCommand("close") { planDoor(it, DoorVerb.CLOSE) },
         TickCommand("lock") { planDoor(it, DoorVerb.LOCK) },
         TickCommand("unlock") { planDoor(it, DoorVerb.UNLOCK) },
+        // Builder tools (SPEC §4.9). The script host adds @trace and @eval.
+        FastCommand("@errors", role = Role.BUILDER) { errors(it) },
     )
 
     fun move(dir: Direction): TickCommand = TickCommand(dir.name) { MoveAction(dir) }
@@ -143,7 +146,8 @@ internal object EngineCommands {
     }
 
     private fun help(c: CommandCall) {
-        val defs = c.world.commands.engineCommands + c.world.commands.globalCommands
+        val defs = (c.world.commands.engineCommands + c.world.commands.globalCommands + c.world.commands.toolCommands)
+            .distinct().filter { it.allows(c.actor) }
         val fast = defs.filter { it.lane == Lane.FAST }.joinToString(" ") { it.name }
         val tick = defs.filter { it.lane == Lane.TICK }.joinToString(" ") { it.name }
         c.world.send(c.actor, "Instant: $fast\nActions: $tick, and any exit name")
@@ -163,6 +167,20 @@ internal object EngineCommands {
             },
         )
     }
+
+    /** `@errors [package]`: the most recent diagnostics, newest last. */
+    private fun errors(c: CommandCall) {
+        val pkg = c.args.trim().removePrefix("//").ifEmpty { null }
+        val recent = c.world.diagnostics.filter { pkg == null || it.pkg == pkg }.takeLast(ERRORS_SHOWN)
+        if (recent.isEmpty()) return c.world.send(c.actor, if (pkg == null) "No diagnostics." else "No diagnostics for //$pkg.")
+        val lines = recent.map { d ->
+            val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":").ifEmpty { d.pkg?.let { "//$it" } ?: "engine" }
+            "[${d.pulse}] ${d.kind} $where: ${d.message}"
+        }
+        c.world.send(c.actor, lines.joinToString("\n"))
+    }
+
+    private const val ERRORS_SHOWN = 10
 
     private fun quit(c: CommandCall) {
         val p = c.actor as? Player ?: return

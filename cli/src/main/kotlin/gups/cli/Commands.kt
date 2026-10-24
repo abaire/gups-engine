@@ -3,24 +3,28 @@ package gups.cli
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.ProgramResult
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.arguments.multiple
 import com.github.ajalt.clikt.parameters.groups.mutuallyExclusiveOptions
 import com.github.ajalt.clikt.parameters.groups.required
 import com.github.ajalt.clikt.parameters.groups.single
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.options.switch
 import com.github.ajalt.clikt.parameters.options.versionOption
 import com.github.ajalt.clikt.parameters.types.file
+import com.github.ajalt.clikt.parameters.types.int
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.harness.TestRunner
 import gups.harness.render
 import gups.script.WorldDir
 import java.io.File
+import kotlinx.coroutines.runBlocking
 
 /** Builds the `gups` command tree (SPEC §4.13). */
 fun gupsCommand(): CliktCommand = Gups().subcommands(
@@ -65,14 +69,33 @@ abstract class StubCommand(name: String, private val summary: String, private va
 
 enum class Profile { DEV, PROD }
 
-class Serve : StubCommand("serve", "Run the server.", "M3") {
+class Serve : CliktCommand(name = "serve") {
     val profile by mutuallyExclusiveOptions(
         option(help = "Single-user local development server.").switch("--dev" to Profile.DEV),
         option(help = "Shared course server.").switch("--prod" to Profile.PROD),
     ).single().required()
     val fresh by option("--fresh", help = "Ignore saved world state and boot from the .star definitions.").flag()
-    val world by option("--world", help = "Course world directory.").file(mustExist = true, canBeFile = false)
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false)
     val db by option("--db", help = "SQLite database file.").file(canBeDir = false)
+    val port by option("--port", help = "Telnet port (--dev: 4000).").int().default(4000)
+    val start by option("--start", metavar = "LABEL", help = "Room new characters start in (--dev: //zones/tutorial:gate, else the first room).")
+
+    override fun help(context: Context) = "Run the server."
+
+    override fun run() {
+        if (profile == Profile.PROD) {
+            echo("gups serve --prod: not implemented yet (planned for M6).", err = true)
+            throw ProgramResult(EXIT_NOT_IMPLEMENTED)
+        }
+        if (fresh || db != null) echo("gups serve: --fresh and --db take effect once persistence lands (M4).", err = true)
+        val startLabel = start?.let { runCatching { Label(it) }.getOrNull() ?: throw UsageError("--start: '$it' is not a label") }
+        val server = DevServer(WorldDir((world ?: File(".")).toPath()), port, startLabel) { echo(it, err = true) }
+        if (!server.boot()) throw ProgramResult(1)
+        Runtime.getRuntime().addShutdownHook(Thread { server.stop() })
+        runBlocking {
+            server.run { bound -> echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound") }
+        }
+    }
 }
 
 /** Exit status of `gups test` when a test fails or a pattern matches nothing. */

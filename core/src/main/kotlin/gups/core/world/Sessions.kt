@@ -4,6 +4,7 @@ import gups.core.ClientInputEvent
 import gups.core.IDLE_QUIT_PULSES
 import gups.core.LINKDEAD_PULSES
 import gups.core.OutputSink
+import gups.core.Role
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Actor
@@ -11,7 +12,14 @@ import gups.core.model.Player
 import gups.core.model.Room
 
 /** World-side state of one connection. */
-class Session internal constructor(val id: SessionId, val sink: OutputSink, connectedNanos: Long) {
+class Session internal constructor(
+    val id: SessionId,
+    val sink: OutputSink,
+    connectedNanos: Long,
+    /** Peer address, for example `127.0.0.1`. */
+    val remote: String = "local",
+    val transport: String = "local",
+) {
     var player: Player? = null
         internal set
     internal val bucket = TokenBucket(startNanos = connectedNanos)
@@ -28,16 +36,18 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
     when (event) {
         is WorldControlEvent.Connect -> {
             require(event.session !in sessions) { "${event.session} is already connected" }
-            sessions[event.session] = Session(event.session, event.sink, nowNanos)
+            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport)
+            sessions[event.session] = s
+            login?.connected(this, s)
         }
         is WorldControlEvent.Disconnect -> disconnect(event.session)
         is WorldControlEvent.Shutdown -> {
             shutdownAt = pulse + event.delayPulses
             for (p in players) send(p, "The world is shutting down: ${event.reason}")
         }
-        // Hot reload and deploy need the script host (M2) and the deploy pipeline (M6).
-        is WorldControlEvent.Reload, is WorldControlEvent.Deploy ->
-            diagnose("control", "$event is not supported by this engine build")
+        is WorldControlEvent.Reload -> reload(event.packages)
+        // Deploy needs the deploy pipeline (M6).
+        is WorldControlEvent.Deploy -> diagnose("control", "$event is not supported by this engine build")
     }
 }
 
@@ -57,7 +67,8 @@ fun World.handle(event: ClientInputEvent) {
     val s = sessions[event.session] ?: return
     val player = s.player
     if (player == null) {
-        s.out.append("You are not playing a character.\n")
+        val handler = login
+        if (handler != null) handler.input(this, s, event.line) else s.out.append("You are not playing a character.\n")
         flush(s)
         return
     }
@@ -140,6 +151,42 @@ internal fun World.flush(s: Session) {
     val text = s.out.toString()
     s.out.setLength(0)
     s.sink.send(text)
+    s.player?.let { s.sink.prompt(promptFor(it)) }
+}
+
+/** The prompt shown after each burst of output (D-083). */
+fun promptFor(p: Player): String = "<${p.hp}hp ${p.mana}m ${p.move}mv> "
+
+/** Queues [text] for a session that may have no character yet, such as during login. */
+fun World.sendSession(s: Session, text: String) {
+    s.out.append(text).append('\n')
+}
+
+/** Ends [s] from the world side, without making a character link-dead. */
+fun World.closeSession(s: Session, reason: String) {
+    flush(s)
+    s.player?.let { p -> if (p.session == s.id) p.session = null }
+    s.player = null
+    sessions.remove(s.id)
+    s.sink.close(reason)
+}
+
+/**
+ * Reloads packages through the script host (SPEC §5.10), then tells builders and instructors
+ * how it went. A failed reload keeps the old version live.
+ */
+internal fun World.reload(packages: List<String>) {
+    val result = try {
+        scripts.reload(this, packages)
+    } catch (e: InvariantViolation) {
+        throw e
+    } catch (e: Exception) {
+        if (config.strict) throw e
+        ReloadResult(false, listOf("reload of ${packages.joinToString()} crashed: $e"))
+    }
+    if (!result.ok) record(Diagnostic(pulse, "reload", result.messages.joinToString("\n")))
+    for (p in players) if (p.role.atLeast(Role.BUILDER)) result.messages.forEach { send(p, it) }
+    flushOutput()
 }
 
 /** Phase 7 (SPEC §5.1). GMCP deltas join this flush in M6. The harness also flushes after input. */

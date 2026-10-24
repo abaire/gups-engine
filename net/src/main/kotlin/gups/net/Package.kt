@@ -1,5 +1,5 @@
 /**
- * Ktor/Netty listeners (telnet, telnet+TLS, WebSocket+TLS), telnet option negotiation,
- * line framing, ANSI rendering, GMCP, per-session output buffers. Implemented in M3 and M6.
+ * Network listeners (SPEC §4.10): raw telnet with option negotiation, line framing, ANSI
+ * rendering and per-session output buffers. TLS, WebSocket and GMCP payloads arrive in M6.
  */
 package gups.net

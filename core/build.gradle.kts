@@ -3,7 +3,8 @@ plugins {
 }
 
 dependencies {
-    implementation(libs.kotlinx.coroutines.core)
+    // WorldLoop exposes suspend functions and its dispatcher.
+    api(libs.kotlinx.coroutines.core)
 }
 
 tasks.processResources {

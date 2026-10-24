@@ -27,7 +27,7 @@ class CommandsTest {
 
     @Test
     fun `stub commands exit with not implemented`() {
-        val result = gupsCommand().test("serve --dev --fresh")
+        val result = gupsCommand().test("serve --prod")
         assertEquals(EXIT_NOT_IMPLEMENTED, result.statusCode)
         assertContains(result.stderr, "not implemented yet")
     }

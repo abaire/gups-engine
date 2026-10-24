@@ -64,6 +64,9 @@ data class HookContext(
     val elapsedPulses: Long? = null,
 )
 
+/** How a reload went; [messages] are shown to builders and instructors in game. */
+data class ReloadResult(val ok: Boolean, val messages: List<String>)
+
 sealed interface HookOutcome {
     data object Allow : HookOutcome
 
@@ -82,6 +85,13 @@ interface ScriptHost {
 
     /** True while [owner]'s timer callback [ref] must not run, for example under quarantine. */
     fun isSuspended(owner: Entity, ref: HookRef): Boolean = false
+
+    /**
+     * Re-evaluates [packages] and swaps them into [world] (SPEC §5.10). On failure the old
+     * version stays live and the result carries the errors.
+     */
+    fun reload(world: World, packages: List<String>): ReloadResult =
+        ReloadResult(false, listOf("This world has no script host to reload ${packages.joinToString()} with."))
 
     companion object {
         /** No scripts: every hook allows. */

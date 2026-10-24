@@ -4,6 +4,7 @@ import gups.core.AttrValue
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.Role
 import gups.core.SessionId
 import gups.core.world.Action
 import gups.core.world.SpawnState
@@ -50,7 +51,11 @@ class Exit(proto: ExitProto) {
     val passable: Boolean get() = door == null || door.state == DoorState.OPEN
 }
 
-class Room(id: EntityId, val proto: RoomProto) : Entity(id, proto.label) {
+class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
+    /** Replaced by a reload (SPEC §5.10). */
+    var proto: RoomProto = proto
+        internal set
+
     init {
         protoVersion = proto.version
     }
@@ -59,7 +64,8 @@ class Room(id: EntityId, val proto: RoomProto) : Entity(id, proto.label) {
     val label: Label get() = proto.label
     val trackSize: Int get() = proto.size.slots
     val regions: Set<String> get() = proto.regions
-    val exits: Map<Direction, Exit> = proto.exits.associateTo(LinkedHashMap()) { it.direction to Exit(it) }
+    var exits: Map<Direction, Exit> = proto.exits.associateTo(LinkedHashMap()) { it.direction to Exit(it) }
+        internal set
 
     internal val actorIndex = TreeMap<EntityId, Actor>()
     internal val itemIndex = TreeMap<EntityId, Item>()
@@ -194,6 +200,9 @@ class Player(
 
     /** Instructors are exempt from the idle auto-quit (SPEC §5.12). */
     var idleExempt: Boolean = false
+
+    /** The account's role, which gates builder and instructor commands (SPEC §3.5, §4.9). */
+    var role: Role = Role.PLAYER
 }
 
 class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Actor(id, proto.label, room, trackIndex) {

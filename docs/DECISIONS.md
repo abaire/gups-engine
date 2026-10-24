@@ -95,7 +95,8 @@ bucket. The 60 s drop window is measured with the input event's `receivedNanos`.
 *Code:* `World.handle(ClientInputEvent)`, `TokenBucket`.
 
 ### D-015 Input from a session without a character — `open`
-It is answered with "You are not playing a character." until login exists (M3).
+It goes to the world's `LoginHandler` (D-082). A world without one answers "You are not
+playing a character."
 *Code:* `World.handle(ClientInputEvent)`.
 
 ### D-016 `quit` is refused while engaged — `open`
@@ -379,8 +380,8 @@ world in the process shares one thread.
 *Code:* `WorldLoop`.
 
 ### D-059 Unsupported control events — `open`
-`Reload` and `Deploy` are accepted but only log a `control` diagnostic until M3 (reload)
-and M6 (deploy).
+`Deploy` is accepted but only logs a `control` diagnostic until M6. `Reload` works from M3
+(D-081).
 *Code:* `World.handle(WorldControlEvent)`.
 
 ## Script host (§2.2, §4.1–§4.5, §6) — M2
@@ -632,3 +633,165 @@ tests run it.
 In hooks, `print()` output goes to the trace. In tests it goes to the test's report, shown
 when the test fails. At load time it is dropped.
 *Code:* `StarlarkHost.call`, `TestRunner.runTest`, `ScriptLoader`.
+
+## Network, dev server and tooling (§2.4, §4.10, §5.10, §5.13) — M3
+
+### D-079 Seams added for M3 — `open`
+- `WorldControlEvent.Reload` carries package paths (`zones/forest`), not labels, since a
+  reload swaps whole packages.
+- `Connect` carries the peer address and transport, for the dev login's localhost check and
+  `@who` (M6).
+- `OutputSink.prompt(text)` sends a prompt (D-083). Headless sinks ignore it.
+- `WorldInbox` (in `core`) is what listeners submit to; `WorldLoop` implements it.
+- `World.login: LoginHandler?` handles sessions without a character (D-082).
+- `ScriptHost.reload(world, packages): ReloadResult` is the reload seam. `World.onDiagnostic`
+  lets the server log diagnostics as they happen.
+- `core` exports `kotlinx-coroutines` as an `api` dependency, because `WorldLoop`'s public
+  API uses it.
+*Code:* `Seams.kt`, `Hooks.kt`, `Login.kt`.
+
+### D-080 Live reconciliation on reload — `open`
+Without persisted deltas (M4), a reload computes each instance's delta on the spot: a field
+whose live value still equals the old prototype's takes the new prototype's value, and any
+other field keeps its live value.
+- **Mobs:** level, max hp/mana/move, armor, base stats, resists, skills, `think_every` and
+  `dormant_recovery` follow that rule. Current vitals stay, capped at the new maximum.
+- **Rooms:** door states and exit blocks follow the same rule.
+- **Items:** they read everything from their prototype, so they simply switch to the new one.
+- **Deleted prototypes:**
+  - Mobs are despawned, and so are items that aren't in a player's custody.
+  - Items in a player's custody become tombstones: kind `tombstone`, same label and name, no
+    hooks, commands or stats, and they keep any container so the contents survive.
+  - A deleted room sends its players to their recall room, or else the first room.
+- **Skills:** actors forget skills whose prototype is gone.
+- **Spawns:** spawn rules carry their live mobs over by label. New rooms fill their spawns,
+  then get `on_load`.
+- **Not yet:** `migrate()` and version bumps arrive with persistence in M4.
+*Code:* `World.applyPrototypes`.
+
+### D-081 How a reload runs — `open`
+- **Evaluation:** a reload re-evaluates every live package plus the named ones, together,
+  so labels across packages are checked against the new code.
+- **Failure:** any load error refuses the whole reload, and so does a result with no rooms.
+  The old version stays live, and the errors (with caret snippets) go to every connected
+  builder and instructor and to `@errors`.
+- **Removal:** a package whose `package.star` is gone is removed, unless something still
+  refers to it.
+- **Timers:** a timer whose function no longer exists is dropped, with a `reload`
+  diagnostic.
+- **Quarantine:** a successful reload clears the reloaded packages' quarantine. §6.3 only
+  says a deploy does this; `--dev` saves are treated the same.
+- **Not yet:** the post-reload checkpoint arrives in M4, and `@reload` in M6 with the other
+  instructor commands.
+*Code:* `StarlarkHost.reload`, `World.reload`.
+
+### D-082 The `--dev` login and world — `open`
+- **Prompting:** the server asks for a name: 2 to 16 letters, capitalized.
+- **Characters:** every character belongs to the local instructor account, so it gets
+  `Role.INSTRUCTOR` and is idle-exempt. Naming a character that is already playing takes it
+  over and closes the old connection. Characters aren't saved until M4.
+- **Connections:** a remote address that isn't loopback is refused and closed.
+- **Starting room:** new characters start in `--start`, else `//zones/tutorial:gate` if it
+  exists, else the first room by label.
+- **Starting stats:** they are the engine defaults until the rules module (M5).
+- **Loading:** `--dev` loads every package under `--world` (default: the current
+  directory). Packages that fail to load are reported and left out.
+*Code:* `DevLogin`, `DevServer`.
+
+### D-083 Prompts — `open`
+After each burst of output, a playing session gets `<{hp}hp {mana}m {move}mv> `. Telnet ends
+it with IAC EOR when the client agreed to EOR, else IAC GA (D-088).
+*Code:* `promptFor`, `World.flush`, `TelnetConnection.encodePrompt`.
+
+### D-084 Invariant violations in `--dev` — `open`
+A world in strict mode (the harness) throws. Otherwise (`--dev`) each violation is logged
+as an `invariant` diagnostic every pulse it persists, and the world keeps running. The
+`--prod` policy (check at the world tick, keep the entity out of the checkpoint) arrives
+with checkpoints in M4.
+*Code:* `World.runPulse`.
+
+### D-085 `@eval` — `open`
+- **What it runs:** the input is evaluated as an expression and its `repr` is shown;
+  anything that isn't an expression runs as statements. `print()` output comes first.
+- **Bindings:** `ctx`, `self` and `room` are predeclared, along with the package builtins
+  (effect primitives, constants). Each call gets a fresh module.
+- **Package:** relative labels and attribute keys belong to the package of the caller's
+  room.
+- **Limits:** 1,000,000 steps and 1 s, shared with any hooks its verbs trigger.
+- **Errors:** errors are shown to the caller only. They are not diagnostics and don't count
+  toward quarantine.
+*Code:* `StarlarkHost.eval`, `DevTools`.
+
+### D-086 The `--dev` file watcher polls — `open`
+Every 100 ms it compares the modification time and size of every non-test `.star` file.
+Changes are reported once nothing has changed for 200 ms, grouped by package: the nearest
+directory with a `package.star`, or the file's own directory if that file was just deleted.
+It doesn't use `WatchService`, which polls every few seconds on macOS.
+*Code:* `WorldWatcher`, `DevServer.run`.
+
+### D-087 Color markup and color depth — `open`
+§2.2 asks for ANSI rendering but defines no markup.
+- **Tags:** text may contain `{red}` and the other base colors, `{bright_red}` etc., `{bold}`,
+  `{underline}`, `{/}` (reset) and `{x0}`–`{x255}`. `{{` is a literal brace, and unknown
+  tags stay as typed.
+- **Rendering:** 16-color clients get xterm colors downgraded to the nearest base color.
+  Clients without color get the tags stripped. Output that leaves a color on ends with a
+  reset.
+- **Color depth:** MTTS bits decide (8 = 256 colors, 1 = ANSI). Without MTTS, terminal
+  types decide: 256 for `*256COLOR*`, `*TRUECOLOR*`, Mudlet and TinTin; 16 for ANSI, XTERM,
+  VT100 and the like. Otherwise there is no color.
+- **Engine text:** engine messages don't use color yet.
+*Code:* `Ansi`, `TelnetConnection.depth`.
+
+### D-088 GA only for real telnet clients — `open`
+Negotiation is always offered when a client connects. GA is only sent to clients that have
+sent at least one telnet command, so plain `nc` sessions don't show a GA byte after every
+prompt.
+*Code:* `TelnetConnection.speaksTelnet`.
+
+### D-089 Telnet details — `open`
+- **Opening:** the server sends DO TTYPE, DO NAWS, WILL EOR, WILL GMCP and WILL CHARSET.
+  Requests for anything else are refused once; nothing is ever re-sent for an option whose
+  state didn't change.
+- **TTYPE and MTTS:** TTYPE is asked up to three times, or until an answer repeats.
+- **CHARSET:** the server requests `UTF-8` and accepts a client's request only if it lists
+  UTF-8. Output is UTF-8 regardless.
+- **Other options:** GMCP is negotiated, but messages are ignored until M6. NAWS is stored.
+- **Lines:** a line ends at CR, LF, CR LF or CR NUL. Backspace edits the line; other control
+  characters are dropped, and invalid UTF-8 becomes U+FFFD.
+- **Long lines:** past 512 bytes the rest is dropped, and the client is told "Your line was
+  longer than 512 bytes and was cut short."
+- **Disconnects:** five malformed sequences disconnect the client. Unsent output over
+  256 KB disconnects it as too slow, and the character goes link-dead.
+*Code:* `TelnetConnection`, `TelnetServer`.
+
+### D-090 Raw sockets with `ktor-network` — `open`
+§1.5 says "Ktor/Netty raw non-blocking sockets". The listener uses `ktor-network` 3.6.0,
+whose raw TCP sockets run on Ktor's own NIO selector: Netty isn't needed. Session ids come
+from one `AtomicLong` shared by listeners.
+*Code:* `TelnetServer`, `gradle/libs.versions.toml`.
+
+### D-091 Roles and builder tools — `open`
+- **Roles:** `Role` lives in `core`, and players have a `role`.
+- **Gating:** a command can require a role. To players without it, the command doesn't
+  exist: they get "Huh?", and `help` leaves it out.
+- **Registration:** `@` commands from outside `core` register as tools. An `@` prefix only
+  matches other `@` commands.
+- **Scope:** builder scope (own packages only) arrives with CODEOWNERS sync in M6; until
+  then builders and instructors see everything. `@trace` streams everything in `--dev`.
+- **`@trace` filters:** `@trace [all|zone|entity <target>|hook <name>|rules|off]`.
+  - `zone` means the package of the caller's room.
+  - `entity here` traces the room itself.
+  - `hook` matches a hook name, or a command or timer prefix such as `command` or `timer`.
+  - `rules` prints a "not yet" line until the rules module (M5).
+- **`@trace` rate limit:** past 50 lines per pulse, the rest are counted. The count is
+  reported with the next traced line or at `@trace off`.
+- **`@errors [package]`:** shows the last 10 diagnostics.
+- **Not yet:** the other builder commands (`@goto`, `@stat`, `@spawn`, `@where`) arrive in
+  M6.
+*Code:* `CommandDef.role`, `CommandRegistry.registerTool`, `DevTools`, `EngineCommands.errors`.
+
+### D-092 `gups serve` options in M3 — `open`
+`--prod` exits with status 3 until M6. `--fresh` and `--db` are accepted but do nothing
+until persistence (M4). Two options are new: `--port` (default 4000) and `--start` (D-082).
+*Code:* `Serve`.

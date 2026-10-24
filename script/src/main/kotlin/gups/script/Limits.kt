@@ -12,6 +12,9 @@ data class ScriptLimits(
     /** Top-level evaluation, per package. */
     val loadSteps: Long = 5_000_000,
     val loadWallNanos: Long = 2_000_000_000,
+    /** `@eval`, per evaluation including the hooks its verbs trigger. */
+    val evalSteps: Long = 1_000_000,
+    val evalWallNanos: Long = 1_000_000_000,
     val wallClock: Boolean = true,
     /** Strings longer than this many chars are rejected where they reach the engine (D-067). */
     val maxStringChars: Int = 1 shl 20,

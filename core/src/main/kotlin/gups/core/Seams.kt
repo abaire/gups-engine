@@ -5,11 +5,25 @@ data class ClientInputEvent(val session: SessionId, val line: String, val receiv
 
 /** Non-input events posted to the world (SPEC §4.11). */
 sealed interface WorldControlEvent {
-    data class Connect(val session: SessionId, val sink: OutputSink) : WorldControlEvent
+    /** [remote] is the peer address, for example `127.0.0.1`; [transport] is `telnet`, `tls` or `ws`. */
+    data class Connect(
+        val session: SessionId,
+        val sink: OutputSink,
+        val remote: String = "local",
+        val transport: String = "local",
+    ) : WorldControlEvent
     data class Disconnect(val session: SessionId) : WorldControlEvent
-    data class Reload(val labels: List<Label>) : WorldControlEvent
+    /** Re-evaluates and swaps in these packages, by path such as `zones/forest` (D-079). */
+    data class Reload(val packages: List<String>) : WorldControlEvent
     data class Deploy(val commit: String) : WorldControlEvent
     data class Shutdown(val delayPulses: Long, val reason: String) : WorldControlEvent
+}
+
+/** Where listeners deliver input and connection events; thread-safe. In practice a `WorldLoop`. */
+interface WorldInbox {
+    fun submit(event: ClientInputEvent)
+
+    fun submit(event: WorldControlEvent)
 }
 
 /**
@@ -18,6 +32,12 @@ sealed interface WorldControlEvent {
  */
 interface OutputSink {
     fun send(text: String)
+
+    /**
+     * Sends a prompt after a burst of output. Telnet ends it with EOR or GA so clients can tell
+     * it apart from text; headless sinks ignore prompts (D-083).
+     */
+    fun prompt(text: String) = Unit
 
     /** Ends the session, for example after `quit` or a rate-limit disconnect. */
     fun close(reason: String)
