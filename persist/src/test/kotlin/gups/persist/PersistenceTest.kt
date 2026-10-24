@@ -18,6 +18,8 @@ import gups.core.world.checkInvariants
 import gups.core.world.damage
 import gups.core.world.moveItem
 import gups.core.world.quit
+import gups.core.world.setActive
+import gups.core.world.setAnchor
 import gups.core.world.setDoor
 import gups.core.world.spawnItem
 import gups.core.model.Direction
@@ -281,4 +283,25 @@ class PersistenceTest {
         Database.restore(manual, file)
         assertEquals(1, count(file, "SELECT COUNT(*) FROM players"))
     }
+
+    @Test
+    fun `affect modifiers and active and anchor reasons survive a restart`() {
+        val file = tempDb()
+        val first = PersistWorld(file)
+        val rat = first.w.actors.filterIsInstance<Mob>().first()
+        val fn = HookRef(Label("//t:mods.star"), "slow")
+        first.w.applyAffect(rat, "slowed", 10_000, modifiers = mapOf(gups.core.model.ModifierPoint.REGEN to fn))
+        first.w.setActive(rat, "boss")
+        first.w.setAnchor(rat, "raid:1")
+        first.save()
+        first.close()
+
+        val second = PersistWorld(file)
+        val back = second.w.actor(rat.id) as Mob
+        assertEquals(mapOf(gups.core.model.ModifierPoint.REGEN to fn), back.affects.single().modifiers)
+        assertEquals(setOf("boss"), back.activeReasons)
+        assertEquals(setOf("raid:1"), back.anchorReasons)
+        second.close()
+    }
 }
+

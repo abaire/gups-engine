@@ -9,6 +9,9 @@ data class ScriptLimits(
     /** Zone hooks, `think`, timers and commands, per top-level event and its cascade. */
     val hookSteps: Long = 50_000,
     val hookWallNanos: Long = 20_000_000,
+    /** The rules module and modifier chain, per evaluation (one rules function or one modifier). */
+    val rulesSteps: Long = 200_000,
+    val rulesWallNanos: Long = 20_000_000,
     /** Top-level evaluation, per package. */
     val loadSteps: Long = 5_000_000,
     val loadWallNanos: Long = 2_000_000_000,

@@ -15,6 +15,7 @@ import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
@@ -74,6 +75,8 @@ data class AffectJson(
     val onTick: RefJson? = null,
     val onExpire: RefJson? = null,
     val expireMessage: String = "",
+    /** Modifier functions by point name (SPEC §4.6). */
+    val modifiers: Map<String, RefJson> = emptyMap(),
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -99,6 +102,9 @@ data class RoomPayload(
     val blocks: Map<String, List<String>> = emptyMap(),
     val attrs: JsonObject = JsonObject(emptyMap()),
     val timers: List<TimerJson> = emptyList(),
+    /** `set_active` and `set_anchor` reasons (SPEC §5.9). */
+    val active: List<String> = emptyList(),
+    val anchor: List<String> = emptyList(),
 )
 
 @Serializable
@@ -126,6 +132,8 @@ data class MobPayload(
     val attrs: JsonObject = JsonObject(emptyMap()),
     val timers: List<TimerJson> = emptyList(),
     val affects: List<AffectJson> = emptyList(),
+    val active: List<String> = emptyList(),
+    val anchor: List<String> = emptyList(),
 )
 
 @Serializable
@@ -141,6 +149,8 @@ data class ItemPayload(
     val timers: List<TimerJson> = emptyList(),
     /** For a tombstone: the payload the item had when its prototype vanished. */
     val tombstone: String? = null,
+    val active: List<String> = emptyList(),
+    val anchor: List<String> = emptyList(),
 )
 
 @Serializable
@@ -165,6 +175,8 @@ data class PlayerPayload(
     val attrs: JsonObject = JsonObject(emptyMap()),
     val timers: List<TimerJson> = emptyList(),
     val affects: List<AffectJson> = emptyList(),
+    val active: List<String> = emptyList(),
+    val anchor: List<String> = emptyList(),
 )
 
 @Serializable
@@ -220,8 +232,15 @@ internal fun restoreTimers(e: Entity, timers: List<TimerJson>) {
 internal fun affectsJson(a: Actor) = a.affects.map {
     AffectJson(
         it.id, it.name, it.source?.v, it.appliedAt, it.expiresAt, it.statDeltas, it.flags.sorted(), it.tickEvery,
-        it.onTick?.json(), it.onExpire?.json(), it.expireMessage,
+        it.onTick?.json(), it.onExpire?.json(), it.expireMessage, it.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
     )
+}
+
+internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {
+    e.activeReasons.clear()
+    e.activeReasons.addAll(active)
+    e.anchorReasons.clear()
+    e.anchorReasons.addAll(anchor)
 }
 
 internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
@@ -230,6 +249,7 @@ internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
         a.affects += Affect(
             x.id, x.name, x.source?.let(::EntityId), x.appliedAt, x.expiresAt, x.statDeltas, x.flags.toSet(),
             x.tickEvery, x.onTick?.ref(), x.onExpire?.ref(), x.expireMessage,
+            x.modifiers.entries.mapNotNull { (k, v) -> ModifierPoint.byName(k)?.let { it to v.ref() } }.toMap(),
         )
     }
 }
@@ -259,6 +279,8 @@ internal fun World.encode(e: Entity): EntityRow? = when (e) {
             }.toMap(),
             attrs = attrsJson(e.customAttributes),
             timers = timersJson(e),
+            active = e.activeReasons.toList(),
+            anchor = e.anchorReasons.toList(),
         )
         EntityRow(e.id.v, "room", e.protoLabel.v, e.protoVersion, null, JSON.encodeToString(RoomPayload.serializer(), p), pulse)
     }
@@ -286,6 +308,8 @@ internal fun World.encode(e: Entity): EntityRow? = when (e) {
             attrs = attrsJson(e.customAttributes),
             timers = timersJson(e),
             affects = affectsJson(e),
+            active = e.activeReasons.toList(),
+            anchor = e.anchorReasons.toList(),
         )
         EntityRow(e.id.v, "mob", e.protoLabel.v, e.protoVersion, null, JSON.encodeToString(MobPayload.serializer(), payload), pulse)
     }
@@ -302,6 +326,8 @@ internal fun World.encode(e: Entity): EntityRow? = when (e) {
                 attrs = attrsJson(e.customAttributes),
                 timers = timersJson(e),
                 tombstone = e.savedPayload,
+                active = e.activeReasons.toList(),
+                anchor = e.anchorReasons.toList(),
             )
             EntityRow(
                 e.id.v, "item", e.protoLabel.v, e.protoVersion,
@@ -334,6 +360,8 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
         attrs = attrsJson(p.customAttributes),
         timers = timersJson(p),
         affects = affectsJson(p),
+        active = p.activeReasons.toList(),
+        anchor = p.anchorReasons.toList(),
     )
     return PlayerRow(p.id.v, p.accountId, p.name, JSON.encodeToString(PlayerPayload.serializer(), payload), pulse)
 }
@@ -348,6 +376,7 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
     room.customAttributes.clear()
     room.customAttributes.putAll(p.attrs.toAttrs())
     restoreTimers(room, p.timers)
+    restoreReasons(room, p.active, p.anchor)
 }
 
 internal fun applyMob(m: Mob, p: MobPayload) {
@@ -370,6 +399,7 @@ internal fun applyMob(m: Mob, p: MobPayload) {
     m.customAttributes.putAll(p.attrs.toAttrs())
     restoreTimers(m, p.timers)
     restoreAffects(m, p.affects)
+    restoreReasons(m, p.active, p.anchor)
 }
 
 internal fun applyItem(item: Item, p: ItemPayload) {
@@ -379,6 +409,7 @@ internal fun applyItem(item: Item, p: ItemPayload) {
     item.customAttributes.clear()
     item.customAttributes.putAll(p.attrs.toAttrs())
     restoreTimers(item, p.timers)
+    restoreReasons(item, p.active, p.anchor)
 }
 
 internal fun applyPlayer(pl: Player, p: PlayerPayload) {
@@ -402,4 +433,5 @@ internal fun applyPlayer(pl: Player, p: PlayerPayload) {
     pl.customAttributes.putAll(p.attrs.toAttrs())
     restoreTimers(pl, p.timers)
     restoreAffects(pl, p.affects)
+    restoreReasons(pl, p.active, p.anchor)
 }

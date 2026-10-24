@@ -9,7 +9,8 @@
 # Each room's `size` sets its track: CRAMPED (1 position), NORMAL (3) or LARGE (5). Combat
 # range depends on how far apart actors stand on it.
 
-load(":helpers.star", "greeting")
+load("//lib:quest.star", "quest")
+load(":helpers.star", "FIRST_STEPS", "greeting")
 
 def _read(ctx):
     # A zone command: `read sign` runs this in the tick lane, like a normal action.
@@ -32,6 +33,8 @@ def _hall_enter(ctx):
     if ctx.actor.is_player and not ctx.get_attr(ctx.actor, "greeted", False):
         ctx.set_attr(ctx.actor, "greeted", True)
         ctx.send(ctx.actor, greeting(ctx.actor.name))
+        # A library helper: it stores the quest in the player's attributes and tells them.
+        quest.start(ctx, ctx.actor, FIRST_STEPS)
 
 room("hall",
     name = "The Hall of Lessons",
@@ -66,10 +69,33 @@ room("armory",
     on_reset = _stock_armory,
 )
 
+def _blunted(ctx, base):
+    # A modifier gets the rules ctx and the value so far, and returns the new value. This one
+    # halves every auto-attack's damage. ctx is read-only: modifiers adjust numbers, nothing else.
+    return max(1, base // 2)
+
+# A region is a tag rooms carry (room(regions = [...])); it may span zones. Its modifiers
+# apply in every room that carries it. Points: to_hit, damage, initiative, cast_allowed,
+# move_cost, regen. `@trace rules` shows each modifier at work.
+region("practice_grounds",
+    modifiers = {"damage": _blunted},
+)
+
+def _arena_enter(ctx):
+    w = ctx.actor.equipped("wield")
+    sword = w != None and w.label.endswith(":practice_sword")
+    if ctx.actor.is_player and sword and quest.step(ctx, ctx.actor, FIRST_STEPS) == 2:
+        quest.complete(ctx, ctx.actor, FIRST_STEPS)
+        ctx.give(ctx.actor, ":leather_cap")
+        ctx.give(ctx.actor, ":healing_draught")
+        ctx.send(ctx.actor, "The guide calls from the hall: 'Well done! Take these, you've earned them.'")
+
 room("arena",
     name = "The Practice Arena",
     desc = "Sand, a few benches, and a battered training dummy at the far end.",
     size = LARGE,
+    regions = ["practice_grounds"],
     exits = [exit("south", to = ":hall")],
     spawns = [spawn(":training_dummy", at_index = 0)],
+    on_enter = _arena_enter,
 )

@@ -1,10 +1,10 @@
 package gups.harness
 
 import gups.core.Label
-import gups.core.rules.DefaultRules
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.script.LoadResult
+import gups.script.PackageKind
 import gups.script.ScriptLimits
 import gups.script.StarlarkHost
 import gups.script.callerPackage
@@ -35,16 +35,25 @@ class TestCtx internal constructor(
     @StarlarkMethod(
         name = "world",
         doc = "A fresh headless world with the given packages (default: this test's package) and the rules package. " +
-            "The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072).",
+            "The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072). " +
+            "rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, " +
+            "so only rooms near players are simulated; by default every room is (D-116).",
         parameters = [
             Param(name = "seed", named = true, defaultValue = "0"),
             Param(name = "packages", named = true, defaultValue = "None"),
             Param(name = "rules", named = true, defaultValue = "None"),
+            Param(name = "bubble", named = true, defaultValue = "False"),
         ],
         useStarlarkThread = true,
     )
-    fun world(seed: Any, packages: Any, rules: Any, thread: StarlarkThread): Any {
-        if (!isNone(rules)) evalFail("world(rules): choosing a rules package arrives with the rules module (M5)")
+    fun world(seed: Any, packages: Any, rules: Any, bubble: Any, thread: StarlarkThread): Any {
+        val rulesPkg = if (isNone(rules)) {
+            "rules"
+        } else {
+            val text = str(rules, "world(rules)")
+            if (!text.startsWith("//") || ':' in text || text.length < 3) evalFail("world(rules): '$text' should be a package label such as //rules")
+            text.removePrefix("//")
+        }
         val from = callerPackage(thread) ?: pkg
         val pkgs = if (isNone(packages)) {
             defaultLoad
@@ -55,14 +64,20 @@ class TestCtx internal constructor(
                 text.removePrefix("//").also { if (it.isEmpty()) evalFail("world(packages): '$text' is not a package") }
             }
         }
-        val result = loadWorld(pkgs)
+        val result = loadWorld(if (isNone(rules)) pkgs else pkgs + rulesPkg)
         if (!result.ok) evalFail("world(): packages failed to load:\n" + result.report())
+        if (!isNone(rules) && result.packages[rulesPkg]?.kind != PackageKind.RULES) evalFail("world(rules): //$rulesPkg is not a rules package")
         val host = StarlarkHost(result, ScriptLimits.HARNESS)
         val world = World(
             result.prototypes(),
-            DefaultRules(),
+            host.rules(rulesPkg),
             host,
-            WorldConfig(seed = int(seed, "world(seed)").toLong(), checkInvariants = true, strict = true),
+            WorldConfig(
+                seed = int(seed, "world(seed)").toLong(),
+                checkInvariants = true,
+                strict = true,
+                bubble = (bubble as? Boolean) ?: evalFail("world(bubble): expected True or False"),
+            ),
         )
         host.install(world)
         world.fireOnLoad()

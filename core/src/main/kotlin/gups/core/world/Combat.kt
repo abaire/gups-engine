@@ -4,10 +4,12 @@ import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Modifiers
 import gups.core.model.Player
 import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
@@ -25,7 +27,10 @@ fun World.startCombat(a: Actor, b: Actor) {
     if (b.primaryTarget == null) b.primaryTarget = a.id
     a.dirty = true
     b.dirty = true
-    if (fresh) echo(a.room, "${a.name.cap()} and ${b.name} are fighting!", a, b)
+    if (fresh) {
+        echo(a.room, "${a.name.cap()} and ${b.name} are fighting!", a, b)
+        perceive("combat_start", Channel.NOISE, a.room, a)
+    }
 }
 
 /** Ends [a]'s engagement with [b], or with everyone if [b] is null. */
@@ -49,7 +54,7 @@ internal fun World.disengageAll(a: Actor) {
 /** Opponents of [a] who are, for validation, in the same room; ascending id. */
 fun World.opponentsOf(a: Actor): List<Actor> {
     val room = roomOf(a)
-    return a.fighting.mapNotNull { actor(it) }.filter { isPresent(it, room) }
+    return a.fighting.mapNotNull { actor(it) }.filter { isPresent(it, room) && isSimulated(it) }
 }
 
 /** True if an opponent shares [a]'s track index (SPEC §5.5). */
@@ -75,14 +80,19 @@ internal fun World.autoAttack(a: Actor) {
         return
     }
     val ctx = RulesContext(this, a, target, weapon, band)
-    if (rng.int(1, 100) > rules.toHit(ctx)) {
+    val chance = toHitChain(ctx)
+    val roll = rng.int(1, 100)
+    traceRules(a, "${chance.text} → roll $roll ${if (roll > chance.value) "MISS" else "HIT"}")
+    if (roll > chance.value) {
         send(a, "You miss ${target.name}.")
         send(target, "${a.name.cap()} misses you.")
         echo(a.room, "${a.name.cap()} misses ${target.name}.", a, target)
         return
     }
     val type = weapon?.proto?.damageType ?: DamageType.BLUDGEON
-    val dealt = rules.mitigate(ctx, rules.damage(ctx), type)
+    val raw = damageChain(ctx)
+    val dealt = rules.mitigate(ctx, raw.value, type)
+    traceRules(a, "${raw.text} → mitigate $dealt $type")
     send(a, "You hit ${target.name}.")
     send(target, "${a.name.cap()} hits you.")
     echo(a.room, "${a.name.cap()} hits ${target.name}.", a, target)
@@ -98,7 +108,8 @@ fun World.damage(target: Actor, amount: Int, type: DamageType, source: Actor? = 
     target.dirty = true
     if (source != null && source !== target) target.lastAttacker = source.id
     dispatch(HookName.ON_DAMAGE, target, target.room, HookContext(actor = source, target = target, amount = amount, type = type))
-    if (target.casting != null && rules.interruptCheck(RulesContext(this, target, source), amount)) interruptCast(target)
+    val cast = target.casting
+    if (cast != null && rules.interruptCheck(RulesContext(this, target, source, skill = (cast.action as? Castable)?.skill), amount)) interruptCast(target)
     if (target.hp <= 0) deferRemoval(target, Deferred.Kind.DEATH) { processDeath(target) }
 }
 
@@ -120,6 +131,7 @@ internal fun World.processDeath(victim: Actor) {
     removedThisPhase += victim.id
     send(victim, "You are DEAD!")
     echo(room, "${victim.name.cap()} is DEAD!", victim)
+    perceive("death", Channel.NOISE, room, victim)
     dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
     if (killer != null) awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
 
@@ -172,13 +184,14 @@ fun World.applyAffect(
     onExpire: HookRef? = null,
     expireMessage: String = "",
     source: Actor? = null,
+    modifiers: Modifiers = emptyMap(),
 ): Affect? {
     if (!target.inWorld) return null
     require(duration >= 1) { "apply_affect: duration must be at least 1" }
     target.affects.removeIf { it.name == name }
     val affect = Affect(
         allocateHandle(), name, source?.id, pulse, pulse + duration,
-        statDeltas, flags, tickEvery, onTick, onExpire, expireMessage,
+        statDeltas, flags, tickEvery, onTick, onExpire, expireMessage, modifiers,
     )
     target.affects += affect
     target.dirty = true
@@ -224,7 +237,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
                 is Effect.Heal -> heal(t, effect.dice.roll(rng))
                 is Effect.ApplyAffect -> applyAffect(
                     t, effect.name, effect.duration, effect.statDeltas, effect.flags,
-                    effect.tickEvery, effect.onTick, effect.onExpire, effect.expireMessage, caster,
+                    effect.tickEvery, effect.onTick, effect.onExpire, effect.expireMessage, caster, effect.modifiers,
                 )
                 is Effect.Dispel -> {
                     val f = effect.filter

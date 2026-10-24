@@ -6,6 +6,7 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.rules.RulesContext
 
 // Item custody (SPEC §3.3, §3.8). An item's location lives only on the item; the per-room,
 // per-actor and per-container indexes are derived and changed only here.
@@ -19,6 +20,7 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1): Item {
     register(item)
     index(item, at)
     if (custodian(item) is Player) itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
+    custodian(item)?.let { updateEncumbrance(it) }
     invokeOn(item, HookName.ON_SPAWN, HookContext(item = item))
     return item
 }
@@ -39,14 +41,66 @@ fun World.moveItem(item: Item, to: ItemLocation) {
         // An item changing hands between players is saved at once, both sides together (SPEC §5.11).
         if (before != null && after != null) requestImmediate("transfer")
     }
+    holderOf(from)?.let { updateEncumbrance(it) }
+    custodian(item)?.let { updateEncumbrance(it) }
+}
+
+/** The actor whose load an item at [loc] counts toward, if any. */
+private fun World.holderOf(loc: ItemLocation): Actor? = when (loc) {
+    is ItemLocation.Carried -> actor(loc.actor)
+    is ItemLocation.Equipped -> actor(loc.actor)
+    is ItemLocation.Contained -> item(loc.container)?.let { custodian(it) }
+    is ItemLocation.InRoom -> null
+}
+
+/**
+ * Applies `rules.encumbrance` while [a] carries more than `rules.carry_limit`, and lifts it once
+ * they don't (SPEC §4.6). The limit is worked out without the current encumbrance.
+ */
+fun World.updateEncumbrance(a: Actor) {
+    if (!a.inWorld) return
+    val was = a.encumbrance
+    guarded("encumbrance of $a") {
+        a.encumbrance = emptyMap()
+        if (a.carriedWeight() > rules.carryLimit(RulesContext(this, a))) a.encumbrance = rules.encumbrance(RulesContext(this, a))
+    }
+    if (was != a.encumbrance) {
+        a.dirty = true
+        if (was.isEmpty()) send(a, "You are carrying more than you can manage.") else if (a.encumbrance.isEmpty()) send(a, "Your load feels manageable again.")
+    }
+}
+
+/**
+ * Merges [item] into a stack of the same prototype at the same location, if there is one with
+ * an identical delta (SPEC §3.8 inv. 8): the same attributes and decay deadline, and no timers
+ * or name override on either. Returns the stack that now holds it.
+ */
+fun World.stack(item: Item): Item {
+    if (!item.proto.stackable || item.timers.isNotEmpty() || item.nameOverride != null) return item
+    val peers = when (val loc = item.location) {
+        is ItemLocation.InRoom -> (entity(loc.room) as? Room)?.itemIndex?.values?.filter { it.groundIndex == loc.trackIndex }
+        is ItemLocation.Carried -> actor(loc.actor)?.inventoryIndex?.values
+        is ItemLocation.Contained -> item(loc.container)?.contentsIndex?.values
+        is ItemLocation.Equipped -> null
+    } ?: return item
+    val into = peers.firstOrNull {
+        it !== item && it.protoLabel == item.protoLabel && it.timers.isEmpty() && it.nameOverride == null &&
+            it.decayAt == item.decayAt && it.customAttributes == item.customAttributes
+    } ?: return item
+    into.count += item.count
+    into.dirty = true
+    destroy(item)
+    return into
 }
 
 /** The `destroy` verb: removes [item] and everything inside it. */
 fun World.destroy(item: Item) {
-    if (custodian(item) is Player) itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
+    val holder = custodian(item)
+    if (holder is Player) itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
     unindex(item)
     markRemoved(item)
     forgetItemTree(item)
+    holder?.let { updateEncumbrance(it) }
 }
 
 /** The actor whose custody [item] ends in, following containers; null for items on the ground. */

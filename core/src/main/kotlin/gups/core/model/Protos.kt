@@ -1,5 +1,6 @@
 package gups.core.model
 
+import gups.core.HookRef
 import gups.core.Label
 import gups.core.THINK_DEFAULT_PULSES
 import gups.core.world.Behavior
@@ -11,6 +12,24 @@ import gups.core.world.ZoneCommand
 // packages; Kotlin tests build them directly.
 
 val STAT_NAMES: List<String> = listOf("str", "dex", "con", "int", "wis")
+
+/** The points of the rules chain that zones, regions, rooms, affects and items may modify (SPEC §4.6). */
+enum class ModifierPoint(val scriptName: String) {
+    TO_HIT("to_hit"),
+    DAMAGE("damage"),
+    INITIATIVE("initiative"),
+    CAST_ALLOWED("cast_allowed"),
+    MOVE_COST("move_cost"),
+    REGEN("regen"),
+    ;
+
+    companion object {
+        fun byName(name: String): ModifierPoint? = entries.firstOrNull { it.scriptName == name }
+    }
+}
+
+/** Modifier functions by point. Each is a top-level script function `fn(ctx, base)`. */
+typealias Modifiers = Map<ModifierPoint, HookRef>
 val DEFAULT_STATS: Map<String, Int> = STAT_NAMES.associateWith { 10 }
 
 data class DoorProto(
@@ -44,8 +63,12 @@ data class RoomProto(
     val spawns: List<SpawnRule> = emptyList(),
     /** Zone verbs, run in the tick lane. */
     val commands: Map<String, ZoneCommand> = emptyMap(),
+    val modifiers: Modifiers = emptyMap(),
     val version: Int = 1,
 )
+
+/** A builder-applied tag on rooms, possibly across zones, that carries modifiers (SPEC §1.6, §4.2). */
+data class RegionProto(val name: String, val pkg: String, val modifiers: Modifiers = emptyMap())
 
 data class LootRule(val label: Label, val chance: Double = 1.0, val count: Int = 1)
 
@@ -63,6 +86,7 @@ data class MobProto(
     val resists: Map<DamageType, Int> = emptyMap(),
     val skills: Map<Label, Int> = emptyMap(),
     val senses: Map<Sense, Int> = emptyMap(),
+    /** Built-in behaviors in declaration order (SPEC §4.7). */
     val behaviors: List<Behavior> = emptyList(),
     val think: ThinkFn? = null,
     val thinkEvery: Int = THINK_DEFAULT_PULSES,
@@ -97,6 +121,10 @@ data class ItemProto(
     val decayPulses: Int? = null,
     val container: ContainerProto? = null,
     val commands: Map<String, ZoneCommand> = emptyMap(),
+    /** Affect flags the wearer has while this is equipped, for example `no_regen`. */
+    val equipAffects: Set<String> = emptySet(),
+    /** Modifiers that apply to the wearer while this is equipped. */
+    val modifiers: Modifiers = emptyMap(),
     val version: Int = 1,
 )
 
@@ -130,7 +158,7 @@ data class SkillProto(
 }
 
 /** Package-level settings of a zone (SPEC §4.1). [pkg] is a package path such as `zones/forest`. */
-data class ZoneProto(val pkg: String, val title: String = pkg, val resetPulses: Int? = null)
+data class ZoneProto(val pkg: String, val title: String = pkg, val resetPulses: Int? = null, val modifiers: Modifiers = emptyMap())
 
 /** The prototype table. Labels are unique per kind. */
 class Prototypes(
@@ -139,8 +167,13 @@ class Prototypes(
     items: List<ItemProto> = emptyList(),
     skills: List<SkillProto> = emptyList(),
     zones: List<ZoneProto> = emptyList(),
+    regions: List<RegionProto> = emptyList(),
 ) {
     val zones: Map<String, ZoneProto> = zones.associateBy { it.pkg }
+    /** Region names are world-wide: a room in any zone may carry any region. */
+    val regions: Map<String, RegionProto> = LinkedHashMap<String, RegionProto>().also { out ->
+        for (r in regions) require(out.put(r.name, r) == null) { "Duplicate region ${r.name}" }
+    }
 
     val rooms: Map<Label, RoomProto> = unique("room", rooms) { it.label }
     val mobs: Map<Label, MobProto> = unique("mob", mobs) { it.label }

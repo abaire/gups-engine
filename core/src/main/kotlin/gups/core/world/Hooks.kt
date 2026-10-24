@@ -9,8 +9,10 @@ import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.Entity
 import gups.core.model.Item
+import gups.core.model.ModifierPoint
 import gups.core.model.Room
 import gups.core.model.SkillProto
+import gups.core.rules.RulesContext
 
 /** The hook catalog (SPEC §4.4). Only `before_*` hooks can veto. */
 enum class HookName(val scriptName: String) {
@@ -62,6 +64,13 @@ data class HookContext(
     val type: DamageType? = null,
     val affect: Affect? = null,
     val elapsedPulses: Long? = null,
+    /** The perception event type for `on_nearby`, for example `say` or `enter` (SPEC §5.7). */
+    val event: String? = null,
+    val sourceRoom: Room? = null,
+    /** The listening mob's own exit leading toward the source; null for its own room. */
+    val viaExit: Direction? = null,
+    /** An item target, for `use <item> <item>` and item-target skills. */
+    val targetItem: Item? = null,
 )
 
 /** How a reload went; [messages] are shown to builders and instructors in game. */
@@ -85,6 +94,17 @@ interface ScriptHost {
 
     /** True while [owner]'s timer callback [ref] must not run, for example under quarantine. */
     fun isSuspended(owner: Entity, ref: HookRef): Boolean = false
+
+    /** False if [owner] certainly has no [hook], so the engine can skip queuing work for it. */
+    fun hasHook(owner: Entity, hook: HookName): Boolean = true
+
+    /**
+     * Runs one modifier `fn(ctx, base)` of the rules chain (SPEC §4.6) and returns its value: an
+     * `Int` for numeric points, a [gups.core.rules.Regen] for `regen`, and for `cast_allowed`
+     * null (allow) or the denial message. A failing modifier returns [base]. [source] says
+     * where the modifier comes from, for example `region:null_field`.
+     */
+    fun modify(world: World, point: ModifierPoint, ref: HookRef, source: String, c: RulesContext, base: Any?): Any? = base
 
     /**
      * Re-evaluates [packages] and swaps them into [world] (SPEC §5.10). On failure the old

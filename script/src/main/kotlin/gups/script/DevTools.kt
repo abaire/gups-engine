@@ -39,6 +39,11 @@ class DevTools private constructor(private val world: World, private val host: S
         data class Hook(val name: String) : Filter {
             override fun matches(e: TraceEvent) = e.hook == name || e.hook.startsWith("$name ")
         }
+
+        /** Rules functions, modifiers and each evaluation's chain (SPEC §4.6, §5.13). */
+        data object Rules : Filter {
+            override fun matches(e: TraceEvent) = e.hook == RULES || e.hook.startsWith("rules.") || e.hook.startsWith("modifier ")
+        }
     }
 
     private class Sub(val player: Player, val session: SessionId, val filter: Filter) {
@@ -66,8 +71,15 @@ class DevTools private constructor(private val world: World, private val host: S
             }
             if (sub.sent++ < TRACE_LINES_PER_PULSE) world.send(sub.player, "[trace] ${e.text}") else sub.dropped++
         }
-        if (subs.isEmpty()) host.tracer = previous
+        if (subs.isEmpty()) {
+            host.tracer = previous
+            world.onRules = null
+        }
     }
+
+    /** A rules chain line from the world, traced like a script event. */
+    private fun emitRules(actor: gups.core.model.Actor?, line: String) =
+        emit(TraceEvent(world.pulse, "rules", actor?.id, RULES, line))
 
     private fun trace(c: CommandCall) {
         val p = c.actor as? Player ?: return
@@ -81,7 +93,7 @@ class DevTools private constructor(private val world: World, private val host: S
                 Filter.Owner((e ?: return world.send(p, "You don't see that here.")).id)
             }
             "hook" -> Filter.Hook(words.getOrNull(1) ?: return world.send(p, "Trace which hook? For example: @trace hook on_enter"))
-            "rules" -> return world.send(p, "Rules tracing arrives with the rules module (M5).")
+            "rules" -> Filter.Rules
             "off" -> {
                 subs.remove(p)?.let { if (it.dropped > 0) world.send(p, "[trace] ... ${it.dropped} more lines at pulse ${it.pulse}") }
                 return world.send(p, "Tracing off.")
@@ -90,6 +102,7 @@ class DevTools private constructor(private val world: World, private val host: S
         }
         subs[p] = Sub(p, p.session ?: return, filter)
         host.tracer = ::emit
+        world.onRules = ::emitRules
         world.send(p, "Tracing ${describe(filter)}.")
     }
 
@@ -98,6 +111,7 @@ class DevTools private constructor(private val world: World, private val host: S
         is Filter.Zone -> "//${f.pkg}"
         is Filter.Owner -> "${world.entity(f.id)}"
         is Filter.Hook -> "hook ${f.name}"
+        Filter.Rules -> "the rules and their modifier chains"
     }
 
     private fun eval(c: CommandCall) {
@@ -107,6 +121,8 @@ class DevTools private constructor(private val world: World, private val host: S
     }
 
     companion object {
+        private const val RULES = "rules"
+
         /** Registers `@trace`, and `@eval` when [eval] is true (`--dev` only). */
         fun install(world: World, host: StarlarkHost, eval: Boolean): DevTools {
             val tools = DevTools(world, host)

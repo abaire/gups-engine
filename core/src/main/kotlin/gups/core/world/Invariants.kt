@@ -50,6 +50,15 @@ fun World.invariantViolations(): List<Violation> {
         if (a.actionQueue.size > ACTION_QUEUE_MAX) out += "$a: action queue holds ${a.actionQueue.size}"
         for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id)) out += "$a lists stray $item"
     }
+    // A dormant room has no running timers, AI or combat (inv. 7). Active entities carry on.
+    for (room in rooms) {
+        if (!room.isDormant) continue
+        for (e in entitiesIn(room)) {
+            if (isSimulated(e)) continue
+            if (e.timers.any { it.due != null }) out += "$e: running timer in dormant ${room.label}"
+            if (e is gups.core.model.Actor && e.isEngaged) out += "$e: fighting in dormant ${room.label}"
+        }
+    }
     return out.list
 }
 

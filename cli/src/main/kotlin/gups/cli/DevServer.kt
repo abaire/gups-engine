@@ -3,7 +3,6 @@ package gups.cli
 import gups.core.Label
 import gups.core.WorldControlEvent
 import gups.core.loop.WorldLoop
-import gups.core.rules.DefaultRules
 import gups.core.world.Boot
 import gups.core.world.DevLogin
 import gups.core.world.World
@@ -89,7 +88,8 @@ class DevServer(
         val saved = db?.let { SqlitePersistence.open(it, log) }
         persistence = saved
         val boot = saved?.boot(protos, fresh) ?: Boot()
-        world = World(protos, DefaultRules(), host, WorldConfig(seed = System.nanoTime(), checkInvariants = true, checkpointPulses = module.checkpointPulses), boot)
+        val config = WorldConfig(seed = System.nanoTime(), checkInvariants = true, checkpointPulses = module.checkpointPulses, bubble = true)
+        world = World(protos, host.rules(), host, config, boot)
         host.install(world)
         if (saved != null) {
             val report = saved.restore(world, fresh)

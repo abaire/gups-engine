@@ -4,8 +4,10 @@ import gups.core.model.Actor
 import gups.core.model.CastState
 import gups.core.model.Entity
 import gups.core.model.Interrupt
+import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.QueuedAction
+import gups.core.model.SkillProto
 
 /**
  * One tick-lane action (SPEC §5.3). The world drives the lifecycle: [validate], [veto], an
@@ -31,6 +33,11 @@ interface Action {
 
     /** Step 5. Returns the recovery lag (step 6). */
     fun resolve(w: World, actor: Actor): Int
+}
+
+/** An action that casts a skill, so rules and views can tell which. */
+interface Castable {
+    val skill: SkillProto
 }
 
 /** Pops and plans a queued command, then starts its lifecycle. */
@@ -90,8 +97,12 @@ internal fun World.cancelCast(actor: Actor): Boolean {
 
 // ---- Mob AI (SPEC §4.7, §5.8) ----------------------------------------------------------------
 
-/** One behavior's suggestion for this think cycle. */
-data class Proposal(val commandLine: String, val priority: Int, val source: String)
+/**
+ * One behavior's suggestion for this think cycle. [commandLine] describes it (and is what runs
+ * when there is no [action]); [action] fixes its target, so `kill goblin` hits the goblin the
+ * behavior chose rather than whichever goblin matches first.
+ */
+data class Proposal(val commandLine: String, val priority: Int, val source: String, val action: Action? = null)
 
 /** A built-in behavior. Proposes at most one action per think cycle. */
 fun interface Behavior {
@@ -121,13 +132,25 @@ fun interface ZoneCommand {
 
 /** A skill's custom `resolve` hook. */
 fun interface SkillResolver {
-    fun resolve(world: World, caster: Actor, target: Actor?)
+    /** [item] is the target of an `item` skill, else null. */
+    fun resolve(world: World, caster: Actor, target: Actor?, item: Item?)
 }
 
 internal fun World.think(mob: Mob) {
     mob.lastThink = pulse
-    val proposals = mob.proto.behaviors
-        .mapIndexedNotNull { i, b -> b.propose(this, mob)?.let { i to it } }
+    val behaviors = mob.proto.behaviors
+    val proposals = behaviors
+        .mapIndexedNotNull { i, b ->
+            val p = try {
+                b.propose(this, mob)
+            } catch (e: Exception) {
+                if (config.strict) throw e
+                diagnose("engine", "behavior of $mob failed: ${e.message}", e)
+                null
+            }
+            p?.let { i to it }
+        }
+        .filter { (_, p) -> Sentinel !in behaviors || Sentinel.allows(p) }
         .sortedWith(compareByDescending<Pair<Int, Proposal>> { it.second.priority }.thenBy { it.first })
         .map { it.second }
     val result = mob.proto.think?.let { fn ->
@@ -139,7 +162,10 @@ internal fun World.think(mob: Mob) {
         }
     } ?: ThinkResult.Accept
     when (result) {
-        ThinkResult.Accept -> proposals.firstOrNull()?.let { act(mob, it.commandLine) }
+        ThinkResult.Accept -> proposals.firstOrNull()?.let { p ->
+            val action = p.action
+            if (action != null) enqueue(mob, p.commandLine.substringBefore(' '), action) else act(mob, p.commandLine)
+        }
         ThinkResult.Idle -> Unit
         is ThinkResult.Act -> act(mob, result.commandLine)
     }

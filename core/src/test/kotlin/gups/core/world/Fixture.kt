@@ -19,6 +19,7 @@ import gups.core.model.ItemProto
 import gups.core.model.LootRule
 import gups.core.model.Mob
 import gups.core.model.MobProto
+import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.RoomProto
@@ -126,6 +127,9 @@ class RecordingHost : ScriptHost {
     val calls = mutableListOf<String>()
     val handlers = mutableMapOf<HookName, (World, Entity, HookContext) -> HookOutcome?>()
 
+    /** Modifier functions by [HookRef.name]: `(point, ctx, base) -> value`. */
+    val modifiers = mutableMapOf<String, (ModifierPoint, RulesContext, Any?) -> Any?>()
+
     override fun invokeHook(world: World, owner: Entity, hook: HookName, ctx: HookContext): HookOutcome {
         val h = handlers[hook] ?: return HookOutcome.Allow
         calls += "${hook.scriptName}:${owner.name}"
@@ -135,7 +139,17 @@ class RecordingHost : ScriptHost {
     override fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext) {
         calls += "ref:${ref.name}@${world.pulse}"
     }
+
+    override fun hasHook(owner: Entity, hook: HookName): Boolean = hook in handlers
+
+    override fun modify(world: World, point: ModifierPoint, ref: HookRef, source: String, c: RulesContext, base: Any?): Any? {
+        calls += "mod:$source:${ref.name}"
+        return modifiers[ref.name]?.invoke(point, c, base) ?: base
+    }
 }
+
+/** A modifier reference for [RecordingHost.modifiers]. */
+fun mod(name: String) = HookRef(Label("//t:mods.star"), name)
 
 /** A headless world with connected players and a virtual clock. */
 class Fixture(
@@ -144,8 +158,9 @@ class Fixture(
     scripts: ScriptHost = ScriptHost.NONE,
     protos: Prototypes = T.protos(),
     strict: Boolean = true,
+    bubble: Boolean = false,
 ) {
-    val w = World(protos, rules, scripts, WorldConfig(seed = seed, checkInvariants = true, strict = strict))
+    val w = World(protos, rules, scripts, WorldConfig(seed = seed, checkInvariants = true, strict = strict, bubble = bubble))
     private var nextSession = 1L
     private val sinks = mutableMapOf<Player, CapturingSink>()
 

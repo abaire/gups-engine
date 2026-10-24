@@ -14,6 +14,7 @@ import gups.core.model.STAT_NAMES
 import gups.core.model.SkillProto
 import gups.core.world.Proposal
 import gups.core.world.World
+import gups.core.world.roomOfEntity
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -69,18 +70,6 @@ internal fun readableAttrs(e: Entity, pkg: String?): Dict<String, Any> {
             short to fromAttr(v, null)
         },
     )
-}
-
-/** The room [e] is in, following carriers and containers; null if it is nowhere. */
-internal fun World.roomOfEntity(e: Entity): Room? = when (e) {
-    is Room -> e
-    is Actor -> e.room.takeIf { e.inWorld }
-    is Item -> when (val loc = e.location) {
-        is ItemLocation.InRoom -> entity(loc.room) as? Room
-        is ItemLocation.Carried -> actor(loc.actor)?.room
-        is ItemLocation.Equipped -> actor(loc.actor)?.room
-        is ItemLocation.Contained -> item(loc.container)?.let { roomOfEntity(it) }
-    }
 }
 
 /** Shared base: identity, equality by entity, and the validity check. */
@@ -203,6 +192,21 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
 
     @StarlarkMethod(name = "home_room", structField = true, doc = "A mob's home room label; None for players.")
     fun homeRoom(): Any = read { (actor as? Mob)?.homeRoom?.v ?: Starlark.NONE }
+
+    @StarlarkMethod(name = "recall_room", structField = true, doc = "A player's recall room label; None for mobs.")
+    fun recallRoom(): Any = read { (actor as? gups.core.model.Player)?.recallRoom?.v ?: Starlark.NONE }
+
+    @StarlarkMethod(name = "flags", structField = true, doc = "Flags from affects and worn items' equip_affects, sorted.")
+    fun flags(): Any = read { sList((actor.affects.flatMap { it.flags } + actor.equipment.values.flatMap { it.proto.equipAffects }).distinct().sorted()) }
+
+    @StarlarkMethod(name = "has_flag", doc = "True if an affect or a worn item gives this flag, such as 'no_regen'.", parameters = [Param(name = "flag", named = true)])
+    fun hasFlag(flag: Any): Any = read { actor.hasFlag(str(flag, "has_flag(flag)")) }
+
+    @StarlarkMethod(name = "carried_weight", structField = true, doc = "Weight of everything carried and worn.")
+    fun carriedWeight(): Any = read { sInt(actor.inventory.sumOf { it.weight } + actor.equipment.values.sumOf { it.weight }) }
+
+    @StarlarkMethod(name = "casting", structField = true, doc = "The skill being cast, or None.")
+    fun casting(): Any = read { (actor.casting?.action as? gups.core.world.Castable)?.skill?.let(::SkillView) ?: Starlark.NONE }
 }
 
 @StarlarkBuiltin(name = "room", doc = "A read-only view of a room.")
@@ -304,6 +308,21 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
 
     @StarlarkMethod(name = "contents", doc = "Items inside this container, ascending id.")
     fun contents(): Any = read { sList(item.contents.map { ItemView(scope, it) }) }
+
+    @StarlarkMethod(name = "dice", structField = true, doc = "Weapon damage dice such as '1d6', or None.")
+    fun dice(): Any = read { item.proto.dice?.toString() ?: Starlark.NONE }
+
+    @StarlarkMethod(name = "damage_type", structField = true)
+    fun damageType(): Any = read { item.proto.damageType.name }
+
+    @StarlarkMethod(name = "range", structField = true, doc = "A weapon's reach: 'melee', 'near' or 'far'.")
+    fun range(): Any = read { item.range.word }
+
+    @StarlarkMethod(name = "wear", structField = true, doc = "The equipment slot it goes in, or None.")
+    fun wear(): Any = read { item.proto.wear ?: Starlark.NONE }
+
+    @StarlarkMethod(name = "stat_deltas", structField = true, doc = "Stat changes while worn.")
+    fun statDeltas(): Any = read { sDict(item.proto.statDeltas.mapValues { sInt(it.value) }) }
 }
 
 /** Where an item is (SPEC §3.3). */
@@ -397,6 +416,15 @@ class SkillView internal constructor(val skill: SkillProto) : StarlarkValue {
 
     @StarlarkMethod(name = "lag", structField = true)
     fun lag(): Any = sInt(skill.lag)
+
+    @StarlarkMethod(name = "cost", structField = true, doc = "Vitals spent: keys 'hp', 'mana', 'move'.")
+    fun cost(): Any = sDict(skill.cost.mapValues { sInt(it.value) })
+
+    @StarlarkMethod(name = "channels", structField = true)
+    fun channels(): Any = sList(skill.channels.map { it.name.lowercase() }.sorted())
+
+    @StarlarkMethod(name = "interrupt", structField = true, doc = "{'damage_pct': int or None, 'stun': bool}.")
+    fun interrupt(): Any = sDict(mapOf("damage_pct" to (skill.interrupt.damagePct?.let(::sInt) ?: Starlark.NONE), "stun" to skill.interrupt.stun))
 
     override fun isImmutable(): Boolean = true
 

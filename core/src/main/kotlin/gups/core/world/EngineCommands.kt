@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Exit
@@ -14,7 +15,7 @@ import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 
-/** The engine's player commands (SPEC §4.9). Items `give`, `put`, `wear` and `use` arrive in M5. */
+/** The engine's player commands (SPEC §4.9). */
 internal object EngineCommands {
     fun all(): List<CommandDef> = listOf(
         // Fast lane.
@@ -40,8 +41,12 @@ internal object EngineCommands {
         TickCommand("flee") { FleeAction },
         TickCommand("get", listOf("take")) { planGet(it) },
         TickCommand("drop") { planDrop(it) },
-        TickCommand("wield") { planWield(it) },
+        TickCommand("give") { planGive(it) },
+        TickCommand("put") { planPut(it) },
+        TickCommand("wear") { planWear(it, wield = false) },
+        TickCommand("wield") { planWear(it, wield = true) },
         TickCommand("remove") { planRemove(it) },
+        TickCommand("use") { planUse(it) },
         TickCommand("open") { planDoor(it, DoorVerb.OPEN) },
         TickCommand("close") { planDoor(it, DoorVerb.CLOSE) },
         TickCommand("lock") { planDoor(it, DoorVerb.LOCK) },
@@ -97,14 +102,15 @@ internal object EngineCommands {
         for (p in c.world.players) c.world.send(p, "[gossip] ${c.actor.name}: ${c.args}")
     }
 
-    /** Heard in the room and every adjacent room. Perception-based carrying arrives in M5. */
+    /** Heard in the room and in every room whose exit toward it lets noise through (SPEC §5.7). */
     private fun shout(c: CommandCall) {
         val w = c.world
         if (c.args.isEmpty()) return w.send(c.actor, "Shout what?")
         w.send(c.actor, "You shout, '${c.args}'")
         w.echo(c.actor.room, "${c.actor.name.cap()} shouts, '${c.args}'", c.actor)
-        val near = c.actor.room.exits.values.map { w.room(it.to) }.distinct().filter { it !== c.actor.room }
+        val near = w.inbound(c.actor.room).filter { (_, exit) -> Channel.NOISE !in exit.effectiveBlocks }.map { it.first }.distinct()
         for (room in near) w.echo(room, "Someone nearby shouts, '${c.args}'")
+        w.perceive("shout", Channel.NOISE, c.actor.room, c.actor, c.args)
     }
 
     private fun whisper(c: CommandCall) {
@@ -246,25 +252,138 @@ internal object EngineCommands {
                 w.send(actor, "You drop ${item.name}.")
                 w.echo(actor.room, "${actor.name.cap()} drops ${item.name}.", actor)
                 w.dispatch(HookName.ON_DROP, item, actor.room, HookContext(actor = actor, item = item))
+                if (item.id in w.entities) w.stack(item)
                 return 0
             }
         }
     }
 
-    private fun planWield(c: CommandCall): Action? {
+    /** `give <item> <actor>` (also `give <item> to <actor>`): hands a carried item over; fires `on_give`. */
+    private fun planGive(c: CommandCall): Action? {
+        val w = c.world
+        val words = c.args.split(Regex("\\s+")).filter { it.isNotEmpty() && it != "to" }
+        if (words.size < 2) return null.also { w.send(c.actor, "Give what to whom?") }
+        val item = w.findItem(c.actor, words.dropLast(1).joinToString(" "), inventory = true, ground = false)
+            ?: return null.also { w.send(c.actor, "You aren't carrying that.") }
+        val target = w.findActor(c.actor, words.last()) ?: return null.also { w.send(c.actor, "They aren't here.") }
+        return object : Action {
+            override fun validate(w: World, actor: Actor): String? = when {
+                item.location != ItemLocation.Carried(actor.id) -> "You aren't carrying that."
+                target === actor -> "You already have it."
+                !w.isPresent(target, w.roomOf(actor)) -> "They aren't here."
+                target.carriedWeight() + item.weight > w.rules.carryLimit(RulesContext(w, target, item = item)) ->
+                    "${target.name.cap()} can't carry that much."
+                else -> null
+            }
+
+            override fun resolve(w: World, actor: Actor): Int {
+                w.moveItem(item, ItemLocation.Carried(target.id))
+                w.send(actor, "You give ${item.name} to ${target.name}.")
+                w.send(target, "${actor.name.cap()} gives you ${item.name}.")
+                w.echo(actor.room, "${actor.name.cap()} gives ${item.name} to ${target.name}.", actor, target)
+                w.dispatch(HookName.ON_GIVE, item, actor.room, HookContext(actor = actor, item = item, target = target))
+                if (item.id in w.entities) w.stack(item)
+                return 0
+            }
+        }
+    }
+
+    /** `put <item> in <container>`: the container is carried or within reach on the ground, and open. */
+    private fun planPut(c: CommandCall): Action? {
+        val w = c.world
+        val parts = c.args.split(Regex("\\s+(in|into)\\s+"), limit = 2)
+        if (parts.size < 2 || parts[0].isBlank()) return null.also { w.send(c.actor, "Put what in what?") }
+        val item = w.findItem(c.actor, parts[0], inventory = true, ground = false)
+            ?: return null.also { w.send(c.actor, "You aren't carrying that.") }
+        val box = w.findItem(c.actor, parts[1], inventory = true, ground = true)
+            ?: return null.also { w.send(c.actor, "You don't see that here.") }
+        return object : Action {
+            override fun validate(w: World, actor: Actor): String? {
+                if (item.location != ItemLocation.Carried(actor.id)) return "You aren't carrying that."
+                if (item === box) return "You can't put something inside itself."
+                val state = box.container ?: return "${box.name.cap()} is not a container."
+                if (!w.isPresent(box, w.roomOf(actor))) return "You don't see that here."
+                w.reach(actor, box)?.let { return it }
+                if (state.state != DoorState.OPEN) return "${box.name.cap()} is closed."
+                if (box.contents.size >= state.capacity) return "${box.name.cap()} is full."
+                if (box.contents.sumOf { it.weight } + item.weight > state.maxWeight) return "${item.name.cap()} won't fit in ${box.name}."
+                return null
+            }
+
+            override fun resolve(w: World, actor: Actor): Int {
+                w.moveItem(item, ItemLocation.Contained(box.id))
+                w.send(actor, "You put ${item.name} in ${box.name}.")
+                w.echo(actor.room, "${actor.name.cap()} puts ${item.name} in ${box.name}.", actor)
+                w.stack(item)
+                return 0
+            }
+        }
+    }
+
+    /**
+     * `wear <item>` and `wield <item>`: equips a carried item in its slot, swapping out whatever
+     * was there. An item's `wear` slot may name a family such as `finger`, which fits the first
+     * free `finger_*` slot of the rules' `equipment_slots()` (D-113).
+     */
+    private fun planWear(c: CommandCall, wield: Boolean): Action? {
         val w = c.world
         val item = w.findItem(c.actor, c.args, inventory = true, ground = false)
             ?: return null.also { w.send(c.actor, "You aren't carrying that.") }
-        if (item.proto.wear != "wield") return null.also { w.send(c.actor, "You can't wield ${item.name}.") }
+        val wanted = item.proto.wear
+        if (wanted == null || (wield && wanted != "wield")) return null.also { w.send(c.actor, "You can't ${if (wield) "wield" else "wear"} ${item.name}.") }
         return object : Action {
-            override fun validate(w: World, actor: Actor): String? =
-                if (item.location != ItemLocation.Carried(actor.id)) "You aren't carrying that." else null
+            override fun validate(w: World, actor: Actor): String? {
+                if (item.location != ItemLocation.Carried(actor.id)) return "You aren't carrying that."
+                if (w.slotFor(actor, wanted) == null) return "You can't wear ${item.name}."
+                return null
+            }
 
             override fun resolve(w: World, actor: Actor): Int {
-                actor.equipped("wield")?.let { w.moveItem(it, ItemLocation.Carried(actor.id)) }
-                w.moveItem(item, ItemLocation.Equipped(actor.id, "wield"))
-                w.send(actor, "You wield ${item.name}.")
-                w.echo(actor.room, "${actor.name.cap()} wields ${item.name}.", actor)
+                val slot = w.slotFor(actor, wanted)!!
+                actor.equipped(slot)?.let {
+                    w.moveItem(it, ItemLocation.Carried(actor.id))
+                    w.send(actor, "You stop using ${it.name}.")
+                }
+                w.moveItem(item, ItemLocation.Equipped(actor.id, slot))
+                val verb = if (slot == "wield") "wield" else "wear"
+                w.send(actor, "You $verb ${item.name}.")
+                w.echo(actor.room, "${actor.name.cap()} ${verb}s ${item.name}.", actor)
+                return 0
+            }
+        }
+    }
+
+    /**
+     * `use <item> [target]`: an item carried or worn whose `before_use` doesn't veto; fires its
+     * `on_use`. The target is an actor in the room, or else an item carried or on the ground.
+     */
+    private fun planUse(c: CommandCall): Action? {
+        val w = c.world
+        val words = c.args.split(Regex("\\s+"), limit = 2)
+        if (words[0].isEmpty()) return null.also { w.send(c.actor, "Use what?") }
+        val item = (c.actor.equipment.values.firstOrNull { it.matches(words[0]) } ?: w.findItem(c.actor, words[0], inventory = true, ground = false))
+            ?: return null.also { w.send(c.actor, "You aren't carrying that.") }
+        val word = words.getOrNull(1)?.trim()?.removePrefix("on ")?.trim()?.ifEmpty { null }
+        val target = word?.let { w.findActor(c.actor, it) }
+        val targetItem = if (word != null && target == null) {
+            w.findItem(c.actor, word, inventory = true, ground = true) ?: return null.also { w.send(c.actor, "You don't see that here.") }
+        } else {
+            null
+        }
+        val ctx = { actor: Actor -> HookContext(actor = actor, item = item, target = target, targetItem = targetItem) }
+        return object : Action {
+            override fun validate(w: World, actor: Actor): String? {
+                val held = item.location == ItemLocation.Carried(actor.id) || (item.location as? ItemLocation.Equipped)?.actor == actor.id
+                if (!held) return "You aren't carrying that."
+                if (target != null && !w.isPresent(target, w.roomOf(actor))) return "They aren't here."
+                if (!w.scripts.hasHook(item, HookName.ON_USE)) return "You can't use ${item.name}."
+                return null
+            }
+
+            override fun veto(w: World, actor: Actor): String? = w.dispatch(HookName.BEFORE_USE, item, actor.room, ctx(actor))
+
+            override fun resolve(w: World, actor: Actor): Int {
+                w.dispatch(HookName.ON_USE, item, actor.room, ctx(actor))
                 return 0
             }
         }
@@ -294,8 +413,13 @@ internal object EngineCommands {
     }
 
     private fun planDoor(c: CommandCall, verb: DoorVerb): Action? {
-        if (c.args.isEmpty()) return null.also { c.world.send(c.actor, "${verb.word.cap()} which way?") }
+        if (c.args.isEmpty()) return null.also { c.world.send(c.actor, "${verb.word.cap()} what?") }
         val dir = Direction.parse(c.args)
+        // A word that isn't a door here may name a container (SPEC §3.3).
+        if (c.actor.room.exits[dir]?.door == null) {
+            val box = c.world.findItem(c.actor, c.args, inventory = true, ground = true)?.takeIf { it.container != null }
+            if (box != null) return planContainer(box, verb)
+        }
         return object : Action {
             override fun validate(w: World, actor: Actor): String? {
                 val door = w.roomOf(actor).exits[dir]?.door ?: return "There is no door $dir."
@@ -317,6 +441,29 @@ internal object EngineCommands {
                 }
                 return 0
             }
+        }
+    }
+
+    /** Opening, closing, locking and unlocking a container item, with its key in inventory. */
+    private fun planContainer(box: Item, verb: DoorVerb): Action = object : Action {
+        override fun validate(w: World, actor: Actor): String? {
+            val state = box.container ?: return "${box.name.cap()} is not a container."
+            if (!w.isPresent(box, w.roomOf(actor))) return "You don't see that here."
+            w.reach(actor, box)?.let { return it }
+            if (state.state !in verb.from) return "${box.name.cap()} is ${state.state.name.lowercase()}."
+            if (verb == DoorVerb.LOCK || verb == DoorVerb.UNLOCK) {
+                val key = state.key ?: return "${box.name.cap()} has no lock."
+                if (actor.inventory.none { it.protoLabel == key }) return "You don't have the key."
+            }
+            return null
+        }
+
+        override fun resolve(w: World, actor: Actor): Int {
+            box.container!!.state = verb.to
+            box.dirty = true
+            w.send(actor, "You ${verb.word} ${box.name}.")
+            w.echo(actor.room, "${actor.name.cap()} ${verb.word}s ${box.name}.", actor)
+            return 0
         }
     }
 
@@ -375,10 +522,10 @@ internal class KillAction(private val target: Actor) : Action {
  * [targetWord] at the first validation, unless the script verb `act_cast` fixed it up front.
  */
 internal class CastAction(
-    val skill: SkillProto,
+    override val skill: SkillProto,
     private val targetWord: String?,
     private val fixedTarget: Actor? = null,
-) : Action {
+) : Action, Castable {
     override val warmup: Int get() = skill.warmup
     override val lag: Int get() = skill.lag
     override val interrupt get() = skill.interrupt
@@ -388,12 +535,20 @@ internal class CastAction(
     private var target: Actor? = null
     private var targetChosen = false
 
+    /** The target of an `item` skill: carried, worn or on the ground (D-123). */
+    private var targetItem: Item? = null
+
     private fun chooseTarget(w: World, caster: Actor): Result<Actor?> {
         if (targetChosen) return Result.success(target)
         val t = if (fixedTarget != null && skill.target in setOf(TargetKind.ENEMY, TargetKind.ALLY)) fixedTarget else when (skill.target) {
             TargetKind.SELF -> caster
             TargetKind.NONE -> null
-            TargetKind.ITEM -> return Result.failure(IllegalArgumentException("You can't cast that on items yet."))
+            TargetKind.ITEM -> {
+                val word = targetWord ?: return Result.failure(IllegalArgumentException("Cast ${skill.name} on what?"))
+                targetItem = caster.equipment.values.firstOrNull { it.matches(word) } ?: w.findItem(caster, word, inventory = true, ground = true)
+                    ?: return Result.failure(IllegalArgumentException("You don't see that here."))
+                null
+            }
             TargetKind.ALLY -> targetWord?.let { w.findActor(caster, it) ?: return notHere() } ?: caster
             TargetKind.ENEMY -> targetWord?.let { w.findActor(caster, it) ?: return notHere() }
                 ?: caster.primaryTarget?.let(w::actor)
@@ -409,6 +564,10 @@ internal class CastAction(
     override fun validate(w: World, actor: Actor): String? {
         if (actor.hasFlag("silenced")) return "You can't get the words out!"
         val t = chooseTarget(w, actor).getOrElse { return it.message }
+        targetItem?.let { i ->
+            if (w.item(i.id) !== i || !w.isPresent(i, w.roomOf(actor))) return "${i.name.cap()} isn't here."
+            w.reach(actor, i)?.let { return it }
+        }
         if (t != null && t !== actor) {
             if (!w.isPresent(t, w.roomOf(actor))) return "${t.name.cap()} isn't here."
             val band = Band.between(w.indexOf(actor), w.indexOf(t))
@@ -433,13 +592,13 @@ internal class CastAction(
     }
 
     override fun veto(w: World, actor: Actor): String? =
-        w.rules.castAllowed(RulesContext(w, actor, target, skill = skill))
-            ?: w.dispatch(HookName.BEFORE_CAST, actor, actor.room, HookContext(actor = actor, target = target, skill = skill))
+        w.castAllowed(RulesContext(w, actor, target, skill = skill))
+            ?: w.dispatch(HookName.BEFORE_CAST, actor, actor.room, HookContext(actor = actor, target = target, skill = skill, targetItem = targetItem))
 
     override fun begin(w: World, actor: Actor) {
         w.send(actor, "You begin casting ${skill.name}.")
         w.echo(actor.room, "${actor.name.cap()} begins casting.", actor)
-        w.dispatch(HookName.ON_CAST_START, actor, actor.room, HookContext(actor = actor, target = target, skill = skill))
+        w.dispatch(HookName.ON_CAST_START, actor, actor.room, HookContext(actor = actor, target = target, skill = skill, targetItem = targetItem))
     }
 
     override fun resolve(w: World, actor: Actor): Int {
@@ -451,33 +610,44 @@ internal class CastAction(
             }
         }
         val t = target
-        w.send(actor, if (t == null || t === actor) "You cast ${skill.name}." else "You cast ${skill.name} at ${t.name}.")
+        val onItem = targetItem
+        w.send(
+            actor,
+            when {
+                onItem != null -> "You cast ${skill.name} on ${onItem.name}."
+                t == null || t === actor -> "You cast ${skill.name}."
+                else -> "You cast ${skill.name} at ${t.name}."
+            },
+        )
         if (t != null && t !== actor) w.send(t, "${actor.name.cap()} casts ${skill.name} at you!")
-        val targets = if (skill.range == SkillRange.ROOM) actor.room.actors.filter { it !== actor } else listOf(t)
+        val targets = if (skill.range == SkillRange.ROOM) actor.room.actors.filter { it !== actor && w.isSimulated(it) } else listOf(t)
         for (each in targets) {
-            skill.effect?.let { w.applyEffect(it, actor, each, skill) }
-            skill.resolve?.resolve(w, actor, each)
+            // Effect primitives act on actors; an item skill's work is its resolve (D-123).
+            if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill) }
+            skill.resolve?.resolve(w, actor, each, onItem)
         }
-        w.dispatch(HookName.ON_CAST, actor, actor.room, HookContext(actor = actor, target = t, skill = skill))
+        w.dispatch(HookName.ON_CAST, actor, actor.room, HookContext(actor = actor, target = t, skill = skill, targetItem = onItem))
         return skill.lag
     }
 }
 
 /** `get <item> [from <container>]`, with lag by band from `rules.get_lag` (SPEC §5.5). */
-internal class GetAction(private val what: String, private val container: Item?) : Action {
+internal class GetAction(private val what: String, private val container: Item?, private val fixed: Item? = null) : Action {
     private var item: Item? = null
     private var extraLag = 0
 
     override fun validate(w: World, actor: Actor): String? {
         val room = w.roomOf(actor)
         val source = container
-        val found = if (source == null) {
-            room.items.firstOrNull { it.matches(what) }
-        } else {
-            if (!w.isPresent(source, room)) return "You don't see that here."
-            val box = source.container ?: return "${source.name.cap()} is not a container."
-            if (box.state != DoorState.OPEN) return "${source.name.cap()} is closed."
-            source.contents.firstOrNull { it.matches(what) }
+        val found: Item = when {
+            fixed != null -> fixed.takeIf { it.location is ItemLocation.InRoom && w.isPresent(it, room) }
+            source == null -> room.items.firstOrNull { it.matches(what) }
+            else -> {
+                if (!w.isPresent(source, room)) return "You don't see that here."
+                val box = source.container ?: return "${source.name.cap()} is not a container."
+                if (box.state != DoorState.OPEN) return "${source.name.cap()} is closed."
+                source.contents.firstOrNull { it.matches(what) }
+            }
         } ?: return "You don't see that here."
         val ground = container ?: found
         val band = ground.groundIndex?.let { Band.between(w.indexOf(actor), it) } ?: Band.MELEE
@@ -499,8 +669,28 @@ internal class GetAction(private val what: String, private val container: Item?)
         w.send(actor, "You get ${it.name}" + (container?.let { c -> " from ${c.name}" } ?: "") + ".")
         w.echo(actor.room, "${actor.name.cap()} gets ${it.name}.", actor)
         w.dispatch(HookName.ON_GET, it, actor.room, HookContext(actor = actor, item = it))
+        if (it.id in w.entities) w.stack(it)
         return extraLag
     }
+}
+
+/** Null if [actor] can reach [item] (carried, or on the ground within `get_lag` reach), else why not. */
+internal fun World.reach(actor: Actor, item: Item): String? {
+    val index = item.groundIndex ?: return null
+    val band = Band.between(indexOf(actor), index)
+    return if (rules.getLag(RulesContext(this, actor, item = item, band = band), band) == null) "You can't reach ${item.name} from here." else null
+}
+
+/**
+ * The equipment slot [wanted] fits for [actor]: the slot itself, or for a family such as
+ * `finger`, the first free `finger_*` slot (else the first one, to swap). Null if the rules
+ * have no such slot.
+ */
+internal fun World.slotFor(actor: Actor, wanted: String): String? {
+    val slots = equipmentSlots()
+    if (wanted in slots) return wanted
+    val family = slots.filter { it.startsWith("${wanted}_") }
+    return family.firstOrNull { actor.equipped(it) == null } ?: family.firstOrNull()
 }
 
 /** The other side of [exit], if it leads back here with a door. */
@@ -517,7 +707,8 @@ fun World.findActor(viewer: Actor, keyword: String): Actor? {
     val (n, word) = ordinal(keyword)
     if (word == "self" || word == "me") return viewer
     val room = roomOf(viewer)
-    return room.actorIndex.values.filter { it !== viewer && isPresent(it, room) && it.matches(word) }.getOrNull(n - 1)
+    // Dormant actors are inert to simulated ones (SPEC §5.9).
+    return room.actorIndex.values.filter { it !== viewer && isPresent(it, room) && it.matches(word) && isSimulated(it) }.getOrNull(n - 1)
 }
 
 fun World.findItem(viewer: Actor, keyword: String, inventory: Boolean, ground: Boolean): Item? {

@@ -20,6 +20,9 @@ import gups.core.model.Interrupt
 import gups.core.model.ItemProto
 import gups.core.model.LootRule
 import gups.core.model.MobProto
+import gups.core.model.ModifierPoint
+import gups.core.model.Modifiers
+import gups.core.model.RegionProto
 import gups.core.model.RoomProto
 import gups.core.model.STAT_NAMES
 import gups.core.model.Sense
@@ -28,8 +31,19 @@ import gups.core.model.SkillRange
 import gups.core.model.SpawnRule
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
+import gups.core.world.ActorFilter
+import gups.core.world.Aggressive
+import gups.core.world.Assist
+import gups.core.world.Behavior
+import gups.core.world.Flee
+import gups.core.world.Follow
+import gups.core.world.Guard
 import gups.core.world.HookName
 import gups.core.world.Lane
+import gups.core.world.Pursue
+import gups.core.world.Scavenge
+import gups.core.world.Sentinel
+import gups.core.world.Wander
 import gups.core.world.ZoneCommand
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
@@ -42,6 +56,9 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
+import net.starlark.java.eval.Structure
+import com.google.common.collect.ImmutableCollection
+import com.google.common.collect.ImmutableList
 import net.starlark.java.eval.Tuple
 import net.starlark.java.spelling.SpellChecker
 
@@ -181,6 +198,29 @@ internal class ContainerDecl(val proto: ContainerProto) : DeclValue("container")
 
 internal class EffectDecl(val effect: Effect) : DeclValue("effect")
 
+internal class BehaviorDecl(val behavior: Behavior) : DeclValue("behavior")
+
+/** What `struct(**fields)` returns: read-only named fields (D-125). */
+internal class StructValue(private val fields: Map<String, Any>) : Structure {
+    override fun getValue(name: String): Any? = fields[name]
+
+    override fun getFieldNames(): ImmutableCollection<String> = ImmutableList.copyOf(fields.keys)
+
+    override fun getErrorMessageForUnknownField(field: String): String =
+        "struct has no field '$field'${SpellChecker.didYouMean(field, fields.keys)}"
+
+    override fun isImmutable(): Boolean = fields.values.all { Starlark.isImmutable(it) }
+
+    override fun repr(printer: Printer) {
+        printer.append("struct(")
+        fields.entries.forEachIndexed { i, (k, v) ->
+            if (i > 0) printer.append(", ")
+            printer.append(k).append(" = ").repr(v)
+        }
+        printer.append(")")
+    }
+}
+
 // ---- Parsing helpers -----------------------------------------------------------------------------
 
 private fun loadCtx(thread: StarlarkThread, fn: String): LoadCtx {
@@ -257,6 +297,45 @@ private fun version(kw: Kw, fn: String): Int {
     return v
 }
 
+private val POINTS = ModifierPoint.entries.map { it.scriptName }
+
+/** A `modifiers` dict: modifier point name to a top-level function `fn(ctx, base)` (SPEC §4.6). */
+internal fun modifiers(v: Any?, what: String): Modifiers {
+    if (isNone(v)) return emptyMap()
+    return dict(v, what).entries.associate { (k, fn) ->
+        val point = ModifierPoint.byName(k)
+            ?: fail("$what: '$k' is not a modifier point${SpellChecker.didYouMean(k, POINTS)} (one of ${POINTS.joinToString(", ")})")
+        point to hookRef(fn, "$what[\"$k\"]")
+    }
+}
+
+/** Affect flags such as `no_regen`: lowercase words. */
+private fun flags(v: Any?, what: String): Set<String> = strList(v, what).onEach {
+    if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag")
+}.toSet()
+
+/**
+ * Whom a behavior means: `players`, `mobs`, `all`, or label patterns with `*` such as
+ * `goblin_*` (any package) or `:goblin_*` (this package). A string or a list of them.
+ */
+private fun actorFilter(v: Any?, what: String, pkg: String): ActorFilter {
+    val items = if (v is String) listOf(v) else strList(v, what)
+    if (items.isEmpty()) fail("$what: name at least one of players, mobs, all, or a label pattern")
+    return ActorFilter(
+        items.map { p ->
+            when {
+                p in setOf("players", "mobs", "all", "anyone") -> p
+                p.startsWith(":") -> "//$pkg$p"
+                else -> p
+            }.also { q ->
+                if (q !in setOf("players", "mobs", "all", "anyone") && !Regex("(//[a-z0-9_/]+:)?[A-Za-z0-9_.*\\-]+").matches(q)) {
+                    fail("$what: '$p' is not players, mobs, all, or a label pattern such as goblin_*")
+                }
+            }
+        },
+    )
+}
+
 private fun effectValue(v: Any?, what: String): Effect =
     (v as? EffectDecl)?.effect ?: fail("$what: expected an effect such as damage(...), got ${typeName(v)}")
 
@@ -292,7 +371,7 @@ internal class DeclarationBuiltins {
             fail("package(shared_namespaces): only lib and rules packages may declare shared namespaces")
         }
         for (ns in p.sharedNamespaces) if (!Regex("[a-z0-9_]+").matches(ns)) fail("package(shared_namespaces): '$ns' is not a valid namespace")
-        kw.notYet("modifiers", "M5")
+        p.modifiers = modifiers(kw["modifiers"], kw.what("modifiers"))
         kw.notYet("expected_tombstones", "M6")
         kw.finish()
         return Starlark.NONE
@@ -339,9 +418,10 @@ internal class DeclarationBuiltins {
             exits = exits,
             spawns = spawns,
             commands = commands(kw["commands"], kw.what("commands"), pkg),
+            modifiers = modifiers(kw["modifiers"], kw.what("modifiers")),
             version = version(kw, "room"),
         )
-        kw.notYet("modifiers", "M5")
+        for (r in proto.regions) if (!Regex("[a-z0-9_]+").matches(r)) fail("room(regions): '$r' is not a valid region name")
         val hooks = kw.hooks(OwnerKind.ROOM)
         kw.finish()
         ctx.pkg.roomList += proto
@@ -500,6 +580,9 @@ internal class DeclarationBuiltins {
             senses = senses,
             think = kw["think"]?.let { ScriptThink(hookRef(it, kw.what("think")), pkg) },
             thinkEvery = kw["think_every"]?.let { int(it, kw.what("think_every")) } ?: d.thinkEvery,
+            behaviors = kw["behaviors"]?.let { list(it, kw.what("behaviors")) }.orEmpty().map {
+                (it as? BehaviorDecl)?.behavior ?: fail("mob(behaviors): expected a behavior such as wander(...), got ${typeName(it)}")
+            },
             dormantRecovery = kw["dormant_recovery"]?.let {
                 DormantRecovery.valueOf(choice(it, kw.what("dormant_recovery"), DormantRecovery.entries.map { r -> r.name.lowercase() }).uppercase())
             } ?: d.dormantRecovery,
@@ -509,7 +592,6 @@ internal class DeclarationBuiltins {
         if (proto.hp < 1) fail("mob(hp): must be at least 1")
         if (proto.thinkEvery < 1) fail("mob(think_every): must be at least 1")
         if (proto.keywords.isEmpty()) fail("mob(keywords): a mob needs at least one keyword")
-        kw.notYet("behaviors", "M5")
         val hooks = kw.hooks(OwnerKind.MOB)
         kw.finish()
         ctx.pkg.mobList += proto
@@ -553,11 +635,15 @@ internal class DeclarationBuiltins {
             decayPulses = kw["decay_pulses"]?.let { int(it, kw.what("decay_pulses")) },
             container = container,
             commands = commands(kw["commands"], kw.what("commands"), pkg),
+            equipAffects = flags(kw["equip_affects"], kw.what("equip_affects")),
+            modifiers = modifiers(kw["modifiers"], kw.what("modifiers")),
             version = version(kw, "item"),
         )
         if (proto.weight < 0) fail("item(weight): can't be negative")
         if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
-        kw.notYet("equip_affects", "M5")
+        if (proto.wear == null && (proto.equipAffects.isNotEmpty() || proto.modifiers.isNotEmpty())) {
+            fail("item(): equip_affects and modifiers apply while the item is worn, so it needs a wear slot")
+        }
         val hooks = kw.hooks(OwnerKind.ITEM)
         kw.finish()
         ctx.pkg.itemList += proto
@@ -621,6 +707,113 @@ internal class DeclarationBuiltins {
     }
 
     @StarlarkMethod(
+        name = "region",
+        doc = "Declares the modifiers of a region, a tag rooms carry with room(regions=[...]). Region names are world-wide.",
+        extraPositionals = Param(name = "args"),
+        extraKeywords = Param(name = "kwargs"),
+        useStarlarkThread = true,
+    )
+    fun region(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "region")
+        val id = declName("region", args, ctx)
+        if (!Regex("[a-z0-9_]+").matches(id)) fail("region(): '$id' is not a valid region name")
+        val kw = Kw("region", kwargs)
+        val proto = RegionProto(id, ctx.pkg.path, modifiers(kw["modifiers"], kw.what("modifiers")))
+        kw.finish()
+        ctx.pkg.regionList += proto
+        return Starlark.NONE
+    }
+
+    // ---- Behaviors (SPEC §4.7) --------------------------------------------------------------------
+
+    @StarlarkMethod(
+        name = "wander",
+        doc = "Behavior: with probability chance per think, steps through a random open exit within radius exits of home.",
+        parameters = [Param(name = "radius", named = true, defaultValue = "3"), Param(name = "chance", named = true, defaultValue = "0.1")],
+        useStarlarkThread = true,
+    )
+    fun wander(radius: Any, chance: Any, thread: StarlarkThread): Any {
+        contentCtx(thread, "wander")
+        val r = int(radius, "wander(radius)").also { if (it < 0) fail("wander(radius): can't be negative") }
+        val c = number(chance, "wander(chance)").also { if (it !in 0.0..1.0) fail("wander(chance): must be between 0 and 1") }
+        return BehaviorDecl(Wander(r, c))
+    }
+
+    @StarlarkMethod(
+        name = "aggressive",
+        doc = "Behavior: attacks matching actors on sight. toward is 'players', 'mobs', 'all' or label patterns.",
+        parameters = [Param(name = "toward", named = true, defaultValue = "'players'"), Param(name = "unless_level_above", named = true, defaultValue = "None")],
+        useStarlarkThread = true,
+    )
+    fun aggressive(toward: Any, unlessLevelAbove: Any, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "aggressive")
+        return BehaviorDecl(Aggressive(actorFilter(toward, "aggressive(toward)", ctx.pkg.path), intOrNull(unlessLevelAbove, "aggressive(unless_level_above)")))
+    }
+
+    @StarlarkMethod(
+        name = "assist",
+        doc = "Behavior: joins fights alongside allies, given as label patterns such as 'goblin_*'.",
+        parameters = [Param(name = "allies", named = true)],
+        useStarlarkThread = true,
+    )
+    fun assist(allies: Any, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "assist")
+        return BehaviorDecl(Assist(actorFilter(allies, "assist(allies)", ctx.pkg.path)))
+    }
+
+    @StarlarkMethod(name = "flee", doc = "Behavior: flees at or below this percentage of max hp.", parameters = [Param(name = "at_hp_pct", named = true, defaultValue = "20")], useStarlarkThread = true)
+    fun flee(atHpPct: Any, thread: StarlarkThread): Any {
+        contentCtx(thread, "flee")
+        val pct = int(atHpPct, "flee(at_hp_pct)").also { if (it !in 0..100) fail("flee(at_hp_pct): must be 0..100") }
+        return BehaviorDecl(Flee(pct))
+    }
+
+    @StarlarkMethod(
+        name = "guard",
+        doc = "Behavior: denies an exit to everyone who isn't an ally (default: other mobs) while the guard is present.",
+        parameters = [Param(name = "exit", named = true), Param(name = "allies", named = true, defaultValue = "'mobs'")],
+        useStarlarkThread = true,
+    )
+    fun guard(exit: Any, allies: Any, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "guard")
+        return BehaviorDecl(Guard(Direction.parse(str(exit, "guard(exit)")), actorFilter(allies, "guard(allies)", ctx.pkg.path)))
+    }
+
+    @StarlarkMethod(
+        name = "follow",
+        doc = "Behavior: follows the first matching actor it meets ('players', 'mobs' or label patterns).",
+        parameters = [Param(name = "target", named = true)],
+        useStarlarkThread = true,
+    )
+    fun follow(target: Any, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "follow")
+        return BehaviorDecl(Follow(actorFilter(target, "follow(target)", ctx.pkg.path)))
+    }
+
+    @StarlarkMethod(
+        name = "pursue",
+        doc = "Behavior: heads for the nearest matching actor anywhere in the world.",
+        parameters = [Param(name = "target", named = true)],
+        useStarlarkThread = true,
+    )
+    fun pursue(target: Any, thread: StarlarkThread): Any {
+        val ctx = contentCtx(thread, "pursue")
+        return BehaviorDecl(Pursue(actorFilter(target, "pursue(target)", ctx.pkg.path)))
+    }
+
+    @StarlarkMethod(name = "sentinel", doc = "Behavior: never leaves its room.", useStarlarkThread = true)
+    fun sentinel(thread: StarlarkThread): Any {
+        contentCtx(thread, "sentinel")
+        return BehaviorDecl(Sentinel)
+    }
+
+    @StarlarkMethod(name = "scavenge", doc = "Behavior: picks up items lying within reach.", useStarlarkThread = true)
+    fun scavenge(thread: StarlarkThread): Any {
+        contentCtx(thread, "scavenge")
+        return BehaviorDecl(Scavenge)
+    }
+
+    @StarlarkMethod(
         name = "global_command",
         doc = "Registers a command available everywhere. lib and rules packages only.",
         parameters = [
@@ -640,6 +833,13 @@ internal class DeclarationBuiltins {
         ctx.pkg.commandList += GlobalCommandDecl(verb, hookRef(fn, "global_command(fn)"), l, ctx.pkg.path)
         return Starlark.NONE
     }
+
+    @StarlarkMethod(
+        name = "struct",
+        doc = "An immutable record of named fields, for example a library's exported functions: struct(start = _start).",
+        extraKeywords = Param(name = "kwargs"),
+    )
+    fun struct(kwargs: Dict<String, Any>): Any = StructValue(LinkedHashMap(kwargs))
 
     // ---- Effect primitives (SPEC §4.3) -----------------------------------------------------------
 
@@ -661,10 +861,11 @@ internal class DeclarationBuiltins {
             Param(name = "on_tick", named = true, defaultValue = "None"),
             Param(name = "on_expire", named = true, defaultValue = "None"),
             Param(name = "expire_msg", named = true, defaultValue = "''"),
+            Param(name = "modifiers", named = true, defaultValue = "{}"),
         ],
     )
-    fun applyAffect(name: Any, duration: Any, statDeltas: Any, flags: Any, tickEvery: Any, onTick: Any, onExpire: Any, expireMsg: Any): Any =
-        EffectDecl(affectEffect(name, duration, statDeltas, flags, tickEvery, onTick, onExpire, expireMsg, "apply_affect"))
+    fun applyAffect(name: Any, duration: Any, statDeltas: Any, flags: Any, tickEvery: Any, onTick: Any, onExpire: Any, expireMsg: Any, modifiers: Any): Any =
+        EffectDecl(affectEffect(name, duration, statDeltas, flags, tickEvery, onTick, onExpire, expireMsg, modifiers, "apply_affect"))
 
     @StarlarkMethod(name = "dispel", doc = "Remove matching affects; a trailing * matches a prefix.", parameters = [Param(name = "filter", named = true)])
     fun dispel(filter: Any): Any = EffectDecl(Effect.Dispel(str(filter, "dispel(filter)")))
@@ -723,6 +924,7 @@ internal fun affectEffect(
     onTick: Any,
     onExpire: Any,
     expireMsg: Any,
+    mods: Any,
     fn: String,
 ): Effect.ApplyAffect {
     val d = int(duration, "$fn(duration)")
@@ -740,6 +942,7 @@ internal fun affectEffect(
         onTick = hookRefOrNull(onTick, "$fn(on_tick)"),
         onExpire = hookRefOrNull(onExpire, "$fn(on_expire)"),
         expireMessage = str(expireMsg, "$fn(expire_msg)"),
+        modifiers = modifiers(mods, "$fn(modifiers)"),
     )
 }
 

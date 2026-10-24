@@ -52,6 +52,15 @@ class Exit(proto: ExitProto) {
 }
 
 class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
+    /** The pulse the room went dormant at, or null while it is simulated (SPEC §5.9). */
+    var dormantSince: Long? = null
+        internal set
+
+    /** A zone reset passed while the room was dormant; applied when it wakes (SPEC §5.9). */
+    internal var resetMissed = false
+
+    val isDormant: Boolean get() = dormantSince != null
+
     /** Replaced by a reload (SPEC §5.10). */
     var proto: RoomProto = proto
         internal set
@@ -92,6 +101,8 @@ class Affect(
     val onTick: HookRef? = null,
     val onExpire: HookRef? = null,
     val expireMessage: String = "",
+    /** Modifiers that apply to the host while the affect lasts (SPEC §4.6). */
+    val modifiers: Modifiers = emptyMap(),
 )
 
 /** A pending script callback (SPEC §3.3). Exactly one of [due] and [remaining] is set. */
@@ -160,13 +171,19 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
     fun equipped(slot: String): Item? = equipmentIndex[slot]
 
-    /** Effective attribute: base plus affect and equipment deltas. */
+    /** Stat deltas from `rules.encumbrance` while carrying more than `rules.carry_limit`; kept by the world. */
+    var encumbrance: Map<String, Int> = emptyMap()
+        internal set
+
+    /** Effective attribute: base plus affect, equipment and encumbrance deltas. */
     fun stat(name: String): Int =
         (baseStats[name] ?: 0) +
             affects.sumOf { it.statDeltas[name] ?: 0 } +
-            equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 }
+            equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
+            (encumbrance[name] ?: 0)
 
-    fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
+    /** True if an affect or an equipped item's `equip_affects` carries [flag]. */
+    fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags } || equipmentIndex.values.any { flag in it.proto.equipAffects }
 
     val isStunned: Boolean get() = hasFlag("stunned")
     val isEngaged: Boolean get() = fighting.isNotEmpty()
@@ -220,6 +237,10 @@ class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) : Acto
     /** Where it was spawned; restored from a checkpoint (SPEC §5.11). */
     var homeRoom: Label = room.label
     var dormantRecovery: DormantRecovery = proto.dormantRecovery
+
+    /** Whom a `follow` behavior is following, once it has seen a match (SPEC §4.7). */
+    var leader: EntityId? = null
+        internal set
 
     internal var spawnedBy: SpawnState? = null
 }

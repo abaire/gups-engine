@@ -1,6 +1,5 @@
 package gups.harness
 
-import gups.core.rules.DefaultRules
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
 import gups.core.world.InputRecord
@@ -39,7 +38,7 @@ class ReproRunner(private val dir: WorldDir) {
         val host = StarlarkHost(result, ScriptLimits.HARNESS, loader)
         val world = World(
             result.prototypes(),
-            DefaultRules(),
+            host.rules(),
             host,
             WorldConfig(seed = seed, checkInvariants = true),
             Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),

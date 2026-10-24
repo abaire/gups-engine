@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.model.Actor
+import gups.core.model.Channel
 import gups.core.model.Direction
 import gups.core.model.Exit
 import gups.core.model.Player
@@ -26,6 +27,8 @@ internal fun World.transition(actor: Actor, exit: Exit, verb: String = "leaves")
     placeActor(actor, to, entryIndexFor(exit, to))
     echo(to, "${actor.name.cap()} arrives.", actor)
     if (actor is Player) send(actor, describeRoom(actor))
+    perceive("exit", Channel.SIGHT, from, actor)
+    perceive("enter", Channel.SIGHT, to, actor)
     dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, direction = exit.direction, toRoom = to))
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, direction = exit.direction, fromRoom = from))
 }
@@ -40,6 +43,8 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
         placeActor(actor, to, index ?: 0)
         echo(to, "${actor.name.cap()} appears.", actor)
         if (actor is Player) send(actor, describeRoom(actor))
+        perceive("exit", Channel.SIGHT, from, actor)
+        perceive("enter", Channel.SIGHT, to, actor)
         dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, toRoom = to))
         dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))
     }
@@ -51,7 +56,7 @@ internal class MoveAction(private val dir: Direction) : Action {
         val exit = w.roomOf(actor).exits[dir] ?: return "You can't go that way."
         if (!exit.passable) return "The way $dir is closed."
         if (w.isPinned(actor)) return "You're pinned! Retreat or flee first."
-        if (actor.move < w.rules.moveCost(RulesContext(w, actor))) return "You are too exhausted."
+        if (actor.move < w.moveCost(RulesContext(w, actor))) return "You are too exhausted."
         return null
     }
 
@@ -59,13 +64,15 @@ internal class MoveAction(private val dir: Direction) : Action {
         val from = w.roomOf(actor)
         val exit = from.exits.getValue(dir)
         val to = w.room(exit.to)
-        return w.dispatch(HookName.BEFORE_EXIT, null, from, HookContext(actor = actor, direction = dir, toRoom = to))
+        // Guards are built-in before_exit observers (SPEC §4.7).
+        return w.guardDenial(actor, from, dir)
+            ?: w.dispatch(HookName.BEFORE_EXIT, null, from, HookContext(actor = actor, direction = dir, toRoom = to))
             ?: w.dispatch(HookName.BEFORE_ENTER, null, to, HookContext(actor = actor, direction = dir, fromRoom = from))
     }
 
     override fun resolve(w: World, actor: Actor): Int {
         val exit = w.roomOf(actor).exits.getValue(dir)
-        actor.move -= w.rules.moveCost(RulesContext(w, actor))
+        actor.move = (actor.move - w.moveCost(RulesContext(w, actor))).coerceAtLeast(0)
         w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit) }
         return 0
     }

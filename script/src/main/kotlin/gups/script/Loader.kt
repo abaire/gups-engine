@@ -67,7 +67,8 @@ class LoadResult internal constructor(
             mobs = ps.flatMap { it.mobs },
             items = ps.flatMap { it.items },
             skills = ps.flatMap { it.skills },
-            zones = ps.map { ZoneProto(it.path, it.title, it.resetPulses) },
+            zones = ps.map { ZoneProto(it.path, it.title, it.resetPulses, it.modifiers) },
+            regions = ps.flatMap { it.regions },
         )
     }
 
@@ -289,6 +290,7 @@ class ScriptLoader(
             resolveLabels()
             propagate()
             checkNamespaces()
+            checkRegions()
             checkCommands()
             propagate()
             val ok = states.values.filter { it.contentDone && !it.failed }.associate { it.pkg.path to it.pkg }
@@ -346,6 +348,18 @@ class ScriptLoader(
                 for (p in pkgs) {
                     val path = p.removeSuffix(" (shared)")
                     states.getValue(path).errors += LoadError(path, "namespace", "attribute namespace '$ns' is used by more than one package: ${pkgs.joinToString(", ")}")
+                }
+            }
+        }
+
+        /** Region names are world-wide, so only one package may declare each (SPEC §4.2). */
+        fun checkRegions() {
+            val owners = LinkedHashMap<String, MutableList<String>>()
+            for (st in live) for (r in st.pkg.regions) owners.getOrPut(r.name) { mutableListOf() } += st.pkg.path
+            for ((name, pkgs) in owners) {
+                if (pkgs.size < 2) continue
+                for (p in pkgs.distinct()) {
+                    states.getValue(p).errors += LoadError(p, "region", "region '$name' is declared by more than one package: ${pkgs.joinToString(", ") { "//$it" }}")
                 }
             }
         }

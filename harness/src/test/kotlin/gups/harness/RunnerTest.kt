@@ -153,7 +153,7 @@ class RunnerTest {
     }
 
     @Test
-    fun `world rejects the load keyword's replacement misuse and custom rules`() {
+    fun `world rejects package misuse and a rules package that isn't there`() {
         val files = zone + ("zones/a/a_test.star" to """
             def test_rules(t):
                 t.world(rules = "//rules")
@@ -162,7 +162,47 @@ class RunnerTest {
                 t.world(packages = ["zones/a"])
         """)
         val r = run(files, "//zones/a").results
-        assertContains(r[0].message!!, "arrives with the rules module")
+        assertContains(r[0].message!!, "no package //rules")
         assertContains(r[1].message!!, "should be a package label")
+    }
+
+    @Test
+    fun `the rules package is loaded implicitly, and rules picks another one`() {
+        val files = zone + mapOf(
+            "rules/package.star" to "package(api_version = 1, kind = \"rules\")",
+            "rules/combat.star" to "def xp_to_level(level):\n    return 1",
+            "house/package.star" to "package(api_version = 1, kind = \"rules\")",
+            "house/combat.star" to "def xp_to_level(level):\n    return 2",
+            "zones/a/a_test.star" to """
+                def test_default_rules(t):
+                    w = t.world()
+                    p = w.spawn_player("Pat", at = ":start")
+                    p.do("say hi")
+
+                def test_house_rules(t):
+                    w = t.world(rules = "//house")
+                    t.true(w != None)
+
+                def test_not_rules(t):
+                    t.world(rules = "//zones/a")
+            """,
+        )
+        val r = run(files, "//zones/a").results.associateBy { it.name }
+        assertEquals(Status.PASS, r.getValue("test_default_rules").status)
+        assertEquals(Status.PASS, r.getValue("test_house_rules").status)
+        assertContains(r.getValue("test_not_rules").message!!, "//zones/a is not a rules package")
+    }
+
+    @Test
+    fun `a world with a bubble only simulates rooms near players`() {
+        val files = zone + ("zones/a/a_test.star" to """
+            def test_bubble(t):
+                w = t.world(bubble = True)
+                t.eq(len([r for r in [w.room(":start"), w.room(":hall")]]), 2)
+                w.run(pulses = 5)
+                w.spawn_player("Pat", at = ":start")
+                w.run(pulses = 1)
+        """)
+        assertTrue(run(files, "//zones/a").ok)
     }
 }

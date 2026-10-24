@@ -36,6 +36,11 @@ class WorldConfig(
      * a world sets it with `checkpoint_minutes` in `MODULE.gups` (SPEC §5.11).
      */
     val checkpointPulses: Long = DEFAULT_CHECKPOINT_PULSES,
+    /**
+     * Keep a reality bubble (SPEC §5.9): only rooms near players and other anchors are
+     * simulated. Off, every room is always simulated, as headless tests usually want (D-116).
+     */
+    val bubble: Boolean = false,
 )
 
 /** 30 minutes of pulses (SPEC §5.11). */
@@ -119,6 +124,11 @@ class World(
     /** Called for every diagnostic as it is recorded, for example to log it. */
     var onDiagnostic: ((Diagnostic) -> Unit)? = null
 
+    /** Receives each rules evaluation with its modifier chain, for `@trace rules` (SPEC §4.6, §5.13). */
+    var onRules: ((Actor?, String) -> Unit)? = null
+
+    internal var slotCache: List<String>? = null
+
     val rng = Rng(config.seed)
     val commands = CommandRegistry()
 
@@ -150,6 +160,22 @@ class World(
     internal val removedThisPhase = HashSet<EntityId>()
     internal var cascadeDepth = 0
 
+    // The reality bubble (SPEC §5.9): how many anchors cover each room, and where each anchor was.
+    internal val coverage = HashMap<Room, Int>()
+    internal val anchorRooms = HashMap<EntityId, Room>()
+
+    // Perception events waiting for phase 5 (SPEC §5.7).
+    internal val perceptions = mutableListOf<Perception>()
+
+    /** `path_to` results by `(from, to)` room id, dropped whenever a door, exit or reload changes the graph (SPEC §5.9). */
+    internal val pathCache = HashMap<Pair<EntityId, EntityId>, List<gups.core.model.Direction>?>()
+    internal var inboundCache: HashMap<Room, MutableList<Pair<Room, gups.core.model.Exit>>>? = null
+
+    /** Forgets everything derived from the room graph, after doors, exits or rooms change. */
+    internal fun graphChanged() {
+        pathCache.clear()
+    }
+
     var shutdownAt: Long? = null
         internal set
     val shutdownRequested: Boolean get() = shutdownAt?.let { pulse >= it } ?: false
@@ -170,6 +196,7 @@ class World(
             }
         }
         for (zone in protos.zones.values) zone.resetPulses?.let { zoneResets[zone.pkg] = pulse + it }
+        startDormant()
     }
 
     val rooms: Collection<Room> get() = roomsByLabel.values
@@ -339,7 +366,12 @@ class World(
 
     fun after(owner: Entity, pulses: Int, fn: HookRef, args: Map<String, AttrValue> = emptyMap()): Long {
         require(pulses >= 1) { "after(): pulses must be at least 1" }
-        val t = ScriptTimer(allocateHandle(), fn, args, due = pulse + pulses)
+        // A dormant owner's timer starts paused (SPEC §3.8 inv. 7).
+        val t = if (isSimulated(owner)) {
+            ScriptTimer(allocateHandle(), fn, args, due = pulse + pulses)
+        } else {
+            ScriptTimer(allocateHandle(), fn, args, due = null, remaining = pulses)
+        }
         owner.timers += t
         owner.dirty = true
         return t.id
@@ -356,12 +388,14 @@ class World(
         pulse++
         runTimers()
         flushImmediate()
-        runTiers(actorIndex.values.toList(), ::actionPulse)
+        runTiers(actorIndex.values.filter { isSimulated(it) }, ::actionPulse)
         if (pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
         flushImmediate()
         if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
-        // Phase 5 (deferred perception) and phase 6 (bubble maintenance) arrive with M5. Until
-        // then every room is simulated.
+        deliverPerceptions()
+        flushImmediate()
+        guarded("bubble maintenance") { maintainBubble() }
+        flushImmediate()
         expireSessions()
         flushOutput()
         if (config.checkInvariants) {
@@ -381,6 +415,7 @@ class World(
         class Due(val due: Long, val id: Long, val run: () -> Unit)
         val due = ArrayList<Due>()
         for (e in entities.values) {
+            if (e.timers.isEmpty() || !isSimulated(e)) continue
             for (t in e.timers) {
                 val at = t.due ?: continue
                 // A quarantined package's timers stay pending, neither fired nor dropped (SPEC §6.3).
@@ -395,6 +430,7 @@ class World(
             }
         }
         for (a in actorIndex.values) {
+            if (a.affects.isEmpty() || !isSimulated(a)) continue
             for (aff in a.affects) {
                 val every = aff.tickEvery
                 when {
@@ -422,40 +458,51 @@ class World(
     /** Phase 3: roll initiative, then one auto-attack per engaged actor (SPEC §5.4). */
     private fun runCombatRound() {
         for (a in actorIndex.values) a.initiative = null
-        val engaged = actorIndex.values.filter { it.isEngaged }
-        for (a in engaged) guarded("initiative of $a") { a.initiative = rules.initiative(RulesContext(this, a)) }
+        val engaged = actorIndex.values.filter { it.isEngaged && isSimulated(it) }
+        for (a in engaged) guarded("initiative of $a") { a.initiative = initiativeOf(RulesContext(this, a)) }
+        if (engaged.isNotEmpty() && onRules != null) {
+            val order = engaged.sortedWith(compareByDescending<Actor> { it.initiative ?: Int.MIN_VALUE }.thenBy { it.id })
+            traceRules(null, "initiative at pulse $pulse: " + order.joinToString(", ") { "${it.name} ${it.initiative}" })
+        }
+        val rooms = engaged.map { it.room }.distinct()
         runTiers(engaged) { a ->
             if (a.isEngaged) {
                 autoAttack(a)
                 invokeOn(a, HookName.ON_COMBAT_TICK, HookContext(actor = a, room = a.room))
             }
         }
+        // The sound of a combat round carries as noise (SPEC §5.7).
+        for (r in rooms) perceive("combat", gups.core.model.Channel.NOISE, r, actor = null)
     }
 
     /** Phase 4 (SPEC §5.1). Checkpoint capture arrives with persistence in M4. */
     private fun runWorldTick() {
         for (a in actorIndex.values.toList()) {
-            if (a.hasFlag("no_regen")) continue
+            if (a.hasFlag("no_regen") || !isSimulated(a)) continue
             guarded("regen of $a") {
-                val r = rules.regen(RulesContext(this, a))
+                val r = regenOf(RulesContext(this, a))
                 a.hp = (a.hp + r.hp).coerceAtMost(a.maxHp)
                 a.mana = (a.mana + r.mana).coerceAtMost(a.maxMana)
                 a.move = (a.move + r.move).coerceAtMost(a.maxMove)
                 a.dirty = true
             }
         }
-        for (e in entities.values.sortedBy { it.id }) if (e.id in entities) invokeOn(e, HookName.ON_TICK, HookContext())
+        for (e in entities.values.filter { isSimulated(it) && scripts.hasHook(it, HookName.ON_TICK) }.sortedBy { it.id }) {
+            if (e.id in entities) invokeOn(e, HookName.ON_TICK, HookContext())
+        }
         for ((pkg, at) in zoneResets.entries.toList()) {
             if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
         }
+        // Dormant rooms catch up on respawns and decay when they wake (SPEC §5.9).
         for (s in spawnStates) {
             val at = s.respawnAt ?: continue
-            if (at <= pulse) guarded("respawn in ${s.room.label}") { fillSpawn(s) }
+            if (at <= pulse && !s.room.isDormant) guarded("respawn in ${s.room.label}") { fillSpawn(s) }
         }
         for (item in entities.values.filterIsInstance<Item>()) {
             val at = item.decayAt ?: continue
-            if (at <= pulse) guarded("decay of $item") { decay(item) }
+            if (at <= pulse && item.id in entities && isSimulated(item)) guarded("decay of $item") { decay(item) }
         }
+        for (a in actorIndex.values) if (isSimulated(a)) updateEncumbrance(a)
         // Checked every world tick; broken entities stay out of the next checkpoint (SPEC §6.5).
         val broken = invariantViolations()
         if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))
@@ -481,8 +528,11 @@ class World(
     private fun resetZone(pkg: String) {
         val interval = protos.zones.getValue(pkg).resetPulses ?: return
         zoneResets[pkg] = pulse + interval
-        for (s in spawnStates) if (s.room.label.pkg == pkg) fillSpawn(s)
-        for (room in roomsByLabel.values.filter { it.label.pkg == pkg }.sortedBy { it.id }) {
+        // A dormant room takes its reset when it wakes (SPEC §5.9).
+        val rooms = roomsByLabel.values.filter { it.label.pkg == pkg }
+        for (room in rooms) if (room.isDormant) room.resetMissed = true
+        for (s in spawnStates) if (s.room.label.pkg == pkg && !s.room.isDormant) fillSpawn(s)
+        for (room in rooms.filter { !it.isDormant }.sortedBy { it.id }) {
             invokeOn(room, HookName.ON_RESET, HookContext(room = room))
         }
     }
@@ -492,6 +542,7 @@ class World(
         for (e in entities.values.sortedBy { it.id }) {
             if (e.id in entities) invokeOn(e, HookName.ON_LOAD, HookContext(room = e as? Room))
         }
+        settleBubble()
     }
 
     // ---- Initiative tiers (SPEC §5.4.1) -------------------------------------------------------

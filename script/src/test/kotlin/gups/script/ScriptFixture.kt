@@ -8,7 +8,6 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Mob
 import gups.core.model.Player
-import gups.core.rules.DefaultRules
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
@@ -40,6 +39,7 @@ class ScriptFixture(
     load: List<String> = listOf("zones/z"),
     val limits: ScriptLimits = ScriptLimits.HARNESS,
     seed: Long = 1,
+    bubble: Boolean = false,
 ) {
     val root: Path = tempWorld(files)
     val loader = ScriptLoader(WorldDir(root), limits)
@@ -47,7 +47,7 @@ class ScriptFixture(
     val host: StarlarkHost by lazy { StarlarkHost(result, limits, loader) }
     val w: World by lazy {
         check(result.ok) { "load failed:\n" + result.report() }
-        World(result.prototypes(), DefaultRules(), host, WorldConfig(seed = seed, checkInvariants = true, strict = true)).also {
+        World(result.prototypes(), host.rules(), host, WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble)).also {
             host.install(it)
             it.fireOnLoad()
         }

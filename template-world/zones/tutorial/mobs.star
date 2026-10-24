@@ -1,6 +1,7 @@
 # Mobs, and the hooks that give them personality.
 
-load(":helpers.star", "READY_WORD", "said")
+load("//lib:quest.star", "quest")
+load(":helpers.star", "FIRST_STEPS", "READY_WORD", "said")
 
 def _guide_hears(ctx):
     # on_say on a mob fires when someone *else* in the room speaks. ctx.text is what they
@@ -14,6 +15,8 @@ def _guide_hears(ctx):
         # give() spawns a fresh item straight into the player's inventory.
         ctx.give(ctx.actor, ":brass_key")
         ctx.emote(ctx.self, "hands %s a brass key." % ctx.actor.name)
+        # from_step makes sure only a player on step 0 moves on.
+        quest.advance(ctx, ctx.actor, FIRST_STEPS, from_step = 0)
 
 def _guide_blocks(ctx):
     # A before_* hook on a mob is an *observer*: it fires for other actors' actions in the
@@ -22,13 +25,24 @@ def _guide_blocks(ctx):
     if ctx.direction == "north" and ctx.actor.is_player and not ctx.get_attr(ctx.actor, "ready", False):
         return ctx.deny("The guide blocks your way: say '%s' first." % READY_WORD)
 
+def _guide_listens(ctx):
+    # on_nearby is perception: it fires for events in the mob's own room, and with
+    # senses = {"hearing": 1} for sounds and noise from the rooms next door too, unless the
+    # exit between blocks them. ctx.via_exit is the guide's own exit toward the sound.
+    if ctx.event == "combat_start" and ctx.via_exit == "north":
+        ctx.say(ctx.self, "I hear someone sparring in the arena. Good!")
+
 mob("guide",
     name = "the guide",
     desc = "A patient old adventurer with a lantern.",
     level = 10,
     hp = 200,
+    senses = {"hearing": 1},
+    # Built-in behaviors: sentinel() keeps the guide at its post.
+    behaviors = [sentinel()],
     on_say = _guide_hears,
     before_exit = _guide_blocks,
+    on_nearby = _guide_listens,
 )
 
 def _mend(ctx):

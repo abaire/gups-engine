@@ -216,9 +216,9 @@ class LoaderTest {
     }
 
     @Test
-    fun `mob arguments not implemented yet are refused clearly`() {
+    fun `mob behaviors must be behavior values`() {
         val r = load(mapOf("zones/z/package.star" to zonePkg(), "zones/z/a.star" to "mob(\"rat\", behaviors = [1])"))
-        assertContains(only(r).message, "'behaviors' is not supported by this engine yet (planned for M5)")
+        assertContains(only(r).message, "mob(behaviors): expected a behavior such as wander(...), got int")
         val empty = load(mapOf("zones/z/package.star" to zonePkg(), "zones/z/a.star" to "mob(\"rat\", behaviors = [])"))
         assertTrue(empty.ok, empty.report())
         assertNull(empty.prototypes().mob(Label("//zones/z:rat")).think)

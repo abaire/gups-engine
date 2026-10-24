@@ -68,36 +68,42 @@ cli/build/install/gups/bin/gups test --world template-world //zones/tutorial/...
 `./gradlew checkModuleGraph` (part of `check`) fails if a module declares a dependency
 outside these rules. The allowed graph is defined in the root `build.gradle.kts`.
 
-`docs/` holds `SPEC.md`, `DECISIONS.md`, `CHANGELOG.md` and `MIGRATING.md`.
+`docs/` holds `SPEC.md`, `DECISIONS.md`, `DESIGN_NEEDED.md` (unbuilt features the spec
+doesn't settle yet), `CHANGELOG.md` and `MIGRATING.md`.
 
 `template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
-metadata) and `zones/tutorial`, the heavily commented reference zone whose tests run on
-every engine commit.
+metadata), the `rules` package, the shared `lib` package, and `zones/tutorial`, the heavily
+commented reference zone whose tests run on every engine commit.
 
 ## Status
 
-M4 (SPEC §7.4): the world persists.
+M5 (SPEC §7.4): the world runs on rules builders can change.
 
-- **`persist`:** SQLite in WAL mode with schema migrations. Routine checkpoints run every
-  30 minutes (`checkpoint_minutes` in the world's `MODULE.gups`), and a graceful shutdown
-  or reload always saves. Ownership changes, level-ups, character creation and logout are
-  captured at once and written with the next checkpoint. One writer commits batches in
-  order and retries failures without blocking the world.
-- **Restore:** at startup the world reconciles saved instances against today's
-  prototypes: deltas, `migrate()`, tombstones and despawns. Characters and their items come
-  back when they log in. `--fresh` boots from the definitions but keeps characters.
-- **Operations:** hourly, daily and manual backups; `gups backup` / `gups restore`.
-  Script diagnostics are stored with repro bundles that `gups repro` replays in the
-  harness.
-- **Tests:** a crash test kills the server with SIGKILL mid-write over and over.
+- **Rules module:** `//rules:combat.star` supplies the combat, movement and regen formulas.
+  Anything it leaves out or gets wrong falls back to the built-in Kotlin ruleset.
+  `template-world/rules` starts out identical to the built-in formulas.
+- **Modifier chain:** zones, regions, rooms, affects and worn items adjust `to_hit`,
+  `damage`, `initiative`, `cast_allowed`, `move_cost` and `regen`. `@trace rules` shows every
+  step.
+- **Reality bubble:** `gups serve` simulates only rooms within three exits of a player or
+  anchor. Dormant rooms catch up when they wake: timers, respawns, resets, decay and each
+  mob's `dormant_recovery`.
+- **Mobs:** perception (`on_nearby`) across exits by sound, noise and sight. The built-in
+  behaviors (`wander`, `aggressive`, `assist`, `flee`, `guard`, `follow`, `pursue`,
+  `sentinel`, `scavenge`) feed `think`.
+- **Items:** `wear`, `give`, `put`, `use`, container locks, stacking, `equip_affects`,
+  encumbrance, and item-target skills.
+- **Libraries:** `template-world/lib/quest.star` provides quests and the `quests` command;
+  the tutorial uses it.
 - **Earlier milestones:**
+  - M4: SQLite persistence, checkpoints, reconciliation, backups and `--fresh`.
   - M3: telnet and `gups serve --dev` with auto-reload, `@trace` and `@eval`.
   - M2: the Starlark host and `gups test`.
   - M1: the core simulation.
 
 Still to come:
-- M5: the Starlark rules module and modifier chain, behaviors, perception and the bubble.
 - M6: TLS, WebSocket, GMCP, accounts and roles, instructor commands, deploys.
+- M7: `gups docs`, `MIGRATING.md`, plugins.
 
 `gups serve --prod`, `lint`, `docs`, `deploy`, `invite` and `import-roster` still exit with
 status 3 ("not implemented").

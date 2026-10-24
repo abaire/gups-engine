@@ -224,6 +224,7 @@ class WorldHandle internal constructor(
     @StarlarkMethod(name = "trace", doc = "Records every hook and verb call; shown when the test fails.", parameters = [Param(name = "on", named = true, defaultValue = "True")])
     fun trace(on: Any): Any {
         host.tracer = if (on == true) { e -> addTrace("[${e.pulse}] ${e.text}") } else null
+        world.onRules = if (on == true) { _, line -> addTrace("[${world.pulse}] $line") } else null
         return Starlark.NONE
     }
 

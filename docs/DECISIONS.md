@@ -48,8 +48,8 @@ processes death right away instead of deferring.
 *Code:* `World.deferRemoval`.
 
 ### D-007 Session expiry runs between phase 4 and the output flush — `open`
-Link-dead and idle auto-quit aren't a numbered phase. They run after the world tick (and
-the not-yet-built phases 5 and 6), before output flush.
+Link-dead and idle auto-quit aren't a numbered phase. They run after phases 5 (perception)
+and 6 (bubble maintenance), before output flush.
 *Code:* `World.expireSessions`.
 
 ### D-008 Fast-lane output is flushed immediately — `open`
@@ -110,14 +110,15 @@ This matches "keeps fighting with auto-attacks only" in §5.12.
 
 ### D-018 `tell`, `shout`, `whisper`, `gossip` — `open`
 `tell` finds an in-world player by name first, otherwise a mob in the room by keyword, which
-receives `on_tell`. `shout` reaches the room and every adjacent room regardless of exit
-`blocks` until perception (M5). `whisper` shows bystanders "X whispers something to Y."
+receives `on_tell`. `shout` reaches the room and every room whose exit toward it doesn't block
+`noise` (D-120). `whisper` shows bystanders "X whispers something to Y."
 `gossip` goes to every player, including link-dead ones (who see nothing).
 *Code:* `EngineCommands`.
 
 ### D-019 Commands not in M1 — `open`
-`give`, `put`, `wear`, `use`, `quests` and the builder and instructor `@` commands are not
-implemented. `wield` and `remove` handle only the `wield` slot.
+`give`, `put`, `wear` and `use` arrived in M5 (D-114), and `wield` and `remove` handle every
+slot. `quests` comes from `//lib:quest.star` (D-126). The builder and instructor `@` commands
+other than `@trace`, `@eval` and `@errors` arrive in M6.
 *Code:* `EngineCommands`.
 
 ## Action lifecycle (§5.3)
@@ -148,10 +149,12 @@ the actor out of the world or casting.
 ### D-024 Skill targeting defaults — `open`
 - An `enemy` skill with no keyword targets the caster's primary target.
 - An `ally` skill with no keyword targets the caster.
-- `item` targets are not supported yet.
-- `room` range applies the effect to everyone in the room except the caster.
+- `item` targets are supported from M5 (D-123).
+- `room` range applies the effect to everyone in the room except the caster (and, with a
+  bubble, except dormant actors).
 
-Skill proficiency is stored but not yet rolled against.
+Skill proficiency is stored but not rolled against: §4.6 gives the rules no proficiency
+input yet. Rules functions can read it from `ctx.actor.skills`.
 *Code:* `CastAction`.
 
 ### D-025 Cast messages — `open`
@@ -308,9 +311,9 @@ actor is excluded from the observers unless it is the primary. Owners are de-dup
 *Code:* `World.dispatch`.
 
 ### D-047 Self-only hooks — `open`
-`on_tick`, `on_combat_tick`, `on_spawn`, `on_tell`, `on_load` and `on_reset` fire on their
-owner only, not through observer dispatch. `on_tick` fires on every room, actor and item,
-ascending id. (Until M2 it skipped items; with scripts, an item declaring `on_tick` that
+`on_tick`, `on_combat_tick`, `on_spawn`, `on_tell`, `on_load`, `on_reset`, `on_wake` and
+`on_nearby` fire on their owner only, not through observer dispatch. `on_tick` fires on every
+simulated room, actor and item (SPEC §5.9) that has the hook, ascending id. (Until M2 it skipped items; with scripts, an item declaring `on_tick` that
 never fired would be a trap.)
 *Code:* `World.invokeOn`, `World.runWorldTick`.
 
@@ -416,7 +419,7 @@ fires `on_load` only on rooms it creates. Characters restored at login don't get
 ### D-063 `path_to` is an uncached BFS — `open`
 Breadth-first over exits in declaration order, through open doors only (closed and locked
 doors block), so ties resolve the same way every time. Empty list if already there, None if
-unreachable. The `(source, dest)` cache of §5.9 arrives with the bubble work in M5.
+unreachable. Results are cached from M5 (D-124).
 *Code:* `World.pathTo`.
 
 ### D-064 What loading a package loads — `open`
@@ -425,8 +428,8 @@ unreachable. The `(source, dest)` cache of §5.9 arrives with the bubble work in
   disk is a label error.
 - A package fails if any of its files fails, if any label doesn't resolve to a declaration
   of the right kind, or if anything it depends on failed.
-- `package.star` must call `package()` exactly once and holds nothing else; it can't be
-  `load()`ed. Content files evaluate in alphabetical order. Only test files may load
+- `package.star` must call `package()` exactly once and holds nothing else, apart from the
+  top-level functions its `modifiers` name (D-111); it can't be `load()`ed. Content files evaluate in alphabetical order. Only test files may load
   `*_test.star` files.
 - The 5,000,000-step load limit is per package, across its files.
 - Global commands may not shadow an engine command or alias, or another package's global
@@ -503,9 +506,9 @@ compact JSON.
 - **New builtins:** `container(capacity, max_weight, state, key)` makes an item a container.
 - **Constants:** `CRAMPED`, `NORMAL` and `LARGE` are the strings `"cramped"`, `"normal"` and
   `"large"`; `ALL` is the list of all channel names.
-- **Not yet supported:** these arguments are refused with "planned for Mx" when non-empty:
-  `behaviors` (M5), `modifiers` (M5), `equip_affects` (M5) and `expected_tombstones` (M6).
-  `region()` (M5) and `migrate()` (M4) are not available yet.
+- **Not yet supported:** `expected_tombstones` (M6) is refused with "planned for M6" when
+  non-empty. `behaviors`, `modifiers`, `equip_affects` and `region()` arrived in M5 (D-111,
+  D-112, D-113, D-121).
 - **When builtins work:** declaration builtins work only while a package loads; effect
   primitives work anywhere.
 *Code:* `DeclarationBuiltins`, `Kw`.
@@ -525,8 +528,8 @@ compact JSON.
   don't fail the test. Tests assert on `w.diagnostics()` explicitly.
 - **`t.eq` and `t.ne`:** an entity view equals a label string that resolves (relative to
   the calling package) to its prototype label. Players are excluded.
-- **`t.world`:** `t.world(rules=...)` is refused until M5. `packages` defaults to the test's
-  own package.
+- **`t.world`:** `packages` defaults to the test's own package. `rules` names a rules package
+  to use instead of `//rules` (D-108), and `bubble=True` keeps a reality bubble (D-116).
 - **Beyond §4.12:**
   - `spawn_player` takes `hp`, `mana`, `move`, `index`, `stats` and `skills`.
   - `w.damage` takes `amount` or `pct`, and `type`.
@@ -585,7 +588,7 @@ parse. The tutorial and docs use `packages`.
 - **Fields beyond §4.5:**
   - `ctx` also has `from_room`, `to_room`, `affect` (affect hooks) and `targets`
     (`on_combat_tick`).
-  - `event`, `source_room` and `via_exit` are None until perception (M5).
+  - `event`, `source_room` and `via_exit` are set for `on_nearby` (D-120) and None otherwise.
   - Views also expose `xp`, `in_world`, `keywords`, `wait_state`, `home_room`, `desc`,
     `track_size`, `flags`, `contents()` and an exit view.
 - **Views:**
@@ -596,21 +599,20 @@ parse. The tutorial and docs use `packages`.
 - **Attributes:**
   - Short keys are `[A-Za-z0-9_]+`.
   - `get_attr` returns a mutable copy.
-- **Simulation verbs:** `set_active` and friends only edit the reason sets until the bubble
-  (M5).
+- **Simulation verbs:** `set_active` and friends drive the bubble (D-116, D-119). Each
+  returns None; a reason added twice counts once.
 *Code:* `Ctx`, `Views.kt`.
 
 ### D-074 Hook catalog enforcement — `open`
 A hook kwarg must be a catalog name (a typo suggests the right one) and must be attachable
-to that kind of entity per §4.4's "Attach to" column. The engine doesn't fire some hooks
-yet:
-- `on_wake` and `on_nearby` arrive with the bubble and perception (M5).
-- `before_use`, `on_use` and `on_give` arrive with the `use` and `give` commands (M5).
+to that kind of entity per §4.4's "Attach to" column. From M5 the engine fires every hook in
+the catalog: `on_wake` (D-118), `on_nearby` (D-120), `before_use`/`on_use` and `on_give`
+(D-114).
 *Code:* `HookCatalog`.
 
 ### D-075 `think` works before behaviors — `open`
-§7.4 puts `think` in M5, but the core seam already existed. Mobs may declare
-`think = fn` now. `ctx.proposals` is empty until behaviors arrive.
+§7.4 puts `think` in M5, but the core seam already existed, so mobs could declare
+`think = fn` from M2. `ctx.proposals` holds the behaviors' proposals from M5 (D-121).
 - If `think` queued an action for its own mob through `ctx.act*`, the top proposal is not
   queued as well.
 - Returning `"idle"` skips the turn.
@@ -703,7 +705,8 @@ other field keeps its live value.
 - **Connections:** a remote address that isn't loopback is refused and closed.
 - **Starting room:** new characters start in `--start`, else `//zones/tutorial:gate` if it
   exists, else the first room by label.
-- **Starting stats:** they are the engine defaults until the rules module (M5).
+- **Starting stats:** they are the engine defaults. §5.12 calls them rules-defined, but §4.6
+  has no rules export for them, so the rules module (M5) doesn't set them either.
 - **Loading:** `--dev` loads every package under `--world` (default: the current
   directory). Packages that fail to load are reported and left out.
 *Code:* `DevLogin`, `DevServer`.
@@ -793,7 +796,7 @@ from one `AtomicLong` shared by listeners.
   - `zone` means the package of the caller's room.
   - `entity here` traces the room itself.
   - `hook` matches a hook name, or a command or timer prefix such as `command` or `timer`.
-  - `rules` prints a "not yet" line until the rules module (M5).
+  - `rules` streams rules functions, modifiers and each evaluation's chain (D-127).
 - **`@trace` rate limit:** past 50 lines per pulse, the rest are counted. The count is
   reported with the next traced line or at `@trace off`.
 - **`@errors [package]`:** shows the last 10 diagnostics.
@@ -972,3 +975,249 @@ such as `checkpoint_minutes`, but gives no syntax.
 - **Changes:** changing the file needs a restart (§5.10). The file watcher and reload never
   read it.
 *Code:* `WorldModule`, `DevServer.boot`.
+
+## Rules, simulation and content (§4.2–§4.7, §5.7–§5.9) — M5
+
+### D-108 The rules module and its fallback — `open`
+- **Where:** the rules functions live in `//rules:combat.star`; `t.world(rules = "//house")`
+  uses `//house:combat.star` instead. The harness always loads the rules package (§4.12);
+  `serve` and `gups repro` use `//rules`.
+- **Missing exports:** a function the file doesn't define uses the built-in Kotlin rule,
+  silently. Instructors can override one formula at a time.
+- **Failures:** an error, a step-limit hit or an unusable return value falls back to the
+  Kotlin rule for that call. It logs a script diagnostic and a `rules` diagnostic, and
+  alerts instructors, at most once per function per 240 pulses (a minute).
+- **Load failure:** if the rules package fails to load, everything falls back, with one alert.
+- **Not exports:** the track-movement lags of D-026 stay Kotlin-only.
+- **Template:** `template-world/rules/combat.star` reproduces the built-in formulas (D-045)
+  exactly; a test checks that they agree.
+*Code:* `StarlarkRules`, `template-world/rules`.
+
+### D-109 What a rules function gets — `open`
+- **`ctx`:** a read-only rules ctx with `actor`, `attacker` (the same actor), `defender` and
+  `target` (the other actor, if any: the defender, the pinner, the killed or the killer),
+  `weapon`, `item`, `band` (a word), `skill`, `room` (the actor's), `pulse`, `rng`,
+  `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no
+  verbs.
+- **Signatures:** `mitigate(ctx, amount, type)` gets the damage type as a string,
+  `get_lag(ctx, band)` the band as a word, and `interrupt_check(ctx, amount)` the spell being
+  cast as `ctx.skill`. `equipment_slots()` and `xp_to_level(level)` get no ctx.
+- **Results:**
+  - `regen` returns a dict with `hp`, `mana` and `move` (missing keys are 0).
+  - `on_player_death` returns `{"respawn": label, "xp_loss": int}`, with relative labels
+    resolved against the rules package.
+  - `get_lag` returns None for out of reach.
+  - `equipment_slots` returns lowercase slot names.
+*Code:* `RulesCtx`, `StarlarkRules`.
+
+### D-110 Rules step budget — `open`
+§6.1 gives the rules module and modifier chain 200,000 steps and 20 ms "per evaluation".
+Each rules function call and each modifier counts as one evaluation. It gets a fresh budget
+even when a hook triggered it (for example `ctx.damage` asking `interrupt_check`), and its
+steps aren't charged to the hook's cascade. Failures are charged to the package of the
+function's file: the rules package, or the zone, library or skill package a modifier lives
+in. They count toward that package's quarantine.
+*Code:* `StarlarkHost.call(budget)`, `ScriptLimits.rulesSteps`.
+
+### D-111 The modifier chain — `open`
+- **Whose chain:** the attacker's for `to_hit` and `damage`, the caster's for `cast_allowed`,
+  the mover's for `move_cost` (from the room being left), and the regenerating actor's for
+  `regen` and `initiative`. "Zone" means the package of that actor's room, and the regions and
+  room are those of that room too.
+- **Declaring:** every modifier is a top-level function `fn(ctx, base)`; lambdas don't parse
+  (D-060).
+  - Package modifiers can't come from another file, because `package.star` can't load
+    anything. Their functions are defined in `package.star` itself, above the `package()`
+    call.
+  - `item(modifiers=)` applies while the item is worn.
+  - `apply_affect(..., modifiers=)` (the primitive and the verb) gives an affect modifiers.
+    They are stored as function references, so they persist.
+- **Evaluation:**
+  - A `cast_allowed` chain stops at the first denial.
+  - A failing modifier, or one that returns the wrong type, leaves the value as it was.
+  - Spell `damage(...)` effects don't go through the `damage` point; only auto-attacks do.
+    `mitigate` is not a modifier point.
+- **Order:** affects are sorted by id; worn items follow `equipment_slots()` order, then any
+  other slots by name.
+*Code:* `World.modifierChain`, `Rules.kt` (core and script).
+
+### D-112 Regions — `open`
+`region(name, modifiers = {...})` declares a region's modifiers. Region names are world-wide:
+one package declares each, and two packages declaring the same name both fail to load. A room
+may carry a region nobody declares; it is then only a tag. Region names are lowercase words.
+*Code:* `DeclarationBuiltins.region`, `ScriptLoader.checkRegions`, `Prototypes.regions`.
+
+### D-113 Equipment — `open`
+- **`equip_affects`:** a list of affect flags (for example `no_regen` or `silenced`) the
+  wearer has while the item is worn. An item with `equip_affects` or `modifiers` needs a
+  `wear` slot.
+- **Slots:** they come from `rules.equipment_slots()`, asked once and again after each
+  reload.
+  - A slot family such as `wear = "finger"` fits the first free `finger_*` slot, else swaps
+    out the first.
+  - Wearing into an occupied slot moves the old item back to the inventory.
+  - `wield` only takes items whose slot is `wield`; `wear` takes any slotted item.
+*Code:* `EngineCommands.planWear`, `World.slotFor`, `Actor.hasFlag`.
+
+### D-114 Item commands — `open`
+- **`give <item> [to] <actor>`:** gives the whole stack. It fails if the receiver can't carry
+  it. It fires `on_give` with the item as primary owner, then the room and the others in it
+  (so the receiver), with `ctx.target` the receiver. There is no `before_give` in the catalog.
+- **`put <item> in|into <container>`:** the container is carried, or within `get_lag` reach on
+  the ground, and open. `capacity` counts items; `max_weight` weighs the contents.
+- **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a
+  door direction here. Locking needs the container's key in the inventory.
+- **`use <item> [target]`:** the item is carried or worn and must have an `on_use` hook
+  ("You can't use that." otherwise). `before_use` can veto. The target is an actor in the room,
+  else an item. The engine never uses an item up; `on_use` destroys it if it should be.
+- **Stacks:** `get`, `drop`, `give` and `put` merge a stackable item into a stack of the same
+  prototype in the same place with identical attributes and decay deadline, and no timers or
+  name override on either (§3.8 inv. 8). Verbs don't merge.
+*Code:* `EngineCommands`, `World.stack`.
+
+### D-115 Encumbrance — `open`
+`rules.encumbrance` applies while the carried and worn weight exceeds `rules.carry_limit`.
+- **When:** it is recomputed when an actor's custody changes (spawn, move, destroy) and at
+  every world tick, since stats can change the limit.
+- **Limit:** it is computed without the current encumbrance.
+- **Messages:** the actor is told when it starts and when it lifts.
+*Code:* `World.updateEncumbrance`, `Actor.encumbrance`.
+
+### D-116 The bubble is a world option — `open`
+`WorldConfig(bubble = true)` keeps a reality bubble.
+- **Where it's on:** `gups serve` turns it on. Kotlin tests, the harness and `gups repro`
+  default to off, where every room is always simulated. That matches §4.12's example of a mob
+  fleeing with no player near. `t.world(bubble = True)` turns it on in a test.
+- **Who is simulated:** players, and entities with an active or anchor reason, are always
+  simulated. Anything else is simulated when its room (following carriers and containers) is
+  active.
+*Code:* `WorldConfig.bubble`, `World.isSimulated`.
+
+### D-117 Going dormant — `open`
+- **Mobs:** besides disengaging, they drop their action queue and cast; recovery
+  (`waitState`) is kept.
+- **Timers:** a paused timer keeps at least 1 pulse to run.
+- **Exceptions:** entities with an active or anchor reason keep running.
+- **Targeting:** dormant actors are inert to simulated ones. They can't be found by keyword,
+  aren't opponents, aren't in `enemies_near`/`allies_near`, and are skipped by `room`-range
+  skills.
+- **Order:** rooms that sleep are processed before rooms that wake, each ascending id.
+*Code:* `World.sleep`, `World.maintainBubble`.
+
+### D-118 Waking up — `open`
+- **Order:**
+  1. Timers resume.
+  2. Mobs recover.
+  3. Affects that ran out are removed (`on_expire` by expiry, then id).
+  4. A missed zone reset is applied to the room (its spawns, then `on_reset`).
+  5. Respawns that are due fill.
+  6. Items that decayed go.
+  7. `on_wake(ctx, elapsed_pulses)` fires on the room, then its mobs, then its items (each
+     ascending id), as they were before the respawns.
+- **`full` recovery:** with a `no_regen` affect still running at wake, `full` falls back to
+  the piecewise catch-up, which then restores nothing while the affect lasts.
+- **Catch-up ticks:** the world ticks counted are those after the room went dormant, up to and
+  including the waking pulse. An affect counts as active at a tick when its `expiresAt` is
+  later than the tick, matching live play, where expiry (phase 1) comes before regen (phase 4).
+*Code:* `World.wake`, `World.catchUpRegen`.
+
+### D-119 Bubble state at startup and across restarts — `open`
+- **Startup:** rooms start dormant from the boot pulse. `fireOnLoad` (D-062) ends by pausing
+  any restored timer that is running in a dormant room, then forms the bubble.
+- **Persistence:** active and anchor reasons are saved with every entity and player, so an
+  `active` boss stays active across a restart. Dormancy itself isn't saved.
+- **Upkeep:** anchors are found by a scan of the world each pulse. Coverage is updated
+  incrementally from each anchor's old and new room. A reload recomputes it in full.
+*Code:* `World.settleBubble`, `World.recomputeBubble`, `Codec.kt`.
+
+### D-120 Perception details — `open`
+- **Own room:** a mob perceives events in its own room whatever its senses, with no
+  `via_exit`. Senses of 1 add the rooms its own exits lead to.
+  - `hearing` covers `sound` and `noise`; `sight` covers `sight`.
+  - The exit checked is the listener's exit toward the source, so a one-way exit into the
+    source room carries events and one out of it doesn't.
+- **Events and `ctx.actor`:**
+  - `say`, `emote` and `shout` carry their text; `ctx.actor` is the speaker.
+  - `combat_start`: the attacker.
+  - `combat` (once per room per round): no actor.
+  - `death`: the one who died.
+  - `enter` and `exit`, including teleports: the mover.
+- **Delivery:** only mobs with an `on_nearby` hook get events. They are coalesced per (mob,
+  event, source room), keeping the first. Events raised while phase 5 delivers wait for the
+  next pulse's phase 5.
+- **Players:** `shout` also reaches players next door over the same exits (D-018).
+*Code:* `Perception.kt`.
+
+### D-121 Built-in behaviors — `open`
+- **Priorities:** flee 100, aggressive 60, assist 50, pursue 40, follow 30, wander 10,
+  scavenge 5.
+- **Whom they mean:** `players`, `mobs`, `all`, or label patterns with `*`. A pattern without
+  a package (`goblin_*`) matches the label name in any package; `:goblin_*` means this package.
+  A string or a list.
+- **Each behavior:**
+  - `wander(radius = 3, chance = 0.1)`: `chance` is the probability per think. The radius is
+    counted from the home room through open doors.
+  - `aggressive(toward = "players", unless_level_above = None)` attacks the lowest-id match.
+  - `assist(allies)` attacks the ally's primary target, or else its lowest-id opponent.
+  - `flee(at_hp_pct = 20)` fires at or below the threshold, engaged or not, as §4.12's
+    example needs.
+  - `guard(exit, allies = "mobs")` says "<Guard> blocks your way." It runs before the scripted
+    `before_exit` observers and only while the guard is simulated and able to act.
+  - `follow(target)` takes the first match it sees as leader and follows it within 3 exits;
+    farther, it forgets the leader.
+  - `pursue(target)` heads for the nearest simulated match by path length, then lowest id.
+  - `sentinel()` removes movement and flee proposals.
+  - `scavenge()` takes the first reachable, carriable ground item that isn't a corpse.
+- **Engagement:** behaviors other than flee propose nothing while engaged.
+- **Failures:** a behavior that throws is logged as an engine diagnostic and proposes
+  nothing.
+*Code:* `Behaviors.kt`, `DeclarationBuiltins`.
+
+### D-122 Proposals carry their action — `open`
+§4.7's `Proposal(action, priority, source)` is `Proposal(commandLine, priority, source,
+action)`. The action fixes the target the behavior chose. `commandLine` describes it and is
+what `ctx.proposals[i].command` shows.
+*Code:* `Proposal`, `World.think`.
+
+### D-123 Item-target skills — `open`
+A `target = "item"` skill finds its item by keyword among worn, carried and ground items
+(ground items within `get_lag` reach). Effect primitives act only on actors, so an item skill
+does its work in `resolve`. There, and in the cast hooks, the item is `ctx.target`.
+`SkillResolver` gained the item argument.
+*Code:* `CastAction`, `SkillResolver`.
+
+### D-124 Path cache — `open`
+`path_to` results are cached per (from, to). A door change (`setDoor`, so every door verb
+and command) and a reload clear the cache. `set_exit_blocks` doesn't, since blocks never
+affect passability (D-029).
+*Code:* `World.pathTo`, `World.graphChanged`.
+
+### D-125 Script API additions in M5 — `open`
+- **`struct(**fields)`:** a builtin that makes an immutable record. Libraries use it to export
+  a namespace of functions (`quest.start`). Core Starlark has none.
+- **Views:**
+  - Item views gained `dice`, `damage_type`, `range`, `wear` and `stat_deltas`.
+  - Actor views gained `recall_room`, `flags`, `has_flag(flag)`, `carried_weight` and
+    `casting`.
+  - Skill views gained `cost`, `channels` and `interrupt`.
+- **ctx:**
+  - `ctx.target` is the target item for `use` and item skills.
+  - `ctx.apply_affect` takes `modifiers`.
+*Code:* `Views.kt`, `Ctx.kt`, `DeclarationBuiltins.struct`.
+
+### D-126 `//lib:quest.star` — `open`
+- **Where:** like the tutorial (D-077), `lib/` and `rules/` live in `template-world/`.
+- **API:** `quest.define(id, title, steps)` returns a quest description. `start`,
+  `advance(..., from_step=None)`, `complete`, `step`, `is_active` and `is_done` take
+  `(ctx, actor, quest)`.
+- **Storage:** progress is a `quests` dict in the lib's own `lib` namespace on the player, so
+  only the library writes it (§3.7).
+- **Command:** `quests` is a fast-lane global command that lists active and finished quests.
+*Code:* `template-world/lib/quest.star`.
+
+### D-127 `@trace rules` — `open`
+It streams each rules function and modifier call, and one line per evaluation with its full
+chain. Auto-attacks add the to-hit roll and the mitigated damage; each combat round adds
+the initiative order. `w.trace()` in the harness records the same lines. Builder scoping of
+what is traced arrives with roles in M6.
+*Code:* `World.onRules`, `DevTools`, `WorldHandle.trace`.

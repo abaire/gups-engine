@@ -43,6 +43,7 @@ sealed interface Effect {
         val onTick: HookRef? = null,
         val onExpire: HookRef? = null,
         val expireMessage: String = "",
+        val modifiers: Modifiers = emptyMap(),
     ) : Effect
 
     /** Removes affects whose name matches [filter]; a trailing `*` matches a prefix. */

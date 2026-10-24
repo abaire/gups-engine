@@ -105,6 +105,12 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
         val every = zone.resetPulses
         if (every == null) zoneResets.remove(zone.pkg) else zoneResets.putIfAbsent(zone.pkg, pulse + every)
     }
+    // The room graph may have changed: paths, neighbours and the bubble are worked out again.
+    graphChanged()
+    inboundCache = null
+    slotCache = null
+    coverage.keys.retainAll(roomsByLabel.values.toSet())
+    recomputeBubble()
     return ReconcileReport(created, notes)
 }
 

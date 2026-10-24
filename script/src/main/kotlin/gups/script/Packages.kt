@@ -4,6 +4,8 @@ import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.ItemProto
 import gups.core.model.MobProto
+import gups.core.model.Modifiers
+import gups.core.model.RegionProto
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.world.HookName
@@ -125,6 +127,10 @@ class ScriptPackage internal constructor(val path: String) {
     var sharedNamespaces: List<String> = emptyList()
         internal set
 
+    /** Modifiers that apply in every room of the package (SPEC §4.6). */
+    var modifiers: Modifiers = emptyMap()
+        internal set
+
     /** Attribute namespace: the last path segment (SPEC §3.7). */
     val namespace: String get() = path.substringAfterLast('/')
 
@@ -132,6 +138,7 @@ class ScriptPackage internal constructor(val path: String) {
     internal val mobList = mutableListOf<MobProto>()
     internal val itemList = mutableListOf<ItemProto>()
     internal val skillList = mutableListOf<SkillProto>()
+    internal val regionList = mutableListOf<RegionProto>()
     internal val commandList = mutableListOf<GlobalCommandDecl>()
     internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
 
@@ -149,6 +156,7 @@ class ScriptPackage internal constructor(val path: String) {
     val mobs: List<MobProto> get() = mobList
     val items: List<ItemProto> get() = itemList
     val skills: List<SkillProto> get() = skillList
+    val regions: List<RegionProto> get() = regionList
     val globalCommands: List<GlobalCommandDecl> get() = commandList
 
     /** Hooks per prototype label. */

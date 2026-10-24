@@ -20,10 +20,14 @@ fun World.say(speaker: Actor, text: String) {
     send(speaker, "You say, '$text'")
     echo(speaker.room, "${speaker.name.cap()} says, '$text'", speaker)
     dispatch(HookName.ON_SAY, null, speaker.room, HookContext(actor = speaker, text = text))
+    perceive("say", Channel.SOUND, speaker.room, speaker, text)
 }
 
 /** The `emote` verb: everyone in the room, the actor included, sees "Name text". */
-fun World.emote(actor: Actor, text: String) = echo(actor.room, "${actor.name.cap()} $text")
+fun World.emote(actor: Actor, text: String) {
+    echo(actor.room, "${actor.name.cap()} $text")
+    perceive("emote", Channel.SOUND, actor.room, actor, text)
+}
 
 /**
  * Sets the door on [room]'s exit [dir], and on the matching door on the other side (D-031).
@@ -38,6 +42,7 @@ fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
         back.door!!.state = state
         other.dirty = true
     }
+    graphChanged()
 }
 
 /** The `set_exit_blocks` verb: replaces the exit's own `blocks`; the door's set still adds to it. */
@@ -63,11 +68,18 @@ fun World.splitItem(item: Item, n: Int): Item {
 
 /**
  * Shortest walk from [from] to [to] over passable exits, as exit directions; empty if they
- * are the same room, null if [to] can't be reached. Breadth-first in exit declaration order,
- * so ties resolve the same way every time. Uncached until the bubble work in M5 (D-063).
+ * are the same room, null if [to] can't be reached. Breadth-first over the whole room graph in
+ * exit declaration order, so ties resolve the same way every time (D-063). Results are cached
+ * per `(from, to)` until a door, exit or reload changes the graph (SPEC §5.9).
  */
 fun World.pathTo(from: Room, to: Room): List<Direction>? {
     if (from === to) return emptyList()
+    val key = from.id to to.id
+    if (key in pathCache) return pathCache[key]
+    return searchPath(from, to).also { pathCache[key] = it }
+}
+
+private fun World.searchPath(from: Room, to: Room): List<Direction>? {
     val via = HashMap<Room, Pair<Room, Direction>>()
     val queue = ArrayDeque(listOf(from))
     while (queue.isNotEmpty()) {

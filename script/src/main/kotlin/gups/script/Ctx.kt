@@ -31,9 +31,15 @@ import gups.core.world.findActor
 import gups.core.world.heal
 import gups.core.world.moveItem
 import gups.core.world.opponentsOf
+import gups.core.world.roomOfEntity
 import gups.core.world.pathTo
 import gups.core.world.removeAffect
 import gups.core.world.say
+import gups.core.world.isSimulated
+import gups.core.world.setActive
+import gups.core.world.clearActive
+import gups.core.world.setAnchor
+import gups.core.world.clearAnchor
 import gups.core.world.send
 import gups.core.world.setDoor
 import gups.core.world.setExitBlocks
@@ -119,8 +125,8 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "actor", structField = true)
     fun actor(): Any = field { v(hc.actor) }
 
-    @StarlarkMethod(name = "target", structField = true)
-    fun target(): Any = field { v(hc.target ?: extras.commandTarget) }
+    @StarlarkMethod(name = "target", structField = true, doc = "The target actor, or the target item of use and item skills.")
+    fun target(): Any = field { v(hc.target ?: hc.targetItem ?: extras.commandTarget) }
 
     @StarlarkMethod(name = "targets", structField = true, doc = "Opponents, for on_combat_tick.")
     fun targets(): Any = field { extras.targets?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE }
@@ -148,14 +154,18 @@ class Ctx internal constructor(
         extras.commandArgs ?: if (hc.args.isEmpty()) Starlark.NONE else sDict(hc.args.mapValues { fromAttr(it.value, null) })
     }
 
-    @StarlarkMethod(name = "event", structField = true, doc = "Perception event type, for on_nearby (M5).")
-    fun event(): Any = field { Starlark.NONE }
+    @StarlarkMethod(
+        name = "event",
+        structField = true,
+        doc = "For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.",
+    )
+    fun event(): Any = field { hc.event ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "source_room", structField = true, doc = "For on_nearby (M5).")
-    fun sourceRoom(): Any = field { Starlark.NONE }
+    @StarlarkMethod(name = "source_room", structField = true, doc = "For on_nearby: the room the event happened in.")
+    fun sourceRoom(): Any = field { v(hc.sourceRoom) }
 
-    @StarlarkMethod(name = "via_exit", structField = true, doc = "For on_nearby (M5).")
-    fun viaExit(): Any = field { Starlark.NONE }
+    @StarlarkMethod(name = "via_exit", structField = true, doc = "For on_nearby: this mob's own exit toward the event, or None for its own room.")
+    fun viaExit(): Any = field { hc.viaExit?.name ?: Starlark.NONE }
 
     @StarlarkMethod(name = "skill", structField = true)
     fun skill(): Any = field { hc.skill?.let(::SkillView) ?: Starlark.NONE }
@@ -406,6 +416,7 @@ class Ctx internal constructor(
             Param(name = "on_tick", named = true, defaultValue = "None"),
             Param(name = "on_expire", named = true, defaultValue = "None"),
             Param(name = "expire_msg", named = true, defaultValue = "''"),
+            Param(name = "modifiers", named = true, defaultValue = "{}"),
         ],
     )
     fun applyAffect(
@@ -418,10 +429,13 @@ class Ctx internal constructor(
         onTick: Any,
         onExpire: Any,
         expireMsg: Any,
+        modifiers: Any,
     ): Any = verb("apply_affect") {
         val t = actorArg(target, "apply_affect(target)")
-        val e = affectEffect(name, duration, statDeltas, flags, tickEvery, onTick, onExpire, expireMsg, "apply_affect")
-        val a = world.applyAffect(t, e.name, e.duration, e.statDeltas, e.flags, e.tickEvery, e.onTick, e.onExpire, e.expireMessage, owner as? Actor)
+        val e = affectEffect(name, duration, statDeltas, flags, tickEvery, onTick, onExpire, expireMsg, modifiers, "apply_affect")
+        val a = world.applyAffect(
+            t, e.name, e.duration, e.statDeltas, e.flags, e.tickEvery, e.onTick, e.onExpire, e.expireMessage, owner as? Actor, e.modifiers,
+        )
         a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
     }
 
@@ -625,28 +639,35 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "cancel", doc = "Cancels one of this owner's timers; True if it was pending.", parameters = [Param(name = "timer_id", named = true)])
     fun cancel(timerId: Any): Any = verb("cancel") { world.cancel(owner, int(timerId, "cancel(timer_id)").toLong()) }
 
-    // ---- Simulation (SPEC §5.9; the bubble itself arrives in M5) -------------------------------
+    // ---- Simulation (SPEC §5.9) ----------------------------------------------------------------
 
-    private fun reason(entity: Any, reason: Any, name: String, set: (Entity) -> MutableSet<String>, add: Boolean): Any = verb(name) {
+    private fun reason(entity: Any, reason: Any, name: String, change: (Entity, String) -> Boolean): Any = verb(name) {
         val e = entityArg(entity, "$name(entity)")
         val r = str(reason, "$name(reason)")
         if (r.isEmpty()) fail("$name(reason): must not be empty")
-        val changed = if (add) set(e).add(r) else set(e).remove(r)
-        if (changed) e.dirty = true
+        change(e, r)
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "set_active", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
-    fun setActive(entity: Any, reason: Any): Any = reason(entity, reason, "set_active", { it.activeReasons }, add = true)
+    @StarlarkMethod(
+        name = "set_active",
+        doc = "Keeps an entity simulated (its queue, timers, AI and movement) even outside the bubble, until its last reason is cleared.",
+        parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)],
+    )
+    fun setActive(entity: Any, reason: Any): Any = reason(entity, reason, "set_active") { e, r -> world.setActive(e, r) }
 
     @StarlarkMethod(name = "clear_active", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
-    fun clearActive(entity: Any, reason: Any): Any = reason(entity, reason, "clear_active", { it.activeReasons }, add = false)
+    fun clearActive(entity: Any, reason: Any): Any = reason(entity, reason, "clear_active") { e, r -> world.clearActive(e, r) }
 
-    @StarlarkMethod(name = "set_anchor", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
-    fun setAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "set_anchor", { it.anchorReasons }, add = true)
+    @StarlarkMethod(
+        name = "set_anchor",
+        doc = "Makes an entity project a bubble of its own, as players do, until its last reason is cleared.",
+        parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)],
+    )
+    fun setAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "set_anchor") { e, r -> world.setAnchor(e, r) }
 
     @StarlarkMethod(name = "clear_anchor", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
-    fun clearAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "clear_anchor", { it.anchorReasons }, add = false)
+    fun clearAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "clear_anchor") { e, r -> world.clearAnchor(e, r) }
 
     // ---- Queries -------------------------------------------------------------------------------
 
@@ -683,7 +704,7 @@ class Ctx internal constructor(
     private fun near(actor: Any, band: Any, what: String, pick: (Actor, List<Actor>) -> List<Actor>): Any = verb(what) {
         val a = actorArg(actor, "$what(actor)")
         val reach = Band.parse(choice(band, "$what(band)", Band.entries.map { it.word }))
-        val within = a.room.actors.filter { it !== a && reach.reaches(Band.between(a.trackIndex, it.trackIndex)) }
+        val within = a.room.actors.filter { it !== a && world.isSimulated(it) && reach.reaches(Band.between(a.trackIndex, it.trackIndex)) }
         sList(pick(a, within).map { v(it) })
     }
 

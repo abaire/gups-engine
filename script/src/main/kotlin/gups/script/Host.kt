@@ -7,6 +7,8 @@ import gups.core.model.Actor
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.Mob
+import gups.core.model.ModifierPoint
+import gups.core.rules.RulesContext
 import gups.core.world.Action
 import gups.core.world.Diagnostic
 import gups.core.world.FastCommand
@@ -26,6 +28,7 @@ import gups.core.world.ZoneCommand
 import gups.core.world.applyPrototypes
 import gups.core.world.findActor
 import gups.core.world.opponentsOf
+import gups.core.world.roomOfEntity
 import gups.core.world.send
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
@@ -92,7 +95,7 @@ internal class Frame(
     fun trace(line: String) = host.trace(site, world.pulse, line)
 }
 
-private sealed interface CallResult {
+internal sealed interface CallResult {
     data class Ok(val value: Any?) : CallResult
 
     data object Failed : CallResult
@@ -126,6 +129,12 @@ class StarlarkHost(
     /** Packages whose scripts are disabled. */
     val quarantined: Set<String> get() = quarantinedSet
 
+    /** Packages that failed to load, so a rules module can say why it falls back. */
+    val failedPackages: Set<String> get() = scripts.failed
+
+    /** The Starlark rules module of package [pkg], falling back to the built-in ruleset (SPEC §4.6, §6.3). */
+    fun rules(pkg: String = "rules"): StarlarkRules = StarlarkRules(this, pkg)
+
     override val quarantinedPackages: Set<String> get() = quarantinedSet
 
     /** Receives one event per script call, verb and error while set (`@trace`, `w.trace`). */
@@ -138,8 +147,9 @@ class StarlarkHost(
         tracer?.invoke(TraceEvent(pulse, site.pkg, site.owner, site.hook, text))
     }
 
-    /** Registers the packages' global commands with [world]. Call once, before play starts. */
+    /** Registers the packages' global commands with [world], and binds its rules module. Call once, before play starts. */
     fun install(world: World) {
+        (world.rules as? StarlarkRules)?.world = world
         for (pkg in scripts.packages.values) {
             for (c in pkg.globalCommands) {
                 world.commands.registerGlobal(
@@ -194,7 +204,13 @@ class StarlarkHost(
         val ref = scripts.hooks(owner.protoLabel)[hook] ?: return HookOutcome.Allow
         val site = Site(owner.protoLabel.pkg, owner.protoLabel, hook.scriptName, hook.vetoable, owner.id)
         val extras = if (hook == HookName.ON_COMBAT_TICK && owner is Actor) CtxExtras(targets = world.opponentsOf(owner)) else CtxExtras()
-        val result = call(world, site, ref, { Ctx(it, owner, ctx, extras) })
+        // on_wake(ctx, elapsed_pulses) takes the elapsed time as a second argument (SPEC §4.4).
+        val positional: ((Frame) -> List<Any>)? = if (hook == HookName.ON_WAKE) {
+            { f -> listOf(Ctx(f, owner, ctx, extras), sInt(ctx.elapsedPulses ?: 0)) }
+        } else {
+            null
+        }
+        val result = call(world, site, ref, { Ctx(it, owner, ctx, extras) }, positional = positional)
         val value = (result as? CallResult.Ok)?.value
         if (hook.vetoable && value is Denial) return HookOutcome.Deny(value.message)
         return HookOutcome.Allow
@@ -208,6 +224,11 @@ class StarlarkHost(
     }
 
     override fun isSuspended(owner: Entity, ref: HookRef): Boolean = chargeTo(owner, ref) in quarantinedSet
+
+    override fun hasHook(owner: Entity, hook: HookName): Boolean = hook in scripts.hooks(owner.protoLabel)
+
+    override fun modify(world: World, point: ModifierPoint, ref: HookRef, source: String, c: RulesContext, base: Any?): Any? =
+        runModifier(world, point, ref, source, c, base)
 
     // ---- Commands, think, resolve --------------------------------------------------------------
 
@@ -236,9 +257,9 @@ class StarlarkHost(
         }
     }
 
-    internal fun resolve(world: World, caster: Actor, target: Actor?, ref: HookRef, pkg: String) {
+    internal fun resolve(world: World, caster: Actor, target: Actor?, item: Item?, ref: HookRef, pkg: String) {
         val site = Site(pkg, null, "resolve ${ref.name}", vetoable = false, caster.id)
-        call(world, site, ref, { Ctx(it, caster, HookContext(actor = caster, target = target, room = caster.room), CtxExtras()) })
+        call(world, site, ref, { Ctx(it, caster, HookContext(actor = caster, target = target, targetItem = item, room = caster.room), CtxExtras()) })
     }
 
     // ---- Reload (SPEC §5.10) ---------------------------------------------------------------------
@@ -356,27 +377,36 @@ class StarlarkHost(
     /**
      * Runs [ref] with a ctx built by [ctxOf] and keyword arguments from [kwargs]. Charges steps to
      * the current cascade, and reports failures. Engine (non-script) exceptions propagate.
+     *
+     * A call with its own [budget] (a rules evaluation, SPEC §6.1) gets that many steps and the
+     * rules wall clock, whatever is running around it, and isn't charged to the cascade.
      */
-    private fun call(
+    internal fun call(
         world: World,
         site: Site,
         ref: HookRef,
-        ctxOf: (Frame) -> Ctx,
+        ctxOf: (Frame) -> Any,
         kwargs: (Frame) -> Map<String, Any> = { emptyMap() },
-        /** Arguments in place of the ctx, for `migrate`; the ctx is still made for verbs' sake. */
+        /** Arguments in place of the ctx, for `migrate` and rules functions; the ctx is still made. */
         positional: ((Frame) -> List<Any>)? = null,
+        budget: Long? = null,
     ): CallResult {
         if (site.pkg in quarantinedSet) return CallResult.Skipped
         val fn = scripts.function(ref) ?: run {
             report(world, site, "missing", "function ${ref.name} no longer exists in ${ref.file}", null, null)
             return CallResult.Failed
         }
-        val remaining = if (stack.isEmpty()) limits.hookSteps else stack.minOf { it.maxSteps - it.thread.executedSteps }
+        val limit = budget ?: limits.hookSteps
+        val remaining = budget ?: if (stack.isEmpty()) limits.hookSteps else stack.minOf { it.maxSteps - it.thread.executedSteps }
         if (remaining <= 0) {
             report(world, site, "step_limit", "${site.hook} not run: the event's ${limits.hookSteps}-step budget is spent", null, null)
             return CallResult.Failed
         }
-        val root = stack.lastOrNull()?.root ?: Root(if (limits.wallClock) System.nanoTime() + limits.hookWallNanos else null, limits.hookWallNanos / 1_000_000)
+        val root = if (budget != null) {
+            Root(if (limits.wallClock) System.nanoTime() + limits.rulesWallNanos else null, limits.rulesWallNanos / 1_000_000)
+        } else {
+            stack.lastOrNull()?.root ?: Root(if (limits.wallClock) System.nanoTime() + limits.hookWallNanos else null, limits.hookWallNanos / 1_000_000)
+        }
         Mutability.create(site.hook).use { mu ->
             val thread = StarlarkThread(mu, SEMANTICS)
             thread.setMaxExecutionSteps(remaining)
@@ -386,7 +416,7 @@ class StarlarkHost(
             stack += frame
             var failure: EvalException? = null
             var value: Any? = null
-            var ctx: Ctx? = null
+            var ctx: Any? = null
             try {
                 ctx = ctxOf(frame)
                 value = Starlark.call(thread, fn, positional?.invoke(frame) ?: listOf(ctx), kwargs(frame))
@@ -397,14 +427,16 @@ class StarlarkHost(
                 frame.valid = false
                 stack.removeAt(stack.size - 1)
                 val used = thread.executedSteps
-                for (outer in stack) {
-                    outer.maxSteps -= used
-                    outer.thread.setMaxExecutionSteps(outer.maxSteps)
+                if (budget == null) {
+                    for (outer in stack) {
+                        outer.maxSteps -= used
+                        outer.thread.setMaxExecutionSteps(outer.maxSteps)
+                    }
                 }
                 trace(site, world.pulse, "  ${site.hook} done: $used steps")
             }
             if (failure != null) {
-                report(world, site, classify(failure), messageOf(failure), failure, ctx)
+                report(world, site, classify(failure), messageOf(failure, limit), failure, ctx as? Ctx)
                 return CallResult.Failed
             }
             return CallResult.Ok(value)
@@ -417,10 +449,10 @@ class StarlarkHost(
         return "script_error"
     }
 
-    private fun messageOf(e: EvalException): String =
-        if (isStepLimit(e)) "exceeded the ${limits.hookSteps}-step limit for one event" else e.message ?: e.toString()
+    private fun messageOf(e: EvalException, limit: Long): String =
+        if (isStepLimit(e)) "exceeded the $limit-step limit for one event" else e.message ?: e.toString()
 
-    private fun report(world: World, site: Site, kind: String, message: String, e: EvalException?, ctx: Ctx?) {
+    internal fun report(world: World, site: Site, kind: String, message: String, e: EvalException?, ctx: Ctx?) {
         val loc = e?.let(::innermost)
         val d = Diagnostic(
             pulse = world.pulse,
@@ -465,5 +497,5 @@ internal class ScriptThink(private val ref: HookRef, private val pkg: String) : 
 
 /** A skill's custom `resolve(ctx)` (SPEC §4.3). */
 internal class ScriptResolve(private val ref: HookRef, private val pkg: String) : SkillResolver {
-    override fun resolve(world: World, caster: Actor, target: Actor?) = hostOf(world).resolve(world, caster, target, ref, pkg)
+    override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?) = hostOf(world).resolve(world, caster, target, item, ref, pkg)
 }
