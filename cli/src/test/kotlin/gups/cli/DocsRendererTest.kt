@@ -87,6 +87,24 @@ class DocsRendererTest {
     }
 
     @Test
+    fun `plugins html starts with the guide, which index links, and its Kotlin matches the sample`() {
+        val page = docs.getValue("plugins.html")
+        assertTrue(page.indexOf("<section id=\"guide\"") < page.indexOf("This world's plugins"))
+        assertContains(page, "<h1 id=\"writing-plugins\">Writing Plugins</h1>")
+        assertContains(docs.getValue("index.html"), "<a href=\"plugins.html#guide\">Writing plugins</a>")
+        val docsDir = File(System.getProperty("gups.docsDir"))
+        val source = docsDir.resolve("../samples/weather-plugin/src/main/kotlin/gups/sample/weather/WeatherPlugin.kt").readText()
+        val guide = docsDir.resolve("PLUGINS.md").readText()
+        val blocks = Regex("```kotlin\n(.*?)\n```", RegexOption.DOT_MATCHES_ALL).findAll(guide).map { it.groupValues[1] }.toList()
+        val fromSample = blocks.filter { "tasks.jar" !in it && "dependencies {" !in it }
+        assertTrue(fromSample.size >= 6, "${fromSample.size} sample blocks")
+        val dedented = source.lines().joinToString("\n") { it.trimStart() }
+        for (b in fromSample) {
+            assertContains(dedented, b.lines().joinToString("\n") { it.trimStart() }, message = "PLUGINS.md block isn't in WeatherPlugin.kt:\n$b")
+        }
+    }
+
+    @Test
     fun `markdown renders the supported subset`() {
         val html = Markdown.toHtml(
             """
@@ -187,7 +205,8 @@ class DocsRendererTest {
             gmcp = listOf(PluginGmcpDocSpec("Weather.Now", "The current weather.")),
         )
         val examples: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
-        val actual = DocsRenderer.render(small, changelog, listOf(plugin), examples)
+        val guide = "# Writing Plugins\n\nA plugin is a `.jar`.\n"
+        val actual = DocsRenderer.render(small, changelog, listOf(plugin), examples, guide)
 
         val dir = File(System.getProperty("gups.docsGolden"))
         if (System.getProperty("gups.updateGolden") == "true") {

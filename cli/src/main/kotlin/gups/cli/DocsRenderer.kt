@@ -59,6 +59,7 @@ object DocsRenderer {
     )
 
     private const val CHANGELOG_RESOURCE = "gups/docs/CHANGELOG.md"
+    private const val GUIDE_RESOURCE = "gups/docs/PLUGINS.md"
 
     /** `"<page>.html#<id>"` for a symbol of [model]. */
     fun symbolHref(model: ScriptApiModel, symbol: String): String {
@@ -68,9 +69,14 @@ object DocsRenderer {
     }
 
     /** `docs/CHANGELOG.md`, as bundled into the CLI's resources. */
-    fun bundledChangelog(): String {
-        val stream = DocsRenderer::class.java.classLoader.getResourceAsStream(CHANGELOG_RESOURCE)
-            ?: error("resource $CHANGELOG_RESOURCE is missing; the cli build bundles docs/CHANGELOG.md")
+    fun bundledChangelog(): String = resource(CHANGELOG_RESOURCE)
+
+    /** `docs/PLUGINS.md`, the engine-developer guide, as bundled into the CLI's resources. */
+    fun bundledPluginGuide(): String = resource(GUIDE_RESOURCE)
+
+    private fun resource(name: String): String {
+        val stream = DocsRenderer::class.java.classLoader.getResourceAsStream(name)
+            ?: error("resource $name is missing; the cli build bundles it from docs/")
         return stream.use { it.readBytes().toString(Charsets.UTF_8) }
     }
 
@@ -80,6 +86,7 @@ object DocsRenderer {
         changelogMarkdown: String = bundledChangelog(),
         plugins: List<PluginDocSpec> = emptyList(),
         examples: Map<String, DocExample> = DocExamples.ALL,
+        pluginGuide: String = bundledPluginGuide(),
     ): Map<String, String> {
         val changelog = Changelog.parse(changelogMarkdown)
         val r = Renderer(model, examples)
@@ -92,7 +99,7 @@ object DocsRenderer {
             "effects.html" to r.page("effects.html") { with(r) { effects() } },
             "rules.html" to r.page("rules.html") { with(r) { rules() } },
             "harness.html" to r.page("harness.html") { with(r) { harness() } },
-            "plugins.html" to r.page("plugins.html") { with(r) { plugins(plugins) } },
+            "plugins.html" to r.page("plugins.html") { with(r) { plugins(plugins, pluginGuide) } },
             "changelog.html" to r.page("changelog.html") { with(r) { changelog(changelog) } },
             "changes.json" to changelog.toJson(model.apiVersion),
             "api.json" to model.toJson(),
@@ -176,6 +183,7 @@ object DocsRenderer {
             row("changelog.html", null, "Script-facing changes per api_version")
             append("</tbody>\n</table>\n")
             append("<p>The machine-readable model is <a href=\"api.json\">api.json</a>.</p>\n")
+            append("<p>Engine developers: <a href=\"plugins.html#guide\">Writing plugins</a>.</p>\n")
         }
 
         fun StringBuilder.declarations() {
@@ -261,7 +269,9 @@ object DocsRenderer {
             for (t in model.harness) type(t, t.name)
         }
 
-        fun StringBuilder.plugins(plugins: List<PluginDocSpec>) {
+        fun StringBuilder.plugins(plugins: List<PluginDocSpec>, guide: String) {
+            append("<section id=\"guide\" class=\"guide\">\n").append(Markdown.toHtml(guide)).append("</section>\n")
+            append("<h2 id=\"loaded-plugins\">This world's plugins</h2>\n")
             if (plugins.isEmpty()) {
                 append("<p>No plugins are loaded.</p>\n")
                 return

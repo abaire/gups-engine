@@ -2044,3 +2044,20 @@ names.
 - **Tests and the real changelog:** `ApiDiffTest` and `ChangelogTest` now use fixed changelog text
   instead of `docs/CHANGELOG.md`, so entries such as `module.plugins` don't break them.
 *Code:* `host/PluginHost.kt`, `Commands.kt` (core and cli), `GupsServer.boot`, `Deployer`, `PluginLoaderTest`, `PluginIntegrationTest`.
+
+### D-179 The sample plugin and the guide (M7 design §6) — `open`
+- **Module graph:** the root build now also calls `evaluationDependsOn` for nested projects (such as
+  `:samples:weather-plugin`); `evaluationDependsOnChildren()` alone left them unevaluated, so
+  `checkModuleGraph` saw none of their dependencies.
+- **The start log line** reaches the server log as `plugin 'weather': weather: tracking …`, because
+  `PluginWorld.log` prefixes the plugin id (D-177); the sample test asserts that full line.
+- **`rain_call`** is `target = "self"`, so casting it soaks the caster.
+- **`plugins.html`:** the guide is a `<section id="guide">` rendered with `Markdown.toHtml`, followed by
+  an `<h2 id="loaded-plugins">This world's plugins</h2>` and the plugin list. `index.html` links
+  `plugins.html#guide` as "Writing plugins" in a line after the `api.json` one. `DocsRenderer.render`
+  takes the guide as a last `pluginGuide` parameter (default: the bundled `docs/PLUGINS.md`); the golden
+  test passes a short fixed guide so edits to the guide don't change the golden files.
+- **Guide accuracy:** a `DocsRendererTest` case checks that every Kotlin block of `PLUGINS.md` (except
+  the Gradle snippets) appears in `WeatherPlugin.kt`, ignoring indentation. The class-header block stops
+  after `doc`, without the closing brace.
+*Code:* `samples/weather-plugin/`, `build.gradle.kts`, `DocsRenderer.kt`, `docs/PLUGINS.md`, `DocsRendererTest`.

@@ -96,6 +96,16 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
+M7.5 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §6): the sample plugin.
+
+- **Writing plugins:** engine developers start with [docs/PLUGINS.md](docs/PLUGINS.md), which `gups docs`
+  renders at the top of `plugins.html`.
+- **The sample:** `samples/weather-plugin` (`:samples:weather-plugin`) is a `weather` plugin using every
+  extension point: `weather.now(room)`, the `weather` command, the `weather.soak(pulses)` effect, the
+  `Gups.Weather` GMCP package and a world-start log line. `./gradlew :samples:weather-plugin:jar` builds
+  `weather.jar`; its tests run that jar through `gups test`'s runner. `checkModuleGraph` allows samples
+  only `:plugin-api`.
+
 M7.4 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §5): the plugin API.
 
 - **Plugins:** a `.jar` in the course world's `plugins/<id>.jar`, pinned in `MODULE.gups`

@@ -24,4 +24,5 @@ include(
     "plugin-api",
     "cli",
     "webclient",
+    "samples:weather-plugin",
 )

@@ -34,6 +34,8 @@ application {
 // The changelog the HTML reference renders (DocsRenderer.bundledChangelog).
 tasks.processResources {
     from(rootProject.file("docs/CHANGELOG.md")) { into("gups/docs") }
+    // The plugin guide plugins.html starts with (SPEC_MILESTONE7.md §6.2).
+    from(rootProject.file("docs/PLUGINS.md")) { into("gups/docs") }
 }
 
 tasks.test {
