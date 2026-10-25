@@ -40,7 +40,13 @@ import gups.persist.ReproBundle
 import gups.persist.SqliteAccountStore
 import gups.persist.buildReproBundle
 import gups.persist.restoreBundle
+import gups.script.ApiDiff
+import gups.script.Changelog
+import gups.script.ChangelogParseException
 import gups.script.Linter
+import gups.script.MigrateInfo
+import gups.script.MigrateInfoException
+import gups.script.MigrationReport
 import gups.script.ScriptApi
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
@@ -68,6 +74,7 @@ fun gupsCommand(): CliktCommand = Gups().subcommands(
     Fuzz(),
     SnapshotCmd(),
     MigrateCheck(),
+    MigrateInfoCmd(),
     Docs(),
     Repro(),
     Backup(),
@@ -399,10 +406,17 @@ class Docs : CliktCommand(name = "docs") {
     val json by option("--json", help = "Write the machine-readable API model (api.json).").flag()
     val out by option("--out", help = "Output directory (default build/docs), or with --json a .json file.").file()
     val world by option("--world", help = "Course world directory; include its plugins.").file(mustExist = true, canBeFile = false)
+    val updateBaseline by option("--update-baseline", help = "Before a release: write docs/api/api-N.json, docs/api/changes-N.json and docs/MIGRATING.md.").flag()
+    val docsDir by option("--docs-dir", metavar = "DIR", help = "The engine's docs directory, for --update-baseline (default: docs).").file(canBeFile = false).default(File("docs"))
 
     override fun help(context: Context) = "Generate the API reference."
 
     override fun run() {
+        if (updateBaseline) {
+            if (json || out != null || world != null) throw UsageError("--update-baseline takes no --json, --out or --world")
+            updateBaseline()
+            return
+        }
         if (json) {
             if (world != null) throw UsageError("--world is for the HTML reference; api.json never includes plugins")
             writeJson()
@@ -422,6 +436,36 @@ class Docs : CliktCommand(name = "docs") {
         echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")
     }
 
+    /** SPEC_MILESTONE7.md §4.3: freezes the current API and changelog as the baseline of api_version N. */
+    private fun updateBaseline() {
+        val source = docsDir.resolve("CHANGELOG.md")
+        if (!source.isFile) throw UsageError("--docs-dir: no CHANGELOG.md in $docsDir")
+        val changelog = try {
+            Changelog.parse(source.readText())
+        } catch (e: ChangelogParseException) {
+            throw UsageError("$source: ${e.message}")
+        }
+        val n = EngineInfo.API_VERSION
+        val newest = changelog.versions.first()
+        if (newest.unreleased) {
+            throw UsageError(
+                "the changelog has an unreleased section (api_version ${newest.apiVersion}); drop \" (unreleased)\" from its " +
+                    "heading and set EngineInfo.API_VERSION to ${newest.apiVersion} first",
+            )
+        }
+        if (newest.apiVersion != n) throw UsageError("the newest changelog section is api_version ${newest.apiVersion}, but EngineInfo.API_VERSION is $n")
+        val api = docsDir.resolve("api").also { it.mkdirs() }
+        val files = listOf(
+            api.resolve("api-$n.json") to ApiDiff.normalize(ScriptApi.model(HarnessApi.specs()).toJson()),
+            api.resolve("changes-$n.json") to changelog.toJson(n),
+            docsDir.resolve("MIGRATING.md") to changelog.toMigratingMarkdown(),
+        )
+        for ((file, text) in files) {
+            file.writeText(text, Charsets.UTF_8)
+            echo("Wrote $file")
+        }
+    }
+
     private fun writeJson() {
         val text = ScriptApi.model(HarnessApi.specs()).toJson()
         val dest = out
@@ -437,6 +481,43 @@ class Docs : CliktCommand(name = "docs") {
             else -> dest.also { it.mkdirs() }.resolve("api.json")
         }
         file.writeText(text, Charsets.UTF_8)
+    }
+}
+
+class MigrateInfoCmd : CliktCommand(name = "migrate-info") {
+    val world by option("--world", help = "Course world directory (default: the current directory).").file(mustExist = true, canBeFile = false).default(File("."))
+    val changelogFile by option("--changelog", metavar = "FILE", help = "Changelog to check against (default: the engine's own).").file(mustExist = true, canBeDir = false)
+    val format by option("--format", help = "Output format.").choice("text", "json").default("text")
+    val packages by argument("package").multiple(required = true)
+
+    override fun help(context: Context) = "List where packages use script API symbols that changed since their api_version (SPEC §1.3)."
+
+    override fun run() {
+        val text = changelogFile?.readText() ?: DocsRenderer.bundledChangelog()
+        val changelog = try {
+            Changelog.parse(text)
+        } catch (e: ChangelogParseException) {
+            throw UsageError("${changelogFile ?: "bundled changelog"}: ${e.message}")
+        }
+        val dir = WorldDir(world.toPath())
+        val model = ScriptApi.model(HarnessApi.specs())
+        val reports = mutableListOf<MigrationReport>()
+        var failed = false
+        for (pkg in packages) {
+            if (!dir.hasPackage(pkg.removePrefix("//"))) throw UsageError("no package $pkg under $world (no package.star)")
+            try {
+                reports += MigrateInfo.inspect(dir, pkg, changelog, model)
+            } catch (e: MigrateInfoException) {
+                echo("error: ${e.message}", err = true)
+                failed = true
+            }
+        }
+        when (format) {
+            // One package prints its report object; several print an array (D-176).
+            "json" -> echo(if (packages.size == 1) reports.singleOrNull()?.toJson() ?: "" else MigrationReport.toJson(reports), trailingNewline = false)
+            else -> echo(reports.joinToString("\n") { it.renderText() }, trailingNewline = false)
+        }
+        if (failed) throw ProgramResult(1)
     }
 }
 

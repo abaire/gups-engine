@@ -3,6 +3,8 @@ package gups.cli
 import com.github.ajalt.clikt.testing.test
 import gups.core.EngineInfo
 import gups.harness.HarnessApi
+import gups.script.ApiDiff
+import gups.script.Changelog
 import gups.script.ScriptApi
 import java.io.File
 import java.nio.file.Files
@@ -25,7 +27,7 @@ class CommandsTest {
         val result = gupsCommand().test("--help")
         assertEquals(0, result.statusCode)
         for (name in listOf(
-            "serve", "test", "lint", "fuzz", "snapshot", "migrate-check", "docs", "repro", "backup", "restore", "deploy", "invite", "import-roster",
+            "serve", "test", "lint", "fuzz", "snapshot", "migrate-check", "migrate-info", "docs", "repro", "backup", "restore", "deploy", "invite", "import-roster",
         )) {
             assertContains(result.stdout, name)
         }
@@ -83,6 +85,111 @@ class CommandsTest {
         assertContains(wrongExtension.stderr, "give a directory or a .json path")
         assertFalse(dir.resolve("model.txt").exists())
     }
+
+    /**
+     * The repository check (SPEC_MILESTONE7.md §4.4 chunk 4): every API difference since the
+     * released baseline needs a changelog entry, and MIGRATING.md must be up to date.
+     */
+    @Test
+    fun `repository check - the changelog records every API change`() {
+        val docs = File(System.getProperty("gups.docsDir"))
+        val n = EngineInfo.API_VERSION
+        val changelog = Changelog.parse(docs.resolve("CHANGELOG.md").readText())
+        assertEquals(
+            docs.resolve("MIGRATING.md").readText(),
+            changelog.toMigratingMarkdown(),
+            "docs/MIGRATING.md is stale; regenerate it with `gups docs --update-baseline` (or copy Changelog.toMigratingMarkdown())",
+        )
+        val problems = ApiDiff.check(
+            docs.resolve("api/api-$n.json").readText(),
+            docs.resolve("api/changes-$n.json").readText(),
+            ScriptApi.model(HarnessApi.specs()),
+            changelog,
+        )
+        assertTrue(
+            problems.isEmpty(),
+            "The script API changed without a changelog entry. Add an entry to docs/CHANGELOG.md " +
+                "(under `## api_version ${n + 1} (unreleased)` for breaking changes, see README.md):\n" + problems.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun `docs --update-baseline writes the baseline and refuses an unreleased section`() {
+        val docs = Files.createTempDirectory("gups-docs-dir").toFile()
+        val released = "# Changelog\n\n## api_version $currentApi\n\nInitial (unstable) script API.\n"
+        docs.resolve("CHANGELOG.md").writeText(released)
+        val result = gupsCommand().test(listOf("docs", "--update-baseline", "--docs-dir", docs.path))
+        assertEquals(0, result.statusCode, result.output)
+        val api = docs.resolve("api/api-$currentApi.json")
+        for (f in listOf(api, docs.resolve("api/changes-$currentApi.json"), docs.resolve("MIGRATING.md"))) {
+            assertTrue(f.isFile, "missing $f")
+            assertContains(result.stdout, "Wrote $f")
+        }
+        assertEquals(ApiDiff.normalize(ScriptApi.model(HarnessApi.specs()).toJson()), api.readText())
+        assertEquals(Changelog.parse(released).toMigratingMarkdown(), docs.resolve("MIGRATING.md").readText())
+
+        docs.resolve("CHANGELOG.md").writeText(
+            "# Changelog\n\n## api_version ${currentApi + 1} (unreleased)\n\n### Gone\n- kind: removed\n- symbol: room.size\n\nGone.\n\n" +
+                "## api_version $currentApi\n\nInitial.\n",
+        )
+        val refused = gupsCommand().test(listOf("docs", "--update-baseline", "--docs-dir", docs.path))
+        assertEquals(1, refused.statusCode)
+        assertContains(refused.stderr, "unreleased section")
+
+        val withOut = gupsCommand().test(listOf("docs", "--update-baseline", "--out", docs.path))
+        assertEquals(1, withOut.statusCode)
+        assertContains(withOut.stderr, "--update-baseline takes no --json, --out or --world")
+    }
+
+    @Test
+    fun `migrate-info reports uses in text and json`() {
+        val world = tempWorld(
+            mapOf(
+                "zones/forest/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Forest\", colour = \"green\")\n",
+                "zones/forest/mobs.star" to "def wake(ctx):\n    ctx.act_move(ctx.self, \"north\")\n",
+                "zones/meadow/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Meadow\")\n",
+            ),
+        ).toFile()
+        val changelog = world.resolve("CHANGELOG.md")
+        changelog.writeText(
+            "# Changelog\n\n## api_version 2 (unreleased)\n\n### Renamed `ctx.act_move` to `ctx.walk`\n- kind: renamed\n" +
+                "- symbol: ctx.act_move\n- replacement: ctx.walk\n\nMobs now walk with `ctx.walk(mob, dir)`.\n\n" +
+                "```python before\nctx.act_move(ctx.self, \"north\")\n```\n\n```python after\nctx.walk(ctx.self, \"north\")\n```\n\n" +
+                "## api_version 1\n\nInitial (unstable) script API.\n",
+        )
+        val args = listOf("migrate-info", "--world", world.path, "--changelog", changelog.path)
+        val text = gupsCommand().test(args + "//zones/forest")
+        assertEquals(0, text.statusCode, text.output)
+        assertEquals(
+            """
+            //zones/forest (package api_version 1, current api_version 1)
+              //zones/forest:mobs.star:2: ctx.act_move(ctx.self, "north")
+                [renamed] ctx.act_move -> ctx.walk (api_version 2, unreleased)
+                Mobs now walk with `ctx.walk(mob, dir)`.
+                before:
+                  ctx.act_move(ctx.self, "north")
+                after:
+                  ctx.walk(ctx.self, "north")
+            """.trimIndent() + "\n",
+            text.stdout,
+        )
+        val json = gupsCommand().test(args + listOf("--format", "json", "zones/forest"))
+        assertEquals(0, json.statusCode, json.output)
+        assertTrue(json.stdout.startsWith("{\n  \"package\": \"//zones/forest\","), json.stdout)
+        assertContains(json.stdout, "\"line\": 2,")
+        assertContains(json.stdout, "\"general_changes\": []")
+
+        val two = gupsCommand().test(args + listOf("zones/forest", "zones/meadow"))
+        assertContains(two.stdout, "ctx.walk(ctx.self, \"north\")\n\n//zones/meadow (package api_version 1, current api_version 1)\n  No uses of changed symbols.\n")
+        val twoJson = gupsCommand().test(args + listOf("--format", "json", "zones/forest", "zones/meadow"))
+        assertTrue(twoJson.stdout.startsWith("[\n"), twoJson.stdout)
+
+        val missing = gupsCommand().test(args + "zones/none")
+        assertEquals(1, missing.statusCode)
+        assertContains(missing.stderr, "no package zones/none")
+    }
+
+    private val currentApi = EngineInfo.API_VERSION
 
     /**
      * `api.json` byte for byte against a committed copy, so a change to the API shows up in review

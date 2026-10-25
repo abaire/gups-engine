@@ -24,12 +24,30 @@
 </header>
 <main>
 <h1>Changelog</h1>
-<h1 id="changelog">Changelog</h1>
-<h2 id="api_version-2">api_version 2 (unreleased)</h2>
-<h3 id="added-room-lighting">Added <code>room.lighting</code></h3>
+<p class="intro">Script-facing changes per <code>api_version</code>, newest first. <a href="changes.json">changes.json</a> lists them for tools.</p>
+<section id="api_version-2" class="version">
+<h2>api_version 2 <span class="badge">unreleased</span></h2>
+<article id="change-2-1" class="entry">
+<h3>Added <code>room.lighting</code> <span class="badge kind">added</span></h3>
+<p>Symbol <code>room.lighting</code></p>
 <p>Rooms take a <code>lighting</code> keyword.</p>
-<h2 id="api_version-1">api_version 1</h2>
+</article>
+<article id="change-2-2" class="entry">
+<h3>Renamed <code>exit.dest</code> <span class="badge kind">renamed</span></h3>
+<p>Symbol <code>exit.dest</code>, replacement <a href="declarations.html#exit.to"><code>exit.to</code></a></p>
+<p>Exits name their target with <code>to</code>.</p>
+<div class="example">
+<p class="caption">Before</p>
+<pre><code>exit(&quot;north&quot;, dest = &quot;:hall&quot;)</code></pre>
+<p class="caption">After</p>
+<pre><code>exit(&quot;north&quot;, to = &quot;:hall&quot;)</code></pre>
+</div>
+</article>
+</section>
+<section id="api_version-1" class="version">
+<h2>api_version 1</h2>
 <p>Initial (unstable) script API.</p>
+</section>
 </main>
 </body>
 </html>

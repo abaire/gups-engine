@@ -96,6 +96,42 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
+M7.3 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §4): changelog and migration artifacts.
+
+- **Changelog format:** `docs/CHANGELOG.md` has one `## api_version N` section per version, newest
+  first; breaking changes collect under `## api_version N+1 (unreleased)`. Each change is an entry:
+  ````markdown
+  ### Renamed `ctx.act_move` to `ctx.walk`
+  - kind: renamed            # removed, renamed, signature, behavior or added
+  - symbol: ctx.act_move     # an api.json symbol
+  - replacement: ctx.walk    # required for renamed
+
+  One or more lines of summary.
+
+  ```python before
+  ctx.act_move(ctx.self, "north")
+  ```
+
+  ```python after
+  ctx.walk(ctx.self, "north")
+  ```
+  ````
+  `Changelog.parse` rejects anything else with `CHANGELOG.md:<line>: <reason>`.
+- **Every API change needs an entry:** a CI test diffs the current model against the released
+  baseline `docs/api/api-N.json` and fails for any removed, added or changed symbol (doc-only edits
+  excepted) that no entry covers; additions take `kind: added`, under the unreleased section or
+  appended to `## api_version N`. Released sections must still match `docs/api/changes-N.json`.
+- **Generated artifacts:** `docs/MIGRATING.md` (breaking entries with their snippets, checked by a
+  test) and `changes.json`, which `gups docs` ships next to `api.json`.
+- **`gups migrate-info [--world DIR] [--changelog FILE] [--format text|json] <package>...`:** lists
+  every place a package uses a symbol that changed since its `api_version`, with the entry and its
+  snippets. It reads the syntax tree only, so it works on packages the engine no longer loads.
+- **Releasing:** before tagging, if the changelog has an `(unreleased)` section, drop
+  ` (unreleased)` from its heading and set `EngineInfo.API_VERSION` to its version. Then run
+  `gups docs --update-baseline` (from the engine checkout; `--docs-dir DIR` points elsewhere), which
+  writes `docs/api/api-N.json`, `docs/api/changes-N.json` and `docs/MIGRATING.md`, and commit them.
+  A release with only additions keeps `N` and just reruns that command.
+
 M7.2 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §3): the HTML API reference.
 
 - **`gups docs [--out DIR] [--world DIR]`:** writes a static, offline HTML reference of the whole

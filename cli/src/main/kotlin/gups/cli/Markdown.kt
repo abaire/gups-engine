@@ -81,7 +81,7 @@ object Markdown {
     }
 
     /** Inline `code`, **bold** and [links](…) as text; everything escaped. */
-    private fun inline(text: String): String {
+    internal fun inline(text: String): String {
         val sb = StringBuilder()
         val parts = text.split('`')
         // An unmatched trailing backtick stays literal.

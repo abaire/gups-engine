@@ -1,0 +1,11 @@
+{
+  "api_version": 1,
+  "versions": [
+    {
+      "api_version": 1,
+      "unreleased": false,
+      "intro": "Initial (unstable) script API.",
+      "entries": []
+    }
+  ]
+}

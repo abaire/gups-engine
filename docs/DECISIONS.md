@@ -1928,4 +1928,71 @@ names.
   is the only, current version.
 *Code:* `DocsRenderer.kt`, `Markdown.kt`, `DocExamples.kt`, `DocExamplesTest`, `Docs`, `WebServer.mountDocs`, `DocsServer`, `GupsServer`, `cli/build.gradle.kts`, `.github/workflows/ci.yml`.
 
+### D-173 Changelog grammar details (M7 design §4.1–§4.2) — `open`
+- **Meta block:** `- key: value` lines right after the `###` heading (blank lines allowed among them)
+  form the meta block; the first other line starts the summary. The meta block is validated when it
+  ends, so a missing `kind`/`symbol`/`replacement` is reported at the entry heading before any later
+  error in that entry (§4.6 example 2). A `- x: y` line in the summary or a version intro is prose.
+- **Extra errors:** a changelog with no version section (reported at its last line); a code fence in a
+  version intro or preamble ("must belong to an entry"); a fence before the entry has any summary;
+  `renamed` whose replacement equals its symbol is reported at the replacement line; a `replacement`
+  on `added` is reported at that line; two `before` blocks in a row are reported at the first.
+  `kind` values are case-sensitive. The parser accepts `\r\n` and ignores one trailing newline.
+- **Intro and summary text:** their lines are joined with `\n` and trimmed, so inner blank lines stay.
+  Snippet bodies are kept verbatim (no trimming).
+- **`changelog.html`:** each version is a `<section id="api_version-N" class="version">` with an
+  `unreleased` badge; each entry an `<article id="change-N-i" class="entry">` whose `<h3>` is the title
+  (inline Markdown) plus a `badge kind` span; then "Symbol …, replacement …"; the summary and intro
+  through `Markdown.toHtml`; snippets as captioned Before/After `<pre>` blocks. The page intro is a fixed
+  sentence linking `changes.json`, since the parser drops the preamble. `DocsRenderer.render` now throws
+  `ChangelogParseException` for a malformed changelog. The escaping test's changelog moved its prose
+  into a version intro, and the golden test's changelog gained `kind`/`symbol` lines and a renamed entry.
+- **`changes.json` in docs** is written with the model's `apiVersion` as its top-level `api_version`.
+*Code:* `Changelog.kt`, `DocsRenderer.kt`, `Markdown.inline`, `ChangelogTest`, `DocsRendererTest`.
+
+### D-174 The API-change check (M7 design §4.3) — `open`
+- **Kept fields:** scalars and non-empty lists of primitives. Empty lists are dropped along with lists of
+  objects, because an empty `params` can't be told apart from an empty `allowed_values`; a list going
+  from empty to non-empty still shows up as a changed key set.
+- **One problem per subtree:** an uncovered removed or added symbol is not reported when its parent is
+  also uncovered in the same category (removing `ctx.act_move` is one problem, not three).
+- **Coverage:** a `signature` entry covers symbols strictly beneath it for removals and additions, and
+  itself or beneath it for changes. An entry counts as used only when it covers a difference in a way its
+  kind allows (an `added` entry on a changed symbol is stale).
+- **Extra problems:** a frozen section missing from the changelog; a released (not unreleased) section
+  absent from the frozen history ("mark it (unreleased) or run `gups docs --update-baseline`"); a
+  `renamed` entry whose replacement isn't a current symbol, reported in step 6.
+- **Frozen history file:** `docs/api/changes-N.json` is committed next to `api-N.json`, both rewritten
+  only by `gups docs --update-baseline`; raising `api_version` is a manual pre-tag step (§4.3), because
+  the tagged commit must already contain the baseline.
+- **`--update-baseline`** reads `<docs-dir>/CHANGELOG.md` (not the bundled copy), runs the full model
+  (harness included), and prints `Wrote <path>` per file. `ApiDiff.normalize` replaces only the first
+  `engine_version`.
+*Code:* `ApiDiff.kt`, `ApiDiffTest`, `Docs.updateBaseline`, `CommandsTest` (repository check), `docs/api/`.
+
+### D-175 `MigrateInfo` matching (M7 design §4.2 item 4) — `open`
+- **Files:** every `*.star` file of the package directory, `package.star` included, in name order. A
+  syntax error in any of them, a missing `package(...)` call, or a non-literal `api_version` is a
+  `MigrateInfoException` (the CLI prints `error: …` and exits 1 after the other packages).
+- **Matching:** symbols are matched on `CallExpression`, `DotExpression`, `Identifier`, `DefStatement` and
+  `Argument` nodes; the line is the node's start line and `sourceLine` is that line trimmed. Identical
+  uses (same file, line and entry) are reported once. `fn.param` matches positionally when the call has
+  more positional arguments than `param`'s index; a parameter no longer in the model matches by keyword
+  only. Symbols of other shapes (for example `module.x.y`) match nothing. The `ctx` aliases are the first
+  parameters of top-level `def`s in the same file. `rules:fn` matches when `package(kind = "rules")` is
+  a literal.
+- **General changes** are `GeneralChange(entry, apiVersion, unreleased)` rather than bare entries, so the
+  text and JSON can name the version. In JSON each is
+  `{"api_version", "unreleased", "title", …, "snippets"}`. In text it is
+  `[behavior] <symbol> (api_version N[, unreleased]): <summary on one line>`, indented under
+  `  General changes (check by hand):`. A report with no uses and no general changes prints
+  `  No uses of changed symbols.`.
+*Code:* `MigrateInfo.kt`, `MigrateInfoTest`.
+
+### D-176 `gups migrate-info` CLI (M7 design §4.4 chunk 3) — `open`
+- With one package, `--format json` prints that report's object (§4.6 example 3); with several, an array.
+- A package with no `package.star` is a usage error before any report is printed. A malformed
+  `--changelog` (or bundled changelog) is a usage error naming the file.
+*Code:* `MigrateInfoCmd`, `CommandsTest`.
+
 

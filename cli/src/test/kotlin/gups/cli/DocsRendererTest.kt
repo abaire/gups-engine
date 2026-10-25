@@ -71,7 +71,7 @@ class DocsRendererTest {
         val model = full.copy(
             declarations = listOf(decl.copy(doc = nasty, params = decl.params.mapIndexed { i, p -> if (i == 0) p.copy(default = nasty) else p })),
         )
-        val page = DocsRenderer.render(model, changelogMarkdown = "# $nasty\n\n$nasty\n", examples = emptyMap())
+        val page = DocsRenderer.render(model, changelogMarkdown = "# $nasty\n\n## api_version 1\n\n$nasty\n", examples = emptyMap())
         val escaped = "&lt;b&gt;Tom &amp; &quot;Jerry&quot;&lt;/b&gt;"
         assertContains(page.getValue("declarations.html"), "<p>$escaped</p>")
         assertContains(page.getValue("declarations.html"), "<code>$escaped</code>")
@@ -154,8 +154,25 @@ class DocsRendererTest {
             ## api_version 2 (unreleased)
 
             ### Added `room.lighting`
+            - kind: added
+            - symbol: room.lighting
 
             Rooms take a `lighting` keyword.
+
+            ### Renamed `exit.dest`
+            - kind: renamed
+            - symbol: exit.dest
+            - replacement: exit.to
+
+            Exits name their target with `to`.
+
+            ```python before
+            exit("north", dest = ":hall")
+            ```
+
+            ```python after
+            exit("north", to = ":hall")
+            ```
 
             ## api_version 1
 

@@ -1,5 +1,7 @@
 package gups.cli
 
+import gups.script.Changelog
+import gups.script.ChangelogEntry
 import gups.script.DeclSpec
 import gups.script.DocExample
 import gups.script.DocExamples
@@ -39,6 +41,7 @@ object DocsRenderer {
         "harness.html",
         "plugins.html",
         "changelog.html",
+        "changes.json",
         "api.json",
     )
 
@@ -78,6 +81,7 @@ object DocsRenderer {
         plugins: List<PluginDocSpec> = emptyList(),
         examples: Map<String, DocExample> = DocExamples.ALL,
     ): Map<String, String> {
+        val changelog = Changelog.parse(changelogMarkdown)
         val r = Renderer(model, examples)
         val pages = mapOf(
             "style.css" to STYLE,
@@ -89,7 +93,8 @@ object DocsRenderer {
             "rules.html" to r.page("rules.html") { with(r) { rules() } },
             "harness.html" to r.page("harness.html") { with(r) { harness() } },
             "plugins.html" to r.page("plugins.html") { with(r) { plugins(plugins) } },
-            "changelog.html" to r.page("changelog.html") { append(Markdown.toHtml(changelogMarkdown)) },
+            "changelog.html" to r.page("changelog.html") { with(r) { changelog(changelog) } },
+            "changes.json" to changelog.toJson(model.apiVersion),
             "api.json" to model.toJson(),
         )
         return FILES.associateWith { pages.getValue(it) }
@@ -298,6 +303,37 @@ object DocsRenderer {
                 }
                 append("</section>\n")
             }
+        }
+
+        fun StringBuilder.changelog(changelog: Changelog) {
+            append("<p class=\"intro\">Script-facing changes per <code>api_version</code>, newest first. ")
+                .append("<a href=\"changes.json\">changes.json</a> lists them for tools.</p>\n")
+            val symbols = pageSymbols(model).values.flatten().toSet()
+            fun symbol(s: String) =
+                if (s in symbols) "<a href=\"${esc(symbolHref(model, s))}\"><code>${esc(s)}</code></a>" else "<code>${esc(s)}</code>"
+            for (v in changelog.versions) {
+                append("<section id=\"api_version-").append(v.apiVersion).append("\" class=\"version\">\n")
+                append("<h2>api_version ").append(v.apiVersion)
+                if (v.unreleased) append(" <span class=\"badge\">unreleased</span>")
+                append("</h2>\n")
+                if (v.intro.isNotEmpty()) append(Markdown.toHtml(v.intro))
+                for ((i, e) in v.entries.withIndex()) changeEntry(v.apiVersion, i + 1, e, ::symbol)
+                append("</section>\n")
+            }
+        }
+
+        fun StringBuilder.changeEntry(version: Int, index: Int, e: ChangelogEntry, symbol: (String) -> String) {
+            append("<article id=\"change-").append(version).append('-').append(index).append("\" class=\"entry\">\n")
+            append("<h3>").append(Markdown.inline(e.title)).append(" <span class=\"badge kind\">").append(e.kind.wireName).append("</span></h3>\n")
+            append("<p>Symbol ").append(symbol(e.symbol))
+            e.replacement?.let { append(", replacement ").append(symbol(it)) }
+            append("</p>\n")
+            append(Markdown.toHtml(e.summary))
+            for (s in e.snippets) {
+                append("<div class=\"example\">\n<p class=\"caption\">Before</p>\n<pre><code>").append(esc(s.before)).append("</code></pre>\n")
+                append("<p class=\"caption\">After</p>\n<pre><code>").append(esc(s.after)).append("</code></pre>\n</div>\n")
+            }
+            append("</article>\n")
         }
 
         // ---- Entries ------------------------------------------------------------------------

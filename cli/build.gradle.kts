@@ -46,6 +46,9 @@ tasks.test {
     // The committed HTML reference of a small model (DocsRendererTest).
     systemProperty("gups.docsGolden", layout.projectDirectory.dir("src/test/resources/docs-golden").asFile.absolutePath)
     systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
+    // The changelog, MIGRATING.md and API baselines the repository check reads (SPEC_MILESTONE7.md §4.4).
+    inputs.dir(rootProject.file("docs")).withPropertyName("docs")
+    systemProperty("gups.docsDir", rootProject.file("docs").absolutePath)
 }
 
 // ---- The HTML API reference (SPEC_MILESTONE7.md §3.2) -----------------------------------

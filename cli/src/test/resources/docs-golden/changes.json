@@ -1,0 +1,39 @@
+{
+  "api_version": 1,
+  "versions": [
+    {
+      "api_version": 2,
+      "unreleased": true,
+      "intro": "",
+      "entries": [
+        {
+          "title": "Added `room.lighting`",
+          "kind": "added",
+          "symbol": "room.lighting",
+          "replacement": null,
+          "summary": "Rooms take a `lighting` keyword.",
+          "snippets": []
+        },
+        {
+          "title": "Renamed `exit.dest`",
+          "kind": "renamed",
+          "symbol": "exit.dest",
+          "replacement": "exit.to",
+          "summary": "Exits name their target with `to`.",
+          "snippets": [
+            {
+              "before": "exit(\"north\", dest = \":hall\")",
+              "after": "exit(\"north\", to = \":hall\")"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "api_version": 1,
+      "unreleased": false,
+      "intro": "Initial (unstable) script API.",
+      "entries": []
+    }
+  ]
+}
