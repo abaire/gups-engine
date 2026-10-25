@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 
 class ApiModelTest {
     private val model = ScriptApi.model(harness = emptyList())
+    private val scriptExamples = DocExamples.ALL - setOf("diagnostic", "p", "t", "w")
 
     private fun load(files: Map<String, String>, vararg pkgs: String = arrayOf("zones/z")): LoadResult =
         ScriptLoader(WorldDir(tempWorld(files)), ScriptLimits.HARNESS).load(pkgs.toList())
@@ -22,8 +23,21 @@ class ApiModelTest {
         assertEquals(ScriptApi.BUILTIN_CLASSES.toSet(), builtins.toSet(), "ScriptApi.BUILTIN_CLASSES is out of date")
         val problems = ScriptApi.validate(model, builtins)
         assertTrue(problems.isEmpty(), "API model completeness failed:\n" + problems.joinToString("\n"))
+        // This model has no harness types (they live in :harness), so leave out their examples.
+        val exampleProblems = DocExamples.problems(model, scriptExamples)
+        assertTrue(exampleProblems.isEmpty(), exampleProblems.joinToString("\n"))
         assertEquals(EngineInfo.API_VERSION, model.apiVersion)
         assertEquals(EngineInfo.version, model.engineVersion)
+    }
+
+    @Test
+    fun `DocExamples problems reports unknown symbols, blank examples and missing required examples`() {
+        assertEquals(emptyList(), DocExamples.problems(model, scriptExamples))
+        val broken = scriptExamples - "room" + ("room.nope" to DocExample(pkg = "x = 1\n")) + ("heal" to DocExample())
+        val problems = DocExamples.problems(model, broken)
+        assertTrue(problems.any { "'room' needs an example" in it }, problems.joinToString("\n"))
+        assertTrue(problems.any { "'room.nope', which is not an api.json symbol" in it }, problems.joinToString("\n"))
+        assertTrue(problems.any { "'heal' has neither pkg nor test" in it }, problems.joinToString("\n"))
     }
 
     @Test

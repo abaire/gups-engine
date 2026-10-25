@@ -1,6 +1,7 @@
 package gups.harness
 
 import gups.script.Ctx
+import gups.script.DocExamples
 import gups.script.ScriptApi
 import gups.script.findBuiltinClasses
 import kotlin.test.Test
@@ -15,6 +16,8 @@ class HarnessApiTest {
         val model = ScriptApi.model(HarnessApi.specs())
         val problems = ScriptApi.validate(model, findBuiltinClasses(Ctx::class.java) + harness)
         assertTrue(problems.isEmpty(), problems.joinToString("\n"))
+        val exampleProblems = DocExamples.problems(model)
+        assertTrue(exampleProblems.isEmpty(), exampleProblems.joinToString("\n"))
         assertEquals(listOf("diagnostic", "p", "t", "w"), model.harness.map { it.name })
     }
 }

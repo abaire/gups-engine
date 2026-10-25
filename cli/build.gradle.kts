@@ -29,6 +29,11 @@ application {
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
+// The changelog the HTML reference renders (DocsRenderer.bundledChangelog).
+tasks.processResources {
+    from(rootProject.file("docs/CHANGELOG.md")) { into("gups/docs") }
+}
+
 tasks.test {
     val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
     inputs.dir(templateWorld).withPropertyName("templateWorld")
@@ -38,7 +43,41 @@ tasks.test {
     // The committed api.json the golden test compares with (a test resource, so already an
     // input); -Dgups.updateGolden=true rewrites it.
     systemProperty("gups.apiGolden", layout.projectDirectory.file("src/test/resources/api.golden.json").asFile.absolutePath)
+    // The committed HTML reference of a small model (DocsRendererTest).
+    systemProperty("gups.docsGolden", layout.projectDirectory.dir("src/test/resources/docs-golden").asFile.absolutePath)
     systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
+}
+
+// ---- The HTML API reference (SPEC_MILESTONE7.md §3.2) -----------------------------------
+
+val generatedDocsDir = layout.buildDirectory.dir("generated-docs")
+
+val generateDocs by tasks.registering(JavaExec::class) {
+    group = "documentation"
+    description = "Writes the HTML API reference into build/generated-docs."
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "gups.cli.MainKt"
+    val out = generatedDocsDir
+    argumentProviders += CommandLineArgumentProvider { listOf("docs", "--out", out.get().asFile.absolutePath) }
+    outputs.dir(generatedDocsDir)
+    doFirst { out.get().asFile.deleteRecursively() }
+}
+
+distributions {
+    main {
+        contents {
+            from(generateDocs) { into("docs") }
+        }
+    }
+}
+
+val docsArchive by tasks.registering(Zip::class) {
+    group = "distribution"
+    description = "Packs the API reference as build/distributions/gups-docs-<version>.zip."
+    archiveFileName = "gups-docs-${project.version}.zip"
+    destinationDirectory = layout.buildDirectory.dir("distributions")
+    into("gups-docs-${project.version}")
+    from(generateDocs)
 }
 
 // ---- Release images (M6 design §7.3) -------------------------------------------------------
@@ -101,6 +140,7 @@ val jlinkImage by tasks.registering {
             "--no-man-pages", "--compress=zip-6", "--output", out.resolve("runtime").path,
         )
         lib.copyRecursively(out.resolve("lib"))
+        install.get().dir("docs").asFile.copyRecursively(out.resolve("docs"))
         val bin = out.resolve("bin").also { it.mkdirs() }.resolve("gups")
         bin.writeText(
             """

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effects and behaviors — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html" class="current">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Effects and behaviors</h1>
+<h2>Effect primitives</h2>
+<p class="intro">Declarative effects for skill(effect=...).</p>
+<section id="heal" class="entry">
+<h3><code>heal(dice)</code> <span class="since">since api_version 1</span></h3>
+<p>Restore hit points.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="heal.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Hit points restored, as dice such as '2d4'.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;mend&quot;, kind = &quot;spell&quot;, cost = {&quot;mana&quot;: 5}, target = &quot;ally&quot;,
+      effect = heal(dice = &quot;2d4&quot;))</code></pre>
+</div>
+</section>
+<h2>Behaviors</h2>
+<p class="intro">Built-in mob behaviors for mob(behaviors=[...]).</p>
+<section id="wander" class="entry">
+<h3><code>wander(radius = 3, chance = 0.1)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: with probability chance per think, steps through a random open exit within radius exits of home.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="wander.radius"><td><code>radius</code></td><td>positional or named</td><td><code>3</code></td><td>Maximum distance from home, in exits.</td></tr>
+<tr id="wander.chance"><td><code>chance</code></td><td>positional or named</td><td><code>0.1</code></td><td>Probability of taking a step on each think, between 0 and 1.</td></tr>
+</tbody>
+</table>
+</section>
+</main>
+</body>
+</html>

@@ -20,7 +20,9 @@ import gups.core.world.DevLogin
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.alert
+import gups.harness.HarnessApi
 import gups.net.CERT_CHECK_INTERVAL
+import gups.net.DocsServer
 import gups.net.ServerTls
 import gups.net.TelnetServer
 import gups.net.WebAssets
@@ -28,6 +30,7 @@ import gups.net.WebServer
 import gups.persist.Backups
 import gups.persist.SqlitePersistence
 import gups.script.DevTools
+import gups.script.ScriptApi
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
@@ -99,6 +102,8 @@ class GupsServer(
     private val db: Path? = defaultDb(dir),
     private val fresh: Boolean = false,
     private val prod: ProdOptions? = null,
+    /** `--dev`: the plain-HTTP port of the API reference on 127.0.0.1; null serves none. */
+    private val docsPort: Int? = null,
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
     private var persistence: SqlitePersistence? = null
@@ -132,11 +137,16 @@ class GupsServer(
 
     private val webServer by lazy {
         prod?.web?.let { w ->
-            WebServer(loop, WebLogins(AccountService(persistence!!.accounts), limiter), WebAssets.fromClasspath(), w.host, w.port, sessionIds, w.tls)
+            WebServer(loop, WebLogins(AccountService(persistence!!.accounts), limiter), WebAssets.fromClasspath(), w.host, w.port, sessionIds, w.tls, docs = docs)
         }
     }
 
-    /** Bound ports by transport (`telnet`, `tls`, `ws`), once [run] has started the listeners. */
+    /** The API reference, rendered once at boot and served at `/docs/` (SPEC_MILESTONE7.md §3.2). */
+    private var docs: Map<String, ByteArray> = emptyMap()
+
+    private val docsServer by lazy { docsPort?.takeIf { prod == null }?.let { DocsServer(docs, "127.0.0.1", it) } }
+
+    /** Bound ports by transport (`telnet`, `tls`, `ws`, `admin`, `docs`), once [run] has started the listeners. */
     @Volatile var ports: Map<String, Int> = emptyMap()
         private set
 
@@ -155,6 +165,8 @@ class GupsServer(
         module.problems().forEach { log("error: $it") }
         if (module.problems().isNotEmpty()) return false
         module.warnings().forEach { log("warning: $it") }
+        // M7.4 adds the world's plugins.
+        docs = DocsRenderer.render(ScriptApi.model(HarnessApi.specs())).mapValues { it.value.toByteArray(Charsets.UTF_8) }
         val loader = ScriptLoader(dir, ScriptLimits())
         val result = loader.load(packages)
         for (e in result.errors) log("load error: ${e.render()}")
@@ -336,7 +348,9 @@ class GupsServer(
             // Shutdown ends with a final checkpoint (SPEC §5.11).
             if (persistence != null) world.checkpointNow("shutdown")
         }
-        ports = listeners.associate { it.transport to it.start() } + listOfNotNull(webServer?.let { "ws" to it.start() }, adminServer?.let { "admin" to it.start() })
+        ports = listeners.associate { it.transport to it.start() } + listOfNotNull(webServer?.let { "ws" to it.start() }, adminServer?.let { "admin" to it.start() }) +
+            // Last, so ready() still gets the telnet port.
+            listOfNotNull(docsServer?.let { "docs" to it.start() })
         val certs = prod?.tls?.tls ?: prod?.web?.tls
         // Renewed certificates are picked up without a restart (M6 design §5.1).
         val certChecks = launch(Dispatchers.IO) {
@@ -373,6 +387,7 @@ class GupsServer(
         listeners.forEach { it.stop() }
         webServer?.stop()
         adminServer?.stop()
+        docsServer?.stop()
         persistence?.close()?.let { ok -> if (!ok) log("Some changes could not be saved before shutdown.") }
         stopped.countDown()
     }

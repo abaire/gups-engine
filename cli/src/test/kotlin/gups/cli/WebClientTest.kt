@@ -139,6 +139,27 @@ class WebClientTest {
         ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye").get()
     }
 
+    @Test
+    fun `the API reference is served at docs without a login`() = withWebServer { base, _ ->
+        val http = HttpClient.newBuilder().sslContext(trustAll).build()
+        fun get(path: String) = http.send(HttpRequest.newBuilder(URI("$base$path")).build(), HttpResponse.BodyHandlers.ofString())
+        val redirect = get("/docs")
+        assertEquals(302, redirect.statusCode())
+        assertEquals("/docs/", redirect.headers().firstValue("Location").orElse(null))
+        val index = get("/docs/")
+        assertEquals(200, index.statusCode(), index.body() + index.headers().map())
+        assertEquals("text/html; charset=UTF-8", index.headers().firstValue("Content-Type").orElse(null))
+        assertContains(index.body(), "api_version")
+        assertEquals(200, get("/docs/declarations.html").statusCode())
+        val css = get("/docs/style.css")
+        assertEquals(200, css.statusCode())
+        assertTrue(css.headers().firstValue("Content-Type").orElse("").startsWith("text/css"))
+        val json = get("/docs/api.json")
+        assertEquals(200, json.statusCode())
+        assertTrue(json.headers().firstValue("Content-Type").orElse("").startsWith("application/json"))
+        assertEquals(404, get("/docs/nope.html").statusCode())
+    }
+
     /**
      * The real client in headless Firefox (M6 design §6.3): on Linux x64 CI, where Firefox is
      * installed, or anywhere with `-Dgups.browserTest=true`.

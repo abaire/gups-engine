@@ -96,6 +96,19 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
+M7.2 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §3): the HTML API reference.
+
+- **`gups docs [--out DIR] [--world DIR]`:** writes a static, offline HTML reference of the whole
+  Script API (default `build/docs`): declarations and settings, hooks, `ctx` and views, effects and
+  behaviors, rules, the test harness, plugins, the changelog, and `api.json`. Every page is tagged
+  with the `api_version`, and every `api.json` symbol has an anchor.
+- **Examples that can't rot:** `DocExamples` holds a short example for every declaration, constant,
+  effect primitive, behavior and harness type; `DocExamplesTest` runs each one as a harness test.
+- **Where to find it:** in the OCI image at `/opt/gups/docs/`, in the jlink image and `installDist`
+  under `docs/`, as `gups-docs-<version>.zip` on each GitHub release, and served by the server at
+  `/docs/` with no login: on the `--https` listener with `--prod`, and at
+  `http://127.0.0.1:4080/docs/` with `--dev` (`--docs-port PORT` changes the port).
+
 M7.1 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §1–§2): one description of the Script API.
 
 - **Spec-driven declarations:** `DeclSpec` defines every package declaration (`package`, `room`,
@@ -211,6 +224,4 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M7.2–M7.4: HTML reference (`gups docs`), `api_version` compatibility check, `MIGRATING.md`, plugins.
-
-`gups docs` (without `--json`) still exits with status 3 ("not implemented").
+- M7.3–M7.5: the structured changelog, `MIGRATING.md` and the API-change check, plugins.

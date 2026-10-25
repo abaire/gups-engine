@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hooks — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html" class="current">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Hooks</h1>
+<table>
+<thead><tr><th>Hook</th><th>Signature</th><th>Vetoable</th><th>Attaches to</th></tr></thead>
+<tbody>
+<tr><td><a href="#hook-on_enter"><code>on_enter</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob</td></tr>
+</tbody>
+</table>
+<section id="hook-on_enter" class="entry">
+<h3><code>on_enter</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after an actor enters the room.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.from_room"><code>from_room</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+</main>
+</body>
+</html>

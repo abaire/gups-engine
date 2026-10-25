@@ -1,0 +1,2234 @@
+{
+  "api_version": 1,
+  "engine_version": "<engine>",
+  "declarations": [
+    {
+      "symbol": "exit",
+      "name": "exit",
+      "doc": "An exit, for room(exits=[...]).",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "exit.direction",
+          "name": "direction",
+          "type": "str",
+          "positional": true,
+          "keyword": false,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Exit direction name, such as 'north', 'up' or a custom word.",
+          "since": 1
+        },
+        {
+          "symbol": "exit.to",
+          "name": "to",
+          "type": "label",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Destination room label.",
+          "since": 1
+        },
+        {
+          "symbol": "exit.entry_index",
+          "name": "entry_index",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "0",
+          "allowed_values": [],
+          "doc": "Track index in the destination room where travellers arrive, or -1 for the back.",
+          "since": 1
+        },
+        {
+          "symbol": "exit.blocks",
+          "name": "blocks",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "doc": "Perception and spell channels blocked by this exit.",
+          "since": 1
+        },
+        {
+          "symbol": "exit.door",
+          "name": "door",
+          "type": "door",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Optional door on this exit, built with door(...).",
+          "since": 1
+        },
+        {
+          "symbol": "exit.one_way",
+          "name": "one_way",
+          "type": "bool",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "False",
+          "allowed_values": [],
+          "doc": "True if this exit intentionally has no return exit.",
+          "since": 1
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "symbol": "module",
+      "name": "module",
+      "doc": "Declares the world's metadata in MODULE.gups.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "module.engine",
+          "name": "engine",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Engine version the world was written for.",
+          "since": 1
+        },
+        {
+          "symbol": "module.api_version",
+          "name": "api_version",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "1",
+          "allowed_values": [],
+          "doc": "Script API version the world pins.",
+          "since": 1
+        },
+        {
+          "symbol": "module.checkpoint_minutes",
+          "name": "checkpoint_minutes",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "30",
+          "allowed_values": [],
+          "doc": "Minutes between routine database checkpoints.",
+          "since": 1
+        },
+        {
+          "symbol": "module.start_room",
+          "name": "start_room",
+          "type": "label",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Room label where new characters start.",
+          "since": 1
+        }
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "symbol": "ALL",
+      "name": "ALL",
+      "type": "list[str]",
+      "value": "[\"sight\", \"sound\", \"noise\", \"spell\"]",
+      "doc": "All perception and spell channels: sight, sound, noise, spell.",
+      "since": 1
+    }
+  ],
+  "hooks": [
+    {
+      "symbol": "hook:on_enter",
+      "name": "on_enter",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "from_room", "room", "pulse", "rng"],
+      "doc": "Fires after an actor enters the room.",
+      "since": 1
+    }
+  ],
+  "ctx": {
+    "symbol": "ctx",
+    "name": "ctx",
+    "builtin_type": "ctx",
+    "doc": "The context of one hook invocation.",
+    "since": 1,
+    "fields": [
+      {
+        "symbol": "ctx.actor",
+        "name": "actor",
+        "doc": "The actor performing the action, or the damage/kill source.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.affect",
+        "name": "affect",
+        "doc": "The affect, for affect on_tick and on_expire.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.amount",
+        "name": "amount",
+        "doc": "The damage dealt, for on_damage.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.args",
+        "name": "args",
+        "doc": "A command's argument text, or a timer's keyword arguments as a dict.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.direction",
+        "name": "direction",
+        "doc": "The movement direction name, for enter and exit hooks.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.elapsed_pulses",
+        "name": "elapsed_pulses",
+        "doc": "Pulses spent dormant, for on_wake.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.event",
+        "name": "event",
+        "doc": "For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.from_room",
+        "name": "from_room",
+        "doc": "The room the actor came from, for enter hooks.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.item",
+        "name": "item",
+        "doc": "The item being picked up, dropped, used or given.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.proposals",
+        "name": "proposals",
+        "doc": "For think: behavior proposals, best first.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.pulse",
+        "name": "pulse",
+        "doc": "Game time.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.rng",
+        "name": "rng",
+        "doc": "The seeded random number generator.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.room",
+        "name": "room",
+        "doc": "The room the event happens in.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.self",
+        "name": "self",
+        "doc": "The hook's owner.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.skill",
+        "name": "skill",
+        "doc": "The skill being cast, for before_cast, on_cast_start and on_cast.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.source_room",
+        "name": "source_room",
+        "doc": "For on_nearby: the room the event happened in.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.target",
+        "name": "target",
+        "doc": "The target actor, or the target item of use and item skills.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.targets",
+        "name": "targets",
+        "doc": "Opponents, for on_combat_tick.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.text",
+        "name": "text",
+        "doc": "Spoken text, for on_say and on_tell.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.to_room",
+        "name": "to_room",
+        "doc": "The room the actor is going to, for exit hooks.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.type",
+        "name": "type",
+        "doc": "The damage type, for on_damage.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.via_exit",
+        "name": "via_exit",
+        "doc": "For on_nearby: this mob's own exit toward the event, or None for its own room.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.weapon",
+        "name": "weapon",
+        "doc": "The weapon used in an attack, or None for unarmed.",
+        "since": 1
+      }
+    ],
+    "methods": [
+      {
+        "symbol": "ctx.act",
+        "name": "act",
+        "doc": "Queues a command line for a mob, exactly as if it typed it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act.command_line",
+            "name": "command_line",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The command line, as a player would type it."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.act_advance",
+        "name": "act_advance",
+        "doc": "Queues one step along the room track toward target for a mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act_advance.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act_advance.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor or item in the same room to step toward."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.act_attack",
+        "name": "act_attack",
+        "doc": "Queues an attack against target for a mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act_attack.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act_attack.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to attack."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.act_cast",
+        "name": "act_cast",
+        "doc": "Queues casting a skill for a mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act_cast.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act_cast.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label to cast."
+          },
+          {
+            "symbol": "ctx.act_cast.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Target actor or item, or None for the skill's default target."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.act_move",
+        "name": "act_move",
+        "doc": "Queues a move through an exit for a mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act_move.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act_move.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit to take."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.act_retreat",
+        "name": "act_retreat",
+        "doc": "Queues one step along the room track away from target (or toward the room back) for a mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.act_retreat.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.act_retreat.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor or item to step away from, or None to step toward the back of the room."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.after",
+        "name": "after",
+        "doc": "Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.after.pulses",
+            "name": "pulses",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Pulses to wait, at least 1."
+          },
+          {
+            "symbol": "ctx.after.fn",
+            "name": "fn",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Top-level function fn(ctx, **args) to call."
+          },
+          {
+            "symbol": "ctx.after.args",
+            "name": "args",
+            "positional": false,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": true,
+            "doc": "Keyword arguments passed to fn; values must be storable (int, str, bool, list or dict)."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.allies_near",
+        "name": "allies_near",
+        "doc": "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.allies_near.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor whose allies are wanted."
+          },
+          {
+            "symbol": "ctx.allies_near.band",
+            "name": "band",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Maximum distance: 'melee', 'near' or 'far'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.apply_affect",
+        "name": "apply_affect",
+        "doc": "Attaches a timed buff or debuff; re-applying a name replaces it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.apply_affect.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to receive the affect."
+          },
+          {
+            "symbol": "ctx.apply_affect.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Affect name; applying the same name again replaces the existing affect."
+          },
+          {
+            "symbol": "ctx.apply_affect.duration",
+            "name": "duration",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Duration in pulses."
+          },
+          {
+            "symbol": "ctx.apply_affect.stat_deltas",
+            "name": "stat_deltas",
+            "positional": true,
+            "named": true,
+            "default": "{}",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Stat adjustments while the affect lasts, such as {'dex': -1}."
+          },
+          {
+            "symbol": "ctx.apply_affect.flags",
+            "name": "flags",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Flags the affect grants, such as 'no_regen'."
+          },
+          {
+            "symbol": "ctx.apply_affect.tick_every",
+            "name": "tick_every",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Pulses between on_tick calls, or None for no ticking."
+          },
+          {
+            "symbol": "ctx.apply_affect.on_tick",
+            "name": "on_tick",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Top-level function fn(ctx) called every tick_every pulses."
+          },
+          {
+            "symbol": "ctx.apply_affect.on_expire",
+            "name": "on_expire",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Top-level function fn(ctx) called when the affect ends."
+          },
+          {
+            "symbol": "ctx.apply_affect.expire_msg",
+            "name": "expire_msg",
+            "positional": true,
+            "named": true,
+            "default": "''",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text sent to the target when the affect ends."
+          },
+          {
+            "symbol": "ctx.apply_affect.modifiers",
+            "name": "modifiers",
+            "positional": true,
+            "named": true,
+            "default": "{}",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Rules modifiers active while the affect lasts, by modifier point name."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.cancel",
+        "name": "cancel",
+        "doc": "Cancels one of this owner's timers; True if it was pending.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.cancel.timer_id",
+            "name": "timer_id",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Timer id returned by ctx.after."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.clear_active",
+        "name": "clear_active",
+        "doc": "Removes a set_active reason from an entity.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_active.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.clear_active.reason",
+            "name": "reason",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The reason given to set_active."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.clear_anchor",
+        "name": "clear_anchor",
+        "doc": "Removes a set_anchor reason from an entity.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_anchor.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.clear_anchor.reason",
+            "name": "reason",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The reason given to set_anchor."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.close_door",
+        "name": "close_door",
+        "doc": "Closes an open door in direction dir.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.close_door.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.close_door.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.damage",
+        "name": "damage",
+        "doc": "Deals damage directly (no to-hit roll, no mitigation); fires on_damage.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.damage.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to damage."
+          },
+          {
+            "symbol": "ctx.damage.amount",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Hit points of damage."
+          },
+          {
+            "symbol": "ctx.damage.type",
+            "name": "type",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Damage type, such as 'fire' or 'slash'."
+          },
+          {
+            "symbol": "ctx.damage.source",
+            "name": "source",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor credited with the damage, or None."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.del_attr",
+        "name": "del_attr",
+        "doc": "Deletes an attribute key from an entity.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.del_attr.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.del_attr.key",
+            "name": "key",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Attribute key; unprefixed keys are in your package's namespace."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.deny",
+        "name": "deny",
+        "doc": "Vetoes the action; return it from a before_* hook.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.deny.msg",
+            "name": "msg",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text shown to the actor whose action is refused."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.destroy",
+        "name": "destroy",
+        "doc": "Removes an item and everything inside it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.destroy.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to remove from the world."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.echo",
+        "name": "echo",
+        "doc": "Sends text to everyone in a room, except the actors in exclude.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.echo.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, to send the text to."
+          },
+          {
+            "symbol": "ctx.echo.text",
+            "name": "text",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text to send."
+          },
+          {
+            "symbol": "ctx.echo.exclude",
+            "name": "exclude",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actors who don't receive the text."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.emote",
+        "name": "emote",
+        "doc": "The room sees '<actor> text'.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.emote.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor performing the emote."
+          },
+          {
+            "symbol": "ctx.emote.text",
+            "name": "text",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text that follows the actor's name."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.enemies_near",
+        "name": "enemies_near",
+        "doc": "Opponents of actor within a band ('melee', 'near', 'far').",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.enemies_near.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor whose opponents are wanted."
+          },
+          {
+            "symbol": "ctx.enemies_near.band",
+            "name": "band",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Maximum distance: 'melee', 'near' or 'far'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.find",
+        "name": "find",
+        "doc": "Entities of a prototype, ascending id. scope is 'room' (the owner's room), 'zone' (its package) or 'world'.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.find.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Prototype label to look for."
+          },
+          {
+            "symbol": "ctx.find.scope",
+            "name": "scope",
+            "positional": true,
+            "named": true,
+            "default": "'room'",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Where to look: 'room', 'zone' or 'world'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.get_attr",
+        "name": "get_attr",
+        "doc": "Reads a value; your own keys by short name, other packages' by 'namespace:key'.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.get_attr.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.get_attr.key",
+            "name": "key",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Attribute key; your own by short name, another package's as 'namespace:key'."
+          },
+          {
+            "symbol": "ctx.get_attr.default",
+            "name": "default",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Value returned when the key is absent."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.give",
+        "name": "give",
+        "doc": "Puts an item (a view, or a label to spawn) into an actor's inventory.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.give.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who receives the item."
+          },
+          {
+            "symbol": "ctx.give.label_or_item",
+            "name": "label_or_item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item view to move, or item prototype label to spawn."
+          },
+          {
+            "symbol": "ctx.give.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of items to spawn when given a label."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.heal",
+        "name": "heal",
+        "doc": "Restores hit points to target, up to max_hp.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.heal.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to heal."
+          },
+          {
+            "symbol": "ctx.heal.amount",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Hit points to restore."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.here",
+        "name": "here",
+        "doc": "The actor or ground item in the owner's room matching a keyword, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.here.keyword",
+            "name": "keyword",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Keyword to match, as a player would type it."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.lock_door",
+        "name": "lock_door",
+        "doc": "Closes and locks the door.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.lock_door.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.lock_door.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.move_item",
+        "name": "move_item",
+        "doc": "Moves an item to a room (at index), an actor's inventory, or a container.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.move_item.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to move."
+          },
+          {
+            "symbol": "ctx.move_item.to",
+            "name": "to",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room or room label, actor, or container item."
+          },
+          {
+            "symbol": "ctx.move_item.index",
+            "name": "index",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Track index when moving to a room."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.move_toward",
+        "name": "move_toward",
+        "doc": "Queues one step toward a direction, an actor (advancing within the room) or a room. False if there is no way.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.move_toward.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that acts."
+          },
+          {
+            "symbol": "ctx.move_toward.dir_or_target",
+            "name": "dir_or_target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction, actor, or room (view or label) to head for."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.open_door",
+        "name": "open_door",
+        "doc": "Opens the door in direction dir, even if locked.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.open_door.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.open_door.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.path_to",
+        "name": "path_to",
+        "doc": "Directions from the owner's room to a room or actor through open exits; [] if already there, None if unreachable.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.path_to.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, room label, or actor to reach."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.remove_affect",
+        "name": "remove_affect",
+        "doc": "Removes an affect by name; True if there was one.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.remove_affect.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor carrying the affect."
+          },
+          {
+            "symbol": "ctx.remove_affect.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Affect name."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.roll",
+        "name": "roll",
+        "doc": "Rolls dice such as '2d6+1'.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.roll.dice",
+            "name": "dice",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Dice expression such as '2d6+1'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.say",
+        "name": "say",
+        "doc": "speaker says text aloud; fires on_say.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.say.speaker",
+            "name": "speaker",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who speaks."
+          },
+          {
+            "symbol": "ctx.say.text",
+            "name": "text",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text spoken."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.send",
+        "name": "send",
+        "doc": "Sends text to one actor.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.send.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who receives the text."
+          },
+          {
+            "symbol": "ctx.send.text",
+            "name": "text",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text to send."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_active",
+        "name": "set_active",
+        "doc": "Keeps an entity simulated (its queue, timers, AI and movement) even outside the bubble, until its last reason is cleared.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_active.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.set_active.reason",
+            "name": "reason",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Name for this reason; clear_active with the same name removes it."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_anchor",
+        "name": "set_anchor",
+        "doc": "Makes an entity project a bubble of its own, as players do, until its last reason is cleared.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_anchor.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.set_anchor.reason",
+            "name": "reason",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Name for this reason; clear_anchor with the same name removes it."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_attr",
+        "name": "set_attr",
+        "doc": "Stores a value (int, str, bool, list or dict) on an entity. None deletes the key.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_attr.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room."
+          },
+          {
+            "symbol": "ctx.set_attr.key",
+            "name": "key",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Attribute key; unprefixed keys are in your package's namespace."
+          },
+          {
+            "symbol": "ctx.set_attr.value",
+            "name": "value",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Value to store (int, str, bool, list or dict), or None to delete the key."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_exit_blocks",
+        "name": "set_exit_blocks",
+        "doc": "Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_exit_blocks.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.set_exit_blocks.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          },
+          {
+            "symbol": "ctx.set_exit_blocks.channels",
+            "name": "channels",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Channels to block: any of 'sight', 'sound', 'noise', 'spell'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.spawn",
+        "name": "spawn",
+        "doc": "Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count > 1 makes several.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.spawn.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob or item prototype label."
+          },
+          {
+            "symbol": "ctx.spawn.at",
+            "name": "at",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room or room label, actor, or container item."
+          },
+          {
+            "symbol": "ctx.spawn.index",
+            "name": "index",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Track index when spawning into a room."
+          },
+          {
+            "symbol": "ctx.spawn.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number to spawn; more than 1 returns a list."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.split",
+        "name": "split",
+        "doc": "Splits n off a stack into a new item beside it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.split.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Stack to split."
+          },
+          {
+            "symbol": "ctx.split.n",
+            "name": "n",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of items to split off."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.start_combat",
+        "name": "start_combat",
+        "doc": "Engages two actors in the same room in combat.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.start_combat.a",
+            "name": "a",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "First actor."
+          },
+          {
+            "symbol": "ctx.start_combat.b",
+            "name": "b",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Second actor, in the same room."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.stop_combat",
+        "name": "stop_combat",
+        "doc": "Ends combat between a and b, or all of a's fights when b is None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.stop_combat.a",
+            "name": "a",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor whose fighting stops."
+          },
+          {
+            "symbol": "ctx.stop_combat.b",
+            "name": "b",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Opponent, or None for all of a's fights."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.teleport",
+        "name": "teleport",
+        "doc": "Moves an actor to a room; fires the exit and enter hooks.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.teleport.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to move."
+          },
+          {
+            "symbol": "ctx.teleport.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Destination room or room label."
+          },
+          {
+            "symbol": "ctx.teleport.index",
+            "name": "index",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Track index on arrival, or None for the room's default."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.unlock_door",
+        "name": "unlock_door",
+        "doc": "Unlocks the door, leaving it closed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.unlock_door.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.unlock_door.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          }
+        ]
+      }
+    ]
+  },
+  "views": [
+    {
+      "symbol": "view:exit",
+      "name": "exit",
+      "builtin_type": "exit",
+      "doc": "A read-only view of an exit.",
+      "since": 1,
+      "fields": [
+        {
+          "symbol": "view:exit.blocks",
+          "name": "blocks",
+          "doc": "Effective blocked channels: the exit's own plus its door's.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.direction",
+          "name": "direction",
+          "doc": "The exit's direction name.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.door",
+          "name": "door",
+          "doc": "'open', 'closed' or 'locked'; None without a door.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.entry_index",
+          "name": "entry_index",
+          "doc": "Destination track index where travellers arrive, or -1 for the back.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.key",
+          "name": "key",
+          "doc": "The door's key label, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.one_way",
+          "name": "one_way",
+          "doc": "True if this exit intentionally has no return exit.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.passable",
+          "name": "passable",
+          "doc": "False while a door is closed or locked.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.to",
+          "name": "to",
+          "doc": "The destination room's label.",
+          "since": 1
+        }
+      ],
+      "methods": []
+    }
+  ],
+  "effects": [
+    {
+      "symbol": "heal",
+      "name": "heal",
+      "doc": "Restore hit points.",
+      "since": 1,
+      "params": [
+        {
+          "symbol": "heal.dice",
+          "name": "dice",
+          "positional": true,
+          "named": true,
+          "default": null,
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Hit points restored, as dice such as '2d4'."
+        }
+      ]
+    }
+  ],
+  "behaviors": [
+    {
+      "symbol": "wander",
+      "name": "wander",
+      "doc": "Behavior: with probability chance per think, steps through a random open exit within radius exits of home.",
+      "since": 1,
+      "params": [
+        {
+          "symbol": "wander.radius",
+          "name": "radius",
+          "positional": true,
+          "named": true,
+          "default": "3",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Maximum distance from home, in exits."
+        },
+        {
+          "symbol": "wander.chance",
+          "name": "chance",
+          "positional": true,
+          "named": true,
+          "default": "0.1",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Probability of taking a step on each think, between 0 and 1."
+        }
+      ]
+    }
+  ],
+  "rules": {
+    "ctx": {
+      "symbol": "rules_ctx",
+      "name": "rules_ctx",
+      "builtin_type": "rules_ctx",
+      "doc": "The read-only context of a rules call or modifier.",
+      "since": 1,
+      "fields": [
+        {
+          "symbol": "rules_ctx.actor",
+          "name": "actor",
+          "doc": "Whom the call is about: the attacker, caster, mover or regenerating actor.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.attacker",
+          "name": "attacker",
+          "doc": "For attack calls, the same as actor.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.band",
+          "name": "band",
+          "doc": "'melee', 'near' or 'far' between actor and target, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.defender",
+          "name": "defender",
+          "doc": "For attack calls, the one attacked; also the one taking damage in mitigate.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.item",
+          "name": "item",
+          "doc": "The item, for get_lag and carry_limit.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.pulse",
+          "name": "pulse",
+          "doc": "Game time.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.rng",
+          "name": "rng",
+          "doc": "The seeded random number generator.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.room",
+          "name": "room",
+          "doc": "The actor's room.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.skill",
+          "name": "skill",
+          "doc": "The skill being cast or evaluated, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.target",
+          "name": "target",
+          "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.weapon",
+          "name": "weapon",
+          "doc": "The weapon used in an attack, or None for unarmed.",
+          "since": 1
+        }
+      ],
+      "methods": [
+        {
+          "symbol": "rules_ctx.deny",
+          "name": "deny",
+          "doc": "Refuses a cast; valid only in cast_allowed and its modifiers.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.deny.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Text shown to the caster."
+            }
+          ]
+        },
+        {
+          "symbol": "rules_ctx.roll",
+          "name": "roll",
+          "doc": "Rolls dice such as '2d6+1' with the seeded rng.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.roll.dice",
+              "name": "dice",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Dice expression such as '2d6+1'."
+            }
+          ]
+        }
+      ]
+    },
+    "exports": [
+      {
+        "symbol": "rules:carry_limit",
+        "name": "carry_limit",
+        "signature": "carry_limit(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "item", "room", "pulse", "rng"],
+        "doc": "Maximum weight the actor can carry without encumbrance.",
+        "since": 1
+      }
+    ],
+    "modifier_points": [
+      {
+        "symbol": "modifier:cast_allowed",
+        "name": "cast_allowed",
+        "signature": "fn(ctx, base)",
+        "value_type": "None | denial",
+        "ctx_fields": ["actor", "target", "skill", "band", "room", "pulse", "rng"],
+        "doc": "Returns None to allow casting, or ctx.deny(msg) to refuse.",
+        "since": 1
+      }
+    ]
+  },
+  "harness": [
+    {
+      "symbol": "t",
+      "name": "t",
+      "builtin_type": "t",
+      "doc": "The test context: makes worlds and checks results.",
+      "since": 1,
+      "fields": [],
+      "methods": [
+        {
+          "symbol": "t.contains",
+          "name": "contains",
+          "doc": "Fails unless a string contains a substring, or a list or dict contains an item.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.contains.container",
+              "name": "container",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "String, list or dict to search."
+            },
+            {
+              "symbol": "t.contains.item",
+              "name": "item",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Substring, element or key to find."
+            },
+            {
+              "symbol": "t.contains.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.eq",
+          "name": "eq",
+          "doc": "Fails unless actual == expected. An entity view equals its label, so t.eq(p.room, ':hall') works.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.eq.actual",
+              "name": "actual",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Value under test."
+            },
+            {
+              "symbol": "t.eq.expected",
+              "name": "expected",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Expected value."
+            },
+            {
+              "symbol": "t.eq.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.fail",
+          "name": "fail",
+          "doc": "Fails the test.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.fail.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.false",
+          "name": "false",
+          "doc": "Fails unless the value is falsy.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.false.value",
+              "name": "value",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Value under test."
+            },
+            {
+              "symbol": "t.false.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.ne",
+          "name": "ne",
+          "doc": "Fails if actual == unexpected.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.ne.actual",
+              "name": "actual",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Value under test."
+            },
+            {
+              "symbol": "t.ne.unexpected",
+              "name": "unexpected",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Value it must not equal."
+            },
+            {
+              "symbol": "t.ne.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.not_contains",
+          "name": "not_contains",
+          "doc": "Fails if a string contains a substring, or a list or dict contains an item.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.not_contains.container",
+              "name": "container",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "String, list or dict to search."
+            },
+            {
+              "symbol": "t.not_contains.item",
+              "name": "item",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Substring, element or key that must be absent."
+            },
+            {
+              "symbol": "t.not_contains.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.true",
+          "name": "true",
+          "doc": "Fails unless the value is truthy.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.true.value",
+              "name": "value",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Value under test."
+            },
+            {
+              "symbol": "t.true.msg",
+              "name": "msg",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Extra text for the failure message."
+            }
+          ]
+        },
+        {
+          "symbol": "t.world",
+          "name": "world",
+          "doc": "A fresh headless world with the given packages (default: this test's package) and the rules package. The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072). rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, so only rooms near players are simulated; by default every room is (D-116).",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "t.world.seed",
+              "name": "seed",
+              "positional": true,
+              "named": true,
+              "default": "0",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Random seed for the world."
+            },
+            {
+              "symbol": "t.world.packages",
+              "name": "packages",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Packages to load, or None for this test's package."
+            },
+            {
+              "symbol": "t.world.rules",
+              "name": "rules",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Rules package label such as //rules_alt, or None for //rules."
+            },
+            {
+              "symbol": "t.world.bubble",
+              "name": "bubble",
+              "positional": true,
+              "named": true,
+              "default": "False",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "True to simulate only rooms near players; by default every room is simulated."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

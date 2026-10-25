@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Declarations — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html" class="current">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Declarations</h1>
+<h2>Declarations</h2>
+<p class="intro">Package content declared in .star files.</p>
+<section id="exit" class="entry">
+<h3><code>exit</code> <span class="since">since api_version 1</span></h3>
+<p>An exit, for room(exits=[...]).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
+<tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
+<tr id="exit.entry_index"><td><code>entry_index</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
+<tr id="exit.blocks"><td><code>blocks</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td><code>sight</code>, <code>sound</code>, <code>noise</code>, <code>spell</code></td><td>Perception and spell channels blocked by this exit.</td></tr>
+<tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
+<tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
+</tbody>
+</table>
+</section>
+<h2>Settings</h2>
+<p class="intro">MODULE.gups (module) and server.gups (server).</p>
+<section id="module" class="entry">
+<h3><code>module</code> <span class="since">since api_version 1</span></h3>
+<p>Declares the world's metadata in MODULE.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="module.engine"><td><code>engine</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Engine version the world was written for.</td></tr>
+<tr id="module.api_version"><td><code>api_version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Script API version the world pins.</td></tr>
+<tr id="module.checkpoint_minutes"><td><code>checkpoint_minutes</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>30</code></td><td></td><td>Minutes between routine database checkpoints.</td></tr>
+<tr id="module.start_room"><td><code>start_room</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Room label where new characters start.</td></tr>
+</tbody>
+</table>
+</section>
+<h2>Constants</h2>
+<p class="intro">Predeclared values in every package.</p>
+<section id="ALL" class="entry">
+<h3><code>ALL</code> <span class="since">since api_version 1</span></h3>
+<p>All perception and spell channels: sight, sound, noise, spell.</p>
+<p>Type <code>list[str]</code>, value <code>[&quot;sight&quot;, &quot;sound&quot;, &quot;noise&quot;, &quot;spell&quot;]</code></p>
+</section>
+</main>
+</body>
+</html>

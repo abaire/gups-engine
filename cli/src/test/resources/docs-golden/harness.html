@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test harness — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html" class="current">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Test harness</h1>
+<p>Objects of <code>*_test.star</code> tests: <code>t</code> is the test, <code>w</code> a world, <code>p</code> a player.</p>
+<section id="t" class="entry">
+<h2><code>t</code> <span class="since">since api_version 1</span></h2>
+<p>The test context: makes worlds and checks results.</p>
+<h3>Methods</h3>
+<article id="t.contains" class="entry">
+<h4><code>contains(container, item, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless a string contains a substring, or a list or dict contains an item.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.contains.container"><td><code>container</code></td><td>positional or named</td><td></td><td>String, list or dict to search.</td></tr>
+<tr id="t.contains.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Substring, element or key to find.</td></tr>
+<tr id="t.contains.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.eq" class="entry">
+<h4><code>eq(actual, expected, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless actual == expected. An entity view equals its label, so t.eq(p.room, ':hall') works.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.eq.actual"><td><code>actual</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.eq.expected"><td><code>expected</code></td><td>positional or named</td><td></td><td>Expected value.</td></tr>
+<tr id="t.eq.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.fail" class="entry">
+<h4><code>fail(msg)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails the test.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.fail.msg"><td><code>msg</code></td><td>positional or named</td><td></td><td>Failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.false" class="entry">
+<h4><code>false(value, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless the value is falsy.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.false.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.false.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.ne" class="entry">
+<h4><code>ne(actual, unexpected, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails if actual == unexpected.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.ne.actual"><td><code>actual</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.ne.unexpected"><td><code>unexpected</code></td><td>positional or named</td><td></td><td>Value it must not equal.</td></tr>
+<tr id="t.ne.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.not_contains" class="entry">
+<h4><code>not_contains(container, item, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails if a string contains a substring, or a list or dict contains an item.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.not_contains.container"><td><code>container</code></td><td>positional or named</td><td></td><td>String, list or dict to search.</td></tr>
+<tr id="t.not_contains.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Substring, element or key that must be absent.</td></tr>
+<tr id="t.not_contains.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.true" class="entry">
+<h4><code>true(value, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless the value is truthy.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.true.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.true.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.world" class="entry">
+<h4><code>world(seed = 0, packages = None, rules = None, bubble = False)</code> <span class="since">since api_version 1</span></h4>
+<p>A fresh headless world with the given packages (default: this test's package) and the rules package. The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072). rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, so only rooms near players are simulated; by default every room is (D-116).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.world.seed"><td><code>seed</code></td><td>positional or named</td><td><code>0</code></td><td>Random seed for the world.</td></tr>
+<tr id="t.world.packages"><td><code>packages</code></td><td>positional or named</td><td><code>None</code></td><td>Packages to load, or None for this test's package.</td></tr>
+<tr id="t.world.rules"><td><code>rules</code></td><td>positional or named</td><td><code>None</code></td><td>Rules package label such as //rules_alt, or None for //rules.</td></tr>
+<tr id="t.world.bubble"><td><code>bubble</code></td><td>positional or named</td><td><code>False</code></td><td>True to simulate only rooms near players; by default every room is simulated.</td></tr>
+</tbody>
+</table>
+</article>
+</section>
+</main>
+</body>
+</html>

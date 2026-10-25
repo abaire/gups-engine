@@ -46,6 +46,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.ServerConfig
 import gups.script.WorldDir
+import gups.script.WorldModule
 import gups.net.ServerTls
 import gups.net.toJson
 import kotlinx.serialization.json.Json
@@ -76,9 +77,6 @@ fun gupsCommand(): CliktCommand = Gups().subcommands(
     ImportRoster(),
 )
 
-/** Exit status of a command that is declared but not implemented yet. */
-const val EXIT_NOT_IMPLEMENTED = 3
-
 class Gups : CliktCommand(name = "gups") {
     init {
         versionOption(
@@ -90,17 +88,6 @@ class Gups : CliktCommand(name = "gups") {
     override fun help(context: Context) = "GUPS text MUD engine."
 
     override fun run() = Unit
-}
-
-/** A subcommand that is declared with its final options but not implemented until [milestone]. */
-abstract class StubCommand(name: String, private val summary: String, private val milestone: String) :
-    CliktCommand(name = name) {
-    override fun help(context: Context) = summary
-
-    override fun run() {
-        echo("gups $commandName: not implemented yet (planned for $milestone).", err = true)
-        throw ProgramResult(EXIT_NOT_IMPLEMENTED)
-    }
 }
 
 enum class Profile { DEV, PROD }
@@ -129,6 +116,7 @@ class Serve : CliktCommand(name = "serve") {
     val deployKeyFile by option("--deploy-key-file", metavar = "FILE", help = "--prod: SSH key for fetching (default: \$GUPS_DEPLOY_KEY_FILE).").file(canBeDir = false)
     val forceCommit by option("--force-commit", help = "--prod: start even if the world isn't at the commit the database was saved at.").flag()
     val openSignup by option("--open-signup", help = "--prod: let new logins be made without an invite code.").nullableFlag("--no-open-signup")
+    val docsPort by option("--docs-port", metavar = "PORT", help = "--dev: HTTP port for /docs/ on 127.0.0.1 (default 4080).").int()
     val maxCharacters by option("--max-characters", metavar = "N", help = "--prod: characters per account (default 5; instructors unlimited).").int()
 
     override fun help(context: Context) = "Run the server."
@@ -143,7 +131,7 @@ class Serve : CliktCommand(name = "serve") {
                 throw UsageError("--config and the listener, certificate, account, admin and deploy options are for --prod")
             }
             val dir = WorldDir((world ?: File(".")).toPath())
-            GupsServer(dir, port ?: 4000, startLabel, db?.toPath() ?: GupsServer.defaultDb(dir), fresh) { echo(it, err = true) }
+            GupsServer(dir, port ?: 4000, startLabel, db?.toPath() ?: GupsServer.defaultDb(dir), fresh, docsPort = docsPort ?: 4080) { echo(it, err = true) }
         }
         if (!server.boot()) throw ProgramResult(1)
         Runtime.getRuntime().addShutdownHook(
@@ -158,7 +146,8 @@ class Serve : CliktCommand(name = "serve") {
                     val words = mapOf("telnet" to "raw telnet", "tls" to "telnet over TLS", "ws" to "HTTPS and the web client", "admin" to "the admin port")
                     echo("GUPS server: " + server.ports.entries.joinToString(", ") { (t, p) -> "${words[t]} on port $p" } + ".")
                 } else {
-                    echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound")
+                    val docs = server.ports["docs"]?.let { " API reference: http://127.0.0.1:$it/docs/" } ?: ""
+                    echo("GUPS dev server on 127.0.0.1:$bound. Connect with: telnet localhost $bound.$docs")
                 }
             }
         }
@@ -167,6 +156,7 @@ class Serve : CliktCommand(name = "serve") {
     /** `--prod` (M6 design §2.1, §3.5): the configuration file, with each flag overriding it (D-135). */
     private fun prodServer(startLabel: Label?): GupsServer {
         if (port != null) throw UsageError("--port is for --dev; use --telnet with --prod")
+        if (docsPort != null) throw UsageError("--docs-port is for --dev; --prod serves /docs/ on --https")
         val cfg = config?.let { f ->
             val (c, error) = ServerConfig.read(f.toPath())
             if (error != null) throw UsageError(error.render())
@@ -405,15 +395,34 @@ class MigrateCheck : CliktCommand(name = "migrate-check") {
     }
 }
 
-class Docs : StubCommand("docs", "Generate the API reference.", "M7.2") {
+class Docs : CliktCommand(name = "docs") {
     val json by option("--json", help = "Write the machine-readable API model (api.json).").flag()
-    val out by option("--out", help = "Output directory, or with --json a .json file.").file()
+    val out by option("--out", help = "Output directory (default build/docs), or with --json a .json file.").file()
+    val world by option("--world", help = "Course world directory; include its plugins.").file(mustExist = true, canBeFile = false)
+
+    override fun help(context: Context) = "Generate the API reference."
 
     override fun run() {
-        if (!json) {
-            super.run()
+        if (json) {
+            if (world != null) throw UsageError("--world is for the HTML reference; api.json never includes plugins")
+            writeJson()
             return
         }
+        val dir = out ?: File("build/docs")
+        if (dir.isFile || dir.name.endsWith(".json")) throw UsageError("--out: give a directory for the HTML reference, not ${dir.name}")
+        world?.let { w ->
+            val (module, error) = WorldModule.read(WorldDir(w.toPath()))
+            if (error != null) throw UsageError("--world: ${error.render()}")
+            module.problems().firstOrNull()?.let { throw UsageError("--world: $it") }
+            // M7.4 renders the world's plugins.
+        }
+        val files = DocsRenderer.render(ScriptApi.model(HarnessApi.specs()))
+        dir.mkdirs()
+        for ((name, text) in files) dir.resolve(name).writeText(text, Charsets.UTF_8)
+        echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")
+    }
+
+    private fun writeJson() {
         val text = ScriptApi.model(HarnessApi.specs()).toJson()
         val dest = out
         if (dest == null) {

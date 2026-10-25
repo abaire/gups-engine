@@ -15,6 +15,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class GupsServerTest {
@@ -77,6 +78,33 @@ class GupsServerTest {
             runner.join(10_000)
         }
         return logs.toString()
+    }
+
+    @Test
+    fun `a dev server serves the API reference on its docs port`() {
+        val root = copyTemplate()
+        val logs = StringBuffer()
+        val server = GupsServer(WorldDir(root), port = 0, db = null, docsPort = 0) { logs.append(it).append('\n') }
+        assertTrue(server.boot(), logs.toString())
+        val port = CompletableFuture<Int>()
+        val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
+        try {
+            explained(logs) {
+                val telnet = port.get(10, TimeUnit.SECONDS)
+                assertEquals(telnet, server.ports["telnet"])
+                val docs = assertNotNull(server.ports["docs"])
+                val http = java.net.http.HttpClient.newHttpClient()
+                val page = http.send(
+                    java.net.http.HttpRequest.newBuilder(java.net.URI("http://127.0.0.1:$docs/docs/hooks.html")).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(),
+                )
+                assertEquals(200, page.statusCode())
+                assertContains(page.body(), "id=\"hook-on_enter\"")
+            }
+        } finally {
+            server.stop()
+            runner.join(10_000)
+        }
     }
 
     @Test

@@ -32,10 +32,33 @@ class CommandsTest {
     }
 
     @Test
-    fun `stub commands exit with not implemented`() {
-        val result = gupsCommand().test("docs")
-        assertEquals(EXIT_NOT_IMPLEMENTED, result.statusCode)
-        assertContains(result.stderr, "not implemented yet")
+    fun `docs writes the HTML reference`() {
+        val dir = Files.createTempDirectory("gups-docs-html").toFile()
+        val result = gupsCommand().test(listOf("docs", "--out", dir.resolve("ref").path))
+        assertEquals(0, result.statusCode, result.output)
+        assertContains(result.stdout, "Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to ${dir.resolve("ref")}")
+        for (file in DocsRenderer.FILES) assertTrue(dir.resolve("ref/$file").isFile, "missing $file")
+        assertEquals(ScriptApi.model(HarnessApi.specs()).toJson(), dir.resolve("ref/api.json").readText())
+
+        val world = System.getProperty("gups.templateWorld")
+        val withWorld = gupsCommand().test(listOf("docs", "--world", world, "--out", dir.resolve("world").path))
+        assertEquals(0, withWorld.statusCode, withWorld.output)
+        for (file in DocsRenderer.FILES) {
+            assertEquals(dir.resolve("ref/$file").readText(), dir.resolve("world/$file").readText(), file)
+        }
+
+        val aFile = dir.resolve("existing.txt").also { it.writeText("x") }
+        val onFile = gupsCommand().test(listOf("docs", "--out", aFile.path))
+        assertEquals(1, onFile.statusCode)
+        assertContains(onFile.stderr, "give a directory for the HTML reference")
+        val onJson = gupsCommand().test(listOf("docs", "--out", dir.resolve("x.json").path))
+        assertEquals(1, onJson.statusCode)
+        assertContains(onJson.stderr, "give a directory for the HTML reference, not x.json")
+        assertFalse(dir.resolve("x.json").exists())
+
+        val jsonWithWorld = gupsCommand().test(listOf("docs", "--json", "--world", world))
+        assertEquals(1, jsonWithWorld.statusCode)
+        assertContains(jsonWithWorld.stderr, "api.json never includes plugins")
     }
 
     @Test
@@ -267,6 +290,9 @@ class CommandsTest {
         assertEquals(1, noTelnet.statusCode)
         assertContains(noTelnet.stderr, "--telnet :4000")
         assertContains(gupsCommand().test(listOf("serve", "--prod", "--port", "4000")).stderr, "--port is for --dev")
+        val docsPort = gupsCommand().test(listOf("serve", "--prod", "--world", world, "--docs-port", "4080"))
+        assertEquals(1, docsPort.statusCode)
+        assertContains(docsPort.stderr, "--docs-port is for --dev")
         assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--self-signed")).stderr, "--self-signed needs --telnet-tls or --https")
         assertContains(gupsCommand().test(listOf("serve", "--prod", "--world", world, "--telnet-tls", ":0")).stderr, "TLS needs --tls-cert and --tls-key")
         assertContains(gupsCommand().test(listOf("serve", "--dev", "--telnet", ":4000")).stderr, "are for --prod")

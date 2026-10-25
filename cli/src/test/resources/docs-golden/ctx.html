@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ctx and views — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html" class="current">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>ctx and views</h1>
+<section id="ctx" class="entry">
+<h2><code>ctx</code> <span class="since">since api_version 1</span></h2>
+<p>The context of one hook invocation.</p>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.actor"><td><code>actor</code></td><td>1</td><td>The actor performing the action, or the damage/kill source.</td></tr>
+<tr id="ctx.affect"><td><code>affect</code></td><td>1</td><td>The affect, for affect on_tick and on_expire.</td></tr>
+<tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The damage dealt, for on_damage.</td></tr>
+<tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
+<tr id="ctx.direction"><td><code>direction</code></td><td>1</td><td>The movement direction name, for enter and exit hooks.</td></tr>
+<tr id="ctx.elapsed_pulses"><td><code>elapsed_pulses</code></td><td>1</td><td>Pulses spent dormant, for on_wake.</td></tr>
+<tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.</td></tr>
+<tr id="ctx.from_room"><td><code>from_room</code></td><td>1</td><td>The room the actor came from, for enter hooks.</td></tr>
+<tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
+<tr id="ctx.proposals"><td><code>proposals</code></td><td>1</td><td>For think: behavior proposals, best first.</td></tr>
+<tr id="ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
+<tr id="ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
+<tr id="ctx.room"><td><code>room</code></td><td>1</td><td>The room the event happens in.</td></tr>
+<tr id="ctx.self"><td><code>self</code></td><td>1</td><td>The hook's owner.</td></tr>
+<tr id="ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
+<tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_nearby: the room the event happened in.</td></tr>
+<tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
+<tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents, for on_combat_tick.</td></tr>
+<tr id="ctx.text"><td><code>text</code></td><td>1</td><td>Spoken text, for on_say and on_tell.</td></tr>
+<tr id="ctx.to_room"><td><code>to_room</code></td><td>1</td><td>The room the actor is going to, for exit hooks.</td></tr>
+<tr id="ctx.type"><td><code>type</code></td><td>1</td><td>The damage type, for on_damage.</td></tr>
+<tr id="ctx.via_exit"><td><code>via_exit</code></td><td>1</td><td>For on_nearby: this mob's own exit toward the event, or None for its own room.</td></tr>
+<tr id="ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
+</tbody>
+</table>
+<h3>Methods</h3>
+<article id="ctx.act" class="entry">
+<h4><code>act(mob, command_line)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues a command line for a mob, exactly as if it typed it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act.command_line"><td><code>command_line</code></td><td>positional or named</td><td></td><td>The command line, as a player would type it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.act_advance" class="entry">
+<h4><code>act_advance(mob, target)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues one step along the room track toward target for a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act_advance.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_advance.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor or item in the same room to step toward.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.act_attack" class="entry">
+<h4><code>act_attack(mob, target)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues an attack against target for a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act_attack.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_attack.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to attack.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.act_cast" class="entry">
+<h4><code>act_cast(mob, skill, target = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues casting a skill for a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act_cast.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_cast.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label to cast.</td></tr>
+<tr id="ctx.act_cast.target"><td><code>target</code></td><td>positional or named</td><td><code>None</code></td><td>Target actor or item, or None for the skill's default target.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.act_move" class="entry">
+<h4><code>act_move(mob, dir)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues a move through an exit for a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act_move.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_move.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit to take.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.act_retreat" class="entry">
+<h4><code>act_retreat(mob, target = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues one step along the room track away from target (or toward the room back) for a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.act_retreat.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_retreat.target"><td><code>target</code></td><td>positional or named</td><td><code>None</code></td><td>Actor or item to step away from, or None to step toward the back of the room.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.after" class="entry">
+<h4><code>after(pulses, fn, **args)</code> <span class="since">since api_version 1</span></h4>
+<p>Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.after.pulses"><td><code>pulses</code></td><td>positional or named</td><td></td><td>Pulses to wait, at least 1.</td></tr>
+<tr id="ctx.after.fn"><td><code>fn</code></td><td>positional or named</td><td></td><td>Top-level function fn(ctx, **args) to call.</td></tr>
+<tr id="ctx.after.args"><td><code>**args</code></td><td>extra named</td><td></td><td>Keyword arguments passed to fn; values must be storable (int, str, bool, list or dict).</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.allies_near" class="entry">
+<h4><code>allies_near(actor, band)</code> <span class="since">since api_version 1</span></h4>
+<p>Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.allies_near.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor whose allies are wanted.</td></tr>
+<tr id="ctx.allies_near.band"><td><code>band</code></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.apply_affect" class="entry">
+<h4><code>apply_affect(target, name, duration, stat_deltas = {}, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {})</code> <span class="since">since api_version 1</span></h4>
+<p>Attaches a timed buff or debuff; re-applying a name replaces it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.apply_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to receive the affect.</td></tr>
+<tr id="ctx.apply_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name; applying the same name again replaces the existing affect.</td></tr>
+<tr id="ctx.apply_affect.duration"><td><code>duration</code></td><td>positional or named</td><td></td><td>Duration in pulses.</td></tr>
+<tr id="ctx.apply_affect.stat_deltas"><td><code>stat_deltas</code></td><td>positional or named</td><td><code>{}</code></td><td>Stat adjustments while the affect lasts, such as {'dex': -1}.</td></tr>
+<tr id="ctx.apply_affect.flags"><td><code>flags</code></td><td>positional or named</td><td><code>[]</code></td><td>Flags the affect grants, such as 'no_regen'.</td></tr>
+<tr id="ctx.apply_affect.tick_every"><td><code>tick_every</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses between on_tick calls, or None for no ticking.</td></tr>
+<tr id="ctx.apply_affect.on_tick"><td><code>on_tick</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called every tick_every pulses.</td></tr>
+<tr id="ctx.apply_affect.on_expire"><td><code>on_expire</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called when the affect ends.</td></tr>
+<tr id="ctx.apply_affect.expire_msg"><td><code>expire_msg</code></td><td>positional or named</td><td><code>''</code></td><td>Text sent to the target when the affect ends.</td></tr>
+<tr id="ctx.apply_affect.modifiers"><td><code>modifiers</code></td><td>positional or named</td><td><code>{}</code></td><td>Rules modifiers active while the affect lasts, by modifier point name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.cancel" class="entry">
+<h4><code>cancel(timer_id)</code> <span class="since">since api_version 1</span></h4>
+<p>Cancels one of this owner's timers; True if it was pending.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.cancel.timer_id"><td><code>timer_id</code></td><td>positional or named</td><td></td><td>Timer id returned by ctx.after.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.clear_active" class="entry">
+<h4><code>clear_active(entity, reason)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes a set_active reason from an entity.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.clear_active.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.clear_active.reason"><td><code>reason</code></td><td>positional or named</td><td></td><td>The reason given to set_active.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.clear_anchor" class="entry">
+<h4><code>clear_anchor(entity, reason)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes a set_anchor reason from an entity.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.clear_anchor.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.clear_anchor.reason"><td><code>reason</code></td><td>positional or named</td><td></td><td>The reason given to set_anchor.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.close_door" class="entry">
+<h4><code>close_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
+<p>Closes an open door in direction dir.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.close_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.close_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.damage" class="entry">
+<h4><code>damage(target, amount, type, source = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Deals damage directly (no to-hit roll, no mitigation); fires on_damage.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.damage.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to damage.</td></tr>
+<tr id="ctx.damage.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Hit points of damage.</td></tr>
+<tr id="ctx.damage.type"><td><code>type</code></td><td>positional or named</td><td></td><td>Damage type, such as 'fire' or 'slash'.</td></tr>
+<tr id="ctx.damage.source"><td><code>source</code></td><td>positional or named</td><td><code>None</code></td><td>Actor credited with the damage, or None.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.del_attr" class="entry">
+<h4><code>del_attr(entity, key)</code> <span class="since">since api_version 1</span></h4>
+<p>Deletes an attribute key from an entity.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.del_attr.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.del_attr.key"><td><code>key</code></td><td>positional or named</td><td></td><td>Attribute key; unprefixed keys are in your package's namespace.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.deny" class="entry">
+<h4><code>deny(msg)</code> <span class="since">since api_version 1</span></h4>
+<p>Vetoes the action; return it from a before_* hook.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.deny.msg"><td><code>msg</code></td><td>positional or named</td><td></td><td>Text shown to the actor whose action is refused.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.destroy" class="entry">
+<h4><code>destroy(item)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes an item and everything inside it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.destroy.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to remove from the world.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.echo" class="entry">
+<h4><code>echo(room, text, exclude = [])</code> <span class="since">since api_version 1</span></h4>
+<p>Sends text to everyone in a room, except the actors in exclude.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.echo.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, to send the text to.</td></tr>
+<tr id="ctx.echo.text"><td><code>text</code></td><td>positional or named</td><td></td><td>Text to send.</td></tr>
+<tr id="ctx.echo.exclude"><td><code>exclude</code></td><td>positional or named</td><td><code>[]</code></td><td>Actors who don't receive the text.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.emote" class="entry">
+<h4><code>emote(actor, text)</code> <span class="since">since api_version 1</span></h4>
+<p>The room sees '&lt;actor&gt; text'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.emote.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor performing the emote.</td></tr>
+<tr id="ctx.emote.text"><td><code>text</code></td><td>positional or named</td><td></td><td>Text that follows the actor's name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.enemies_near" class="entry">
+<h4><code>enemies_near(actor, band)</code> <span class="since">since api_version 1</span></h4>
+<p>Opponents of actor within a band ('melee', 'near', 'far').</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.enemies_near.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor whose opponents are wanted.</td></tr>
+<tr id="ctx.enemies_near.band"><td><code>band</code></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.find" class="entry">
+<h4><code>find(label, scope = 'room')</code> <span class="since">since api_version 1</span></h4>
+<p>Entities of a prototype, ascending id. scope is 'room' (the owner's room), 'zone' (its package) or 'world'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.find.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Prototype label to look for.</td></tr>
+<tr id="ctx.find.scope"><td><code>scope</code></td><td>positional or named</td><td><code>'room'</code></td><td>Where to look: 'room', 'zone' or 'world'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.get_attr" class="entry">
+<h4><code>get_attr(entity, key, default = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Reads a value; your own keys by short name, other packages' by 'namespace:key'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.get_attr.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.get_attr.key"><td><code>key</code></td><td>positional or named</td><td></td><td>Attribute key; your own by short name, another package's as 'namespace:key'.</td></tr>
+<tr id="ctx.get_attr.default"><td><code>default</code></td><td>positional or named</td><td><code>None</code></td><td>Value returned when the key is absent.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.give" class="entry">
+<h4><code>give(actor, label_or_item, count = 1)</code> <span class="since">since api_version 1</span></h4>
+<p>Puts an item (a view, or a label to spawn) into an actor's inventory.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.give.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who receives the item.</td></tr>
+<tr id="ctx.give.label_or_item"><td><code>label_or_item</code></td><td>positional or named</td><td></td><td>Item view to move, or item prototype label to spawn.</td></tr>
+<tr id="ctx.give.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of items to spawn when given a label.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.heal" class="entry">
+<h4><code>heal(target, amount)</code> <span class="since">since api_version 1</span></h4>
+<p>Restores hit points to target, up to max_hp.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.heal.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to heal.</td></tr>
+<tr id="ctx.heal.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Hit points to restore.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.here" class="entry">
+<h4><code>here(keyword)</code> <span class="since">since api_version 1</span></h4>
+<p>The actor or ground item in the owner's room matching a keyword, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.here.keyword"><td><code>keyword</code></td><td>positional or named</td><td></td><td>Keyword to match, as a player would type it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.lock_door" class="entry">
+<h4><code>lock_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
+<p>Closes and locks the door.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.lock_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.lock_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.move_item" class="entry">
+<h4><code>move_item(item, to, index = 0)</code> <span class="since">since api_version 1</span></h4>
+<p>Moves an item to a room (at index), an actor's inventory, or a container.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.move_item.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to move.</td></tr>
+<tr id="ctx.move_item.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
+<tr id="ctx.move_item.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index when moving to a room.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.move_toward" class="entry">
+<h4><code>move_toward(mob, dir_or_target)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues one step toward a direction, an actor (advancing within the room) or a room. False if there is no way.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.move_toward.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.move_toward.dir_or_target"><td><code>dir_or_target</code></td><td>positional or named</td><td></td><td>Direction, actor, or room (view or label) to head for.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.open_door" class="entry">
+<h4><code>open_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
+<p>Opens the door in direction dir, even if locked.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.open_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.open_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.path_to" class="entry">
+<h4><code>path_to(target)</code> <span class="since">since api_version 1</span></h4>
+<p>Directions from the owner's room to a room or actor through open exits; [] if already there, None if unreachable.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.path_to.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Room, room label, or actor to reach.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.remove_affect" class="entry">
+<h4><code>remove_affect(target, name)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes an affect by name; True if there was one.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.remove_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor carrying the affect.</td></tr>
+<tr id="ctx.remove_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.roll" class="entry">
+<h4><code>roll(dice)</code> <span class="since">since api_version 1</span></h4>
+<p>Rolls dice such as '2d6+1'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.roll.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Dice expression such as '2d6+1'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.say" class="entry">
+<h4><code>say(speaker, text)</code> <span class="since">since api_version 1</span></h4>
+<p>speaker says text aloud; fires on_say.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.say.speaker"><td><code>speaker</code></td><td>positional or named</td><td></td><td>Actor who speaks.</td></tr>
+<tr id="ctx.say.text"><td><code>text</code></td><td>positional or named</td><td></td><td>Text spoken.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.send" class="entry">
+<h4><code>send(target, text)</code> <span class="since">since api_version 1</span></h4>
+<p>Sends text to one actor.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.send.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor who receives the text.</td></tr>
+<tr id="ctx.send.text"><td><code>text</code></td><td>positional or named</td><td></td><td>Text to send.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_active" class="entry">
+<h4><code>set_active(entity, reason)</code> <span class="since">since api_version 1</span></h4>
+<p>Keeps an entity simulated (its queue, timers, AI and movement) even outside the bubble, until its last reason is cleared.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_active.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.set_active.reason"><td><code>reason</code></td><td>positional or named</td><td></td><td>Name for this reason; clear_active with the same name removes it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_anchor" class="entry">
+<h4><code>set_anchor(entity, reason)</code> <span class="since">since api_version 1</span></h4>
+<p>Makes an entity project a bubble of its own, as players do, until its last reason is cleared.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_anchor.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.set_anchor.reason"><td><code>reason</code></td><td>positional or named</td><td></td><td>Name for this reason; clear_anchor with the same name removes it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_attr" class="entry">
+<h4><code>set_attr(entity, key, value)</code> <span class="since">since api_version 1</span></h4>
+<p>Stores a value (int, str, bool, list or dict) on an entity. None deletes the key.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_attr.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="ctx.set_attr.key"><td><code>key</code></td><td>positional or named</td><td></td><td>Attribute key; unprefixed keys are in your package's namespace.</td></tr>
+<tr id="ctx.set_attr.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value to store (int, str, bool, list or dict), or None to delete the key.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_exit_blocks" class="entry">
+<h4><code>set_exit_blocks(room, dir, channels)</code> <span class="since">since api_version 1</span></h4>
+<p>Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_exit_blocks.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.set_exit_blocks.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+<tr id="ctx.set_exit_blocks.channels"><td><code>channels</code></td><td>positional or named</td><td></td><td>Channels to block: any of 'sight', 'sound', 'noise', 'spell'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.spawn" class="entry">
+<h4><code>spawn(label, at, index = 0, count = 1)</code> <span class="since">since api_version 1</span></h4>
+<p>Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count &gt; 1 makes several.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.spawn.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Mob or item prototype label.</td></tr>
+<tr id="ctx.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
+<tr id="ctx.spawn.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
+<tr id="ctx.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.split" class="entry">
+<h4><code>split(item, n)</code> <span class="since">since api_version 1</span></h4>
+<p>Splits n off a stack into a new item beside it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.split.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Stack to split.</td></tr>
+<tr id="ctx.split.n"><td><code>n</code></td><td>positional or named</td><td></td><td>Number of items to split off.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.start_combat" class="entry">
+<h4><code>start_combat(a, b)</code> <span class="since">since api_version 1</span></h4>
+<p>Engages two actors in the same room in combat.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.start_combat.a"><td><code>a</code></td><td>positional or named</td><td></td><td>First actor.</td></tr>
+<tr id="ctx.start_combat.b"><td><code>b</code></td><td>positional or named</td><td></td><td>Second actor, in the same room.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.stop_combat" class="entry">
+<h4><code>stop_combat(a, b = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Ends combat between a and b, or all of a's fights when b is None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.stop_combat.a"><td><code>a</code></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
+<tr id="ctx.stop_combat.b"><td><code>b</code></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.teleport" class="entry">
+<h4><code>teleport(actor, room, index = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Moves an actor to a room; fires the exit and enter hooks.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.teleport.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to move.</td></tr>
+<tr id="ctx.teleport.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Destination room or room label.</td></tr>
+<tr id="ctx.teleport.index"><td><code>index</code></td><td>positional or named</td><td><code>None</code></td><td>Track index on arrival, or None for the room's default.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.unlock_door" class="entry">
+<h4><code>unlock_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
+<p>Unlocks the door, leaving it closed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.unlock_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.unlock_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+</tbody>
+</table>
+</article>
+</section>
+<h2>Views</h2>
+<p class="intro">Read-only views of the world that ctx and rules_ctx hand out.</p>
+<section id="view-exit" class="entry">
+<h2><code>exit</code> <span class="since">since api_version 1</span></h2>
+<p>A read-only view of an exit.</p>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="view-exit.blocks"><td><code>blocks</code></td><td>1</td><td>Effective blocked channels: the exit's own plus its door's.</td></tr>
+<tr id="view-exit.direction"><td><code>direction</code></td><td>1</td><td>The exit's direction name.</td></tr>
+<tr id="view-exit.door"><td><code>door</code></td><td>1</td><td>'open', 'closed' or 'locked'; None without a door.</td></tr>
+<tr id="view-exit.entry_index"><td><code>entry_index</code></td><td>1</td><td>Destination track index where travellers arrive, or -1 for the back.</td></tr>
+<tr id="view-exit.key"><td><code>key</code></td><td>1</td><td>The door's key label, or None.</td></tr>
+<tr id="view-exit.one_way"><td><code>one_way</code></td><td>1</td><td>True if this exit intentionally has no return exit.</td></tr>
+<tr id="view-exit.passable"><td><code>passable</code></td><td>1</td><td>False while a door is closed or locked.</td></tr>
+<tr id="view-exit.to"><td><code>to</code></td><td>1</td><td>The destination room's label.</td></tr>
+</tbody>
+</table>
+</section>
+</main>
+</body>
+</html>

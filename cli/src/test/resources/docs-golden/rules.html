@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html" class="current">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Rules</h1>
+<section id="rules_ctx" class="entry">
+<h2><code>rules_ctx</code> <span class="since">since api_version 1</span></h2>
+<p>The read-only context of a rules call or modifier.</p>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.actor"><td><code>actor</code></td><td>1</td><td>Whom the call is about: the attacker, caster, mover or regenerating actor.</td></tr>
+<tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
+<tr id="rules_ctx.band"><td><code>band</code></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
+<tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
+<tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
+<tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
+<tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room.</td></tr>
+<tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
+<tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer.</td></tr>
+<tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
+</tbody>
+</table>
+<h3>Methods</h3>
+<article id="rules_ctx.deny" class="entry">
+<h4><code>deny(msg)</code> <span class="since">since api_version 1</span></h4>
+<p>Refuses a cast; valid only in cast_allowed and its modifiers.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.deny.msg"><td><code>msg</code></td><td>positional or named</td><td></td><td>Text shown to the caster.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.roll" class="entry">
+<h4><code>roll(dice)</code> <span class="since">since api_version 1</span></h4>
+<p>Rolls dice such as '2d6+1' with the seeded rng.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.roll.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Dice expression such as '2d6+1'.</td></tr>
+</tbody>
+</table>
+</article>
+</section>
+<h2>Exports</h2>
+<p class="intro">Functions of //rules:combat.star the engine calls.</p>
+<section id="rules-carry_limit" class="entry">
+<h3><code>carry_limit</code> <span class="since">since api_version 1</span></h3>
+<p>Maximum weight the actor can carry without encumbrance.</p>
+<p>Signature <code>carry_limit(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<h2>Modifier points</h2>
+<p class="intro">Values zones, regions, rooms, affects and worn items can adjust.</p>
+<section id="modifier-cast_allowed" class="entry">
+<h3><code>cast_allowed</code> <span class="since">since api_version 1</span></h3>
+<p>Returns None to allow casting, or ctx.deny(msg) to refuse.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>None | denial</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+</main>
+</body>
+</html>

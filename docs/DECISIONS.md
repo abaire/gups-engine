@@ -1880,8 +1880,52 @@ names.
   the CLI tests compare with it on every CI platform (`-Dgups.updateGolden=true` rewrites it).
 - **CLI (`gups docs`):** `gups docs --json [--out PATH]` writes `api.json` to stdout when `--out` is omitted,
   directly to `PATH` when it ends with `.json`, and otherwise to `<PATH>/api.json`, creating the directory.
-  A `PATH` that is an existing file, or has another extension, is a usage error. Calling `gups docs`
-  without `--json` continues to exit with `EXIT_NOT_IMPLEMENTED` (3) until M7.2 adds HTML generation.
+  A `PATH` that is an existing file, or has another extension, is a usage error. Without `--json`,
+  `gups docs` writes the HTML reference (M7.2, D-172).
 *Code:* `ApiModel.kt`, `Declarations.kt`, `WorldModule.SPEC`, `ServerConfig.SPEC`, `Rules.kt`, `HarnessApi`, `Docs`.
+
+### D-172 The HTML reference, its examples and `/docs/` — `open`
+- **Page contents:** page titles are Overview, Declarations, Hooks, "ctx and views", "Effects and
+  behaviors", Rules, "Test harness", Plugins and Changelog. The nav lists them in `FILES` order, then
+  `api.json`. Each page starts `<main>` with an `<h1>` of its title; sections within a page get an
+  `<h2>` and a one-line intro.
+- **Entry counts on `index.html`:** top-level entries per page: declarations + settings + constants;
+  hooks; `ctx` + views; effects + behaviors; `rules_ctx` + exports + modifier points; harness types;
+  plugins. The changelog row has no count.
+- **Entry markup:** declarations, constants, hooks, effects, behaviors, exports, modifier points and
+  types are `<section class="entry">`; methods of a type are nested `<article>`s; parameters and fields
+  are `<tr>`s. Method headings show a signature built from the params (`wander(radius = 3, chance =
+  0.1)`, `*args`, `**kwargs`). A parameter's or field's `since` is shown when it differs from its
+  entry's (declaration params) or always (type fields, in their own column).
+- **Symbol pages:** `DocsRenderer.pageSymbols` walks the model with the same symbol paths as
+  `api.json`; a test checks every `model.symbols()` entry has an anchor on its page.
+- **Escaping:** `esc()` also escapes ids and the engine version. Markdown slugs are computed from the
+  raw heading text (backticks included, so they become `-`); an empty slug becomes `section`.
+- **Markdown details:** a `- ` item continues onto following indented lines; an unmatched backtick
+  stays literal; fenced code keeps its lines verbatim (escaped); bold isn't parsed inside code.
+- **Plugins:** plugins are rendered sorted by id, and their builtins, effects, commands and GMCP packages
+  sorted by name. Plugin builtin and effect parameter rows have no ids (they aren't `api.json` symbols).
+- **Examples that need another file or kind:** besides `module` (`MODULE.gups`), the `package` example
+  replaces `package.star` (a second `package()` call is an error), as listed in
+  `DocExamples.FILE_FOR_SYMBOL`. `global_command` is only allowed in lib and rules packages, so its
+  example package is declared `kind = "lib"` (`DocExamples.LIB_SYMBOLS`). The other examples use the
+  §3.1 zone. `MODULE.gups` is `module(api_version = 1)` when the example doesn't replace it.
+- **Fixture:** `room("start", name = "Start", desc = "A bare stone room.", flags = ["dead_end_ok"])`.
+- **`DocExamples.problems(model, examples = ALL)`:** takes the examples as a parameter so tests can
+  check a broken table. It also reports a `server` example. The `:script` completeness test builds a
+  model without harness types, so it checks `ALL` minus the four harness examples; `HarnessApiTest`
+  checks all of `ALL` against the full model.
+- **`gups docs`:** `--world` reports only the first `WorldModule.problems()` entry as the usage error.
+  With `--world`, the output is identical to without it until M7.4 adds plugins.
+- **Content types:** `WebAssets.contentType` now adds `; charset=utf-8` to HTML and CSS for the web
+  client's files too, not just the docs. Docs responses send `Cache-Control: no-cache`.
+- **Routes:** Ktor matched `/docs/` to neither `/docs` nor `/docs/{name}`, so `mountDocs` also registers
+  `get("/docs/")`; the `/docs` handler still checks the path for a trailing slash in case Ktor's
+  trailing-slash handling changes. The redirect is `302` (`permanent = false`).
+- **Dev ready message:** `GUPS dev server on 127.0.0.1:<port>. Connect with: telnet localhost <port>.
+  API reference: http://127.0.0.1:<docs>/docs/`.
+- **CHANGELOG.md:** rewritten into the §4.1 shape; the "Unreleased" heading is gone, since api_version 1
+  is the only, current version.
+*Code:* `DocsRenderer.kt`, `Markdown.kt`, `DocExamples.kt`, `DocExamplesTest`, `Docs`, `WebServer.mountDocs`, `DocsServer`, `GupsServer`, `cli/build.gradle.kts`, `.github/workflows/ci.yml`.
 
 

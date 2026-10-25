@@ -60,6 +60,7 @@ jobs:
           cli/build/install/gups/bin/gups --version
           cli/build/install/gups/bin/gups --help
           cli/build/install/gups/bin/gups test --world template-world //...
+          test -f cli/build/install/gups/docs/index.html
 
       - name: Upload test reports
         if: failure()
@@ -78,6 +79,7 @@ jobs:
         run: |
           cli/build/image/gups/bin/gups --version
           cli/build/image/gups/bin/gups test --world template-world //...
+          test -f cli/build/image/gups/docs/index.html
 
       - name: Upload the jlink image
         uses: actions/upload-artifact@v4
@@ -99,6 +101,19 @@ jobs:
           name: course-world-template
           path: cli/build/distributions/course-world-template-*.tar.gz
 
+      - name: Build the API reference archive
+        if: matrix.platform == 'linux-x64'
+        env:
+          VERSION_ARG: ${{ steps.props.outputs.version_arg }}
+        run: ./gradlew :cli:docsArchive $VERSION_ARG --console=plain
+
+      - name: Upload the API reference archive
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.platform == 'linux-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gups-docs
+          path: cli/build/distributions/gups-docs-*.zip
+
   release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
@@ -117,7 +132,7 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber ./*.tar.gz
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber ./*.tar.gz ./*.zip
 
   template-release:
     name: Sync course-world-template

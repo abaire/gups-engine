@@ -22,6 +22,11 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
+import io.ktor.http.withCharset
+import io.ktor.server.request.path
+import io.ktor.server.response.respondRedirect
+import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -95,13 +100,59 @@ class WebAssets(private val files: Map<String, ByteArray>) {
 
         fun contentType(name: String): ContentType = when (name.substringAfterLast('.')) {
             "js" -> ContentType.Text.JavaScript
-            "css" -> ContentType.Text.CSS
-            "html" -> ContentType.Text.Html
+            "css" -> ContentType.Text.CSS.withCharset(Charsets.UTF_8)
+            "html" -> ContentType.Text.Html.withCharset(Charsets.UTF_8)
+            "json" -> ContentType.Application.Json.withCharset(Charsets.UTF_8)
             "svg" -> ContentType.Image.SVG
             "png" -> ContentType.Image.PNG
             "ico" -> ContentType("image", "x-icon")
             else -> ContentType.Application.OctetStream
         }
+    }
+}
+
+/**
+ * The API reference's routes (SPEC_MILESTONE7.md §3.2): `/docs` redirects to `/docs/` so the
+ * pages' relative links resolve, `/docs/` is `index.html`, and `/docs/<file>` is one of [docs].
+ */
+fun Route.mountDocs(docs: Map<String, ByteArray>) {
+    suspend fun RoutingCall.file(name: String) {
+        val bytes = docs[name] ?: return respondText("Not found", status = HttpStatusCode.NotFound)
+        response.header(HttpHeaders.CacheControl, "no-cache")
+        respondBytes(bytes, WebAssets.contentType(name))
+    }
+    // Ktor may match /docs/ to the /docs route too, so the path tells them apart.
+    get("/docs") {
+        if (call.request.path().endsWith("/")) call.file("index.html") else call.respondRedirect("/docs/", permanent = false)
+    }
+    get("/docs/") { call.file("index.html") }
+    get("/docs/{name}") { call.file(call.parameters["name"].orEmpty()) }
+}
+
+/** A plain-HTTP listener serving only the API reference, for `serve --dev` (SPEC_MILESTONE7.md §3.2). */
+class DocsServer(private val docs: Map<String, ByteArray>, private val host: String, private val port: Int) {
+    private var server: EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? = null
+
+    /** Binds and starts serving. Returns the bound port (useful with port 0). */
+    suspend fun start(): Int {
+        val s = embeddedServer(
+            Netty,
+            configure = {
+                connector {
+                    this.host = this@DocsServer.host
+                    this.port = this@DocsServer.port
+                }
+            },
+        ) {
+            routing { mountDocs(docs) }
+        }
+        s.start(wait = false)
+        server = s
+        return s.engine.resolvedConnectors().first().port
+    }
+
+    fun stop() {
+        server?.stop(0, 1000)
     }
 }
 
@@ -121,6 +172,8 @@ class WebServer(
     private val sessionIds: AtomicLong = AtomicLong(1),
     private val tls: ServerTls? = null,
     private val tokenCheck: Duration = TOKEN_CHECK_INTERVAL,
+    /** The API reference's files, served at `/docs/` with no login (SPEC_MILESTONE7.md §3.2). */
+    private val docs: Map<String, ByteArray> = emptyMap(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val live = ConcurrentHashMap.newKeySet<Socket>()
@@ -163,6 +216,7 @@ class WebServer(
                 post("/api/signup") { signup(call) }
                 post("/api/logout") { logout(call) }
                 webSocket("/ws") { serve(this) }
+                if (docs.isNotEmpty()) mountDocs(docs)
             }
         }
         s.start(wait = false)
