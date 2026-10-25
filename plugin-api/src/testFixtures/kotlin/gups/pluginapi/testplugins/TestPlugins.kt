@@ -135,6 +135,20 @@ class CharPlugin : GmcpClashPlugin("zchar", "Char")
 
 class WeatherGmcpPlugin : GmcpClashPlugin("zweather", "Gups.Weather")
 
+/** Nests a package inside the weather plugin's `Gups.Weather`. */
+class WeatherRainGmcpPlugin : GmcpClashPlugin("zrain", "Gups.Weather.Rain")
+
+/** Registers `Gups.Sky` and then `Gups.Sky.Moon`, which nests in its own first package. */
+class SkyGmcpPlugin : GupsPlugin {
+    override val id = "zsky"
+    override val pluginApiVersion = PluginApi.VERSION
+
+    override fun register(r: PluginRegistry) {
+        r.addGmcp("Gups.Sky", "Sky.") { _, _ -> null }
+        r.addGmcp("Gups.Sky.Moon", "Clash.") { _, _ -> null }
+    }
+}
+
 /** Its id isn't the one MODULE.gups pins. */
 class MisnamedPlugin : GupsPlugin {
     override val id = "somethingelse"

@@ -351,7 +351,7 @@ class ScriptLoader(
             }
         }
 
-        /** Attribute namespaces are unique across the world (SPEC §3.7). */
+        /** Attribute namespaces are unique across the world, plugins' included (SPEC §3.7). */
         fun checkNamespaces() {
             val owners = LinkedHashMap<String, MutableList<String>>()
             for (st in live) {
@@ -363,6 +363,12 @@ class ScriptLoader(
                 for (p in pkgs) {
                     val path = p.removeSuffix(" (shared)")
                     states.getValue(path).errors += LoadError(path, "namespace", "attribute namespace '$ns' is used by more than one package: ${pkgs.joinToString(", ")}")
+                }
+            }
+            // A plugin writes attributes in its id's namespace, so no package may own it (D-178).
+            for (st in live) {
+                for (ns in listOf(st.pkg.namespace) + st.pkg.sharedNamespaces) {
+                    if (ns in pluginGlobals) st.errors += LoadError(st.pkg.path, "namespace", "attribute namespace '$ns' is the namespace of plugin '$ns'")
                 }
             }
         }

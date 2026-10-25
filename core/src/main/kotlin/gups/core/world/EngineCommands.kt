@@ -155,7 +155,7 @@ internal object EngineCommands {
     }
 
     private fun help(c: CommandCall) {
-        val defs = (c.world.commands.engineCommands + c.world.commands.globalCommands + c.world.commands.toolCommands)
+        val defs = (c.world.commands.engineCommands + c.world.commands.globalCommands + c.world.commands.pluginCommands + c.world.commands.toolCommands)
             .distinct().filter { it.allows(c.actor) }
         val fast = defs.filter { it.lane == Lane.FAST }.joinToString(" ") { it.name }
         val tick = defs.filter { it.lane == Lane.TICK }.joinToString(" ") { it.name }

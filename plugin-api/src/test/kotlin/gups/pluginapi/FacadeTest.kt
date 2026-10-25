@@ -2,7 +2,10 @@ package gups.pluginapi
 
 import gups.core.Label
 import gups.core.model.ItemLocation
+import gups.core.model.Player
 import gups.core.world.World
+import gups.core.world.destroy
+import gups.core.world.quit
 import gups.core.world.spawnItem
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.ItemFacade
@@ -64,6 +67,18 @@ class FacadeTest {
         assertEquals(cave, ann.room)
         assertEquals(20, ann.maxHp)
         assertEquals(1, ann.level)
+    }
+
+    @Test
+    fun `verbs refuse entities that have left the world`() {
+        val stick = ItemFacade(w.spawnItem(Label("//zones/z:stick"), ItemLocation.InRoom(w.room(Label("//zones/z:a")).id, 0)))
+        w.quit(ann.actor as Player)
+        w.destroy(stick.item)
+        assertFalse(ann.actor.inWorld)
+        assertEquals("teleport(actor): Ann is no longer in the world", assertFailsWith<IllegalArgumentException> { f.teleport(ann, cave) }.message)
+        assertFailsWith<IllegalArgumentException> { f.echo(glade, "Thunder.", exclude = listOf(ann)) }
+        assertFailsWith<IllegalArgumentException> { f.setAttr(ann, "x", 1) }
+        assertEquals("get_attr(entity): ${stick.name} is no longer in the world", assertFailsWith<IllegalArgumentException> { f.getAttr(stick, "x") }.message)
     }
 
     @Test

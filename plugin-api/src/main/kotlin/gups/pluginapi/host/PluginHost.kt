@@ -103,6 +103,8 @@ internal class PluginRegistryImpl(
     override fun addCommand(name: String, lane: PluginLane, role: PluginRole, doc: String, run: (PluginCommandCall) -> Unit) {
         require(name.isNotBlank() && name.none { it.isWhitespace() }) { "command name '$name' must be one word" }
         require(name == name.lowercase()) { "command name '$name' must be lowercase" }
+        // `@` words resolve only to engine tool commands (SPEC §4.9), so a plugin's could never run (D-178).
+        require(!name.startsWith("@")) { "command name '$name' can't start with @: those are engine tool commands" }
         try {
             commandCheck.registerPlugin(FastCommand(name) {})
         } catch (e: IllegalArgumentException) {
@@ -119,10 +121,12 @@ internal class PluginRegistryImpl(
 
     override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) {
         require(GMCP.matches(pkg)) { "GMCP package '$pkg' needs at least two dot-separated parts, such as Gups.Weather" }
-        for (e in ENGINE_GMCP_PACKAGES) {
-            require(pkg != e && !pkg.startsWith("$e.") && !e.startsWith("$pkg.")) { "GMCP package '$pkg' overlaps the engine's $e" }
-        }
+        // Clients subscribe by prefix, so a package may not equal, contain or nest in a taken one (D-178).
+        fun overlaps(t: String) = pkg == t || pkg.startsWith("$t.") || t.startsWith("$pkg.")
+        ENGINE_GMCP_PACKAGES.firstOrNull { overlaps(it) }?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps the engine's $it") }
         require(pkg !in takenGmcp && gmcp.none { it.pkg == pkg }) { "GMCP package '$pkg' is already registered" }
+        takenGmcp.firstOrNull { overlaps(it) }?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps another plugin's $it") }
+        gmcp.firstOrNull { overlaps(it.pkg) }?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps this plugin's ${it.pkg}") }
         gmcp += GmcpReg(pkg, doc, produce)
     }
 

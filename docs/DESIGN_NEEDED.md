@@ -177,3 +177,31 @@ nothing ever quits a disabled account's online characters (D-135).
 - Which command disables and re-enables an account: a `@role <account> disable` form, a
   restriction (§4.4), or a CLI tool?
 - Does disabling also revoke web tokens and drop link-dead characters at once?
+
+## Plugins
+
+### Plugins that share a GMCP package tree
+**Spec:** M7 design §5.1 (GMCP), §5.3 (loading order); SPEC §4.10.
+**Today:** a plugin's GMCP package may not equal, contain or nest in another plugin's, and the
+plugin that registers later (larger id) fails to load (D-178). That stops a plugin from silently
+sending under another's tree, since clients subscribe by prefix. It also rules out deliberate
+cooperation, such as a `rain` plugin adding `Gups.Weather.Rain` next to `weather`'s
+`Gups.Weather`.
+**Sketch (not settled):**
+- Both sides opt in. The owner allows sub-packages with `r.shareGmcp("Gups.Weather")`. The
+  other plugin names the owner when it registers: `r.addGmcp("Gups.Weather.Rain", doc,
+  within = "weather") { … }`. A nested package without both still fails, as today.
+- The owner must be loaded. If `weather` is missing or failed, `rain`'s nested package fails
+  with "needs plugin 'weather'", and so does `rain`, since registration is atomic.
+- Load order: today "earlier" means a smaller id, so `arain` would register before `weather`.
+  Either `within` makes the owner register first (a dependency edge, sorted by id otherwise),
+  or the overlap check runs once all plugins have registered.
+- The docs page lists a shared package under its owner, so a student can see who sends what.
+- It's an API change: bump `PluginApi.VERSION` and add a CHANGELOG entry.
+**Questions:**
+- Should the operator also agree in `MODULE.gups` (for example
+  `plugins_share = {"rain": ["weather"]}`), or is the plugins' consent enough?
+- Should the same opt-in cover other things plugins share: commands (a plugin adding a
+  sub-command to another's), attribute namespaces, or calling another plugin's builtins?
+- Does a dependency between plugins need a declared version range, and how does that relate
+  to `PluginApi.VERSION`?

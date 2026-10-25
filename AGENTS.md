@@ -16,8 +16,9 @@ that differ from what the spec shows.
   entries.
 - If you change behavior that an existing entry describes, update that entry rather than
   adding a contradicting one.
-- Don't edit `docs/SPEC.md` to match your decision. The maintainers review the log and fold
-  accepted decisions into the spec themselves; rejected ones mean the code changes.
+- Don't edit `docs/SPEC.md` without explicit approval of the proposed change. Propose the
+  exact wording first; never edit it just to match a decision you made. The maintainers review
+  the log and fold accepted decisions into the spec; rejected ones mean the code changes.
 - If you can't tell whether something counts, log it. A spurious entry costs a minute of
   review; a silent decision can go unnoticed for good.
 

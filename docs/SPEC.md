@@ -427,6 +427,8 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
   `package(shared_namespaces = ["faction"])`. Any package may write to a shared namespace,
   but only through helper functions exported by the declaring package. The declaring
   package's helpers run with write permission on that namespace.
+- **Plugin namespaces:** a plugin writes attributes in the namespace of its id, so no
+  package's namespace or shared namespace may equal a plugin id.
 - **Built-in state** isn't stored in attributes and isn't reachable through them. That
   covers stats, position, and inventory.
 
@@ -776,6 +778,11 @@ interface GupsPlugin {                                               // ServiceL
     fun register(r: PluginRegistry)   // addBuiltin(), addCommand(), addEffectPrimitive(), addGmcp()
 }
 ```
+
+Plugins act on the world only through the `PluginWorld` facade, whose verbs check their
+arguments as `ctx` verbs do. A verb given an actor or item that has left the world (a dead
+mob, a player who quit, a destroyed item) fails with "<name> is no longer in the world"
+rather than silently doing nothing. Details are in [SPEC_MILESTONE7.md](SPEC_MILESTONE7.md) §5.2.
 
 ### 4.12 Test Harness API (Starlark)
 

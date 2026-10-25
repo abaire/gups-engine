@@ -118,14 +118,21 @@ internal class RngFacade(private val world: World) : PluginRng {
  * namespace of its own, so attribute keys must be qualified and can't be written (D-177).
  */
 internal class WorldFacade(val world: World, private val pluginId: String?, private val logSink: (String) -> Unit) : PluginWorld {
-    private fun actorOf(a: PluginActor, what: String): Actor =
-        (a as? ActorFacade)?.actor ?: throw IllegalArgumentException("$what: not an actor of this world")
+    // A stale view fails as it does in `Ctx`, rather than reaching `core` (D-177).
+    private fun actorOf(a: PluginActor, what: String): Actor {
+        val actor = (a as? ActorFacade)?.actor ?: throw IllegalArgumentException("$what: not an actor of this world")
+        require(actor.inWorld) { "$what: ${actor.name} is no longer in the world" }
+        return actor
+    }
 
     private fun roomOf(r: PluginRoom, what: String): Room =
         (r as? RoomFacade)?.room ?: throw IllegalArgumentException("$what: not a room of this world")
 
-    private fun entityOf(e: PluginEntity, what: String): Entity =
-        (e as? EntityFacade)?.entity ?: throw IllegalArgumentException("$what: not an entity of this world")
+    private fun entityOf(e: PluginEntity, what: String): Entity = when (e) {
+        is ActorFacade -> actorOf(e, what)
+        is ItemFacade -> e.item.also { require(world.item(it.id) === it) { "$what: ${it.name} is no longer in the world" } }
+        else -> (e as? EntityFacade)?.entity ?: throw IllegalArgumentException("$what: not an entity of this world")
+    }
 
     override fun send(target: PluginActor, text: String) = world.send(actorOf(target, "send(target)"), text)
 

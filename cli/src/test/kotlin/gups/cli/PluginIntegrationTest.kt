@@ -13,10 +13,12 @@ import gups.pluginapi.testplugins.CharVitalsPlugin
 import gups.pluginapi.testplugins.EchoForecastPlugin
 import gups.pluginapi.testplugins.LookPlugin
 import gups.pluginapi.testplugins.NorthPlugin
+import gups.pluginapi.testplugins.SkyGmcpPlugin
 import gups.pluginapi.testplugins.ThrowingPlugin
 import gups.pluginapi.testplugins.TidesPlugin
 import gups.pluginapi.testplugins.WeatherGmcpPlugin
 import gups.pluginapi.testplugins.WeatherPlugin
+import gups.pluginapi.testplugins.WeatherRainGmcpPlugin
 import gups.pluginapi.testplugins.WrongVersionPlugin
 import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
@@ -136,6 +138,8 @@ class PluginIntegrationTest {
                 "zvitals" to listOf(CharVitalsPlugin::class),
                 "zchar" to listOf(CharPlugin::class),
                 "zweather" to listOf(WeatherGmcpPlugin::class),
+                "zrain" to listOf(WeatherRainGmcpPlugin::class),
+                "zsky" to listOf(SkyGmcpPlugin::class),
             ),
             wrong = setOf("tides"),
             extraPins = mapOf("gone" to "sha256:" + "1".repeat(64)),
@@ -144,7 +148,7 @@ class PluginIntegrationTest {
         val server = GupsServer(WorldDir(root), port = 0, db = null) { logs.append(it).append('\n') }
         assertTrue(server.boot(), logs.toString())
         val log = logs.toString()
-        for (id in listOf("tides", "oldie", "thrower", "looker", "norther", "zforecast", "zvitals", "zchar", "zweather", "gone")) {
+        for (id in listOf("tides", "oldie", "thrower", "looker", "norther", "zforecast", "zvitals", "zchar", "zweather", "zrain", "zsky", "gone")) {
             assertContains(log, "warning: plugin '$id': ", message = log)
         }
         assertContains(log, "checksum mismatch for plugins/tides.jar")
@@ -154,6 +158,8 @@ class PluginIntegrationTest {
         assertContains(log, "GMCP package 'Char.Vitals' overlaps")
         assertContains(log, "GMCP package 'Char' needs at least two dot-separated parts")
         assertContains(log, "GMCP package 'Gups.Weather' is already registered")
+        assertContains(log, "GMCP package 'Gups.Weather.Rain' overlaps another plugin's Gups.Weather")
+        assertContains(log, "GMCP package 'Gups.Sky.Moon' overlaps this plugin's Gups.Sky")
         assertContains(log, "name 'tides' is not defined")
         assertContains(log, "cannot define 'weather': it is the namespace of plugin 'weather'")
         val w = server.world

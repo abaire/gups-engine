@@ -2016,16 +2016,26 @@ names.
 - **Views:** `PluginRoom.size` is the lowercase track size (`normal`), `flags` and `regions` sorted;
   `PluginEntity.label` is the room label, or the prototype label of a mob or item, and null for players.
   Facades compare equal when they wrap the same entity.
+- **Stale views:** a verb given an actor or item that has left the world fails with
+  `<verb>(<param>): <name> is no longer in the world`, as `Ctx`'s argument checks do; rooms never leave.
+  The milestone spec §5.2 and SPEC §4.11 now say so.
 - **`scriptWorld(thread)`** is also set for `@eval` frames. The harness's own `@eval` worlds have no
   loader, so they don't predeclare plugin globals.
 *Code:* `plugin-api/src/main/kotlin/gups/pluginapi/`, `host/Facade.kt`, `host/Values.kt`, `Host.kt`.
 
 ### D-178 Plugin loading and wiring (M7 design §5.3, §5.5) — `open`
-- **Registry checks:** command names must also be lowercase. Plugin commands are checked against a
+- **Registry checks:** command names must also be lowercase, and can't start with `@`: `resolve` sends
+  `@` words only to engine tool commands, so such a command could never run. Plugin commands are checked against a
   `CommandRegistry` holding the earlier plugins' commands; a GMCP package must match
-  `Name(.Name)+` before the engine-overlap check, so `Char` fails as "needs at least two parts".
+  `Name(.Name)+` before the engine-overlap check, so `Char` fails as "needs at least two parts". GMCP
+  packages also may not nest in an earlier plugin's or in the same plugin's earlier ones (`Gups.Weather`
+  then `Gups.Weather.Rain`), because clients subscribe by prefix; the milestone spec §5.1 now says so.
+  Opting in to a shared package tree is in DESIGN_NEEDED.md.
 - **Roles:** `CommandRegistry.resolve` skips plugin commands the actor's role doesn't allow, so they don't
-  exist for other players (engine commands with roles are all `@` tools, which already did this).
+  exist for other players (engine commands with roles are all `@` tools, which already did this). `help`
+  lists them the same way, after the global commands.
+- **Namespaces:** a package whose namespace or `shared_namespaces` entry is a plugin id fails to load with
+  a `"namespace"` error, since the plugin writes attributes there (§5.2, SPEC §3.7).
 - **Loader:** an id that fails the `MODULE.gups` checks is skipped with a warning too (the server stops on
   the problem anyway, but other commands still load the rest). Unpinned-jar warnings come first, then
   plugins in id order; `register` runs after all jars are checked, also in id order, so "earlier plugin"
@@ -2043,7 +2053,7 @@ names.
   `:cli`'s integration tests can use them through `testFixtures(project(":plugin-api"))`.
 - **Tests and the real changelog:** `ApiDiffTest` and `ChangelogTest` now use fixed changelog text
   instead of `docs/CHANGELOG.md`, so entries such as `module.plugins` don't break them.
-*Code:* `host/PluginHost.kt`, `Commands.kt` (core and cli), `GupsServer.boot`, `Deployer`, `PluginLoaderTest`, `PluginIntegrationTest`.
+*Code:* `host/PluginHost.kt`, `Commands.kt` (core and cli), `EngineCommands.help`, `Loader.checkNamespaces`, `GupsServer.boot`, `Deployer`, `PluginLoaderTest`, `PluginIntegrationTest`.
 
 ### D-179 The sample plugin and the guide (M7 design §6) — `open`
 - **Module graph:** the root build now also calls `evaluationDependsOn` for nested projects (such as

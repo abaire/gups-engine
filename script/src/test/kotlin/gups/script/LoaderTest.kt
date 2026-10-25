@@ -247,4 +247,22 @@ class LoaderTest {
         assertEquals("cannot define 'weather': it is the namespace of plugin 'weather'", e.message)
         assertEquals(2, e.line)
     }
+
+    @Test
+    fun `a package may not own a plugin's attribute namespace`() {
+        val dir = WorldDir(
+            tempWorld(
+                mapOf(
+                    "zones/weather/package.star" to zonePkg(),
+                    "lib/sky/package.star" to libPkg(", shared_namespaces = [\"weather\"]"),
+                ),
+            ),
+        )
+        val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = mapOf("weather" to StructValue(emptyMap())))
+        for (pkg in listOf("zones/weather", "lib/sky")) {
+            val e = loader.load(listOf(pkg)).errors.single { it.kind == "namespace" }
+            assertEquals(pkg, e.pkg)
+            assertEquals("attribute namespace 'weather' is the namespace of plugin 'weather'", e.message)
+        }
+    }
 }

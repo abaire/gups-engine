@@ -1092,7 +1092,9 @@ fun interface PluginEffect {
   name has at least two dot-separated parts (`Gups.Weather`). It must not equal, contain, or be
   contained in an engine package (`Char.Vitals`, `Char.Status`, `Char.Affects`, `Room.Info`,
   `Room.Bands`, `Comm.Channel.Text`, `Gups.Trace`), because `supportsGmcp` matches by prefix.
-  Nor may it equal another plugin's package.
+  Nor may it equal, contain, or be contained in another plugin's package or another of its own
+  plugin's packages: the later registration fails like any other clash, so one plugin can't
+  silently receive or send under another's package tree.
 - **Failures at run time:** an exception from a plugin builtin becomes a script error in the
   calling hook (the normal hook-failure path, SPEC §6.2). An exception from a command, effect,
   GMCP producer or `onWorldStarted` callback is caught and recorded as a `"plugin"` diagnostic,
@@ -1119,6 +1121,11 @@ fun interface PluginEffect {
   fun delAttr(entity: PluginEntity, key: String)
   ```
   Attribute keys are in the plugin's own namespace (its id), as a package's are in its own.
+  Like `Ctx`'s argument checks, each verb refuses an actor or item that has left the world (a
+  mob that died, a player who quit, a destroyed item) with
+  `IllegalArgumentException("<verb>(<param>): <name> is no longer in the world")`, before
+  calling `core`. A plugin that keeps a `PluginActor` or `PluginItem` across pulses gets this
+  error instead of a silent no-op.
 - **reads:** `val pulse: Long`, `val seed: Long`, `val rng: PluginRng`
   (`int(min, max)`, `chance(p)`, seeded from the world's RNG), `fun rooms(): List<PluginRoom>`
   (sorted by label), `fun room(label: String): PluginRoom?`, and

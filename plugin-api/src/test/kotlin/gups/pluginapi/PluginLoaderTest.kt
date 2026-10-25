@@ -2,6 +2,7 @@ package gups.pluginapi
 
 import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginNamespace
+import gups.pluginapi.host.PluginRegistryImpl
 import gups.pluginapi.testplugins.LookPlugin
 import gups.pluginapi.testplugins.MisnamedPlugin
 import gups.pluginapi.testplugins.ThrowingPlugin
@@ -14,6 +15,7 @@ import gups.script.WorldModule
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class PluginLoaderTest {
@@ -61,5 +63,12 @@ class PluginLoaderTest {
     @Test
     fun `no plugins, no warnings`() {
         PluginLoader.load(WorldDir(root), WorldModule()).use { assertEquals(emptyMap(), it.globals) }
+    }
+
+    @Test
+    fun `plugin commands may not start with @`() {
+        val r = PluginRegistryImpl("weather", emptyList(), emptySet()) { { } }
+        val e = assertFailsWith<IllegalArgumentException> { r.addCommand("@weather", PluginLane.FAST, doc = "Tool.") {} }
+        assertEquals("command name '@weather' can't start with @: those are engine tool commands", e.message)
     }
 }

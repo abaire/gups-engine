@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Effect
 import kotlin.test.Test
@@ -48,5 +49,21 @@ class PluginSeamsTest {
         assertEquals(listOf("forecast"), f.w.commands.pluginCommands.map { it.name })
         assertEquals("forecast", f.w.commands.resolve(ann, "forecast")?.name)
         assertEquals("forecast", f.w.commands.resolve(ann, "forec")?.name)
+    }
+
+    @Test
+    fun `help lists plugin commands the actor may use`() {
+        val f = Fixture()
+        val ann = f.player("Ann")
+        f.w.commands.registerPlugin(FastCommand("forecast") {})
+        f.w.commands.registerPlugin(TickCommand("rake") { null })
+        f.w.commands.registerPlugin(FastCommand("storm", role = Role.BUILDER) {})
+        f.out(ann)
+        f.input(ann, "help")
+        val out = f.out(ann)
+        val (fast, tick) = out.lines()
+        assertTrue(" forecast" in fast, out)
+        assertTrue(" rake" in tick, out)
+        assertTrue("storm" !in out, out)
     }
 }
