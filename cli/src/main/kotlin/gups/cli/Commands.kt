@@ -40,7 +40,13 @@ import gups.persist.ReproBundle
 import gups.persist.SqliteAccountStore
 import gups.persist.buildReproBundle
 import gups.persist.restoreBundle
+import gups.pluginapi.host.PluginHost
+import gups.pluginapi.host.PluginInfo
+import gups.pluginapi.host.PluginLoader
+import gups.pluginapi.host.PluginMemberInfo
 import gups.script.ApiDiff
+import gups.script.MethodSpec
+import gups.script.ParamSpec
 import gups.script.Changelog
 import gups.script.ChangelogParseException
 import gups.script.Linter
@@ -242,12 +248,14 @@ class TestCmd : CliktCommand(name = "test") {
     override fun run() {
         val dir = WorldDir((world ?: File(".")).toPath())
         var file: Label? = null
-        val report = TestRunner(dir).run(patterns) { r ->
-            if (r.file != file) {
-                file = r.file
-                echo(r.file.v)
+        val report = withPlugins(dir) { plugins ->
+            TestRunner(dir, plugins).run(patterns) { r ->
+                if (r.file != file) {
+                    file = r.file
+                    echo(r.file.v)
+                }
+                echo(r.render())
             }
-            echo(r.render())
         }
         for (p in report.problems) echo("gups test: $p", err = true)
         if (report.results.isNotEmpty()) echo("\n" + report.summary())
@@ -264,7 +272,9 @@ class Lint : CliktCommand(name = "lint") {
 
     override fun help(context: Context) = "Run static checks on course world packages (SPEC §7.3 gate 2)."
 
-    override fun run() {
+    override fun run() = withPlugins(WorldDir((world ?: File(".")).toPath())) { plugins -> lint(plugins) }
+
+    private fun lint(plugins: PluginHost) {
         val dir = WorldDir((world ?: File(".")).toPath())
         val patternList = patterns.ifEmpty { listOf("//...") }
 
@@ -280,7 +290,7 @@ class Lint : CliktCommand(name = "lint") {
             try {
                 git.run("worktree", "add", "--detach", "--quiet", staging.toString(), commit)
                 val baseDir = WorldDir(staging)
-                val baseLoader = ScriptLoader(baseDir, ScriptLimits())
+                val baseLoader = ScriptLoader(baseDir, ScriptLimits(), pluginGlobals = plugins.globals)
                 val baseResult = baseLoader.load(baseDir.packages())
                 if (!baseResult.ok) {
                     val errs = baseResult.errors.joinToString("\n") { it.render() }
@@ -293,7 +303,7 @@ class Lint : CliktCommand(name = "lint") {
             }
         }
 
-        val report = Linter(dir, basePrototypes).lint(patternList)
+        val report = Linter(dir, basePrototypes, plugins).lint(patternList)
 
         if (format == "github") {
             for (f in report.findings) echo(f.renderGithub())
@@ -323,8 +333,10 @@ class Fuzz : CliktCommand(name = "fuzz") {
 
     override fun run() {
         val dir = WorldDir((world ?: File(".")).toPath())
-        val outcome = FuzzWalker(dir).run(patterns, pulses, seed) { p ->
-            if (pulses >= 2000) echo("... pulse $p / $pulses")
+        val outcome = withPlugins(dir) { plugins ->
+            FuzzWalker(dir, plugins).run(patterns, pulses, seed) { p ->
+                if (pulses >= 2000) echo("... pulse $p / $pulses")
+            }
         }
         if (!outcome.ok) {
             echo("gups fuzz failed: ${outcome.failureMessage}", err = true)
@@ -388,7 +400,7 @@ class MigrateCheck : CliktCommand(name = "migrate-check") {
         try {
             Files.copy(snapshot.toPath(), tempDb, StandardCopyOption.REPLACE_EXISTING)
             val dir = WorldDir((world ?: File(".")).toPath())
-            val outcome = MigrationChecker(dir, tempDb).check()
+            val outcome = withPlugins(dir) { MigrationChecker(dir, tempDb, it).check() }
             val ageStr = outcome.snapshotAgeText ?: "unknown age"
             echo("Checking migrations against snapshot ${snapshot.name} ($ageStr)...")
             if (!outcome.ok) {
@@ -424,13 +436,14 @@ class Docs : CliktCommand(name = "docs") {
         }
         val dir = out ?: File("build/docs")
         if (dir.isFile || dir.name.endsWith(".json")) throw UsageError("--out: give a directory for the HTML reference, not ${dir.name}")
-        world?.let { w ->
-            val (module, error) = WorldModule.read(WorldDir(w.toPath()))
+        val plugins = world?.let { w ->
+            val worldDir = WorldDir(w.toPath())
+            val (module, error) = WorldModule.read(worldDir)
             if (error != null) throw UsageError("--world: ${error.render()}")
             module.problems().firstOrNull()?.let { throw UsageError("--world: $it") }
-            // M7.4 renders the world's plugins.
-        }
-        val files = DocsRenderer.render(ScriptApi.model(HarnessApi.specs()))
+            loadPlugins(worldDir, module) { echo("warning: $it", err = true) }.use { it.describe().map(::toDocSpec) }
+        }.orEmpty()
+        val files = DocsRenderer.render(ScriptApi.model(HarnessApi.specs()), plugins = plugins)
         dir.mkdirs()
         for ((name, text) in files) dir.resolve(name).writeText(text, Charsets.UTF_8)
         echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")
@@ -521,6 +534,33 @@ class MigrateInfoCmd : CliktCommand(name = "migrate-info") {
     }
 }
 
+/** The world's plugins (M7 design §5.5 chunk 4); each warning goes to [log]. Close the host when done. */
+fun loadPlugins(dir: WorldDir, module: WorldModule, log: (String) -> Unit): PluginHost = PluginLoader.load(dir, module, log = log)
+
+/**
+ * Runs [block] with [dir]'s plugins, printing their warnings. A `MODULE.gups` that doesn't
+ * read means no plugins here; the command reports that error itself (D-178).
+ */
+private fun <T> CliktCommand.withPlugins(dir: WorldDir, block: (PluginHost) -> T): T =
+    loadPlugins(dir, WorldModule.read(dir).first) { echo("warning: $it", err = true) }.use(block)
+
+/** What `plugins.html` shows about a plugin. */
+internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
+    fun method(m: PluginMemberInfo) = MethodSpec(
+        m.name,
+        m.doc,
+        m.params.map { ParamSpec(it.name, positional = true, named = true, default = if (it.required) null else it.defaultValue.toString(), doc = it.doc) },
+    )
+    return PluginDocSpec(
+        id = p.id,
+        doc = p.doc,
+        builtins = p.builtins.map(::method),
+        effects = p.effects.map(::method),
+        commands = p.commands.map { PluginCommandDocSpec(it.name, it.lane.name.lowercase(), it.role.name.lowercase(), it.doc) },
+        gmcp = p.gmcp.map { PluginGmcpDocSpec(it.pkg, it.doc) },
+    )
+}
+
 /** How long a shutdown waits for the final checkpoint. */
 const val SHUTDOWN_WAIT_MS = 30_000L
 
@@ -547,7 +587,8 @@ class Repro : CliktCommand(name = "repro") {
         val bundle = runCatching { ReproBundle.parse(json) }.getOrElse { throw UsageError("not a repro bundle: ${it.message}") }
         save?.writeText(bundle.toJson())
         echo("Replaying ${bundle.hook ?: "the failure"} in ${bundle.room} (seed ${bundle.seed}, pulses ${bundle.checkpointPulse}..${bundle.pulse}, ${bundle.inputs.size} inputs)")
-        val outcome = ReproRunner(WorldDir((world ?: File(".")).toPath())).run(
+        val reproDir = WorldDir((world ?: File(".")).toPath())
+        val outcome = withPlugins(reproDir) { plugins -> ReproRunner(reproDir, plugins).run(
             seed = bundle.seed,
             startPulse = bundle.checkpointPulse,
             firstFreeId = bundle.maxId + 1,
@@ -555,7 +596,7 @@ class Repro : CliktCommand(name = "repro") {
             inputs = bundle.records,
             untilPulse = bundle.pulse,
             matches = { it.hook == bundle.hook && it.message == bundle.message },
-        )
+        ) }
         outcome.notes.forEach { echo("  note: $it") }
         if (outcome.reproduced) {
             val d = outcome.matching.first()

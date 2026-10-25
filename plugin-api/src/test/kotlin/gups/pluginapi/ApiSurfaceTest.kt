@@ -1,0 +1,43 @@
+package gups.pluginapi
+
+import java.lang.reflect.Modifier
+import java.lang.reflect.ParameterizedType
+import java.lang.reflect.Type
+import java.lang.reflect.WildcardType
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/** No public type in `gups.pluginapi` mentions a `core` or `script` type (M7 design §5.2, Q6). */
+class ApiSurfaceTest {
+    private val classes = listOf(
+        PluginApi::class, GupsPlugin::class, PluginRegistry::class, PluginLane::class, PluginRole::class, PluginParam::class,
+        PluginCommandCall::class, PluginEffectCall::class, PluginEffect::class, PluginWorld::class, PluginRng::class,
+        PluginEntity::class, PluginRoom::class, PluginActor::class, PluginItem::class, PluginViews::class,
+    )
+
+    private fun names(t: Type): List<String> = when (t) {
+        is Class<*> -> listOf(t.name) + (t.componentType?.let(::names) ?: emptyList())
+        is ParameterizedType -> names(t.rawType) + t.actualTypeArguments.flatMap(::names)
+        is WildcardType -> (t.upperBounds + t.lowerBounds).flatMap(::names)
+        else -> listOf(t.typeName)
+    }
+
+    @Test
+    fun `the public api uses only plugin-api, Kotlin, Java and Starlark types`() {
+        val leaks = mutableListOf<String>()
+        fun check(where: String, t: Type) {
+            for (n in names(t)) if (n.startsWith("gups.core.") || n.startsWith("gups.script.")) leaks += "$where: $n"
+        }
+        for (k in classes) {
+            val c = k.java
+            assertEquals("gups.pluginapi", c.packageName, c.name)
+            for (m in c.declaredMethods.filter { Modifier.isPublic(it.modifiers) }) {
+                check("${c.simpleName}.${m.name} return", m.genericReturnType)
+                m.genericParameterTypes.forEach { check("${c.simpleName}.${m.name} param", it) }
+            }
+            // Properties are checked through their public getters.
+        }
+        assertTrue(leaks.isEmpty(), leaks.joinToString("\n"))
+    }
+}

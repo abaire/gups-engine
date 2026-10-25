@@ -42,9 +42,11 @@ class ChangelogTest {
     private fun error(md: String): ChangelogParseException = assertFailsWith<ChangelogParseException> { Changelog.parse(md.trimIndent() + "\n") }
 
     @Test
-    fun `the real changelog parses and its json matches the spec example`() {
-        val changelog = Changelog.parse(docs.resolve("CHANGELOG.md").readText())
-        assertEquals(listOf(1), changelog.versions.map { it.apiVersion })
+    fun `the real changelog parses, and the first changelog's json matches the spec example`() {
+        val real = Changelog.parse(docs.resolve("CHANGELOG.md").readText())
+        assertEquals(1, real.versions.last().apiVersion)
+        assertEquals(docs.resolve("MIGRATING.md").readText(), real.toMigratingMarkdown())
+        val changelog = Changelog.parse("# Changelog\n\n## api_version 1\n\nInitial (unstable) script API.\n")
         assertEquals(
             """
             {
@@ -61,7 +63,6 @@ class ChangelogTest {
             """.trimIndent() + "\n",
             changelog.toJson(1),
         )
-        assertEquals(docs.resolve("MIGRATING.md").readText(), changelog.toMigratingMarkdown())
     }
 
     @Test

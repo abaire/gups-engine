@@ -12,6 +12,9 @@ import gups.core.model.Player
 /** Packages recomputed every phase 7 and sent only when they changed (M6 design §5.2). */
 private val STATE_PACKAGES = listOf("Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands")
 
+/** Every package the engine sends; plugin packages may not overlap them (M7 design §5.1). */
+val ENGINE_GMCP_PACKAGES: Set<String> = (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace")).toSortedSet()
+
 /**
  * Queues the GMCP event [pkg] for [p], to go out with the session's next flush after its
  * text. Returns false, sending nothing, when the client doesn't support [pkg].
@@ -39,6 +42,16 @@ internal fun World.gmcpDeltas(s: Session) {
     for (pkg in STATE_PACKAGES) {
         if (!s.sink.wantsGmcp(pkg)) continue
         val data = gmcpPayload(p, pkg)
+        if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
+        s.gmcpLast[pkg] = data
+        s.gmcpOut += pkg to data
+    }
+    for ((pkg, produce) in pluginGmcp) {
+        if (!s.sink.wantsGmcp(pkg)) continue
+        val data = runCatching { produce(p) }.getOrElse { e ->
+            record(Diagnostic(pulse, "plugin", "GMCP producer $pkg failed: $e", e))
+            continue
+        }
         if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
         s.gmcpLast[pkg] = data
         s.gmcpOut += pkg to data

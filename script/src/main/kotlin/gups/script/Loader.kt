@@ -14,7 +14,11 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkFunction
 import net.starlark.java.eval.StarlarkSemantics
 import net.starlark.java.eval.StarlarkThread
+import net.starlark.java.syntax.AssignmentStatement
+import net.starlark.java.syntax.DefStatement
 import net.starlark.java.syntax.FileOptions
+import net.starlark.java.syntax.Identifier
+import net.starlark.java.syntax.LoadStatement
 import net.starlark.java.syntax.Location
 import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.Program
@@ -90,7 +94,11 @@ class ScriptLoader(
     private val limits: ScriptLimits = ScriptLimits(),
     /** Receives `print()` output from top-level code. */
     private val printSink: (String) -> Unit = {},
+    /** Plugin namespaces by id, predeclared in every package and test file (M7 design §5.5). */
+    val pluginGlobals: Map<String, Any> = emptyMap(),
 ) {
+    private val packageGlobals: Map<String, Any> = PACKAGE_GLOBALS + pluginGlobals
+
     /**
      * Loads [requested] (package paths such as `zones/tutorial`) and their dependencies. [tests]
      * are `*_test.star` files to evaluate as well, with [testGlobals] as their builtins.
@@ -134,7 +142,7 @@ class ScriptLoader(
             }
             drain()
             for (t in tests) {
-                evalFile(t, testGlobals, test = true)
+                evalFile(t, testGlobals + pluginGlobals, test = true)
                 drain()
             }
             return finish()
@@ -176,7 +184,7 @@ class ScriptLoader(
             states[p] = st
             st.startedNanos = System.nanoTime()
             val file = Label("//$p:${WorldDir.PACKAGE_FILE}")
-            val ctx = evalFile(file, PACKAGE_GLOBALS, header = true)
+            val ctx = evalFile(file, packageGlobals, header = true)
             st.headerDone = true
             if (ctx != null && !ctx.packageDeclared && !st.failed) {
                 st.errors += LoadError(p, "package", "package.star must call package(...)", file.v, 1, 1)
@@ -192,7 +200,7 @@ class ScriptLoader(
             if (file in inProgress) return fail("load cycle: " + (inProgress.dropWhile { it != file } + file).joinToString(" -> "))
             val owner = header(file.pkg) ?: return fail("no package //${file.pkg} for $file")
             if (owner.failed) return fail("//${file.pkg} failed to load")
-            evalFile(file, PACKAGE_GLOBALS)
+            evalFile(file, packageGlobals)
             return modules[file] ?: fail("$file failed to load")
         }
 
@@ -265,6 +273,13 @@ class ScriptLoader(
                 }
             } catch (e: EvalException) {
                 err(evalError(st.pkg.path, file, e))
+                return null
+            }
+            val clashes = module.globals.keys.filter { it in pluginGlobals }.sorted()
+            if (clashes.isNotEmpty()) {
+                for (name in clashes) {
+                    err(LoadError(st.pkg.path, "plugin", "cannot define '$name': it is the namespace of plugin '$name'", file.v, bindingLine(parsed, name)))
+                }
                 return null
             }
             if (test) testModules[file] = module else modules[file] = module
@@ -411,3 +426,13 @@ internal fun innermost(e: EvalException): Location? =
     e.callStack.lastOrNull { it.location != Location.BUILTIN && it.location.line() > 0 }?.location
 
 internal fun isStepLimit(e: EvalException): Boolean = e.message?.contains("too many steps") == true
+
+/** The line of the first top-level statement of [file] that binds [name], for clash errors. */
+private fun bindingLine(file: StarlarkFile, name: String): Int? = file.statements.firstOrNull { st ->
+    when (st) {
+        is AssignmentStatement -> (st.lhs as? Identifier)?.name == name
+        is DefStatement -> st.identifier.name == name
+        is LoadStatement -> st.bindings.any { it.localName.name == name }
+        else -> false
+    }
+}?.startLocation?.line()

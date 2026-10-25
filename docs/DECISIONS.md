@@ -1996,3 +1996,51 @@ names.
 *Code:* `MigrateInfoCmd`, `CommandsTest`.
 
 
+### D-177 The plugin API and facade (M7 design §5.1–§5.2) — `open`
+- **Builtin arguments:** the lambda overload gets every parameter's bound value, in declared order, as
+  `positional`, and the same values by name as `named`. Kotlin `Int`/`Float` defaults become
+  `Long`/`Double`, as Starlark values do. A returned `StarlarkValue` passes through; other unknown types
+  are an error. An exception other than `EvalException` becomes `<id>.<name>() failed: <e>`.
+- **Effects:** `sequence` takes effects as varargs (`sequence(a, weather.soak())`), as the engine's
+  already does; §5.5 writes `sequence([...])`. An `Effect.Plugin` whose plugin isn't loaded records a
+  `"plugin"` diagnostic and does nothing.
+- **`PluginRng.chance(pct: Int)`** takes a percentage, like `ctx.rng.chance`.
+- **Attributes:** keys without `ns:` are in the plugin's namespace; a plugin may read any namespace and
+  write only its own. Values are `Long`/`Int`, `String`, `Boolean`, `List` and `Map` with string keys
+  (the engine's attribute types; `Double` is refused), and `null` deletes. The script layer's attribute
+  size limit isn't applied to plugins (trusted code).
+- **Raw builtins:** `PluginViews.world(thread)` can't know which plugin is calling, so its facade has no
+  namespace: unqualified attribute keys and all writes fail, and `diagnose`/`log` carry no
+  `plugin '<id>':` prefix. Its log is the server log, found through a per-`World` registry that
+  `PluginHost.install` fills.
+- **Views:** `PluginRoom.size` is the lowercase track size (`normal`), `flags` and `regions` sorted;
+  `PluginEntity.label` is the room label, or the prototype label of a mob or item, and null for players.
+  Facades compare equal when they wrap the same entity.
+- **`scriptWorld(thread)`** is also set for `@eval` frames. The harness's own `@eval` worlds have no
+  loader, so they don't predeclare plugin globals.
+*Code:* `plugin-api/src/main/kotlin/gups/pluginapi/`, `host/Facade.kt`, `host/Values.kt`, `Host.kt`.
+
+### D-178 Plugin loading and wiring (M7 design §5.3, §5.5) — `open`
+- **Registry checks:** command names must also be lowercase. Plugin commands are checked against a
+  `CommandRegistry` holding the earlier plugins' commands; a GMCP package must match
+  `Name(.Name)+` before the engine-overlap check, so `Char` fails as "needs at least two parts".
+- **Roles:** `CommandRegistry.resolve` skips plugin commands the actor's role doesn't allow, so they don't
+  exist for other players (engine commands with roles are all `@` tools, which already did this).
+- **Loader:** an id that fails the `MODULE.gups` checks is skipped with a warning too (the server stops on
+  the problem anyway, but other commands still load the rest). Unpinned-jar warnings come first, then
+  plugins in id order; `register` runs after all jars are checked, also in id order, so "earlier plugin"
+  means a smaller id. `PluginHost.of(vararg plugins)` builds a host without jars.
+- **GMCP producers** are not wrapped by the host: `core`'s `gmcpDeltas` already records the failure and
+  skips the package for that pulse (chunk 1).
+- **Worlds without `fireOnLoad`:** `FuzzWalker`, `ReproRunner` and `MigrationChecker` call
+  `plugins.started(world)` right after `host.install(world)`. Loaders that build no world (`Linter`, the
+  `--base` loader of `gups lint`) only take the plugin globals; `--base` uses the current world's plugins.
+- **CLI:** commands read `MODULE.gups` for their plugins; one that doesn't read means no plugins (the
+  command reports the error itself). Warnings print as `warning: …` on stderr.
+- **Server:** each warning is recorded as a `"plugin"` diagnostic and an `alert("plugin_load", …)` right
+  before `fireOnLoad`, after the diagnostic log is wired.
+- **Test plugins** live in `plugin-api/src/testFixtures` (with `buildPluginJar`), not `src/test`, so
+  `:cli`'s integration tests can use them through `testFixtures(project(":plugin-api"))`.
+- **Tests and the real changelog:** `ApiDiffTest` and `ChangelogTest` now use fixed changelog text
+  instead of `docs/CHANGELOG.md`, so entries such as `module.plugins` don't break them.
+*Code:* `host/PluginHost.kt`, `Commands.kt` (core and cli), `GupsServer.boot`, `Deployer`, `PluginLoaderTest`, `PluginIntegrationTest`.

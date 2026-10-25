@@ -225,6 +225,7 @@ internal fun World.expireAffect(a: Actor, affect: Affect) {
 fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: SkillProto? = null) {
     when (effect) {
         is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill) }
+        is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target)
         is Effect.Summon -> repeat(effect.count) {
             val m = spawnMob(effect.label, caster.room, caster.trackIndex)
             effect.duration?.let { applyAffect(m, "summoned", it, flags = setOf("summoned"), source = caster) }
@@ -252,7 +253,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
                 is Effect.Knockback -> shove(t, awayFrom = caster, steps = effect.steps)
                 is Effect.Pull -> pull(t, toward = caster, steps = effect.steps)
                 is Effect.Stun -> applyAffect(t, "stun", effect.pulses, flags = setOf("stunned"), source = caster)
-                is Effect.Sequence, is Effect.Summon -> Unit
+                is Effect.Sequence, is Effect.Summon, is Effect.Plugin -> Unit
             }
         }
     }

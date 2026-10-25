@@ -20,6 +20,8 @@ dependencies {
     implementation(libs.clikt)
     implementation(libs.micrometer.prometheus)
     testImplementation(libs.selenium.java)
+    // Test plugins and buildPluginJar (PluginIntegrationTest).
+    testImplementation(testFixtures(project(":plugin-api")))
 }
 
 application {

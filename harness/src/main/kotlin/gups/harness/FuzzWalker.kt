@@ -1,5 +1,6 @@
 package gups.harness
 
+import gups.script.WorldPluginWiring
 import gups.core.CapturingSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
@@ -27,7 +28,7 @@ import java.util.Random
  * attack, say), and asserts no script errors, step limits, wall-clock hits, quarantines or
  * invariant violations.
  */
-class FuzzWalker(private val dir: WorldDir) {
+class FuzzWalker(private val dir: WorldDir, private val plugins: WorldPluginWiring = WorldPluginWiring.NONE) {
 
     data class Outcome(
         val ok: Boolean,
@@ -54,7 +55,7 @@ class FuzzWalker(private val dir: WorldDir) {
         seed: Long = DEFAULT_SEED,
         onProgress: ((Int) -> Unit)? = null,
     ): Outcome {
-        val loader = ScriptLoader(dir, ScriptLimits.HARNESS)
+        val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
         val loadResult = loader.load(dir.packages())
         if (!loadResult.ok) {
             val errs = loadResult.errors.joinToString("; ") { it.render() }
@@ -84,7 +85,9 @@ class FuzzWalker(private val dir: WorldDir) {
             host,
             WorldConfig(seed = seed, bubble = false, checkInvariants = true),
         )
+        plugins.install(world)
         host.install(world)
+        plugins.started(world)
 
         val rng = Random(seed)
         val bots = mutableListOf<Player>()

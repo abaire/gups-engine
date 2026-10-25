@@ -1,6 +1,5 @@
 package gups.script
 
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -8,7 +7,8 @@ import kotlin.test.assertTrue
 class ApiDiffTest {
     private val model = ScriptApi.model(harness = emptyList())
     private val baseline = model.toJson()
-    private val realChangelog = Changelog.parse(File(System.getProperty("gups.docsDir")).resolve("CHANGELOG.md").readText())
+    // A fixed changelog, so entries added to docs/CHANGELOG.md don't change these cases.
+    private val realChangelog = Changelog.parse("# Changelog\n\n## api_version 1\n\nInitial (unstable) script API.\n")
     private val frozen = realChangelog.toJson(model.apiVersion)
 
     private fun entry(title: String, kind: String, symbol: String, replacement: String? = null) = buildString {

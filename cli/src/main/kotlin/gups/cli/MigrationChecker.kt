@@ -1,5 +1,6 @@
 package gups.cli
 
+import gups.script.WorldPluginWiring
 import gups.core.Label
 import gups.core.world.World
 import gups.persist.Database
@@ -25,6 +26,7 @@ import java.nio.file.Path
 class MigrationChecker(
     private val worldDir: WorldDir,
     private val snapshotDb: Path,
+    private val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
 ) {
     data class Outcome(
         val ok: Boolean,
@@ -40,7 +42,7 @@ class MigrationChecker(
     private val json = Json { ignoreUnknownKeys = true }
 
     fun check(): Outcome {
-        val loader = ScriptLoader(worldDir, ScriptLimits())
+        val loader = ScriptLoader(worldDir, ScriptLimits(), pluginGlobals = plugins.globals)
         val loadResult = loader.load(worldDir.packages())
         if (!loadResult.ok) {
             return Outcome(
@@ -64,7 +66,9 @@ class MigrationChecker(
             val host = StarlarkHost(loadResult, ScriptLimits(), loader)
             val boot = persistence.boot(loadResult.prototypes(), fresh = false)
             val world = World(loadResult.prototypes(), host.rules(), host, boot = boot)
+            plugins.install(world)
             host.install(world)
+            plugins.started(world)
 
             val playerIds = playerRows.map { it.id }.toSet()
             val entityMap = entityRows.associateBy { it.id }

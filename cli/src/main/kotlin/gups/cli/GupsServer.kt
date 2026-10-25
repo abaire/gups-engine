@@ -1,5 +1,7 @@
 package gups.cli
 
+import gups.core.world.Diagnostic
+import gups.pluginapi.host.PluginHost
 import gups.auth.AccountLogin
 import gups.auth.AccountService
 import gups.auth.AccountTools
@@ -107,6 +109,9 @@ class GupsServer(
     private val log: (String) -> Unit = { System.err.println(it) },
 ) {
     private var persistence: SqlitePersistence? = null
+
+    /** The world's plugins, loaded once at boot (M7 design §5.3); closed when the server stops. */
+    private var plugins: PluginHost? = null
     private var metrics: Metrics? = null
     private val startedNanos = System.nanoTime()
 
@@ -165,9 +170,11 @@ class GupsServer(
         module.problems().forEach { log("error: $it") }
         if (module.problems().isNotEmpty()) return false
         module.warnings().forEach { log("warning: $it") }
-        // M7.4 adds the world's plugins.
-        docs = DocsRenderer.render(ScriptApi.model(HarnessApi.specs())).mapValues { it.value.toByteArray(Charsets.UTF_8) }
-        val loader = ScriptLoader(dir, ScriptLimits())
+        val plugins = loadPlugins(dir, module) { log("warning: $it") }.also { plugins = it }
+        docs = DocsRenderer.render(ScriptApi.model(HarnessApi.specs()), plugins = plugins.describe().map(::toDocSpec))
+            .mapValues { it.value.toByteArray(Charsets.UTF_8) }
+        // Packages that use a skipped plugin fail to load and are left out, as any failed package is.
+        val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
         val result = loader.load(packages)
         for (e in result.errors) log("load error: ${e.render()}")
         val protos = result.prototypes()
@@ -205,6 +212,7 @@ class GupsServer(
             production = prod != null,
         )
         world = World(protos, host.rules(), host, config, boot)
+        plugins.install(world)
         host.install(world)
         if (saved != null) {
             val report = saved.restore(world, fresh)
@@ -220,7 +228,12 @@ class GupsServer(
             log("[${d.kind}] ${if (where.isEmpty()) "" else "$where: "}${d.message}")
             metrics?.diagnostic(d)
         }
+        for (w in plugins.warnings) {
+            world.record(Diagnostic(world.pulse, "plugin", w))
+            world.alert("plugin_load", w)
+        }
         world.fireOnLoad()
+        plugins.started(world)
         if (saved != null) world.checkpointNow("boot")
         loop = WorldLoop(world)
         world.background = background
@@ -389,6 +402,7 @@ class GupsServer(
         adminServer?.stop()
         docsServer?.stop()
         persistence?.close()?.let { ok -> if (!ok) log("Some changes could not be saved before shutdown.") }
+        plugins?.close()
         stopped.countDown()
     }
 

@@ -30,6 +30,8 @@ data class WorldModule(
     val checkpointMinutes: Int = DEFAULT_CHECKPOINT_MINUTES,
     /** Where new characters start (M6 design §3.4); null means the tutorial gate, or else the first room (D-138). */
     val startRoom: Label? = null,
+    /** Plugin ids → `sha256:<hex>` checksums of `plugins/<id>.jar` (M7 design §5.3). */
+    val plugins: Map<String, String> = emptyMap(),
 ) {
     /** The checkpoint interval in pulses. */
     val checkpointPulses: Long get() = checkpointMinutes * 60_000L / PULSE_MS
@@ -38,6 +40,13 @@ data class WorldModule(
     fun problems(): List<String> = buildList {
         if (apiVersion != EngineInfo.API_VERSION) {
             add("MODULE.gups pins api_version $apiVersion, but this engine supports only api_version ${EngineInfo.API_VERSION}. See CHANGELOG.md and MIGRATING.md.")
+        }
+        for ((id, checksum) in plugins.toSortedMap()) {
+            when {
+                !PLUGIN_ID.matches(id) -> add("MODULE.gups: plugin id '$id' must match [a-z][a-z0-9_]*")
+                id in reservedPluginIds -> add("MODULE.gups: plugin id '$id' is a reserved name")
+            }
+            if (!CHECKSUM.matches(checksum)) add("MODULE.gups: plugin '$id' checksum must be 'sha256:' and 64 lowercase hex digits, not '$checksum'")
         }
     }
 
@@ -49,6 +58,14 @@ data class WorldModule(
     companion object {
         const val FILE = "MODULE.gups"
         const val DEFAULT_CHECKPOINT_MINUTES = 30
+        val PLUGIN_ID = Regex("[a-z][a-z0-9_]*")
+        val CHECKSUM = Regex("sha256:[0-9a-f]{64}")
+
+        /** Names a plugin id may not take (M7 design §5.3). */
+        val reservedPluginIds: Set<String> by lazy {
+            PACKAGE_GLOBALS.keys + Starlark.UNIVERSE.keys +
+                setOf("module", "server", "ctx", "self", "room", "rules_ctx", "t", "w", "p", "diagnostic")
+        }
 
         val SPEC = DeclSpec(
             name = "module",
@@ -58,6 +75,7 @@ data class WorldModule(
                 DeclParam("api_version", "int", "Script API version the world pins.", default = "${EngineInfo.API_VERSION}"),
                 DeclParam("checkpoint_minutes", "int", "Minutes between routine database checkpoints.", default = "$DEFAULT_CHECKPOINT_MINUTES"),
                 DeclParam("start_room", "label", "Room label where new characters start.", default = "None"),
+                DeclParam("plugins", "dict[str, str]", "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.", default = "{}"),
             ),
         )
 
@@ -85,11 +103,15 @@ data class WorldModule(
                 val start = d.str("start_room")?.let { text ->
                     runCatching { Label(text) }.getOrElse { fail("module(start_room): '$text' is not a label such as //zones/tutorial:gate") }
                 }
+                val plugins = d.dict("plugins").mapValues { (id, v) ->
+                    v as? String ?: fail("module(plugins): the checksum of '$id' must be a string")
+                }
                 result = WorldModule(
                     engine = d.str("engine"),
                     apiVersion = d.int("api_version") ?: EngineInfo.API_VERSION,
                     checkpointMinutes = minutes,
                     startRoom = start,
+                    plugins = plugins,
                 )
                 Starlark.NONE
             }

@@ -1,5 +1,6 @@
 package gups.harness
 
+import gups.script.WorldPluginWiring
 import gups.core.Label
 import gups.core.world.World
 import gups.core.world.WorldConfig
@@ -29,6 +30,7 @@ class TestCtx internal constructor(
     private val pkg: String,
     private val loadWorld: (List<String>) -> LoadResult,
     private val defaultLoad: List<String>,
+    private val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
 ) : StarlarkValue {
     internal val worlds = mutableListOf<WorldHandle>()
 
@@ -79,8 +81,10 @@ class TestCtx internal constructor(
                 bubble = (bubble as? Boolean) ?: evalFail("world(bubble): expected True or False"),
             ),
         )
+        plugins.install(world)
         host.install(world)
         world.fireOnLoad()
+        plugins.started(world)
         return WorldHandle(world, host, from).also { worlds += it }
     }
 

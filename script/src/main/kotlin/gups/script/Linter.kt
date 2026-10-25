@@ -26,6 +26,7 @@ import kotlin.io.path.readText
 class Linter(
     private val dir: WorldDir,
     private val basePrototypes: Prototypes? = null,
+    private val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
 ) {
     data class Finding(
         val severity: Severity,
@@ -111,7 +112,7 @@ class Linter(
         val findings = mutableListOf<Finding>()
 
         // 1. Load the packages to inspect prototypes and catch load errors.
-        val loader = ScriptLoader(dir, ScriptLimits())
+        val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
         val loadResult = loader.load(dir.packages())
 
         // Load errors (catalog hook errors D-074, namespace uniqueness D-064, etc.)

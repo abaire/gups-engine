@@ -309,6 +309,9 @@ internal class ContainerDecl(val proto: ContainerProto) : DeclValue("container")
 
 internal class EffectDecl(val effect: Effect) : DeclValue("effect")
 
+/** An effect value for a plugin effect primitive, usable wherever an engine effect is (M7 design §5.1). */
+fun pluginEffect(pluginId: String, name: String, args: Map<String, Any?>): StarlarkValue = EffectDecl(Effect.Plugin(pluginId, name, args))
+
 internal class BehaviorDecl(val behavior: Behavior) : DeclValue("behavior")
 
 /** What `struct(**fields)` returns: read-only named fields (D-125). */

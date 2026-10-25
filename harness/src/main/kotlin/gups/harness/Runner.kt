@@ -1,5 +1,6 @@
 package gups.harness
 
+import gups.script.WorldPluginWiring
 import gups.core.Label
 import gups.core.world.InvariantViolation
 import gups.script.LoadResult
@@ -75,8 +76,8 @@ class TestReport(val results: List<TestResult>, val problems: List<String>) {
  * Runs `*_test.star` files against headless in-memory worlds with a virtual clock and seeded
  * RNG: no network, no SQLite, no wall clock (SPEC §7.2).
  */
-class TestRunner(private val dir: WorldDir) {
-    private val loader = ScriptLoader(dir, ScriptLimits.HARNESS)
+class TestRunner(private val dir: WorldDir, private val plugins: WorldPluginWiring = WorldPluginWiring.NONE) {
+    private val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
     private val cache = HashMap<List<String>, LoadResult>()
 
     /** The rules package is always loaded implicitly when the world has one (SPEC §4.12). */
@@ -129,7 +130,7 @@ class TestRunner(private val dir: WorldDir) {
     }
 
     private fun runTest(pkg: String, file: Label, name: String, fn: StarlarkFunction): TestResult {
-        val t = TestCtx(pkg, ::loadWorld, listOf(pkg))
+        val t = TestCtx(pkg, ::loadWorld, listOf(pkg), plugins = plugins)
         val printed = StringBuilder()
         var status = Status.PASS
         var message: String? = null

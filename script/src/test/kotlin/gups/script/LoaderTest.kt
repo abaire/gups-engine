@@ -224,4 +224,27 @@ class LoaderTest {
         assertNull(empty.prototypes().mob(Label("//zones/z:rat")).think)
         assertNotNull(empty.packages["zones/z"])
     }
+
+    @Test
+    fun `plugin globals are predeclared, and a package may not redefine one`() {
+        val weather = StructValue(mapOf("level" to net.starlark.java.eval.StarlarkInt.of(3)))
+        val dir = WorldDir(
+            tempWorld(
+                mapOf(
+                    "zones/z/package.star" to zonePkg(),
+                    "zones/z/rooms.star" to "room(\"a\", name = \"A\", desc = \"x\" * weather.level, flags = [\"dead_end_ok\"])",
+                    "zones/bad/package.star" to zonePkg(),
+                    "zones/bad/x.star" to "x = 1\nweather = 1\n",
+                ),
+            ),
+        )
+        val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = mapOf("weather" to weather))
+        val ok = loader.load(listOf("zones/z"))
+        assertTrue(ok.ok, ok.report())
+        val bad = loader.load(listOf("zones/bad"))
+        val e = bad.errors.single { it.kind == "plugin" }
+        assertEquals("plugin", e.kind)
+        assertEquals("cannot define 'weather': it is the namespace of plugin 'weather'", e.message)
+        assertEquals(2, e.line)
+    }
 }

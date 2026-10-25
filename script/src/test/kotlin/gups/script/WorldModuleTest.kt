@@ -31,6 +31,20 @@ class WorldModuleTest {
     }
 
     @Test
+    fun `plugins are pinned by checksum and checked`() {
+        val sum = "sha256:" + "ab".repeat(32)
+        val ok = read("module(plugins = {\"weather\": \"$sum\"})").first
+        assertEquals(mapOf("weather" to sum), ok.plugins)
+        assertTrue(ok.problems().isEmpty())
+        assertContains(read("module(plugins = {\"Weather\": \"$sum\"})").first.problems().single(), "must match [a-z][a-z0-9_]*")
+        for (reserved in listOf("room", "ctx", "len", "damage", "t")) {
+            assertContains(read("module(plugins = {\"$reserved\": \"$sum\"})").first.problems().single(), "reserved name", message = reserved)
+        }
+        assertContains(read("module(plugins = {\"weather\": \"sha256:AB\"})").first.problems().single(), "64 lowercase hex digits")
+        assertContains(assertNotNull(read("module(plugins = {\"weather\": 1})").second).message, "must be a string")
+    }
+
+    @Test
     fun `start_room names where new characters start`() {
         assertNull(read(null).first.startRoom)
         assertEquals(gups.core.Label("//zones/town:square"), read("module(start_room = \"//zones/town:square\")").first.startRoom)

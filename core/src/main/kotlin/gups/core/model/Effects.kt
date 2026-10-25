@@ -60,4 +60,10 @@ sealed interface Effect {
     data class Sequence(val effects: List<Effect>) : Effect {
         constructor(vararg effects: Effect) : this(effects.toList())
     }
+
+    /**
+     * An effect primitive a plugin adds (M7 design §5.1). [args] holds only plain values
+     * (String, Long, Double, Boolean, null, List, Map), so prototypes still compare by value.
+     */
+    data class Plugin(val pluginId: String, val name: String, val args: Map<String, Any?>) : Effect
 }

@@ -102,6 +102,11 @@ class Boot(
     val fillSpawns: Boolean = true,
 )
 
+/** Applies plugin effect primitives; the plugin host installs one (M7 design §5.1). */
+fun interface PluginEffectRunner {
+    fun apply(world: World, effect: gups.core.model.Effect.Plugin, caster: Actor, target: Actor?)
+}
+
 class World(
     protos: Prototypes,
     val rules: RulesEngine = DefaultRules(),
@@ -152,6 +157,12 @@ class World(
 
     /** Called by the world loop after each pulse with its duration in nanoseconds, for metrics (M6 design §7.1). */
     var onPulse: ((Long) -> Unit)? = null
+
+    /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner (M7 design §5.1). */
+    var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _ -> }
+
+    /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's (M7 design §5.1). */
+    val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 
     /** Production deploys (M6 design §7.2), when the server can run them. */
     var deploys: Deploys? = null

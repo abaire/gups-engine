@@ -1,5 +1,6 @@
 package gups.harness
 
+import gups.script.WorldPluginWiring
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
 import gups.core.world.InputRecord
@@ -19,7 +20,7 @@ const val REPRO_SLACK_PULSES = 16
  * today's packages, the bundle's seed, its room as of the last checkpoint, then the recorded
  * inputs at their pulses. Exact in the harness, best effort from production (D-098).
  */
-class ReproRunner(private val dir: WorldDir) {
+class ReproRunner(private val dir: WorldDir, private val plugins: WorldPluginWiring = WorldPluginWiring.NONE) {
     data class Outcome(val reproduced: Boolean, val matching: List<Diagnostic>, val diagnostics: List<Diagnostic>, val notes: List<String>)
 
     fun run(
@@ -32,7 +33,7 @@ class ReproRunner(private val dir: WorldDir) {
         matches: (Diagnostic) -> Boolean,
     ): Outcome {
         val notes = mutableListOf<String>()
-        val loader = ScriptLoader(dir, ScriptLimits.HARNESS)
+        val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
         val result = loader.load(dir.packages())
         result.errors.forEach { notes += "load error: ${it.render()}" }
         val host = StarlarkHost(result, ScriptLimits.HARNESS, loader)
@@ -43,7 +44,9 @@ class ReproRunner(private val dir: WorldDir) {
             WorldConfig(seed = seed, checkInvariants = true),
             Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
         )
+        plugins.install(world)
         host.install(world)
+        plugins.started(world)
         notes += setup(world)
         for (input in inputs.sortedBy { it.pulse }) {
             while (world.pulse < input.pulse) world.runPulse()

@@ -96,6 +96,19 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
+M7.4 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §5): the plugin API.
+
+- **Plugins:** a `.jar` in the course world's `plugins/<id>.jar`, pinned in `MODULE.gups`
+  (`plugins = {"weather": "sha256:<hex>"}`), with one `gups.pluginapi.GupsPlugin` service. It can add
+  builtins and effect primitives (scripts call them as `weather.now(room)`), commands, GMCP packages and
+  an `onWorldStarted` callback. Plugins compile against `:plugin-api` only and see the world through the
+  `PluginWorld` facade.
+- **Loading:** the server, `gups test`, `lint`, `fuzz`, `migrate-check`, `repro` and `docs --world` load
+  the same jars. A plugin that is missing, fails its checksum, has the wrong id or API version, or fails
+  or clashes in `register` is skipped with a warning; packages that use it fail to load. Plugins are
+  trusted code with full JVM access: review them like engine code. Changing one needs a restart, and
+  deploys that touch `plugins/` are refused.
+
 M7.3 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §4): changelog and migration artifacts.
 
 - **Changelog format:** `docs/CHANGELOG.md` has one `## api_version N` section per version, newest

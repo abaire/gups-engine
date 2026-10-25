@@ -73,6 +73,23 @@ class GmcpTest {
     }
 
     @Test
+    fun `plugin producers send deltas, and a failing one is recorded and skipped`() {
+        val f = Fixture()
+        var temp = 10
+        f.w.pluginGmcp["Gups.Weather"] = { mapOf("temp" to temp) }
+        f.w.pluginGmcp["Gups.Broken"] = { error("boom") }
+        val (_, sink) = f.gmcpPlayer("Ann", sink = GmcpSink(setOf("Gups.Weather", "Gups.Broken")))
+        f.run()
+        assertEquals(listOf("Gups.Weather" to mapOf("temp" to 10)), sink.take())
+        f.run()
+        assertEquals(emptyList(), sink.packages())
+        temp = 12
+        f.run()
+        assertEquals(listOf("Gups.Weather" to mapOf("temp" to 12)), sink.take())
+        assertTrue(f.w.diagnostics.any { it.kind == "plugin" && "GMCP producer Gups.Broken failed" in it.message })
+    }
+
+    @Test
     fun `room bands come from each viewer's own index`() {
         val f = Fixture()
         val (ann, _) = f.gmcpPlayer("Ann", index = 0)

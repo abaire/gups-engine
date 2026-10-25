@@ -5,6 +5,9 @@ import gups.core.WorldControlEvent
 import gups.core.world.DeployOutcome
 import gups.core.world.World
 import com.github.ajalt.clikt.testing.test
+import gups.pluginapi.testplugins.TidesPlugin
+import gups.pluginapi.testplugins.WeatherPlugin
+import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -38,7 +41,7 @@ class OperationsTest {
     }
 
     /** A course repository: a bare remote, the server's working tree, and a developer's clone. */
-    private inner class Repo {
+    private inner class Repo(seedChange: (Path) -> Unit = {}) {
         val root: Path = Files.createTempDirectory("gups-ops")
         val bare: Path = root.resolve("course.git")
         val world: Path = root.resolve("world")
@@ -54,6 +57,7 @@ class OperationsTest {
                 }
             }
             seed.resolve(".gitignore").writeText(".gups/\n")
+            seedChange(seed)
             git(seed, "init", "--quiet", "-b", "main")
             identity(seed)
             git(seed, "add", "-A")
@@ -155,6 +159,25 @@ class OperationsTest {
         }
         assertTrue(first != sha)
         gups.persist.Database.open(repo.db).use { assertEquals(sha, it.meta()["world_commit"]) }
+    }
+
+    @Test
+    fun `deploys keep plugin commands and refuse plugin changes`() {
+        val repo = Repo { seed ->
+            val sum = buildPluginJar(seed.resolve("plugins/weather.jar"), WeatherPlugin::class)
+            val module = seed.resolve("MODULE.gups")
+            module.writeText(module.readText().replace("module(", "module(\n    plugins = {\"weather\": \"$sum\"},"))
+        }
+        repo.push("rename the gate") { dev -> repo.rooms(dev).writeText(repo.rooms(dev).readText().replace("The Tutorial Gate", "The Weather Gate")) }
+        withServer(repo) { r ->
+            assertTrue(r.deploy().ok, r.logs.toString())
+            assertEquals("The Weather Gate", r.onWorld { it.room(gate).name })
+            assertEquals(listOf("crash", "forecast", "rainmake", "storm"), r.onWorld { w -> w.commands.pluginCommands.map { it.name }.sorted() })
+        }
+        repo.push("change the plugin") { dev -> buildPluginJar(dev.resolve("plugins/weather.jar"), WeatherPlugin::class, TidesPlugin::class) }
+        withServer(repo) { r ->
+            assertContains(r.deploy().errors.single(), "plugins/ changed")
+        }
     }
 
     @Test

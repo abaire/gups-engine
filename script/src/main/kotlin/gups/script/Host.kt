@@ -152,6 +152,10 @@ class StarlarkHost(
         (world.rules as? StarlarkRules)?.world = world
         for (pkg in scripts.packages.values) {
             for (c in pkg.globalCommands) {
+                if (world.commands.isPluginCommand(c.name)) {
+                    world.record(Diagnostic(world.pulse, "load", "global_command '${c.name}' clashes with a plugin command; skipped", pkg = pkg.path))
+                    continue
+                }
                 world.commands.registerGlobal(
                     when (c.lane) {
                         Lane.FAST -> FastCommand(c.name) { call -> runCommand(call.world, c.name, c.fn, c.pkg, call.actor, call.args, call.actor) }
@@ -300,7 +304,7 @@ class StarlarkHost(
      */
     fun stage(dir: WorldDir): StagedWorld {
         val packages = dir.packages()
-        val next = ScriptLoader(dir, limits).load(packages)
+        val next = ScriptLoader(dir, limits, pluginGlobals = loader?.pluginGlobals.orEmpty()).load(packages)
         val errors = when {
             !next.ok -> next.errors.map { it.render() }
             next.prototypes().rooms.isEmpty() -> listOf("The world would have no rooms.")
@@ -387,8 +391,9 @@ class StarlarkHost(
             val printed = StringBuilder()
             thread.setPrintHandler { _, msg -> printed.append(msg).append('\n') }
             val frame = Frame(this, world, thread, site, root, limits.evalSteps)
+            thread.setThreadLocal(ViewScope::class.java, frame)
             val ctx = Ctx(frame, actor, HookContext(actor = actor, room = actor.room), CtxExtras())
-            val module = Module.withPredeclared(SEMANTICS, PACKAGE_GLOBALS + mapOf("ctx" to ctx, "self" to ctx.self(), "room" to ctx.room()))
+            val module = Module.withPredeclared(SEMANTICS, PACKAGE_GLOBALS + loader?.pluginGlobals.orEmpty() + mapOf("ctx" to ctx, "self" to ctx.self(), "room" to ctx.room()))
             module.clientData = FileInfo(Label("//$pkg:eval.star"), pkg)
             stack += frame
             val result = try {
@@ -451,6 +456,7 @@ class StarlarkHost(
             thread.setMaxExecutionSteps(remaining)
             thread.setPrintHandler { _, msg -> trace(site, world.pulse, "  print: $msg") }
             val frame = Frame(this, world, thread, site, root, remaining)
+            thread.setThreadLocal(ViewScope::class.java, frame)
             trace(site, world.pulse, "${site.hook} on ${site.label ?: site.pkg} at pulse ${world.pulse}")
             stack += frame
             var failure: EvalException? = null
@@ -544,3 +550,6 @@ internal data class ScriptResolve(private val ref: HookRef, private val pkg: Str
 class StagedWorld internal constructor(internal val result: LoadResult, val packages: List<String>, val errors: List<String>) {
     val ok: Boolean get() = errors.isEmpty()
 }
+
+/** The world of the hook running on [thread], or null outside one; plugin builtins use it (M7 design §5.5). */
+fun scriptWorld(thread: StarlarkThread): World? = thread.getThreadLocal(ViewScope::class.java)?.world

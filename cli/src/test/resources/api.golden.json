@@ -1328,6 +1328,18 @@
           "allowed_values": [],
           "doc": "Room label where new characters start.",
           "since": 1
+        },
+        {
+          "symbol": "module.plugins",
+          "name": "plugins",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.",
+          "since": 1
         }
       ]
     },

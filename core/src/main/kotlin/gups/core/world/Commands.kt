@@ -49,13 +49,31 @@ class CommandRegistry {
     private val engine: List<CommandDef> = EngineCommands.all()
     private val global = mutableListOf<CommandDef>()
     private val tools = mutableListOf<CommandDef>()
+    private val plugins = mutableListOf<CommandDef>()
     private val moves = HashMap<Direction, TickCommand>()
 
     /** Registers a global command, as privileged packages do with `global_command` (SPEC §4.9). */
     fun registerGlobal(command: CommandDef) {
+        require(!isPluginCommand(command.name)) { "Global command ${command.name} clashes with a plugin command" }
         require(global.none { it.name == command.name }) { "Global command ${command.name} already registered" }
         global += command
     }
+
+    /**
+     * Registers a plugin command (M7 design §5.1). It may not shadow an engine command, a
+     * direction, or another plugin's command; reloads keep it.
+     */
+    fun registerPlugin(command: CommandDef) {
+        for (word in listOf(command.name) + command.aliases) {
+            val w = word.lowercase()
+            require(engine.none { it.name == w || w in it.aliases }) { "plugin command '$w' clashes with an engine command" }
+            require(Direction.parse(w) !in Direction.STANDARD) { "plugin command '$w' clashes with a direction" }
+            require(plugins.none { it.name == w || w in it.aliases }) { "plugin command '$w' is already registered" }
+        }
+        plugins += command
+    }
+
+    fun isPluginCommand(name: String): Boolean = plugins.any { it.name == name || name in it.aliases }
 
     /** Drops every global command, before a reload registers them again. */
     fun clearGlobals() = global.clear()
@@ -72,6 +90,7 @@ class CommandRegistry {
 
     val engineCommands: List<CommandDef> get() = engine
     val globalCommands: List<CommandDef> get() = global
+    val pluginCommands: List<CommandDef> get() = plugins
     val toolCommands: List<CommandDef> get() = (engine + tools).filter { it.name.startsWith("@") }
 
     fun resolve(actor: Actor, verb: String): CommandDef? {
@@ -84,10 +103,13 @@ class CommandRegistry {
         val dir = Direction.parse(v)
         if (dir in actor.room.exits || dir in Direction.STANDARD) return moves.getOrPut(dir) { EngineCommands.move(dir) }
         exact(global, v)?.let { return it }
+        // A plugin command above the actor's role doesn't exist for them (D-178).
+        val usable = plugins.filter { it.allows(actor) }
+        exact(usable, v)?.let { return it }
         actor.room.proto.commands[v]?.let { return zoneCommand(v, actor.room, it) }
         val items = (actor.inventoryIndex.values + actor.equipmentIndex.values + actor.room.itemIndex.values).sortedBy { it.id }
         for (item in items) item.proto.commands[v]?.let { return zoneCommand(v, item, it) }
-        return prefix(engine, v) ?: prefix(global, v)
+        return prefix(engine, v) ?: prefix(global, v) ?: prefix(usable, v)
     }
 
     private fun exact(defs: List<CommandDef>, v: String) = defs.firstOrNull { it.name == v || v in it.aliases }
