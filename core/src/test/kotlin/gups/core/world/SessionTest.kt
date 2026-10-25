@@ -13,6 +13,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import java.util.Random
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.LockSupport
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -94,6 +98,30 @@ class SessionTest {
         job.join()
         assertContains(sink.transcript, "The Yard")
         assertTrue(f.w.pulse > 0)
+    }
+
+    @Test
+    fun `the loop never drops an event that arrives as a pulse falls due`() {
+        val f = Fixture()
+        // Short pulses so the wait's timeout keeps racing events posted from another thread.
+        val loop = WorldLoop(f.w, pulseNanos = 50_000)
+        val handled = AtomicInteger()
+        val runner = thread { runBlocking { loop.run() } }
+        try {
+            val n = 5_000
+            val random = Random(1)
+            repeat(n) {
+                loop.submit(WorldControlEvent.Task { handled.incrementAndGet() })
+                // Let the loop park, so the event lands while it waits.
+                LockSupport.parkNanos(random.nextLong(100_000))
+            }
+            val deadline = System.nanoTime() + 10_000_000_000
+            while (handled.get() < n && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals(n, handled.get())
+        } finally {
+            loop.stop()
+            runner.join(5000)
+        }
     }
 
     @Test

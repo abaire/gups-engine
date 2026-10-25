@@ -9,9 +9,10 @@ import gups.core.world.checkOverruns
 import gups.core.world.handle
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.nanoseconds
 
@@ -81,20 +82,22 @@ class WorldLoop(
         wake.trySend(Unit)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     suspend fun run() {
         val timer = PulseTimer(pulseNanos, nanoTime())
         while (!stopped && !world.shutdownRequested) {
             val wait = timer.nextBoundary - nanoTime()
             if (wait > 0) {
-                withTimeoutOrNull(wait.nanoseconds) {
-                    select {
-                        wake.onReceive {}
-                        control.onReceive { world.handle(it, nanoTime()) }
-                        input.onReceive {
-                            waiting.decrementAndGet()
-                            world.handle(it)
-                        }
+                // The timeout is a clause of the select, not a withTimeout around it: cancelling
+                // a select that has just taken an event from a channel drops that event.
+                select {
+                    wake.onReceive {}
+                    control.onReceive { world.handle(it, nanoTime()) }
+                    input.onReceive {
+                        waiting.decrementAndGet()
+                        world.handle(it)
                     }
+                    onTimeout(wait.nanoseconds) {}
                 }
                 continue
             }
