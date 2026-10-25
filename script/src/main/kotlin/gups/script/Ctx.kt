@@ -122,7 +122,7 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "self", structField = true, doc = "The hook's owner.")
     fun self(): Any = field { v(owner) }
 
-    @StarlarkMethod(name = "actor", structField = true)
+    @StarlarkMethod(name = "actor", structField = true, doc = "The actor performing the action, or the damage/kill source.")
     fun actor(): Any = field { v(hc.actor) }
 
     @StarlarkMethod(name = "target", structField = true, doc = "The target actor, or the target item of use and item skills.")
@@ -131,22 +131,22 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "targets", structField = true, doc = "Opponents, for on_combat_tick.")
     fun targets(): Any = field { extras.targets?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "item", structField = true)
+    @StarlarkMethod(name = "item", structField = true, doc = "The item being picked up, dropped, used or given.")
     fun item(): Any = field { v(hc.item) }
 
     @StarlarkMethod(name = "room", structField = true, doc = "The room the event happens in.")
     fun room(): Any = field { v(hc.room ?: world.roomOfEntity(owner)) }
 
-    @StarlarkMethod(name = "direction", structField = true)
+    @StarlarkMethod(name = "direction", structField = true, doc = "The movement direction name, for enter and exit hooks.")
     fun direction(): Any = field { hc.direction?.name ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "from_room", structField = true)
+    @StarlarkMethod(name = "from_room", structField = true, doc = "The room the actor came from, for enter hooks.")
     fun fromRoom(): Any = field { v(hc.fromRoom) }
 
-    @StarlarkMethod(name = "to_room", structField = true)
+    @StarlarkMethod(name = "to_room", structField = true, doc = "The room the actor is going to, for exit hooks.")
     fun toRoom(): Any = field { v(hc.toRoom) }
 
-    @StarlarkMethod(name = "text", structField = true)
+    @StarlarkMethod(name = "text", structField = true, doc = "Spoken text, for on_say and on_tell.")
     fun text(): Any = field { hc.text ?: Starlark.NONE }
 
     @StarlarkMethod(name = "args", structField = true, doc = "A command's argument text, or a timer's keyword arguments as a dict.")
@@ -167,13 +167,13 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "via_exit", structField = true, doc = "For on_nearby: this mob's own exit toward the event, or None for its own room.")
     fun viaExit(): Any = field { hc.viaExit?.name ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "skill", structField = true)
+    @StarlarkMethod(name = "skill", structField = true, doc = "The skill being cast, for before_cast, on_cast_start and on_cast.")
     fun skill(): Any = field { hc.skill?.let(::SkillView) ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "weapon", structField = true)
+    @StarlarkMethod(name = "weapon", structField = true, doc = "The weapon used in an attack, or None for unarmed.")
     fun weapon(): Any = field { v(hc.weapon) }
 
-    @StarlarkMethod(name = "amount", structField = true)
+    @StarlarkMethod(name = "amount", structField = true, doc = "The damage dealt, for on_damage.")
     fun amount(): Any = field { hc.amount?.let(::sInt) ?: Starlark.NONE }
 
     @StarlarkMethod(name = "type", structField = true, doc = "The damage type, for on_damage.")
@@ -188,13 +188,13 @@ class Ctx internal constructor(
     @StarlarkMethod(name = "proposals", structField = true, doc = "For think: behavior proposals, best first.")
     fun proposals(): Any = field { extras.proposals?.let { p -> sList(p.map(::ProposalView)) } ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "elapsed_pulses", structField = true)
+    @StarlarkMethod(name = "elapsed_pulses", structField = true, doc = "Pulses spent dormant, for on_wake.")
     fun elapsedPulses(): Any = field { hc.elapsedPulses?.let(::sInt) ?: Starlark.NONE }
 
     @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
     fun pulse(): Any = field { sInt(world.pulse) }
 
-    @StarlarkMethod(name = "rng", structField = true)
+    @StarlarkMethod(name = "rng", structField = true, doc = "The seeded random number generator.")
     fun rng(): Any = field { RngView(frame) }
 
     // ---- Argument conversion -------------------------------------------------------------------
@@ -240,19 +240,19 @@ class Ctx internal constructor(
 
     // ---- Messaging -----------------------------------------------------------------------------
 
-    @StarlarkMethod(name = "say", doc = "speaker says text aloud; fires on_say.", parameters = [Param(name = "speaker", named = true), Param(name = "text", named = true)])
+    @StarlarkMethod(name = "say", doc = "speaker says text aloud; fires on_say.", parameters = [Param(name = "speaker", named = true, doc = "Actor who speaks."), Param(name = "text", named = true, doc = "Text spoken.")])
     fun say(speaker: Any, text: Any): Any = verb("say") { world.say(actorArg(speaker, "say(speaker)"), text(text, "say(text)")); Starlark.NONE }
 
-    @StarlarkMethod(name = "emote", doc = "The room sees '<actor> text'.", parameters = [Param(name = "actor", named = true), Param(name = "text", named = true)])
+    @StarlarkMethod(name = "emote", doc = "The room sees '<actor> text'.", parameters = [Param(name = "actor", named = true, doc = "Actor performing the emote."), Param(name = "text", named = true, doc = "Text that follows the actor's name.")])
     fun emote(actor: Any, text: Any): Any = verb("emote") { world.emote(actorArg(actor, "emote(actor)"), text(text, "emote(text)")); Starlark.NONE }
 
-    @StarlarkMethod(name = "send", doc = "Sends text to one actor.", parameters = [Param(name = "target", named = true), Param(name = "text", named = true)])
+    @StarlarkMethod(name = "send", doc = "Sends text to one actor.", parameters = [Param(name = "target", named = true, doc = "Actor who receives the text."), Param(name = "text", named = true, doc = "Text to send.")])
     fun send(target: Any, text: Any): Any = verb("send") { world.send(actorArg(target, "send(target)"), text(text, "send(text)")); Starlark.NONE }
 
     @StarlarkMethod(
         name = "echo",
         doc = "Sends text to everyone in a room, except the actors in exclude.",
-        parameters = [Param(name = "room", named = true), Param(name = "text", named = true), Param(name = "exclude", named = true, defaultValue = "[]")],
+        parameters = [Param(name = "room", named = true, doc = "Room, or room label, to send the text to."), Param(name = "text", named = true, doc = "Text to send."), Param(name = "exclude", named = true, defaultValue = "[]", doc = "Actors who don't receive the text.")],
         useStarlarkThread = true,
     )
     fun echo(room: Any, text: Any, exclude: Any, thread: StarlarkThread): Any = verb("echo") {
@@ -263,7 +263,7 @@ class Ctx internal constructor(
 
     // ---- Veto ----------------------------------------------------------------------------------
 
-    @StarlarkMethod(name = "deny", doc = "Vetoes the action; return it from a before_* hook.", parameters = [Param(name = "msg", named = true)])
+    @StarlarkMethod(name = "deny", doc = "Vetoes the action; return it from a before_* hook.", parameters = [Param(name = "msg", named = true, doc = "Text shown to the actor whose action is refused.")])
     fun deny(msg: Any): Any = verb("deny") {
         if (!frame.site.vetoable) fail("deny() is only valid as the return value of a before_* hook (this is ${frame.site.hook})")
         Denial(text(msg, "deny(msg)"))
@@ -276,19 +276,19 @@ class Ctx internal constructor(
         return ok
     }
 
-    @StarlarkMethod(name = "act", doc = "Queues a command line for a mob, exactly as if it typed it.", parameters = [Param(name = "mob", named = true), Param(name = "command_line", named = true)])
+    @StarlarkMethod(name = "act", doc = "Queues a command line for a mob, exactly as if it typed it.", parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "command_line", named = true, doc = "The command line, as a player would type it.")])
     fun act(mob: Any, commandLine: Any): Any = verb("act") {
         val m = mobArg(mob, "act(mob)")
         acted(m, world.act(m, text(commandLine, "act(command_line)")))
     }
 
-    @StarlarkMethod(name = "act_move", parameters = [Param(name = "mob", named = true), Param(name = "dir", named = true)])
+    @StarlarkMethod(name = "act_move", doc = "Queues a move through an exit for a mob.", parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "dir", named = true, doc = "Direction of the exit to take.")])
     fun actMove(mob: Any, dir: Any): Any = verb("act_move") {
         val m = mobArg(mob, "act_move(mob)")
         acted(m, world.actMove(m, dir(dir, "act_move(dir)")))
     }
 
-    @StarlarkMethod(name = "act_attack", parameters = [Param(name = "mob", named = true), Param(name = "target", named = true)])
+    @StarlarkMethod(name = "act_attack", doc = "Queues an attack against target for a mob.", parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "target", named = true, doc = "Actor to attack.")])
     fun actAttack(mob: Any, target: Any): Any = verb("act_attack") {
         val m = mobArg(mob, "act_attack(mob)")
         acted(m, world.actAttack(m, actorArg(target, "act_attack(target)")))
@@ -296,7 +296,8 @@ class Ctx internal constructor(
 
     @StarlarkMethod(
         name = "act_cast",
-        parameters = [Param(name = "mob", named = true), Param(name = "skill", named = true), Param(name = "target", defaultValue = "None", named = true)],
+        doc = "Queues casting a skill for a mob.",
+        parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "skill", named = true, doc = "Skill label to cast."), Param(name = "target", defaultValue = "None", named = true, doc = "Target actor or item, or None for the skill's default target.")],
         useStarlarkThread = true,
     )
     fun actCast(mob: Any, skill: Any, target: Any, thread: StarlarkThread): Any = verb("act_cast") {
@@ -309,13 +310,13 @@ class Ctx internal constructor(
         acted(m, world.actCast(m, proto, if (isNone(target)) null else actorArg(target, "act_cast(target)")))
     }
 
-    @StarlarkMethod(name = "act_advance", parameters = [Param(name = "mob", named = true), Param(name = "target", named = true)])
+    @StarlarkMethod(name = "act_advance", doc = "Queues one step along the room track toward target for a mob.", parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "target", named = true, doc = "Actor or item in the same room to step toward.")])
     fun actAdvance(mob: Any, target: Any): Any = verb("act_advance") {
         val m = mobArg(mob, "act_advance(mob)")
         acted(m, world.actAdvance(m, actorArg(target, "act_advance(target)")))
     }
 
-    @StarlarkMethod(name = "act_retreat", parameters = [Param(name = "mob", named = true), Param(name = "target", defaultValue = "None", named = true)])
+    @StarlarkMethod(name = "act_retreat", doc = "Queues one step along the room track away from target (or toward the room back) for a mob.", parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "target", defaultValue = "None", named = true, doc = "Actor or item to step away from, or None to step toward the back of the room.")])
     fun actRetreat(mob: Any, target: Any): Any = verb("act_retreat") {
         val m = mobArg(mob, "act_retreat(mob)")
         acted(m, world.actRetreat(m, if (isNone(target)) null else actorArg(target, "act_retreat(target)")))
@@ -324,7 +325,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "move_toward",
         doc = "Queues one step toward a direction, an actor (advancing within the room) or a room. False if there is no way.",
-        parameters = [Param(name = "mob", named = true), Param(name = "dir_or_target", named = true)],
+        parameters = [Param(name = "mob", named = true, doc = "The mob that acts."), Param(name = "dir_or_target", named = true, doc = "Direction, actor, or room (view or label) to head for.")],
         useStarlarkThread = true,
     )
     fun moveToward(mob: Any, dirOrTarget: Any, thread: StarlarkThread): Any = verb("move_toward") {
@@ -353,7 +354,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "teleport",
         doc = "Moves an actor to a room; fires the exit and enter hooks.",
-        parameters = [Param(name = "actor", named = true), Param(name = "room", named = true), Param(name = "index", defaultValue = "None", named = true)],
+        parameters = [Param(name = "actor", named = true, doc = "Actor to move."), Param(name = "room", named = true, doc = "Destination room or room label."), Param(name = "index", defaultValue = "None", named = true, doc = "Track index on arrival, or None for the room's default.")],
         useStarlarkThread = true,
     )
     fun teleport(actor: Any, room: Any, index: Any, thread: StarlarkThread): Any = verb("teleport") {
@@ -369,7 +370,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "damage",
         doc = "Deals damage directly (no to-hit roll, no mitigation); fires on_damage.",
-        parameters = [Param(name = "target", named = true), Param(name = "amount", named = true), Param(name = "type", named = true), Param(name = "source", defaultValue = "None", named = true)],
+        parameters = [Param(name = "target", named = true, doc = "Actor to damage."), Param(name = "amount", named = true, doc = "Hit points of damage."), Param(name = "type", named = true, doc = "Damage type, such as 'fire' or 'slash'."), Param(name = "source", defaultValue = "None", named = true, doc = "Actor credited with the damage, or None.")],
     )
     fun damage(target: Any, amount: Any, type: Any, source: Any): Any = verb("damage") {
         val t = actorArg(target, "damage(target)")
@@ -379,7 +380,7 @@ class Ctx internal constructor(
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "heal", parameters = [Param(name = "target", named = true), Param(name = "amount", named = true)])
+    @StarlarkMethod(name = "heal", doc = "Restores hit points to target, up to max_hp.", parameters = [Param(name = "target", named = true, doc = "Actor to heal."), Param(name = "amount", named = true, doc = "Hit points to restore.")])
     fun heal(target: Any, amount: Any): Any = verb("heal") {
         val n = int(amount, "heal(amount)")
         if (n < 0) fail("heal(amount): can't be negative; use damage()")
@@ -387,7 +388,7 @@ class Ctx internal constructor(
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "start_combat", parameters = [Param(name = "a", named = true), Param(name = "b", named = true)])
+    @StarlarkMethod(name = "start_combat", doc = "Engages two actors in the same room in combat.", parameters = [Param(name = "a", named = true, doc = "First actor."), Param(name = "b", named = true, doc = "Second actor, in the same room.")])
     fun startCombat(a: Any, b: Any): Any = verb("start_combat") {
         val x = actorArg(a, "start_combat(a)")
         val y = actorArg(b, "start_combat(b)")
@@ -397,7 +398,7 @@ class Ctx internal constructor(
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "stop_combat", parameters = [Param(name = "a", named = true), Param(name = "b", defaultValue = "None", named = true)])
+    @StarlarkMethod(name = "stop_combat", doc = "Ends combat between a and b, or all of a's fights when b is None.", parameters = [Param(name = "a", named = true, doc = "Actor whose fighting stops."), Param(name = "b", defaultValue = "None", named = true, doc = "Opponent, or None for all of a's fights.")])
     fun stopCombat(a: Any, b: Any): Any = verb("stop_combat") {
         world.stopCombat(actorArg(a, "stop_combat(a)"), if (isNone(b)) null else actorArg(b, "stop_combat(b)"))
         Starlark.NONE
@@ -407,16 +408,16 @@ class Ctx internal constructor(
         name = "apply_affect",
         doc = "Attaches a timed buff or debuff; re-applying a name replaces it.",
         parameters = [
-            Param(name = "target", named = true),
-            Param(name = "name", named = true),
-            Param(name = "duration", named = true),
-            Param(name = "stat_deltas", named = true, defaultValue = "{}"),
-            Param(name = "flags", named = true, defaultValue = "[]"),
-            Param(name = "tick_every", named = true, defaultValue = "None"),
-            Param(name = "on_tick", named = true, defaultValue = "None"),
-            Param(name = "on_expire", named = true, defaultValue = "None"),
-            Param(name = "expire_msg", named = true, defaultValue = "''"),
-            Param(name = "modifiers", named = true, defaultValue = "{}"),
+            Param(name = "target", named = true, doc = "Actor to receive the affect."),
+            Param(name = "name", named = true, doc = "Affect name; applying the same name again replaces the existing affect."),
+            Param(name = "duration", named = true, doc = "Duration in pulses."),
+            Param(name = "stat_deltas", named = true, defaultValue = "{}", doc = "Stat adjustments while the affect lasts, such as {'dex': -1}."),
+            Param(name = "flags", named = true, defaultValue = "[]", doc = "Flags the affect grants, such as 'no_regen'."),
+            Param(name = "tick_every", named = true, defaultValue = "None", doc = "Pulses between on_tick calls, or None for no ticking."),
+            Param(name = "on_tick", named = true, defaultValue = "None", doc = "Top-level function fn(ctx) called every tick_every pulses."),
+            Param(name = "on_expire", named = true, defaultValue = "None", doc = "Top-level function fn(ctx) called when the affect ends."),
+            Param(name = "expire_msg", named = true, defaultValue = "''", doc = "Text sent to the target when the affect ends."),
+            Param(name = "modifiers", named = true, defaultValue = "{}", doc = "Rules modifiers active while the affect lasts, by modifier point name."),
         ],
     )
     fun applyAffect(
@@ -439,7 +440,7 @@ class Ctx internal constructor(
         a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
     }
 
-    @StarlarkMethod(name = "remove_affect", doc = "Removes an affect by name; True if there was one.", parameters = [Param(name = "target", named = true), Param(name = "name", named = true)])
+    @StarlarkMethod(name = "remove_affect", doc = "Removes an affect by name; True if there was one.", parameters = [Param(name = "target", named = true, doc = "Actor carrying the affect."), Param(name = "name", named = true, doc = "Affect name.")])
     fun removeAffect(target: Any, name: Any): Any = verb("remove_affect") {
         world.removeAffect(actorArg(target, "remove_affect(target)"), str(name, "remove_affect(name)"))
     }
@@ -450,10 +451,10 @@ class Ctx internal constructor(
         name = "spawn",
         doc = "Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count > 1 makes several.",
         parameters = [
-            Param(name = "label", named = true),
-            Param(name = "at", named = true),
-            Param(name = "index", named = true, defaultValue = "0"),
-            Param(name = "count", named = true, defaultValue = "1"),
+            Param(name = "label", named = true, doc = "Mob or item prototype label."),
+            Param(name = "at", named = true, doc = "Room or room label, actor, or container item."),
+            Param(name = "index", named = true, defaultValue = "0", doc = "Track index when spawning into a room."),
+            Param(name = "count", named = true, defaultValue = "1", doc = "Number to spawn; more than 1 returns a list."),
         ],
         useStarlarkThread = true,
     )
@@ -480,7 +481,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "give",
         doc = "Puts an item (a view, or a label to spawn) into an actor's inventory.",
-        parameters = [Param(name = "actor", named = true), Param(name = "label_or_item", named = true), Param(name = "count", named = true, defaultValue = "1")],
+        parameters = [Param(name = "actor", named = true, doc = "Actor who receives the item."), Param(name = "label_or_item", named = true, doc = "Item view to move, or item prototype label to spawn."), Param(name = "count", named = true, defaultValue = "1", doc = "Number of items to spawn when given a label.")],
         useStarlarkThread = true,
     )
     fun give(actor: Any, labelOrItem: Any, count: Any, thread: StarlarkThread): Any = verb("give") {
@@ -502,7 +503,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "move_item",
         doc = "Moves an item to a room (at index), an actor's inventory, or a container.",
-        parameters = [Param(name = "item", named = true), Param(name = "to", named = true), Param(name = "index", named = true, defaultValue = "0")],
+        parameters = [Param(name = "item", named = true, doc = "Item to move."), Param(name = "to", named = true, doc = "Room or room label, actor, or container item."), Param(name = "index", named = true, defaultValue = "0", doc = "Track index when moving to a room.")],
         useStarlarkThread = true,
     )
     fun moveItem(item: Any, to: Any, index: Any, thread: StarlarkThread): Any = verb("move_item") {
@@ -510,13 +511,13 @@ class Ctx internal constructor(
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "destroy", doc = "Removes an item and everything inside it.", parameters = [Param(name = "item", named = true)])
+    @StarlarkMethod(name = "destroy", doc = "Removes an item and everything inside it.", parameters = [Param(name = "item", named = true, doc = "Item to remove from the world.")])
     fun destroy(item: Any): Any = verb("destroy") {
         world.destroy(itemArg(item, "destroy(item)"))
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "split", doc = "Splits n off a stack into a new item beside it.", parameters = [Param(name = "item", named = true), Param(name = "n", named = true)])
+    @StarlarkMethod(name = "split", doc = "Splits n off a stack into a new item beside it.", parameters = [Param(name = "item", named = true, doc = "Stack to split."), Param(name = "n", named = true, doc = "Number of items to split off.")])
     fun split(item: Any, n: Any): Any = verb("split") { v(world.splitItem(itemArg(item, "split(item)"), int(n, "split(n)"))) }
 
     // ---- Doors and exits -----------------------------------------------------------------------
@@ -529,24 +530,24 @@ class Ctx internal constructor(
         Starlark.NONE
     }
 
-    @StarlarkMethod(name = "open_door", parameters = [Param(name = "room", named = true), Param(name = "dir", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "open_door", doc = "Opens the door in direction dir, even if locked.", parameters = [Param(name = "room", named = true, doc = "Room, or room label, that has the exit."), Param(name = "dir", named = true, doc = "Direction of the exit.")], useStarlarkThread = true)
     fun openDoor(room: Any, dir: Any, thread: StarlarkThread): Any = door(room, dir, thread, "open_door") { DoorState.OPEN }
 
-    @StarlarkMethod(name = "close_door", parameters = [Param(name = "room", named = true), Param(name = "dir", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "close_door", doc = "Closes an open door in direction dir.", parameters = [Param(name = "room", named = true, doc = "Room, or room label, that has the exit."), Param(name = "dir", named = true, doc = "Direction of the exit.")], useStarlarkThread = true)
     fun closeDoor(room: Any, dir: Any, thread: StarlarkThread): Any =
         door(room, dir, thread, "close_door") { if (it == DoorState.LOCKED) it else DoorState.CLOSED }
 
-    @StarlarkMethod(name = "lock_door", doc = "Closes and locks the door.", parameters = [Param(name = "room", named = true), Param(name = "dir", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "lock_door", doc = "Closes and locks the door.", parameters = [Param(name = "room", named = true, doc = "Room, or room label, that has the exit."), Param(name = "dir", named = true, doc = "Direction of the exit.")], useStarlarkThread = true)
     fun lockDoor(room: Any, dir: Any, thread: StarlarkThread): Any = door(room, dir, thread, "lock_door") { DoorState.LOCKED }
 
-    @StarlarkMethod(name = "unlock_door", doc = "Unlocks the door, leaving it closed.", parameters = [Param(name = "room", named = true), Param(name = "dir", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "unlock_door", doc = "Unlocks the door, leaving it closed.", parameters = [Param(name = "room", named = true, doc = "Room, or room label, that has the exit."), Param(name = "dir", named = true, doc = "Direction of the exit.")], useStarlarkThread = true)
     fun unlockDoor(room: Any, dir: Any, thread: StarlarkThread): Any =
         door(room, dir, thread, "unlock_door") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
 
     @StarlarkMethod(
         name = "set_exit_blocks",
         doc = "Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
-        parameters = [Param(name = "room", named = true), Param(name = "dir", named = true), Param(name = "channels", named = true)],
+        parameters = [Param(name = "room", named = true, doc = "Room, or room label, that has the exit."), Param(name = "dir", named = true, doc = "Direction of the exit."), Param(name = "channels", named = true, doc = "Channels to block: any of 'sight', 'sound', 'noise', 'spell'.")],
         useStarlarkThread = true,
     )
     fun setExitBlocks(room: Any, dir: Any, channels: Any, thread: StarlarkThread): Any = verb("set_exit_blocks") {
@@ -581,7 +582,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "set_attr",
         doc = "Stores a value (int, str, bool, list or dict) on an entity. None deletes the key.",
-        parameters = [Param(name = "entity", named = true), Param(name = "key", named = true), Param(name = "value", named = true)],
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "key", named = true, doc = "Attribute key; unprefixed keys are in your package's namespace."), Param(name = "value", named = true, doc = "Value to store (int, str, bool, list or dict), or None to delete the key.")],
         useStarlarkThread = true,
     )
     fun setAttr(entity: Any, key: Any, value: Any, thread: StarlarkThread): Any = verb("set_attr", "$key") {
@@ -605,7 +606,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "get_attr",
         doc = "Reads a value; your own keys by short name, other packages' by 'namespace:key'.",
-        parameters = [Param(name = "entity", named = true), Param(name = "key", named = true), Param(name = "default", defaultValue = "None", named = true)],
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "key", named = true, doc = "Attribute key; your own by short name, another package's as 'namespace:key'."), Param(name = "default", defaultValue = "None", named = true, doc = "Value returned when the key is absent.")],
         useStarlarkThread = true,
     )
     fun getAttr(entity: Any, key: Any, default: Any, thread: StarlarkThread): Any = verb("get_attr", "$key") {
@@ -613,7 +614,7 @@ class Ctx internal constructor(
         e.customAttributes[attrKey(key, write = false, "get_attr(key)", thread)]?.let { fromAttr(it, thread.mutability()) } ?: default
     }
 
-    @StarlarkMethod(name = "del_attr", parameters = [Param(name = "entity", named = true), Param(name = "key", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "del_attr", doc = "Deletes an attribute key from an entity.", parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "key", named = true, doc = "Attribute key; unprefixed keys are in your package's namespace.")], useStarlarkThread = true)
     fun delAttr(entity: Any, key: Any, thread: StarlarkThread): Any = verb("del_attr", "$key") {
         val e = entityArg(entity, "del_attr(entity)")
         if (e.customAttributes.remove(attrKey(key, write = true, "del_attr(key)", thread)) != null) e.dirty = true
@@ -625,8 +626,8 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "after",
         doc = "Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.",
-        parameters = [Param(name = "pulses", named = true), Param(name = "fn", named = true)],
-        extraKeywords = Param(name = "args"),
+        parameters = [Param(name = "pulses", named = true, doc = "Pulses to wait, at least 1."), Param(name = "fn", named = true, doc = "Top-level function fn(ctx, **args) to call.")],
+        extraKeywords = Param(name = "args", doc = "Keyword arguments passed to fn; values must be storable (int, str, bool, list or dict)."),
     )
     fun after(pulses: Any, fn: Any, args: Dict<String, Any>): Any = verb("after") {
         val n = int(pulses, "after(pulses)")
@@ -636,7 +637,7 @@ class Ctx internal constructor(
         sInt(world.after(owner, n, ref, stored))
     }
 
-    @StarlarkMethod(name = "cancel", doc = "Cancels one of this owner's timers; True if it was pending.", parameters = [Param(name = "timer_id", named = true)])
+    @StarlarkMethod(name = "cancel", doc = "Cancels one of this owner's timers; True if it was pending.", parameters = [Param(name = "timer_id", named = true, doc = "Timer id returned by ctx.after.")])
     fun cancel(timerId: Any): Any = verb("cancel") { world.cancel(owner, int(timerId, "cancel(timer_id)").toLong()) }
 
     // ---- Simulation (SPEC §5.9) ----------------------------------------------------------------
@@ -652,28 +653,28 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "set_active",
         doc = "Keeps an entity simulated (its queue, timers, AI and movement) even outside the bubble, until its last reason is cleared.",
-        parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)],
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "reason", named = true, doc = "Name for this reason; clear_active with the same name removes it.")],
     )
     fun setActive(entity: Any, reason: Any): Any = reason(entity, reason, "set_active") { e, r -> world.setActive(e, r) }
 
-    @StarlarkMethod(name = "clear_active", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
+    @StarlarkMethod(name = "clear_active", doc = "Removes a set_active reason from an entity.", parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "reason", named = true, doc = "The reason given to set_active.")])
     fun clearActive(entity: Any, reason: Any): Any = reason(entity, reason, "clear_active") { e, r -> world.clearActive(e, r) }
 
     @StarlarkMethod(
         name = "set_anchor",
         doc = "Makes an entity project a bubble of its own, as players do, until its last reason is cleared.",
-        parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)],
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "reason", named = true, doc = "Name for this reason; clear_anchor with the same name removes it.")],
     )
     fun setAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "set_anchor") { e, r -> world.setAnchor(e, r) }
 
-    @StarlarkMethod(name = "clear_anchor", parameters = [Param(name = "entity", named = true), Param(name = "reason", named = true)])
+    @StarlarkMethod(name = "clear_anchor", doc = "Removes a set_anchor reason from an entity.", parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "reason", named = true, doc = "The reason given to set_anchor.")])
     fun clearAnchor(entity: Any, reason: Any): Any = reason(entity, reason, "clear_anchor") { e, r -> world.clearAnchor(e, r) }
 
     // ---- Queries -------------------------------------------------------------------------------
 
     private fun ownerRoom(): Room = world.roomOfEntity(owner) ?: fail("${owner.name} is not in a room")
 
-    @StarlarkMethod(name = "here", doc = "The actor or ground item in the owner's room matching a keyword, or None.", parameters = [Param(name = "keyword", named = true)])
+    @StarlarkMethod(name = "here", doc = "The actor or ground item in the owner's room matching a keyword, or None.", parameters = [Param(name = "keyword", named = true, doc = "Keyword to match, as a player would type it.")])
     fun here(keyword: Any): Any = verb("here") {
         val word = str(keyword, "here(keyword)")
         val room = ownerRoom()
@@ -684,7 +685,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "find",
         doc = "Entities of a prototype, ascending id. scope is 'room' (the owner's room), 'zone' (its package) or 'world'.",
-        parameters = [Param(name = "label", named = true), Param(name = "scope", named = true, defaultValue = "'room'")],
+        parameters = [Param(name = "label", named = true, doc = "Prototype label to look for."), Param(name = "scope", named = true, defaultValue = "'room'", doc = "Where to look: 'room', 'zone' or 'world'.")],
         useStarlarkThread = true,
     )
     fun find(label: Any, scope: Any, thread: StarlarkThread): Any = verb("find", "$label") {
@@ -708,7 +709,7 @@ class Ctx internal constructor(
         sList(pick(a, within).map { v(it) })
     }
 
-    @StarlarkMethod(name = "enemies_near", doc = "Opponents of actor within a band ('melee', 'near', 'far').", parameters = [Param(name = "actor", named = true), Param(name = "band", named = true)])
+    @StarlarkMethod(name = "enemies_near", doc = "Opponents of actor within a band ('melee', 'near', 'far').", parameters = [Param(name = "actor", named = true, doc = "The actor whose opponents are wanted."), Param(name = "band", named = true, doc = "Maximum distance: 'melee', 'near' or 'far'.")])
     fun enemiesNear(actor: Any, band: Any): Any = near(actor, band, "enemies_near") { a, within ->
         val foes = world.opponentsOf(a).toSet()
         within.filter { it in foes }
@@ -717,7 +718,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "allies_near",
         doc = "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.",
-        parameters = [Param(name = "actor", named = true), Param(name = "band", named = true)],
+        parameters = [Param(name = "actor", named = true, doc = "The actor whose allies are wanted."), Param(name = "band", named = true, doc = "Maximum distance: 'melee', 'near' or 'far'.")],
     )
     fun alliesNear(actor: Any, band: Any): Any = near(actor, band, "allies_near") { a, within ->
         within.filter { it.isPlayer == a.isPlayer && it.id !in a.fighting }
@@ -726,7 +727,7 @@ class Ctx internal constructor(
     @StarlarkMethod(
         name = "path_to",
         doc = "Directions from the owner's room to a room or actor through open exits; [] if already there, None if unreachable.",
-        parameters = [Param(name = "target", named = true)],
+        parameters = [Param(name = "target", named = true, doc = "Room, room label, or actor to reach.")],
         useStarlarkThread = true,
     )
     fun pathTo(target: Any, thread: StarlarkThread): Any = verb("path_to") {
@@ -738,7 +739,7 @@ class Ctx internal constructor(
         world.pathTo(ownerRoom(), dest)?.let { p -> sList(p.map { it.name }) } ?: Starlark.NONE
     }
 
-    @StarlarkMethod(name = "roll", doc = "Rolls dice such as '2d6+1'.", parameters = [Param(name = "dice", named = true)])
+    @StarlarkMethod(name = "roll", doc = "Rolls dice such as '2d6+1'.", parameters = [Param(name = "dice", named = true, doc = "Dice expression such as '2d6+1'.")])
     fun roll(dice: Any): Any = verb("roll", "$dice") {
         val d = try {
             Dice.parse(str(dice, "roll(dice)"))

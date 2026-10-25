@@ -96,6 +96,19 @@ commented reference zone whose tests run on every engine commit.
 
 ## Status
 
+M7.1 ([SPEC_MILESTONE7.md](docs/SPEC_MILESTONE7.md) §1–§2): one description of the Script API.
+
+- **Spec-driven declarations:** `DeclSpec` defines every package declaration (`package`, `room`,
+  `exit`, `door`, `mob`, `item`, `skill`, `region`, `spawn`, `loot`, `container`,
+  `global_command`, `struct`) plus `module` (`MODULE.gups`) and `server` (`server.gups`),
+  driving both runtime argument parsing (with spelling suggestions) and the documentation model.
+- **Complete API model:** `ScriptApi.model()` combines `DeclSpec`, `HookCatalog`, `CONSTANT_SPECS`,
+  `RULES_EXPORTS`, `MODIFIER_POINTS`, `HarnessApi`, and `@StarlarkBuiltin`/`@StarlarkMethod`
+  reflection into one validated model.
+- **`api.json`:** `gups docs --json [--out DIR_OR_FILE.json]` writes a deterministic, sorted JSON dump
+  of the entire Script API tagged with `api_version` and `engine_version`, with a `symbol` and a `since`
+  on every entry. A golden copy in `cli/src/test/resources` catches unreviewed API changes.
+
 M6.6 ([SPEC_MILESTONE6.md](docs/SPEC_MILESTONE6.md) §8): course world template and CI gates.
 
 - **Static checks:** `gups lint [--base REF] <patterns>` runs static checks on rooms (dead ends, reverse exits,
@@ -198,6 +211,6 @@ M5: the world runs on rules builders can change.
   - M1: the core simulation.
 
 Still to come:
-- M7: `gups docs`, `MIGRATING.md`, plugins.
+- M7.2–M7.4: HTML reference (`gups docs`), `api_version` compatibility check, `MIGRATING.md`, plugins.
 
-`docs` still exits with status 3 ("not implemented").
+`gups docs` (without `--json`) still exits with status 3 ("not implemented").

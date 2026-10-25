@@ -30,6 +30,7 @@ import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.Role
 import gups.harness.FuzzWalker
+import gups.harness.HarnessApi
 import gups.harness.ReproRunner
 import gups.harness.TestRunner
 import gups.harness.render
@@ -40,6 +41,7 @@ import gups.persist.SqliteAccountStore
 import gups.persist.buildReproBundle
 import gups.persist.restoreBundle
 import gups.script.Linter
+import gups.script.ScriptApi
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.ServerConfig
@@ -403,8 +405,30 @@ class MigrateCheck : CliktCommand(name = "migrate-check") {
     }
 }
 
-class Docs : StubCommand("docs", "Generate the API reference.", "M7") {
-    val out by option("--out", help = "Output directory.").file(canBeFile = false)
+class Docs : StubCommand("docs", "Generate the API reference.", "M7.2") {
+    val json by option("--json", help = "Write the machine-readable API model (api.json).").flag()
+    val out by option("--out", help = "Output directory, or with --json a .json file.").file()
+
+    override fun run() {
+        if (!json) {
+            super.run()
+            return
+        }
+        val text = ScriptApi.model(HarnessApi.specs()).toJson()
+        val dest = out
+        if (dest == null) {
+            echo(text, trailingNewline = false)
+            return
+        }
+        // D-171: a .json path is the file itself; anything else is a directory.
+        val file = when {
+            dest.name.endsWith(".json") -> dest.also { it.absoluteFile.parentFile?.mkdirs() }
+            dest.isFile -> throw UsageError("--out: $dest is a file; give a directory or a .json path")
+            '.' in dest.name -> throw UsageError("--out: give a directory or a .json path, not ${dest.name}")
+            else -> dest.also { it.mkdirs() }.resolve("api.json")
+        }
+        file.writeText(text, Charsets.UTF_8)
+    }
 }
 
 /** How long a shutdown waits for the final checkpoint. */

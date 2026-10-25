@@ -23,8 +23,10 @@ import gups.script.EntityView
 import gups.script.ItemView
 import gups.script.RoomView
 import gups.script.StarlarkHost
+import gups.script.TypeSpec
 import gups.script.ViewScope
 import gups.script.callerPackage
+import gups.script.describeBuiltin
 import gups.script.starlarkValue
 import gups.script.storableValue
 import gups.script.view
@@ -95,15 +97,15 @@ class WorldHandle internal constructor(
         name = "spawn_player",
         doc = "Adds a connected player and returns its handle.",
         parameters = [
-            Param(name = "name", named = true),
-            Param(name = "at", named = true),
-            Param(name = "level", named = true, defaultValue = "1"),
-            Param(name = "hp", named = true, defaultValue = "20"),
-            Param(name = "mana", named = true, defaultValue = "20"),
-            Param(name = "move", named = true, defaultValue = "100"),
-            Param(name = "index", named = true, defaultValue = "0"),
-            Param(name = "stats", named = true, defaultValue = "None"),
-            Param(name = "skills", named = true, defaultValue = "None"),
+            Param(name = "name", named = true, doc = "Player name."),
+            Param(name = "at", named = true, doc = "Starting room label."),
+            Param(name = "level", named = true, defaultValue = "1", doc = "Player level."),
+            Param(name = "hp", named = true, defaultValue = "20", doc = "Starting and maximum hit points."),
+            Param(name = "mana", named = true, defaultValue = "20", doc = "Starting and maximum mana."),
+            Param(name = "move", named = true, defaultValue = "100", doc = "Starting and maximum movement points."),
+            Param(name = "index", named = true, defaultValue = "0", doc = "Track index in the starting room."),
+            Param(name = "stats", named = true, defaultValue = "None", doc = "Base stats such as {'str': 12}, or None for the defaults."),
+            Param(name = "skills", named = true, defaultValue = "None", doc = "Known skills mapping skill label to proficiency, or None."),
         ],
         useStarlarkThread = true,
     )
@@ -137,10 +139,10 @@ class WorldHandle internal constructor(
         name = "spawn",
         doc = "Spawns a mob or item and returns its view.",
         parameters = [
-            Param(name = "label", named = true),
-            Param(name = "at", named = true),
-            Param(name = "index", named = true, defaultValue = "0"),
-            Param(name = "count", named = true, defaultValue = "1"),
+            Param(name = "label", named = true, doc = "Mob or item prototype label."),
+            Param(name = "at", named = true, doc = "Room label or view, actor, or container item."),
+            Param(name = "index", named = true, defaultValue = "0", doc = "Track index when spawning into a room."),
+            Param(name = "count", named = true, defaultValue = "1", doc = "Number to spawn; more than 1 returns a list."),
         ],
         useStarlarkThread = true,
     )
@@ -163,7 +165,7 @@ class WorldHandle internal constructor(
         }
     }
 
-    @StarlarkMethod(name = "run", doc = "Advances game time.", parameters = [Param(name = "pulses", named = true, defaultValue = "1")])
+    @StarlarkMethod(name = "run", doc = "Advances game time.", parameters = [Param(name = "pulses", named = true, defaultValue = "1", doc = "Pulses to advance.")])
     fun run(pulses: Any): Any {
         val n = int(pulses, "run(pulses)")
         if (n < 0) evalFail("run(pulses): can't be negative")
@@ -175,10 +177,10 @@ class WorldHandle internal constructor(
         name = "damage",
         doc = "Damages an actor by amount, or by pct of its max hp. Fires on_damage; death is processed at once.",
         parameters = [
-            Param(name = "target", named = true),
-            Param(name = "amount", named = true, defaultValue = "None"),
-            Param(name = "pct", named = true, defaultValue = "None"),
-            Param(name = "type", named = true, defaultValue = "'bludgeon'"),
+            Param(name = "target", named = true, doc = "Actor to damage."),
+            Param(name = "amount", named = true, defaultValue = "None", doc = "Hit points of damage, or None to use pct."),
+            Param(name = "pct", named = true, defaultValue = "None", doc = "Percentage of max hp, or None to use amount."),
+            Param(name = "type", named = true, defaultValue = "'bludgeon'", doc = "Damage type."),
         ],
     )
     fun damage(target: Any, amount: Any, pct: Any, type: Any): Any {
@@ -198,7 +200,7 @@ class WorldHandle internal constructor(
     @StarlarkMethod(
         name = "set_attr",
         doc = "Sets an attribute directly. Unprefixed keys are in the test package's namespace.",
-        parameters = [Param(name = "entity", named = true), Param(name = "key", named = true), Param(name = "value", named = true)],
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "key", named = true, doc = "Attribute key."), Param(name = "value", named = true, doc = "Value to store, or None to delete the key.")],
         useStarlarkThread = true,
     )
     fun setAttr(entity: Any, key: Any, value: Any, thread: StarlarkThread): Any {
@@ -212,16 +214,17 @@ class WorldHandle internal constructor(
 
     @StarlarkMethod(
         name = "get_attr",
-        parameters = [Param(name = "entity", named = true), Param(name = "key", named = true), Param(name = "default", named = true, defaultValue = "None")],
+        doc = "Reads an attribute directly. Unprefixed keys are in the test package's namespace.",
+        parameters = [Param(name = "entity", named = true, doc = "Actor, item or room."), Param(name = "key", named = true, doc = "Attribute key."), Param(name = "default", named = true, defaultValue = "None", doc = "Value returned when the key is absent.")],
         useStarlarkThread = true,
     )
     fun getAttr(entity: Any, key: Any, default: Any, thread: StarlarkThread): Any =
         entityArg(entity, "get_attr(entity)").customAttributes[attrKey(key, thread)]?.let(::starlarkValue) ?: default
 
-    @StarlarkMethod(name = "room", doc = "A view of a room.", parameters = [Param(name = "label", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "room", doc = "A view of a room.", parameters = [Param(name = "label", named = true, doc = "Room label.")], useStarlarkThread = true)
     fun room(label: Any, thread: StarlarkThread): Any = RoomView(this, roomArg(label, "room(label)", thread))
 
-    @StarlarkMethod(name = "trace", doc = "Records every hook and verb call; shown when the test fails.", parameters = [Param(name = "on", named = true, defaultValue = "True")])
+    @StarlarkMethod(name = "trace", doc = "Records every hook and verb call; shown when the test fails.", parameters = [Param(name = "on", named = true, defaultValue = "True", doc = "True to start recording, False to stop.")])
     fun trace(on: Any): Any {
         host.tracer = if (on == true) { e -> addTrace("[${e.pulse}] ${e.text}") } else null
         world.onRules = if (on == true) { _, line -> addTrace("[${world.pulse}] $line") } else null
@@ -267,7 +270,7 @@ class PlayerHandle internal constructor(private val w: WorldHandle, val player: 
     @StarlarkMethod(
         name = "do",
         doc = "Enters a command line, runs pulses until the player's queued actions and casts are done, and returns the output since the last do() or output().",
-        parameters = [Param(name = "line", named = true)],
+        parameters = [Param(name = "line", named = true, doc = "Command line, as the player would type it.")],
     )
     fun doLine(line: Any): Any {
         val world = w.world
@@ -289,30 +292,30 @@ class PlayerHandle internal constructor(private val w: WorldHandle, val player: 
 }
 
 /** A read-only diagnostic for `w.diagnostics()`. */
-@StarlarkBuiltin(name = "diagnostic")
+@StarlarkBuiltin(name = "diagnostic", doc = "A read-only diagnostic entry from w.diagnostics().")
 class DiagnosticView internal constructor(private val d: Diagnostic) : StarlarkValue {
-    @StarlarkMethod(name = "kind", structField = true)
+    @StarlarkMethod(name = "kind", structField = true, doc = "Diagnostic category, such as 'script_error', 'step_limit' or 'quarantine'.")
     fun kind(): Any = d.kind
 
-    @StarlarkMethod(name = "message", structField = true)
+    @StarlarkMethod(name = "message", structField = true, doc = "Human-readable diagnostic message.")
     fun message(): Any = d.message
 
-    @StarlarkMethod(name = "package", structField = true)
+    @StarlarkMethod(name = "package", structField = true, doc = "The package the diagnostic was charged to, or None.")
     fun pkg(): Any = d.pkg ?: Starlark.NONE
 
-    @StarlarkMethod(name = "label", structField = true)
+    @StarlarkMethod(name = "label", structField = true, doc = "The prototype label involved, or None.")
     fun label(): Any = d.label?.v ?: Starlark.NONE
 
-    @StarlarkMethod(name = "hook", structField = true)
+    @StarlarkMethod(name = "hook", structField = true, doc = "The hook, command or timer name, or None.")
     fun hook(): Any = d.hook ?: Starlark.NONE
 
-    @StarlarkMethod(name = "file", structField = true)
+    @StarlarkMethod(name = "file", structField = true, doc = "The Starlark file where the error occurred, or None.")
     fun file(): Any = d.file ?: Starlark.NONE
 
-    @StarlarkMethod(name = "line", structField = true)
+    @StarlarkMethod(name = "line", structField = true, doc = "1-based source line number, or None.")
     fun line(): Any = d.line?.let { StarlarkInt.of(it) } ?: Starlark.NONE
 
-    @StarlarkMethod(name = "pulse", structField = true)
+    @StarlarkMethod(name = "pulse", structField = true, doc = "Game pulse when the diagnostic was recorded.")
     fun pulse(): Any = StarlarkInt.of(d.pulse)
 
     override fun isImmutable(): Boolean = true
@@ -320,6 +323,21 @@ class DiagnosticView internal constructor(private val d: Diagnostic) : StarlarkV
     override fun repr(printer: Printer) {
         printer.append("<diagnostic ${d.kind}: ${d.message}>")
     }
+}
+
+/** The harness objects (`t`, `w`, `p`, `diagnostic`) for the script API model (SPEC §4.12, M7.1). */
+object HarnessApi {
+    /** Each harness class by the name tests know it by. */
+    private val NAMED: Map<String, Class<*>> = mapOf(
+        "t" to TestCtx::class.java,
+        "w" to WorldHandle::class.java,
+        "p" to PlayerHandle::class.java,
+        "diagnostic" to DiagnosticView::class.java,
+    )
+
+    val BUILTIN_CLASSES: List<Class<*>> = NAMED.values.toList()
+
+    fun specs(): List<TypeSpec> = NAMED.map { (name, cls) -> describeBuiltin(cls, name = name) }.sortedBy { it.name }
 }
 
 /** The label an entity view stands for when compared with a label string. */

@@ -35,6 +35,10 @@ tasks.test {
     systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
     // -Dgups.browserTest=true runs the headless Firefox test outside Linux CI too.
     systemProperty("gups.browserTest", System.getProperty("gups.browserTest") ?: "false")
+    // The committed api.json the golden test compares with (a test resource, so already an
+    // input); -Dgups.updateGolden=true rewrites it.
+    systemProperty("gups.apiGolden", layout.projectDirectory.file("src/test/resources/api.golden.json").asFile.absolutePath)
+    systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
 }
 
 // ---- Release images (M6 design §7.3) -------------------------------------------------------

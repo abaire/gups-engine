@@ -34,6 +34,29 @@ data class ServerConfig(
     val reservedNames: List<String> = emptyList(),
 ) {
     companion object {
+        val SPEC = DeclSpec(
+            name = "server",
+            doc = "Declares this server's settings in server.gups.",
+            params = listOf(
+                DeclParam("world", "str", "Path to the course world directory.", default = "None"),
+                DeclParam("db", "str", "Path to the SQLite database file.", default = "None"),
+                DeclParam("telnet", "str", "Raw telnet listen address (host:port or :port), or None to disable.", default = "None"),
+                DeclParam("telnet_tls", "str", "TLS telnet listen address (host:port or :port).", default = "None"),
+                DeclParam("https", "str", "HTTPS and WebSocket listen address (host:port or :port).", default = "None"),
+                DeclParam("admin", "str", "Loopback admin HTTP listen address (host:port).", default = "None"),
+                DeclParam("tls_cert", "str", "Path to the TLS certificate PEM file.", default = "None"),
+                DeclParam("tls_key", "str", "Path to the TLS private key PEM file.", default = "None"),
+                DeclParam("admin_token_file", "str", "Path to the file containing the admin bearer token.", default = "None"),
+                DeclParam("repository", "str", "Git repository URL or path for deploys.", default = "None"),
+                DeclParam("deploy_branch", "str", "Git branch deployed by the admin endpoint.", default = "'main'"),
+                DeclParam("deploy_key_file", "str", "Path to the SSH deploy key file.", default = "None"),
+                DeclParam("open_signup", "bool", "True to allow creating player accounts without an invite code.", default = "False"),
+                DeclParam("max_characters", "int", "Maximum characters per account.", default = "5"),
+                DeclParam("restriction_ladder", "list[str]", "Default restriction durations for @restrict.", default = "['1d', '7d', 'permanent']"),
+                DeclParam("reserved_names", "list[str]", "Character names players may not register.", default = "[]"),
+            ),
+        )
+
         /** Reads [path]. Errors are [LoadError]s naming the file. */
         fun read(path: Path): Pair<ServerConfig, LoadError?> {
             if (!path.isRegularFile()) return ServerConfig() to LoadError("", "config", "no server configuration at $path")
@@ -51,30 +74,29 @@ data class ServerConfig(
         @StarlarkMethod(name = "server", doc = "Declares this server's settings.", extraKeywords = Param(name = "kwargs"))
         fun server(kwargs: Dict<String, Any>): Any {
             if (result != null) fail("server() is called more than once")
-            val kw = Kw("server", kwargs)
-            fun s(name: String) = kw[name]?.let { str(it, kw.what(name)) }
-            val max = kw["max_characters"]?.let { int(it, kw.what("max_characters")) } ?: 5
-            if (max < 1) fail("server(max_characters): must be at least 1")
-            result = ServerConfig(
-                world = s("world"),
-                db = s("db"),
-                telnet = s("telnet"),
-                telnetTls = s("telnet_tls"),
-                https = s("https"),
-                admin = s("admin"),
-                tlsCert = s("tls_cert"),
-                tlsKey = s("tls_key"),
-                adminTokenFile = s("admin_token_file"),
-                repository = s("repository"),
-                deployBranch = s("deploy_branch") ?: "main",
-                deployKeyFile = s("deploy_key_file"),
-                openSignup = kw["open_signup"]?.let { bool(it, kw.what("open_signup")) } ?: false,
-                maxCharacters = max,
-                restrictionLadder = kw["restriction_ladder"]?.let { strList(it, kw.what("restriction_ladder")) } ?: listOf("1d", "7d", "permanent"),
-                reservedNames = kw["reserved_names"]?.let { strList(it, kw.what("reserved_names")) } ?: emptyList(),
-            )
-            kw.finish()
-            return Starlark.NONE
+            return SPEC.bind(kwargs = kwargs) { d ->
+                val max = d.int("max_characters") ?: 5
+                if (max < 1) fail("server(max_characters): must be at least 1")
+                result = ServerConfig(
+                    world = d.str("world"),
+                    db = d.str("db"),
+                    telnet = d.str("telnet"),
+                    telnetTls = d.str("telnet_tls"),
+                    https = d.str("https"),
+                    admin = d.str("admin"),
+                    tlsCert = d.str("tls_cert"),
+                    tlsKey = d.str("tls_key"),
+                    adminTokenFile = d.str("admin_token_file"),
+                    repository = d.str("repository"),
+                    deployBranch = d.str("deploy_branch") ?: "main",
+                    deployKeyFile = d.str("deploy_key_file"),
+                    openSignup = d.bool("open_signup") ?: false,
+                    maxCharacters = max,
+                    restrictionLadder = d["restriction_ladder"]?.let { d.strList("restriction_ladder") } ?: listOf("1d", "7d", "permanent"),
+                    reservedNames = d["reserved_names"]?.let { d.strList("reserved_names") } ?: emptyList(),
+                )
+                Starlark.NONE
+            }
         }
     }
 }

@@ -50,6 +50,17 @@ data class WorldModule(
         const val FILE = "MODULE.gups"
         const val DEFAULT_CHECKPOINT_MINUTES = 30
 
+        val SPEC = DeclSpec(
+            name = "module",
+            doc = "Declares the world's metadata in MODULE.gups.",
+            params = listOf(
+                DeclParam("engine", "str", "Engine version the world was written for.", default = "None"),
+                DeclParam("api_version", "int", "Script API version the world pins.", default = "${EngineInfo.API_VERSION}"),
+                DeclParam("checkpoint_minutes", "int", "Minutes between routine database checkpoints.", default = "$DEFAULT_CHECKPOINT_MINUTES"),
+                DeclParam("start_room", "label", "Room label where new characters start.", default = "None"),
+            ),
+        )
+
         /** Reads `MODULE.gups`; a world without one gets the defaults. Errors are [LoadError]s. */
         fun read(dir: WorldDir): Pair<WorldModule, LoadError?> {
             val path = dir.root.resolve(FILE)
@@ -68,21 +79,20 @@ data class WorldModule(
         @StarlarkMethod(name = "module", doc = "Declares the world's metadata.", extraKeywords = Param(name = "kwargs"))
         fun module(kwargs: Dict<String, Any>): Any {
             if (result != null) fail("module() is called more than once")
-            val kw = Kw("module", kwargs)
-            val minutes = kw["checkpoint_minutes"]?.let { int(it, kw.what("checkpoint_minutes")) } ?: DEFAULT_CHECKPOINT_MINUTES
-            if (minutes < 1) fail("module(checkpoint_minutes): must be at least 1")
-            val start = kw["start_room"]?.let { v ->
-                val text = str(v, kw.what("start_room"))
-                runCatching { Label(text) }.getOrElse { fail("module(start_room): '$text' is not a label such as //zones/tutorial:gate") }
+            return SPEC.bind(kwargs = kwargs) { d ->
+                val minutes = d.int("checkpoint_minutes") ?: DEFAULT_CHECKPOINT_MINUTES
+                if (minutes < 1) fail("module(checkpoint_minutes): must be at least 1")
+                val start = d.str("start_room")?.let { text ->
+                    runCatching { Label(text) }.getOrElse { fail("module(start_room): '$text' is not a label such as //zones/tutorial:gate") }
+                }
+                result = WorldModule(
+                    engine = d.str("engine"),
+                    apiVersion = d.int("api_version") ?: EngineInfo.API_VERSION,
+                    checkpointMinutes = minutes,
+                    startRoom = start,
+                )
+                Starlark.NONE
             }
-            result = WorldModule(
-                engine = kw["engine"]?.let { str(it, kw.what("engine")) },
-                apiVersion = kw["api_version"]?.let { int(it, kw.what("api_version")) } ?: EngineInfo.API_VERSION,
-                checkpointMinutes = minutes,
-                startRoom = start,
-            )
-            kw.finish()
-            return Starlark.NONE
         }
     }
 }

@@ -49,7 +49,7 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     @StarlarkMethod(name = "target", structField = true, doc = "The other actor of the call, if any: the defender, the pinner, the victim, the killer.")
     fun target(): Any = field { v(c.target) }
 
-    @StarlarkMethod(name = "weapon", structField = true)
+    @StarlarkMethod(name = "weapon", structField = true, doc = "The weapon used in an attack, or None for unarmed.")
     fun weapon(): Any = field { v(c.weapon) }
 
     @StarlarkMethod(name = "item", structField = true, doc = "The item, for get_lag and carry_limit.")
@@ -58,19 +58,19 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     @StarlarkMethod(name = "band", structField = true, doc = "'melee', 'near' or 'far' between actor and target, or None.")
     fun band(): Any = field { c.band?.word ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "skill", structField = true)
+    @StarlarkMethod(name = "skill", structField = true, doc = "The skill being cast or evaluated, or None.")
     fun skill(): Any = field { c.skill?.let(::SkillView) ?: Starlark.NONE }
 
     @StarlarkMethod(name = "room", structField = true, doc = "The actor's room.")
     fun room(): Any = field { v(c.actor.room) }
 
-    @StarlarkMethod(name = "pulse", structField = true)
+    @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
     fun pulse(): Any = field { sInt(c.world.pulse) }
 
-    @StarlarkMethod(name = "rng", structField = true)
+    @StarlarkMethod(name = "rng", structField = true, doc = "The seeded random number generator.")
     fun rng(): Any = field { RngView(frame) }
 
-    @StarlarkMethod(name = "roll", doc = "Rolls dice such as '2d6+1' with the seeded rng.", parameters = [Param(name = "dice", named = true)])
+    @StarlarkMethod(name = "roll", doc = "Rolls dice such as '2d6+1' with the seeded rng.", parameters = [Param(name = "dice", named = true, doc = "Dice expression such as '2d6+1'.")])
     fun roll(dice: Any): Any = field {
         val d = try {
             gups.core.model.Dice.parse(str(dice, "roll(dice)"))
@@ -80,7 +80,7 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
         sInt(d.roll(c.world.rng))
     }
 
-    @StarlarkMethod(name = "deny", doc = "Refuses a cast; valid only in cast_allowed and its modifiers.", parameters = [Param(name = "msg", named = true)])
+    @StarlarkMethod(name = "deny", doc = "Refuses a cast; valid only in cast_allowed and its modifiers.", parameters = [Param(name = "msg", named = true, doc = "Text shown to the caster.")])
     fun deny(msg: Any): Any = field {
         if (!frame.site.vetoable) fail("deny() is only valid in cast_allowed (this is ${frame.site.hook})")
         Denial(checkString(str(msg, "deny(msg)"), "deny(msg)", frame.host.limits))
@@ -149,14 +149,15 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules", p
     private var warnedUnloaded = false
     private val lastAlert = HashMap<String, Long>()
 
-    /** True if the rules package is loaded and defines [name]. */
-    fun defines(name: String): Boolean = host.scripts.function(HookRef(file, name)) != null
+    /** True if the rules package is loaded and defines [export]. */
+    fun defines(export: RulesExport): Boolean = host.scripts.function(HookRef(file, export.scriptName)) != null
 
     /**
-     * Calls [name] with the rules ctx of [c] (or [args] alone when [c] is null) and converts
+     * Calls [export] with the rules ctx of [c] (or [args] alone when [c] is null) and converts
      * the result with [convert]. Null means "use the fallback".
      */
-    private fun <T : Any> run(name: String, c: RulesContext?, args: (Frame) -> List<Any>, deny: Boolean = false, convert: (Any?) -> T?): T? {
+    private fun <T : Any> run(export: RulesExport, c: RulesContext?, args: (Frame) -> List<Any>, deny: Boolean = false, convert: (Any?) -> T?): T? {
+        val name = export.scriptName
         val w = c?.world ?: world ?: return null
         if (host.scripts.packages[pkg] == null) {
             if (pkg in host.failedPackages && !warnedUnloaded) {
@@ -195,67 +196,67 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules", p
 
     private fun ctxArgs(c: RulesContext, vararg more: Any): (Frame) -> List<Any> = { f -> listOf(RulesCtx(f, c), *more) }
 
-    private fun intOf(name: String): (Any?) -> Int = { v -> int(v, "rules.$name return value") }
+    private fun intOf(export: RulesExport): (Any?) -> Int = { v -> int(v, "rules.${export.scriptName} return value") }
 
     override fun equipmentSlots(): List<String> =
-        run("equipment_slots", null, { emptyList() }) { v ->
+        run(RulesExport.EQUIPMENT_SLOTS, null, { emptyList() }) { v ->
             strList(v, "rules.equipment_slots return value").also { slots ->
                 for (s in slots) if (!Regex("[a-z][a-z0-9_]*").matches(s)) fail("rules.equipment_slots: '$s' is not a valid slot name")
             }
         } ?: fallback.equipmentSlots()
 
-    override fun toHit(c: RulesContext): Int = run("to_hit", c, ctxArgs(c), convert = intOf("to_hit")) ?: fallback.toHit(c)
+    override fun toHit(c: RulesContext): Int = run(RulesExport.TO_HIT, c, ctxArgs(c), convert = intOf(RulesExport.TO_HIT)) ?: fallback.toHit(c)
 
-    override fun damage(c: RulesContext): Int = run("damage", c, ctxArgs(c), convert = intOf("damage")) ?: fallback.damage(c)
+    override fun damage(c: RulesContext): Int = run(RulesExport.DAMAGE, c, ctxArgs(c), convert = intOf(RulesExport.DAMAGE)) ?: fallback.damage(c)
 
     override fun mitigate(c: RulesContext, amount: Int, type: DamageType): Int =
-        run("mitigate", c, ctxArgs(c, sInt(amount), type.name), convert = intOf("mitigate"))?.coerceAtLeast(0) ?: fallback.mitigate(c, amount, type)
+        run(RulesExport.MITIGATE, c, ctxArgs(c, sInt(amount), type.name), convert = intOf(RulesExport.MITIGATE))?.coerceAtLeast(0) ?: fallback.mitigate(c, amount, type)
 
-    override fun initiative(c: RulesContext): Int = run("initiative", c, ctxArgs(c), convert = intOf("initiative")) ?: fallback.initiative(c)
+    override fun initiative(c: RulesContext): Int = run(RulesExport.INITIATIVE, c, ctxArgs(c), convert = intOf(RulesExport.INITIATIVE)) ?: fallback.initiative(c)
 
     override fun castAllowed(c: RulesContext): String? {
-        if (!defines("cast_allowed") || host.scripts.packages[pkg] == null) return fallback.castAllowed(c)
+        if (!defines(RulesExport.CAST_ALLOWED) || host.scripts.packages[pkg] == null) return fallback.castAllowed(c)
         // A None result is a real answer here, so it is wrapped to tell it from a failure.
-        val answer = run("cast_allowed", c, ctxArgs(c), deny = true) { v -> Allowed(denialValue(v, "rules.cast_allowed return value")) }
+        val answer = run(RulesExport.CAST_ALLOWED, c, ctxArgs(c), deny = true) { v -> Allowed(denialValue(v, "rules.cast_allowed return value")) }
         return if (answer == null) fallback.castAllowed(c) else answer.denial
     }
 
     private class Allowed(val denial: String?)
 
     override fun interruptCheck(c: RulesContext, amount: Int): Boolean =
-        run("interrupt_check", c, ctxArgs(c, sInt(amount))) { v -> bool(v, "rules.interrupt_check return value") } ?: fallback.interruptCheck(c, amount)
+        run(RulesExport.INTERRUPT_CHECK, c, ctxArgs(c, sInt(amount))) { v -> bool(v, "rules.interrupt_check return value") } ?: fallback.interruptCheck(c, amount)
 
-    override fun retreatCheck(c: RulesContext): Int = run("retreat_check", c, ctxArgs(c), convert = intOf("retreat_check")) ?: fallback.retreatCheck(c)
+    override fun retreatCheck(c: RulesContext): Int = run(RulesExport.RETREAT_CHECK, c, ctxArgs(c), convert = intOf(RulesExport.RETREAT_CHECK)) ?: fallback.retreatCheck(c)
 
-    override fun fleeChance(c: RulesContext): Int = run("flee_chance", c, ctxArgs(c), convert = intOf("flee_chance")) ?: fallback.fleeChance(c)
+    override fun fleeChance(c: RulesContext): Int = run(RulesExport.FLEE_CHANCE, c, ctxArgs(c), convert = intOf(RulesExport.FLEE_CHANCE)) ?: fallback.fleeChance(c)
 
-    override fun moveCost(c: RulesContext): Int = run("move_cost", c, ctxArgs(c), convert = intOf("move_cost"))?.coerceAtLeast(0) ?: fallback.moveCost(c)
+    override fun moveCost(c: RulesContext): Int = run(RulesExport.MOVE_COST, c, ctxArgs(c), convert = intOf(RulesExport.MOVE_COST))?.coerceAtLeast(0) ?: fallback.moveCost(c)
 
-    override fun regen(c: RulesContext): Regen = run("regen", c, ctxArgs(c)) { v -> regenValue(v, "rules.regen return value") } ?: fallback.regen(c)
+    override fun regen(c: RulesContext): Regen = run(RulesExport.REGEN, c, ctxArgs(c)) { v -> regenValue(v, "rules.regen return value") } ?: fallback.regen(c)
 
-    override fun carryLimit(c: RulesContext): Int = run("carry_limit", c, ctxArgs(c), convert = intOf("carry_limit")) ?: fallback.carryLimit(c)
+    override fun carryLimit(c: RulesContext): Int = run(RulesExport.CARRY_LIMIT, c, ctxArgs(c), convert = intOf(RulesExport.CARRY_LIMIT)) ?: fallback.carryLimit(c)
 
     override fun encumbrance(c: RulesContext): Map<String, Int> =
-        run("encumbrance", c, ctxArgs(c)) { v -> intDict(v, "rules.encumbrance return value") } ?: fallback.encumbrance(c)
+        run(RulesExport.ENCUMBRANCE, c, ctxArgs(c)) { v -> intDict(v, "rules.encumbrance return value") } ?: fallback.encumbrance(c)
 
     override fun getLag(c: RulesContext, band: Band): Int? {
-        if (!defines("get_lag") || host.scripts.packages[pkg] == null) return fallback.getLag(c, band)
-        val answer = run("get_lag", c, ctxArgs(c, band.word)) { v -> Lag(intOrNull(v, "rules.get_lag return value")) }
+        if (!defines(RulesExport.GET_LAG) || host.scripts.packages[pkg] == null) return fallback.getLag(c, band)
+        val answer = run(RulesExport.GET_LAG, c, ctxArgs(c, band.word)) { v -> Lag(intOrNull(v, "rules.get_lag return value")) }
         return if (answer == null) fallback.getLag(c, band) else answer.pulses
     }
 
     private class Lag(val pulses: Int?)
 
     override fun xpForKill(c: RulesContext): Long =
-        run("xp_for_kill", c, ctxArgs(c)) { v -> int(v, "rules.xp_for_kill return value").toLong() } ?: fallback.xpForKill(c)
+        run(RulesExport.XP_FOR_KILL, c, ctxArgs(c)) { v -> int(v, "rules.xp_for_kill return value").toLong() } ?: fallback.xpForKill(c)
 
     override fun xpToLevel(level: Int): Long =
-        run("xp_to_level", null, { listOf(sInt(level)) }) { v ->
+        run(RulesExport.XP_TO_LEVEL, null, { listOf(sInt(level)) }) { v ->
             int(v, "rules.xp_to_level return value").toLong().also { if (it < 1) fail("rules.xp_to_level must be at least 1") }
         } ?: fallback.xpToLevel(level)
 
     override fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome =
-        run("on_player_death", c, ctxArgs(c)) { v ->
+        run(RulesExport.ON_PLAYER_DEATH, c, ctxArgs(c)) { v ->
             val d = dict(v, "rules.on_player_death return value")
             val respawn = label(str(d["respawn"], "rules.on_player_death[\"respawn\"]"), pkg, "rules.on_player_death[\"respawn\"]")
             if (c.world.roomOrNull(respawn) == null) fail("rules.on_player_death: there is no room $respawn")
@@ -270,3 +271,193 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules", p
 
     override fun fleeFailLag(c: RulesContext): Int = fallback.fleeFailLag(c)
 }
+
+/** The functions `//rules:combat.star` may export (SPEC §4.6). [RULES_EXPORTS] documents each. */
+enum class RulesExport(val scriptName: String) {
+    EQUIPMENT_SLOTS("equipment_slots"),
+    TO_HIT("to_hit"),
+    DAMAGE("damage"),
+    MITIGATE("mitigate"),
+    INITIATIVE("initiative"),
+    CAST_ALLOWED("cast_allowed"),
+    INTERRUPT_CHECK("interrupt_check"),
+    RETREAT_CHECK("retreat_check"),
+    FLEE_CHANCE("flee_chance"),
+    MOVE_COST("move_cost"),
+    REGEN("regen"),
+    CARRY_LIMIT("carry_limit"),
+    ENCUMBRANCE("encumbrance"),
+    GET_LAG("get_lag"),
+    XP_FOR_KILL("xp_for_kill"),
+    XP_TO_LEVEL("xp_to_level"),
+    ON_PLAYER_DEATH("on_player_death"),
+}
+
+/** The docs of every [RulesExport] (SPEC §4.6, M7.1). */
+internal val RULES_EXPORTS: List<RulesExportSpec> = listOf(
+    RulesExportSpec(
+        export = RulesExport.EQUIPMENT_SLOTS,
+        signature = "equipment_slots()",
+        returnType = "list[str]",
+        ctxFields = emptyList(),
+        doc = "Equipment slot names in display and modifier evaluation order.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.TO_HIT,
+        signature = "to_hit(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"),
+        doc = "Hit chance in percent before modifiers.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.DAMAGE,
+        signature = "damage(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"),
+        doc = "Raw attack damage before modifiers and mitigation.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.MITIGATE,
+        signature = "mitigate(ctx, amount, type)",
+        returnType = "int",
+        ctxFields = listOf("actor", "attacker", "defender", "target", "weapon", "room", "pulse", "rng"),
+        doc = "Damage remaining after armor and resistances.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.INITIATIVE,
+        signature = "initiative(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Combat round initiative score; higher acts first.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.CAST_ALLOWED,
+        signature = "cast_allowed(ctx)",
+        returnType = "None | denial",
+        ctxFields = listOf("actor", "target", "skill", "band", "room", "pulse", "rng"),
+        doc = "Returns None if casting is allowed, or ctx.deny(msg) to refuse.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.INTERRUPT_CHECK,
+        signature = "interrupt_check(ctx, amount)",
+        returnType = "bool",
+        ctxFields = listOf("actor", "skill", "room", "pulse", "rng"),
+        doc = "True if taking amount damage interrupts an in-progress cast.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.RETREAT_CHECK,
+        signature = "retreat_check(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "target", "room", "pulse", "rng"),
+        doc = "Chance in percent to retreat along the track when pinned in melee.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.FLEE_CHANCE,
+        signature = "flee_chance(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Chance in percent for a fleeing actor to escape through an exit.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.MOVE_COST,
+        signature = "move_cost(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Movement points spent when leaving a room.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.REGEN,
+        signature = "regen(ctx)",
+        returnType = "dict[str, int]",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Vitals regenerated per world tick as {'hp': int, 'mana': int, 'move': int}.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.CARRY_LIMIT,
+        signature = "carry_limit(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "item", "room", "pulse", "rng"),
+        doc = "Maximum weight the actor can carry without encumbrance.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.ENCUMBRANCE,
+        signature = "encumbrance(ctx)",
+        returnType = "dict[str, int]",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Penalties applied while the actor carries more than carry_limit.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.GET_LAG,
+        signature = "get_lag(ctx, band)",
+        returnType = "int | None",
+        ctxFields = listOf("actor", "item", "room", "pulse", "rng"),
+        doc = "Wait-state pulses for picking up an item at band, or None if out of reach.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.XP_FOR_KILL,
+        signature = "xp_for_kill(ctx)",
+        returnType = "int",
+        ctxFields = listOf("actor", "target", "room", "pulse", "rng"),
+        doc = "Experience points awarded to actor for slaying target.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.XP_TO_LEVEL,
+        signature = "xp_to_level(level)",
+        returnType = "int",
+        ctxFields = emptyList(),
+        doc = "Total experience points required to reach the given level.",
+    ),
+    RulesExportSpec(
+        export = RulesExport.ON_PLAYER_DEATH,
+        signature = "on_player_death(ctx)",
+        returnType = "dict[str, any]",
+        ctxFields = listOf("actor", "target", "room", "pulse", "rng"),
+        doc = "Player death outcome as {'respawn': label, 'xp_loss': int}.",
+    ),
+)
+
+/** The modifier points in the rules modifier chain (SPEC §4.6, M7.1). */
+internal val MODIFIER_POINTS: List<ModifierPointSpec> = listOf(
+    ModifierPointSpec(
+        point = ModifierPoint.TO_HIT,
+        signature = "fn(ctx, base)",
+        valueType = "int",
+        ctxFields = listOf("actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"),
+        doc = "Adjusts hit chance in percent.",
+    ),
+    ModifierPointSpec(
+        point = ModifierPoint.DAMAGE,
+        signature = "fn(ctx, base)",
+        valueType = "int",
+        ctxFields = listOf("actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"),
+        doc = "Adjusts raw damage before mitigation.",
+    ),
+    ModifierPointSpec(
+        point = ModifierPoint.INITIATIVE,
+        signature = "fn(ctx, base)",
+        valueType = "int",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Adjusts combat round initiative.",
+    ),
+    ModifierPointSpec(
+        point = ModifierPoint.CAST_ALLOWED,
+        signature = "fn(ctx, base)",
+        valueType = "None | denial",
+        ctxFields = listOf("actor", "target", "skill", "band", "room", "pulse", "rng"),
+        doc = "Returns None to allow casting, or ctx.deny(msg) to refuse.",
+    ),
+    ModifierPointSpec(
+        point = ModifierPoint.MOVE_COST,
+        signature = "fn(ctx, base)",
+        valueType = "int",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Adjusts movement point cost for leaving a room.",
+    ),
+    ModifierPointSpec(
+        point = ModifierPoint.REGEN,
+        signature = "fn(ctx, base)",
+        valueType = "dict[str, int]",
+        ctxFields = listOf("actor", "room", "pulse", "rng"),
+        doc = "Adjusts per-tick regeneration dict {'hp': int, 'mana': int, 'move': int}.",
+    ),
+)

@@ -50,6 +50,19 @@ class GupsServerTest {
 
     private fun Socket.line(text: String) = getOutputStream().write("$text\r\n".toByteArray())
 
+    /**
+     * Runs [play], adding the server log and what the world and server threads were doing to
+     * any failure, so a stall on a slow CI runner can be diagnosed from the report.
+     */
+    private fun <T> explained(logs: CharSequence, play: () -> T): T = try {
+        play()
+    } catch (e: Throwable) {
+        val threads = Thread.getAllStackTraces().filterKeys { "DefaultDispatcher" in it.name || it.name.startsWith("gups") }
+            .entries.sortedBy { it.key.name }
+            .joinToString("\n") { (t, stack) -> "${t.name} (${t.state})\n" + stack.take(20).joinToString("\n") { "    at $it" } }
+        throw AssertionError("${e.message}\n--- server log ---\n$logs--- threads ---\n$threads", e)
+    }
+
     /** Runs a dev server, or a --prod one with [prod], on [root] until [play] returns, then shuts it down cleanly. */
     private fun withServer(root: Path, start: gups.core.Label? = null, prod: ProdOptions? = null, play: (Socket) -> Unit): String {
         val logs = StringBuffer()
@@ -58,7 +71,7 @@ class GupsServerTest {
         val port = CompletableFuture<Int>()
         val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
         try {
-            Socket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use(play)
+            explained(logs) { Socket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use(play) }
         } finally {
             server.stop()
             runner.join(10_000)
@@ -262,21 +275,23 @@ class GupsServerTest {
                 },
             )
             val ctx = javax.net.ssl.SSLContext.getInstance("TLS").apply { init(null, trustAll, null) }
-            ctx.socketFactory.createSocket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use { s ->
-                assertEquals(setOf("tls"), server.ports.keys, "no raw telnet unless asked for")
-                val iac = 255.toByte()
-                fun gmcp(m: String) = byteArrayOf(iac, 250.toByte(), 201.toByte()) + m.toByteArray() + byteArrayOf(iac, 240.toByte())
-                s.getOutputStream().write(byteArrayOf(iac, 253.toByte(), 201.toByte()) + gmcp("Core.Supports.Set [\"Char 1\"]"))
-                s.readUntil("invite code)")
-                s.line("ann")
-                s.readUntil("Password: ")
-                s.line("correct horse")
-                s.readUntil("Type a name to play")
-                s.line("new")
-                s.readUntil("called? ")
-                s.line("Tess")
-                s.readUntil("Exits: north.")
-                s.readUntil("Char.Vitals {\"hp\":")
+            explained(logs) {
+                ctx.socketFactory.createSocket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use { s ->
+                    assertEquals(setOf("tls"), server.ports.keys, "no raw telnet unless asked for")
+                    val iac = 255.toByte()
+                    fun gmcp(m: String) = byteArrayOf(iac, 250.toByte(), 201.toByte()) + m.toByteArray() + byteArrayOf(iac, 240.toByte())
+                    s.getOutputStream().write(byteArrayOf(iac, 253.toByte(), 201.toByte()) + gmcp("Core.Supports.Set [\"Char 1\"]"))
+                    s.readUntil("invite code)")
+                    s.line("ann")
+                    s.readUntil("Password: ")
+                    s.line("correct horse")
+                    s.readUntil("Type a name to play")
+                    s.line("new")
+                    s.readUntil("called? ")
+                    s.line("Tess")
+                    s.readUntil("Exits: north.")
+                    s.readUntil("Char.Vitals {\"hp\":")
+                }
             }
         } finally {
             server.stop()
@@ -293,23 +308,25 @@ class GupsServerTest {
         val port = CompletableFuture<Int>()
         val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
         try {
-            Socket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use { s ->
-                s.readUntil("known?")
-                s.line("Tess")
-                assertContains(s.readUntil("Exits: north."), "The Tutorial Gate")
-                s.line("@eval room.name")
-                s.readUntil("\"The Tutorial Gate\"")
+            explained(logs) {
+                Socket("127.0.0.1", port.get(10, TimeUnit.SECONDS)).use { s ->
+                    s.readUntil("known?")
+                    s.line("Tess")
+                    assertContains(s.readUntil("Exits: north."), "The Tutorial Gate")
+                    s.line("@eval room.name")
+                    s.readUntil("\"The Tutorial Gate\"")
 
-                val rooms = root.resolve("zones/tutorial/rooms.star")
-                rooms.writeText(rooms.readText().replace("The Tutorial Gate", "The Rebuilt Gate"))
-                s.readUntil("Reloaded //zones/tutorial.")
-                s.line("look")
-                s.readUntil("The Rebuilt Gate")
+                    val rooms = root.resolve("zones/tutorial/rooms.star")
+                    rooms.writeText(rooms.readText().replace("The Tutorial Gate", "The Rebuilt Gate"))
+                    s.readUntil("Reloaded //zones/tutorial.")
+                    s.line("look")
+                    s.readUntil("The Rebuilt Gate")
 
-                rooms.writeText(rooms.readText().replace("room(\"gate\",", "room(\"gate\""))
-                assertContains(s.readUntil("the old version stays live"), "rooms.star")
-                s.line("@errors")
-                s.readUntil("reload")
+                    rooms.writeText(rooms.readText().replace("room(\"gate\",", "room(\"gate\""))
+                    assertContains(s.readUntil("the old version stays live"), "rooms.star")
+                    s.line("@errors")
+                    s.readUntil("reload")
+                }
             }
         } finally {
             server.stop()

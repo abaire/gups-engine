@@ -2,9 +2,14 @@ package gups.cli
 
 import com.github.ajalt.clikt.testing.test
 import gups.core.EngineInfo
+import gups.harness.HarnessApi
+import gups.script.ScriptApi
+import java.io.File
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CommandsTest {
@@ -31,6 +36,44 @@ class CommandsTest {
         val result = gupsCommand().test("docs")
         assertEquals(EXIT_NOT_IMPLEMENTED, result.statusCode)
         assertContains(result.stderr, "not implemented yet")
+    }
+
+    @Test
+    fun `docs --json writes api json to stdout, a directory or a json file`() {
+        val expected = ScriptApi.model(HarnessApi.specs()).toJson()
+
+        val stdout = gupsCommand().test("docs --json")
+        assertEquals(0, stdout.statusCode, stdout.output)
+        assertEquals(expected, stdout.stdout)
+
+        val dir = Files.createTempDirectory("gups-docs-out").toFile()
+        val toDir = gupsCommand().test(listOf("docs", "--json", "--out", dir.resolve("ref").path))
+        assertEquals(0, toDir.statusCode, toDir.output)
+        assertEquals(expected, dir.resolve("ref/api.json").readText())
+
+        val toFile = gupsCommand().test(listOf("docs", "--json", "--out", dir.resolve("out/model.json").path))
+        assertEquals(0, toFile.statusCode, toFile.output)
+        assertEquals(expected, dir.resolve("out/model.json").readText())
+
+        val wrongExtension = gupsCommand().test(listOf("docs", "--json", "--out", dir.resolve("model.txt").path))
+        assertEquals(1, wrongExtension.statusCode)
+        assertContains(wrongExtension.stderr, "give a directory or a .json path")
+        assertFalse(dir.resolve("model.txt").exists())
+    }
+
+    /**
+     * `api.json` byte for byte against a committed copy, so a change to the API shows up in review
+     * and the output is the same on every CI platform. After a deliberate change, regenerate it with
+     * `./gradlew :cli:test --tests '*CommandsTest*' -Dgups.updateGolden=true`.
+     */
+    @Test
+    fun `api json matches the committed golden copy`() {
+        val actual = ScriptApi.model(HarnessApi.specs()).toJson()
+            .replace("\"engine_version\": \"${EngineInfo.version}\"", "\"engine_version\": \"<engine>\"")
+        val golden = File(System.getProperty("gups.apiGolden"))
+        if (System.getProperty("gups.updateGolden") == "true") golden.also { it.parentFile.mkdirs() }.writeText(actual)
+        assertTrue(golden.isFile, "missing $golden; run with -Dgups.updateGolden=true to create it")
+        assertEquals(golden.readText(), actual, "api.json changed; if that is intended, run with -Dgups.updateGolden=true")
     }
 
     @Test

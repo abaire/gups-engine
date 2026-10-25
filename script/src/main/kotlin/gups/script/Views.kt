@@ -85,7 +85,7 @@ abstract class EntityView internal constructor(val scope: ViewScope, val entity:
     @StarlarkMethod(name = "label", structField = true, doc = "The prototype label.")
     fun label(): Any = read { entity.protoLabel.v }
 
-    @StarlarkMethod(name = "name", structField = true)
+    @StarlarkMethod(name = "name", structField = true, doc = "The entity's display name.")
     fun name(): Any = read { entity.name }
 
     @StarlarkMethod(name = "attrs", structField = true, doc = "Custom attributes; your package's own keys by short name.")
@@ -104,55 +104,55 @@ abstract class EntityView internal constructor(val scope: ViewScope, val entity:
 
 @StarlarkBuiltin(name = "actor", doc = "A read-only view of a player or mob.")
 open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, actor) {
-    @StarlarkMethod(name = "is_player", structField = true)
+    @StarlarkMethod(name = "is_player", structField = true, doc = "True for a player, False for a mob.")
     fun isPlayer(): Any = read { actor.isPlayer }
 
     @StarlarkMethod(name = "in_world", structField = true, doc = "False once the actor has died (mobs) or quit.")
     fun inWorld(): Any = read { actor.inWorld }
 
-    @StarlarkMethod(name = "keywords", structField = true)
+    @StarlarkMethod(name = "keywords", structField = true, doc = "Words that match this actor when targeting.")
     fun keywords(): Any = read { sList(actor.keywords) }
 
-    @StarlarkMethod(name = "level", structField = true)
+    @StarlarkMethod(name = "level", structField = true, doc = "The actor's level.")
     fun level(): Any = read { sInt(actor.level) }
 
-    @StarlarkMethod(name = "xp", structField = true)
+    @StarlarkMethod(name = "xp", structField = true, doc = "Current experience points.")
     fun xp(): Any = read { sInt(actor.xp) }
 
-    @StarlarkMethod(name = "hp", structField = true)
+    @StarlarkMethod(name = "hp", structField = true, doc = "Current hit points.")
     fun hp(): Any = read { sInt(actor.hp) }
 
-    @StarlarkMethod(name = "max_hp", structField = true)
+    @StarlarkMethod(name = "max_hp", structField = true, doc = "Maximum hit points.")
     fun maxHp(): Any = read { sInt(actor.maxHp) }
 
-    @StarlarkMethod(name = "mana", structField = true)
+    @StarlarkMethod(name = "mana", structField = true, doc = "Current mana.")
     fun mana(): Any = read { sInt(actor.mana) }
 
-    @StarlarkMethod(name = "max_mana", structField = true)
+    @StarlarkMethod(name = "max_mana", structField = true, doc = "Maximum mana.")
     fun maxMana(): Any = read { sInt(actor.maxMana) }
 
-    @StarlarkMethod(name = "move", structField = true)
+    @StarlarkMethod(name = "move", structField = true, doc = "Current movement points.")
     fun move(): Any = read { sInt(actor.move) }
 
-    @StarlarkMethod(name = "max_move", structField = true)
+    @StarlarkMethod(name = "max_move", structField = true, doc = "Maximum movement points.")
     fun maxMove(): Any = read { sInt(actor.maxMove) }
 
     @StarlarkMethod(name = "stats", structField = true, doc = "Effective attributes, including affects and equipment.")
     fun stats(): Any = read { sDict(STAT_NAMES.associateWith { sInt(actor.stat(it)) }) }
 
-    @StarlarkMethod(name = "armor", structField = true)
+    @StarlarkMethod(name = "armor", structField = true, doc = "Armor rating.")
     fun armor(): Any = read { sInt(actor.armor) }
 
-    @StarlarkMethod(name = "resists", structField = true)
+    @StarlarkMethod(name = "resists", structField = true, doc = "Damage resistance percentage by damage type.")
     fun resists(): Any = read { sDict(actor.resists.entries.associate { it.key.name to sInt(it.value) }) }
 
-    @StarlarkMethod(name = "room", structField = true)
+    @StarlarkMethod(name = "room", structField = true, doc = "The room the actor is currently in.")
     fun room(): Any = read { RoomView(scope, actor.room) }
 
-    @StarlarkMethod(name = "track_index", structField = true)
+    @StarlarkMethod(name = "track_index", structField = true, doc = "Position along the room's 1D track.")
     fun trackIndex(): Any = read { sInt(actor.trackIndex) }
 
-    @StarlarkMethod(name = "band_of", doc = "'melee', 'near' or 'far' to another actor or item in the same room; None elsewhere.", parameters = [Param(name = "other", named = true)])
+    @StarlarkMethod(name = "band_of", doc = "'melee', 'near' or 'far' to another actor or item in the same room; None elsewhere.", parameters = [Param(name = "other", named = true, doc = "Actor or item in the same room.")])
     fun bandOf(other: Any): Any = read {
         val index = when (other) {
             is ActorView -> other.actor.trackIndex.takeIf { other.actor.room === actor.room && other.actor.inWorld }
@@ -163,19 +163,19 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
         index?.let { Band.between(actor.trackIndex, it).word } ?: Starlark.NONE
     }
 
-    @StarlarkMethod(name = "affects", structField = true)
+    @StarlarkMethod(name = "affects", structField = true, doc = "Active timed affects on this actor.")
     fun affects(): Any = read { sList(actor.affects.map { AffectView(scope, actor, it) }) }
 
     @StarlarkMethod(name = "skills", structField = true, doc = "Skill label to proficiency (0-100).")
     fun skills(): Any = read { sDict(actor.skills.entries.associate { it.key.v to sInt(it.value) }) }
 
-    @StarlarkMethod(name = "equipped", doc = "The item in an equipment slot, or None.", parameters = [Param(name = "slot", named = true)])
+    @StarlarkMethod(name = "equipped", doc = "The item in an equipment slot, or None.", parameters = [Param(name = "slot", named = true, doc = "Equipment slot name, such as 'wield' or 'body'.")])
     fun equipped(slot: Any): Any = read { view(scope, actor.equipped(str(slot, "equipped(slot)"))) }
 
     @StarlarkMethod(name = "inventory", doc = "Carried items (not equipment).")
     fun inventory(): Any = read { sList(actor.inventory.map { ItemView(scope, it) }) }
 
-    @StarlarkMethod(name = "has_item", doc = "Whether the actor carries or wears an item of this prototype.", parameters = [Param(name = "label", named = true)], useStarlarkThread = true)
+    @StarlarkMethod(name = "has_item", doc = "Whether the actor carries or wears an item of this prototype.", parameters = [Param(name = "label", named = true, doc = "Item prototype label.")], useStarlarkThread = true)
     fun hasItem(label: Any, thread: StarlarkThread): Any = read {
         val l = label(str(label, "has_item(label)"), callerFile(thread)?.pkg ?: scope.pkg, "has_item(label)")
         (actor.inventory + actor.equipment.values).any { it.protoLabel == l }
@@ -184,7 +184,7 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     @StarlarkMethod(name = "fighting", doc = "Actors engaged with this one.")
     fun fighting(): Any = read { sList(actor.fighting.mapNotNull { scope.world.actor(it) }.map { ActorView(scope, it) }) }
 
-    @StarlarkMethod(name = "is_casting", structField = true)
+    @StarlarkMethod(name = "is_casting", structField = true, doc = "True while the actor is in casting warmup.")
     fun isCasting(): Any = read { actor.isCasting }
 
     @StarlarkMethod(name = "wait_state", structField = true, doc = "Recovery pulses left.")
@@ -199,7 +199,7 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     @StarlarkMethod(name = "flags", structField = true, doc = "Flags from affects and worn items' equip_affects, sorted.")
     fun flags(): Any = read { sList((actor.affects.flatMap { it.flags } + actor.equipment.values.flatMap { it.proto.equipAffects }).distinct().sorted()) }
 
-    @StarlarkMethod(name = "has_flag", doc = "True if an affect or a worn item gives this flag, such as 'no_regen'.", parameters = [Param(name = "flag", named = true)])
+    @StarlarkMethod(name = "has_flag", doc = "True if an affect or a worn item gives this flag, such as 'no_regen'.", parameters = [Param(name = "flag", named = true, doc = "Flag name, such as 'no_regen'.")])
     fun hasFlag(flag: Any): Any = read { actor.hasFlag(str(flag, "has_flag(flag)")) }
 
     @StarlarkMethod(name = "carried_weight", structField = true, doc = "Weight of everything carried and worn.")
@@ -211,25 +211,25 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
 
 @StarlarkBuiltin(name = "room", doc = "A read-only view of a room.")
 class RoomView(scope: ViewScope, val room: Room) : EntityView(scope, room) {
-    @StarlarkMethod(name = "desc", structField = true)
+    @StarlarkMethod(name = "desc", structField = true, doc = "The room's description.")
     fun desc(): Any = read { room.proto.desc }
 
     @StarlarkMethod(name = "size", structField = true, doc = "'cramped', 'normal' or 'large'.")
     fun size(): Any = read { room.proto.size.name.lowercase() }
 
-    @StarlarkMethod(name = "track_size", structField = true)
+    @StarlarkMethod(name = "track_size", structField = true, doc = "Number of track slots in this room (1, 3 or 6).")
     fun trackSize(): Any = read { sInt(room.trackSize) }
 
-    @StarlarkMethod(name = "regions", structField = true)
+    @StarlarkMethod(name = "regions", structField = true, doc = "Region tags carried by this room, sorted.")
     fun regions(): Any = read { sList(room.regions.sorted()) }
 
-    @StarlarkMethod(name = "flags", structField = true)
+    @StarlarkMethod(name = "flags", structField = true, doc = "Room flags, sorted.")
     fun flags(): Any = read { sList(room.proto.flags.sorted()) }
 
-    @StarlarkMethod(name = "exits")
+    @StarlarkMethod(name = "exits", doc = "Exits leading out of this room.")
     fun exits(): Any = read { sList(room.exits.values.map { ExitView(scope, room, it) }) }
 
-    @StarlarkMethod(name = "exit", doc = "The exit in a direction, or None.", parameters = [Param(name = "dir", named = true)])
+    @StarlarkMethod(name = "exit", doc = "The exit in a direction, or None.", parameters = [Param(name = "dir", named = true, doc = "Direction name.")])
     fun exit(dir: Any): Any = read {
         room.exits[Direction.parse(str(dir, "exit(dir)"))]?.let { ExitView(scope, room, it) } ?: Starlark.NONE
     }
@@ -248,13 +248,13 @@ class ExitView internal constructor(private val scope: ViewScope, private val ro
         return block()
     }
 
-    @StarlarkMethod(name = "direction", structField = true)
+    @StarlarkMethod(name = "direction", structField = true, doc = "The exit's direction name.")
     fun direction(): Any = read { exit.direction.name }
 
     @StarlarkMethod(name = "to", structField = true, doc = "The destination room's label.")
     fun to(): Any = read { exit.to.v }
 
-    @StarlarkMethod(name = "entry_index", structField = true)
+    @StarlarkMethod(name = "entry_index", structField = true, doc = "Destination track index where travellers arrive, or -1 for the back.")
     fun entryIndex(): Any = read { sInt(exit.entryIndex) }
 
     @StarlarkMethod(name = "blocks", structField = true, doc = "Effective blocked channels: the exit's own plus its door's.")
@@ -269,7 +269,7 @@ class ExitView internal constructor(private val scope: ViewScope, private val ro
     @StarlarkMethod(name = "passable", structField = true, doc = "False while a door is closed or locked.")
     fun passable(): Any = read { exit.passable }
 
-    @StarlarkMethod(name = "one_way", structField = true)
+    @StarlarkMethod(name = "one_way", structField = true, doc = "True if this exit intentionally has no return exit.")
     fun oneWay(): Any = read { exit.oneWay }
 
     override fun equals(other: Any?): Boolean = other is ExitView && other.exit === exit
@@ -285,22 +285,22 @@ class ExitView internal constructor(private val scope: ViewScope, private val ro
 
 @StarlarkBuiltin(name = "item", doc = "A read-only view of an item.")
 class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
-    @StarlarkMethod(name = "kind", structField = true)
+    @StarlarkMethod(name = "kind", structField = true, doc = "Item category, such as 'misc', 'melee', 'ranged', 'armor' or 'key'.")
     fun kind(): Any = read { item.kind }
 
-    @StarlarkMethod(name = "keywords", structField = true)
+    @StarlarkMethod(name = "keywords", structField = true, doc = "Words that match this item when targeting.")
     fun keywords(): Any = read { sList(item.keywords) }
 
-    @StarlarkMethod(name = "count", structField = true)
+    @StarlarkMethod(name = "count", structField = true, doc = "Stack count.")
     fun count(): Any = read { sInt(item.count) }
 
     @StarlarkMethod(name = "weight", structField = true, doc = "Total weight, including the stack and any contents.")
     fun weight(): Any = read { sInt(item.weight) }
 
-    @StarlarkMethod(name = "in_world", structField = true)
+    @StarlarkMethod(name = "in_world", structField = true, doc = "False once the item has been destroyed or decayed.")
     fun inWorld(): Any = read { scope.world.item(item.id) === item }
 
-    @StarlarkMethod(name = "location", structField = true)
+    @StarlarkMethod(name = "location", structField = true, doc = "Where the item currently is.")
     fun location(): Any = read { LocationView(scope, item.location) }
 
     @StarlarkMethod(name = "container_state", structField = true, doc = "'open', 'closed' or 'locked'; None if not a container.")
@@ -312,7 +312,7 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
     @StarlarkMethod(name = "dice", structField = true, doc = "Weapon damage dice such as '1d6', or None.")
     fun dice(): Any = read { item.proto.dice?.toString() ?: Starlark.NONE }
 
-    @StarlarkMethod(name = "damage_type", structField = true)
+    @StarlarkMethod(name = "damage_type", structField = true, doc = "Weapon damage type.")
     fun damageType(): Any = read { item.proto.damageType.name }
 
     @StarlarkMethod(name = "range", structField = true, doc = "A weapon's reach: 'melee', 'near' or 'far'.")
@@ -328,7 +328,7 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
 /** Where an item is (SPEC §3.3). */
 @StarlarkBuiltin(name = "location", doc = "Where an item is: kind is 'room', 'carried', 'equipped' or 'contained'.")
 class LocationView internal constructor(private val scope: ViewScope, private val loc: ItemLocation) : StarlarkValue {
-    @StarlarkMethod(name = "kind", structField = true)
+    @StarlarkMethod(name = "kind", structField = true, doc = "'room', 'carried', 'equipped' or 'contained'.")
     fun kind(): Any = when (loc) {
         is ItemLocation.InRoom -> "room"
         is ItemLocation.Carried -> "carried"
@@ -363,10 +363,10 @@ class LocationView internal constructor(private val scope: ViewScope, private va
 
 @StarlarkBuiltin(name = "affect", doc = "A read-only view of an affect.")
 class AffectView internal constructor(private val scope: ViewScope, private val host: Actor, val affect: Affect) : StarlarkValue {
-    @StarlarkMethod(name = "id", structField = true)
+    @StarlarkMethod(name = "id", structField = true, doc = "The affect's id on its host.")
     fun id(): Any = sInt(affect.id)
 
-    @StarlarkMethod(name = "name", structField = true)
+    @StarlarkMethod(name = "name", structField = true, doc = "The affect's name.")
     fun name(): Any = affect.name
 
     @StarlarkMethod(name = "expires_at", structField = true, doc = "The pulse it expires at.")
@@ -375,10 +375,10 @@ class AffectView internal constructor(private val scope: ViewScope, private val 
     @StarlarkMethod(name = "remaining", structField = true, doc = "Pulses until it expires.")
     fun remaining(): Any = sInt((affect.expiresAt - scope.world.pulse).coerceAtLeast(0))
 
-    @StarlarkMethod(name = "flags", structField = true)
+    @StarlarkMethod(name = "flags", structField = true, doc = "Affect flags, sorted.")
     fun flags(): Any = sList(affect.flags.sorted())
 
-    @StarlarkMethod(name = "stat_deltas", structField = true)
+    @StarlarkMethod(name = "stat_deltas", structField = true, doc = "Stat adjustments granted by this affect.")
     fun statDeltas(): Any = sDict(affect.statDeltas.mapValues { sInt(it.value) })
 
     @StarlarkMethod(name = "source", structField = true, doc = "Who applied it, if still in the world.")
@@ -396,31 +396,31 @@ class AffectView internal constructor(private val scope: ViewScope, private val 
 
 @StarlarkBuiltin(name = "skill", doc = "A read-only view of a skill.")
 class SkillView internal constructor(val skill: SkillProto) : StarlarkValue {
-    @StarlarkMethod(name = "label", structField = true)
+    @StarlarkMethod(name = "label", structField = true, doc = "The skill's prototype label.")
     fun label(): Any = skill.label.v
 
-    @StarlarkMethod(name = "name", structField = true)
+    @StarlarkMethod(name = "name", structField = true, doc = "The skill's name.")
     fun name(): Any = skill.name
 
-    @StarlarkMethod(name = "kind", structField = true)
+    @StarlarkMethod(name = "kind", structField = true, doc = "Skill category, such as 'spell' or 'skill'.")
     fun kind(): Any = skill.kind
 
-    @StarlarkMethod(name = "range", structField = true)
+    @StarlarkMethod(name = "range", structField = true, doc = "Maximum target range.")
     fun range(): Any = skill.range.name.lowercase()
 
-    @StarlarkMethod(name = "target", structField = true)
+    @StarlarkMethod(name = "target", structField = true, doc = "Kind of target the skill accepts.")
     fun target(): Any = skill.target.name.lowercase()
 
-    @StarlarkMethod(name = "warmup", structField = true)
+    @StarlarkMethod(name = "warmup", structField = true, doc = "Casting warmup pulses.")
     fun warmup(): Any = sInt(skill.warmup)
 
-    @StarlarkMethod(name = "lag", structField = true)
+    @StarlarkMethod(name = "lag", structField = true, doc = "Post-resolution recovery pulses.")
     fun lag(): Any = sInt(skill.lag)
 
     @StarlarkMethod(name = "cost", structField = true, doc = "Vitals spent: keys 'hp', 'mana', 'move'.")
     fun cost(): Any = sDict(skill.cost.mapValues { sInt(it.value) })
 
-    @StarlarkMethod(name = "channels", structField = true)
+    @StarlarkMethod(name = "channels", structField = true, doc = "Channels required and emitted when casting, sorted.")
     fun channels(): Any = sList(skill.channels.map { it.name.lowercase() }.sorted())
 
     @StarlarkMethod(name = "interrupt", structField = true, doc = "{'damage_pct': int or None, 'stun': bool}.")
@@ -435,13 +435,13 @@ class SkillView internal constructor(val skill: SkillProto) : StarlarkValue {
 
 @StarlarkBuiltin(name = "proposal", doc = "A behavior's suggested action for this think cycle.")
 class ProposalView internal constructor(val proposal: Proposal) : StarlarkValue {
-    @StarlarkMethod(name = "command", structField = true)
+    @StarlarkMethod(name = "command", structField = true, doc = "The proposed command line.")
     fun command(): Any = proposal.commandLine
 
-    @StarlarkMethod(name = "priority", structField = true)
+    @StarlarkMethod(name = "priority", structField = true, doc = "Proposal priority; higher ranks first.")
     fun priority(): Any = sInt(proposal.priority)
 
-    @StarlarkMethod(name = "source", structField = true)
+    @StarlarkMethod(name = "source", structField = true, doc = "The behavior that produced this proposal.")
     fun source(): Any = proposal.source
 
     override fun isImmutable(): Boolean = true
@@ -450,7 +450,7 @@ class ProposalView internal constructor(val proposal: Proposal) : StarlarkValue 
 /** The seeded world RNG (SPEC §4.5). There is no other source of randomness. */
 @StarlarkBuiltin(name = "rng", doc = "The seeded, deterministic random number generator.")
 class RngView internal constructor(private val scope: ViewScope) : StarlarkValue {
-    @StarlarkMethod(name = "int", doc = "A uniform int in lo..hi, inclusive.", parameters = [Param(name = "lo", named = true), Param(name = "hi", named = true)])
+    @StarlarkMethod(name = "int", doc = "A uniform int in lo..hi, inclusive.", parameters = [Param(name = "lo", named = true, doc = "Smallest value."), Param(name = "hi", named = true, doc = "Largest value.")])
     fun int(lo: Any, hi: Any): Any {
         scope.check()
         val a = gups.script.int(lo, "rng.int(lo)")
@@ -459,13 +459,13 @@ class RngView internal constructor(private val scope: ViewScope) : StarlarkValue
         return sInt(scope.world.rng.int(a, b))
     }
 
-    @StarlarkMethod(name = "chance", doc = "True with probability pct percent.", parameters = [Param(name = "pct", named = true)])
+    @StarlarkMethod(name = "chance", doc = "True with probability pct percent.", parameters = [Param(name = "pct", named = true, doc = "Probability in percent (0..100).")])
     fun chance(pct: Any): Any {
         scope.check()
         return scope.world.rng.chance(gups.script.int(pct, "rng.chance(pct)"))
     }
 
-    @StarlarkMethod(name = "choice", doc = "A uniformly chosen element of a non-empty list.", parameters = [Param(name = "items", named = true)])
+    @StarlarkMethod(name = "choice", doc = "A uniformly chosen element of a non-empty list.", parameters = [Param(name = "items", named = true, doc = "Non-empty list to choose from.")])
     fun choice(items: Any): Any {
         scope.check()
         val l = list(items, "rng.choice(items)")

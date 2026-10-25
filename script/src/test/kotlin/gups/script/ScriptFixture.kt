@@ -8,6 +8,7 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Mob
 import gups.core.model.Player
+import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
@@ -40,6 +41,8 @@ class ScriptFixture(
     val limits: ScriptLimits = ScriptLimits.HARNESS,
     seed: Long = 1,
     bubble: Boolean = false,
+    /** Wraps the host the world calls, for tests that watch hook calls. */
+    wrap: (ScriptHost) -> ScriptHost = { it },
 ) {
     val root: Path = tempWorld(files)
     val loader = ScriptLoader(WorldDir(root), limits)
@@ -47,7 +50,7 @@ class ScriptFixture(
     val host: StarlarkHost by lazy { StarlarkHost(result, limits, loader) }
     val w: World by lazy {
         check(result.ok) { "load failed:\n" + result.report() }
-        World(result.prototypes(), host.rules(), host, WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble)).also {
+        World(result.prototypes(), host.rules(), wrap(host), WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble)).also {
             host.install(it)
             it.fireOnLoad()
         }

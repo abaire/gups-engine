@@ -512,7 +512,8 @@ compact JSON.
   in M5 (D-111, D-112, D-113, D-121), and `expected_tombstones` and `migrate_noop` in M6.6 (D-168).
 - **When builtins work:** declaration builtins work only while a package loads; effect
   primitives work anywhere.
-*Code:* `DeclarationBuiltins`, `Kw`.
+- **`DeclSpec` (M7.1):** declaration parsing moved from `Kw` to `DeclSpec` (D-171).
+*Code:* `DeclarationBuiltins`, `DeclSpec`.
 
 ### D-071 Harness details — `open`
 - **`p.do(line)`:**
@@ -1821,4 +1822,66 @@ names.
   by `<!-- gups-gates-summary -->` via the GitHub API (`pull-requests: write`). If any gate failed, the
   workflow exits 1 after posting the summary.
 *Code:* `template-world/.github/workflows/gates.yml`.
+
+## Documentation, API stability and plugins (§5.9, §5.11, §7.2; M7 design) — M7
+
+### D-171 The script API model and `api.json` — `open`
+- **`DeclSpec`:** replaces `Kw` (D-070) for all 13 package declarations plus `module` (`MODULE.gups`) and
+  `server` (`server.gups`).
+  - In `room`, `mob`, and `item`, the required positional declaration identifier is named `id`
+    (`positional = true, keyword = false`) while the optional display name keyword is `name`
+    (`positional = false, keyword = true`), keeping parameter names unique within each `DeclSpec`.
+  - `exit` takes `direction` positionally and `to` either positionally or by keyword; `global_command`
+    takes `name`, `fn`, and `lane` either positionally or by keyword.
+  - Builtins parse through `DeclSpec.bind(args, kwargs) { d -> ... }`. After the block, every parameter of
+    the spec must have been read through `ParsedDecl`, or the call fails with an engine error, so a spec
+    parameter its builtin ignores can't be accepted and silently dropped.
+  - `package()` passes a `beforeUnknownCheck` callback so `api_version` is verified before unknown
+    keyword arguments are rejected, preserving `ApiVersionMismatch` diagnostics when a package targets a
+    newer `api_version`.
+  - A required parameter with allowed values lists them as "a, b or c", as `package(kind)` did before.
+- **Documented defaults:** a `DeclParam.default` is either a Starlark expression the declaration really
+  uses (a test passes it explicitly and checks the result is unchanged) or one of the descriptions
+  "id with spaces", "words of name" and "package path". That corrected six documented defaults that
+  didn't match the code (`door(closed_blocks)`, `container(capacity)`, `mob(hp)`, `mob(mana)`,
+  `skill(kind)`, `spawn(respawn_pulses)`); the code's behavior is unchanged.
+- **`since`, no milestones:** every entry has `since`, the `api_version` that added it, defaulting to the
+  literal `FIRST_API_VERSION` (1), never to the current `EngineInfo.API_VERSION`, so raising the version
+  doesn't re-date the whole API. `@StarlarkMethod`s and `@StarlarkBuiltin` types added later carry
+  `@ApiSince(n)`; `DeclParam`, hooks and the Kotlin tables take `since = n`. Method parameters have no
+  `since`: a parameter added to an existing method is recorded in the changelog (M7.3). The spec's
+  "milestone or `api_version`" is met with the `api_version` alone, as everything so far is
+  `api_version` 1.
+- **Hook ctx fields:** `HookSpec.ctxFields` lists the `ctx` fields the engine may set for that hook
+  (the others are always None). A test fires every hook and checks the list both ways against what
+  the engine passes. That corrected `on_spawn` (+`item`), `on_combat_tick` (+`actor`), `on_nearby`
+  (+`text`), the enter hooks (only `from_room`), the exit hooks (only `to_room`) and `on_tell` (no
+  `target`), and the `ctx.from_room` / `ctx.to_room` docs.
+- **Rules exports:** the names `StarlarkRules` calls are the `RulesExport` enum, and `RULES_EXPORTS` must
+  document every entry. Listed `rules_ctx` fields of exports and modifier points must exist on `rules_ctx`.
+- **Docs:** every method parameter needs a doc string, as declaration parameters do. Method parameters
+  have no type in the model: the only annotation slot for one, `Param.allowedTypes`, is enforced at
+  call time and would change argument errors, so types stay in the doc text for now.
+- **Module seam:** `:script` depends only on `:core`, while `:harness` depends on `:script`.
+  `ScriptApi.model(harness)` takes the harness types as an argument (`HarnessApi.specs()` in `:harness`);
+  `:script` doesn't look for them itself.
+- **Completeness:** tests list every `@StarlarkBuiltin` class compiled into `gups.script` and
+  `gups.harness` (`findBuiltinClasses`, nested classes included) and check them against
+  `ScriptApi.BUILTIN_CLASSES` and `HarnessApi.BUILTIN_CLASSES`.
+- **Symbols:** each `api.json` entry has a `symbol`, the path M7.3's changelog names it by. Package
+  globals are bare (`room`, `room.size`, `damage.dice`, `ALL`); other kinds are prefixed where a bare name
+  would clash: `hook:on_wake`, `view:room.exits`, `rules:to_hit`, `modifier:to_hit`. `ctx`, `rules_ctx` and
+  the harness objects use their own names (`ctx.act_move`, `ctx.apply_affect.name`, `rules_ctx.weapon`,
+  `t.eq`), as do the settings (`module.start_room`). Symbols must be unique.
+- **`api.json` structure:** top-level keys are emitted in deterministic order (`api_version`, `engine_version`,
+  `declarations`, `settings`, `constants`, `hooks`, `ctx`, `views`, `effects`, `behaviors`, `rules`, `harness`),
+  with map entries and member lists (`fields`, `methods`, `exports`, `modifier_points`) sorted alphabetically
+  by name. A copy with `engine_version` blanked is committed as `cli/src/test/resources/api.golden.json`;
+  the CLI tests compare with it on every CI platform (`-Dgups.updateGolden=true` rewrites it).
+- **CLI (`gups docs`):** `gups docs --json [--out PATH]` writes `api.json` to stdout when `--out` is omitted,
+  directly to `PATH` when it ends with `.json`, and otherwise to `<PATH>/api.json`, creating the directory.
+  A `PATH` that is an existing file, or has another extension, is a usage error. Calling `gups docs`
+  without `--json` continues to exit with `EXIT_NOT_IMPLEMENTED` (3) until M7.2 adds HTML generation.
+*Code:* `ApiModel.kt`, `Declarations.kt`, `WorldModule.SPEC`, `ServerConfig.SPEC`, `Rules.kt`, `HarnessApi`, `Docs`.
+
 

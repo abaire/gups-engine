@@ -39,10 +39,10 @@ class TestCtx internal constructor(
             "rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, " +
             "so only rooms near players are simulated; by default every room is (D-116).",
         parameters = [
-            Param(name = "seed", named = true, defaultValue = "0"),
-            Param(name = "packages", named = true, defaultValue = "None"),
-            Param(name = "rules", named = true, defaultValue = "None"),
-            Param(name = "bubble", named = true, defaultValue = "False"),
+            Param(name = "seed", named = true, defaultValue = "0", doc = "Random seed for the world."),
+            Param(name = "packages", named = true, defaultValue = "None", doc = "Packages to load, or None for this test's package."),
+            Param(name = "rules", named = true, defaultValue = "None", doc = "Rules package label such as //rules_alt, or None for //rules."),
+            Param(name = "bubble", named = true, defaultValue = "False", doc = "True to simulate only rooms near players; by default every room is simulated."),
         ],
         useStarlarkThread = true,
     )
@@ -101,7 +101,7 @@ class TestCtx internal constructor(
     @StarlarkMethod(
         name = "eq",
         doc = "Fails unless actual == expected. An entity view equals its label, so t.eq(p.room, ':hall') works.",
-        parameters = [Param(name = "actual", named = true), Param(name = "expected", named = true), Param(name = "msg", named = true, defaultValue = "None")],
+        parameters = [Param(name = "actual", named = true, doc = "Value under test."), Param(name = "expected", named = true, doc = "Expected value."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")],
         useStarlarkThread = true,
     )
     fun eq(actual: Any, expected: Any, msg: Any, thread: StarlarkThread): Any {
@@ -119,7 +119,7 @@ class TestCtx internal constructor(
     @StarlarkMethod(
         name = "ne",
         doc = "Fails if actual == unexpected.",
-        parameters = [Param(name = "actual", named = true), Param(name = "unexpected", named = true), Param(name = "msg", named = true, defaultValue = "None")],
+        parameters = [Param(name = "actual", named = true, doc = "Value under test."), Param(name = "unexpected", named = true, doc = "Value it must not equal."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")],
         useStarlarkThread = true,
     )
     fun ne(actual: Any, unexpected: Any, msg: Any, thread: StarlarkThread): Any {
@@ -127,13 +127,13 @@ class TestCtx internal constructor(
         assertionFail(prefix(msg) + "expected a value other than ${shown(unexpected)}")
     }
 
-    @StarlarkMethod(name = "true", doc = "Fails unless the value is truthy.", parameters = [Param(name = "value", named = true), Param(name = "msg", named = true, defaultValue = "None")])
+    @StarlarkMethod(name = "true", doc = "Fails unless the value is truthy.", parameters = [Param(name = "value", named = true, doc = "Value under test."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")])
     fun isTrue(value: Any, msg: Any): Any {
         if (Starlark.truth(value)) return Starlark.NONE
         assertionFail(prefix(msg) + "expected a true value, got ${shown(value)}")
     }
 
-    @StarlarkMethod(name = "false", doc = "Fails unless the value is falsy.", parameters = [Param(name = "value", named = true), Param(name = "msg", named = true, defaultValue = "None")])
+    @StarlarkMethod(name = "false", doc = "Fails unless the value is falsy.", parameters = [Param(name = "value", named = true, doc = "Value under test."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")])
     fun isFalse(value: Any, msg: Any): Any {
         if (!Starlark.truth(value)) return Starlark.NONE
         assertionFail(prefix(msg) + "expected a false value, got ${shown(value)}")
@@ -149,7 +149,7 @@ class TestCtx internal constructor(
     @StarlarkMethod(
         name = "contains",
         doc = "Fails unless a string contains a substring, or a list or dict contains an item.",
-        parameters = [Param(name = "container", named = true), Param(name = "item", named = true), Param(name = "msg", named = true, defaultValue = "None")],
+        parameters = [Param(name = "container", named = true, doc = "String, list or dict to search."), Param(name = "item", named = true, doc = "Substring, element or key to find."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")],
     )
     fun contains(container: Any, item: Any, msg: Any): Any {
         if (holds(container, item)) return Starlark.NONE
@@ -159,7 +159,7 @@ class TestCtx internal constructor(
     @StarlarkMethod(
         name = "not_contains",
         doc = "Fails if a string contains a substring, or a list or dict contains an item.",
-        parameters = [Param(name = "container", named = true), Param(name = "item", named = true), Param(name = "msg", named = true, defaultValue = "None")],
+        parameters = [Param(name = "container", named = true, doc = "String, list or dict to search."), Param(name = "item", named = true, doc = "Substring, element or key that must be absent."), Param(name = "msg", named = true, defaultValue = "None", doc = "Extra text for the failure message.")],
     )
     fun notContains(container: Any, item: Any, msg: Any): Any {
         if (!holds(container, item)) return Starlark.NONE
@@ -168,7 +168,7 @@ class TestCtx internal constructor(
 
     private fun block(v: Any): String = if (v is String) v.lines().joinToString("\n") { "  | $it" } else "  ${Starlark.repr(v)}"
 
-    @StarlarkMethod(name = "fail", doc = "Fails the test.", parameters = [Param(name = "msg", named = true)])
+    @StarlarkMethod(name = "fail", doc = "Fails the test.", parameters = [Param(name = "msg", named = true, doc = "Failure message.")])
     fun fail(msg: Any): Any = assertionFail(str(msg, "fail(msg)"))
 
     override fun isImmutable(): Boolean = true
