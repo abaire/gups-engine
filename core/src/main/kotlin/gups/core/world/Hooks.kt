@@ -47,6 +47,14 @@ enum class HookName(val scriptName: String) {
     get() = scriptName.startsWith("before_")
 }
 
+/** Why an affect ended, for its `on_expire` (SPEC §4.4). */
+enum class AffectEndReason {
+  /** It reached its expiry pulse. */
+  EXPIRED,
+  /** It was taken off early, by `remove_affect` or `dispel`. */
+  REMOVED,
+}
+
 /** The event fields of one hook invocation (SPEC §4.5). `ctx.self` is the owner. */
 data class HookContext(
   val actor: Actor? = null,
@@ -63,6 +71,8 @@ data class HookContext(
   val amount: Int? = null,
   val type: DamageType? = null,
   val affect: Affect? = null,
+  /** Why [affect] ended, for its `on_expire`. */
+  val affectEndReason: AffectEndReason? = null,
   val elapsedPulses: Long? = null,
   /** The perception event type for `on_nearby`, for example `say` or `enter` (SPEC §5.7). */
   val event: String? = null,

@@ -1,7 +1,10 @@
 package gups.core.world
 
+import gups.core.HookRef
 import gups.core.Label
+import gups.core.model.Effect
 import gups.core.model.ItemLocation
+import gups.core.model.Mob
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import kotlin.test.Test
@@ -9,6 +12,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CombatTest {
@@ -167,5 +171,73 @@ class CombatTest {
     val p = f.player("Ann")
     f.w.awardXp(p, 2500)
     assertEquals(3, p.level)
+  }
+
+  @Test
+  fun `on_expire fires with the reason the affect ended`() {
+    val host = RecordingHost()
+    val reasons = mutableListOf<String>()
+    host.refHandlers["done"] = { _, _, ctx ->
+      reasons += "${ctx.affect!!.name} ${ctx.affectEndReason}"
+    }
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    val done = HookRef(Label("//t:t.star"), "done")
+    f.w.applyAffect(p, "ward", 5, onExpire = done)
+    f.w.applyAffect(p, "hex", 50, onExpire = done)
+    f.w.applyAffect(p, "glow", 50, onExpire = done)
+    f.w.removeAffect(p, "hex")
+    f.w.applyEffect(Effect.Dispel("glow"), p, p)
+    f.runTo(10)
+    assertEquals(listOf("hex REMOVED", "glow REMOVED", "ward EXPIRED"), reasons)
+  }
+
+  @Test
+  fun `an affect removed on its expiry pulse counts as expired`() {
+    val host = RecordingHost()
+    val reasons = mutableListOf<String>()
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    val done = HookRef(Label("//t:t.star"), "done")
+    // Both run out on the same pulse; the first one's on_expire removes the second.
+    host.refHandlers["done"] = { w, _, ctx ->
+      reasons += "${ctx.affect!!.name} ${ctx.affectEndReason}"
+      if (ctx.affect.name == "first") w.removeAffect(p, "second")
+    }
+    f.w.applyAffect(p, "first", 5, onExpire = done)
+    f.w.applyAffect(p, "second", 5, onExpire = done)
+    f.runTo(10)
+    assertEquals(listOf("first EXPIRED", "second EXPIRED"), reasons)
+  }
+
+  @Test
+  fun `a timed summon fades away when it expires or is dispelled`() {
+    val f = Fixture()
+    val p = f.player("Ann", at = T.YARD)
+    f.w.applyEffect(Effect.Summon(T.GOBLIN, count = 2, duration = 50), p, null)
+    val (a, b) = f.w.room(T.YARD).actors.filterIsInstance<Mob>()
+    f.w.startCombat(a, p)
+    f.w.applyEffect(Effect.Dispel("summoned"), p, a)
+    assertFalse(a.inWorld, "dispelling banishes it")
+    assertTrue(p.fighting.isEmpty())
+    assertTrue(b.inWorld)
+    f.runTo(60)
+    assertFalse(b.inWorld, "expiry banishes it")
+    assertTrue(f.w.room(T.YARD).items.isEmpty(), "a banished summon leaves no corpse")
+  }
+
+  @Test
+  fun `summons record their summoner, and killing one gives no xp or loot`() {
+    val f = Fixture(rules = FixedRules(damage = 20))
+    val p = f.player("Ann", at = T.YARD)
+    f.w.applyEffect(Effect.Summon(T.GOBLIN), p, null)
+    val g = f.w.room(T.YARD).actors.filterIsInstance<Mob>().single()
+    assertEquals(p.id, g.summonedBy)
+    assertNull(f.mob().summonedBy)
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertFalse(g.inWorld)
+    assertEquals(0L, p.xp)
+    assertTrue(f.w.room(T.YARD).items.single().contents.isEmpty(), "no loot rolled")
   }
 }

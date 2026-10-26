@@ -1952,6 +1952,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.reason",
+        "name": "reason",
+        "doc": "Why the affect ended, 'expired' or 'removed', for affect on_expire.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.rng",
         "name": "rng",
         "doc": "The seeded random number generator.",
@@ -2353,7 +2359,7 @@
             "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Top-level function fn(ctx) called when the affect ends."
+            "doc": "Top-level function fn(ctx) called when the affect expires or is removed."
           },
           {
             "symbol": "ctx.apply_affect.expire_msg",
@@ -4318,7 +4324,7 @@
           "default": "None",
           "varargs": false,
           "kwargs": false,
-          "doc": "Top-level function fn(ctx) called when the affect ends."
+          "doc": "Top-level function fn(ctx) called when the affect expires or is removed."
         },
         {
           "symbol": "apply_affect.expire_msg",

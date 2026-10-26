@@ -241,6 +241,13 @@ internal constructor(
   }
 
   @StarlarkMethod(
+    name = "reason",
+    structField = true,
+    doc = "Why the affect ended, 'expired' or 'removed', for affect on_expire.",
+  )
+  fun reason(): Any = field { hc.affectEndReason?.name?.lowercase() ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "proposals",
     structField = true,
     doc = "For think: behavior proposals, best first.",
@@ -727,7 +734,7 @@ internal constructor(
           name = "on_expire",
           named = true,
           defaultValue = "None",
-          doc = "Top-level function fn(ctx) called when the affect ends.",
+          doc = "Top-level function fn(ctx) called when the affect expires or is removed.",
         ),
         Param(
           name = "expire_msg",

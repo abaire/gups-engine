@@ -410,4 +410,19 @@ class PersistenceTest {
     assertEquals(setOf("raid:1"), back.anchorReasons)
     second.close()
   }
+
+  @Test
+  fun `a summon's summoner survives a restart`() {
+    val file = tempDb()
+    val first = PersistWorld(file)
+    val (rat, other) = first.w.actors.filterIsInstance<Mob>()
+    rat.summonedBy = EntityId(42)
+    first.save()
+    first.close()
+
+    val second = PersistWorld(file)
+    assertEquals(EntityId(42), (second.w.actor(rat.id) as Mob).summonedBy)
+    assertNull((second.w.actor(other.id) as Mob).summonedBy)
+    second.close()
+  }
 }

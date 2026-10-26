@@ -1256,7 +1256,7 @@ internal class DeclarationBuiltins {
           name = "on_expire",
           named = true,
           defaultValue = "None",
-          doc = "Top-level function fn(ctx) called when the affect ends.",
+          doc = "Top-level function fn(ctx) called when the affect expires or is removed.",
         ),
         Param(
           name = "expire_msg",

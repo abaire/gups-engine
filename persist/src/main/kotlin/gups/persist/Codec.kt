@@ -136,6 +136,7 @@ data class MobPayload(
   val xp: Long = 0,
   val home: String? = null,
   val spawn: SpawnJson? = null,
+  val summonedBy: Long? = null,
   // The delta: present only where the instance differs from its prototype.
   val level: Int? = null,
   val maxHp: Int? = null,
@@ -364,6 +365,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           xp = e.xp,
           home = e.homeRoom.v.takeIf { e.homeRoom != e.room.label },
           spawn = spawnOf(e)?.let { (room, rule) -> SpawnJson(room.v, rule) },
+          summonedBy = e.summonedBy?.v,
           level = delta(e.level, p.level),
           maxHp = delta(e.maxHp, p.hp),
           maxMana = delta(e.maxMana, p.mana),
@@ -494,6 +496,7 @@ internal fun applyMob(m: Mob, p: MobPayload) {
   p.thinkEvery?.let { m.thinkEvery = it }
   p.dormantRecovery?.let { m.dormantRecovery = DormantRecovery.valueOf(it.uppercase()) }
   p.home?.let { m.homeRoom = Label(it) }
+  m.summonedBy = p.summonedBy?.let(::EntityId)
   m.hp = p.hp.coerceAtMost(m.maxHp)
   m.mana = p.mana.coerceAtMost(m.maxMana)
   m.move = p.move.coerceAtMost(m.maxMove)

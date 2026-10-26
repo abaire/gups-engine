@@ -156,8 +156,10 @@ internal fun World.processDeath(victim: Actor) {
   echo(room, "${victim.name.cap()} is DEAD!", victim)
   perceive("death", Channel.NOISE, room, victim)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
-  // A debug mob is worth nothing, and everything it leaves is debug too (SPEC §4.9).
-  if (killer != null && !victim.debug)
+  // A debug mob is worth nothing, and everything it leaves is debug too (SPEC §4.9). A summon is
+  // worth nothing either and drops no loot, so it can't be farmed.
+  val summoned = victim is Mob && victim.summonedBy != null
+  if (killer != null && !victim.debug && !summoned)
     awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
 
   val corpse =
@@ -175,8 +177,9 @@ internal fun World.processDeath(victim: Actor) {
         if (victim.debug) markDebug(item)
         moveItem(item, into)
       }
-      for (rule in victim.proto.loot) if (rng.fraction() < rule.chance)
-        spawnItem(rule.label, into, rule.count, debug = victim.debug)
+      if (!summoned)
+        for (rule in victim.proto.loot) if (rng.fraction() < rule.chance)
+          spawnItem(rule.label, into, rule.count, debug = victim.debug)
       removeActor(victim)
     }
     is Player -> {
@@ -255,24 +258,34 @@ fun World.applyAffect(
   return affect
 }
 
-fun World.removeAffect(target: Actor, name: String): Boolean {
-  val wasStunned = target.isStunned
-  return target.affects
-    .removeIf { it.name == name }
-    .also {
-      if (it) target.dirty = true
-      stunChanged(target, wasStunned)
-    }
+fun World.removeAffect(target: Actor, name: String): Boolean =
+  removeAffects(target) { it.name == name }
+
+/** Ends every affect on [target] that [matches], as removed early; true if any matched. */
+private fun World.removeAffects(target: Actor, matches: (Affect) -> Boolean): Boolean {
+  val gone = target.affects.filter(matches)
+  for (affect in gone) endAffect(target, affect, AffectEndReason.REMOVED)
+  return gone.isNotEmpty()
 }
 
-internal fun World.expireAffect(a: Actor, affect: Affect) {
+internal fun World.expireAffect(a: Actor, affect: Affect) =
+  endAffect(a, affect, AffectEndReason.EXPIRED)
+
+/**
+ * Takes [affect] off [a] and runs its end: the expire message (on expiry only), `on_expire` and,
+ * for a summon, the banishing. An affect that has reached its expiry pulse counts as expired
+ * however it was taken off.
+ */
+private fun World.endAffect(a: Actor, affect: Affect, reason: AffectEndReason) {
   val wasStunned = a.isStunned
   if (!a.affects.remove(affect)) return
   a.dirty = true
   stunChanged(a, wasStunned)
-  if (affect.expireMessage.isNotEmpty()) send(a, affect.expireMessage)
-  affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect)) }
-  if ("summoned" in affect.flags && a is Mob) {
+  val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
+  if (why == AffectEndReason.EXPIRED && affect.expireMessage.isNotEmpty())
+    send(a, affect.expireMessage)
+  affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
+  if ("summoned" in affect.flags && a is Mob && a.inWorld) {
     echo(a.room, "${a.name.cap()} fades away.", a)
     disengageAll(a)
     removeActor(a)
@@ -331,6 +344,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
     is Effect.Summon ->
       repeat(effect.count) {
         val m = spawnMob(effect.label, caster.room, caster.trackIndex)
+        m.summonedBy = caster.id
         effect.duration?.let {
           applyAffect(m, "summoned", it, flags = setOf("summoned"), source = caster)
         }
@@ -374,7 +388,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
           val f = effect.filter
           val matches: (Affect) -> Boolean =
             if (f.endsWith("*")) { a -> a.name.startsWith(f.dropLast(1)) } else { a -> a.name == f }
-          if (t.affects.removeIf(matches)) t.dirty = true
+          removeAffects(t, matches)
         }
         is Effect.Knockback -> shove(t, awayFrom = caster, steps = effect.steps)
         is Effect.Pull -> pull(t, toward = caster, steps = effect.steps)

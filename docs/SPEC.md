@@ -501,6 +501,7 @@ current state.
   - `thinkEvery: Int`.
   - `senses: Map<Sense, Int>` with radius 0..1. Senses are `HEARING` and `SIGHT`.
   - `homeRoom`.
+  - `summonedBy: EntityId?`, the actor whose `summon` (§4.3) spawned it.
   - `dormantRecovery`: `FULL` (default), `REGEN`, or `NONE` (§5.9).
 - **Player only:**
   - `accountId` (none for characters in a world without a database).
@@ -885,11 +886,11 @@ Rules functions can read it from `ctx.actor.skills`.
 | `damage(dice, type)` | Deal damage. |
 | `heal(dice)` | Restore hit points. |
 | `apply_affect(name, duration, stat_deltas={}, flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff. |
-| `dispel(filter)` | Remove matching affects. |
+| `dispel(filter)` | Remove matching affects, firing each one's `on_expire`. |
 | `knockback(steps)` | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. |
 | `pull(steps)` | Draw the target toward the caster, never past it. Clamped to the track. |
 | `stun(pulses)` | Stun the target. |
-| `summon(label, count=1, duration=None)` | Spawn mobs. |
+| `summon(label, count=1, duration=None)` | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world. |
 | `sequence(*effects)` | Combine several primitives, passed as varargs. |
 
 Spell `damage(...)` effects don't go through the `damage` modifier point; only auto-attacks
@@ -924,7 +925,8 @@ of `on_*` hooks are ignored.
 | `on_nearby` | — | Mob (any; `senses` widen it, §5.7) | `event`, `actor`, `text`, `source_room`, `via_exit` |
 | `think` | — | Mob | `self`, `proposals` |
 | `commands[verb]` | — | Room, Item | `actor`, `args`, `target`, `item` |
-| affect `on_tick` / `on_expire` | — | Affect | `self` (host), `affect` |
+| affect `on_tick` | — | Affect | `self` (host), `affect` |
+| affect `on_expire` | — | Affect | `self` (host), `affect`, `reason` |
 
 **Observer semantics:** Hooks on a mob fire for actions *by others in the same room*.
 `ctx.self` is always the hook's owner.
@@ -956,7 +958,10 @@ engine validates each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`,
 `args`, `event`, `source_room`, `via_exit`, `skill`, `weapon`, `amount`, `type`,
-`proposals`, `elapsed_pulses`, `from_room`, `to_room`, `affect` (affect hooks), `targets`
+`proposals`, `elapsed_pulses`, `from_room`, `to_room`, `affect` (affect hooks), `reason`
+(affect `on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"`
+for `remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as
+expired), `targets`
 (`on_combat_tick`), `pulse`, `rng`.
 
 - **Commands:** `ctx.args` is the argument text, `ctx.target` the actor in the room matching
@@ -2291,7 +2296,8 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
     world. The order is: messages, `on_death` (target's own hook, then the room, then
     observers), XP, then the corpse.
   - **For mobs:** awards XP via `xp_for_kill` and creates a corpse container holding the
-    mob's inventory, its equipment and the loot rolls.
+    mob's inventory, its equipment and the loot rolls. A summoned mob (`summonedBy` set)
+    awards no XP and rolls no loot.
   - **For players:** applies `rules.on_player_death` and leaves a corpse holding the carried
     inventory only; equipment stays on the player. The player respawns at index 0 of the
     respawn room with 1 hp and all affects removed.

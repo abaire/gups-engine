@@ -201,4 +201,33 @@ class M5ScriptTest {
     f.run(3)
     assertTrue(p.id in brute.fighting)
   }
+
+  @Test
+  fun `on_expire sees whether the affect expired or was removed`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _ended(ctx):
+                    ctx.set_attr(ctx.self, ctx.affect.name, ctx.reason)
+
+                def _ward(ctx):
+                    ctx.apply_affect(ctx.actor, "short", 2, on_expire = _ended)
+                    ctx.apply_affect(ctx.actor, "long", 100, on_expire = _ended)
+
+                def _unward(ctx):
+                    ctx.remove_affect(ctx.actor, "long")
+
+                room("start", commands = {"ward": _ward, "unward": _unward})
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "ward")
+    f.run(5)
+    f.input(p, "unward")
+    f.run()
+    assertEquals(AttrValue.S("expired"), p.customAttributes["z:short"])
+    assertEquals(AttrValue.S("removed"), p.customAttributes["z:long"])
+  }
 }

@@ -42,6 +42,7 @@
 <tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
 <tr id="ctx.proposals"><td><code>proposals</code></td><td>1</td><td>For think: behavior proposals, best first.</td></tr>
 <tr id="ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
+<tr id="ctx.reason"><td><code>reason</code></td><td>1</td><td>Why the affect ended, 'expired' or 'removed', for affect on_expire.</td></tr>
 <tr id="ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
 <tr id="ctx.room"><td><code>room</code></td><td>1</td><td>The room the event happens in.</td></tr>
 <tr id="ctx.self"><td><code>self</code></td><td>1</td><td>The hook's owner.</td></tr>
@@ -160,7 +161,7 @@
 <tr id="ctx.apply_affect.flags"><td><code>flags</code></td><td>positional or named</td><td><code>[]</code></td><td>Flags the affect grants, such as 'no_regen'.</td></tr>
 <tr id="ctx.apply_affect.tick_every"><td><code>tick_every</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses between on_tick calls, or None for no ticking.</td></tr>
 <tr id="ctx.apply_affect.on_tick"><td><code>on_tick</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called every tick_every pulses.</td></tr>
-<tr id="ctx.apply_affect.on_expire"><td><code>on_expire</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called when the affect ends.</td></tr>
+<tr id="ctx.apply_affect.on_expire"><td><code>on_expire</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called when the affect expires or is removed.</td></tr>
 <tr id="ctx.apply_affect.expire_msg"><td><code>expire_msg</code></td><td>positional or named</td><td><code>''</code></td><td>Text sent to the target when the affect ends.</td></tr>
 <tr id="ctx.apply_affect.modifiers"><td><code>modifiers</code></td><td>positional or named</td><td><code>{}</code></td><td>Rules modifiers active while the affect lasts, by modifier point name.</td></tr>
 </tbody>

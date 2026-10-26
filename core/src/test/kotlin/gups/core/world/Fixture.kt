@@ -210,8 +210,12 @@ class RecordingHost : ScriptHost {
     return h(world, owner, ctx) ?: HookOutcome.Allow
   }
 
+  /** Run on a timer or affect callback, by function name, after it is recorded in [calls]. */
+  val refHandlers = mutableMapOf<String, (World, Entity, HookContext) -> Unit>()
+
   override fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext) {
     calls += "ref:${ref.name}@${world.pulse}"
+    refHandlers[ref.name]?.invoke(world, owner, ctx)
   }
 
   override fun hasHook(owner: Entity, hook: HookName): Boolean = hook in handlers

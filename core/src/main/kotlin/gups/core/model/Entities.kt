@@ -307,6 +307,9 @@ class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) :
 
   internal var spawnedBy: SpawnState? = null
 
+  /** Who summoned it, or null if it wasn't summoned (SPEC §4.3). It gives no XP or loot. */
+  var summonedBy: EntityId? = null
+
   /** For a debug mob: the player who spawned it, and the pulse it despawns at (SPEC §4.9). */
   var debugOwner: EntityId? = null
     internal set
