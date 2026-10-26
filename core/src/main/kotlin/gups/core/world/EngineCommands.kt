@@ -709,7 +709,16 @@ internal class CastAction(
 
   override fun begin(w: World, actor: Actor) {
     w.send(actor, "You begin casting ${skill.name}.")
-    w.echo(actor.room, "${actor.name.cap()} begins casting.", actor)
+    // Onlookers who know the spell recognize it; others only see that a spell is starting.
+    for (viewer in actor.room.actorIndex.values) {
+      if (viewer === actor) continue
+      w.send(
+        viewer,
+        if (viewer.skills.containsKey(skill.label))
+          "${actor.name.cap()} begins casting ${skill.name}."
+        else "${actor.name.cap()} begins casting.",
+      )
+    }
     w.dispatch(
       HookName.ON_CAST_START,
       actor,
@@ -737,6 +746,16 @@ internal class CastAction(
       },
     )
     if (t != null && t !== actor) w.send(t, "${actor.name.cap()} casts ${skill.name} at you!")
+    // Bystanders see every completed cast, so instant spells aren't invisible to the room.
+    w.echo(
+      actor.room,
+      when {
+        onItem != null -> "${actor.name.cap()} casts ${skill.name} on ${onItem.name}."
+        t == null || t === actor -> "${actor.name.cap()} casts ${skill.name}."
+        else -> "${actor.name.cap()} casts ${skill.name} at ${t.name}."
+      },
+      *listOfNotNull(actor, t).toTypedArray(),
+    )
     val targets =
       if (skill.range == SkillRange.ROOM)
         actor.room.actors.filter { it !== actor && w.isSimulated(it) }

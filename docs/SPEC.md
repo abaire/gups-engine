@@ -2347,6 +2347,8 @@ For each popped action:
      **no** lag.
 3. **Warmup:**
    - If `warmup > 0`, set `casting = CastState(action, endsAt)` and fire `on_cast_start`.
+   - Onlookers who know the skill see "<caster> begins casting <skill>."; others see
+     "<caster> begins casting."
    - Each incoming `damage` event calls `rules.interrupt_check`. A `stun` always
      interrupts if `interrupt.stun`.
    - An interrupt clears `casting`, pays no cost, and applies `lag / 2` (rounded down).
@@ -2355,6 +2357,8 @@ For each popped action:
    first validation. A failed re-validation pays no cost and applies `lag / 2`.
 5. **Resolve:**
    - Pay the cost.
+   - For casts, everyone else in the room except the target sees "<caster> casts <skill>.",
+     with " at <target>" or " on <item>" when there is one. Instant casts are seen too.
    - Apply the `effect`, or call `resolve(ctx)`. All mutations go through verbs.
    - Fire the `on_*` hooks (`on_cast`, `on_damage`, …).
 6. **Recovery:** Set `waitState = max(waitState, lag)`, so recovery never shortens existing

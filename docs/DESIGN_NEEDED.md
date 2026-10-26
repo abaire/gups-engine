@@ -187,6 +187,18 @@ channel (D-018, D-120).
 **Question:** should players also hear combat, death cries and voices through open exits, as
 text such as "You hear fighting to the north"?
 
+### Recognizing an unfamiliar spell
+**Spec:** §5.3 (warmup messages), §4.6 (rules exports).
+**Today:** when a cast's warmup begins, onlookers who know the skill see its name and everyone
+else sees only "<caster> begins casting." Nothing else lets an onlooker identify the spell.
+**Questions:**
+- Should onlookers with high Wisdom or Intelligence, or who pass a perception check, recognize
+  a spell they don't know by watching the caster?
+- Is that check a rules export, such as `recognizes_spell(ctx) -> bool`, and does it run once
+  per onlooker per cast?
+- Does the skill's `kind` or another field make some spells harder to recognize, or hide them
+  entirely?
+
 ### Events from rooms, doors and items
 **Spec:** §5.7's table lists only actor events.
 **Today:** doors opening and closing, items breaking or falling, and room-scripted events are

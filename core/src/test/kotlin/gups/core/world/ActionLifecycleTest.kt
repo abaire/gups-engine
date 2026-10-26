@@ -17,6 +17,34 @@ class ActionLifecycleTest {
   }
 
   @Test
+  fun `onlookers who know the spell recognize it at the warmup, others don't`() {
+    val (f, p, _) = caster()
+    val adept = f.player("Bea", index = 1)
+    adept.skills[T.BOLT] = 50
+    val novice = f.player("Cal", index = 1)
+    f.input(p, "cast bolt dummy")
+    f.run()
+    assertContains(f.out(adept), "Ann begins casting bolt.")
+    val seen = f.out(novice)
+    assertContains(seen, "Ann begins casting.")
+    assertFalse("begins casting bolt" in seen)
+  }
+
+  @Test
+  fun `bystanders see a completed cast, including an instant one`() {
+    val f = Fixture(rules = FixedRules(toHit = 0))
+    val p = f.player("Ann")
+    p.skills[T.ZAP] = 100
+    val g = f.mob(T.DUMMY, index = 2)
+    val onlooker = f.player("Bea", index = 1)
+    f.input(p, "cast zap dummy")
+    f.run()
+    assertTrue(g.hp < 1000, "the instant cast resolved")
+    assertContains(f.out(onlooker), "Ann casts zap at ${g.name}.")
+    assertFalse("Ann casts zap" in f.out(p), "the caster gets its own message only")
+  }
+
+  @Test
   fun `a warmup casts for its pulses, then resolves, pays, and lags`() {
     val (f, p, g) = caster()
     f.input(p, "cast bolt dummy")
