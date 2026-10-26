@@ -93,8 +93,8 @@
           "since": 1
         },
         {
-          "symbol": "door.open_blocks",
-          "name": "open_blocks",
+          "symbol": "door.open_senses_blocked",
+          "name": "open_senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -105,8 +105,8 @@
           "since": 1
         },
         {
-          "symbol": "door.closed_blocks",
-          "name": "closed_blocks",
+          "symbol": "door.closed_senses_blocked",
+          "name": "closed_senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -163,8 +163,8 @@
           "since": 1
         },
         {
-          "symbol": "exit.blocks",
-          "name": "blocks",
+          "symbol": "exit.senses_blocked",
+          "name": "senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -449,13 +449,13 @@
         {
           "symbol": "item.equip_affects",
           "name": "equip_affects",
-          "type": "list[str]",
+          "type": "list[str | dict]",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "[]",
           "allowed_values": [],
-          "doc": "Affect flags granted while the item is worn.",
+          "doc": "Affects applied when the item is worn: a flag held while worn, or {'flag': str, 'pulses': int} for a timed one. 'stunned' must be timed.",
           "since": 1
         },
         {
@@ -1328,6 +1328,42 @@
           "allowed_values": [],
           "doc": "Room label where new characters start.",
           "since": 1
+        },
+        {
+          "symbol": "module.plugins",
+          "name": "plugins",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.",
+          "since": 1
+        },
+        {
+          "symbol": "module.aliases",
+          "name": "aliases",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Alias words for engine commands, such as {\"l\": \"look\"}.",
+          "since": 1
+        },
+        {
+          "symbol": "module.prefixes",
+          "name": "prefixes",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Single characters that stand for an engine command, such as {\"'\": \"say\"}.",
+          "since": 1
         }
       ]
     },
@@ -1529,6 +1565,18 @@
           "default": "[]",
           "allowed_values": [],
           "doc": "Character names players may not register.",
+          "since": 1
+        },
+        {
+          "symbol": "server.shutdown_timeout",
+          "name": "shutdown_timeout",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "30",
+          "allowed_values": [],
+          "doc": "Seconds a shutdown waits for the final checkpoint to be saved.",
           "since": 1
         }
       ]
@@ -3124,13 +3172,13 @@
         ]
       },
       {
-        "symbol": "ctx.set_exit_blocks",
-        "name": "set_exit_blocks",
-        "doc": "Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+        "symbol": "ctx.set_exit_senses_blocked",
+        "name": "set_exit_senses_blocked",
+        "doc": "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
         "since": 1,
         "params": [
           {
-            "symbol": "ctx.set_exit_blocks.room",
+            "symbol": "ctx.set_exit_senses_blocked.room",
             "name": "room",
             "positional": true,
             "named": true,
@@ -3140,7 +3188,7 @@
             "doc": "Room, or room label, that has the exit."
           },
           {
-            "symbol": "ctx.set_exit_blocks.dir",
+            "symbol": "ctx.set_exit_senses_blocked.dir",
             "name": "dir",
             "positional": true,
             "named": true,
@@ -3150,7 +3198,7 @@
             "doc": "Direction of the exit."
           },
           {
-            "symbol": "ctx.set_exit_blocks.channels",
+            "symbol": "ctx.set_exit_senses_blocked.channels",
             "name": "channels",
             "positional": true,
             "named": true,
@@ -3402,7 +3450,7 @@
         {
           "symbol": "view:actor.flags",
           "name": "flags",
-          "doc": "Flags from affects and worn items' equip_affects, sorted.",
+          "doc": "Flags from affects, including those worn items apply, sorted.",
           "since": 1
         },
         {
@@ -3708,12 +3756,6 @@
       "since": 1,
       "fields": [
         {
-          "symbol": "view:exit.blocks",
-          "name": "blocks",
-          "doc": "Effective blocked channels: the exit's own plus its door's.",
-          "since": 1
-        },
-        {
           "symbol": "view:exit.direction",
           "name": "direction",
           "doc": "The exit's direction name.",
@@ -3747,6 +3789,12 @@
           "symbol": "view:exit.passable",
           "name": "passable",
           "doc": "False while a door is closed or locked.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.senses_blocked",
+          "name": "senses_blocked",
+          "doc": "Effective blocked channels: the exit's own plus its door's.",
           "since": 1
         },
         {
@@ -5066,7 +5114,7 @@
         {
           "symbol": "p.flags",
           "name": "flags",
-          "doc": "Flags from affects and worn items' equip_affects, sorted.",
+          "doc": "Flags from affects, including those worn items apply, sorted.",
           "since": 1
         },
         {

@@ -32,6 +32,19 @@ class DocsRendererTest {
   }
 
   @Test
+  fun `the changelog page renders free-form Markdown and no changes json`() {
+    val page =
+      DocsRenderer.render(
+          full,
+          changelogMarkdown = "# Changelog\n\n## Unreleased\n\n- Rooms can be **dark**.\n",
+        )
+        .getValue("changelog.html")
+    assertContains(page, "<h2 id=\"unreleased\">Unreleased</h2>")
+    assertContains(page, "<li>Rooms can be <strong>dark</strong>.</li>")
+    assertFalse("changes.json" in DocsRenderer.FILES)
+  }
+
+  @Test
   fun `every symbol has an anchor on its page`() {
     for (symbol in full.symbols()) {
       val href = DocsRenderer.symbolHref(full, symbol)
@@ -211,23 +224,18 @@ class DocsRendererTest {
       ## api_version 2 (unreleased)
 
       ### Added `room.lighting`
-      - kind: added
-      - symbol: room.lighting
 
       Rooms take a `lighting` keyword.
 
       ### Renamed `exit.dest`
-      - kind: renamed
-      - symbol: exit.dest
-      - replacement: exit.to
 
       Exits name their target with `to`.
 
-      ```python before
+      ```python
       exit("north", dest = ":hall")
       ```
 
-      ```python after
+      ```python
       exit("north", to = ":hall")
       ```
 

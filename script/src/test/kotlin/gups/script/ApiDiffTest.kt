@@ -7,36 +7,8 @@ import kotlin.test.assertTrue
 class ApiDiffTest {
   private val model = ScriptApi.model(harness = emptyList())
   private val baseline = model.toJson()
-  // A fixed changelog, so entries added to docs/CHANGELOG.md don't change these cases.
-  private val realChangelog =
-    Changelog.parse("# Changelog\n\n## api_version 1\n\nInitial (unstable) script API.\n")
-  private val frozen = realChangelog.toJson(model.apiVersion)
 
-  private fun entry(title: String, kind: String, symbol: String, replacement: String? = null) =
-    buildString {
-      append("### ")
-        .append(title)
-        .append("\n- kind: ")
-        .append(kind)
-        .append("\n- symbol: ")
-        .append(symbol)
-        .append('\n')
-      replacement?.let { append("- replacement: ").append(it).append('\n') }
-      append("\nSummary of ").append(title).append(".\n\n")
-    }
-
-  /**
-   * The real changelog with [unreleased] entries under version 2 and [appended] after version 1's.
-   */
-  private fun changelog(unreleased: String = "", appended: String = ""): Changelog =
-    Changelog.parse(
-      "# Changelog\n\n" +
-        (if (unreleased.isEmpty()) "" else "## api_version 2 (unreleased)\n\n$unreleased") +
-        "## api_version 1\n\nInitial (unstable) script API.\n\n$appended"
-    )
-
-  private fun check(current: ScriptApiModel, c: Changelog = realChangelog) =
-    ApiDiff.check(baseline, frozen, current, c)
+  private fun check(current: ScriptApiModel) = ApiDiff.check(baseline, current)
 
   private fun withCtxMethods(f: (List<MethodSpec>) -> List<MethodSpec>) =
     model.copy(ctx = model.ctx.copy(methods = f(model.ctx.methods)))
@@ -51,17 +23,14 @@ class ApiDiffTest {
   }
 
   @Test
-  fun `identical model passes, and doc-only changes need no entry`() {
+  fun `identical model passes, and doc-only changes are not breaking`() {
     assertEquals(emptyList(), check(model))
     assertEquals(emptyList(), check(withActMove { it.copy(doc = "Walks a mob.") }))
-    assertEquals(
-      emptyList(),
-      ApiDiff.check(ApiDiff.normalize(baseline), frozen, model, realChangelog),
-    )
+    assertEquals(emptyList(), ApiDiff.check(ApiDiff.normalize(baseline), model))
   }
 
   @Test
-  fun `removals need an entry`() {
+  fun `removals without an api_version bump fail`() {
     val noSize =
       model.copy(
         declarations =
@@ -70,139 +39,39 @@ class ApiDiffTest {
           }
       )
     assertOne(check(noSize), "room.size")
-    assertEquals(
-      emptyList(),
-      check(noSize, changelog(unreleased = entry("Removed size", "removed", "room.size"))),
-    )
+    assertTrue("bumping EngineInfo.API_VERSION" in check(noSize).single())
+    // A removed method is reported once, not once per parameter.
     assertOne(check(withCtxMethods { ms -> ms.filter { it.name != "act_move" } }), "ctx.act_move")
   }
 
   @Test
-  fun `additions need an added entry, unreleased or appended to the current version`() {
-    val newParam = withActMove {
-      it.copy(
-        params =
-          it.params +
-            ParamSpec("speed", positional = false, named = true, default = "1", doc = "Speed.")
-      )
-    }
-    assertOne(check(newParam), "ctx.act_move.speed")
-    val added = entry("Added speed", "added", "ctx.act_move.speed")
-    assertEquals(emptyList(), check(newParam, changelog(unreleased = added)))
-    assertEquals(emptyList(), check(newParam, changelog(appended = added)))
-
-    val newMethod = withCtxMethods {
-      it +
-        MethodSpec(
-          "hover",
-          "Hovers.",
-          listOf(ParamSpec("mob", positional = true, named = true, doc = "Mob.")),
-        )
-    }
-    assertOne(check(newMethod), "ctx.hover")
-    assertEquals(
-      emptyList(),
-      check(newMethod, changelog(appended = entry("Added hover", "added", "ctx.hover"))),
-    )
-  }
-
-  @Test
-  fun `a rename covers the old and new symbols and their parameters`() {
-    val renamed = withActMove { it.copy(name = "walk") }
-    assertEquals(2, check(renamed).size, check(renamed).joinToString("\n"))
-    assertEquals(
-      emptyList(),
-      check(
-        renamed,
-        changelog(unreleased = entry("Renamed", "renamed", "ctx.act_move", "ctx.walk")),
-      ),
-    )
-    val wrongTarget =
-      check(renamed, changelog(unreleased = entry("Renamed", "renamed", "ctx.act_move", "ctx.run")))
-    assertTrue(wrongTarget.any { "not a current symbol" in it }, wrongTarget.joinToString("\n"))
-  }
-
-  @Test
-  fun `changed fields need a signature or behavior entry`() {
+  fun `renames and changed fields without an api_version bump fail`() {
+    // The new name is a valid addition; the old one is a removal.
+    assertOne(check(withActMove { it.copy(name = "walk") }), "ctx.act_move")
     val newDefault = withActMove { m ->
       m.copy(params = m.params.map { if (it.name == "dir") it.copy(default = "\"north\"") else it })
     }
     assertOne(check(newDefault), "ctx.act_move.dir")
-    assertEquals(
-      emptyList(),
-      check(newDefault, changelog(unreleased = entry("Default dir", "signature", "ctx.act_move"))),
-    )
-    assertEquals(
-      emptyList(),
-      check(
-        newDefault,
-        changelog(unreleased = entry("Default dir", "behavior", "ctx.act_move.dir")),
-      ),
-    )
-    // A signature entry also covers parameters added beneath it.
-    val both = withActMove { m ->
-      m.copy(
-        params = m.params + ParamSpec("speed", positional = false, named = true, doc = "Speed.")
-      )
+  }
+
+  @Test
+  fun `additions without a bump pass only when marked since the current api_version`() {
+    val newMethod = withCtxMethods {
+      it + MethodSpec("hover", "Hovers.", emptyList(), since = model.apiVersion)
     }
-    assertEquals(
-      emptyList(),
-      check(both, changelog(unreleased = entry("New signature", "signature", "ctx.act_move"))),
-    )
+    assertEquals(emptyList(), check(newMethod))
+    val wrongSince = withCtxMethods {
+      it + MethodSpec("hover", "Hovers.", emptyList(), since = model.apiVersion + 1)
+    }
+    assertOne(check(wrongSince), "ctx.hover")
+    assertTrue("@ApiSince(${model.apiVersion})" in check(wrongSince).single())
   }
 
   @Test
-  fun `released sections are frozen`() {
-    val breaking = check(model, changelog(appended = entry("Removed size", "removed", "room.size")))
-    assertTrue(
-      breaking.any { "go under `## api_version 2 (unreleased)`" in it },
-      breaking.joinToString("\n"),
-    )
-
-    val history = changelog(appended = entry("Added hover", "added", "ctx.hover"))
-    val newMethod = withCtxMethods { it + MethodSpec("hover", "Hovers.", emptyList()) }
-    val frozenWithEntry = history.toJson(1)
-    assertEquals(
-      emptyList(),
-      ApiDiff.check(newMethod.toJson(), frozenWithEntry, newMethod, history),
-    )
-    val edited =
-      Changelog.parse(
-        "# Changelog\n\n## api_version 1\n\nInitial (unstable) script API.\n\n" +
-          entry("Added hover!", "added", "ctx.hover")
-      )
-    val problems = ApiDiff.check(newMethod.toJson(), frozenWithEntry, newMethod, edited)
-    assertTrue(
-      problems.any { "released entry 'Added hover' of api_version 1 was edited or removed" in it },
-      problems.joinToString("\n"),
-    )
-  }
-
-  @Test
-  fun `stale and misplaced entries are problems`() {
-    val stale = check(model, changelog(unreleased = entry("Removed size", "removed", "room.size")))
-    assertOne(stale, "room.size")
-    assertTrue("matches no API difference" in stale.single())
-    assertEquals(
-      emptyList(),
-      check(model, changelog(unreleased = entry("Wake later", "behavior", "hook:on_wake"))),
-    )
-    assertOne(
-      check(model, changelog(unreleased = entry("Gone", "behavior", "ctx.nope"))),
-      "ctx.nope",
-    )
-    val wrongVersion =
-      ApiDiff.check(
-        baseline,
-        frozen,
-        model,
-        Changelog.parse(
-          "## api_version 3 (unreleased)\n\n" +
-            entry("Wake", "behavior", "hook:on_wake") +
-            "## api_version 1\n\nInitial (unstable) script API.\n"
-        ),
-      )
-    assertOne(wrongVersion, "api_version 3")
+  fun `a bumped api_version allows breaking changes`() {
+    val bumped =
+      model.copy(apiVersion = model.apiVersion + 1, ctx = model.ctx.copy(methods = emptyList()))
+    assertEquals(emptyList(), check(bumped))
   }
 
   @Test

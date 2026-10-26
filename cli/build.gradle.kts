@@ -56,7 +56,7 @@ tasks.test {
     layout.projectDirectory.dir("src/test/resources/docs-golden").asFile.absolutePath,
   )
   systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
-  // The changelog, MIGRATING.md and API baselines the repository check reads (SPEC §4.17).
+  // The API baselines the repository check reads (SPEC §4.17).
   inputs.dir(rootProject.file("docs")).withPropertyName("docs")
   systemProperty("gups.docsDir", rootProject.file("docs").absolutePath)
 }

@@ -2177,5 +2177,5 @@ internal class ApiVersionMismatch(val declared: Int) :
   RuntimeException(
     "package declares api_version $declared, but this engine supports only api_version ${EngineInfo.API_VERSION} " +
       "(${if (declared > EngineInfo.API_VERSION) "the package is newer than the engine" else "the package is ${EngineInfo.API_VERSION - declared} version(s) behind"}). " +
-      "See CHANGELOG.md#api_version-${maxOf(declared, EngineInfo.API_VERSION)} and MIGRATING.md."
+      "See CHANGELOG.md#api_version-${maxOf(declared, EngineInfo.API_VERSION)}."
   )

@@ -89,7 +89,6 @@ same there. Add `--telnet 127.0.0.1:4000` to serve raw telnet as well.
 | `gups backup`, `gups restore` | Back up the database, or restore it with the server stopped. |
 | `gups snapshot --sanitized --out FILE` | A snapshot with personal data stripped, for `migrate-check`. |
 | `gups migrate-check --snapshot FILE` | Checks migrations and reconciliation against a snapshot. |
-| `gups migrate-info <package>...` | Lists where packages use API symbols that changed since their `api_version`. |
 | `gups deploy --commit SHA --admin ADDR` | Deploys a course world commit to a running server (CI calls it). |
 | `gups repro <diagnostic-id or bundle.json>` | Replays a diagnostic in the harness. |
 
@@ -211,7 +210,7 @@ client, which otherwise runs only on Linux CI.
 outside these rules. The allowed graph is defined in the root `build.gradle.kts`.
 
 `docs/` holds `SPEC.md` (the design), `DECISIONS.md`, `DESIGN_NEEDED.md` (unbuilt features the spec doesn't
-settle yet), `PLUGINS.md` (the plugin developer guide), `CHANGELOG.md` and `MIGRATING.md`.
+settle yet), `PLUGINS.md` (the plugin developer guide), and `CHANGELOG.md`.
 
 `template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
 metadata), the `rules` package, the shared `lib` package, and `zones/tutorial`, the heavily
@@ -219,34 +218,15 @@ commented reference zone whose tests run on every engine commit.
 
 ## Releasing
 
-`docs/CHANGELOG.md` has one `## api_version N` section per version, newest first; breaking
-changes collect under `## api_version N+1 (unreleased)`. Each change is an entry:
+`docs/CHANGELOG.md` is plain Markdown with one `## api_version N` section per version, newest
+first. Describe each script-facing change there, with before/after snippets for breaking ones.
 
-````markdown
-### Renamed `ctx.act_move` to `ctx.walk`
-- kind: renamed            # removed, renamed, signature, behavior or added
-- symbol: ctx.act_move     # an api.json symbol
-- replacement: ctx.walk    # required for renamed
+A test diffs the current API against the released baseline `docs/api/api-N.json`. While
+`EngineInfo.API_VERSION` is still `N`, any removed or changed symbol (doc-only edits excepted)
+fails it, and added symbols must be marked `@ApiSince(N)`. A breaking change therefore needs
+`EngineInfo.API_VERSION` raised.
 
-One or more lines of summary.
-
-```python before
-ctx.act_move(ctx.self, "north")
-```
-
-```python after
-ctx.walk(ctx.self, "north")
-```
-````
-
-A test diffs the current API against the released baseline `docs/api/api-N.json` and fails
-for any removed, added or changed symbol (doc-only edits excepted) that no entry covers.
-Additions take `kind: added`, under the unreleased section or appended to
-`## api_version N`.
-
-Before tagging a release, if the changelog has an `(unreleased)` section, drop
-` (unreleased)` from its heading and set `EngineInfo.API_VERSION` to its version. Then run
-`gups docs --update-baseline` from the engine checkout, which writes `docs/api/api-N.json`,
-`docs/api/changes-N.json` and `docs/MIGRATING.md`, and commit them. A release with only
-additions keeps `N` and just reruns that command. Pushing a version tag builds the images,
+Before tagging a release, run `gups docs --update-baseline` from the engine checkout, which
+writes `docs/api/api-N.json`, and commit it. A release with only additions keeps `N` and just
+reruns that command. Pushing a version tag builds the images,
 the docs archive and the course world template, and attaches them to the GitHub release.

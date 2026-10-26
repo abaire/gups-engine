@@ -36,13 +36,12 @@ documented but carries no compatibility promises.
 - Every package declares the `api_version` it targets. The engine supports exactly one
   `api_version` at a time in v0. A package that declares a different version fails to
   load with a structured diagnostic that names the version gap and links to the changelog.
-- Each engine release ships generated API docs (§4.16), a changelog of breaking changes, and
-  a `MIGRATING.md` with before/after snippets (§4.17).
+- Each engine release ships generated API docs (§4.16) and a human-readable changelog
+  (§4.17).
 - Migrating legacy zones with a local LLM, fed the changelog and the failing zone, is an
-  intended course exercise. Migration artifacts are designed to be machine-readable:
-  `changes.json` and `gups migrate-info` (§4.17).
-- Every difference in the script API needs a changelog entry, additions included; engine CI
-  enforces it (§4.17).
+  intended course exercise.
+- A breaking change to the script API requires raising `api_version`; engine CI enforces it
+  (§4.17).
 - The API will be stabilized over time. Stabilization is out of scope for v0.
 
 ### 1.4 Deployment Model (Hybrid)
@@ -158,7 +157,7 @@ gups-engine/
   samples/     sample plugins: weather-plugin (§4.15)
   template-world/  the course world template, including the canonical tutorial zone,
                //lib and //rules (§2.3)
-  docs/        SPEC.md, CHANGELOG.md, generated MIGRATING.md, PLUGINS.md (the
+  docs/        SPEC.md, CHANGELOG.md, PLUGINS.md (the
                engine-developer guide), api/ (released API baselines, §4.17)
 ```
 
@@ -1656,8 +1655,7 @@ def test_scout_flees_when_hurt(t):
 | `gups migrate-check --snapshot FILE` | Run the migration check (§7.3). |
 | `gups docs [--out DIR] [--world DIR]` | Write the HTML API reference (§4.16). |
 | `gups docs --json [--out PATH]` | Write the `api.json` model (§4.16). |
-| `gups docs --update-baseline [--docs-dir DIR]` | Before a release: write the API baseline and `MIGRATING.md` (§4.17). |
-| `gups migrate-info [--world DIR] [--changelog FILE] [--format text\|json] <package>...` | List a package's uses of symbols that changed since its `api_version` (§4.17). |
+| `gups docs --update-baseline [--docs-dir DIR]` | Before a release: write the API baseline (§4.17). |
 | `gups repro <diagnostic-id\|bundle.json> [--save FILE]` | Replay a diagnostic in the harness. |
 | `gups backup` / `gups restore <file>` | Back up or restore the database. |
 | `gups deploy [--commit SHA]` | Called by CI; talks to the admin port. |
@@ -2053,8 +2051,7 @@ that world's plugins, after checking its `MODULE.gups`. The files, in order:
 | `rules.html` | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields. |
 | `harness.html` | `t`, `w`, `p`, `diagnostic`. |
 | `plugins.html` | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands and GMCP packages, badged `plugin: <id>`, or "No plugins are loaded." |
-| `changelog.html` | The parsed changelog (§4.17). |
-| `changes.json` | The changelog as JSON (§4.17). |
+| `changelog.html` | `docs/CHANGELOG.md` rendered as Markdown (§4.17). |
 | `api.json` | Byte for byte what `gups docs --json` writes. |
 
 - **Entries** show name, `since`, doc, example if any, and parameters, fields and methods as
@@ -2090,156 +2087,32 @@ that world's plugins, after checking its `MODULE.gups`. The files, in order:
   `GET /docs` redirects (302) to `/docs/`; `/docs/` is `index.html`; `/docs/<file>` is that
   file or 404. HTML, CSS and JSON are served as UTF-8.
 
-### 4.17 Changelog and Migration Artifacts
+### 4.17 Changelog and API Baselines
 
-**`docs/CHANGELOG.md`** is human-written Markdown in a strict shape that the engine parses
-and validates, reporting the first error as `CHANGELOG.md:<line>: <reason>`:
+**`docs/CHANGELOG.md`** is plain, human-written Markdown listing script-facing changes per
+`api_version`, newest first, with before/after snippets for breaking ones. The engine never
+parses its structure; `changelog.html` renders it with the Markdown subset of §4.16. Each
+version heading `## api_version <N>` gets the anchor `api_version-<N>` that the
+`api_version` mismatch diagnostic links to (§1.3).
 
-````markdown
-# Changelog
-
-Breaking script-facing changes are listed per `api_version`. See `MIGRATING.md` for
-before/after snippets.
-
-## api_version 2 (unreleased)
-
-### Renamed `ctx.act_move` to `ctx.walk`
-- kind: renamed
-- symbol: ctx.act_move
-- replacement: ctx.walk
-
-Mobs now walk with `ctx.walk(mob, dir)`.
-
-```python before
-ctx.act_move(ctx.self, "north")
-```
-
-```python after
-ctx.walk(ctx.self, "north")
-```
-
-## api_version 1
-
-Initial (unstable) script API.
-````
-
-Grammar (blank lines are allowed between any two parts):
-1. **Preamble:** lines before the first `## ` heading are ignored, except that a `### `
-   heading or a `- key: value` line there is an error.
-2. **Version sections:** every `## ` line must match
-   `^## api_version ([1-9][0-9]*)( \(unreleased\))?$`. Versions strictly descend with no
-   repeats. At most one section is `(unreleased)`, and only the first. Prose after the heading
-   and before the first entry is the section's `intro`. Each version heading is the anchor
-   `api_version-<N>` that the `api_version` mismatch diagnostic links to (§1.3).
-3. **Entries:** a `### <title>` line (non-blank title) starts an entry, followed by
-   `- <key>: <value>` lines:
-   - `kind` (required): `removed`, `renamed`, `signature`, `behavior` or `added`. Only
-     `added` isn't breaking.
-   - `symbol` (required): matches
-     `^(hook:|view:|rules:|modifier:)?[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`.
-     Whether it exists is the API check's business, since a removed symbol no longer does.
-   - `replacement`: the same pattern. Required for `renamed`, where it must differ from
-     `symbol`; optional for `removed`, `signature` and `behavior`; an error on `added`.
-   - Any other key, or a repeated key, is an error.
-   - Then at least one prose line, the `summary`.
-   - Then zero or more snippet pairs: a ```` ```python before ```` block followed by a
-     ```` ```python after ```` block. An unclosed fence (reported at its opening line), any
-     other info string, a `before` without an `after`, an `after` without a `before`, and prose
-     after the first fence are errors.
-
-**Generated artifacts:**
-1. **`docs/MIGRATING.md`** is generated from the changelog and never hand-edited; a test fails
-   when it is stale. With no breaking entry it reads `# Migrating Between api_versions` and
-   "No migrations yet: `api_version = 1` is the first script API." Otherwise it has the title,
-   the line "Breaking script-facing changes per `api_version`, with before/after snippets.",
-   then each section with a breaking entry, newest first, with its heading as in the changelog
-   and each breaking entry as `### <title>`, bullets for `**kind:**`, `**symbol:**` and (when
-   present) `**replacement:**`, the summary, and the snippets. `added` entries never appear.
-2. **`changes.json`:** the changelog as 2-space-indented JSON:
-   `{"api_version", "versions": [{"api_version", "unreleased", "intro", "entries": [...]}]}`,
-   each entry `{"title", "kind", "symbol", "replacement" (or null), "summary",
-   "snippets": [{"before", "after"}]}`, keys in that order. The top-level `api_version` is the
-   engine's. `gups docs` ships it.
-3. **`changelog.html`:** each version section has `id="api_version-<N>"`, each entry
-   `id="change-<api_version>-<index>"` (counting from 1 within its section) and a `kind`
-   badge. `symbol` and `replacement` link into the reference when the current model has them.
-4. **`gups migrate-info [--world DIR] [--changelog FILE] [--format text|json] <package>...`**
-   lists every place a package uses a symbol that changed since the package's `api_version`,
-   for the LLM migration exercise (§1.3).
-   - It reads the AST and **never loads the package**, since a package written for an older
-     `api_version` fails to load at `package(...)`. It parses each `.star` file and needs only
-     a syntactically valid package with an integer literal `api_version` in `package.star`.
-   - The relevant entries are those of every section newer than the package's version,
-     including an unreleased one (labelled "(unreleased)").
-   - It visits every `.star` file, tests included, in name order, recording a use for each
-     node that matches a relevant symbol:
-
-     | Symbol shape | Matches |
-     |---|---|
-     | `fn` (a declaration, effect, behavior or setting) | a call whose callee is the identifier `fn` |
-     | `fn.param` for such a global | a call to `fn` with keyword `param`, or a positional argument at `param`'s position |
-     | `NAME` in capitals (a constant) | the identifier `NAME` |
-     | `hook:name` | keyword argument `name` in any call |
-     | `ctx.member`, `rules_ctx.member`, `t.member`, `w.member`, `p.member`, `diagnostic.member` | `obj.member`; for `ctx`, the receiver may also be the first parameter of any top-level `def` |
-     | `obj.method.param`, `view:kind.method.param` | a call `<x>.method(...)` with keyword `param` |
-     | `view:kind.member` | `x.member` where `x` isn't `ctx`, `rules_ctx` or a harness object |
-     | `rules:fn` | a `def fn` in a package of kind `rules` |
-     | `modifier:point` | a string key `point` in a dict passed as `modifiers = {...}` |
-
-     The view and hook rules are heuristics and may report false positives; a person or model
-     reads the report.
-   - Uses are sorted by file, line and symbol. Relevant `behavior` entries with no use are
-     listed as general changes to check by hand.
-   - Text output: a header `//zones/forest (package api_version 1, current api_version 1)`,
-     then per use `<file>:<line>: <source line>`, `[<kind>] <symbol> -> <replacement>
-     (api_version N[, unreleased])`, the summary and the snippets; then
-     `General changes (check by hand):` with one `[behavior] <symbol> (api_version N):
-     <summary>` line each. JSON output: `{"package", "package_api_version",
-     "current_api_version", "uses": [{"file", "line", "source", "api_version", "unreleased",
-     "title", "kind", "symbol", "replacement", "summary", "snippets"}], "general_changes"}`.
-     Several packages print one report each (in JSON, an array).
-   - The changelog defaults to the engine's bundled copy; `--changelog FILE` overrides it.
-
-**The API-change check.** Engine CI fails when the script API differs from the last release
-without a changelog entry, additions included. Files:
-- `docs/api/api-<N>.json`: the API as released at `api_version` N, the **baseline**.
-- `docs/api/changes-<N>.json`: `changes.json` taken with that baseline, the **frozen
-  history**.
-
-With `N` the engine's `api_version`, the check:
-1. **Freezes released sections:** each section of the frozen history must start the
-   changelog's section of the same version, entry for entry. Extra entries are allowed only
-   in section `N` and only with `kind: added`; breaking changes since the baseline go under
-   `## api_version N+1 (unreleased)`.
-2. Requires the unreleased section, if any, to be `N + 1`.
-3. Takes as **active entries** every entry of the unreleased section, plus the extra `added`
-   entries of section `N`.
-4. **Diffs** every object with a `symbol` in the baseline and the current model, keeping only
-   scalar fields and lists of strings, without `symbol`, `doc` and `since` (so doc-only edits
-   need no entry). Child changes show up as their own symbols. A symbol is *removed*,
-   *added* or *changed*.
-5. **Requires coverage**, where entry `E` covers symbol `S` when `E.symbol == S` or `S`
-   starts with `E.symbol + "."`: a removed symbol needs a `removed` or `renamed` entry (whose
-   `replacement` must be a current symbol); an added one needs an `added` entry, or a
-   `renamed` entry whose `replacement` covers it; a changed one needs a `signature` or
-   `behavior` entry. A `signature` entry also covers removed and added symbols beneath it.
-6. **Rejects stale entries:** every active entry must cover at least one difference, except a
-   `behavior` entry, whose symbol only has to exist.
-
-The repository check also requires that the changelog parses and that `MIGRATING.md` is
-current. Its failure message says to add a changelog entry or run
-`gups docs --update-baseline`.
+**The API-change check.** Engine CI fails when the script API changes incompatibly without an
+`api_version` bump. `docs/api/api-<N>.json` is the API as released at `api_version` N, the
+**baseline**. With `N` the engine's `api_version`, the check compares the baseline of
+version `N` with the current model:
+1. **Diffs** every object with a `symbol` in both, keeping only scalar fields and lists of
+   strings, without `symbol`, `doc` and `since` (so doc-only edits never fail). Child changes
+   show up as their own symbols. A symbol is *removed*, *added* or *changed*; a removed or
+   added symbol stands for the symbols beneath it.
+2. If the baseline's `api_version` equals `N`, every removed or changed symbol is an error
+   saying that breaking changes require raising `api_version`, and every added symbol must
+   have `since` equal to `N`.
+3. If the baseline's `api_version` differs from `N`, any difference is allowed.
 
 **Raising `api_version`** is a pre-tag step, because the tagged commit must already contain
-the new baseline (the tag-triggered release job can't commit it):
-1. If the changelog has an `(unreleased)` section, drop ` (unreleased)` from its heading and
-   set the engine's `api_version` to its version.
-2. Run `gups docs --update-baseline [--docs-dir DIR]`. It refuses while an `(unreleased)`
-   section exists or while the newest section isn't the engine's `api_version`. It writes
-   `docs/api/api-<N>.json`, `docs/api/changes-<N>.json` and `docs/MIGRATING.md`, and keeps
-   older baselines. It takes no `--json`, `--out` or `--world`.
-3. A release with only `added` entries keeps `N`: step 2 alone rewrites the version-`N`
-   files.
+the new baseline (the tag-triggered release job can't commit it): set the engine's
+`api_version`, then run `gups docs --update-baseline [--docs-dir DIR]`. It writes only
+`docs/api/api-<N>.json` and keeps older baselines. It takes no `--json`, `--out` or
+`--world`. A release with only additions keeps `N` and rewrites that file.
 
 ---
 
@@ -3124,10 +2997,8 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     thread stalls.
   - **Docs and API:** the rendered reference is deterministic, every symbol has its anchor,
     every link resolves, nothing unescaped gets through, and a small model matches golden
-    files; every doc example runs; the changelog parses and every grammar error is reported
-    at its line; `MIGRATING.md` is current; the API-change check (§4.17) passes and covers
-    removal, addition, rename, signature and frozen-history cases; `migrate-info` reports
-    exact lines without loading the package.
+    files; every doc example runs; the API-change check (§4.17) passes and covers removal,
+    addition, rename, signature and version-bump cases.
   - **Plugins:** every extension point end to end in the server and in `gups test`; each
     loading failure skipping only its plugin; every name clash refused; deploys touching
     `plugins/` refused while other deploys keep plugins working; no `core` or `script` type
@@ -3240,4 +3111,4 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
 | **M4** | `persist`: checkpoints, reconciliation, backups, `--fresh`, crash tests |
 | **M5** | Rules module, modifier chain, skills and affects, behaviors and `think`, perception, reality bubble, items/equipment/containers, `//lib:quest.star` |
 | **M6** | Built in six stages: **M6.1** accounts and login, and the `--prod` profile; **M6.2** roles, builder scope and the in-game tools, restrictions and alerts; **M6.3** TLS and GMCP; **M6.4** WebSocket and the web client; **M6.5** the admin port, metrics, the deploy pipeline and release images; **M6.6** the course world template and CI gates. The load test was deferred (§1.7). |
-| **M7** | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog, `MIGRATING.md`, `changes.json`, `gups migrate-info` and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15). |
+| **M7** | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15). |

@@ -1,87 +1,72 @@
 # Changelog
 
-Breaking script-facing changes are listed per `api_version`. See `MIGRATING.md` for
-before/after snippets.
+Script-facing changes are listed per `api_version`, with before/after snippets for
+breaking ones.
 
-## api_version 2 (unreleased)
+## api_version 1 (unreleased)
 
 ### Added `module.aliases`
-- kind: added
-- symbol: module.aliases
 
 `MODULE.gups` sets the alias words for engine commands, such as `l` for `look`. The engine no
 longer has built-in aliases, so a world keeps `l`, `i`, `inv`, `eq`, `k`, `attack`, `c` and
 `take` only by listing them, as the template world does.
 
 ### Added `module.prefixes`
-- kind: added
-- symbol: module.prefixes
 
 `MODULE.gups` sets the single characters that stand for an engine command at the start of a
 line, such as `'` for `say`. A world keeps `'` only by listing it, as the template world does.
 
 ### Added `server.shutdown_timeout`
-- kind: added
-- symbol: server.shutdown_timeout
 
 `server.gups` can set how many seconds a shutdown waits for the final checkpoint.
 
 ### `item(equip_affects)` entries can be timed, and a stun must be
-- kind: signature
-- symbol: item.equip_affects
 
 An `equip_affects` entry is now a flag name, held while the item is worn, or
 `{"flag": ..., "pulses": n}`, applied for `n` pulses when the item is equipped. Worn items'
 affects are real affects on the wearer (SPEC §4.6). A bare `"stunned"` no longer loads.
 
-```python before
+Before:
+
+```python
 item("dazing_helm", wear = "head", equip_affects = ["stunned"])
 ```
 
-```python after
+After:
+
+```python
 item("dazing_helm", wear = "head", equip_affects = [{"flag": "stunned", "pulses": 4}])
 ```
 
 ### `exit(blocks)` is now `exit(senses_blocked)`
-- kind: renamed
-- symbol: exit.blocks
-- replacement: exit.senses_blocked
 
 The name says the channels are senses an exit stops, not whether it can be walked through.
 
-```python before
+Before:
+
+```python
 exit("east", to = ":long_hall", blocks = ALL)
 ```
 
-```python after
+After:
+
+```python
 exit("east", to = ":long_hall", senses_blocked = ALL)
 ```
 
 ### `door(open_blocks)` is now `door(open_senses_blocked)`
-- kind: renamed
-- symbol: door.open_blocks
-- replacement: door.open_senses_blocked
 
 Renamed to match `exit(senses_blocked)`.
 
 ### `door(closed_blocks)` is now `door(closed_senses_blocked)`
-- kind: renamed
-- symbol: door.closed_blocks
-- replacement: door.closed_senses_blocked
 
 Renamed to match `exit(senses_blocked)`.
 
 ### `ctx.set_exit_blocks` is now `ctx.set_exit_senses_blocked`
-- kind: renamed
-- symbol: ctx.set_exit_blocks
-- replacement: ctx.set_exit_senses_blocked
 
 Renamed to match `exit(senses_blocked)`; the arguments are unchanged.
 
 ### The exit view's `blocks` is now `senses_blocked`
-- kind: renamed
-- symbol: view:exit.blocks
-- replacement: view:exit.senses_blocked
 
 Renamed to match `exit(senses_blocked)`.
 
@@ -90,7 +75,5 @@ Renamed to match `exit(senses_blocked)`.
 Initial (unstable) script API.
 
 ### Added `module.plugins`
-- kind: added
-- symbol: module.plugins
 
 `MODULE.gups` can pin plugin jars.

@@ -47,7 +47,7 @@ data class WorldModule(
   fun problems(): List<String> = buildList {
     if (apiVersion != EngineInfo.API_VERSION) {
       add(
-        "MODULE.gups pins api_version $apiVersion, but this engine supports only api_version ${EngineInfo.API_VERSION}. See CHANGELOG.md and MIGRATING.md."
+        "MODULE.gups pins api_version $apiVersion, but this engine supports only api_version ${EngineInfo.API_VERSION}. See CHANGELOG.md."
       )
     }
     for ((id, checksum) in plugins.toSortedMap()) {
