@@ -1,5 +1,10 @@
 package gups.core.world
 
+import gups.core.Label
+import gups.core.model.Effect
+import gups.core.model.Prototypes
+import gups.core.model.SkillProto
+import gups.core.model.SkillRange
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -63,6 +68,62 @@ class ActionLifecycleTest {
     assertTrue(g.id in p.fighting, "a hostile skill landing starts combat")
     f.run(4)
     assertEquals(0, p.waitState)
+  }
+
+  @Test
+  fun `an enemy skill with no harmful effect still starts combat`() {
+    val hex =
+      SkillProto(
+        Label("//t:hex"),
+        kind = "spell",
+        range = SkillRange.FAR,
+        effect = Effect.ApplyAffect("hexed", 10, flags = setOf("silenced")),
+      )
+    val f =
+      Fixture(
+        rules = FixedRules(toHit = 0),
+        protos = Prototypes(T.rooms, T.mobs, T.items, T.skills + hex),
+      )
+    val p = f.player("Ann")
+    p.skills[hex.label] = 100
+    val g = f.mob(T.DUMMY, index = 2)
+    f.input(p, "cast hex dummy")
+    f.run()
+    assertTrue(g.hasFlag("silenced"))
+    assertTrue(g.id in p.fighting)
+    assertTrue(p.id in g.fighting)
+  }
+
+  @Test
+  fun `an ally skill landing on another actor does not start combat`() {
+    val f = Fixture(rules = FixedRules(toHit = 0))
+    val p = f.player("Ann")
+    p.skills[T.MEND] = 100
+    val g = f.mob(T.DUMMY, index = 2)
+    f.input(p, "cast mend dummy")
+    f.run()
+    assertFalse(p.isEngaged)
+    assertFalse(g.isEngaged)
+  }
+
+  @Test
+  fun `stuns and displacement start combat, outside of any skill`() {
+    for (effect in listOf(Effect.Stun(3), Effect.Knockback(1), Effect.Pull(1))) {
+      val f = Fixture(rules = FixedRules(toHit = 0))
+      val p = f.player("Ann")
+      val g = f.mob(T.DUMMY, index = 2)
+      f.w.applyEffect(effect, p, g)
+      assertTrue(g.id in p.fighting, "$effect engages")
+      assertTrue(p.id in g.fighting, "$effect engages both sides")
+    }
+  }
+
+  @Test
+  fun `a stun an actor puts on itself does not start combat`() {
+    val f = Fixture(rules = FixedRules(toHit = 0))
+    val p = f.player("Ann")
+    f.w.applyEffect(Effect.Stun(3), p, p)
+    assertFalse(p.isEngaged)
   }
 
   @Test

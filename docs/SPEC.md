@@ -2254,6 +2254,10 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
 - **Engagement:**
   - Combat starts through `kill`/`attack`, `aggressive`/`assist` behaviors, a hostile
     skill landing, or `ctx.start_combat`.
+  - A skill is hostile when it lands on an actor other than the caster and either its
+    `target` is `enemy` (including a `room`-range skill hitting each actor in the room),
+    whatever its effects, or it applies a `damage`, `stun`, `knockback` or `pull` primitive
+    (§4.3). Those primitives engage the same way wherever they are applied from.
   - It ends on death, on either party leaving the room, on a successful `flee`, or with
     `ctx.stop_combat`.
   - Engagement is always symmetric. `start_combat` engages both sides and sets each side's

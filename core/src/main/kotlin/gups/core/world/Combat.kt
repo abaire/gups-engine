@@ -332,6 +332,13 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
     else -> {
       val t = target ?: return
       if (!t.inWorld) return
+      // Harmful primitives engage, so a stun or shove can't be used on a mob without aggro.
+      val hostile =
+        effect is Effect.Damage ||
+          effect is Effect.Stun ||
+          effect is Effect.Knockback ||
+          effect is Effect.Pull
+      if (hostile && t !== caster) startCombat(caster, t)
       when (effect) {
         is Effect.Damage -> {
           val amount =
@@ -340,7 +347,6 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
               effect.dice.roll(rng),
               effect.type,
             )
-          if (t !== caster) startCombat(caster, t)
           damage(t, amount, effect.type, caster)
         }
         is Effect.Heal -> heal(t, effect.dice.roll(rng))
