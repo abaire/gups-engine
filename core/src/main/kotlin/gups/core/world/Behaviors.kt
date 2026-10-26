@@ -11,9 +11,9 @@ import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.RulesContext
 
-// The built-in behaviors (SPEC §4.7). Each proposes at most one action per think cycle; the
-// think cycle sorts the proposals by priority, then by declaration order (SPEC §5.8). The
-// priorities are fixed (D-121): fleeing beats fighting, which beats moving about.
+// The built-in behaviors. Each proposes at most one action per think cycle; the
+// think cycle sorts the proposals by priority, then by declaration order. The
+// priorities are fixed: fleeing beats fighting, which beats moving about.
 
 const val PRIORITY_FLEE = 100
 const val PRIORITY_AGGRESSIVE = 60
@@ -24,7 +24,7 @@ const val PRIORITY_WANDER = 10
 const val PRIORITY_SCAVENGE = 5
 
 /**
- * Whom a behavior means (D-121): `players`, `mobs`, `all`, or label patterns such as
+ * Whom a behavior means: `players`, `mobs`, `all`, or label patterns such as
  * `//zones/caves:goblin_*` with `*` wildcards. A pattern without a package matches the label's name
  * in any package.
  */
@@ -126,9 +126,7 @@ data class Assist(val allies: ActorFilter) : Behavior {
   }
 }
 
-/**
- * `flee(at_hp_pct)`: flees once hit points are at or below the threshold, engaged or not (D-121).
- */
+/** `flee(at_hp_pct)`: flees once hit points are at or below the threshold, engaged or not. */
 data class Flee(val atHpPct: Int) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.hp.toLong() * 100 > atHpPct.toLong() * mob.maxHp) return null

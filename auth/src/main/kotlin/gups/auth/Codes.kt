@@ -4,9 +4,9 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Invite and setup codes (SPEC §5.12, D-133): 10 characters from an alphabet without look-alikes
- * (no 0/O, 1/I/L, U/V), shown as `XXXXX-XXXXX`. Typing them is forgiving: case, spaces and dashes
- * don't matter. Only a code's SHA-256 is stored (SPEC §3.6).
+ * Invite and setup codes: 10 characters from an alphabet without look-alikes (no 0/O, 1/I/L, U/V),
+ * shown as `XXXXX-XXXXX`. Typing them is forgiving: case, spaces and dashes don't matter. Only a
+ * code's SHA-256 is stored.
  */
 object Codes {
   const val ALPHABET = "23456789ABCDEFGHJKMNPQRSTWXYZ"

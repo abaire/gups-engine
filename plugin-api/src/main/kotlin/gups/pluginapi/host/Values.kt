@@ -21,12 +21,9 @@ import net.starlark.java.eval.StarlarkValue
 import net.starlark.java.eval.Structure
 import net.starlark.java.eval.Tuple
 
-// The script-facing values of plugins (SPEC §4.15).
+// The script-facing values of plugins.
 
-/**
- * A plugin's builtins and effect primitives, as the fields of one global named by its id (SPEC
- * §4.15).
- */
+/** A plugin's builtins and effect primitives, as the fields of one global named by its id. */
 class PluginNamespace(val pluginId: String, private val members: Map<String, Any>) :
   StarlarkValue, Structure {
   override fun getValue(name: String): Any? = members[name]
@@ -44,10 +41,7 @@ class PluginNamespace(val pluginId: String, private val members: Map<String, Any
   }
 }
 
-/**
- * Binds Starlark arguments to [params] in declared order, as §5.1 says. Values stay Starlark
- * values.
- */
+/** Binds Starlark arguments to [params] in declared order. Values stay Starlark values. */
 internal fun bind(
   what: String,
   params: List<PluginParam>,

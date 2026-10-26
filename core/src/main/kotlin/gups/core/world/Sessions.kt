@@ -20,7 +20,7 @@ internal constructor(
   /** Peer address, for example `127.0.0.1`. */
   val remote: String = "local",
   val transport: String = "local",
-  /** The account a web session token already proved, if any (SPEC §4.10). */
+  /** The account a web session token already proved, if any. */
   val account: Long? = null,
 ) {
   var player: Player? = null
@@ -34,10 +34,7 @@ internal constructor(
   internal val drops = ArrayDeque<Long>()
   internal val out = StringBuilder()
 
-  /**
-   * The last state payload sent per GMCP package, and events waiting for the next flush (SPEC
-   * §4.10).
-   */
+  /** The last state payload sent per GMCP package, and events waiting for the next flush. */
   internal val gmcpLast = HashMap<String, Any?>()
   internal val gmcpOut = mutableListOf<Pair<String, Any?>>()
 }
@@ -77,7 +74,7 @@ fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
   }
 }
 
-/** Binds [player] to [session]. Reconnecting to a link-dead character resumes it (SPEC §5.12). */
+/** Binds [player] to [session]. Reconnecting to a link-dead character resumes it. */
 fun World.attach(session: SessionId, player: Player) {
   val s = requireNotNull(sessions[session]) { "Unknown $session" }
   require(player.inWorld) { "$player is not in the world" }
@@ -89,7 +86,7 @@ fun World.attach(session: SessionId, player: Player) {
   player.lastInputPulse = pulse
 }
 
-/** Handles one line of input between pulses (SPEC §5.1, §5.2). */
+/** Handles one line of input between pulses. */
 fun World.handle(event: ClientInputEvent) {
   val s = sessions[event.session] ?: return
   // Floods are dropped silently, before login or parsing, so they cost no reply traffic.
@@ -126,7 +123,7 @@ fun World.handle(event: ClientInputEvent) {
   flush(s)
 }
 
-/** Records a dropped line; more than [MAX_DROPS] within a minute disconnects (SPEC §5.2). */
+/** Records a dropped line; more than [MAX_DROPS] within a minute disconnects. */
 private fun World.dropped(s: Session, nowNanos: Long) {
   s.drops.addLast(nowNanos)
   while (s.drops.isNotEmpty() && nowNanos - s.drops.first() > DROP_WINDOW_NANOS) s.drops
@@ -137,7 +134,7 @@ private fun World.dropped(s: Session, nowNanos: Long) {
   }
 }
 
-/** The connection dropped: the character goes link-dead and keeps auto-attacking (SPEC §5.12). */
+/** The connection dropped: the character goes link-dead and keeps auto-attacking. */
 fun World.disconnect(id: SessionId) {
   val s = sessions.remove(id) ?: return
   login?.disconnected(this, id)
@@ -149,7 +146,7 @@ fun World.disconnect(id: SessionId) {
   echo(p.room, "${p.name} has lost their link.", p)
 }
 
-/** Removes [player] from the world. Persistence takes its immediate checkpoint here from M4. */
+/** Removes [player] from the world. Persistence takes its immediate checkpoint here. */
 fun World.quit(player: Player, message: String = "Goodbye.") {
   if (!player.inWorld) return
   send(player, message)
@@ -164,7 +161,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
   player.session = null
   disengageAll(player)
   despawnDebugMobs(player)
-  // Logout saves the character and everything it carries, at once (SPEC §5.11).
+  // Logout saves the character and everything it carries, at once.
   player.dirty = true
   for (item in player.inventory + player.equipment.values) markDirtyTree(item)
   immediateCause = null
@@ -174,7 +171,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
   echo(room, "${player.name} has left the game.")
 }
 
-/** Link-dead and idle auto-quit (SPEC §5.12). */
+/** Link-dead and idle auto-quit. */
 internal fun World.expireSessions() {
   login?.let { guarded("login timeouts") { it.pulse(this) } }
   for (p in players) {
@@ -207,13 +204,13 @@ fun World.flush(s: Session) {
   val text = s.out.toString()
   s.out.setLength(0)
   if (text.isNotEmpty()) s.sink.send(text)
-  // GMCP follows the text it goes with (SPEC §4.10).
+  // GMCP follows the text it goes with.
   for ((pkg, data) in s.gmcpOut) s.sink.gmcp(pkg, data)
   s.gmcpOut.clear()
   if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
 }
 
-/** The prompt shown after each burst of output (D-083). */
+/** The prompt shown after each burst of output. */
 fun promptFor(p: Player): String = "<${p.hp}hp ${p.mana}m ${p.move}mv> "
 
 /** Queues [text] for a session that may have no character yet, such as during login. */
@@ -232,8 +229,8 @@ fun World.closeSession(s: Session, reason: String) {
 }
 
 /**
- * Reloads packages through the script host (SPEC §5.10), then tells builders and instructors how it
- * went. A failed reload keeps the old version live.
+ * Reloads packages through the script host, then tells builders and instructors how it went. A
+ * failed reload keeps the old version live.
  */
 internal fun World.reload(packages: List<String>) {
   val result =
@@ -246,16 +243,13 @@ internal fun World.reload(packages: List<String>) {
       ReloadResult(false, listOf("reload of ${packages.joinToString()} crashed: $e"))
     }
   if (!result.ok) record(Diagnostic(pulse, "reload", result.messages.joinToString("\n")))
-  // A successful reload ends with a checkpoint (SPEC §5.10 step 6).
+  // A successful reload ends with a checkpoint.
   if (result.ok) checkpointNow("reload")
   for (p in players) if (p.role.atLeast(Role.BUILDER)) result.messages.forEach { send(p, it) }
   flushOutput()
 }
 
-/**
- * Phase 7 (SPEC §5.1): text, then GMCP events and state deltas. The harness also flushes after
- * input.
- */
+/** Phase 7: text, then GMCP events and state deltas. The harness also flushes after input. */
 fun World.flushOutput() {
   for (s in sessions.values.toList()) {
     guarded("GMCP for ${s.id}") { gmcpDeltas(s) }

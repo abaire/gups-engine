@@ -27,33 +27,32 @@ import java.util.TreeMap
 
 class WorldConfig(
   val seed: Long = 0,
-  /** Check the §3.8 invariants after every pulse (`--dev` and the harness, SPEC §6.5). */
+  /** Check the invariants after every pulse (`--dev` and the harness). */
   val checkInvariants: Boolean = false,
   /** Rethrow engine exceptions instead of logging them. For tests. */
   val strict: Boolean = false,
   /**
    * Pulses between routine checkpoints, rounded up to world ticks. The default is 30 minutes; a
-   * world sets it with `checkpoint_minutes` in `MODULE.gups` (SPEC §5.11).
+   * world sets it with `checkpoint_minutes` in `MODULE.gups`.
    */
   val checkpointPulses: Long = DEFAULT_CHECKPOINT_PULSES,
   /**
-   * Keep a reality bubble (SPEC §5.9): only rooms near players and other anchors are simulated.
-   * Off, every room is always simulated, as headless tests usually want (D-116).
+   * Keep a reality bubble: only rooms near players and other anchors are simulated. Off, every room
+   * is always simulated, as headless tests usually want.
    */
   val bubble: Boolean = false,
-  /** `--prod`: `@reload` is refused in favour of deploys (SPEC §1.4, §4.9). */
+  /** `--prod`: `@reload` is refused in favour of deploys. */
   val production: Boolean = false,
-  /** Command aliases and prefixes from `MODULE.gups` (SPEC §2.3); a world without them has none. */
+  /** Command aliases and prefixes from `MODULE.gups`; a world without them has none. */
   val aliases: CommandAliases = CommandAliases.NONE,
 )
 
-/** 30 minutes of pulses (SPEC §5.11). */
+/** 30 minutes of pulses. */
 const val DEFAULT_CHECKPOINT_PULSES = 30L * 60 * 1000 / PULSE_MS
 
 /**
- * A logged engine or script problem (SPEC §3.6, §6.2). Persisted to the diagnostics table from M4.
- * Script diagnostics fill in where the failing code lives; engine ones leave the script fields
- * null.
+ * A logged engine or script problem. Persisted to the diagnostics table. Script diagnostics fill in
+ * where the failing code lives; engine ones leave the script fields null.
  */
 data class Diagnostic(
   val pulse: Long,
@@ -65,7 +64,7 @@ data class Diagnostic(
   /** The prototype whose hook failed. */
   val label: Label? = null,
   val hook: String? = null,
-  /** The room the failing code ran for, which a repro bundle snapshots (SPEC §6.2). */
+  /** The room the failing code ran for, which a repro bundle snapshots. */
   val room: Label? = null,
   /** The file label, for example `//zones/tutorial:rooms.star`. */
   val file: String? = null,
@@ -87,13 +86,13 @@ class SpawnState internal constructor(val room: Room, val rule: SpawnRule) {
 }
 
 /**
- * The world graph and its scheduler (SPEC §5.1). Not thread-safe by design: everything runs on the
- * world thread, driven by [gups.core.loop.WorldLoop] or directly by a headless test.
+ * The world graph and its scheduler. Not thread-safe by design: everything runs on the world
+ * thread, driven by [gups.core.loop.WorldLoop] or directly by a headless test.
  */
 /**
- * How a world starts (SPEC §5.11 startup): fresh from its prototypes, or as the shell that saved
- * state is restored into. Saved rooms keep their ids so references to them survive a restart; new
- * ids start above everything ever saved.
+ * How a world starts: fresh from its prototypes, or as the shell that saved state is restored into.
+ * Saved rooms keep their ids so references to them survive a restart; new ids start above
+ * everything ever saved.
  */
 class Boot(
   val pulse: Long = 0,
@@ -104,7 +103,7 @@ class Boot(
   val fillSpawns: Boolean = true,
 )
 
-/** Applies plugin effect primitives; the plugin host installs one (SPEC §4.15). */
+/** Applies plugin effect primitives; the plugin host installs one. */
 fun interface PluginEffectRunner {
   fun apply(world: World, effect: gups.core.model.Effect.Plugin, caster: Actor, target: Actor?)
 }
@@ -116,15 +115,15 @@ class World(
   val config: WorldConfig = WorldConfig(),
   boot: Boot = Boot(),
 ) {
-  /** The live prototype table; a reload swaps it (SPEC §5.10). */
+  /** The live prototype table; a reload swaps it. */
   var protos: Prototypes = protos
     internal set
 
-  /** Game time (SPEC §3.1). */
+  /** Game time. */
   var pulse: Long = boot.pulse
     private set
 
-  /** Where checkpoints go (SPEC §5.11); nowhere until a persistence layer is attached. */
+  /** Where checkpoints go; nowhere until a persistence layer is attached. */
   var persistence: Persistence = Persistence.NONE
 
   /**
@@ -136,12 +135,10 @@ class World(
   /** Called for every diagnostic as it is recorded, for example to log it. */
   var onDiagnostic: ((Diagnostic) -> Unit)? = null
 
-  /**
-   * Receives each rules evaluation with its modifier chain, for `@trace rules` (SPEC §4.6, §5.13).
-   */
+  /** Receives each rules evaluation with its modifier chain, for `@trace rules`. */
   var onRules: ((Actor?, String) -> Unit)? = null
 
-  // ---- Operations (SPEC §4.9) -----------------------------------------------------------
+  // ---- Operations -----------------------------------------------------------------------
 
   /** Wall-clock milliseconds, for restrictions and audit times. */
   var wallClock: () -> Long = System::currentTimeMillis
@@ -150,13 +147,10 @@ class World(
   var background: java.util.concurrent.Executor? = null
   var post: ((gups.core.WorldControlEvent) -> Unit)? = null
 
-  /**
-   * Restrictions of every account, as loaded from the account store and kept by `@restrict` (SPEC
-   * §4.9).
-   */
+  /** Restrictions of every account, as loaded from the account store and kept by `@restrict`. */
   var restrictions: List<gups.core.Restriction> = emptyList()
 
-  /** Receives every instructor alert, for the server log (SPEC §6.2). */
+  /** Receives every instructor alert, for the server log. */
   var onAlert: ((String) -> Unit)? = null
 
   /** The last minute of pulse durations, fed by the world loop. */
@@ -165,22 +159,19 @@ class World(
   /** Input lines waiting for the world thread, as the world loop counts them. */
   var queueDepth: () -> Int = { 0 }
 
-  /**
-   * Called by the world loop after each pulse with its duration in nanoseconds, for metrics (SPEC
-   * §4.14).
-   */
+  /** Called by the world loop after each pulse with its duration in nanoseconds, for metrics. */
   var onPulse: ((Long) -> Unit)? = null
 
-  /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner (SPEC §4.15). */
+  /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner. */
   var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _ -> }
 
-  /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's (SPEC §4.15). */
+  /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's. */
   val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 
-  /** Production deploys (SPEC §5.10), when the server can run them. */
+  /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
 
-  // Alert rate limits, the engine-error window and step samples (SPEC §6.2).
+  // Alert rate limits, the engine-error window and step samples.
   internal val alertTimes = HashMap<String, Long>()
   internal val ownerAlertTimes = HashMap<String, Long>()
   internal val engineErrors = ArrayDeque<Long>()
@@ -202,38 +193,35 @@ class World(
   internal val spawnStates = mutableListOf<SpawnState>()
   private val diagnosticLog = mutableListOf<Diagnostic>()
 
-  /** Next zone reset per package that declares `reset_world_ticks` (SPEC §4.1). */
+  /** Next zone reset per package that declares `reset_world_ticks`. */
   internal val zoneResets = TreeMap<String, Long>()
 
-  // Persistence bookkeeping (SPEC §5.11), drained by each checkpoint capture.
+  // Persistence bookkeeping, drained by each checkpoint capture.
   internal val removed = LinkedHashSet<EntityId>()
   internal val itemEvents = mutableListOf<ItemEvent>()
   internal val inputs = mutableListOf<InputRecord>()
   internal var immediateCause: String? = null
 
-  /**
-   * Entities the last world tick's invariant check found broken; kept out of checkpoints (SPEC
-   * §6.5).
-   */
+  /** Entities the last world tick's invariant check found broken; kept out of checkpoints. */
   var checkpointExclusions: Set<EntityId> = emptySet()
     private set
 
-  // Initiative-tier state (SPEC §5.4.1).
+  // Initiative-tier state.
   internal var snapshot: TierSnapshot? = null
   internal val deferred = mutableListOf<Deferred>()
   internal val removedThisPhase = HashSet<EntityId>()
   internal var cascadeDepth = 0
 
-  // The reality bubble (SPEC §5.9): how many anchors cover each room, and where each anchor was.
+  // The reality bubble: how many anchors cover each room, and where each anchor was.
   internal val coverage = HashMap<Room, Int>()
   internal val anchorRooms = HashMap<EntityId, Room>()
 
-  // Perception events waiting for phase 5 (SPEC §5.7).
+  // Perception events waiting for phase 5.
   internal val perceptions = mutableListOf<Perception>()
 
   /**
    * `path_to` results by `(from, to)` room id, dropped whenever a door, exit or reload changes the
-   * graph (SPEC §5.9).
+   * graph.
    */
   internal val pathCache = HashMap<Pair<EntityId, EntityId>, List<gups.core.model.Direction>?>()
   internal var inboundCache: HashMap<Room, MutableList<Pair<Room, gups.core.model.Exit>>>? = null
@@ -300,13 +288,13 @@ class World(
 
   internal fun allocateId(): EntityId = EntityId(nextEntityId++)
 
-  /** Ids to save: the next entity id and the next timer/affect handle (SPEC §3.6 `meta`). */
+  /** Ids to save: the next entity id and the next timer/affect handle (`meta`). */
   val nextIds: Pair<Long, Long>
     get() = nextEntityId to nextHandle
 
   /**
-   * Asks for an immediate checkpoint once the current action's cascade ends (SPEC §5.11), for
-   * example after an item changes hands between players.
+   * Asks for an immediate checkpoint once the current action's cascade ends, for example after an
+   * item changes hands between players.
    */
   fun requestImmediate(cause: String) {
     if (immediateCause == null) immediateCause = cause
@@ -338,7 +326,7 @@ class World(
     alertFor(d)
   }
 
-  /** Runs [block], logging an engine exception and aborting only that action (SPEC §6.4). */
+  /** Runs [block], logging an engine exception and aborting only that action. */
   internal inline fun guarded(what: String, block: () -> Unit) {
     try {
       block()
@@ -454,7 +442,7 @@ class World(
     s.respawnAt = null
   }
 
-  // ---- Timers (verbs `after` / `cancel`, SPEC §4.5) -----------------------------------------
+  // ---- Timers (verbs `after` / `cancel`) ----------------------------------------------------
 
   fun after(
     owner: Entity,
@@ -463,7 +451,7 @@ class World(
     args: Map<String, AttrValue> = emptyMap(),
   ): Long {
     require(pulses >= 1) { "after(): pulses must be at least 1" }
-    // A dormant owner's timer starts paused (SPEC §3.8 inv. 7).
+    // A dormant owner's timer starts paused.
     val t =
       if (isSimulated(owner)) {
         ScriptTimer(allocateHandle(), fn, args, due = pulse + pulses)
@@ -478,14 +466,14 @@ class World(
   fun cancel(owner: Entity, timerId: Long): Boolean =
     owner.timers.removeIf { it.id == timerId }.also { if (it) owner.dirty = true }
 
-  // ---- The pulse (SPEC §5.1) ----------------------------------------------------------------
+  // ---- The pulse ----------------------------------------------------------------------------
 
   /** Advances game time by one pulse and runs every phase in order. */
   fun runPulse() {
     pulse++
     runTimers()
     flushImmediate()
-    // Roll before phase 2 so a round-boundary action pulse uses the new initiative (D-002).
+    // Roll before phase 2 so a round-boundary action pulse uses the new initiative.
     if (pulse % COMBAT_ROUND_PULSES == 0L) rollInitiative()
     runTiers(actorIndex.values.filter { isSimulated(it) }, ::actionPulse)
     if (pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
@@ -501,7 +489,7 @@ class World(
     if (config.checkInvariants) {
       val violations = checkInvariants()
       if (violations.isNotEmpty()) {
-        // The harness fails the test; --dev logs and keeps running (SPEC §6.5, D-084).
+        // The harness fails the test; --dev logs and keeps running.
         if (config.strict) throw InvariantViolation(violations)
         for (v in violations) record(
           Diagnostic(pulse, "invariant", v, InvariantViolation(listOf(v)))
@@ -520,7 +508,7 @@ class World(
       if (e.timers.isEmpty() || !isSimulated(e)) continue
       for (t in e.timers) {
         val at = t.due ?: continue
-        // A quarantined package's timers stay pending, neither fired nor dropped (SPEC §6.3).
+        // A quarantined package's timers stay pending, neither fired nor dropped.
         if (at <= pulse && !scripts.isSuspended(e, t.fn)) {
           due +=
             Due(at, t.id) {
@@ -547,7 +535,7 @@ class World(
     for (d in due) guarded("timer ${d.id}") { d.run() }
   }
 
-  /** Phase 2 for one actor (SPEC §5.1). */
+  /** Phase 2 for one actor. */
   private fun actionPulse(a: Actor) {
     val c = a.casting
     when {
@@ -558,7 +546,7 @@ class World(
     }
   }
 
-  /** Rolls initiative for every engaged actor at a round boundary, before phase 2 (D-002). */
+  /** Rolls initiative for every engaged actor at a round boundary, before phase 2. */
   private fun rollInitiative() {
     for (a in actorIndex.values) a.initiative = null
     val engaged = actorIndex.values.filter { it.isEngaged && isSimulated(it) }
@@ -577,9 +565,7 @@ class World(
     }
   }
 
-  /**
-   * Phase 3: one auto-attack per engaged actor, under the initiative rolled this pulse (SPEC §5.4).
-   */
+  /** Phase 3: one auto-attack per engaged actor, under the initiative rolled this pulse. */
   private fun runCombatRound() {
     val engaged = actorIndex.values.filter { it.isEngaged && isSimulated(it) }
     val rooms = engaged.map { it.room }.distinct()
@@ -588,7 +574,7 @@ class World(
         autoAttack(a)
         val ctx = HookContext(actor = a, room = a.room)
         invokeOn(a, HookName.ON_COMBAT_TICK, ctx)
-        // Equipped items take part in the round too (SPEC §4.4), after their wearer.
+        // Equipped items take part in the round too, after their wearer.
         for (item in
           a.equipmentIndex.values
             .filter { scripts.hasHook(it, HookName.ON_COMBAT_TICK) }
@@ -597,11 +583,11 @@ class World(
         }
       }
     }
-    // The sound of a combat round carries as noise (SPEC §5.7).
+    // The sound of a combat round carries as noise.
     for (r in rooms) perceive("combat", gups.core.model.Channel.NOISE, r, actor = null)
   }
 
-  /** Phase 4 (SPEC §5.1). Checkpoint capture arrives with persistence in M4. */
+  /** Phase 4. Checkpoint capture arrives with persistence. */
   private fun runWorldTick() {
     for (a in actorIndex.values.toList()) {
       if (a.hasFlag("no_regen") || !isSimulated(a)) continue
@@ -622,7 +608,7 @@ class World(
     for ((pkg, at) in zoneResets.entries.toList()) {
       if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
     }
-    // Dormant rooms catch up on respawns and decay when they wake (SPEC §5.9).
+    // Dormant rooms catch up on respawns and decay when they wake.
     for (s in spawnStates) {
       val at = s.respawnAt ?: continue
       if (at <= pulse && !s.room.isDormant) guarded("respawn in ${s.room.label}") { fillSpawn(s) }
@@ -634,7 +620,7 @@ class World(
     }
     for (a in actorIndex.values) if (isSimulated(a)) updateEncumbrance(a)
     expireDebugMobs()
-    // Checked every world tick; broken entities stay out of the next checkpoint (SPEC §6.5).
+    // Checked every world tick; broken entities stay out of the next checkpoint.
     val broken = invariantViolations()
     if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))
     checkpointExclusions = broken.mapNotNullTo(HashSet()) { it.entity }
@@ -644,8 +630,8 @@ class World(
   private var lastCheckpoint = boot.pulse
 
   /**
-   * Writes a routine checkpoint now, as the schedule, a successful reload and shutdown do (SPEC
-   * §5.10, §5.11). Restarts the schedule.
+   * Writes a routine checkpoint now, as the schedule, a successful reload and shutdown do. Restarts
+   * the schedule.
    */
   fun checkpointNow(cause: String) {
     lastCheckpoint = pulse
@@ -659,7 +645,7 @@ class World(
   private fun resetZone(pkg: String) {
     val interval = protos.zones.getValue(pkg).resetPulses ?: return
     zoneResets[pkg] = pulse + interval
-    // A dormant room takes its reset when it wakes (SPEC §5.9).
+    // A dormant room takes its reset when it wakes.
     val rooms = roomsByLabel.values.filter { it.label.pkg == pkg }
     for (room in rooms) if (room.isDormant) room.resetMissed = true
     for (s in spawnStates) if (s.room.label.pkg == pkg && !s.room.isDormant) fillSpawn(s)
@@ -668,7 +654,7 @@ class World(
     }
   }
 
-  /** Fires `on_load` on every entity, ascending id, once the world is built (D-062). */
+  /** Fires `on_load` on every entity, ascending id, once the world is built. */
   fun fireOnLoad() {
     for (e in entities.values.sortedBy { it.id }) {
       if (e.id in entities) invokeOn(e, HookName.ON_LOAD, HookContext(room = e as? Room))
@@ -676,7 +662,7 @@ class World(
     settleBubble()
   }
 
-  // ---- Initiative tiers (SPEC §5.4.1) -------------------------------------------------------
+  // ---- Initiative tiers ---------------------------------------------------------------------
 
   /**
    * Runs [act] for each participant tier by tier: engaged actors grouped by initiative from highest
@@ -690,7 +676,7 @@ class World(
     for (tier in tiers) {
       val members = tier.filter { it.inWorld && it.id !in removedThisPhase }.sortedBy { it.id }
       if (members.isEmpty()) continue
-      // Only actors that can be acted on: simulated ones, which covers active rooms (D-003).
+      // Only actors that can be acted on: simulated ones, which covers active rooms.
       val snap = TierSnapshot(actorIndex.values.filter { isSimulated(it) })
       snapshot = snap
       try {

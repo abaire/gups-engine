@@ -35,7 +35,7 @@ application {
 // The changelog the HTML reference renders (DocsRenderer.bundledChangelog).
 tasks.processResources {
   from(rootProject.file("docs/CHANGELOG.md")) { into("gups/docs") }
-  // The plugin guide plugins.html starts with (SPEC §4.15).
+  // The plugin guide plugins.html starts with.
   from(rootProject.file("docs/PLUGINS.md")) { into("gups/docs") }
 }
 
@@ -57,12 +57,12 @@ tasks.test {
     layout.projectDirectory.dir("src/test/resources/docs-golden").asFile.absolutePath,
   )
   systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
-  // The API baselines the repository check reads (SPEC §4.17).
+  // The API baselines the repository check reads.
   inputs.dir(rootProject.file("docs")).withPropertyName("docs")
   systemProperty("gups.docsDir", rootProject.file("docs").absolutePath)
 }
 
-// ---- The HTML API reference (SPEC §4.16) -----------------------------------
+// ---- The HTML API reference -------------------------------------------------
 
 val generatedDocsDir = layout.buildDirectory.dir("generated-docs")
 
@@ -92,7 +92,7 @@ val docsArchive by
     from(generateDocs)
   }
 
-// ---- Release images (SPEC §2.2) -------------------------------------------------------
+// ---- Release images -------------------------------------------------------------------
 
 /** The platform an image is built for, as CI names it: linux-x64, linux-arm64 or macos-arm64. */
 val platform: String =
@@ -113,7 +113,7 @@ val imageDir = layout.buildDirectory.dir("image/gups")
 
 /**
  * A self-contained `gups`: a jlink runtime with just the JDK modules jdeps finds the libraries
- * need, the jars, and a launcher that uses that runtime (D-164).
+ * need, the jars, and a launcher that uses that runtime.
  */
 val jlinkImage by
   tasks.registering {
@@ -203,7 +203,7 @@ val jlinkImage by
       bin.writeText(
         """
         |#!/bin/sh
-        |# The gups launcher of a jlink image (SPEC §2.2): runs the bundled runtime.
+        |# The gups launcher of a jlink image: runs the bundled runtime.
         |HERE=${'$'}(cd "${'$'}(dirname "${'$'}0")/.." && pwd)
         |exec "${'$'}HERE/runtime/bin/java" --enable-native-access=ALL-UNNAMED -cp "${'$'}HERE/lib/*" gups.cli.MainKt "${'$'}@"
         |"""
@@ -241,8 +241,8 @@ val imageOwner: String =
     ?: "gups"
 
 /**
- * Prepares the course world template for release (SPEC §2.3), stamping the engine version pin into
- * MODULE.gups and the image owner and tag into gates.yml.
+ * Prepares the course world template for release, stamping the engine version pin into MODULE.gups
+ * and the image owner and tag into gates.yml.
  */
 val prepareCourseWorldTemplate =
   tasks.register<Sync>("prepareCourseWorldTemplate") {
@@ -260,7 +260,7 @@ val prepareCourseWorldTemplate =
     filesMatching("MODULE.gups") {
       filter { line ->
         if (line.trim() == "module(") {
-          "module(\n    # Pinned engine version (SPEC §2.3).\n    engine = \"$v\",\n"
+          "module(\n    # Pinned engine version.\n    engine = \"$v\",\n"
         } else {
           line
         }

@@ -30,7 +30,7 @@ import gups.script.scriptWorld
 import java.util.WeakHashMap
 import net.starlark.java.eval.StarlarkThread
 
-// The facade implementations (SPEC §4.15). Each verb calls what the `ctx` verb of
+// The facade implementations. Each verb calls what the `ctx` verb of
 // the same name calls (script/src/main/kotlin/gups/script/Ctx.kt).
 
 /** Conversions behind `PluginViews`, and the server log of each world with plugins installed. */
@@ -43,7 +43,7 @@ internal object Facades {
 
   fun logOf(world: World): (String) -> Unit = synchronized(logs) { logs[world] } ?: {}
 
-  /** The facade for raw builtins, which belong to no plugin namespace (D-177). */
+  /** The facade for raw builtins, which belong to no plugin namespace. */
   fun world(thread: StarlarkThread): PluginWorld? =
     scriptWorld(thread)?.let { WorldFacade(it, null, logOf(it)) }
 
@@ -159,14 +159,14 @@ internal class RngFacade(private val world: World) : PluginRng {
 
 /**
  * The [PluginWorld] of plugin [pluginId] over [world]. A null [pluginId] (raw builtins) has no
- * namespace of its own, so attribute keys must be qualified and can't be written (D-177).
+ * namespace of its own, so attribute keys must be qualified and can't be written.
  */
 internal class WorldFacade(
   val world: World,
   private val pluginId: String?,
   private val logSink: (String) -> Unit,
 ) : PluginWorld {
-  // A stale view fails as it does in `Ctx`, rather than reaching `core` (D-177).
+  // A stale view fails as it does in `Ctx`, rather than reaching `core`.
   private fun actorOf(a: PluginActor, what: String): Actor {
     val actor =
       (a as? ActorFacade)?.actor

@@ -1,4 +1,4 @@
-// Game text markup (D-087) rendered as HTML: {red} ... {white}, {bright_red} ...,
+// Game text markup rendered as HTML: {red} ... {white}, {bright_red} ...,
 // {bold}, {underline}, {/} to reset, {x0} ... {x255} for xterm colors, and {{ for a brace.
 // Unknown tags stay as typed.
 

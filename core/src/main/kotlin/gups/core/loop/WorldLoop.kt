@@ -17,9 +17,9 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 
 /**
- * Pulse-boundary bookkeeping (SPEC §5.1). A pulse that finishes after the next boundary does not
- * trigger catch-up pulses: the timer skips to the next future boundary and reports how many it
- * skipped, so a lag spike slows game time instead of making it lurch.
+ * Pulse-boundary bookkeeping. A pulse that finishes after the next boundary does not trigger
+ * catch-up pulses: the timer skips to the next future boundary and reports how many it skipped, so
+ * a lag spike slows game time instead of making it lurch.
  */
 class PulseTimer(val pulseNanos: Long, startNanos: Long) {
   /** When the next pulse is due. */
@@ -40,9 +40,9 @@ class PulseTimer(val pulseNanos: Long, startNanos: Long) {
 }
 
 /**
- * Drives a [World] in real time (SPEC §2.5, §5.1): between pulse boundaries it applies input and
- * control events as they arrive; at each boundary it runs one pulse. Run it on [worldDispatcher] so
- * every world mutation happens on one thread.
+ * Drives a [World] in real time: between pulse boundaries it applies input and control events as
+ * they arrive; at each boundary it runs one pulse. Run it on [worldDispatcher] so every world
+ * mutation happens on one thread.
  */
 class WorldLoop(
   private val world: World,
@@ -112,7 +112,7 @@ class WorldLoop(
   }
 
   companion object {
-    /** The single-threaded world dispatcher (SPEC §2.5). */
+    /** The single-threaded world dispatcher. */
     val worldDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
   }
 }

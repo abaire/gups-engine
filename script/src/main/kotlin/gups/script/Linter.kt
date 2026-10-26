@@ -19,7 +19,7 @@ import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.StarlarkFile
 import net.starlark.java.syntax.StringLiteral
 
-/** Static checks for course world packages (SPEC §7.3 gate 2, SPEC §7.3, D-166). */
+/** Static checks for course world packages (gate 2). */
 class Linter(
   private val dir: WorldDir,
   private val basePrototypes: Prototypes? = null,
@@ -125,7 +125,7 @@ class Linter(
     val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
     val loadResult = loader.load(dir.packages())
 
-    // Load errors (catalog hook errors D-074, namespace uniqueness D-064, etc.)
+    // Load errors (catalog hook errors, namespace uniqueness, etc.)
     for (err in loadResult.errors) {
       if (matchesPkg(err.pkg)) {
         findings += Finding(Finding.Severity.ERROR, err.message, file = err.file, line = err.line)
@@ -184,7 +184,7 @@ class Linter(
       }
     }
 
-    // 3. Schema changes since --base without a version bump (SPEC §7.3)
+    // 3. Schema changes since --base without a version bump
     if (basePrototypes != null) {
       checkBaseDiffs(protos, basePrototypes, ::matches, findings)
     }

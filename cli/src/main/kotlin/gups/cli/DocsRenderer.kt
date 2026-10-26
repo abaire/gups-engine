@@ -29,7 +29,7 @@ data class PluginCommandDocSpec(
 /** A GMCP package a plugin adds, for `plugins.html`. */
 data class PluginGmcpDocSpec(val pkg: String, val doc: String)
 
-/** What `plugins.html` shows about one plugin. M7.2 always renders none; M7.4 fills them in. */
+/** What `plugins.html` shows about one plugin. */
 data class PluginDocSpec(
   val id: String,
   val doc: String = "",
@@ -40,8 +40,8 @@ data class PluginDocSpec(
 )
 
 /**
- * Renders the HTML API reference from the script API model (SPEC §4.16). Pages are static and
- * offline: no scripts, only relative links between the files in [FILES].
+ * Renders the HTML API reference from the script API model. Pages are static and offline: no
+ * scripts, only relative links between the files in [FILES].
  */
 object DocsRenderer {
   val FILES: List<String> =
@@ -126,7 +126,7 @@ object DocsRenderer {
   /** The `id` of a symbol's element: `hook:on_enter` → `hook-on_enter`. */
   internal fun anchor(symbol: String): String = symbol.replace(':', '-')
 
-  /** The symbols each page holds, following `api.json`'s symbol paths (D-171). */
+  /** The symbols each page holds, following `api.json`'s symbol paths. */
   internal fun pageSymbols(model: ScriptApiModel): Map<String, Set<String>> {
     fun decl(d: DeclSpec) = listOf(d.name) + d.params.map { "${d.name}.${it.name}" }
     fun method(m: MethodSpec, path: String) = listOf(path) + m.params.map { "$path.${it.name}" }
@@ -705,9 +705,8 @@ private val MARKDOWN_RENDERER: HtmlRenderer =
     .build()
 
 /**
- * Renders the changelog and the plugin guide (SPEC §4.16) as CommonMark. Raw HTML stays escaped,
- * links and images render as their text so nothing points outside the reference, and headings get
- * ids.
+ * Renders the changelog and the plugin guide as CommonMark. Raw HTML stays escaped, links and
+ * images render as their text so nothing points outside the reference, and headings get ids.
  */
 internal fun markdownToHtml(md: String): String =
   MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(md))

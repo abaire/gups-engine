@@ -10,9 +10,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * The API-change check (SPEC §4.17): compares the committed baseline `api-<N>.json` with the
- * current model. Without an `api_version` bump, no symbol may be removed or changed, and every
- * added symbol must carry `since` equal to the current `api_version`.
+ * The API-change check: compares the committed baseline `api-<N>.json` with the current model.
+ * Without an `api_version` bump, no symbol may be removed or changed, and every added symbol must
+ * carry `since` equal to the current `api_version`.
  */
 object ApiDiff {
   private val ENGINE_VERSION = Regex("""("engine_version": )"[^"]*"""")

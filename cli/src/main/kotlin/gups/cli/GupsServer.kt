@@ -49,7 +49,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** Where new characters start unless `--start` or `start_room` says otherwise (D-082, D-138). */
+/** Where new characters start unless `--start` or `start_room` says otherwise. */
 val TUTORIAL_START = Label("//zones/tutorial:gate")
 
 /** How often the server checks whether an hourly or daily backup is due. */
@@ -58,48 +58,44 @@ private const val BACKUP_CHECK_MS = 5 * 60_000L
 /** How often the `--dev` file watcher looks for changes. */
 private const val WATCH_INTERVAL_MS = 100L
 
-/** What `--prod` adds (SPEC §2.4): where raw telnet listens, and the account login's settings. */
+/** What `--prod` adds: where raw telnet listens, and the account login's settings. */
 class ProdOptions(
   /** Where raw telnet listens, on [GupsServer]'s port; null for none. */
   val telnetHost: String?,
   val login: LoginSettings = LoginSettings(),
-  /** `restriction_ladder` of the server configuration (SPEC §4.9). */
+  /** `restriction_ladder` of the server configuration. */
   val ladder: List<String> = DEFAULT_LADDER,
-  /** Telnet over TLS (SPEC §4.10). */
+  /** Telnet over TLS. */
   val tls: TlsListener? = null,
-  /** HTTPS with the web client and WebSocket (SPEC §4.10). */
+  /** HTTPS with the web client and WebSocket. */
   val web: TlsListener? = null,
-  /** The admin port (SPEC §4.14); null for none. */
+  /** The admin port; null for none. */
   val admin: AdminListener? = null,
-  /** Where deploys fetch from (SPEC §5.10). */
+  /** Where deploys fetch from. */
   val deploy: DeploySettings = DeploySettings(),
-  /** Start even if the working tree isn't at `meta.world_commit` (SPEC §2.4). */
+  /** Start even if the working tree isn't at `meta.world_commit`. */
   val forceCommit: Boolean = false,
-  /** How long a shutdown waits for the final checkpoint (`shutdown_timeout`, SPEC §5.11). */
+  /** How long a shutdown waits for the final checkpoint (`shutdown_timeout`). */
   val shutdownTimeoutMs: Long = SHUTDOWN_WAIT_MS,
 )
 
 /** Where the admin port listens, and its bearer token (null: only `/healthz` works). */
 class AdminListener(val host: String, val port: Int, val token: String?)
 
-/** `/healthz` fails once the world thread hasn't pulsed for this long (SPEC §4.14). */
+/** `/healthz` fails once the world thread hasn't pulsed for this long. */
 private const val STALL_NANOS = 5_000_000_000L
 
 /** Where telnet over TLS listens, and its certificate. */
 class TlsListener(val host: String, val port: Int, val tls: ServerTls)
 
-/**
- * Password checks, account changes and other slow work run here, never on the world thread (SPEC
- * §2.5).
- */
+/** Password checks, account changes and other slow work run here, never on the world thread. */
 private const val BACKGROUND_THREADS = 4
 
 /**
- * A running server (SPEC §2.4). Without [prod] it is the `--dev` profile: raw telnet on localhost,
- * the passwordless local instructor, auto-reload on save and `@eval`. With [prod] it is `--prod`:
- * the account login, telnet on the configured address, and no `@eval`, auto-reload or per-pulse
- * invariant check (SPEC §2.4). Both load every package of the world and keep checkpoints and
- * backups.
+ * A running server. Without [prod] it is the `--dev` profile: raw telnet on localhost, the
+ * passwordless local instructor, auto-reload on save and `@eval`. With [prod] it is `--prod`: the
+ * account login, telnet on the configured address, and no `@eval`, auto-reload or per-pulse
+ * invariant check. Both load every package of the world and keep checkpoints and backups.
  */
 class GupsServer(
   private val dir: WorldDir,
@@ -115,10 +111,10 @@ class GupsServer(
 ) {
   private var persistence: SqlitePersistence? = null
 
-  /** How long a shutdown waits for the final checkpoint to commit (SPEC §5.11). */
+  /** How long a shutdown waits for the final checkpoint to commit. */
   val shutdownTimeoutMs: Long = prod?.shutdownTimeoutMs ?: SHUTDOWN_WAIT_MS
 
-  /** The world's plugins, loaded once at boot (SPEC §4.15); closed when the server stops. */
+  /** The world's plugins, loaded once at boot; closed when the server stops. */
   private var plugins: PluginHost? = null
   private var metrics: Metrics? = null
   private val startedNanos = System.nanoTime()
@@ -128,7 +124,7 @@ class GupsServer(
   @Volatile private var lastPulse = 0L
   private val background = Dispatchers.IO.limitedParallelism(BACKGROUND_THREADS).asExecutor()
 
-  /** The world's CODEOWNERS as last read (SPEC §3.5). */
+  /** The world's CODEOWNERS as last read. */
   @Volatile
   var codeOwners: CodeOwners = CodeOwners.EMPTY
     private set
@@ -152,7 +148,7 @@ class GupsServer(
     )
   }
 
-  /** Failed logins are counted once for telnet and the web (SPEC §4.10). */
+  /** Failed logins are counted once for telnet and the web. */
   private val limiter = LoginLimiter()
 
   private val webServer by lazy {
@@ -170,7 +166,7 @@ class GupsServer(
     }
   }
 
-  /** The API reference, rendered once at boot and served at `/docs/` (SPEC §4.16). */
+  /** The API reference, rendered once at boot and served at `/docs/`. */
   private var docs: Map<String, ByteArray> = emptyMap()
 
   private val docsServer by lazy {
@@ -241,7 +237,7 @@ class GupsServer(
       return false
     }
     val boot = saved?.boot(protos, fresh) ?: Boot()
-    // --prod checks invariants only at world ticks, before capture (SPEC §2.4).
+    // --prod checks invariants only at world ticks, before capture.
     val config =
       WorldConfig(
         seed = System.nanoTime(),
@@ -263,7 +259,7 @@ class GupsServer(
       )
     }
     DevTools.install(world, host, eval = prod == null)
-    // Script alerts (quarantine, rules fallback) reach online instructors too (SPEC §6.2).
+    // Script alerts (quarantine, rules fallback) reach online instructors too.
     host.alerts = { world.alert(it, it) }
     world.onAlert = { log("alert: $it") }
     world.onDiagnostic = { d ->
@@ -317,7 +313,7 @@ class GupsServer(
           log("There are no accounts yet. Create some with gups import-roster or gups invite.")
         AccountLogin(AccountService(accounts), at, background, loop::submit, prod.login, limiter)
       } else {
-        // The local instructor is a real account once there is a database (SPEC §5.12).
+        // The local instructor is a real account once there is a database.
         val instructor =
           saved?.accounts?.let { a ->
             a.byLogin(DEV_ACCOUNT)
@@ -340,8 +336,8 @@ class GupsServer(
   }
 
   /**
-   * Reads CODEOWNERS and replaces every account's builder scope (SPEC §3.5). Runs at startup;
-   * deploys (M6.5) will run it again.
+   * Reads CODEOWNERS and replaces every account's builder scope. Runs at startup; deploys will run
+   * it again.
    */
   private fun syncCodeOwners(
     accounts: gups.core.AccountStore,
@@ -364,8 +360,8 @@ class GupsServer(
   }
 
   /**
-   * After a deploy: CODEOWNERS again, from the live tree, with the new scopes on characters in play
-   * (SPEC §3.5).
+   * After a deploy: CODEOWNERS again, from the live tree, with the new scopes on characters in
+   * play.
    */
   private fun resyncCodeOwners() {
     val accounts = persistence?.accounts ?: return
@@ -375,8 +371,8 @@ class GupsServer(
 
   /**
    * `--prod` refuses to start unless the working tree is at `meta.world_commit` and has no
-   * uncommitted changes, which would mean someone edited the live world by hand (SPEC §7.2 step 7).
-   * `--force-commit` adopts what is there. A first start records the commit.
+   * uncommitted changes, which would mean someone edited the live world by hand. `--force-commit`
+   * adopts what is there. A first start records the commit.
    */
   private fun checkCommit(saved: SqlitePersistence): Boolean {
     val git = Git(dir.root)
@@ -407,7 +403,7 @@ class GupsServer(
     return true
   }
 
-  /** `/healthz` and the other admin endpoints (SPEC §4.14). */
+  /** `/healthz` and the other admin endpoints. */
   private val admin =
     object : gups.net.Admin {
       override fun health(): Pair<Boolean, Map<String, Any?>> {
@@ -479,7 +475,7 @@ class GupsServer(
     val running =
       launch(WorldLoop.worldDispatcher) {
         loop.run()
-        // Shutdown ends with a final checkpoint (SPEC §5.11).
+        // Shutdown ends with a final checkpoint.
         if (persistence != null) world.checkpointNow("shutdown")
       }
     ports =
@@ -491,7 +487,7 @@ class GupsServer(
         // Last, so ready() still gets the telnet port.
         listOfNotNull(docsServer?.let { "docs" to it.start() })
     val certs = prod?.tls?.tls ?: prod?.web?.tls
-    // Renewed certificates are picked up without a restart (SPEC §4.10).
+    // Renewed certificates are picked up without a restart.
     val certChecks =
       launch(Dispatchers.IO) {
         while (isActive && certs != null) {
@@ -505,7 +501,7 @@ class GupsServer(
         }
       }
     val watcher = WorldWatcher(dir)
-    // --prod changes only through deploys (SPEC §1.4, §5.10).
+    // --prod changes only through deploys.
     val watching =
       launch(Dispatchers.IO) {
         while (isActive && prod == null) {
@@ -553,10 +549,10 @@ class GupsServer(
   fun awaitStopped(): Boolean = stopped.await(shutdownTimeoutMs, TimeUnit.MILLISECONDS)
 
   companion object {
-    /** The `--dev` local instructor's account (SPEC §5.12). */
+    /** The `--dev` local instructor's account. */
     const val DEV_ACCOUNT = "instructor"
 
-    /** `--db` defaults to a hidden directory in the world, which the package scan skips (D-099). */
+    /** `--db` defaults to a hidden directory in the world, which the package scan skips. */
     fun defaultDb(dir: WorldDir): Path = dir.root.resolve(".gups").resolve("world.db")
   }
 }

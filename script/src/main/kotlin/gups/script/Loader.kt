@@ -42,9 +42,8 @@ internal val PACKAGE_GLOBALS: Map<String, Any> by lazy {
 }
 
 /**
- * The outcome of loading packages (SPEC §4.11). Loading is all-or-nothing per package: a package
- * with any error, or that depends on one that failed, is left out of [packages] and reported in
- * [errors].
+ * The outcome of loading packages. Loading is all-or-nothing per package: a package with any error,
+ * or that depends on one that failed, is left out of [packages] and reported in [errors].
  */
 class LoadResult
 internal constructor(
@@ -90,15 +89,15 @@ internal constructor(
 }
 
 /**
- * Evaluates packages into frozen prototypes (SPEC §3.4, §5.10 step 1). Loading a package also loads
- * every package it refers to by label or `load()` (D-064).
+ * Evaluates packages into frozen prototypes. Loading a package also loads every package it refers
+ * to by label or `load()`.
  */
 class ScriptLoader(
   val dir: WorldDir,
   private val limits: ScriptLimits = ScriptLimits(),
   /** Receives `print()` output from top-level code. */
   private val printSink: (String) -> Unit = {},
-  /** Plugin namespaces by id, predeclared in every package and test file (SPEC §4.15). */
+  /** Plugin namespaces by id, predeclared in every package and test file. */
   val pluginGlobals: Map<String, Any> = emptyMap(),
 ) {
   private val packageGlobals: Map<String, Any> = PACKAGE_GLOBALS + pluginGlobals
@@ -408,7 +407,7 @@ class ScriptLoader(
       } while (changed)
     }
 
-    /** Every label resolves to a declaration of the right kind (SPEC §5.10, §7.3). */
+    /** Every label resolves to a declaration of the right kind. */
     fun resolveLabels() {
       val index = HashMap<Label, RefKind>()
       for (st in live) {
@@ -444,7 +443,7 @@ class ScriptLoader(
       }
     }
 
-    /** Attribute namespaces are unique across the world, plugins' included (SPEC §3.7). */
+    /** Attribute namespaces are unique across the world, plugins' included. */
     fun checkNamespaces() {
       val owners = LinkedHashMap<String, MutableList<String>>()
       for (st in live) {
@@ -464,7 +463,7 @@ class ScriptLoader(
             )
         }
       }
-      // A plugin writes attributes in its id's namespace, so no package may own it (D-178).
+      // A plugin writes attributes in its id's namespace, so no package may own it.
       for (st in live) {
         for (ns in listOf(st.pkg.namespace) + st.pkg.sharedNamespaces) {
           if (ns in pluginGlobals)
@@ -478,7 +477,7 @@ class ScriptLoader(
       }
     }
 
-    /** Region names are world-wide, so only one package may declare each (SPEC §4.2). */
+    /** Region names are world-wide, so only one package may declare each. */
     fun checkRegions() {
       val owners = LinkedHashMap<String, MutableList<String>>()
       for (st in live) for (r in st.pkg.regions) owners.getOrPut(r.name) { mutableListOf() } +=
@@ -568,10 +567,7 @@ class ScriptLoader(
   }
 }
 
-/**
- * Engine command names and [aliases] for them, which no global command or exit may take (SPEC
- * §4.9).
- */
+/** Engine command names and [aliases] for them, which no global command or exit may take. */
 internal fun engineVerbs(aliases: CommandAliases): Set<String> =
   CommandRegistry(aliases).engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
 
@@ -595,12 +591,12 @@ private fun bindingLine(file: StarlarkFile, name: String): Int? =
     ?.startLocation
     ?.line()
 
-/** The file of a rules package whose functions the engine calls (SPEC §4.6). */
+/** The file of a rules package whose functions the engine calls. */
 internal const val RULES_FILE = "combat.star"
 
 /**
  * Public top-level functions of a rules [module] that aren't a [RulesExport], sorted. The engine
- * would never call them, so they're almost always a misspelled export (SPEC §4.6).
+ * would never call them, so they're almost always a misspelled export.
  */
 internal fun unknownRulesExports(module: Module): List<String> {
   val known = RulesExport.entries.mapTo(HashSet()) { it.scriptName }

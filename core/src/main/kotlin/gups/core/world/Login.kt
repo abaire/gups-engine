@@ -6,8 +6,8 @@ import gups.core.SessionId
 import gups.core.model.Player
 
 /**
- * Handles a session until it plays a character (SPEC §5.12). Runs on the world thread. The account
- * login of `auth` serves `--prod`; [DevLogin] serves `--dev`.
+ * Handles a session until it plays a character. Runs on the world thread. The account login of
+ * `auth` serves `--prod`; [DevLogin] serves `--dev`.
  */
 interface LoginHandler {
   fun connected(world: World, session: Session)
@@ -25,10 +25,10 @@ interface LoginHandler {
 }
 
 /**
- * The `--dev` login (SPEC §2.4, §5.12): a passwordless local instructor account that only accepts
- * connections from this machine. Each name is a character of that account: one already in the world
- * is taken over, a saved one is restored, any other is created (D-082). With a database, the
- * account is a real one, `instructor`, and [accountId] is its id (D-131).
+ * The `--dev` login: a passwordless local instructor account that only accepts connections from
+ * this machine. Each name is a character of that account: one already in the world is taken over, a
+ * saved one is restored, any other is created. With a database, the account is a real one,
+ * `instructor`, and [accountId] is its id.
  */
 class DevLogin(private val start: Label, private val accountId: Long? = null) : LoginHandler {
   override fun connected(world: World, session: Session) {
@@ -96,7 +96,7 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
 
 /**
  * Closes the connection playing [p], if any, telling it why: another login is taking the character
- * over (D-082).
+ * over.
  */
 fun World.takeOver(p: Player) {
   p.session?.let { old ->

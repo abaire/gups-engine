@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
-/** Runs every example of the HTML reference as a harness test (SPEC §4.16). */
+/** Runs every example of the HTML reference as a harness test. */
 class DocExamplesTest {
   @TestFactory
   fun `every doc example passes`(): List<DynamicTest> =

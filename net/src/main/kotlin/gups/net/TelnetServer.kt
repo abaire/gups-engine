@@ -27,15 +27,14 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** A client whose unsent output passes this many bytes is disconnected (SPEC §4.10). */
+/** A client whose unsent output passes this many bytes is disconnected. */
 const val OUTPUT_BUFFER_MAX = 256 * 1024
 
 /**
- * A telnet listener on Netty (SPEC §4.10): raw telnet, or telnet over TLS when [tls] is set, the
- * two sharing one pipeline with an optional `SslHandler` in front. All socket I/O runs on Netty's
- * event loops; the world only ever sees [ClientInputEvent]s and per-session [OutputSink]s that
- * never block it (SPEC §2.5). Option negotiation and framing stay in [TelnetConnection], byte in
- * and byte out.
+ * A telnet listener on Netty: raw telnet, or telnet over TLS when [tls] is set, the two sharing one
+ * pipeline with an optional `SslHandler` in front. All socket I/O runs on Netty's event loops; the
+ * world only ever sees [ClientInputEvent]s and per-session [OutputSink]s that never block it.
+ * Option negotiation and framing stay in [TelnetConnection], byte in and byte out.
  */
 class TelnetServer(
   private val inbox: WorldInbox,
@@ -43,7 +42,7 @@ class TelnetServer(
   private val port: Int = 4000,
   /** Shared with other listeners so session ids never collide. */
   private val sessionIds: AtomicLong = AtomicLong(1),
-  /** Telnet over TLS (SPEC §4.10); null serves raw telnet. */
+  /** Telnet over TLS; null serves raw telnet. */
   private val tls: ServerTls? = null,
 ) {
   private var boss: EventLoopGroup? = null
@@ -98,7 +97,7 @@ class TelnetServer(
     private fun enqueue(bytes: ByteArray) {
       if (closed.get() || bytes.isEmpty()) return
       if (buffered.addAndGet(bytes.size.toLong()) > OUTPUT_BUFFER_MAX) {
-        // A slow client: drop it; the character goes link-dead (SPEC §6.4).
+        // A slow client: drop it; the character goes link-dead.
         if (closed.compareAndSet(false, true)) {
           ch.close()
           inbox.submit(WorldControlEvent.Disconnect(id))

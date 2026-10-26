@@ -5,15 +5,15 @@ import gups.core.model.Band
 import gups.core.model.DoorState
 import gups.core.model.Player
 
-// GMCP payloads (SPEC §4.10). `core` builds them as plain values (String,
-// Long/Int, Boolean, List, Map, null) and the listener encodes them (SPEC §4.10). Field
+// GMCP payloads. `core` builds them as plain values (String,
+// Long/Int, Boolean, List, Map, null) and the listener encodes them. Field
 // names are lowercase.
 
-/** Packages recomputed every phase 7 and sent only when they changed (SPEC §4.10). */
+/** Packages recomputed every phase 7 and sent only when they changed. */
 private val STATE_PACKAGES =
   listOf("Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands")
 
-/** Every package the engine sends; plugin packages may not overlap them (SPEC §4.15). */
+/** Every package the engine sends; plugin packages may not overlap them. */
 val ENGINE_GMCP_PACKAGES: Set<String> =
   (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace")).toSortedSet()
 
@@ -28,7 +28,7 @@ fun World.gmcp(p: Player, pkg: String, data: Any?): Boolean {
   return true
 }
 
-/** `Comm.Channel.Text` (SPEC §4.10) to each of [to] that is a player. */
+/** `Comm.Channel.Text` to each of [to] that is a player. */
 internal fun World.channel(
   channel: String,
   talker: gups.core.model.Actor,
@@ -41,8 +41,7 @@ internal fun World.channel(
 
 /**
  * Phase 7's GMCP for one session: each state package the client supports, when its payload differs
- * from the last one this session was sent. The per-session cache is what makes the messages deltas
- * (SPEC §4.10).
+ * from the last one this session was sent. The per-session cache is what makes the messages deltas.
  */
 internal fun World.gmcpDeltas(s: Session) {
   val p = s.player ?: return
@@ -118,7 +117,7 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
       )
     }
     "Room.Bands" -> {
-      // Only the viewer's own room, from the viewer's own index (SPEC §4.10).
+      // Only the viewer's own room, from the viewer's own index.
       val bands = Band.entries.associateWith { mutableListOf<Map<String, Any?>>() }
       for (a in p.room.actors) {
         if (a === p) continue

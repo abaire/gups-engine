@@ -22,8 +22,11 @@ that differ from what the spec shows.
 - If you can't tell whether something counts, log it. A spurious entry costs a minute of
   review; a silent decision can go unnoticed for good.
 
-When you mention a decision in a code comment, cite its ID (for example `// D-005`) if it
-helps a reader find the reasoning.
+Do not link back to specific sections of the spec or cite decision IDs (such as `// D-005` or
+`SPEC §2.4`) in code comments, as they may become outdated or invalid as the specification
+evolves. Comments should explain why something is done directly without linking back to spec
+sections or decision documents. Assume the reader is familiar with Kotlin and avoid obvious
+comments.
 
 ## Building and testing
 

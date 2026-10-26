@@ -11,10 +11,10 @@ data class Violation(val entity: EntityId?, val message: String) {
   override fun toString(): String = message
 }
 
-/** Checks the state contracts of SPEC §3.8. Returns one line per violation. */
+/** Checks the state contracts. Returns one line per violation. */
 fun World.checkInvariants(): List<String> = invariantViolations().map { it.message }
 
-/** Like [checkInvariants], keeping which entity each violation is about (SPEC §6.5). */
+/** Like [checkInvariants], keeping which entity each violation is about. */
 fun World.invariantViolations(): List<Violation> {
   val out = ViolationList()
   for (e in entities.values) {

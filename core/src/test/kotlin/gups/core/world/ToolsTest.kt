@@ -51,7 +51,7 @@ class ToolsTest {
     f.input(b, "@goto :vault")
     assertContains(f.out(b), "The Vault")
     f.input(b, "@goto ann")
-    assertEquals(T.YARD, b.room.label, "any player, by default (SPEC §4.9)")
+    assertEquals(T.YARD, b.room.label, "any player, by default")
     f.input(b, "@goto hall")
     assertEquals(
       "No player or room called 'hall'.\n",

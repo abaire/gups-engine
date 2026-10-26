@@ -22,7 +22,7 @@ import gups.script.WorldPluginWiring
 import java.util.Random
 
 /**
- * Fuzz walker for the course world (SPEC §7.3 gate 4, SPEC §7.3, D-167).
+ * Fuzz walker for the course world (gate 4).
  *
  * Loads the world in the harness with bubble off and a fixed seed. Spawns one bot player per
  * changed zone, repeatedly picking random actions (movement, zone/item commands, get/drop/wear/use,

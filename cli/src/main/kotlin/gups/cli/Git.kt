@@ -7,8 +7,8 @@ import java.util.concurrent.TimeUnit
 class GitException(message: String) : Exception(message)
 
 /**
- * The `git` binary, run in [dir] (SPEC §5.10). [sshKey] is the deploy key, passed through
- * `GIT_SSH_COMMAND` for fetches. Every call blocks.
+ * The `git` binary, run in [dir]. [sshKey] is the deploy key, passed through `GIT_SSH_COMMAND` for
+ * fetches. Every call blocks.
  */
 class Git(
   private val dir: Path,
@@ -69,7 +69,7 @@ class Git(
     run("diff", "--name-only", from, to).lines().filter { it.isNotBlank() }
 
   companion object {
-    /** True if a `git` binary can be run (`--prod` needs one, SPEC §2.4). */
+    /** True if a `git` binary can be run (`--prod` needs one). */
     fun available(): Boolean =
       runCatching {
           ProcessBuilder("git", "--version").redirectErrorStream(true).start().let {

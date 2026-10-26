@@ -25,17 +25,16 @@ import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.openssl.jcajce.JcaPKCS8Generator
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
-/** TLS protocols the listener accepts (SPEC §4.10). */
+/** TLS protocols the listener accepts. */
 val TLS_PROTOCOLS = listOf("TLSv1.3", "TLSv1.2")
 
-/** How often the server looks for renewed certificate files (SPEC §4.10). */
+/** How often the server looks for renewed certificate files. */
 val CERT_CHECK_INTERVAL: Duration = Duration.ofHours(1)
 
 /**
- * The server certificate (SPEC §4.10, D-150): a PEM certificate chain and a PEM PKCS#8 private key,
- * as certbot writes them. TLS 1.2 and 1.3 only, with the JDK's default cipher suites.
- * [reloadIfChanged] picks up renewed files without a restart; connections already open keep the
- * certificate they started with.
+ * The server certificate: a PEM certificate chain and a PEM PKCS#8 private key, as certbot writes
+ * them. TLS 1.2 and 1.3 only, with the JDK's default cipher suites. [reloadIfChanged] picks up
+ * renewed files without a restart; connections already open keep the certificate they started with.
  */
 class ServerTls(val cert: Path, val key: Path) {
   @Volatile private var current: SslContext = build()

@@ -1,5 +1,5 @@
-// The GUPS web client (SPEC §4.10): log in over HTTPS, then play over a WebSocket.
-// Every frame is one JSON message (SPEC §4.10):
+// The GUPS web client: log in over HTTPS, then play over a WebSocket.
+// Every frame is one JSON message:
 //   server: {"t":"text","d":"..."} {"t":"prompt","d":"..."} {"t":"hide","d":true}
 //           {"t":"gmcp","p":"Char.Vitals","d":{...}} {"t":"error","d":"..."}
 //   client: {"t":"auth","d":token} {"t":"input","d":"..."} {"t":"gmcp","p":"Core.Supports.Set","d":[...]}
@@ -135,7 +135,7 @@ async function post(path, body) {
   }
 }
 
-// Sign-up (SPEC §4.10): check the instructor's code first, which says whether it is bound
+// Sign-up: check the instructor's code first, which says whether it is bound
 // to an account (a roster setup code) or creates one (an invite), then choose a password.
 let signupChecked = false;
 let signupBound = null;

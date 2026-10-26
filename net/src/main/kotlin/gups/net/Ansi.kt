@@ -1,6 +1,6 @@
 package gups.net
 
-/** How many colors a client can show, taken from MTTS (SPEC §4.10). */
+/** How many colors a client can show, taken from MTTS. */
 enum class ColorDepth {
   NONE,
   ANSI16,
@@ -8,7 +8,7 @@ enum class ColorDepth {
 }
 
 /**
- * Color markup in game text, rendered per client (D-087):
+ * Color markup in game text, rendered per client:
  * - `{red}` … `{white}` and `{bright_red}` … `{bright_white}` for the 16 ANSI colors,
  * - `{bold}`, `{underline}`, and `{/}` to reset,
  * - `{x0}` … `{x255}` for xterm-256 colors, downgraded to the nearest of the 16 when needed,

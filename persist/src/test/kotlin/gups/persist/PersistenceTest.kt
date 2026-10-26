@@ -87,7 +87,7 @@ class PersistenceTest {
     a.w.after(ann, 500, HookRef(Label("//t:a.star"), "_ring"), mapOf("n" to AttrValue.I(2)))
     a.w.applyAffect(ann, "blessed", 900, statDeltas = mapOf("str" to 2))
     a.run(130)
-    // Shutdown takes a final checkpoint (SPEC §5.11).
+    // Shutdown takes a final checkpoint.
     a.save()
     val pulse = a.w.pulse
     val ratId = rat.id
@@ -248,7 +248,7 @@ class PersistenceTest {
     val before = a.persistence.writer.committed
     val gem = a.w.spawnItem(P.GEM, ItemLocation.Carried(ann.id))
     a.w.moveItem(gem, ItemLocation.Carried(bob.id))
-    // The transfer is captured when its cascade ends, but held for the schedule (SPEC §5.11).
+    // The transfer is captured when its cascade ends, but held for the schedule.
     a.run(120)
     assertTrue(a.persistence.writer.flush())
     assertEquals(before, a.persistence.writer.committed, "nothing written at the first world tick")
@@ -377,11 +377,7 @@ class PersistenceTest {
 
     val second = PersistWorld(file)
     val back = second.w.actor(rat.id) as Mob
-    assertEquals(
-      listOf(setOf("no_regen")),
-      back.affects.map { it.flags },
-      "one worn affect (D-181)",
-    )
+    assertEquals(listOf(setOf("no_regen")), back.affects.map { it.flags }, "one worn affect")
     assertTrue(back.affects.single().wornFrom != null)
     second.close()
   }

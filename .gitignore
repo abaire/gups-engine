@@ -5,5 +5,5 @@ build/
 *.iml
 .DS_Store
 
-# Dev-server databases and backups (D-099)
+# Dev-server databases and backups
 .gups/

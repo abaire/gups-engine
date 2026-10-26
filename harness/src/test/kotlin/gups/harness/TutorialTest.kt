@@ -5,9 +5,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/**
- * The tutorial zone's tests are worked examples and must pass on every engine commit (SPEC §7.2).
- */
+/** The tutorial zone's tests are worked examples and must pass on every engine commit. */
 class TutorialTest {
   @Test
   fun `the tutorial zone's tests pass`() {

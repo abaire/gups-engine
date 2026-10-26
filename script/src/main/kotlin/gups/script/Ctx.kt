@@ -57,7 +57,7 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 
-/** What `ctx.deny(msg)` returns; a `before_*` hook returns it to veto (SPEC §4.4). */
+/** What `ctx.deny(msg)` returns; a `before_*` hook returns it to veto. */
 @StarlarkBuiltin(name = "denial", doc = "A veto, from ctx.deny(msg).")
 class Denial internal constructor(val message: String) : StarlarkValue {
   override fun isImmutable(): Boolean = true
@@ -77,9 +77,9 @@ internal class CtxExtras(
 )
 
 /**
- * The `ctx` handed to one hook invocation (SPEC §4.5). Created fresh per call and invalid once the
- * hook returns. Fields are read-only views; every mutation is a verb the engine validates and
- * applies at once, on the world thread.
+ * The `ctx` handed to one hook invocation. Created fresh per call and invalid once the hook
+ * returns. Fields are read-only views; every mutation is a verb the engine validates and applies at
+ * once, on the world thread.
  */
 @StarlarkBuiltin(name = "ctx", doc = "The context of one hook invocation.")
 class Ctx
@@ -1043,7 +1043,7 @@ internal constructor(
       Starlark.NONE
     }
 
-  // ---- State (SPEC §3.7) ---------------------------------------------------------------------
+  // ---- State ---------------------------------------------------------------------------------
 
   /** The stored key for [key] as written by code in the caller's package. */
   private fun attrKey(key: Any, write: Boolean, what: String, thread: StarlarkThread): String {
@@ -1195,7 +1195,7 @@ internal constructor(
   fun cancel(timerId: Any): Any =
     verb("cancel") { world.cancel(owner, int(timerId, "cancel(timer_id)").toLong()) }
 
-  // ---- Simulation (SPEC §5.9) ----------------------------------------------------------------
+  // ---- Simulation ----------------------------------------------------------------------------
 
   private fun reason(
     entity: Any,
@@ -1414,7 +1414,7 @@ internal constructor(
     printer.append("<ctx ${frame.site.hook} of ${owner.name}>")
   }
 
-  /** One line for diagnostics (SPEC §6.2). */
+  /** One line for diagnostics. */
   internal fun summary(): String = describeCtx(owner, hc)
 }
 

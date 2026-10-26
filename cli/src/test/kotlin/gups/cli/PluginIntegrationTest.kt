@@ -31,7 +31,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Plugins end to end (SPEC §4.15). */
+/** Plugins end to end. */
 class PluginIntegrationTest {
   private val zone =
     mapOf(

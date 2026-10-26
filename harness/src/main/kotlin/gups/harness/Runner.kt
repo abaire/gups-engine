@@ -16,13 +16,13 @@ import net.starlark.java.eval.StarlarkSemantics
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.syntax.Location
 
-/** Steps one test function may spend in its own code; pulses it runs don't count (D-071). */
+/** Steps one test function may spend in its own code; pulses it runs don't count. */
 const val TEST_STEPS = 10_000_000L
 
 /**
- * A `gups test` label pattern (SPEC §4.13): `//...` (everything), `//zones/...` (a package and
- * those below it), `//zones/forest` (one package), or `//zones/forest:target` where target is a
- * test file (`forest_test.star`) or one test function (`test_gate`).
+ * A `gups test` label pattern: `//...` (everything), `//zones/...` (a package and those below it),
+ * `//zones/forest` (one package), or `//zones/forest:target` where target is a test file
+ * (`forest_test.star`) or one test function (`test_gate`).
  */
 class LabelPattern(val text: String) {
   private val base: String
@@ -88,7 +88,7 @@ class TestReport(val results: List<TestResult>, val problems: List<String>) {
 
 /**
  * Runs `*_test.star` files against headless in-memory worlds with a virtual clock and seeded RNG:
- * no network, no SQLite, no wall clock (SPEC §7.2).
+ * no network, no SQLite, no wall clock.
  */
 class TestRunner(
   private val dir: WorldDir,
@@ -97,7 +97,7 @@ class TestRunner(
   private val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
   private val cache = HashMap<List<String>, LoadResult>()
 
-  /** The rules package is always loaded implicitly when the world has one (SPEC §4.12). */
+  /** The rules package is always loaded implicitly when the world has one. */
   private val implicit: List<String> = listOf("rules").filter(dir::hasPackage)
 
   private val aliases = WorldModule.read(dir).first.aliases

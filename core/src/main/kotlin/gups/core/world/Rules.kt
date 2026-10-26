@@ -6,7 +6,7 @@ import gups.core.model.ModifierPoint
 import gups.core.rules.Regen
 import gups.core.rules.RulesContext
 
-// The modifier chain (SPEC §4.6). Each modifiable rules result is the base value from the rules
+// The modifier chain. Each modifiable rules result is the base value from the rules
 // module, then the zone's package modifiers, the region modifiers sorted by region name, the
 // room's, then the actor's affects (by id) and equipped items (in slot order).
 
@@ -33,7 +33,7 @@ fun World.modifierChain(point: ModifierPoint, actor: Actor): List<Pair<String, H
   return out
 }
 
-/** The rules module's equipment slots, asked once and again after each reload (D-113). */
+/** The rules module's equipment slots, asked once and again after each reload. */
 fun World.equipmentSlots(): List<String> {
   slotCache?.let {
     return it

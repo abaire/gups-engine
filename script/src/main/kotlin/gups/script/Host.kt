@@ -55,7 +55,7 @@ internal class Site(
 /** The top-level event a cascade of nested calls belongs to. */
 internal class Root(val deadlineNanos: Long?, val limitMs: Long)
 
-/** One line of script tracing (SPEC §5.13): a call, a verb it ran, its step count, or an error. */
+/** One line of script tracing: a call, a verb it ran, its step count, or an error. */
 data class TraceEvent(
   val pulse: Long,
   /** The package the call is charged to. */
@@ -78,7 +78,7 @@ internal class Frame(
 ) : ViewScope {
   var valid = true
 
-  /** Set when a think hook enqueued an action for its own mob (SPEC §5.8). */
+  /** Set when a think hook enqueued an action for its own mob. */
   var acted = false
 
   override val pkg: String
@@ -108,13 +108,13 @@ internal sealed interface CallResult {
 }
 
 /**
- * The Starlark script host (SPEC §2.2, §4.11): runs the hooks, timers, commands, `think` and
- * `resolve` functions of the packages in [scripts]. One host serves one world.
+ * The Starlark script host: runs the hooks, timers, commands, `think` and `resolve` functions of
+ * the packages in [scripts]. One host serves one world.
  *
  * Every top-level event (a hook fired by the engine with no script running) gets a fresh step
- * budget; hooks it triggers through verbs run on their own threads but share that budget (SPEC
- * §5.6, §6.1). A failing call is logged as a diagnostic and treated as returning None (SPEC §6.2);
- * too many failures quarantine its package (SPEC §6.3).
+ * budget; hooks it triggers through verbs run on their own threads but share that budget. A failing
+ * call is logged as a diagnostic and treated as returning None; too many failures quarantine its
+ * package.
  */
 class StarlarkHost(
   scripts: LoadResult,
@@ -138,10 +138,7 @@ class StarlarkHost(
   val failedPackages: Set<String>
     get() = scripts.failed
 
-  /**
-   * The Starlark rules module of package [pkg], falling back to the built-in ruleset (SPEC §4.6,
-   * §6.3).
-   */
+  /** The Starlark rules module of package [pkg], falling back to the built-in ruleset. */
   fun rules(pkg: String = "rules"): StarlarkRules = StarlarkRules(this, pkg)
 
   override val quarantinedPackages: Set<String>
@@ -150,7 +147,7 @@ class StarlarkHost(
   /** Receives one event per script call, verb and error while set (`@trace`, `w.trace`). */
   var tracer: ((TraceEvent) -> Unit)? = null
 
-  /** Instructor and owner notifications; wired to roles in M6 (D-068). */
+  /** Instructor and owner notifications. */
   var alerts: (String) -> Unit = {}
 
   internal fun trace(site: Site, pulse: Long, text: String) {
@@ -199,7 +196,7 @@ class StarlarkHost(
     }
   }
 
-  // ---- Quarantine (SPEC §6.3) ----------------------------------------------------------------
+  // ---- Quarantine ----------------------------------------------------------------------------
 
   override fun quarantine(world: World, pkg: String, why: String) {
     if (!quarantinedSet.add(pkg)) return
@@ -242,7 +239,7 @@ class StarlarkHost(
 
   // ---- ScriptHost ----------------------------------------------------------------------------
 
-  /** The package a call on [owner] is charged to: the owner's, or else the function's (D-065). */
+  /** The package a call on [owner] is charged to: the owner's, or else the function's. */
   private fun chargeTo(owner: Entity, ref: HookRef): String =
     owner.protoLabel.pkg.takeIf { it in scripts.packages } ?: ref.file.pkg
 
@@ -259,7 +256,7 @@ class StarlarkHost(
       if (hook == HookName.ON_COMBAT_TICK && (ctx.actor ?: owner) is Actor)
         CtxExtras(targets = world.opponentsOf(ctx.actor ?: owner as Actor))
       else CtxExtras()
-    // on_wake(ctx, elapsed_pulses) takes the elapsed time as a second argument (SPEC §4.4).
+    // on_wake(ctx, elapsed_pulses) takes the elapsed time as a second argument.
     val positional: ((Frame) -> List<Any>)? =
       if (hook == HookName.ON_WAKE) {
         { f -> listOf(Ctx(f, owner, ctx, extras), sInt(ctx.elapsedPulses ?: 0)) }
@@ -310,9 +307,7 @@ class StarlarkHost(
 
   // ---- Commands, think, resolve --------------------------------------------------------------
 
-  /**
-   * A zone or global command. A failure (or quarantine) shows only "Nothing happens." (SPEC §6.2).
-   */
+  /** A zone or global command. A failure (or quarantine) shows only "Nothing happens." */
   internal fun runCommand(
     world: World,
     verb: String,
@@ -394,13 +389,13 @@ class StarlarkHost(
     )
   }
 
-  // ---- Reload (SPEC §5.10) ---------------------------------------------------------------------
+  // ---- Reload -----------------------------------------------------------------------------------
 
   /**
    * Re-evaluates the live packages plus [packages] from disk, all together, so every label still
-   * resolves (D-081). Any error keeps the old version live. On success the prototype table, hooks
-   * and global commands are swapped, live instances are reconciled, timers whose function is gone
-   * are dropped, and the reloaded packages leave quarantine.
+   * resolves. Any error keeps the old version live. On success the prototype table, hooks and
+   * global commands are swapped, live instances are reconciled, timers whose function is gone are
+   * dropped, and the reloaded packages leave quarantine.
    */
   override fun reload(world: World, packages: List<String>): ReloadResult {
     val loader =
@@ -431,8 +426,8 @@ class StarlarkHost(
   }
 
   /**
-   * Loads every package of [dir], a deploy's staging tree, and checks it as one batch (M6 design
-   * §7.2 step 4). It touches no world, so it runs off the world thread.
+   * Loads every package of [dir], a deploy's staging tree, and checks it as one batch. It touches
+   * no world, so it runs off the world thread.
    */
   fun stage(dir: WorldDir): StagedWorld {
     val packages = dir.packages()
@@ -448,8 +443,8 @@ class StarlarkHost(
   }
 
   /**
-   * Swaps a checked [staged] world in on the world thread (SPEC §5.10), as a reload does, and
-   * clears the quarantine of the [changed] packages (SPEC §5.10).
+   * Swaps a checked [staged] world in on the world thread, as a reload does, and clears the
+   * quarantine of the [changed] packages.
    */
   fun swap(world: World, staged: StagedWorld, changed: List<String>): ReloadResult {
     if (!staged.ok) return ReloadResult(false, staged.errors)
@@ -489,12 +484,12 @@ class StarlarkHost(
     return notes
   }
 
-  // ---- migrate (SPEC §3.4) --------------------------------------------------------------------
+  // ---- migrate ----------------------------------------------------------------------------------
 
   /**
    * Calls the package's `migrate(old_version, attrs)` with [entity]'s own attributes by short name,
    * and stores the dict it returns in their place. Other packages' keys are untouched. A failing
-   * migrate leaves the attributes as they were and logs a diagnostic (D-094).
+   * migrate leaves the attributes as they were and logs a diagnostic.
    */
   override fun migrate(world: World, entity: Entity, fromVersion: Int) {
     val pkg = entity.protoLabel.pkg
@@ -538,12 +533,12 @@ class StarlarkHost(
     entity.dirty = true
   }
 
-  // ---- @eval (SPEC §5.13) --------------------------------------------------------------------
+  // ---- @eval ----------------------------------------------------------------------------------
 
   /**
    * Evaluates [code] with a live ctx bound to [actor]: `ctx`, `self` and `room` are predeclared and
    * verbs change the live world. Relative labels and attribute keys belong to the package of the
-   * actor's room (D-085). Returns what to show the caller.
+   * actor's room. Returns what to show the caller.
    */
   fun eval(world: World, actor: Actor, code: String): String {
     val pkg = actor.room.label.pkg
@@ -599,8 +594,8 @@ class StarlarkHost(
    * Runs [ref] with a ctx built by [ctxOf] and keyword arguments from [kwargs]. Charges steps to
    * the current cascade, and reports failures. Engine (non-script) exceptions propagate.
    *
-   * A call with its own [budget] (a rules evaluation, SPEC §6.1) gets that many steps and the rules
-   * wall clock, whatever is running around it, and isn't charged to the cascade.
+   * A call with its own [budget] (a rules evaluation) gets that many steps and the rules wall
+   * clock, whatever is running around it, and isn't charged to the cascade.
    */
   internal fun call(
     world: World,
@@ -748,7 +743,7 @@ private fun hostOf(world: World): StarlarkHost =
   world.scripts as? StarlarkHost
     ?: error("Starlark prototypes need a StarlarkHost; this world has ${world.scripts}")
 
-/** A room or item `commands[verb]` entry (SPEC §4.4). */
+/** A room or item `commands[verb]` entry. */
 internal data class ScriptCommand(
   private val verb: String,
   private val ref: HookRef,
@@ -758,20 +753,20 @@ internal data class ScriptCommand(
     hostOf(world).runCommand(world, verb, ref, pkg, actor, args, owner)
 }
 
-/** A mob's `think` hook (SPEC §4.8). */
+/** A mob's `think` hook. */
 internal data class ScriptThink(private val ref: HookRef, private val pkg: String) : ThinkFn {
   override fun think(world: World, mob: Mob, proposals: List<Proposal>): ThinkResult =
     hostOf(world).think(world, mob, proposals, ref, pkg)
 }
 
-/** A skill's custom `resolve(ctx)` (SPEC §4.3). */
+/** A skill's custom `resolve(ctx)`. */
 internal data class ScriptResolve(private val ref: HookRef, private val pkg: String) :
   SkillResolver {
   override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?) =
     hostOf(world).resolve(world, caster, target, item, ref, pkg)
 }
 
-/** A world loaded from a deploy's staging tree (SPEC §5.10): [ok] when every package loaded. */
+/** A world loaded from a deploy's staging tree: [ok] when every package loaded. */
 class StagedWorld
 internal constructor(
   internal val result: LoadResult,
@@ -782,9 +777,6 @@ internal constructor(
     get() = errors.isEmpty()
 }
 
-/**
- * The world of the hook running on [thread], or null outside one; plugin builtins use it (SPEC
- * §4.15).
- */
+/** The world of the hook running on [thread], or null outside one; plugin builtins use it. */
 fun scriptWorld(thread: StarlarkThread): World? =
   thread.getThreadLocal(ViewScope::class.java)?.world

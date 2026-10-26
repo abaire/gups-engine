@@ -8,10 +8,10 @@ import java.sql.PreparedStatement
 import java.sql.SQLException
 import kotlin.io.path.absolutePathString
 
-/** One schema step (SPEC §5.11 startup step 1). Versions are consecutive from 1. */
+/** One schema step. Versions are consecutive from 1. */
 class Migration(val version: Int, val statements: List<String>)
 
-/** The engine's schema (SPEC §3.6). Append new migrations; never edit applied ones. */
+/** The engine's schema. Append new migrations; never edit applied ones. */
 val MIGRATIONS: List<Migration> =
   listOf(
     Migration(
@@ -35,9 +35,9 @@ val MIGRATIONS: List<Migration> =
                 stack TEXT, ctx_json TEXT, seed INTEGER, repro_json TEXT)""",
       ),
     ),
-    // Setup codes are invites bound to an account (SPEC §5.12, D-128).
+    // Setup codes are invites bound to an account.
     Migration(2, listOf("ALTER TABLE invites ADD COLUMN account_id INTEGER")),
-    // Per-account restrictions of capabilities (SPEC §4.9, D-128).
+    // Per-account restrictions of capabilities.
     Migration(
       3,
       listOf(
@@ -48,7 +48,7 @@ val MIGRATIONS: List<Migration> =
     ),
   )
 
-/** A diagnostics row (SPEC §3.6). */
+/** A diagnostics row. */
 data class DiagnosticRow(
   val id: Long = 0,
   val pulse: Long,
@@ -66,7 +66,7 @@ data class DiagnosticRow(
   val reproJson: String?,
 )
 
-/** An `item_events` row (SPEC §3.6). */
+/** An `item_events` row. */
 data class ItemEventRow(
   val itemId: Long,
   val pulse: Long,
@@ -77,8 +77,8 @@ data class ItemEventRow(
 )
 
 /**
- * The SQLite database in WAL mode (SPEC §1.5, §3.6). One instance owns one connection; the
- * checkpoint writer is the only thing that writes through it once the world runs.
+ * The SQLite database in WAL mode. One instance owns one connection; the checkpoint writer is the
+ * only thing that writes through it once the world runs.
  */
 class Database private constructor(val file: Path, private val conn: Connection) : AutoCloseable {
   val schemaVersion: Int
@@ -154,8 +154,8 @@ class Database private constructor(val file: Path, private val conn: Connection)
   fun diagnostic(id: Long): DiagnosticRow? = diagnostics().firstOrNull { it.id == id }
 
   /**
-   * Applies one checkpoint batch in a single transaction (SPEC §5.11), then completes the batch's
-   * futures: [Batch.done] and the results of its account operations.
+   * Applies one checkpoint batch in a single transaction, then completes the batch's futures:
+   * [Batch.done] and the results of its account operations.
    */
   fun write(b: Batch) {
     val results = mutableListOf<() -> Unit>()
@@ -168,8 +168,8 @@ class Database private constructor(val file: Path, private val conn: Connection)
   }
 
   /**
-   * Account changes (D-128). Conflicts are reported through results, never thrown, so a taken login
-   * can't wedge the writer.
+   * Account changes. Conflicts are reported through results, never thrown, so a taken login can't
+   * wedge the writer.
    */
   private fun writeAccounts(ops: List<AccountOp>, results: MutableList<() -> Unit>) {
     for (op in ops) {
@@ -375,20 +375,17 @@ class Database private constructor(val file: Path, private val conn: Connection)
     }
   }
 
-  /**
-   * A consistent snapshot through SQLite's online-backup API, safe while the world writes (SPEC
-   * §5.11).
-   */
+  /** A consistent snapshot through SQLite's online-backup API, safe while the world writes. */
   fun backupTo(target: Path) = backup(file, target)
 
   /**
-   * A copy of this database at [target] with nothing personal in it (SPEC §7.3, D-163): `accounts`,
-   * `session_tokens`, `invites`, `restrictions`, `diagnostics` and `item_events` emptied,
-   * characters renamed `Player1`, `Player2`, ... by id and detached from accounts.
+   * A copy of this database at [target] with nothing personal in it: `accounts`, `session_tokens`,
+   * `invites`, `restrictions`, `diagnostics` and `item_events` emptied, characters renamed
+   * `Player1`, `Player2`, ... by id and detached from accounts.
    */
   fun sanitizedCopy(target: Path): Path = sanitizedCopy(file, target)
 
-  /** The time the snapshot was taken, recorded in `meta.snapshot_taken_at` (SPEC §7.3). */
+  /** The time the snapshot was taken, recorded in `meta.snapshot_taken_at`. */
   fun snapshotTakenAt(): java.time.Instant? =
     meta()["snapshot_taken_at"]?.toLongOrNull()?.let { java.time.Instant.ofEpochSecond(it) }
 
@@ -435,7 +432,7 @@ class Database private constructor(val file: Path, private val conn: Connection)
 
     /**
      * Copies [source] to [target] via [backup] and sanitizes [target] in place without running
-     * schema migrations on [source] (SPEC §7.3, D-163, D-168).
+     * schema migrations on [source].
      */
     fun sanitizedCopy(source: Path, target: Path): Path {
       backup(source, target)

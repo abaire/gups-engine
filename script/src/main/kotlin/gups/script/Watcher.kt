@@ -7,9 +7,9 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.name
 
 /**
- * Finds changed packages for `--dev` auto-reload (SPEC §5.10). It polls file times and sizes rather
- * than using the JDK's WatchService, which polls slowly on macOS anyway (D-086). Changes are
- * reported once nothing has changed for [debounceNanos].
+ * Finds changed packages for `--dev` auto-reload. It polls file times and sizes rather than using
+ * the JDK's WatchService, which polls slowly on macOS anyway. Changes are reported once nothing has
+ * changed for [debounceNanos].
  */
 class WorldWatcher(private val dir: WorldDir, private val debounceNanos: Long = 200_000_000) {
   private var snapshot = scan()

@@ -22,9 +22,9 @@ import gups.core.world.takeOver
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 
-/** Account login settings (SPEC §2.4, §3.5, §5.12). */
+/** Account login settings. */
 data class LoginSettings(
-  /** A new login can be made at the prompt without a code (SPEC §1.7). */
+  /** A new login can be made at the prompt without a code. */
   val openSignup: Boolean = false,
   /** Characters per account; instructors and admins have no limit. */
   val maxCharacters: Int = 5,
@@ -43,11 +43,10 @@ const val LOGIN_PROMPT =
   "By what name do you wish to be known? (login, or \"new\" with an invite code) "
 
 /**
- * The account login of `--prod` (SPEC §5.12, D-129, D-130): login and password, invite and setup
- * codes, then character selection and creation. A small state machine per session on the world
- * thread. Anything that touches the [AccountService] (the database, Argon2) runs on [background],
- * and its result comes back through [post] as a [WorldControlEvent.AuthResult]; until then the
- * session's input is held.
+ * The account login of `--prod`: login and password, invite and setup codes, then character
+ * selection and creation. A small state machine per session on the world thread. Anything that
+ * touches the [AccountService] (the database, Argon2) runs on [background], and its result comes
+ * back through [post] as a [WorldControlEvent.AuthResult]; until then the session's input is held.
  */
 class AccountLogin(
   private val accounts: AccountService,
@@ -93,7 +92,7 @@ class AccountLogin(
 
   private val conns = HashMap<SessionId, Conn>()
 
-  /** Hashed for unknown logins, so a wrong login costs as much as a wrong password (SPEC §5.12). */
+  /** Hashed for unknown logins, so a wrong login costs as much as a wrong password. */
   private val dummyHash: String by lazy { accounts.hasher.hash("no account has this password") }
 
   override fun connected(world: World, session: Session) {
@@ -101,7 +100,7 @@ class AccountLogin(
     conns[session.id] = c
     world.sendSession(session, "Welcome to GUPS.")
     val proven = session.account ?: return ask(world, session, c, Step.LOGIN, LOGIN_PROMPT)
-    // A web session token already proved the account: straight to the characters (SPEC §4.10).
+    // A web session token already proved the account: straight to the characters.
     later(world, session, c, { accounts.store.byId(proven) }) { w, s, a ->
       if (a == null || a.disabled) {
         w.sendSession(
@@ -396,10 +395,7 @@ class AccountLogin(
         world.players.filter { it.accountId == a.id }.map { it.name })
       .distinctBy { it.lowercase() }
 
-  /**
-   * The account's character in the world, link-dead included: an account plays one at a time (SPEC
-   * §5.12).
-   */
+  /** The account's character in the world, link-dead included: an account plays one at a time. */
   private fun playing(world: World, a: Account): Player? =
     world.players.firstOrNull { it.accountId == a.id }
 
@@ -484,7 +480,6 @@ class AccountLogin(
     val a = c.account!!
     p.role = a.role
     p.scope = a.packages
-    // Idle quit applies to everyone below instructor (SPEC §5.12).
     p.idleExempt = a.role.atLeast(Role.INSTRUCTOR)
     conns.remove(s.id)
     world.enterGame(s, p, welcome)
@@ -540,8 +535,8 @@ class AccountLogin(
 
   /**
    * Runs [work] on [background] and [then] on the world thread with its result, holding the
-   * session's input in between (SPEC §2.5). A failure is logged and sends the session back to the
-   * start of where it was.
+   * session's input in between. A failure is logged and sends the session back to the start of
+   * where it was.
    */
   private fun <T> later(
     world: World,

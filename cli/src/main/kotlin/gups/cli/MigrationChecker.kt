@@ -15,7 +15,7 @@ import java.nio.file.Path
 import kotlinx.serialization.json.Json
 
 /**
- * Checks a PR's world against a production migration snapshot (SPEC §7.3 gate 5, D-168).
+ * Checks a PR's world against a production migration snapshot (gate 5).
  *
  * Verifies that:
  * 1. Every prototype version bump has a `migrate()` hook or is declared in `package(migrate_noop =

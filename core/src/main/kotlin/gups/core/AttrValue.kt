@@ -1,9 +1,6 @@
 package gups.core
 
-/**
- * A script-compatible attribute value (SPEC §3.2). JSON serialization arrives with persistence in
- * M4.
- */
+/** A script-compatible attribute value. */
 sealed interface AttrValue {
   data class I(val v: Long) : AttrValue
 

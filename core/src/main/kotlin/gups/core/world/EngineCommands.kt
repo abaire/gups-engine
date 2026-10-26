@@ -19,7 +19,7 @@ import gups.core.rules.RulesContext
 /** What a `silenced` actor is told when it tries to speak or cast. */
 private const val SILENCED = "You can't get the words out!"
 
-/** The engine's player commands (SPEC §4.9). Their aliases come from the world (SPEC §2.3). */
+/** The engine's player commands. Their aliases come from the world. */
 internal object EngineCommands {
   fun all(): List<CommandDef> =
     listOf(
@@ -123,7 +123,7 @@ internal object EngineCommands {
     c.world.channel("gossip", c.actor, c.args, c.world.players)
   }
 
-  /** Heard in the room and in every room whose exit toward it lets noise through (SPEC §5.7). */
+  /** Heard in the room and in every room whose exit toward it lets noise through. */
   private fun shout(c: CommandCall) {
     val w = c.world
     if (c.args.isEmpty()) return w.send(c.actor, "Shout what?")
@@ -216,7 +216,7 @@ internal object EngineCommands {
     c.world.send(c.actor, "Instant: $fast\nActions: $tick, and any exit name")
   }
 
-  /** `stop`/`clear` (SPEC §5.2): flush the queue and cancel a cast; combat and recovery stay. */
+  /** `stop`/`clear`: flush the queue and cancel a cast; combat and recovery stay. */
   private fun stop(c: CommandCall) {
     val queued = c.actor.actionQueue.size
     c.actor.actionQueue.clear()
@@ -402,7 +402,7 @@ internal object EngineCommands {
   /**
    * `wear <item>` and `wield <item>`: equips a carried item in its slot, swapping out whatever was
    * there. An item's `wear` slot may name a family such as `finger`, which fits the first free
-   * `finger_*` slot of the rules' `equipment_slots()` (D-113).
+   * `finger_*` slot of the rules' `equipment_slots()`.
    */
   private fun planWear(c: CommandCall, wield: Boolean): Action? {
     val w = c.world
@@ -509,7 +509,7 @@ internal object EngineCommands {
   private fun planDoor(c: CommandCall, verb: DoorVerb): Action? {
     if (c.args.isEmpty()) return null.also { c.world.send(c.actor, "${verb.word.cap()} what?") }
     val dir = Direction.parse(c.args)
-    // A word that isn't a door here may name a container (SPEC §3.3).
+    // A word that isn't a door here may name a container.
     if (c.actor.room.exits[dir]?.door == null) {
       val box =
         c.world.findItem(c.actor, c.args, inventory = true, ground = true)?.takeIf {
@@ -603,7 +603,7 @@ internal object EngineCommands {
   }
 }
 
-/** `kill <target>`: engages and switches the primary target (D-034). */
+/** `kill <target>`: engages and switches the primary target. */
 internal class KillAction(private val target: Actor) : Action {
   override fun validate(w: World, actor: Actor): String? =
     when {
@@ -623,8 +623,8 @@ internal class KillAction(private val target: Actor) : Action {
 }
 
 /**
- * A skill cast with the full action lifecycle (SPEC §4.3, §5.3). The target is found by
- * [targetWord] at the first validation, unless the script verb `act_cast` fixed it up front.
+ * A skill cast with the full action lifecycle. The target is found by [targetWord] at the first
+ * validation, unless the script verb `act_cast` fixed it up front.
  */
 internal class CastAction(
   override val skill: SkillProto,
@@ -647,7 +647,7 @@ internal class CastAction(
   private var target: Actor? = null
   private var targetChosen = false
 
-  /** The target of an `item` skill: carried, worn or on the ground (D-123). */
+  /** The target of an `item` skill: carried, worn or on the ground. */
   private var targetItem: Item? = null
 
   private fun chooseTarget(w: World, caster: Actor): Result<Actor?> {
@@ -789,7 +789,7 @@ internal class CastAction(
       // An enemy skill engages whatever it lands on, whatever its effects do.
       if (skill.target == TargetKind.ENEMY && each != null && each !== actor)
         w.startCombat(actor, each)
-      // Effect primitives act on actors; an item skill's work is its resolve (D-123).
+      // Effect primitives act on actors; an item skill's work is its resolve.
       if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill) }
       skill.resolve?.resolve(w, actor, each, onItem)
     }
@@ -803,7 +803,7 @@ internal class CastAction(
   }
 }
 
-/** `get <item> [from <container>]`, with lag by band from `rules.get_lag` (SPEC §5.5). */
+/** `get <item> [from <container>]`, with lag by band from `rules.get_lag`. */
 internal class GetAction(
   private val what: String,
   private val container: Item?,
@@ -917,7 +917,7 @@ fun World.findActor(viewer: Actor, keyword: String): Actor? {
   val (n, word) = ordinal(keyword)
   if (word == "self" || word == "me") return viewer
   val room = roomOf(viewer)
-  // Dormant actors are inert to simulated ones (SPEC §5.9).
+  // Dormant actors are inert to simulated ones.
   return room.actorIndex.values
     .filter { it !== viewer && isPresent(it, room) && it.matches(word) && isSimulated(it) }
     .getOrNull(n - 1)
@@ -943,7 +943,7 @@ private fun ordinal(keyword: String): Pair<Int, String> {
   return 1 to t
 }
 
-/** `look`: the room, its exits, and actors and items grouped by band (SPEC §5.5). */
+/** `look`: the room, its exits, and actors and items grouped by band. */
 fun World.describeRoom(viewer: Actor): String {
   val room = viewer.room
   val lines = mutableListOf(room.name)

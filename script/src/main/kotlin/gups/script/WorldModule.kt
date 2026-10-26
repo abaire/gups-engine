@@ -19,9 +19,9 @@ import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.SyntaxError
 
 /**
- * The world's metadata from `MODULE.gups` at the world root (SPEC §2.3): the engine and
- * `api_version` it pins, and server settings such as the checkpoint interval (D-107). Changing it
- * needs a restart; hot reload never reads it (SPEC §5.10).
+ * The world's metadata from `MODULE.gups` at the world root: the engine and `api_version` it pins,
+ * and server settings such as the checkpoint interval. Changing it needs a restart; hot reload
+ * never reads it.
  */
 data class WorldModule(
   /** The engine version the world was written for, if pinned. */
@@ -29,14 +29,11 @@ data class WorldModule(
   val apiVersion: Int = EngineInfo.API_VERSION,
   /** Minutes between routine checkpoints. */
   val checkpointMinutes: Int = DEFAULT_CHECKPOINT_MINUTES,
-  /**
-   * Where new characters start (SPEC §5.12); null means the tutorial gate, or else the first room
-   * (D-138).
-   */
+  /** Where new characters start; null means the tutorial gate, or else the first room. */
   val startRoom: Label? = null,
-  /** Plugin ids → `sha256:<hex>` checksums of `plugins/<id>.jar` (SPEC §4.15). */
+  /** Plugin ids → `sha256:<hex>` checksums of `plugins/<id>.jar`. */
   val plugins: Map<String, String> = emptyMap(),
-  /** Shorthands for engine commands, from `aliases` and `prefixes` (SPEC §2.3, §5.2). */
+  /** Shorthands for engine commands, from `aliases` and `prefixes`. */
   val aliases: CommandAliases = CommandAliases.NONE,
 ) {
   /** The checkpoint interval in pulses. */
@@ -75,7 +72,7 @@ data class WorldModule(
     val PLUGIN_ID = Regex("[a-z][a-z0-9_]*")
     val CHECKSUM = Regex("sha256:[0-9a-f]{64}")
 
-    /** Names a plugin id may not take (SPEC §4.15). */
+    /** Names a plugin id may not take. */
     val reservedPluginIds: Set<String> by lazy {
       PACKAGE_GLOBALS.keys +
         Starlark.UNIVERSE.keys +

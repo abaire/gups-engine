@@ -5,11 +5,10 @@ import gups.core.AccountStore
 import gups.core.Role
 
 /**
- * A `CODEOWNERS` file in GitHub's syntax (SPEC §3.5, D-139): each line is a path pattern and its
- * owners. A pattern owns every package whose directory, or a directory above it, it matches; for
- * each package the last matching line wins, as on GitHub, and a line without owners leaves the
- * package unowned. Only `@user` owners count: team owners and email addresses are reported as
- * [warnings].
+ * A `CODEOWNERS` file in GitHub's syntax: each line is a path pattern and its owners. A pattern
+ * owns every package whose directory, or a directory above it, it matches; for each package the
+ * last matching line wins, as on GitHub, and a line without owners leaves the package unowned. Only
+ * `@user` owners count: team owners and email addresses are reported as [warnings].
  */
 class CodeOwners private constructor(private val rules: List<Rule>, val warnings: List<String>) {
   private class Rule(val line: Int, val pattern: String, val regex: Regex, val owners: List<String>)
@@ -106,9 +105,9 @@ class CodeOwners private constructor(private val rules: List<Rule>, val warnings
 data class SyncReport(val changed: List<Account>, val warnings: List<String>)
 
 /**
- * Replaces every account's CODEOWNERS scope (SPEC §3.5): an account whose GitHub handle owns
- * packages gets them; instructors and admins are never scoped. Roles never change. Hand scope
- * (`@role`) loses any package CODEOWNERS now covers. Blocks on the store.
+ * Replaces every account's CODEOWNERS scope: an account whose GitHub handle owns packages gets
+ * them; instructors and admins are never scoped. Roles never change. Hand scope (`@role`) loses any
+ * package CODEOWNERS now covers. Blocks on the store.
  */
 fun syncScopes(store: AccountStore, owners: CodeOwners, packages: Collection<String>): SyncReport {
   val scopes = owners.scopes(packages)

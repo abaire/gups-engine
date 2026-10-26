@@ -10,7 +10,7 @@ dependencies {
 tasks.jar {
   archiveFileName = "weather.jar"
   // The service descriptor goes only into the jar, so the test classpath doesn't also
-  // offer the plugin through the parent class loader (M7.5 §6.3).
+  // offer the plugin through the parent class loader.
   from(layout.projectDirectory.dir("src/plugin"))
 }
 

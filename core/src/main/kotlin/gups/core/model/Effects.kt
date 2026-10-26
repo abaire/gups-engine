@@ -34,7 +34,7 @@ data class Dice(val count: Int, val sides: Int, val bonus: Int = 0) {
   }
 }
 
-/** The v0 effect primitives (SPEC §4.3). */
+/** The v0 effect primitives. */
 sealed interface Effect {
   data class Damage(val dice: Dice, val type: DamageType) : Effect
 
@@ -91,8 +91,8 @@ sealed interface Effect {
   }
 
   /**
-   * An effect primitive a plugin adds (SPEC §4.15). [args] holds only plain values (String, Long,
-   * Double, Boolean, null, List, Map), so prototypes still compare by value.
+   * An effect primitive a plugin adds. [args] holds only plain values (String, Long, Double,
+   * Boolean, null, List, Map), so prototypes still compare by value.
    */
   data class Plugin(val pluginId: String, val name: String, val args: Map<String, Any?>) : Effect
 }

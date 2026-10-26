@@ -16,13 +16,12 @@ import gups.core.model.RoomProto
 data class ReconcileReport(val created: List<Room>, val notes: List<String>)
 
 /**
- * Swaps in [next] after a reload (SPEC §5.10 steps 3–4) and reconciles live instances (SPEC §3.4)
- * against it.
+ * Swaps in [next] after a reload and reconciles live instances against it.
  * - **Rooms** keep their identity and contents. Their static data comes from the new prototype.
  *   Door states and exit blocks the old prototype set are taken from the new one; ones changed in
  *   play are kept.
  * - **Mobs** keep their state, except for a field still equal to its old prototype value, which
- *   takes the new value. That is the instance delta of §3.4, computed on the spot (D-080).
+ *   takes the new value. That is the instance delta, computed on the spot.
  * - **Deleted prototypes:** mobs and items on the ground are despawned. Items in a player's custody
  *   become inert tombstones. Players in a deleted room move to their recall room, or else the first
  *   room.
@@ -122,10 +121,10 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   return ReconcileReport(created, notes)
 }
 
-/** Kind of the inert items left when a carried item's prototype is deleted (SPEC §3.4). */
+/** Kind of the inert items left when a carried item's prototype is deleted. */
 const val TOMBSTONE = "tombstone"
 
-/** The inert prototype an item falls back to when its own is deleted (SPEC §3.4). */
+/** The inert prototype an item falls back to when its own is deleted. */
 fun tombstone(was: ItemProto) =
   ItemProto(
     label = was.label,
@@ -166,7 +165,7 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
   room.dirty = true
 }
 
-/** Moves [e] to prototype [version], running the package's `migrate` if it went up (SPEC §3.4). */
+/** Moves [e] to prototype [version], running the package's `migrate` if it went up. */
 fun World.upgrade(e: Entity, version: Int) {
   if (e.protoVersion < version)
     guarded("migrate of $e") { scripts.migrate(this, e, e.protoVersion) }

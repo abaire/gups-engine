@@ -1,6 +1,6 @@
 package gups.auth
 
-/** Failures that start a lockout (SPEC §5.12). */
+/** Failures that start a lockout. */
 const val LOCKOUT_FAILURES = 5
 
 /** Quiet time after which a key's failures are forgotten. */
@@ -10,9 +10,9 @@ const val FIRST_LOCKOUT_MS = 60_000L
 const val MAX_LOCKOUT_MS = 15 * 60_000L
 
 /**
- * Failed-login counting per account and per IP (SPEC §5.12, D-132). Five failures start a 1-minute
- * lockout, and each further failure doubles it, up to 15 minutes. A key's count resets after 15
- * minutes without a failure. Counts live in memory only, so a restart clears them. Thread-safe.
+ * Failed-login counting per account and per IP. Five failures start a 1-minute lockout, and each
+ * further failure doubles it, up to 15 minutes. A key's count resets after 15 minutes without a
+ * failure. Counts live in memory only, so a restart clears them. Thread-safe.
  */
 class LoginLimiter(private val clock: () -> Long = System::currentTimeMillis) {
   private class Record(var failures: Int, var lastFailure: Long, var lockedUntil: Long)
@@ -43,7 +43,7 @@ class LoginLimiter(private val clock: () -> Long = System::currentTimeMillis) {
       records.entries.removeIf { now - it.value.lastFailure > FAILURE_WINDOW_MS }
   }
 
-  /** A successful login clears the account's count; the IP's stays (D-132). */
+  /** A successful login clears the account's count; the IP's stays. */
   @Synchronized
   fun success(accountKey: String) {
     records.remove(accountKey)

@@ -19,7 +19,7 @@ import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 
-// Plugins for the plugin tests (SPEC §4.15). Each is a top-level public
+// Plugins for the plugin tests. Each is a top-level public
 // class with a no-argument constructor, so a jar's ServiceLoader descriptor can name it.
 
 /** Every extension point. */
@@ -191,7 +191,7 @@ class MisnamedPlugin : GupsPlugin {
 
 /**
  * Writes [jar] with a `META-INF/services` descriptor naming [classes] and their class files, and
- * returns its `sha256:` checksum (§5.5 chunk 5). The descriptor exists only in the jar.
+ * returns its `sha256:` checksum. The descriptor exists only in the jar.
  */
 fun buildPluginJar(jar: Path, vararg classes: KClass<out GupsPlugin>): String {
   Files.createDirectories(jar.parent)

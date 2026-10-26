@@ -10,8 +10,8 @@ import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.name
 
 /**
- * Database snapshots through the online-backup API (SPEC §5.11): hourly (keep 48), daily (keep 14),
- * and on demand. Files are named `<kind>-<UTC time>.db` in [dir] (D-097).
+ * Database snapshots through the online-backup API: hourly (keep 48), daily (keep 14), and on
+ * demand. Files are named `<kind>-<UTC time>.db` in [dir].
  */
 class Backups(
   private val db: Database,

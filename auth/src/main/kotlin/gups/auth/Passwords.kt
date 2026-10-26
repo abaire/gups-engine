@@ -7,8 +7,8 @@ import org.bouncycastle.crypto.generators.Argon2BytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
 
 /**
- * Hashes and checks passwords. Both calls are slow by design, so they never run on the world thread
- * (SPEC §2.5).
+ * Hashes and checks passwords. Both calls are slow by design, so they never run on the world
+ * thread.
  */
 interface PasswordHasher {
   /** A self-describing hash of [password], such as a PHC string. */
@@ -19,10 +19,10 @@ interface PasswordHasher {
 }
 
 /**
- * Argon2id with Bouncy Castle's pure-Java generator (SPEC §5.12): by default m = 64 MiB, t = 3, p =
- * 1, a 16-byte salt and a 32-byte hash, stored as the PHC string
- * `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>` (unpadded base64). [verify] reads the parameters
- * from the hash, so changing the defaults never locks anyone out.
+ * Argon2id with Bouncy Castle's pure-Java generator: by default m = 64 MiB, t = 3, p = 1, a 16-byte
+ * salt and a 32-byte hash, stored as the PHC string `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>`
+ * (unpadded base64). [verify] reads the parameters from the hash, so changing the defaults never
+ * locks anyone out.
  */
 class Argon2Hasher(
   val memoryKiB: Int = 65536,

@@ -14,7 +14,7 @@ import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
 
-/** The hook catalog (SPEC §4.4). Only `before_*` hooks can veto. */
+/** The hook catalog. Only `before_*` hooks can veto. */
 enum class HookName(val scriptName: String) {
   ON_LOAD("on_load"),
   ON_SPAWN("on_spawn"),
@@ -47,7 +47,7 @@ enum class HookName(val scriptName: String) {
     get() = scriptName.startsWith("before_")
 }
 
-/** Why an affect ended, for its `on_expire` (SPEC §4.4). */
+/** Why an affect ended, for its `on_expire`. */
 enum class AffectEndReason {
   /** It reached its expiry pulse. */
   EXPIRED,
@@ -55,7 +55,7 @@ enum class AffectEndReason {
   REMOVED,
 }
 
-/** The event fields of one hook invocation (SPEC §4.5). `ctx.self` is the owner. */
+/** The event fields of one hook invocation. `ctx.self` is the owner. */
 data class HookContext(
   val actor: Actor? = null,
   val target: Actor? = null,
@@ -74,7 +74,7 @@ data class HookContext(
   /** Why [affect] ended, for its `on_expire`. */
   val affectEndReason: AffectEndReason? = null,
   val elapsedPulses: Long? = null,
-  /** The perception event type for `on_nearby`, for example `say` or `enter` (SPEC §5.7). */
+  /** The perception event type for `on_nearby`, for example `say` or `enter`. */
   val event: String? = null,
   val sourceRoom: Room? = null,
   /** The listening mob's own exit leading toward the source; null for its own room. */
@@ -93,8 +93,8 @@ sealed interface HookOutcome {
 }
 
 /**
- * The script seam (SPEC §4.11), implemented by `gups.script.StarlarkHost`. The engine decides
- * dispatch order; the host runs whatever hook the owner's prototype defines, if any.
+ * The script seam, implemented by `gups.script.StarlarkHost`. The engine decides dispatch order;
+ * the host runs whatever hook the owner's prototype defines, if any.
  */
 interface ScriptHost {
   fun invokeHook(world: World, owner: Entity, hook: HookName, ctx: HookContext): HookOutcome
@@ -109,10 +109,10 @@ interface ScriptHost {
   fun hasHook(owner: Entity, hook: HookName): Boolean = true
 
   /**
-   * Runs one modifier `fn(ctx, base)` of the rules chain (SPEC §4.6) and returns its value: an
-   * `Int` for numeric points, a [gups.core.rules.Regen] for `regen`, and for `cast_allowed` null
-   * (allow) or the denial message. A failing modifier returns [base]. [source] says where the
-   * modifier comes from, for example `region:null_field`.
+   * Runs one modifier `fn(ctx, base)` of the rules chain and returns its value: an `Int` for
+   * numeric points, a [gups.core.rules.Regen] for `regen`, and for `cast_allowed` null (allow) or
+   * the denial message. A failing modifier returns [base]. [source] says where the modifier comes
+   * from, for example `region:null_field`.
    */
   fun modify(
     world: World,
@@ -124,8 +124,8 @@ interface ScriptHost {
   ): Any? = base
 
   /**
-   * Re-evaluates [packages] and swaps them into [world] (SPEC §5.10). On failure the old version
-   * stays live and the result carries the errors.
+   * Re-evaluates [packages] and swaps them into [world]. On failure the old version stays live and
+   * the result carries the errors.
    */
   fun reload(world: World, packages: List<String>): ReloadResult =
     ReloadResult(
@@ -135,11 +135,11 @@ interface ScriptHost {
 
   /**
    * Runs the package's `migrate(old_version, attrs)` for [entity], saved at prototype version
-   * [fromVersion] (SPEC §3.4). The host rewrites the package's own attributes in place.
+   * [fromVersion]. The host rewrites the package's own attributes in place.
    */
   fun migrate(world: World, entity: Entity, fromVersion: Int) = Unit
 
-  /** Packages whose scripts are disabled, saved in `zone_states` (SPEC §6.3). */
+  /** Packages whose scripts are disabled, saved in `zone_states`. */
   val quarantinedPackages: Set<String>
     get() = emptySet()
 
@@ -148,16 +148,14 @@ interface ScriptHost {
    */
   fun quarantine(world: World, pkg: String, why: String) = Unit
 
-  /** Lifts a package's quarantine (`@unquarantine`, SPEC §4.9). */
+  /** Lifts a package's quarantine (`@unquarantine`). */
   fun unquarantine(world: World, pkg: String) = Unit
 
   /** Every loaded package path, for checking `@quarantine` and `@reload` arguments. */
   val packages: Set<String>
     get() = emptySet()
 
-  /**
-   * Script steps used so far per package, ever increasing (SPEC §6.2, `gups_script_steps_total`).
-   */
+  /** Script steps used so far per package, ever increasing (`gups_script_steps_total`). */
   val stepsByPackage: Map<String, Long>
     get() = emptyMap()
 
@@ -174,11 +172,11 @@ interface ScriptHost {
 }
 
 /**
- * Fires [hook] in dispatch order (SPEC §5.6): [primary], the acting actor ([HookContext.actor]) for
- * `before_*` hooks, the room, other actors in the room by ascending id, the room's items, then the
- * items carried or equipped by [primary], the acting actor and the other actors in that order,
- * ascending id within each owner. The acting actor observes its own `on_*` events only when it is
- * [primary], but its items always do. Returns the first denial of a `before_*` hook, or null.
+ * Fires [hook] in dispatch order: [primary], the acting actor ([HookContext.actor]) for `before_*`
+ * hooks, the room, other actors in the room by ascending id, the room's items, then the items
+ * carried or equipped by [primary], the acting actor and the other actors in that order, ascending
+ * id within each owner. The acting actor observes its own `on_*` events only when it is [primary],
+ * but its items always do. Returns the first denial of a `before_*` hook, or null.
  */
 internal fun World.dispatch(
   hook: HookName,
@@ -209,7 +207,7 @@ internal fun World.dispatch(
         try {
           scripts.invokeHook(this, owner, hook, ctx)
         } catch (e: Exception) {
-          // A crashing hook behaves as if it returned None (SPEC §6.2).
+          // A crashing hook behaves as if it returned None.
           diagnose("script", "${hook.scriptName} on $owner failed: ${e.message}", e)
           HookOutcome.Allow
         }
@@ -243,8 +241,8 @@ internal fun World.invokeRef(owner: Entity, ref: HookRef, ctx: HookContext) {
 
 /**
  * Runs [block] one cascade level deeper, or drops it with a `cascade` diagnostic naming [what] and
- * returns null when the cascade is already [CASCADE_MAX_DEPTH] deep (SPEC §5.6). Every script entry
- * point goes through here, so self-only hooks and callbacks can't recurse past the limit.
+ * returns null when the cascade is already [CASCADE_MAX_DEPTH] deep. Every script entry point goes
+ * through here, so self-only hooks and callbacks can't recurse past the limit.
  */
 private inline fun <T> World.withCascadeGuard(what: String, block: () -> T): T? {
   if (cascadeDepth >= CASCADE_MAX_DEPTH) {

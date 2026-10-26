@@ -10,7 +10,7 @@ import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.QueuedAction
 
-/** Fast-lane commands run immediately; tick-lane commands queue for action pulses (SPEC §5.2). */
+/** Fast-lane commands run immediately; tick-lane commands queue for action pulses. */
 enum class Lane {
   FAST,
   TICK,
@@ -61,9 +61,9 @@ class TickCommand(
 }
 
 /**
- * A world's shorthands for engine commands, from `MODULE.gups` (SPEC §2.3): [words] maps an alias
- * such as `l` to a command name, and [prefixes] maps a single character such as `'` to the command
- * that the rest of the line is passed to.
+ * A world's shorthands for engine commands, from `MODULE.gups`: [words] maps an alias such as `l`
+ * to a command name, and [prefixes] maps a single character such as `'` to the command that the
+ * rest of the line is passed to.
  */
 data class CommandAliases(
   val words: Map<String, String> = emptyMap(),
@@ -96,9 +96,9 @@ data class CommandAliases(
 }
 
 /**
- * Verb lookup (SPEC §5.2): engine commands (with the world's aliases, including exits), global
- * commands, then the room's and nearby items' `commands`. Exact names and aliases win over unique
- * prefixes; a prefix of the names or aliases of more than one command resolves to nothing.
+ * Verb lookup: engine commands (with the world's aliases, including exits), global commands, then
+ * the room's and nearby items' `commands`. Exact names and aliases win over unique prefixes; a
+ * prefix of the names or aliases of more than one command resolves to nothing.
  */
 class CommandRegistry(
   /** The world's aliases; [CommandAliases.problems] must be empty. */
@@ -114,7 +114,7 @@ class CommandRegistry(
   private val plugins = mutableListOf<CommandDef>()
   private val moves = HashMap<Direction, TickCommand>()
 
-  /** Registers a global command, as privileged packages do with `global_command` (SPEC §4.9). */
+  /** Registers a global command, as privileged packages do with `global_command`. */
   fun registerGlobal(command: CommandDef) {
     require(!isPluginCommand(command.name)) {
       "Global command ${command.name} clashes with a plugin command"
@@ -126,8 +126,8 @@ class CommandRegistry(
   }
 
   /**
-   * Registers a plugin command (SPEC §4.15). It may not shadow an engine command, a direction, or
-   * another plugin's command; reloads keep it.
+   * Registers a plugin command. It may not shadow an engine command, a direction, or another
+   * plugin's command; reloads keep it.
    */
   fun registerPlugin(command: CommandDef) {
     for (word in listOf(command.name) + command.aliases) {
@@ -151,8 +151,8 @@ class CommandRegistry(
   fun clearGlobals() = global.clear()
 
   /**
-   * Registers a builder or instructor `@` command (SPEC §4.9) that the engine provides outside
-   * `core`, such as `@trace` and `@eval` from the script host.
+   * Registers a builder or instructor `@` command that the engine provides outside `core`, such as
+   * `@trace` and `@eval` from the script host.
    */
   fun registerTool(command: CommandDef) {
     require(command.name.startsWith("@")) { "Tool commands start with @: ${command.name}" }
@@ -189,7 +189,7 @@ class CommandRegistry(
     exact(global, v)?.let {
       return it
     }
-    // A plugin command above the actor's role doesn't exist for them (D-178).
+    // A plugin command above the actor's role doesn't exist for them.
     val usable = plugins.filter { it.allows(actor) }
     exact(usable, v)?.let {
       return it
@@ -234,7 +234,7 @@ class CommandRegistry(
           try {
             handler.run(w, actor, call.args, owner)
           } catch (e: Exception) {
-            // Players see only this for a failed zone command (SPEC §6.2).
+            // Players see only this for a failed zone command.
             w.diagnose("script", "command '$verb' on $owner failed: ${e.message}", e)
             w.send(actor, "Nothing happens.")
           }
@@ -269,7 +269,7 @@ fun World.submit(actor: Actor, line: String): Boolean {
     send(actor, "Huh?")
     return false
   }
-  // Tick-lane commands and says (never tells) feed repro bundles (SPEC §6.2).
+  // Tick-lane commands and says (never tells) feed repro bundles.
   if (def is TickCommand || def.name == "say")
     inputs += InputRecord(pulse, actor.id, actor.name, actor.room.label, line)
   when (def) {
@@ -286,10 +286,10 @@ fun World.submit(actor: Actor, line: String): Boolean {
   return true
 }
 
-/** The `act` verb: a mob issues a command line exactly as a player would (SPEC §4.5, §5.8). */
+/** The `act` verb: a mob issues a command line exactly as a player would. */
 fun World.act(mob: Mob, line: String): Boolean = submit(mob, line)
 
-/** Per-session fast-lane rate limit: capacity 20, refilling 5 tokens/s (SPEC §5.2). */
+/** Per-session fast-lane rate limit: capacity 20, refilling 5 tokens/s. */
 class TokenBucket(
   private val capacity: Double = 20.0,
   private val refillPerSecond: Double = 5.0,

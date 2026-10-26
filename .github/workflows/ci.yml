@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    # A version tag also publishes the release images (SPEC §2.2).
+    # A version tag also publishes the release images.
     tags: ["v*"]
   pull_request:
 

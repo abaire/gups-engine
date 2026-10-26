@@ -20,27 +20,27 @@ commonmark = "0.31.0"
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
 kotlin-serialization-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
-# Pure-Java Argon2id for password hashing (SPEC §5.12).
+# Pure-Java Argon2id for password hashing.
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
-# Self-signed certificates for local TLS testing (SPEC §4.10).
+# Self-signed certificates for local TLS testing.
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
-# Telnet and telnet-over-TLS listeners (SPEC §4.10); the version Ktor 3.6 uses.
+# Telnet and telnet-over-TLS listeners; the version Ktor 3.6 uses.
 netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
-# HTTPS, the web client and WebSocket (SPEC §4.10).
+# HTTPS, the web client and WebSocket.
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
 ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
-# Bazel's net.starlark.java, as packaged for Maven Central (D-060).
+# Bazel's net.starlark.java, as packaged for Maven Central.
 starlark = { module = "com.eed3si9n.starlark:starlark", version.ref = "starlark" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
-# Prometheus metrics on the admin port (SPEC §4.14).
+# Prometheus metrics on the admin port.
 micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer" }
 # Libraries such as sqlite-jdbc log through SLF4J; the CLI discards it rather than warn about a missing provider.
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
-# The headless browser test of the web client, Linux CI only (SPEC §7.1).
+# The headless browser test of the web client, Linux CI only.
 selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
-# The changelog and plugin guide in the HTML reference (SPEC §4.16).
+# The changelog and plugin guide in the HTML reference.
 commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }

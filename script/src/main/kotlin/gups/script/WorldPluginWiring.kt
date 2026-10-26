@@ -2,7 +2,7 @@ package gups.script
 
 import gups.core.world.World
 
-/** What the script layer needs from the world's plugins; `:plugin-api` implements it (M7.4). */
+/** What the script layer needs from the world's plugins; `:plugin-api` implements it. */
 interface WorldPluginWiring {
   /** Plugin namespaces by id, predeclared in every package and test file. */
   val globals: Map<String, Any>

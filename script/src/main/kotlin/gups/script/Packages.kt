@@ -18,8 +18,8 @@ import kotlin.io.path.name
 import kotlin.io.path.readText
 
 /**
- * A course world on disk (SPEC §2.3). Every directory under [root] that holds a `package.star` is a
- * package, addressed by its relative path: `//zones/forest`.
+ * A course world on disk. Every directory under [root] that holds a `package.star` is a package,
+ * addressed by its relative path: `//zones/forest`.
  */
 class WorldDir(root: Path) {
   val root: Path = root.toAbsolutePath().normalize()
@@ -71,7 +71,7 @@ class WorldDir(root: Path) {
   }
 }
 
-/** Package kinds (SPEC §2.3). Only `lib` and `rules` packages are privileged. */
+/** Package kinds. Only `lib` and `rules` packages are privileged. */
 enum class PackageKind(val word: String, val privileged: Boolean) {
   ZONE("zone", false),
   LIB("lib", true),
@@ -84,8 +84,8 @@ enum class PackageKind(val word: String, val privileged: Boolean) {
 }
 
 /**
- * Why a package failed to load (SPEC §1.3, §5.10). [file], [line] and [column] point at the
- * offending code when there is one; [snippet] is that source line with a caret under it.
+ * Why a package failed to load. [file], [line] and [column] point at the offending code when there
+ * is one; [snippet] is that source line with a caret under it.
  */
 data class LoadError(
   val pkg: String,
@@ -111,7 +111,7 @@ data class LoadError(
 /** Where a Starlark module came from. Set as the module's client data. */
 internal data class FileInfo(val label: Label, val pkg: String, val test: Boolean = false)
 
-/** A `global_command` registered by a privileged package (SPEC §4.9). */
+/** A `global_command` registered by a privileged package. */
 data class GlobalCommandDecl(val name: String, val fn: HookRef, val lane: Lane, val pkg: String)
 
 /** Everything one package declared. Built while the package evaluates, then read-only. */
@@ -131,11 +131,11 @@ class ScriptPackage internal constructor(val path: String) {
   var sharedNamespaces: List<String> = emptyList()
     internal set
 
-  /** Modifiers that apply in every room of the package (SPEC §4.6). */
+  /** Modifiers that apply in every room of the package. */
   var modifiers: Modifiers = emptyMap()
     internal set
 
-  /** Attribute namespace: the last path segment (SPEC §3.7). */
+  /** Attribute namespace: the last path segment. */
   val namespace: String
     get() = path.substringAfterLast('/')
 
@@ -147,18 +147,18 @@ class ScriptPackage internal constructor(val path: String) {
   internal val commandList = mutableListOf<GlobalCommandDecl>()
   internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
 
-  /** Declaration names, unique across kinds within the package (SPEC §2.3). */
+  /** Declaration names, unique across kinds within the package. */
   internal val names = HashSet<String>()
 
-  /** The package's `migrate(old_version, attrs)`, if one of its files defines it (SPEC §3.4). */
+  /** The package's `migrate(old_version, attrs)`, if one of its files defines it. */
   var migrate: HookRef? = null
     internal set
 
-  /** Expected tombstones declared for this package (SPEC §7.3, D-070). */
+  /** Expected tombstones declared for this package. */
   var expectedTombstones: List<Label> = emptyList()
     internal set
 
-  /** Labels whose version bumped without requiring a `migrate()` function (SPEC §7.3). */
+  /** Labels whose version bumped without requiring a `migrate()` function. */
   var migrateNoop: List<Label> = emptyList()
     internal set
 

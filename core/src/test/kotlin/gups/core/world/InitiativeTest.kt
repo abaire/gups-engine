@@ -115,7 +115,7 @@ class InitiativeTest {
     rules.initiative = mapOf("Ann" to 20, "a goblin" to 30)
     f.input(p, "flee")
     f.w.act(g, "cast zap ann")
-    f.run() // pulse 16: the new roll must order this action pulse (D-002)
+    f.run() // pulse 16: the new roll must order this action pulse
     assertEquals(45, p.hp, "the goblin acted before Ann's flee")
   }
 
@@ -128,7 +128,7 @@ class InitiativeTest {
     f.run()
     var covered: List<Boolean> = emptyList()
     f.w.runTiers(listOf(p)) { covered = listOf(p, near, far).map { f.w.snapshot!!.covers(it) } }
-    assertEquals(listOf(true, true, false), covered, "the dormant rat isn't recorded (D-003)")
+    assertEquals(listOf(true, true, false), covered, "the dormant rat isn't recorded")
     assertEquals(far.room, f.w.roomOf(far), "an unrecorded actor reads its live state")
   }
 

@@ -10,7 +10,7 @@ import gups.core.model.MobProto
 import gups.core.model.Player
 import gups.core.model.Room
 
-// Rebuilding saved state into a world made with a restoring Boot (SPEC §5.11 startup). These
+// Rebuilding saved state into a world made with a restoring Boot. These
 // fire no hooks: restored entities already exist; `on_load` fires once restoring is done.
 
 private fun World.claim(id: EntityId) {
@@ -81,7 +81,7 @@ fun World.restoreItem(id: EntityId, proto: ItemProto, at: ItemLocation, count: I
         "${a.name} already wears something in ${at.slot}"
       }
       a.equipmentIndex[at.slot] = item
-      // Untimed equip affects aren't saved; they are rebuilt from what is worn (D-181).
+      // Untimed equip affects aren't saved; they are rebuilt from what is worn.
       applyEquipAffects(a, item)
     }
     is ItemLocation.Contained -> {

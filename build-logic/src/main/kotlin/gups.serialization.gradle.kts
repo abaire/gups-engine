@@ -1,4 +1,4 @@
-// kotlinx.serialization for modules that write JSON payloads (SPEC §1.5).
+// kotlinx.serialization for modules that write JSON payloads.
 
 plugins {
   id("gups.kotlin-module")

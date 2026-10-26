@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
-/** Where deploys come from (SPEC §2.4, §5.10). */
+/** Where deploys come from. */
 class DeploySettings(
   /** The remote to fetch from: a URL, or null for the working tree's `origin`. */
   val repository: String? = null,
@@ -31,11 +31,11 @@ class DeploySettings(
 private class Refused(message: String) : Exception(message)
 
 /**
- * The production deploy pipeline (SPEC §5.10, D-162). One deploy at a time, on a thread of its own:
- * fetch, pick and check the commit, find the changed packages, take a `predeploy` snapshot, check
- * out and load the commit in a staging tree, then swap it in on the world thread. Only after the
- * swap does the live working tree move to the commit; then `meta.world_commit` is set, CODEOWNERS
- * synced and a checkpoint taken.
+ * The production deploy pipeline. One deploy at a time, on a thread of its own: fetch, pick and
+ * check the commit, find the changed packages, take a `predeploy` snapshot, check out and load the
+ * commit in a staging tree, then swap it in on the world thread. Only after the swap does the live
+ * working tree move to the commit; then `meta.world_commit` is set, CODEOWNERS synced and a
+ * checkpoint taken.
  */
 class Deployer(
   private val worldDir: Path,
@@ -104,7 +104,7 @@ class Deployer(
         runCatching { git.commit(commit) }
           .getOrElse { throw Refused("$commit is not on ${settings.branch}.") }
       }
-    // Any commit deployed must be on the deploy branch (SPEC §5.10).
+    // Any commit deployed must be on the deploy branch.
     if (!git.isAncestor(target, tip)) throw Refused("$target is not on ${settings.branch}.")
     val dirty = git.dirtyFiles()
     if (dirty.isNotEmpty())
@@ -112,7 +112,7 @@ class Deployer(
     val from = persistence.worldCommit ?: git.head()
     if (target == from) progress("$target is already live; reloading it anyway.")
     val files = git.changedFiles(from, target)
-    // An engine upgrade needs a restart with the new image (SPEC §5.10).
+    // An engine upgrade needs a restart with the new image.
     if ("MODULE.gups" in files)
       throw Refused(
         "MODULE.gups changed between $from and $target: that needs a restart with the matching engine."
@@ -171,7 +171,7 @@ class Deployer(
     }
   }
 
-  /** A failed deploy: the world is unchanged; instructors and `@errors` hear why (SPEC §5.10). */
+  /** A failed deploy: the world is unchanged; instructors and `@errors` hear why. */
   private fun failed(commit: String?, errors: List<String>): DeployOutcome {
     log("Deploy of ${commit ?: "the branch tip"} failed: ${errors.joinToString("; ")}")
     post(

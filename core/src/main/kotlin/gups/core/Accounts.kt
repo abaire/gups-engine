@@ -1,8 +1,8 @@
 package gups.core
 
 /**
- * An account (SPEC §3.5, §3.6 `accounts`). It has one role, since the higher roles imply the lower.
- * [pwHash] is a PHC string, or null until the owner redeems a setup code.
+ * An account. It has one role, since the higher roles imply the lower. [pwHash] is a PHC string, or
+ * null until the owner redeems a setup code.
  */
 data class Account(
   val id: Long,
@@ -10,9 +10,9 @@ data class Account(
   val login: String,
   val pwHash: String?,
   val role: Role = Role.PLAYER,
-  /** Packages a builder may change, from CODEOWNERS; every sync replaces it (SPEC §3.5). */
+  /** Packages a builder may change, from CODEOWNERS; every sync replaces it. */
   val scope: List<String> = emptyList(),
-  /** Packages given by hand with `@role`, for packages CODEOWNERS doesn't cover (D-140). */
+  /** Packages given by hand with `@role`, for packages CODEOWNERS doesn't cover. */
   val manualScope: List<String> = emptyList(),
   val githubHandle: String? = null,
   val disabled: Boolean = false,
@@ -24,7 +24,7 @@ data class Account(
     get() = (scope + manualScope).toSortedSet()
 }
 
-/** Capabilities an instructor can take away from one account (SPEC §4.9). */
+/** Capabilities an instructor can take away from one account. */
 object Capabilities {
   const val GOTO_PLAYER = "goto_player"
   val ALL: List<String> =
@@ -32,8 +32,8 @@ object Capabilities {
 }
 
 /**
- * One restriction of one capability on one account (SPEC §4.9, §3.6 `restrictions`). Times are
- * wall-clock milliseconds, so restrictions run out while the server is down.
+ * One restriction of one capability on one account. Times are wall-clock milliseconds, so
+ * restrictions run out while the server is down.
  */
 data class Restriction(
   val id: Long,
@@ -51,8 +51,8 @@ data class Restriction(
 }
 
 /**
- * An invite or setup code (SPEC §3.6 `invites`). Only the code's hash is stored. A setup code is an
- * invite bound to an existing account (SPEC §5.12).
+ * An invite or setup code. Only the code's hash is stored. A setup code is an invite bound to an
+ * existing account.
  */
 data class Invite(
   val codeHash: String,
@@ -66,8 +66,8 @@ data class Invite(
 )
 
 /**
- * Account storage (SPEC §3.5), implemented by `persist` and used by `auth`. Every call may block on
- * the database, so none may run on the world thread. A write returns once it is committed, so an
+ * Account storage, implemented by `persist` and used by `auth`. Every call may block on the
+ * database, so none may run on the world thread. A write returns once it is committed, so an
  * account change survives a crash right after it.
  */
 interface AccountStore {
@@ -90,7 +90,7 @@ interface AccountStore {
    */
   fun update(account: Account)
 
-  /** Sets or clears an account's password and revokes its web session tokens (SPEC §5.12). */
+  /** Sets or clears an account's password and revokes its web session tokens. */
   fun setPassword(id: Long, pwHash: String?)
 
   fun addInvite(invite: Invite)
@@ -112,10 +112,7 @@ interface AccountStore {
   /** Lifts restriction [id]. */
   fun liftRestriction(id: Long, by: Long?, at: Long)
 
-  /**
-   * Stores a web session token's hash (SPEC §3.6 `session_tokens`), dropping those expired at wall
-   * time [now].
-   */
+  /** Stores a web session token's hash, dropping those expired at wall time [now]. */
   fun addToken(tokenHash: String, accountId: Long, expiresAt: Long, now: Long)
 
   /** The account of an unexpired token hash at wall time [now], or null. */
@@ -125,14 +122,14 @@ interface AccountStore {
   fun removeToken(tokenHash: String)
 }
 
-/** A web login's outcome (SPEC §4.10). [status] is the HTTP status to answer with. */
+/** A web login's outcome. [status] is the HTTP status to answer with. */
 sealed interface WebLogin {
   data class Ok(val token: String, val expiresAt: Long, val accountId: Long) : WebLogin
 
   data class Refused(val status: Int, val message: String) : WebLogin
 }
 
-/** What a sign-up code is good for (SPEC §4.10). */
+/** What a sign-up code is good for. */
 sealed interface CodeCheck {
   /**
    * A usable code: [login] is the account a setup code sets up, or null when the new account's
@@ -144,11 +141,11 @@ sealed interface CodeCheck {
 }
 
 /**
- * What the web listener needs from accounts (SPEC §4.10), implemented by `auth` so `net` depends
- * only on `core`. Every call may hash or block on the database, so never on the world thread.
+ * What the web listener needs from accounts, implemented by `auth` so `net` depends only on `core`.
+ * Every call may hash or block on the database, so never on the world thread.
  */
 interface WebAccounts {
-  /** Checks a password, rate-limited like telnet (SPEC §5.12), and issues a 30-day token. */
+  /** Checks a password, rate-limited like telnet, and issues a 30-day token. */
   fun login(login: String, password: String, remote: String): WebLogin
 
   /**
@@ -158,8 +155,8 @@ interface WebAccounts {
   fun checkCode(code: String, remote: String): CodeCheck
 
   /**
-   * Redeems an instructor's one-time code (SPEC §5.12, §4.10): a setup code sets its account's
-   * password, an invite creates [login] (ignored for setup codes). Then a token, as [login] gives.
+   * Redeems an instructor's one-time code: a setup code sets its account's password, an invite
+   * creates [login] (ignored for setup codes). Then a token, as [login] gives.
    */
   fun signup(code: String, login: String?, password: String, remote: String): WebLogin
 

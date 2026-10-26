@@ -8,14 +8,14 @@ import gups.core.model.ItemLocation
 import gups.core.model.Player
 
 /**
- * The persistence seam (SPEC §2.2, §5.11), implemented by the `persist` module. Every call comes
- * from the world thread and must not block it: capture serializes, a writer elsewhere commits.
+ * The persistence seam, implemented by the `persist` module. Every call comes from the world thread
+ * and must not block it: capture serializes, a writer elsewhere commits.
  */
 interface Persistence {
   /**
    * Captures dirty state. A routine capture is written at once. An [immediate] one (an ownership
    * change, a level-up, character creation, quit) is held and written with the next routine one, so
-   * both sides of a transfer always land together (SPEC §5.11).
+   * both sides of a transfer always land together.
    */
   fun checkpoint(world: World, cause: String, immediate: Boolean)
 
@@ -27,10 +27,7 @@ interface Persistence {
   /** Records a diagnostic in the diagnostics table, with a repro bundle for script errors. */
   fun diagnostic(world: World, d: Diagnostic) = Unit
 
-  /**
-   * Non-null while new logins must be refused, for example while the database is unwritable (SPEC
-   * §6.4).
-   */
+  /** Non-null while new logins must be refused, for example while the database is unwritable. */
   val maintenance: String?
     get() = null
 
@@ -44,13 +41,13 @@ interface Persistence {
   fun savedCharacter(name: String): SavedCharacter? = null
 
   /**
-   * Account storage (SPEC §3.5), or null when this persistence keeps no accounts. Its calls block,
-   * so the world thread never makes them.
+   * Account storage, or null when this persistence keeps no accounts. Its calls block, so the world
+   * thread never makes them.
    */
   val accounts: AccountStore?
     get() = null
 
-  /** Batches waiting for the database writer, for `@stats` (SPEC §4.9). */
+  /** Batches waiting for the database writer, for `@stats`. */
   val backlog: Int
     get() = 0
 
@@ -87,7 +84,7 @@ data class ItemHistory(
 /** A saved character's exact name and owning account. */
 data class SavedCharacter(val name: String, val accountId: Long?)
 
-/** One custody change of an item involving a player, for the `item_events` audit (SPEC §3.6). */
+/** One custody change of an item involving a player, for the `item_events` audit. */
 data class ItemEvent(
   val item: EntityId,
   val pulse: Long,
@@ -96,7 +93,7 @@ data class ItemEvent(
   val cause: String,
 )
 
-/** A tick-lane command or `say` since the last checkpoint, for repro bundles (SPEC §6.2). */
+/** A tick-lane command or `say` since the last checkpoint, for repro bundles. */
 data class InputRecord(
   val pulse: Long,
   val actor: EntityId,

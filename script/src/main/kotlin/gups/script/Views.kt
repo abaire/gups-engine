@@ -26,7 +26,7 @@ import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 
-// Read-only views of live entities (SPEC §4.5). Scripts never hold an entity directly: every
+// Read-only views of live entities. Scripts never hold an entity directly: every
 // mutation goes through a ctx verb. A view reads the entity's current state on each access.
 
 /** Where views come from: a hook's ctx (valid only while the hook runs) or the harness. */
@@ -61,7 +61,7 @@ fun view(scope: ViewScope, e: Entity?): Any =
 
 /**
  * Attributes as a reader in package [pkg] sees them: its own keys by short name, everyone else's by
- * full `namespace:key` name (SPEC §3.7).
+ * full `namespace:key` name.
  */
 internal fun readableAttrs(e: Entity, pkg: String?): Dict<String, Any> {
   val own = pkg?.substringAfterLast('/')
@@ -481,7 +481,7 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun statDeltas(): Any = read { sDict(item.proto.statDeltas.mapValues { sInt(it.value) }) }
 }
 
-/** Where an item is (SPEC §3.3). */
+/** Where an item is. */
 @StarlarkBuiltin(
   name = "location",
   doc = "Where an item is: kind is 'room', 'carried', 'equipped' or 'contained'.",
@@ -654,7 +654,7 @@ class ProposalView internal constructor(val proposal: Proposal) : StarlarkValue 
   override fun isImmutable(): Boolean = true
 }
 
-/** The seeded world RNG (SPEC §4.5). There is no other source of randomness. */
+/** The seeded world RNG. There is no other source of randomness. */
 @StarlarkBuiltin(name = "rng", doc = "The seeded, deterministic random number generator.")
 class RngView internal constructor(private val scope: ViewScope) : StarlarkValue {
   @StarlarkMethod(

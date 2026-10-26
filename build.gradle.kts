@@ -1,6 +1,6 @@
 plugins { id("gups.ktfmt") }
 
-// Module dependency rules (SPEC §2.2). The `checkModuleGraph` task fails the build if any
+// Module dependency rules. The `checkModuleGraph` task fails the build if any
 // module declares a project dependency that is not listed here. `cli` is the only module
 // that wires everything together, so it is unrestricted.
 val allowedModuleDeps: Map<String, Set<String>?> =
@@ -13,14 +13,14 @@ val allowedModuleDeps: Map<String, Set<String>?> =
     ":harness" to setOf(":core", ":script"),
     ":plugin-api" to setOf(":core", ":script"),
     ":webclient" to emptySet(),
-    // Samples prove the plugin facade is enough (SPEC §2.2).
+    // Samples prove the plugin facade is enough.
     ":samples:weather-plugin" to setOf(":plugin-api"),
     ":cli" to null,
   )
 
 evaluationDependsOnChildren()
 
-// Nested projects such as :samples:weather-plugin aren't direct children (D-179).
+// Nested projects such as :samples:weather-plugin aren't direct children.
 subprojects.filter { it.parent != rootProject }.forEach { evaluationDependsOn(it.path) }
 
 /** Projects with a build file; Gradle's implicit `:samples` has none, and no `check` task. */
@@ -41,7 +41,7 @@ val declaredModuleDeps: Map<String, Set<String>> =
 val checkModuleGraph =
   tasks.register("checkModuleGraph") {
     group = "verification"
-    description = "Verifies that module dependencies follow the SPEC §2.2 rules."
+    description = "Verifies that module dependencies follow the module dependency rules."
     val declared = declaredModuleDeps
     val allowed = allowedModuleDeps
     inputs.property("declared", declared.mapValues { it.value.toList() })

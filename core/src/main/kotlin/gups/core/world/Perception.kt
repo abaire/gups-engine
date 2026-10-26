@@ -8,7 +8,7 @@ import gups.core.model.Mob
 import gups.core.model.Room
 import gups.core.model.Sense
 
-// Adjacent-room perception (SPEC §5.7). Events are queued as they happen and delivered to
+// Adjacent-room perception. Events are queued as they happen and delivered to
 // listening mobs' `on_nearby` in phase 5 of the pulse.
 
 /**
@@ -55,11 +55,11 @@ internal fun World.inbound(room: Room): List<Pair<Room, Exit>> {
 }
 
 /**
- * Phase 5 (SPEC §5.1, §5.7): delivers this pulse's events to simulated mobs that have an
- * `on_nearby` hook. A mob hears events in its own room (with no `via_exit`), and in rooms its own
- * exits lead to when its sense for the channel reaches 1 and that exit's effective blocks let the
- * channel through. Events of one type from one room reach a mob at most once a pulse. Events raised
- * by the hooks themselves are delivered the next pulse (D-120).
+ * Phase 5: delivers this pulse's events to simulated mobs that have an `on_nearby` hook. A mob
+ * hears events in its own room (with no `via_exit`), and in rooms its own exits lead to when its
+ * sense for the channel reaches 1 and that exit's effective blocks let the channel through. Events
+ * of one type from one room reach a mob at most once a pulse. Events raised by the hooks themselves
+ * are delivered the next pulse.
  */
 internal fun World.deliverPerceptions() {
   if (perceptions.isEmpty()) return

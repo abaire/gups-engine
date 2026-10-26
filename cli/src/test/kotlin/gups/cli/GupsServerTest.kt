@@ -142,12 +142,11 @@ class GupsServerTest {
         db = null,
         prod = ProdOptions("127.0.0.1", shutdownTimeoutMs = 200),
       )
-    // Never run, so the final checkpoint never finishes: the wait gives up after 200 ms, not the
-    // old fixed 30 s (D-010).
+    // Never run, so the final checkpoint never finishes: the wait gives up after 200 ms.
     val started = System.nanoTime()
     assertTrue(!server.awaitStopped(), "a server that never ran can't have stopped")
     val waitedMs = (System.nanoTime() - started) / 1_000_000
-    assertTrue(waitedMs in 150..5_000, "waited $waitedMs ms for a 200 ms shutdown timeout (D-010)")
+    assertTrue(waitedMs in 150..5_000, "waited $waitedMs ms for a 200 ms shutdown timeout")
   }
 
   @Test

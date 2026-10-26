@@ -7,7 +7,6 @@ dependencies {
 }
 
 tasks.test {
-  // The crash test kills child JVMs; -Dgups.crashIterations=300 runs the full "hundreds" (SPEC
-  // §7.1).
+  // The crash test kills child JVMs; -Dgups.crashIterations=300 runs the full "hundreds".
   systemProperty("gups.crashIterations", System.getProperty("gups.crashIterations") ?: "20")
 }

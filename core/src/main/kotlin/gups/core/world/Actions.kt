@@ -10,8 +10,8 @@ import gups.core.model.QueuedAction
 import gups.core.model.SkillProto
 
 /**
- * One tick-lane action (SPEC §5.3). The world drives the lifecycle: [validate], [veto], an optional
- * warmup, re-validation, [resolve], and recovery.
+ * One tick-lane action. The world drives the lifecycle: [validate], [veto], an optional warmup,
+ * re-validation, [resolve], and recovery.
  */
 interface Action {
   /** Pulses spent casting before [resolve]; 0 means instant. */
@@ -90,7 +90,7 @@ private fun World.finish(actor: Actor, action: Action) {
   actor.dirty = true
 }
 
-/** Breaks [actor]'s cast: no cost is paid and half the lag applies (SPEC §5.3). */
+/** Breaks [actor]'s cast: no cost is paid and half the lag applies. */
 fun World.interruptCast(actor: Actor) {
   val cast = actor.casting ?: return
   actor.casting = null
@@ -107,7 +107,7 @@ internal fun World.cancelCast(actor: Actor): Boolean {
   return true
 }
 
-// ---- Mob AI (SPEC §4.7, §5.8) ----------------------------------------------------------------
+// ---- Mob AI ---------------------------------------------------------------------------------
 
 /**
  * One behavior's suggestion for this think cycle. [commandLine] describes it (and is what runs when

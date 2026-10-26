@@ -1,6 +1,6 @@
 package gups.core
 
-// Time and capacity constants (SPEC §3.1). Game time is the pulse counter.
+// Time and capacity constants. Game time is the pulse counter.
 
 const val PULSE_MS = 250L
 const val COMBAT_ROUND_PULSES = 8 // 2.0 s

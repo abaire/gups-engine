@@ -1,4 +1,4 @@
-# Course world CODEOWNERS (SPEC §2.3).
+# Course world CODEOWNERS.
 # IMPORTANT: Replace @CHANGE_ME_INSTRUCTOR with the instructor's GitHub account or team.
 # Changing core rules, shared libraries, skills or world settings needs instructor review.
 /MODULE.gups @CHANGE_ME_INSTRUCTOR

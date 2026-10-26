@@ -20,13 +20,13 @@ import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkValue
 
-// The rules module (SPEC §4.6, §6.3): `//rules:combat.star` exports one function per rules call.
+// The rules module: `//rules:combat.star` exports one function per rules call.
 // A missing export, an error, or a rules package that failed to load falls back to the built-in
 // Kotlin ruleset for that call, and combat keeps working.
 
 /**
- * The read-only `ctx` of a rules function or modifier (SPEC §4.6). It has the call's fields and
- * `rng`, and `deny` for `cast_allowed`; it has no verbs.
+ * The read-only `ctx` of a rules function or modifier. It has the call's fields and `rng`, and
+ * `deny` for `cast_allowed`; it has no verbs.
  */
 @StarlarkBuiltin(name = "rules_ctx", doc = "The read-only context of a rules call or modifier.")
 class RulesCtx internal constructor(private val frame: Frame, private val c: RulesContext) :
@@ -206,9 +206,9 @@ internal fun StarlarkHost.runModifier(
 }
 
 /**
- * The Starlark rules module: calls the functions `//<pkg>:combat.star` exports (SPEC §4.6). Any
- * export it lacks, and any call that fails, uses [fallback], the built-in Kotlin ruleset (SPEC
- * §6.3). Bound to its world by [StarlarkHost.install].
+ * The Starlark rules module: calls the functions `//<pkg>:combat.star` exports. Any export it
+ * lacks, and any call that fails, uses [fallback], the built-in Kotlin ruleset. Bound to its world
+ * by [StarlarkHost.install].
  */
 class StarlarkRules(
   private val host: StarlarkHost,
@@ -284,7 +284,7 @@ class StarlarkRules(
     return converted
   }
 
-  /** Loud, but at most once a minute of game time per function (SPEC §6.3). */
+  /** Loud, but at most once a minute of game time per function. */
   private fun alert(w: World, name: String, message: String) {
     val last = lastAlert[name]
     if (last != null && w.pulse - last < host.limits.quarantineWindowPulses) return
@@ -424,7 +424,7 @@ class StarlarkRules(
   override fun fleeFailLag(c: RulesContext): Int = fallback.fleeFailLag(c)
 }
 
-/** The functions `//rules:combat.star` may export (SPEC §4.6). [RULES_EXPORTS] documents each. */
+/** The functions `//rules:combat.star` may export. [RULES_EXPORTS] documents each. */
 enum class RulesExport(val scriptName: String) {
   EQUIPMENT_SLOTS("equipment_slots"),
   TO_HIT("to_hit"),
@@ -445,7 +445,7 @@ enum class RulesExport(val scriptName: String) {
   ON_PLAYER_DEATH("on_player_death"),
 }
 
-/** The docs of every [RulesExport] (SPEC §4.6, M7.1). */
+/** The docs of every [RulesExport]. */
 internal val RULES_EXPORTS: List<RulesExportSpec> =
   listOf(
     RulesExportSpec(
@@ -594,7 +594,7 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
     ),
   )
 
-/** The modifier points in the rules modifier chain (SPEC §4.6, M7.1). */
+/** The modifier points in the rules modifier chain. */
 internal val MODIFIER_POINTS: List<ModifierPointSpec> =
   listOf(
     ModifierPointSpec(

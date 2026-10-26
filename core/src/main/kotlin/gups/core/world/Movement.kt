@@ -8,7 +8,7 @@ import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.RulesContext
 
-// Room transitions and the tactical track (SPEC §5.5).
+// Room transitions and the tactical track.
 
 /** The arrival index for [exit] in [to]: `-1` maps to the back; clamped to the track. */
 fun entryIndexFor(exit: Exit, to: Room): Int =
@@ -67,7 +67,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
 internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
   val from = roomOf(actor)
   val to = room(from.exits.getValue(dir).to)
-  // Guards are built-in before_exit observers (SPEC §4.7).
+  // Guards are built-in before_exit observers.
   return guardDenial(actor, from, dir)
     ?: dispatch(
       HookName.BEFORE_EXIT,

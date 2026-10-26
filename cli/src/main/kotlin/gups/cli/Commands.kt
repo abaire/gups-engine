@@ -66,7 +66,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** Builds the `gups` command tree (SPEC §4.13). */
+/** Builds the `gups` command tree. */
 fun gupsCommand(): CliktCommand =
   Gups()
     .subcommands(
@@ -302,7 +302,7 @@ class Serve : CliktCommand(name = "serve") {
     }
   }
 
-  /** `--prod` (SPEC §2.4): the configuration file, with each flag overriding it (D-135). */
+  /** `--prod`: the configuration file, with each flag overriding it. */
   private fun prodServer(startLabel: Label?): GupsServer {
     if (port != null) throw UsageError("--port is for --dev; use --telnet with --prod")
     if (docsPort != null)
@@ -387,8 +387,7 @@ class Serve : CliktCommand(name = "serve") {
   }
 
   /**
-   * The certificate: a throwaway self-signed one, or the PEM files of the flags or configuration
-   * (SPEC §4.10).
+   * The certificate: a throwaway self-signed one, or the PEM files of the flags or configuration.
    */
   private fun serverTls(cfg: ServerConfig, host: String): ServerTls {
     if (selfSigned) {
@@ -473,8 +472,7 @@ class Lint : CliktCommand(name = "lint") {
     option("--world", help = "Course world directory (default: the current directory).")
       .file(mustExist = true, canBeFile = false)
 
-  override fun help(context: Context) =
-    "Run static checks on course world packages (SPEC §7.3 gate 2)."
+  override fun help(context: Context) = "Run static checks on course world packages (gate 2)."
 
   override fun run() =
     withPlugins(WorldDir((world ?: File(".")).toPath())) { plugins -> lint(plugins) }
@@ -540,8 +538,7 @@ class Fuzz : CliktCommand(name = "fuzz") {
     option("--world", help = "Course world directory (default: the current directory).")
       .file(mustExist = true, canBeFile = false)
 
-  override fun help(context: Context) =
-    "Run the fuzz walker against changed zones (SPEC §7.3 gate 4)."
+  override fun help(context: Context) = "Run the fuzz walker against changed zones (gate 4)."
 
   override fun run() {
     val dir = WorldDir((world ?: File(".")).toPath())
@@ -605,11 +602,10 @@ class SnapshotCmd : CliktCommand(name = "snapshot") {
       .file(canBeDir = false)
 
   override fun help(context: Context) =
-    "Make a sanitized snapshot of the world database for migrations (SPEC §7.3 gate 5)."
+    "Make a sanitized snapshot of the world database for migrations (gate 5)."
 
   override fun run() {
-    // Only sanitized snapshots exist; the flag makes that explicit at every call (SPEC §7.3,
-    // D-168).
+    // Only sanitized snapshots exist; the flag makes that explicit at every call.
     if (!sanitized)
       throw UsageError(
         "only sanitized snapshots are supported: run gups snapshot --sanitized --out FILE"
@@ -642,7 +638,7 @@ class MigrateCheck : CliktCommand(name = "migrate-check") {
       .file(mustExist = true, canBeFile = false)
 
   override fun help(context: Context) =
-    "Check migrations and reconciliation against a production snapshot (SPEC §7.3 gate 5)."
+    "Check migrations and reconciliation against a production snapshot (gate 5)."
 
   override fun run() {
     if (!snapshot.isFile) {
@@ -723,7 +719,7 @@ class Docs : CliktCommand(name = "docs") {
     echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")
   }
 
-  /** SPEC §4.17: freezes the current API as the baseline of api_version N. */
+  /** Freezes the current API as the baseline of api_version N. */
   private fun updateBaseline() {
     val n = EngineInfo.API_VERSION
     val file = docsDir.resolve("api").also { it.mkdirs() }.resolve("api-$n.json")
@@ -738,7 +734,7 @@ class Docs : CliktCommand(name = "docs") {
       echo(text, trailingNewline = false)
       return
     }
-    // D-171: a .json path is the file itself; anything else is a directory.
+    // A .json path is the file itself; anything else is a directory.
     val file =
       when {
         dest.name.endsWith(".json") -> dest.also { it.absoluteFile.parentFile?.mkdirs() }
@@ -751,13 +747,13 @@ class Docs : CliktCommand(name = "docs") {
   }
 }
 
-/** The world's plugins (SPEC §4.15); each warning goes to [log]. Close the host when done. */
+/** The world's plugins; each warning goes to [log]. Close the host when done. */
 fun loadPlugins(dir: WorldDir, module: WorldModule, log: (String) -> Unit): PluginHost =
   PluginLoader.load(dir, module, log = log)
 
 /**
  * Runs [block] with [dir]'s plugins, printing their warnings. A `MODULE.gups` that doesn't read
- * means no plugins here; the command reports that error itself (D-178).
+ * means no plugins here; the command reports that error itself.
  */
 private fun <T> CliktCommand.withPlugins(dir: WorldDir, block: (PluginHost) -> T): T =
   loadPlugins(dir, WorldModule.read(dir).first) { echo("warning: $it", err = true) }.use(block)
@@ -791,12 +787,10 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
   )
 }
 
-/**
- * How long a shutdown waits for the final checkpoint by default (`shutdown_timeout`, SPEC §5.11).
- */
+/** How long a shutdown waits for the final checkpoint by default (`shutdown_timeout`). */
 const val SHUTDOWN_WAIT_MS = 30_000L
 
-/** `--db`, defaulting to the database of `--world` (D-099). */
+/** `--db`, defaulting to the database of `--world`. */
 private fun dbPath(world: File?, db: File?): Path =
   db?.toPath() ?: GupsServer.defaultDb(WorldDir((world ?: File(".")).toPath()))
 
@@ -918,8 +912,7 @@ class Deploy : CliktCommand(name = "deploy") {
   override fun run() {
     val client = AdminClient(admin, adminTokenFile)
     var ok = false
-    // The response is NDJSON: {"progress"} lines, then {"ok", "commit", "packages", "errors"} (SPEC
-    // §4.14).
+    // The response is NDJSON: {"progress"} lines, then {"ok", "commit", "packages", "errors"}.
     val status =
       client.post("/deploy", toJson(mapOf("commit" to commit)).toString(), "application/json") {
         _,
@@ -944,7 +937,7 @@ class Deploy : CliktCommand(name = "deploy") {
 
 /**
  * Runs [block] on the account store of the world's database, written directly: the CLI tools work
- * offline (D-134).
+ * offline.
  */
 private fun <T> withAccounts(world: File?, db: File?, block: (AccountService) -> T): T {
   val path = dbPath(world, db)

@@ -10,8 +10,8 @@ import gups.core.model.SkillProto
 import gups.core.world.World
 
 /**
- * The read-only context handed to every rules call (SPEC §4.6). Fields that do not apply to a call
- * are null; [attacker] and [defender] are the attack-call names for [actor] and [target].
+ * The read-only context handed to every rules call. Fields that do not apply to a call are null;
+ * [attacker] and [defender] are the attack-call names for [actor] and [target].
  */
 class RulesContext(
   val world: World,
@@ -37,9 +37,8 @@ data class Regen(val hp: Int, val mana: Int, val move: Int)
 data class PlayerDeathOutcome(val respawn: Label, val xpLoss: Long)
 
 /**
- * One method per `//rules:combat.star` export (SPEC §4.6). [DefaultRules] is the built-in Kotlin
- * ruleset; the Starlark-backed implementation arrives with the rules module in M5 and falls back to
- * it.
+ * One method per `//rules:combat.star` export. [DefaultRules] is the built-in Kotlin ruleset; the
+ * Starlark-backed implementation falls back to it.
  */
 interface RulesEngine {
   fun equipmentSlots(): List<String>
@@ -87,7 +86,7 @@ interface RulesEngine {
   /** For the dead player [RulesContext.actor], killed by [RulesContext.target] if any. */
   fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome
 
-  // Track-movement lag (SPEC §5.5). Engine-side settings, not Starlark exports in api_version 1.
+  // Track-movement lag. Engine-side settings, not Starlark exports in api_version 1.
 
   fun advanceLag(c: RulesContext): Int = 2
 

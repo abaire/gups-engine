@@ -93,8 +93,8 @@ class CrashTest {
   }
 
   /**
-   * SPEC §7.1: kill -9 during checkpoint writes; every restart opens cleanly and keeps every item
-   * exactly once.
+   * Kill -9 during checkpoint writes; every restart opens cleanly and keeps every item exactly
+   * once.
    */
   @Test
   fun `killing the server mid-write never loses or duplicates an item`() {

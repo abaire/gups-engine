@@ -5,9 +5,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/**
- * SPEC §7.1: random sequences of item verbs never break the single-location or forest invariant.
- */
+/** Random sequences of item verbs never break the single-location or forest invariant. */
 class ItemPropertyTest {
   @Test
   fun `random item verbs keep every item in exactly one place`() {

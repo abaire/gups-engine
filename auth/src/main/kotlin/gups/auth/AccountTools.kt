@@ -14,7 +14,7 @@ import gups.core.world.send
 import gups.core.world.session
 import gups.core.world.wallTime
 
-/** The default escalation ladder of `@restrict` (SPEC §2.4, §4.9). */
+/** The default escalation ladder of `@restrict`. */
 val DEFAULT_LADDER = listOf("1d", "7d", "permanent")
 
 private val DURATION = Regex("(\\d{1,6})([mhdw])")
@@ -52,8 +52,8 @@ fun World.applyAccount(a: Account) {
 }
 
 /**
- * The instructor commands that change accounts (SPEC §4.9): `@role`, `@invite`, `@restrict`,
- * `@unrestrict` and `@restrictions`. Every store call runs off the world thread through [later].
+ * The instructor commands that change accounts: `@role`, `@invite`, `@restrict`, `@unrestrict` and
+ * `@restrictions`. Every store call runs off the world thread through [later].
  */
 class AccountTools
 private constructor(
@@ -108,9 +108,7 @@ private constructor(
     if (a.pwHash == null) append("\n  No password yet: they need a setup code.")
   }
 
-  /**
-   * Clears the password, revokes web tokens and hands the instructor a new setup code (SPEC §5.12).
-   */
+  /** Clears the password, revokes web tokens and hands the instructor a new setup code. */
   private fun reset(w: World, p: Player, a: Account) {
     if (!mayManage(p, a)) return reply(w, p, "Only an admin can reset an admin.")
     run(
@@ -201,7 +199,7 @@ private constructor(
     }
   }
 
-  // ---- Restrictions (SPEC §4.9) ------------------------------------------------------
+  // ---- Restrictions ------------------------------------------------------------------
 
   private fun restrict(c: CommandCall) {
     val p = c.actor as? Player ?: return

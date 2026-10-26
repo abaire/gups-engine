@@ -13,7 +13,7 @@ import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.RulesContext
 
-// The reality bubble (SPEC §5.9). Rooms within BUBBLE_RADIUS exits of an anchor are simulated;
+// The reality bubble. Rooms within BUBBLE_RADIUS exits of an anchor are simulated;
 // every other room is dormant: no timers, AI or combat, and nothing is replayed when it wakes.
 // Only worlds with WorldConfig.bubble keep a bubble; in the others every room is simulated.
 
@@ -74,7 +74,7 @@ internal fun World.ball(from: Room): List<Room> {
   return seen.keys.toList()
 }
 
-/** The active rooms computed from scratch, for checking the incremental bookkeeping (SPEC §7.1). */
+/** The active rooms computed from scratch, for checking the incremental bookkeeping. */
 fun World.activeRoomsFromScratch(): Set<Room> {
   val out = HashSet<Room>()
   for (e in entities.values) anchorRoom(e)?.let { out += ball(it) }
@@ -96,9 +96,9 @@ private fun World.cover(room: Room, delta: Int, changed: MutableSet<Room>) {
 }
 
 /**
- * Phase 6 (SPEC §5.1, §5.9): moves every anchor's coverage to where it is now, by a BFS from its
- * old and new rooms, then puts rooms that lost all coverage to sleep and wakes rooms that gained
- * it. Dormant rooms go to sleep first, then rooms wake, each ascending id.
+ * Phase 6: moves every anchor's coverage to where it is now, by a BFS from its old and new rooms,
+ * then puts rooms that lost all coverage to sleep and wakes rooms that gained it. Dormant rooms go
+ * to sleep first, then rooms wake, each ascending id.
  */
 internal fun World.maintainBubble() {
   if (!config.bubble) return
@@ -157,10 +157,7 @@ internal fun World.entitiesIn(room: Room): List<Entity> {
   return out
 }
 
-/**
- * Starts every room dormant except `always_active` ones, as a freshly booted world does (SPEC §5.11
- * step 6).
- */
+/** Starts every room dormant except `always_active` ones, as a freshly booted world does. */
 internal fun World.startDormant() {
   if (!config.bubble) return
   for (r in roomsByLabel.values) if (!r.hasFlag("always_active")) r.dormantSince = pulse
@@ -203,9 +200,9 @@ internal fun World.syncTimers(e: Entity) {
 }
 
 /**
- * A room goes dormant (SPEC §5.9): AI, `on_tick` and `on_combat_tick` stop because nothing in it is
- * simulated; timers pause; mobs disengage and drop their plans (D-117). Affects keep expiring by
- * their absolute deadlines. Entities with an `active` reason carry on.
+ * A room goes dormant: AI, `on_tick` and `on_combat_tick` stop because nothing in it is simulated;
+ * timers pause; mobs disengage and drop their plans. Affects keep expiring by their absolute
+ * deadlines. Entities with an `active` reason carry on.
  */
 internal fun World.sleep(room: Room) {
   room.dormantSince = pulse
@@ -222,10 +219,9 @@ internal fun World.sleep(room: Room) {
 }
 
 /**
- * A room wakes (SPEC §5.9): lazy catch-up, never simulation. Timers resume; missed resets, respawns
- * and decay are applied; mobs recover by their `dormant_recovery` and their affects that ran out
- * are removed (`on_expire` in expiry order); then `on_wake` fires on the room, its mobs and its
- * items.
+ * A room wakes: lazy catch-up, never simulation. Timers resume; missed resets, respawns and decay
+ * are applied; mobs recover by their `dormant_recovery` and their affects that ran out are removed
+ * (`on_expire` in expiry order); then `on_wake` fires on the room, its mobs and its items.
  */
 internal fun World.wake(room: Room) {
   val since = room.dormantSince ?: return
@@ -262,7 +258,7 @@ internal fun World.wake(room: Room) {
     invokeOn(i, HookName.ON_WAKE, ctx())
 }
 
-/** Dormant vital recovery by `dormant_recovery` (SPEC §5.9). */
+/** Dormant vital recovery by `dormant_recovery`. */
 private fun World.recover(m: Mob, since: Long) {
   val live = m.affects.filter { it.expiresAt > pulse }
   when (m.dormantRecovery) {
@@ -290,9 +286,9 @@ private fun ticksIn(lo: Long, hi: Long): Long =
       Math.floorDiv(lo - 1, WORLD_TICK_PULSES.toLong())
 
 /**
- * Regen for the world ticks missed since [since], computed piecewise (SPEC §5.9): the time is split
- * at every affect expiry inside it, and each piece regenerates with the affects that were active
- * then, through `rules.regen` and the modifier chain.
+ * Regen for the world ticks missed since [since], computed piecewise: the time is split at every
+ * affect expiry inside it, and each piece regenerates with the affects that were active then,
+ * through `rules.regen` and the modifier chain.
  */
 internal fun World.catchUpRegen(m: Mob, since: Long) {
   val all = m.affects.toList()
@@ -319,7 +315,7 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
   }
 }
 
-// ---- Simulation verbs (SPEC §4.5) ------------------------------------------------------------
+// ---- Simulation verbs ------------------------------------------------------------------------
 // Reasons are ref-counted by name: an entity stops being active or anchored only when its
 // last reason is cleared. Anchor changes take effect at the next phase 6.
 

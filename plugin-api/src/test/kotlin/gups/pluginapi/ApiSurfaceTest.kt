@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** No public type in `gups.pluginapi` mentions a `core` or `script` type (SPEC §2.2). */
+/** No public type in `gups.pluginapi` mentions a `core` or `script` type. */
 class ApiSurfaceTest {
   private val classes =
     listOf(

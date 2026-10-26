@@ -1,4 +1,4 @@
-// The side panel, drawn from GMCP (SPEC §4.10): vitals bars, affects and bands.
+// The side panel, drawn from GMCP: vitals bars, affects and bands.
 
 /**
  * @typedef {{hp: number, maxhp: number, mana: number, maxmana: number, move: number, maxmove: number}} Vitals

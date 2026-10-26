@@ -42,7 +42,7 @@ import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 
-// The Starlark objects of the test harness API (SPEC §4.12): the world handle `w` and player
+// The Starlark objects of the test harness API: the world handle `w` and player
 // handles `p`. `t` is in Assertions.kt.
 
 internal fun evalFail(message: String): Nothing = throw EvalException(message)
@@ -72,9 +72,7 @@ const val DO_MAX_PULSES = 1000
 /** Keeps at most this many trace lines per world. */
 private const val TRACE_KEEP = 400
 
-/**
- * One headless world created by `t.world(...)`: virtual clock, seeded RNG, no network (SPEC §7.2).
- */
+/** One headless world created by `t.world(...)`: virtual clock, seeded RNG, no network. */
 @StarlarkBuiltin(name = "world", doc = "A headless test world.")
 class WorldHandle
 internal constructor(
@@ -392,7 +390,7 @@ internal constructor(
     }
 }
 
-/** A connected player in a test world: an actor view plus `do` and `output` (SPEC §4.12). */
+/** A connected player in a test world: an actor view plus `do` and `output`. */
 @StarlarkBuiltin(
   name = "player",
   doc = "A test player: its view fields plus do(line) and output().",
@@ -488,9 +486,7 @@ class DiagnosticView internal constructor(private val d: Diagnostic) : StarlarkV
   }
 }
 
-/**
- * The harness objects (`t`, `w`, `p`, `diagnostic`) for the script API model (SPEC §4.12, M7.1).
- */
+/** The harness objects (`t`, `w`, `p`, `diagnostic`) for the script API model. */
 object HarnessApi {
   /** Each harness class by the name tests know it by. */
   private val NAMED: Map<String, Class<*>> =

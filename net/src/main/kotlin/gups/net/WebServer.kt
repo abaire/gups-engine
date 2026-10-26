@@ -62,19 +62,19 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
-/** The web session cookie (SPEC §4.10). */
+/** The web session cookie. */
 const val SESSION_COOKIE = "gups_session"
 
 /** How long a socket without the cookie has to send its `auth` frame. */
 private val AUTH_WAIT = 30.seconds
 
-/** How often live sockets' tokens are checked for expiry and revocation (D-155). */
+/** How often live sockets' tokens are checked for expiry and revocation. */
 val TOKEN_CHECK_INTERVAL: Duration = Duration.ofMinutes(1)
 
 /**
- * The web client's files, served unchanged (SPEC §4.10): `index.html` at `/`, and every other file
- * under `/assets/<hash>/`, where the hash covers all of them, so a new engine version never mixes
- * with old cached files (D-156).
+ * The web client's files, served unchanged: `index.html` at `/`, and every other file under
+ * `/assets/<hash>/`, where the hash covers all of them, so a new engine version never mixes with
+ * old cached files.
  */
 class WebAssets(private val files: Map<String, ByteArray>) {
   val hash: String =
@@ -129,8 +129,8 @@ class WebAssets(private val files: Map<String, ByteArray>) {
 }
 
 /**
- * The API reference's routes (SPEC §4.16): `/docs` redirects to `/docs/` so the pages' relative
- * links resolve, `/docs/` is `index.html`, and `/docs/<file>` is one of [docs].
+ * The API reference's routes: `/docs` redirects to `/docs/` so the pages' relative links resolve,
+ * `/docs/` is `index.html`, and `/docs/<file>` is one of [docs].
  */
 fun Route.mountDocs(docs: Map<String, ByteArray>) {
   suspend fun RoutingCall.file(name: String) {
@@ -147,7 +147,7 @@ fun Route.mountDocs(docs: Map<String, ByteArray>) {
   get("/docs/{name}") { call.file(call.parameters["name"].orEmpty()) }
 }
 
-/** A plain-HTTP listener serving only the API reference, for `serve --dev` (SPEC §4.16). */
+/** A plain-HTTP listener serving only the API reference, for `serve --dev`. */
 class DocsServer(
   private val docs: Map<String, ByteArray>,
   private val host: String,
@@ -182,10 +182,10 @@ class DocsServer(
 }
 
 /**
- * The HTTPS and WebSocket listener (SPEC §4.10) on Ktor's Netty engine. With [tls] it serves HTTPS
- * through the same hot-reloading certificate as telnet over TLS (D-154); without, plain HTTP, which
- * only tests use. Each socket is one world session whose frames are one JSON message each: `text`,
- * `prompt`, `hide`, `gmcp` and `error` from the server; `auth`, `input` and `gmcp` from the client.
+ * The HTTPS and WebSocket listener on Ktor's Netty engine. With [tls] it serves HTTPS through the
+ * same hot-reloading certificate as telnet over TLS; without, plain HTTP, which only tests use.
+ * Each socket is one world session whose frames are one JSON message each: `text`, `prompt`,
+ * `hide`, `gmcp` and `error` from the server; `auth`, `input` and `gmcp` from the client.
  */
 class WebServer(
   private val inbox: WorldInbox,
@@ -196,7 +196,7 @@ class WebServer(
   private val sessionIds: AtomicLong = AtomicLong(1),
   private val tls: ServerTls? = null,
   private val tokenCheck: Duration = TOKEN_CHECK_INTERVAL,
-  /** The API reference's files, served at `/docs/` with no login (SPEC §4.16). */
+  /** The API reference's files, served at `/docs/` with no login. */
   private val docs: Map<String, ByteArray> = emptyMap(),
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -290,8 +290,7 @@ class WebServer(
     when (r) {
       is WebLogin.Ok -> {
         val maxAge = (r.expiresAt - System.currentTimeMillis()) / 1000
-        // Set by hand: Ktor sees plain HTTP behind our own TLS handler and refuses Secure cookies
-        // (D-154).
+        // Set by hand: Ktor sees plain HTTP behind our own TLS handler and refuses Secure cookies.
         call.response.header(
           HttpHeaders.SetCookie,
           "$SESSION_COOKIE=${r.token}; Path=/; Max-Age=$maxAge; HttpOnly; Secure; SameSite=Strict",
@@ -310,7 +309,7 @@ class WebServer(
     }
   }
 
-  /** `{"code"}`: whether a sign-up code is usable, and the login it is bound to, if any (D-159). */
+  /** `{"code"}`: whether a sign-up code is usable, and the login it is bound to, if any. */
   private suspend fun checkCode(call: ApplicationCall) {
     val code =
       runCatching { Json.parseToJsonElement(call.receiveText()).jsonObject }
@@ -334,8 +333,7 @@ class WebServer(
   }
 
   /**
-   * `{"code", "login", "password"}`: redeems an instructor's code and logs in, like `/api/login`
-   * (D-159).
+   * `{"code", "login", "password"}`: redeems an instructor's code and logs in, like `/api/login`.
    */
   private suspend fun signup(call: ApplicationCall) {
     val body = runCatching { Json.parseToJsonElement(call.receiveText()).jsonObject }.getOrNull()
@@ -407,7 +405,7 @@ class WebServer(
     fun put(json: String) {
       if (ended.get()) return
       if (buffered.addAndGet(json.length.toLong()) > OUTPUT_BUFFER_MAX) {
-        // A slow client: drop it; the character goes link-dead (SPEC §6.4).
+        // A slow client: drop it; the character goes link-dead.
         end("Too slow.")
         return
       }

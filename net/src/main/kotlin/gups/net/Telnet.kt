@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
-/** Telnet command and option codes (RFC 854 and the MUD extensions of SPEC §4.10). */
+/** Telnet command and option codes (RFC 854 and MUD extensions). */
 object Telnet {
   const val IAC = 255
   const val DONT = 254
@@ -35,18 +35,18 @@ object Telnet {
   const val CHARSET_REJECTED = 3
 }
 
-/** Input lines longer than this many bytes are truncated (SPEC §4.10). */
+/** Input lines longer than this many bytes are truncated. */
 const val MAX_LINE_BYTES = 512
 
-/** A connection is dropped after this many malformed sequences (SPEC §6.4). */
+/** A connection is dropped after this many malformed sequences. */
 const val MAX_PROTOCOL_ERRORS = 5
 
 private const val MAX_SUBNEGOTIATION = 8192
 
 /**
- * One telnet connection's protocol state (SPEC §4.10): line framing and option negotiation for
- * NAWS, TTYPE/MTTS, EOR (falling back to GA), GMCP and CHARSET (UTF-8 only). Pure: bytes to send go
- * to [write], so it can be tested against recorded client transcripts.
+ * One telnet connection's protocol state: line framing and option negotiation for NAWS, TTYPE/MTTS,
+ * EOR (falling back to GA), GMCP and CHARSET (UTF-8 only). Pure: bytes to send go to [write], so it
+ * can be tested against recorded client transcripts.
  *
  * [receive] runs on the connection's reader; the encoders run on the world thread and only read
  * state, which is volatile.
@@ -60,7 +60,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   var eor: Boolean = false
     private set
 
-  /** True once the client has sent any telnet command; plain `nc` never does (D-088). */
+  /** True once the client has sent any telnet command; plain `nc` never does. */
   @Volatile
   var speaksTelnet: Boolean = false
     private set
@@ -69,10 +69,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   var gmcp: Boolean = false
     private set
 
-  /**
-   * GMCP modules the client listed with `Core.Supports.*`, such as `Char` or `Char.Vitals` (SPEC
-   * §4.10).
-   */
+  /** GMCP modules the client listed with `Core.Supports.*`, such as `Char` or `Char.Vitals`. */
   @Volatile
   var gmcpSupports: Set<String> = emptySet()
     private set
@@ -100,7 +97,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   var utf8Accepted: Boolean = false
     private set
 
-  /** True while we have asked the client not to echo, around a password prompt (D-137). */
+  /** True while we have asked the client not to echo, around a password prompt. */
   @Volatile private var echoHidden = false
 
   /** Malformed sequences seen so far. */
@@ -241,7 +238,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
           send(Telnet.IAC, Telnet.DONT, opt)
         }
       Telnet.WONT -> if (himOn.remove(opt)) send(Telnet.IAC, Telnet.DONT, opt)
-      // ECHO is ours only while a password prompt hides input; refuse it otherwise (D-137).
+      // ECHO is ours only while a password prompt hides input; refuse it otherwise.
       Telnet.DO ->
         if (opt == Telnet.OPT_ECHO) {
           if (!echoHidden && offered.add(opt)) send(Telnet.IAC, Telnet.WONT, opt)
@@ -330,7 +327,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     }
   }
 
-  /** Color depth from MTTS bits when sent, else from the terminal type names (D-087). */
+  /** Color depth from MTTS bits when sent, else from the terminal type names. */
   private fun depth(): ColorDepth {
     mtts?.let { bits ->
       return when {
@@ -368,8 +365,8 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   }
 
   /**
-   * One GMCP message from the client. Only `Core.*` is read (SPEC §4.10); a malformed message
-   * counts as a protocol error.
+   * One GMCP message from the client. Only `Core.*` is read; a malformed message counts as a
+   * protocol error.
    */
   private fun gmcpIn(message: String) {
     val space = message.indexOf(' ')
@@ -415,8 +412,8 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   }
 
   /**
-   * `IAC WILL ECHO` to hide typed input, `IAC WONT ECHO` to show it again (SPEC §5.12). Clients
-   * that refuse simply keep echoing. Plain `nc` gets nothing (D-088).
+   * `IAC WILL ECHO` to hide typed input, `IAC WONT ECHO` to show it again. Clients that refuse
+   * simply keep echoing. Plain `nc` gets nothing.
    */
   fun encodeEcho(hidden: Boolean): ByteArray {
     if (!speaksTelnet || hidden == echoHidden) return ByteArray(0)
@@ -431,7 +428,7 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
 
 private fun byteArrayOf(vararg ints: Int): ByteArray = ByteArray(ints.size) { ints[it].toByte() }
 
-/** A plain value from `core` as JSON (SPEC §4.10). */
+/** A plain value from `core` as JSON. */
 fun toJson(v: Any?): JsonElement =
   when (v) {
     null -> JsonNull
@@ -445,8 +442,8 @@ fun toJson(v: Any?): JsonElement =
   }
 
 /**
- * [supports] after the client's `Core.Supports.Set`, `Add` or `Remove` message [pkg] (SPEC §4.10);
- * unchanged for others.
+ * [supports] after the client's `Core.Supports.Set`, `Add` or `Remove` message [pkg]; unchanged for
+ * others.
  */
 fun updateSupports(supports: Set<String>, pkg: String, body: JsonElement?): Set<String> {
   fun modules(): List<String> =

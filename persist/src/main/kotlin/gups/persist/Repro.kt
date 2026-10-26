@@ -44,8 +44,8 @@ data class InputJson(
 )
 
 /**
- * What `gups repro` replays (SPEC §6.2): the failing room as of the last checkpoint, and the inputs
- * that followed, up to the failure.
+ * What `gups repro` replays: the failing room as of the last checkpoint, and the inputs that
+ * followed, up to the failure.
  */
 @Serializable
 data class ReproBundle(
@@ -112,9 +112,9 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
 }
 
 /**
- * Builds a repro bundle from a live [world] for [d] (SPEC §6.2, §7.3, D-167). When
- * [playerStartRooms] is provided, sets player starting rooms to their pulse-0 positions and
- * preserves all inputs so room-transition failures reproduce cleanly.
+ * Builds a repro bundle from a live [world] for [d]. When [playerStartRooms] is provided, sets
+ * player starting rooms to their pulse-0 positions and preserves all inputs so room-transition
+ * failures reproduce cleanly.
  */
 fun buildReproBundle(
   world: World,

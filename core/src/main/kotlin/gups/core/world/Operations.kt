@@ -13,21 +13,21 @@ import java.time.format.DateTimeFormatter
 /** A minute of pulses: the window of `@stats`, overrun alerts and the engine-error alert. */
 const val MINUTE_PULSES = 60_000L / PULSE_MS
 
-/** Owner alerts are sent at most once per package per 10 seconds (SPEC §6.2). */
+/** Owner alerts are sent at most once per package per 10 seconds. */
 const val OWNER_ALERT_PULSES = 10_000L / PULSE_MS
 
-/** Each alert kind is repeated at most once a minute (SPEC §6.2). */
+/** Each alert kind is repeated at most once a minute. */
 const val ALERT_REPEAT_PULSES = MINUTE_PULSES
 
-/** More engine exceptions than this in a minute raise an instructor alert (SPEC §6.4). */
+/** More engine exceptions than this in a minute raise an instructor alert. */
 const val ENGINE_ERRORS_PER_MINUTE = 100
 
 /** Diagnostic kinds that are a script's fault, for owner alerts. */
 private val SCRIPT_KINDS = setOf("script_error", "step_limit", "wall_clock", "missing")
 
 /**
- * Durations of the last minute of pulses (`@stats`, `/metrics`, SPEC §4.9, §6.2), and which of them
- * overran their 250 ms. Written by the world loop, read on the world thread.
+ * Durations of the last minute of pulses (`@stats`, `/metrics`), and which of them overran their
+ * 250 ms. Written by the world loop, read on the world thread.
  */
 class PulseStats(private val size: Int = MINUTE_PULSES.toInt()) {
   private val nanos = LongArray(size)
@@ -60,10 +60,7 @@ class PulseStats(private val size: Int = MINUTE_PULSES.toInt()) {
     get() = if (count < size) 0.0 else overruns.toDouble() / count
 }
 
-/**
- * A restriction in effect for [player], or null (SPEC §4.9). Instructors and admins are never
- * restricted.
- */
+/** A restriction in effect for [player], or null. Instructors and admins are never restricted. */
 fun World.restriction(player: Player, capability: String): Restriction? {
   if (player.role.atLeast(Role.INSTRUCTOR)) return null
   val account = player.accountId ?: return null
@@ -93,8 +90,7 @@ fun wallTime(ms: Long): String = WALL.format(Instant.ofEpochMilli(ms))
 
 /**
  * Runs [work] off the world thread on [World.background], then [then] with its result back on the
- * world thread through [World.post] (SPEC §2.5). A world without them (headless tests) runs both at
- * once.
+ * world thread through [World.post]. A world without them (headless tests) runs both at once.
  */
 fun <T> World.later(work: () -> T, then: World.(Result<T>) -> Unit) {
   val exec = background
@@ -112,8 +108,8 @@ internal fun World.flushPlayer(p: Player) {
 }
 
 /**
- * An instructor alert (SPEC §6.2): to every online instructor and admin, and to [World.onAlert]
- * (the server log). The same [kind] is repeated at most once a minute; the log always gets it.
+ * An instructor alert: to every online instructor and admin, and to [World.onAlert] (the server
+ * log). The same [kind] is repeated at most once a minute; the log always gets it.
  */
 fun World.alert(kind: String, message: String) {
   onAlert?.invoke(message)
@@ -123,9 +119,7 @@ fun World.alert(kind: String, message: String) {
   for (p in players) if (p.role.atLeast(Role.INSTRUCTOR)) send(p, "{yellow}[alert]{/} $message")
 }
 
-/**
- * Owner alerts and the engine-error alert, for each diagnostic as it is recorded (SPEC §6.2, §6.4).
- */
+/** Owner alerts and the engine-error alert, for each diagnostic as it is recorded. */
 internal fun World.alertFor(d: Diagnostic) {
   val pkg = d.pkg
   if (d.kind in SCRIPT_KINDS && pkg != null) {
@@ -158,7 +152,7 @@ internal fun World.alertFor(d: Diagnostic) {
 /**
  * Called by the world loop after each pulse: samples the scripts' step counts every combat round,
  * and alerts when more than 10% of the last minute's pulses overran, naming the package that used
- * the most steps in that minute (SPEC §6.2).
+ * the most steps in that minute.
  */
 fun World.checkOverruns() {
   if (pulse % COMBAT_ROUND_PULSES == 0L) {
@@ -187,8 +181,8 @@ fun World.busiestPackage(): Pair<String, Long>? {
 }
 
 /**
- * Shuts the world down in [delayPulses] (`@shutdown`, SPEC §4.9), warning players 60, 30, 10 and 5
- * seconds before. The world loop then stops and takes the final checkpoint.
+ * Shuts the world down in [delayPulses] (`@shutdown`), warning players 60, 30, 10 and 5 seconds
+ * before. The world loop then stops and takes the final checkpoint.
  */
 fun World.scheduleShutdown(delayPulses: Long, reason: String) {
   shutdownAt = pulse + delayPulses.coerceAtLeast(0)
@@ -216,14 +210,14 @@ internal fun World.shutdownWarnings() {
 private val SHUTDOWN_WARNINGS = setOf(60L, 30L, 10L, 5L)
 
 /**
- * Starts a production deploy (SPEC §5.10), implemented by the server. [start] returns at once;
- * [progress] gets each step's line off the world thread, and [done] the outcome.
+ * Starts a production deploy, implemented by the server. [start] returns at once; [progress] gets
+ * each step's line off the world thread, and [done] the outcome.
  */
 fun interface Deploys {
   fun start(commit: String?, progress: (String) -> Unit, done: (DeployOutcome) -> Unit)
 }
 
-/** How a deploy ended (SPEC §4.14 `POST /deploy`). */
+/** How a deploy ended (`POST /deploy`). */
 data class DeployOutcome(
   val ok: Boolean,
   val commit: String?,

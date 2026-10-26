@@ -17,9 +17,9 @@ import gups.script.WorldPluginWiring
 const val REPRO_SLACK_PULSES = 16
 
 /**
- * Replays a diagnostic's repro bundle in a headless world (SPEC §4.13 `gups repro`, §6.2): today's
- * packages, the bundle's seed, its room as of the last checkpoint, then the recorded inputs at
- * their pulses. Exact in the harness, best effort from production (D-098).
+ * Replays a diagnostic's repro bundle in a headless world (`gups repro`): today's packages, the
+ * bundle's seed, its room as of the last checkpoint, then the recorded inputs at their pulses.
+ * Exact in the harness, best effort from production.
  */
 class ReproRunner(
   private val dir: WorldDir,

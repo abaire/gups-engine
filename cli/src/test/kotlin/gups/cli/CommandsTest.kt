@@ -108,8 +108,8 @@ class CommandsTest {
   }
 
   /**
-   * The repository check (SPEC §4.17): without an api_version bump, the script API may only grow
-   * since the committed baseline.
+   * The repository check: without an api_version bump, the script API may only grow since the
+   * committed baseline.
    */
   @Test
   fun `repository check - no breaking API change without an api_version bump`() {

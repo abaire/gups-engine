@@ -3,8 +3,8 @@ package gups.core
 import kotlin.random.Random
 
 /**
- * The world's only source of randomness (SPEC §4.5). Seeded, so the same seed and inputs produce
- * the same draws on every platform.
+ * The world's only source of randomness. Seeded, so the same seed and inputs produce the same draws
+ * on every platform.
  */
 class Rng(seed: Long) {
   private val random = Random(seed)

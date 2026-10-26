@@ -16,8 +16,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The hook catalog's `ctx_fields` (M7.1) against what the engine really sets: every hook fires
- * here, the fields it gets must be ones the catalog lists, and each listed field must turn up.
+ * The hook catalog's `ctx_fields` against what the engine really sets: every hook fires here, the
+ * fields it gets must be ones the catalog lists, and each listed field must turn up.
  */
 class HookCtxFieldsTest {
   /** Records every hook call the world makes. */

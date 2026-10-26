@@ -9,10 +9,10 @@ import net.starlark.java.eval.Dict
 import net.starlark.java.eval.Starlark
 
 /**
- * The server configuration of `gups serve --prod --config FILE` (SPEC §2.4): Starlark with one
- * `server(...)` call, like `MODULE.gups`. It holds this machine's paths and settings, so it lives
- * outside the course world. Secrets never go in it, only the paths of files holding them. Addresses
- * are `host:port` or `:port`. A CLI flag overrides each setting.
+ * The server configuration of `gups serve --prod --config FILE`: Starlark with one `server(...)`
+ * call, like `MODULE.gups`. It holds this machine's paths and settings, so it lives outside the
+ * course world. Secrets never go in it, only the paths of files holding them. Addresses are
+ * `host:port` or `:port`. A CLI flag overrides each setting.
  */
 data class ServerConfig(
   val world: String? = null,
@@ -32,7 +32,7 @@ data class ServerConfig(
   val maxCharacters: Int = 5,
   val restrictionLadder: List<String> = listOf("1d", "7d", "permanent"),
   val reservedNames: List<String> = emptyList(),
-  /** Seconds a shutdown waits for the final checkpoint to commit (SPEC §5.11). */
+  /** Seconds a shutdown waits for the final checkpoint to commit. */
   val shutdownTimeout: Int = 30,
 ) {
   companion object {

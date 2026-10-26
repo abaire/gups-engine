@@ -2,11 +2,9 @@ package gups.core
 
 import java.util.Properties
 
-/**
- * Version identity of the engine. The engine version and [API_VERSION] are independent (SPEC §2.2).
- */
+/** Version identity of the engine. The engine version and [API_VERSION] are independent. */
 object EngineInfo {
-  /** The single script `api_version` this engine supports (SPEC §1.3). */
+  /** The single script `api_version` this engine supports. */
   const val API_VERSION = 1
 
   /** The engine's semver version, stamped in at build time. */

@@ -1,9 +1,9 @@
 package gups.script
 
 /**
- * Script resource limits (SPEC §6.1, §6.3). Steps are the deterministic limit and agree exactly
- * between the harness and production; the wall-clock backstop only catches slow host calls, so the
- * harness turns it off (D-066).
+ * Script resource limits. Steps are the deterministic limit and agree exactly between the harness
+ * and production; the wall-clock backstop only catches slow host calls, so the harness turns it
+ * off.
  */
 data class ScriptLimits(
   /** Zone hooks, `think`, timers and commands, per top-level event and its cascade. */
@@ -19,7 +19,7 @@ data class ScriptLimits(
   val evalSteps: Long = 1_000_000,
   val evalWallNanos: Long = 1_000_000_000,
   val wallClock: Boolean = true,
-  /** Strings longer than this many chars are rejected where they reach the engine (D-067). */
+  /** Strings longer than this many chars are rejected where they reach the engine. */
   val maxStringChars: Int = 1 shl 20,
   /** Lists and dicts with more elements than this are rejected likewise: 1 MB at 8 bytes each. */
   val maxElements: Int = (1 shl 20) / 8,
@@ -27,7 +27,7 @@ data class ScriptLimits(
   val maxAttrBytes: Int = 64 * 1024,
   /** More than this many errors from one package within the window quarantines it. */
   val quarantineErrors: Int = 20,
-  /** 60 s of game time (D-068). */
+  /** 60 s of game time. */
   val quarantineWindowPulses: Long = 240,
 ) {
   companion object {

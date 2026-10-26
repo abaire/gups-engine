@@ -10,8 +10,8 @@ import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginWorld
 
 /**
- * The sample plugin (SPEC §4.15): deterministic weather by region, using every extension point. A
- * room is outdoors when it carries a region tag; its region is the first tag.
+ * The sample plugin: deterministic weather by region, using every extension point. A room is
+ * outdoors when it carries a region tag; its region is the first tag.
  */
 class WeatherPlugin : GupsPlugin {
   override val id = "weather"
@@ -73,7 +73,7 @@ class WeatherPlugin : GupsPlugin {
   companion object {
     private val STATES = listOf("clear", "rain", "storm")
 
-    /** §6.1: a pure function of the seed, the one-minute window and the room's region. */
+    /** A pure function of the seed, the one-minute window and the room's region. */
     fun stateFor(world: PluginWorld, room: PluginRoom): String {
       val region = room.regions.minOrNull() ?: return "clear"
       var z =

@@ -19,7 +19,7 @@ import gups.core.rules.RulesContext
 
 const val CORPSE_DECAY_PULSES = 1200 // 5 min
 
-// ---- Engagement (SPEC §5.4) ------------------------------------------------------------------
+// ---- Engagement ------------------------------------------------------------------------------
 
 fun World.startCombat(a: Actor, b: Actor) {
   if (a === b || !a.inWorld || !b.inWorld || a.room !== b.room) return
@@ -60,7 +60,7 @@ fun World.opponentsOf(a: Actor): List<Actor> {
   return a.fighting.mapNotNull { actor(it) }.filter { isPresent(it, room) && isSimulated(it) }
 }
 
-/** True if an opponent shares [a]'s track index (SPEC §5.5). */
+/** True if an opponent shares [a]'s track index. */
 fun World.isPinned(a: Actor): Boolean = opponentsOf(a).any { indexOf(it) == indexOf(a) }
 
 // ---- Auto-attacks ----------------------------------------------------------------------------
@@ -140,7 +140,7 @@ fun World.heal(target: Actor, amount: Int) {
   target.dirty = true
 }
 
-/** Engine-owned death (SPEC §5.4). Runs at most once per life. */
+/** Engine-owned death. Runs at most once per life. */
 internal fun World.processDeath(victim: Actor) {
   if (!victim.inWorld || victim.hp > 0) return
   val room = victim.room
@@ -156,7 +156,7 @@ internal fun World.processDeath(victim: Actor) {
   echo(room, "${victim.name.cap()} is DEAD!", victim)
   perceive("death", Channel.NOISE, room, victim)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
-  // A debug mob is worth nothing, and everything it leaves is debug too (SPEC §4.9). A summon is
+  // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
   // worth nothing either and drops no loot, so it can't be farmed.
   val summoned = victim is Mob && victim.summonedBy != null
   if (killer != null && !victim.debug && !summoned)
@@ -230,7 +230,7 @@ fun World.applyAffect(
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
-  // A worn item's affect lasts until the item comes off (D-181).
+  // A worn item's affect lasts until the item comes off.
   val expiresAt = if (wornFrom != null) Long.MAX_VALUE else pulse + duration
   target.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
   val wasStunned = target.isStunned
@@ -299,9 +299,9 @@ private fun World.endAffect(
 
 /**
  * Clears [a]'s recovery when a stun starts and puts it back when the last stun ends, so recovery
- * neither counts down nor runs out during the stun (D-004). Any lag from a cast the stun broke is
- * part of what is put back. A cast the stun didn't break has its warmup pushed back by the stun's
- * length, so it stays paused.
+ * neither counts down nor runs out during the stun. Any lag from a cast the stun broke is part of
+ * what is put back. A cast the stun didn't break has its warmup pushed back by the stun's length,
+ * so it stays paused.
  */
 private fun World.stunChanged(a: Actor, wasStunned: Boolean) {
   val stunned = a.isStunned
@@ -320,7 +320,7 @@ private fun World.stunChanged(a: Actor, wasStunned: Boolean) {
 
 /**
  * Applies [item]'s `equip_affects` to [wearer] as it is equipped, through [applyAffect] like any
- * other affect (D-181). Untimed entries last until [removeEquipAffects]; timed ones count down.
+ * other affect. Untimed entries last until [removeEquipAffects]; timed ones count down.
  */
 internal fun World.applyEquipAffects(wearer: Actor, item: Item) {
   for (e in item.proto.equipAffects) {
@@ -330,7 +330,7 @@ internal fun World.applyEquipAffects(wearer: Actor, item: Item) {
   }
 }
 
-/** Removes the untimed `equip_affects` of [item] from [wearer] as it comes off (D-181). */
+/** Removes the untimed `equip_affects` of [item] from [wearer] as it comes off. */
 internal fun World.removeEquipAffects(wearer: Actor, item: Item) {
   for (e in item.proto.equipAffects) {
     if (e.pulses == null) removeAffect(wearer, equipAffectName(item, e.flag))
@@ -339,7 +339,7 @@ internal fun World.removeEquipAffects(wearer: Actor, item: Item) {
 
 private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag"
 
-// ---- Effect primitives (SPEC §4.3) -----------------------------------------------------------
+// ---- Effect primitives -----------------------------------------------------------------------
 
 /** Applies [effect] from [caster] to [target] (null for `target = "none"` skills). */
 fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: SkillProto? = null) {

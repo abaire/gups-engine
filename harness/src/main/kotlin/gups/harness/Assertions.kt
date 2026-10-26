@@ -25,7 +25,7 @@ internal class AssertionFailed(message: String) : RuntimeException(message)
 private fun assertionFail(message: String): Nothing =
   throw EvalException(message, AssertionFailed(message))
 
-/** The `t` passed to each test function (SPEC §4.12). */
+/** The `t` passed to each test function. */
 @StarlarkBuiltin(name = "t", doc = "The test context: makes worlds and checks results.")
 class TestCtx
 internal constructor(

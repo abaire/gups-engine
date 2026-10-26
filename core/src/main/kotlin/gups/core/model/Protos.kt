@@ -8,15 +8,12 @@ import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
 import gups.core.world.ZoneCommand
 
-// Immutable prototypes (SPEC §3.4). The `script` module produces them by evaluating
+// Immutable prototypes. The `script` module produces them by evaluating
 // packages; Kotlin tests build them directly.
 
 val STAT_NAMES: List<String> = listOf("str", "dex", "con", "int", "wis")
 
-/**
- * The points of the rules chain that zones, regions, rooms, affects and items may modify (SPEC
- * §4.6).
- */
+/** The points of the rules chain that zones, regions, rooms, affects and items may modify. */
 enum class ModifierPoint(val scriptName: String) {
   TO_HIT("to_hit"),
   DAMAGE("damage"),
@@ -75,9 +72,7 @@ data class RoomProto(
   val version: Int = 1,
 )
 
-/**
- * A builder-applied tag on rooms, possibly across zones, that carries modifiers (SPEC §1.6, §4.2).
- */
+/** A builder-applied tag on rooms, possibly across zones, that carries modifiers. */
 data class RegionProto(val name: String, val pkg: String, val modifiers: Modifiers = emptyMap())
 
 data class LootRule(val label: Label, val chance: Double = 1.0, val count: Int = 1)
@@ -96,7 +91,7 @@ data class MobProto(
   val resists: Map<DamageType, Int> = emptyMap(),
   val skills: Map<Label, Int> = emptyMap(),
   val senses: Map<Sense, Int> = emptyMap(),
-  /** Built-in behaviors in declaration order (SPEC §4.7). */
+  /** Built-in behaviors in declaration order. */
   val behaviors: List<Behavior> = emptyList(),
   val think: ThinkFn? = null,
   val thinkEvery: Int = THINK_DEFAULT_PULSES,
@@ -131,7 +126,7 @@ data class ItemProto(
   val decayPulses: Int? = null,
   val container: ContainerProto? = null,
   val commands: Map<String, ZoneCommand> = emptyMap(),
-  /** Affects equipping this applies to the wearer, for example `no_regen` (SPEC §4.6). */
+  /** Affects equipping this applies to the wearer, for example `no_regen`. */
   val equipAffects: List<EquipAffect> = emptyList(),
   /** Modifiers that apply to the wearer while this is equipped. */
   val modifiers: Modifiers = emptyMap(),
@@ -154,10 +149,10 @@ enum class TargetKind {
   NONE,
 }
 
-/** When an in-progress cast is broken (SPEC §5.3). */
+/** When an in-progress cast is broken. */
 /**
- * One `equip_affects` entry (SPEC §4.6): [flag] for as long as the item is worn, or for [pulses]
- * from the moment it is equipped when that is set.
+ * One `equip_affects` entry: [flag] for as long as the item is worn, or for [pulses] from the
+ * moment it is equipped when that is set.
  */
 data class EquipAffect(val flag: String, val pulses: Int? = null)
 
@@ -186,7 +181,7 @@ data class SkillProto(
     get() = label.name
 }
 
-/** Package-level settings of a zone (SPEC §4.1). [pkg] is a package path such as `zones/forest`. */
+/** Package-level settings of a zone. [pkg] is a package path such as `zones/forest`. */
 data class ZoneProto(
   val pkg: String,
   val title: String = pkg,

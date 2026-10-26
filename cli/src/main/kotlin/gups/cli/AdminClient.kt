@@ -8,12 +8,12 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-/** The default admin address (SPEC §4.14). */
+/** The default admin address. */
 const val DEFAULT_ADMIN = "127.0.0.1:9090"
 
 /**
- * A running server's admin port, for `gups deploy` and `gups import-roster --admin` (SPEC §3.3,
- * §7.1). The token comes from [tokenFile], or the file `GUPS_ADMIN_TOKEN_FILE` names.
+ * A running server's admin port, for `gups deploy` and `gups import-roster --admin`. The token
+ * comes from [tokenFile], or the file `GUPS_ADMIN_TOKEN_FILE` names.
  */
 class AdminClient(address: String, tokenFile: File?) {
   private val base: String =
@@ -76,7 +76,7 @@ class AdminClient(address: String, tokenFile: File?) {
   }
 }
 
-/** A secret read from [file], or from the file the environment variable [env] names (SPEC §2.4). */
+/** A secret read from [file], or from the file the environment variable [env] names. */
 fun readSecret(file: File?, env: String): String? {
   val f = file ?: System.getenv(env)?.takeIf { it.isNotBlank() }?.let(::File) ?: return null
   if (!f.isFile) throw UsageError("no secret file at $f")

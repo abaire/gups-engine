@@ -15,13 +15,13 @@ import gups.core.world.refuseRestricted
 import gups.core.world.send
 import gups.core.world.session
 
-/** Trace lines one session gets per pulse before the rest are summarized (SPEC §5.13). */
+/** Trace lines one session gets per pulse before the rest are summarized. */
 const val TRACE_LINES_PER_PULSE = 50
 
 /**
- * Builder tools backed by the script host (SPEC §4.9, §5.13): `@trace` streams script activity to
- * the sessions that asked for it, and `@eval` (`--dev` only) runs Starlark with a live ctx. Role
- * checks happen in the command registry.
+ * Builder tools backed by the script host: `@trace` streams script activity to the sessions that
+ * asked for it, and `@eval` (`--dev` only) runs Starlark with a live ctx. Role checks happen in the
+ * command registry.
  */
 class DevTools private constructor(private val world: World, private val host: StarlarkHost) {
   private sealed interface Filter {
@@ -43,7 +43,7 @@ class DevTools private constructor(private val world: World, private val host: S
       override fun matches(e: TraceEvent) = e.hook == name || e.hook.startsWith("$name ")
     }
 
-    /** Rules functions, modifiers and each evaluation's chain (SPEC §4.6, §5.13). */
+    /** Rules functions, modifiers and each evaluation's chain. */
     data object Rules : Filter {
       override fun matches(e: TraceEvent) =
         e.hook == RULES || e.hook.startsWith("rules.") || e.hook.startsWith("modifier ")
@@ -86,8 +86,8 @@ class DevTools private constructor(private val world: World, private val host: S
   }
 
   /**
-   * Builders see only their own packages' events, and only their own character's rules lines (SPEC
-   * §4.9, §5.13). Instructors see everything.
+   * Builders see only their own packages' events, and only their own character's rules lines.
+   * Instructors see everything.
    */
   private fun visible(p: Player, e: TraceEvent): Boolean =
     when {
@@ -97,10 +97,7 @@ class DevTools private constructor(private val world: World, private val host: S
       else -> p.owns(e.pkg)
     }
 
-  /**
-   * One trace line: `Gups.Trace` when the client supports it, else a `[trace]` text line (SPEC
-   * §4.10).
-   */
+  /** One trace line: `Gups.Trace` when the client supports it, else a `[trace]` text line. */
   private fun line(p: Player, text: String) {
     if (!world.gmcp(p, "Gups.Trace", mapOf("line" to text))) world.send(p, "[trace] $text")
   }

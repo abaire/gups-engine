@@ -1,6 +1,6 @@
 package gups.core
 
-/** Identity of a live entity (SPEC §3.3). Allocated monotonically by the world. */
+/** Identity of a live entity. Allocated monotonically by the world. */
 @JvmInline
 value class EntityId(val v: Long) : Comparable<EntityId> {
   override fun compareTo(other: EntityId): Int = v.compareTo(other.v)
@@ -8,15 +8,15 @@ value class EntityId(val v: Long) : Comparable<EntityId> {
   override fun toString(): String = "#$v"
 }
 
-/** Identity of a network session (SPEC §4.11). */
+/** Identity of a network session. */
 @JvmInline
 value class SessionId(val v: Long) {
   override fun toString(): String = "session:$v"
 }
 
 /**
- * Bazel-style address of a declaration: `//zones/forest:clearing` (SPEC §1.6, §2.3). Relative
- * labels such as `:clearing` are resolved with [parse].
+ * Bazel-style address of a declaration: `//zones/forest:clearing`. Relative labels such as
+ * `:clearing` are resolved with [parse].
  */
 @JvmInline
 value class Label(val v: String) {
@@ -48,8 +48,5 @@ value class Label(val v: String) {
   }
 }
 
-/**
- * A persistable reference to a top-level script function: `(file label, function name)` (SPEC
- * §3.3).
- */
+/** A persistable reference to a top-level script function: `(file label, function name)`. */
 data class HookRef(val file: Label, val name: String)

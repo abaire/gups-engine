@@ -2,7 +2,7 @@ package gups.pluginapi
 
 import net.starlark.java.eval.StarlarkValue
 
-// The plugin interface (SPEC §4.15). Unstable: no compatibility promises.
+// The plugin interface. Unstable: no compatibility promises.
 
 object PluginApi {
   /**

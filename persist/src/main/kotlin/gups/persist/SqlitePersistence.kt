@@ -42,9 +42,9 @@ data class RestoreReport(
 )
 
 /**
- * SQLite persistence for one world (SPEC §5.11). Capture runs on the world thread and only
- * serializes; the [CheckpointWriter] commits. The last captured row of every entity and player is
- * mirrored in memory, so logins and repro bundles never wait on the database (D-095).
+ * SQLite persistence for one world. Capture runs on the world thread and only serializes; the
+ * [CheckpointWriter] commits. The last captured row of every entity and player is mirrored in
+ * memory, so logins and repro bundles never wait on the database.
  */
 class SqlitePersistence private constructor(val db: Database, private val log: (String) -> Unit) :
   Persistence {
@@ -57,13 +57,13 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   private val pendingDiagnostics = mutableListOf<DiagnosticRow>()
   private val pendingDeletes = LinkedHashSet<Long>()
 
-  /** Immediate captures waiting for the next periodic checkpoint (SPEC §5.11). */
+  /** Immediate captures waiting for the next periodic checkpoint. */
   private var held: Batch? = null
   private var alerted = false
 
   /**
-   * The course repository commit the live world was loaded from (`meta.world_commit`, M6 design
-   * §7.2), saved with every checkpoint. Set by deploys and at first startup.
+   * The course repository commit the live world was loaded from (`meta.world_commit`), saved with
+   * every checkpoint. Set by deploys and at first startup.
    */
   @Volatile var worldCommit: String? = null
 
@@ -75,12 +75,12 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     lastCapturePulse = db.meta()["pulse"]?.toLongOrNull() ?: 0
   }
 
-  // ---- Startup (SPEC §5.11) ------------------------------------------------------------------
+  // ---- Startup --------------------------------------------------------------------------------
 
   /**
    * How to build the world: saved pulse and id counters, and saved room ids. With [fresh] the world
-   * boots purely from its definitions (SPEC §2.4), with counters kept so ids never clash with saved
-   * characters and their items.
+   * boots purely from its definitions, with counters kept so ids never clash with saved characters
+   * and their items.
    */
   fun boot(protos: Prototypes, fresh: Boolean): Boot {
     val meta = db.meta()
@@ -159,7 +159,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     for ((pkg, json) in zoneRows) {
       if (json.isEmpty()) continue
       val zone = pkg in world.protos.zones
-      // Non-zone packages (libraries, rules) keep a row only for their quarantine (D-146).
+      // Non-zone packages (libraries, rules) keep a row only for their quarantine.
       if (!zone && pkg !in world.scripts.packages) continue
       val z = JSON.decodeFromString(ZonePayload.serializer(), json)
       if (zone) {
@@ -211,7 +211,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     return player
   }
 
-  // ---- Checkpoints (SPEC §5.11) --------------------------------------------------------------
+  // ---- Checkpoints ----------------------------------------------------------------------------
 
   override fun checkpoint(world: World, cause: String, immediate: Boolean) {
     val b = Batch(immediate, cause, world.pulse)
@@ -222,7 +222,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     worldCommit?.let { b.meta["world_commit"] = it }
     val excluded = world.checkpointExclusions
     for (e in world.allEntities) {
-      // Debug spawns are never saved (SPEC §4.9).
+      // Debug spawns are never saved.
       if (!e.dirty || e.id in excluded || e.debug) continue
       if (e is Player) {
         world.encodePlayer(e).also {
@@ -275,7 +275,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     pendingDiagnostics.clear()
     if (immediate) {
       // Captured now, so both sides of a transfer are in one batch; written with the next
-      // periodic checkpoint to keep disk writes rare (SPEC §5.11).
+      // periodic checkpoint to keep disk writes rare.
       held?.merge(b) ?: run { held = b }
       return
     }
@@ -334,9 +334,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
 
   private val accountStore = lazy { SqliteAccountStore.through(db.file, writer) }
 
-  /**
-   * Account storage over this database; account writes join the checkpoint writer's queue (D-128).
-   */
+  /** Account storage over this database; account writes join the checkpoint writer's queue. */
   override val accounts: AccountStore
     get() = accountStore.value
 
@@ -346,19 +344,13 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   /** Waits for what is queued, then takes a `manual` snapshot (`@snapshot`). */
   override fun backup(): String = backup(Backups.Kind.MANUAL).toString()
 
-  /**
-   * Waits for what is queued, then takes a snapshot of [kind], such as `predeploy` (SPEC §5.10).
-   * Blocks.
-   */
+  /** Waits for what is queued, then takes a snapshot of [kind], such as `predeploy`. Blocks. */
   fun backup(kind: Backups.Kind): Path {
     writer.flush()
     return Backups(db).snapshot(kind)
   }
 
-  /**
-   * A sanitized copy of the database at [target], for the CI migration check (SPEC §4.14, §7.3).
-   * Blocks.
-   */
+  /** A sanitized copy of the database at [target], for the CI migration check. Blocks. */
   fun sanitizedCopy(target: Path): Path {
     writer.flush()
     return db.sanitizedCopy(target)
@@ -396,7 +388,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       else
         "The world can't save right now, so new logins are paused. Please try again in a few minutes."
 
-  // ---- Diagnostics (SPEC §6.2) ---------------------------------------------------------------
+  // ---- Diagnostics -----------------------------------------------------------------------------
 
   override fun diagnostic(world: World, d: Diagnostic) {
     pendingDiagnostics +=
@@ -419,7 +411,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
 
   /**
    * A repro bundle: the failing room's entities as of the last checkpoint, and the inputs of actors
-   * in the failing package's rooms since then (SPEC §6.2).
+   * in the failing package's rooms since then.
    */
   private fun bundle(world: World, d: Diagnostic): ReproBundle? {
     val room = d.room ?: return null

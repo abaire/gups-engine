@@ -3,7 +3,7 @@ package gups.auth
 import gups.core.model.Direction
 import gups.core.world.World
 
-/** Login, character-name and password rules (SPEC §3.5, §5.12). */
+/** Login, character-name and password rules. */
 object Names {
   private val LOGIN = Regex("[a-z0-9_.-]{3,24}")
   private val CHARACTER = Regex("[A-Za-z]{2,16}")
@@ -11,7 +11,7 @@ object Names {
   const val MIN_PASSWORD = 10
 
   /**
-   * Words no character may be called (D-136): engine words, the words of the login menus, and every
+   * Words no character may be called: engine words, the words of the login menus, and every
    * direction with its abbreviation. Command names are added per world.
    */
   val BUILTIN_RESERVED: Set<String> = buildSet {

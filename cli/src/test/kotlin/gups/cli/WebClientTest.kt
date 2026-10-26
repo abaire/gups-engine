@@ -207,8 +207,8 @@ class WebClientTest {
   }
 
   /**
-   * The real client in headless Firefox (SPEC §7.1): on Linux x64 CI, where Firefox is installed,
-   * or anywhere with `-Dgups.browserTest=true`.
+   * The real client in headless Firefox: on Linux x64 CI, where Firefox is installed, or anywhere
+   * with `-Dgups.browserTest=true`.
    */
   @Test
   @EnabledIf("browserTest")

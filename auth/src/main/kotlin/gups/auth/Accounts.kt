@@ -5,12 +5,11 @@ import gups.core.AccountStore
 import gups.core.Invite
 import gups.core.Role
 
-/** Invites and setup codes last a week unless asked otherwise (SPEC §5.12). */
+/** Invites and setup codes last a week unless asked otherwise. */
 const val DEFAULT_INVITE_DAYS = 7
 
 private const val DAY_MS = 24 * 60 * 60_000L
 
-/** One roster line (SPEC §5.12). */
 data class RosterEntry(
   val login: String,
   val githubHandle: String? = null,
@@ -35,8 +34,8 @@ sealed interface Redeemed {
 }
 
 /**
- * Account operations shared by the login flow and the CLI tools (SPEC §5.12). Every call blocks on
- * [store] and may hash, so callers keep it off the world thread.
+ * Account operations shared by the login flow and the CLI tools. Every call blocks on [store] and
+ * may hash, so callers keep it off the world thread.
  */
 class AccountService(
   val store: AccountStore,
@@ -72,8 +71,7 @@ class AccountService(
 
   /**
    * Uses a code: a setup code gets [password] on its account, any other invite creates [login] with
-   * the invite's role. With [code] null (open signup, §1.7) a player account is created without
-   * one.
+   * the invite's role. With [code] null (open signup) a player account is created without one.
    */
   fun redeem(code: String?, login: String, password: String): Redeemed {
     val hash = hasher.hash(password)
@@ -105,9 +103,9 @@ class AccountService(
   }
 
   /**
-   * `gups import-roster` (SPEC §5.12, D-134): new logins become password-less accounts with a setup
-   * code each; existing ones get the roster's GitHub handle and role, and keep their password.
-   * Running the same roster again changes nothing and issues no codes.
+   * `gups import-roster`: new logins become password-less accounts with a setup code each; existing
+   * ones get the roster's GitHub handle and role, and keep their password. Running the same roster
+   * again changes nothing and issues no codes.
    */
   fun importRoster(entries: List<RosterEntry>, days: Int = DEFAULT_INVITE_DAYS): RosterResult {
     val codes = mutableListOf<Pair<String, String>>()
@@ -132,7 +130,7 @@ class AccountService(
   }
 }
 
-/** Parses a roster CSV (SPEC §5.12, D-134). */
+/** Parses a roster CSV. */
 object Roster {
   /**
    * A header row naming the columns, any order: `login` (required), `github_handle` and `role`

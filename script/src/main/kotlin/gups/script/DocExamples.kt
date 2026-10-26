@@ -1,6 +1,6 @@
 package gups.script
 
-// Short examples for the HTML reference (M7.2, SPEC §4.16). They are run as harness
+// Short examples for the HTML reference. They are run as harness
 // tests (DocExamplesTest), so they can't rot, and they are never written to `api.json`.
 
 /**
@@ -22,14 +22,14 @@ object DocExamples {
 
   /**
    * Examples whose `pkg` replaces a whole file instead of `example.star`: the `module` example is
-   * `MODULE.gups`, and the `package` example is `package.star` (D-172).
+   * `MODULE.gups`, and the `package` example is `package.star`.
    */
   val FILE_FOR_SYMBOL: Map<String, String> =
     mapOf("module" to "MODULE.gups", "package" to "package.star")
 
   /**
    * Symbols whose example package is a `lib` package rather than a `zone`, because the declaration
-   * is only allowed there (D-172).
+   * is only allowed there.
    */
   val LIB_SYMBOLS: Set<String> = setOf("global_command")
 

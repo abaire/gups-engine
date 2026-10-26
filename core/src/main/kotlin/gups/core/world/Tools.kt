@@ -15,10 +15,7 @@ import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
 
-/**
- * A debug mob despawns this long after `@spawn`, if its spawner hasn't logged out first (SPEC
- * §4.9).
- */
+/** A debug mob despawns this long after `@spawn`, if its spawner hasn't logged out first. */
 const val DEBUG_MOB_PULSES = 30L * 60 * 1000 / PULSE_MS
 
 /** At most this many entities per `@spawn`. */
@@ -27,9 +24,9 @@ const val MAX_SPAWN = 10
 private const val NOT_YOURS = "That isn't one of your packages."
 
 /**
- * The builder and instructor `@` commands of SPEC §4.9 (SPEC §4.9) that need only the world.
- * Builders are confined to their packages; instructors may use them anywhere. `@trace` and `@eval`
- * come from the script host, and the account commands from `auth`.
+ * The builder and instructor `@` commands that need only the world. Builders are confined to their
+ * packages; instructors may use them anywhere. `@trace` and `@eval` come from the script host, and
+ * the account commands from `auth`.
  */
 internal object Tools {
   fun all(): List<CommandDef> =
@@ -68,7 +65,7 @@ internal object Tools {
     val target = w.players.firstOrNull { it.name.equals(arg, ignoreCase = true) }
     if (target != null) {
       if (target === p) return w.send(p, "You're already there.")
-      // Any player, unless taken away from this account (SPEC §4.9).
+      // Any player, unless taken away from this account.
       if (w.refuseRestricted(p, Capabilities.GOTO_PLAYER)) return
       return w.teleport(p, target.room, target.trackIndex)
     }
@@ -153,7 +150,7 @@ internal object Tools {
     w.send(p, lines.joinToString("\n"))
   }
 
-  /** `@errors [package]`: recent diagnostics, only of a builder's own packages (SPEC §4.9). */
+  /** `@errors [package]`: recent diagnostics, only of a builder's own packages. */
   private fun errors(c: CommandCall) {
     val w = c.world
     val p = c.actor as? Player ?: return
@@ -185,10 +182,7 @@ internal object Tools {
   private fun reload(c: CommandCall) {
     val w = c.world
     if (w.config.production)
-      return w.send(
-        c.actor,
-        "@reload is off on this server: changes go live with @deploy (SPEC §1.4).",
-      )
+      return w.send(c.actor, "@reload is off on this server: changes go live with @deploy.")
     val packages =
       c.args
         .split(Regex("\\s+"))
@@ -206,7 +200,7 @@ internal object Tools {
     w.reload(packages)
   }
 
-  /** `@deploy [commit]` (SPEC §4.9, §5.10): progress is reported in game as it happens. */
+  /** `@deploy [commit]`: progress is reported in game as it happens. */
   private fun deploy(c: CommandCall) {
     val w = c.world
     val p = c.actor as? Player ?: return
@@ -241,7 +235,7 @@ internal object Tools {
     if (on == already)
       return w.send(c.actor, "//$pkg is ${if (on) "already" else "not"} quarantined.")
     if (on) w.scripts.quarantine(w, pkg, "by ${c.actor.name}") else w.scripts.unquarantine(w, pkg)
-    // The state persists (SPEC §6.3).
+    // The state persists.
     w.checkpointNow(if (on) "quarantine" else "unquarantine")
     w.send(c.actor, if (on) "//$pkg is quarantined." else "//$pkg is running again.")
   }
@@ -386,8 +380,8 @@ internal object Tools {
 }
 
 /**
- * The package a builder needs to own to inspect [e] (D-143): a room's own, a mob's or item's
- * prototype package, and for players and engine items (corpses) the package of their room.
+ * The package a builder needs to own to inspect [e]: a room's own, a mob's or item's prototype
+ * package, and for players and engine items (corpses) the package of their room.
  */
 fun World.packageOf(e: Entity): String? =
   when {
@@ -407,7 +401,7 @@ internal fun World.describeLocation(loc: ItemLocation): String =
     is ItemLocation.Contained -> "inside ${item(loc.container)?.name ?: "#${loc.container.v}"}"
   }
 
-/** `@stat`: an entity's whole state (SPEC §4.9). */
+/** `@stat`: an entity's whole state. */
 internal fun World.statLines(e: Entity): List<String> = buildList {
   val kind =
     when (e) {
@@ -539,7 +533,7 @@ private fun render(v: AttrValue): String =
       v.v.entries.joinToString(", ", "{", "}") { "\"${it.key}\": ${render(it.value)}" }
   }
 
-// ---- Debug spawns (SPEC §4.9) -----------------------------------------------------------
+// ---- Debug spawns -----------------------------------------------------------------------
 
 /** Marks [item] and everything inside it as debug, so none of it is saved. */
 internal fun markDebug(item: Item) {

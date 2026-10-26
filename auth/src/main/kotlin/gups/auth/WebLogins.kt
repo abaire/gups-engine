@@ -7,15 +7,15 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 
-/** Web session tokens last 30 days (SPEC §5.12). */
+/** Web session tokens last 30 days. */
 const val TOKEN_DAYS = 30
 
 private const val DAY_MS = 24 * 60 * 60_000L
 
 /**
- * Logins for the web client (SPEC §4.10, D-153): the password check and rate limits of the telnet
- * login, sharing its [limiter], then a random 256-bit token. Only the token's SHA-256 is stored, in
- * `session_tokens`. Every call blocks.
+ * Logins for the web client: the password check and rate limits of the telnet login, sharing its
+ * [limiter], then a random 256-bit token. Only the token's SHA-256 is stored, in `session_tokens`.
+ * Every call blocks.
  */
 class WebLogins(
   private val accounts: AccountService,
@@ -34,7 +34,7 @@ class WebLogins(
     val accountKey = LoginLimiter.accountKey(name)
     val ipKey = LoginLimiter.ipKey(remote)
     val locked = limiter.lockedFor(accountKey, ipKey)
-    // Refused without hashing (SPEC §5.12).
+    // Refused without hashing.
     if (locked > 0)
       return WebLogin.Refused(
         429,
@@ -69,7 +69,7 @@ class WebLogins(
 
   private val badCode = "That code isn't valid, or it has expired."
 
-  /** The usable invite for [code], or why not; bad codes count against [remote] (D-132). */
+  /** The usable invite for [code], or why not; bad codes count against [remote]. */
   private fun invite(code: String, remote: String): Result<gups.core.Invite> {
     val ipKey = LoginLimiter.ipKey(remote)
     val locked = limiter.lockedFor(ipKey)

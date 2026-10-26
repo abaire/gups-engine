@@ -8,7 +8,7 @@ import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.RulesContext
 
-// Item custody (SPEC §3.3, §3.8). An item's location lives only on the item; the per-room,
+// Item custody. An item's location lives only on the item; the per-room,
 // per-actor and per-container indexes are derived and changed only here.
 
 /** The `spawn` verb for items. */
@@ -20,7 +20,7 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boole
   checkTarget(item, at)
   register(item)
   index(item, at)
-  // Debug items are never saved, so they have no audit trail (SPEC §4.9).
+  // Debug items are never saved, so they have no audit trail.
   if (custodian(item) is Player && !debug)
     itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
   custodian(item)?.let { updateEncumbrance(it) }
@@ -41,7 +41,7 @@ fun World.moveItem(item: Item, to: ItemLocation) {
   val after = custodian(item) as? Player
   if (before !== after && !item.debug) {
     itemEvents += ItemEvent(item.id, pulse, from, to, "move")
-    // An item changing hands between players is saved at once, both sides together (SPEC §5.11).
+    // An item changing hands between players is saved at once, both sides together.
     if (before != null && after != null) requestImmediate("transfer")
   }
   holderOf(from)?.let { updateEncumbrance(it) }
@@ -59,7 +59,7 @@ private fun World.holderOf(loc: ItemLocation): Actor? =
 
 /**
  * Applies `rules.encumbrance` while [a] carries more than `rules.carry_limit`, and lifts it once
- * they don't (SPEC §4.6). The limit is worked out without the current encumbrance.
+ * they don't. The limit is worked out without the current encumbrance.
  */
 fun World.updateEncumbrance(a: Actor) {
   if (!a.inWorld) return
@@ -78,8 +78,8 @@ fun World.updateEncumbrance(a: Actor) {
 
 /**
  * Merges [item] into a stack of the same prototype at the same location, if there is one with an
- * identical delta (SPEC §3.8 inv. 8): the same attributes and decay deadline, and no timers or name
- * override on either. Returns the stack that now holds it.
+ * identical delta: the same attributes and decay deadline, and no timers or name override on
+ * either. Returns the stack that now holds it.
  */
 fun World.stack(item: Item): Item {
   if (!item.proto.stackable || item.timers.isNotEmpty() || item.nameOverride != null) return item

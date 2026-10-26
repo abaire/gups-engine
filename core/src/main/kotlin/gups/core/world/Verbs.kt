@@ -12,8 +12,8 @@ import gups.core.model.QueuedAction
 import gups.core.model.Room
 import gups.core.model.SkillProto
 
-// Engine-validated verbs used by the script host's `ctx` (SPEC §4.5) that have no player
-// command of their own. Each is individually atomic and invariant-preserving (SPEC §6.2).
+// Engine-validated verbs used by the script host's `ctx` that have no player
+// command of their own. Each is individually atomic and invariant-preserving.
 
 /** The `say` verb: the room hears it and `on_say` fires. */
 fun World.say(speaker: Actor, text: String) {
@@ -56,7 +56,7 @@ fun World.setExitSensesBlocked(room: Room, dir: Direction, channels: Set<Channel
   room.dirty = true
 }
 
-/** The `split` verb: moves [n] of a stack into a new item beside it (SPEC §3.8 inv. 8). */
+/** The `split` verb: moves [n] of a stack into a new item beside it. */
 fun World.splitItem(item: Item, n: Int): Item {
   require(item.proto.stackable) { "${item.name} is not stackable" }
   require(n in 1 until item.count) { "split: n must be between 1 and ${item.count - 1}" }
@@ -73,8 +73,8 @@ fun World.splitItem(item: Item, n: Int): Item {
 /**
  * Shortest walk from [from] to [to] over passable exits, as exit directions; empty if they are the
  * same room, null if [to] can't be reached. Breadth-first over the whole room graph in exit
- * declaration order, so ties resolve the same way every time (D-063). Results are cached per
- * `(from, to)` until a door, exit or reload changes the graph (SPEC §5.9).
+ * declaration order, so ties resolve the same way every time. Results are cached per `(from, to)`
+ * until a door, exit or reload changes the graph.
  */
 fun World.pathTo(from: Room, to: Room): List<Direction>? {
   if (from === to) return emptyList()
@@ -109,11 +109,11 @@ private fun World.searchPath(from: Room, to: Room): List<Direction>? {
   return null
 }
 
-// ---- Mob actions (SPEC §4.5, §5.8) -----------------------------------------------------------
+// ---- Mob actions -----------------------------------------------------------------------------
 // Each enqueues a tick-lane action, exactly as if the mob had typed it, and returns false if
 // the queue is full.
 
-/** Enqueues a ready-made [action] for [actor], subject to the queue cap (SPEC §5.2). */
+/** Enqueues a ready-made [action] for [actor], subject to the queue cap. */
 fun World.enqueue(actor: Actor, verb: String, action: Action): Boolean {
   if (actor.actionQueue.size >= ACTION_QUEUE_MAX) {
     send(actor, "You can't plan that far ahead.")

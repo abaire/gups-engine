@@ -2,7 +2,7 @@ package gups.core.model
 
 import kotlin.math.abs
 
-/** Relative distance on a room's track, as seen by a viewer (SPEC §5.5). */
+/** Relative distance on a room's track, as seen by a viewer. */
 enum class Band {
   MELEE,
   NEAR,
@@ -26,14 +26,14 @@ enum class Band {
   }
 }
 
-/** A room's track size (SPEC §3.3). */
+/** A room's track size. */
 enum class TrackSize(val slots: Int) {
   CRAMPED(1),
   NORMAL(3),
   LARGE(5),
 }
 
-/** Perception channels an exit may block (SPEC §3.3, §5.7). */
+/** Perception channels an exit may block. */
 enum class Channel {
   SIGHT,
   SOUND,

@@ -34,7 +34,7 @@ import kotlin.io.path.isRegularFile
 import kotlin.io.path.name
 import net.starlark.java.eval.StarlarkValue
 
-// Loading plugins and wiring them into a world (SPEC §4.15).
+// Loading plugins and wiring them into a world.
 
 /** What `gups docs` shows about one plugin; `:cli` maps it to its `PluginDocSpec`. */
 data class PluginInfo(
@@ -84,9 +84,8 @@ internal class GmcpReg(
 )
 
 /**
- * Collects one plugin's registrations, validating each as it comes (§5.5 chunk 3). Any violation
- * throws, so a failed `register` adds nothing. [takenCommands] and [takenGmcp] are the earlier
- * plugins' names.
+ * Collects one plugin's registrations, validating each as it comes. Any violation throws, so a
+ * failed `register` adds nothing. [takenCommands] and [takenGmcp] are the earlier plugins' names.
  */
 internal class PluginRegistryImpl(
   private val pluginId: String,
@@ -137,8 +136,7 @@ internal class PluginRegistryImpl(
       "command name '$name' must be one word"
     }
     require(name == name.lowercase()) { "command name '$name' must be lowercase" }
-    // `@` words resolve only to engine tool commands (SPEC §4.9), so a plugin's could never run
-    // (D-178).
+    // `@` words resolve only to engine tool commands, so a plugin's could never run.
     require(!name.startsWith("@")) {
       "command name '$name' can't start with @: those are engine tool commands"
     }
@@ -165,8 +163,7 @@ internal class PluginRegistryImpl(
     require(GMCP.matches(pkg)) {
       "GMCP package '$pkg' needs at least two dot-separated parts, such as Gups.Weather"
     }
-    // Clients subscribe by prefix, so a package may not equal, contain or nest in a taken one
-    // (D-178).
+    // Clients subscribe by prefix, so a package may not equal, contain or nest in a taken one.
     fun overlaps(t: String) = pkg == t || pkg.startsWith("$t.") || t.startsWith("$pkg.")
     ENGINE_GMCP_PACKAGES.firstOrNull { overlaps(it) }
       ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps the engine's $it") }
@@ -211,8 +208,8 @@ internal class LoadedPlugin(
 )
 
 /**
- * The world's loaded plugins (§5.5 chunk 3): their script globals, and the commands, effects, GMCP
- * producers and start callbacks [install] and [started] wire into a world.
+ * The world's loaded plugins: their script globals, and the commands, effects, GMCP producers and
+ * start callbacks [install] and [started] wire into a world.
  */
 class PluginHost
 internal constructor(
@@ -266,7 +263,7 @@ internal constructor(
         )
       }
       for (g in p.reg.gmcp) {
-        // core records a failing producer and skips it for the pulse (SPEC §4.15).
+        // core records a failing producer and skips it for the pulse.
         world.pluginGmcp[g.pkg] = { player -> g.produce(facade(world, p.id), ActorFacade(player)) }
       }
     }
@@ -335,8 +332,8 @@ internal constructor(
 
 object PluginLoader {
   /**
-   * Loads the plugins `MODULE.gups` pins (§5.3), sorted by id. Each one that fails a check is
-   * skipped with a warning (to [log] and [PluginHost.warnings]); the others still load.
+   * Loads the plugins `MODULE.gups` pins, sorted by id. Each one that fails a check is skipped with
+   * a warning (to [log] and [PluginHost.warnings]); the others still load.
    */
   fun load(
     dir: WorldDir,

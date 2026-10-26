@@ -1,6 +1,6 @@
 package gups.pluginapi
 
-// What plugins can touch (SPEC §4.15): a facade over the running world. Every verb
+// What plugins can touch: a facade over the running world. Every verb
 // calls what the `ctx` verb of the same name calls, so the engine's invariants hold. Views read
 // current state on every access.
 
@@ -63,7 +63,7 @@ interface PluginRng {
   /** A uniform int in `min..max`, inclusive. */
   fun int(min: Int, max: Int): Int
 
-  /** True with probability [pct] percent, as `ctx.rng.chance` (D-177). */
+  /** True with probability [pct] percent, as `ctx.rng.chance`. */
   fun chance(pct: Int): Boolean
 }
 

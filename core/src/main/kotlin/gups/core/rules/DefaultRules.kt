@@ -6,8 +6,8 @@ import gups.core.model.Dice
 import gups.core.model.Player
 
 /**
- * The built-in Kotlin ruleset (SPEC §4.6, §6.3). Used when no rules package is loaded, and as the
- * fallback when the rules package fails. Open so tests can pin individual results.
+ * The built-in Kotlin ruleset. Used when no rules package is loaded, and as the fallback when the
+ * rules package fails. Open so tests can pin individual results.
  */
 open class DefaultRules : RulesEngine {
   override fun equipmentSlots(): List<String> = DEFAULT_SLOTS
@@ -31,7 +31,7 @@ open class DefaultRules : RulesEngine {
     return (afterArmor * (100 - resist) / 100).coerceAtLeast(0)
   }
 
-  /** `dex` plus `level`, with no roll (SPEC §5.4.1). */
+  /** `dex` plus `level`, with no roll. */
   override fun initiative(c: RulesContext): Int = c.actor.stat("dex") + c.actor.level
 
   override fun castAllowed(c: RulesContext): String? = null

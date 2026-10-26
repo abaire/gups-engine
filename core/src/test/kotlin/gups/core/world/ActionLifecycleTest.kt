@@ -148,13 +148,13 @@ class ActionLifecycleTest {
     f.run(2)
     f.w.applyEffect(gups.core.model.Effect.Stun(3), g, p)
     assertFalse(p.isCasting)
-    assertEquals(0, p.waitState, "no recovery while stunned (D-004)")
+    assertEquals(0, p.waitState, "no recovery while stunned")
     f.run(2)
     assertTrue(p.isStunned)
     assertEquals(0, p.waitState)
     f.run() // the stun expires in the timer phase, then the action phase counts down one pulse
     assertFalse(p.isStunned)
-    assertEquals(1, p.waitState, "the broken cast's half lag applies once the stun ends (D-004)")
+    assertEquals(1, p.waitState, "the broken cast's half lag applies once the stun ends")
     assertEquals(1000, g.hp, "the interrupted cast never resolves")
     assertEquals(50, p.mana)
   }
@@ -178,7 +178,7 @@ class ActionLifecycleTest {
     f.w.applyEffect(gups.core.model.Effect.Stun(3), g, p)
     assertTrue(p.isCasting)
     f.run(3) // the stun ends at pulse 5, the cast's original end
-    assertTrue(p.isCasting, "the warmup didn't run during the stun (D-004)")
+    assertTrue(p.isCasting, "the warmup didn't run during the stun")
     assertEquals(1000, g.hp)
     f.run(3)
     assertFalse(p.isCasting)
@@ -192,11 +192,11 @@ class ActionLifecycleTest {
     val g = f.mob(index = 2)
     p.waitState = 4
     f.w.applyAffect(p, "stun", 3, flags = setOf("stunned"))
-    assertEquals(0, p.waitState, "the stun removes recovery (D-004)")
+    assertEquals(0, p.waitState, "the stun removes recovery")
     f.run(2)
     assertEquals(0, p.waitState)
     f.w.removeAffect(p, "stun")
-    assertEquals(4, p.waitState, "recovery did not count down during the stun (D-004)")
+    assertEquals(4, p.waitState, "recovery did not count down during the stun")
     f.input(p, "advance goblin")
     f.run(4)
     assertEquals(0, p.trackIndex, "the queued action still waits out the restored recovery")

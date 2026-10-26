@@ -15,11 +15,11 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.Tuple
 import net.starlark.java.spelling.SpellChecker
 
-// Single machine-readable model of the Gups Starlark API (M7.1, SPEC §4.16).
+// Single machine-readable model of the Gups Starlark API.
 // Drives declaration argument parsing, completeness checks, `gups docs --json` (`api.json`),
-// and the HTML reference and changelog tools in M7.2–M7.3.
+// and the HTML reference and changelog tools.
 
-/** The `api_version` the whole API so far belongs to. Later additions give their own (D-171). */
+/** The `api_version` the whole API so far belongs to. Later additions give their own. */
 const val FIRST_API_VERSION = 1
 
 /**
@@ -47,7 +47,7 @@ data class DeclParam(
 /**
  * Specification of a declaration or settings builtin (`room`, `mob`, `item`, `skill`, `exit`,
  * `door`, `package`, `region`, `spawn`, `loot`, `container`, `global_command`, `struct`, `module`,
- * `server`). Both argument parsing and `api.json` read from this single spec (D-171).
+ * `server`). Both argument parsing and `api.json` read from this single spec.
  */
 data class DeclSpec(
   val name: String,
@@ -73,7 +73,7 @@ data class DeclSpec(
   /**
    * Parses [args] and [kwargs] against this spec and runs [body] on the result. Afterwards, every
    * parameter of the spec must have been read, so a parameter the builtin forgets is an engine
-   * error instead of an argument that is silently ignored (D-171).
+   * error instead of an argument that is silently ignored.
    *
    * Parsing checks positional counts, binds positional and keyword arguments, runs
    * [beforeUnknownCheck] if given (so `package()` can check `api_version` before rejecting newer
@@ -218,7 +218,7 @@ data class ConstantSpec(
   val since: Int = FIRST_API_VERSION,
 )
 
-/** One hook in the hook catalog (SPEC §4.4). */
+/** One hook in the hook catalog. */
 data class HookSpec(
   val hook: HookName,
   val signature: String,
@@ -267,7 +267,7 @@ data class TypeSpec(
   val since: Int = FIRST_API_VERSION,
 )
 
-/** One function exported by `//rules:combat.star` (SPEC §4.6). */
+/** One function exported by `//rules:combat.star`. */
 data class RulesExportSpec(
   val export: RulesExport,
   val signature: String,
@@ -281,7 +281,7 @@ data class RulesExportSpec(
     get() = export.scriptName
 }
 
-/** One modifier point in the rules modifier chain (SPEC §4.6). */
+/** One modifier point in the rules modifier chain. */
 data class ModifierPointSpec(
   val point: ModifierPoint,
   val signature: String,
@@ -294,7 +294,7 @@ data class ModifierPointSpec(
     get() = point.scriptName
 }
 
-/** The rules section of the script API model (SPEC §4.6). */
+/** The rules section of the script API model. */
 data class RulesApiSpec(
   val ctx: TypeSpec,
   val exports: List<RulesExportSpec>,
@@ -302,8 +302,8 @@ data class RulesApiSpec(
 )
 
 /**
- * The complete, canonical description of the Gups Starlark API (M7.1). Every list is sorted by
- * `name` so [toJson] is deterministic across runs and platforms.
+ * The complete, canonical description of the Gups Starlark API. Every list is sorted by `name` so
+ * [toJson] is deterministic across runs and platforms.
  */
 data class ScriptApiModel(
   val apiVersion: Int,
@@ -322,9 +322,7 @@ data class ScriptApiModel(
   /** Canonical, sorted, 2-space-indented JSON with `\n` line endings. */
   fun toJson(): String = JsonWriter().apply { writeModel(this@ScriptApiModel) }.toString()
 
-  /**
-   * Every entry's `symbol`, the path the changelog uses to name it (D-171), in `api.json` order.
-   */
+  /** Every entry's `symbol`, the path the changelog uses to name it, in `api.json` order. */
   fun symbols(): List<String> = JsonWriter().apply { writeModel(this@ScriptApiModel) }.symbols
 }
 
@@ -468,7 +466,7 @@ object ScriptApi {
 
   /**
    * Builds the complete [ScriptApiModel]. [harness] describes the harness objects, which live in
-   * `:harness` (`HarnessApi.specs()`); `:script` can't see them itself (D-171).
+   * `:harness` (`HarnessApi.specs()`); `:script` can't see them itself.
    */
   fun model(harness: List<TypeSpec>): ScriptApiModel =
     ScriptApiModel(
@@ -495,9 +493,9 @@ object ScriptApi {
   /**
    * Checks that [model] covers every global in `PACKAGE_GLOBALS`, every `@StarlarkBuiltin` class in
    * [builtinClasses] and all of its `@StarlarkMethod`s, every [HookName], every [ModifierPoint] and
-   * every [RulesExport], with non-blank doc strings throughout, including method parameters (M7.1
-   * §2.2). Also checks that the ctx fields listed for hooks and rules calls exist, and that symbols
-   * are unique. Returns the problems (empty when complete).
+   * every [RulesExport], with non-blank doc strings throughout, including method parameters. Also
+   * checks that the ctx fields listed for hooks and rules calls exist, and that symbols are unique.
+   * Returns the problems (empty when complete).
    */
   fun validate(model: ScriptApiModel, builtinClasses: Collection<Class<*>>): List<String> {
     val problems = mutableListOf<String>()
@@ -640,7 +638,7 @@ object ScriptApi {
 // ---- Deterministic JSON writer ------------------------------------------------------------------
 
 /**
- * Writes `api.json`. Each entry carries a `symbol`, its path for the changelog (D-171): `room`,
+ * Writes `api.json`. Each entry carries a `symbol`, its path for the changelog: `room`,
  * `room.size`, `damage.dice`, `ALL`, `hook:on_wake`, `ctx.act_move`, `ctx.apply_affect.name`,
  * `view:room.exits`, `rules:to_hit`, `modifier:to_hit`, `rules_ctx.weapon`, `t.eq`.
  */

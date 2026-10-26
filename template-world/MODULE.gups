@@ -1,4 +1,4 @@
-# World metadata (SPEC §2.3). Changing this file needs a server restart.
+# World metadata. Changing this file needs a server restart.
 module(
     # The script API version every package here targets.
     api_version = 1,

@@ -137,7 +137,7 @@ class WorldModuleTest {
       ),
       c,
     )
-    // The shutdown timeout is configurable, not a fixed 30 s (D-010).
+    // The shutdown timeout is configurable, not a fixed 30 s.
     assertEquals(30, ServerConfig().shutdownTimeout)
     assertContains(
       assertNotNull(ServerConfig.read(dir.resolve("no-wait.gups")).second).message,

@@ -62,7 +62,7 @@ import net.starlark.java.eval.Structure
 import net.starlark.java.eval.Tuple
 import net.starlark.java.spelling.SpellChecker
 
-// The content declarations of a package (SPEC §4.1–§4.3). They are only callable while a
+// The content declarations of a package. They are only callable while a
 // package's files evaluate; each one produces a frozen Kotlin prototype.
 
 /** What the file being evaluated may do. Attached to the evaluating thread. */
@@ -85,14 +85,14 @@ internal class LoadCtx(
   }
 }
 
-/** Kinds of entity a hook can be attached to (SPEC §4.4 "Attach to"). */
+/** Kinds of entity a hook can be attached to. */
 enum class OwnerKind(val word: String) {
   ROOM("room"),
   MOB("mob"),
   ITEM("item"),
 }
 
-/** The hook catalog: attachment rules, signatures, ctx fields and docs (SPEC §4.4, M7.1). */
+/** The hook catalog: attachment rules, signatures, ctx fields and docs. */
 internal object HookCatalog {
   private val R = OwnerKind.ROOM
   private val M = OwnerKind.MOB
@@ -328,15 +328,13 @@ internal class ContainerDecl(val proto: ContainerProto) : DeclValue("container")
 
 internal class EffectDecl(val effect: Effect) : DeclValue("effect")
 
-/**
- * An effect value for a plugin effect primitive, usable wherever an engine effect is (SPEC §4.15).
- */
+/** An effect value for a plugin effect primitive, usable wherever an engine effect is. */
 fun pluginEffect(pluginId: String, name: String, args: Map<String, Any?>): StarlarkValue =
   EffectDecl(Effect.Plugin(pluginId, name, args))
 
 internal class BehaviorDecl(val behavior: Behavior) : DeclValue("behavior")
 
-/** What `struct(**fields)` returns: read-only named fields (D-125). */
+/** What `struct(**fields)` returns: read-only named fields. */
 internal class StructValue(private val fields: Map<String, Any>) : Structure {
   override fun getValue(name: String): Any? = fields[name]
 
@@ -422,8 +420,7 @@ private fun displayName(id: String): String = id.replace('_', ' ')
 private val ARTICLES = setOf("a", "an", "the", "some")
 
 /**
- * Keywords default to the words of the display name minus articles, or else the declaration name
- * (D-070).
+ * Keywords default to the words of the display name minus articles, or else the declaration name.
  */
 private fun defaultKeywords(name: String, id: String): List<String> =
   name
@@ -449,7 +446,7 @@ private fun version(d: ParsedDecl): Int {
 
 private val POINTS = ModifierPoint.entries.map { it.scriptName }
 
-/** A `modifiers` dict: modifier point name to a top-level function `fn(ctx, base)` (SPEC §4.6). */
+/** A `modifiers` dict: modifier point name to a top-level function `fn(ctx, base)`. */
 internal fun modifiers(v: Any?, what: String): Modifiers {
   if (isNone(v)) return emptyMap()
   return dict(v, what).entries.associate { (k, fn) ->
@@ -470,9 +467,8 @@ private fun flag(f: String, what: String): String =
   f.also { if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag") }
 
 /**
- * `equip_affects` entries (SPEC §4.6): a flag name, held while worn, or `{"flag": ..., "pulses":
- * n}`, applied for `n` pulses on equip. A stun must be timed so an item can't stun its wearer for
- * good (D-181).
+ * `equip_affects` entries: a flag name, held while worn, or `{"flag": ..., "pulses": n}`, applied
+ * for `n` pulses on equip. A stun must be timed so an item can't stun its wearer for good.
  */
 private fun equipAffects(v: Any?, what: String): List<EquipAffect> =
   (if (isNone(v)) emptyList() else list(v, what)).map { e ->
@@ -523,8 +519,8 @@ private fun effectValue(v: Any?, what: String): Effect =
     ?: fail("$what: expected an effect such as damage(...), got ${typeName(v)}")
 
 /**
- * The declaration builtins, plus the effect primitives (SPEC §4.3) and constants. Effect primitives
- * work anywhere; everything else only while a package loads.
+ * The declaration builtins, plus the effect primitives and constants. Effect primitives work
+ * anywhere; everything else only while a package loads.
  */
 internal class DeclarationBuiltins {
   @StarlarkMethod(
@@ -969,7 +965,7 @@ internal class DeclarationBuiltins {
     }
   }
 
-  // ---- Behaviors (SPEC §4.7) --------------------------------------------------------------------
+  // ---- Behaviors --------------------------------------------------------------------------------
 
   @StarlarkMethod(
     name = "wander",
@@ -1192,7 +1188,7 @@ internal class DeclarationBuiltins {
     return STRUCT_SPEC.bind(kwargs = kwargs) { StructValue(LinkedHashMap(kwargs)) }
   }
 
-  // ---- Effect primitives (SPEC §4.3) -----------------------------------------------------------
+  // ---- Effect primitives ------------------------------------------------------------------------
 
   @StarlarkMethod(
     name = "damage",
@@ -2204,7 +2200,7 @@ internal fun affectEffect(
   )
 }
 
-/** `package(api_version=...)` names a version this engine doesn't support (SPEC §1.3). */
+/** `package(api_version=...)` names a version this engine doesn't support. */
 internal class ApiVersionMismatch(val declared: Int) :
   RuntimeException(
     "package declares api_version $declared, but this engine supports only api_version ${EngineInfo.API_VERSION} " +

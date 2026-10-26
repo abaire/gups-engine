@@ -36,8 +36,8 @@ private const val SNAPSHOT_PULSES = 1000 / PULSE_MS
 private val TRANSPORTS = listOf("telnet", "tls", "ws", "local")
 
 /**
- * The Prometheus metrics of SPEC §4.14 (D-161), through Micrometer. The world thread only records
- * into thread-safe meters and publishes a [Snapshot]; scrapes read nothing else.
+ * Prometheus metrics through Micrometer. The world thread only records into thread-safe meters and
+ * publishes a [Snapshot]; scrapes read nothing else.
  */
 class Metrics(private val world: World, writer: CheckpointWriter?, overruns: () -> Long) {
   val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)

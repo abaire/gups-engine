@@ -28,9 +28,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
-/**
- * What the admin port reports and does (SPEC §4.14), implemented by the server. Calls may block.
- */
+/** What the admin port reports and does, implemented by the server. Calls may block. */
 interface Admin {
   /** `GET /healthz`: healthy, and the fields of its JSON body. */
   fun health(): Pair<Boolean, Map<String, Any?>>
@@ -59,9 +57,9 @@ interface Admin {
 }
 
 /**
- * The admin port (SPEC §4.14): plain HTTP on a private address, on Ktor's Netty engine. Every
- * endpoint but `GET /healthz` needs `Authorization: Bearer <token>`, compared in constant time.
- * With no [token] configured, they all answer 403.
+ * The admin port: plain HTTP on a private address, on Ktor's Netty engine. Every endpoint but `GET
+ * /healthz` needs `Authorization: Bearer <token>`, compared in constant time. With no [token]
+ * configured, they all answer 403.
  */
 class AdminServer(
   private val admin: Admin,
@@ -181,7 +179,7 @@ class AdminServer(
   }
 
   companion object {
-    /** Compares in constant time whatever the lengths, by comparing SHA-256 digests (D-160). */
+    /** Compares in constant time whatever the lengths, by comparing SHA-256 digests. */
     fun sameToken(given: String, expected: String): Boolean {
       val md = { s: String ->
         MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))

@@ -13,7 +13,7 @@ import kotlin.io.path.absolutePathString
 import kotlinx.serialization.Serializable
 import org.sqlite.SQLiteConfig
 
-/** `accounts.roles_json` (SPEC §3.5): one role, and the builder scope CODEOWNERS fills. */
+/** `accounts.roles_json`: one role, and the builder scope CODEOWNERS fills. */
 @Serializable
 internal class RolesJson(
   val role: String,
@@ -24,7 +24,7 @@ internal class RolesJson(
 internal fun rolesJson(a: Account): String =
   JSON.encodeToString(RolesJson.serializer(), RolesJson(a.role.name, a.scope, a.manualScope))
 
-/** A read-only connection beside the writer, which WAL allows (SPEC §3.5). */
+/** A read-only connection beside the writer, which WAL allows. */
 internal fun readOnlyConnection(file: Path): Connection =
   SQLiteConfig()
     .apply {
@@ -37,10 +37,10 @@ internal fun readOnlyConnection(file: Path): Connection =
 private const val WRITE_TIMEOUT_S = 30L
 
 /**
- * SQLite account storage (SPEC §3.5, D-128). Reads go to a read-only connection of their own, which
- * WAL lets run beside the writer. Writes are single-purpose [Batch]es handed to [write], which
- * returns once the batch is committed: through the [CheckpointWriter] in a running server, or
- * [Database.write] directly for the offline CLI tools.
+ * SQLite account storage. Reads go to a read-only connection of their own, which WAL lets run
+ * beside the writer. Writes are single-purpose [Batch]es handed to [write], which returns once the
+ * batch is committed: through the [CheckpointWriter] in a running server, or [Database.write]
+ * directly for the offline CLI tools.
  */
 class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
   AccountStore, AutoCloseable {
@@ -192,7 +192,7 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
     }
 
   companion object {
-    /** A store for a running server: writes go through [writer] (SPEC §2.5). */
+    /** A store for a running server: writes go through [writer]. */
     fun through(file: Path, writer: CheckpointWriter) =
       SqliteAccountStore(file) { writer.submit(it) }
   }

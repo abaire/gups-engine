@@ -17,13 +17,13 @@ import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.Tuple
 import net.starlark.java.spelling.SpellChecker
 
-// Conversions between Starlark values and engine values (SPEC §3.2), and the argument
+// Conversions between Starlark values and engine values, and the argument
 // checks every builtin shares. Every failure is an EvalException, which the host turns into
 // a script error.
 
 internal fun fail(message: String): Nothing = throw EvalException(message)
 
-/** Marks an error raised because a script exceeded a resource limit (SPEC §6.1). */
+/** Marks an error raised because a script exceeded a resource limit. */
 internal class LimitExceeded(val kind: String, message: String) : RuntimeException(message)
 
 internal fun limitFail(kind: String, message: String): Nothing =
@@ -99,7 +99,7 @@ internal fun label(text: String, pkg: String?, what: String): Label =
 
 /**
  * A reference to a top-level function, as hooks, commands and timers need: they are stored as
- * `(file, name)` so they survive reloads and persistence (SPEC §3.3).
+ * `(file, name)` so they survive reloads and persistence.
  */
 internal fun hookRef(v: Any?, what: String): HookRef {
   val fn = v as? StarlarkFunction ?: fail("$what: expected a function, got ${typeName(v)}")
@@ -116,7 +116,7 @@ internal fun hookRef(v: Any?, what: String): HookRef {
 internal fun hookRefOrNull(v: Any?, what: String): HookRef? =
   if (isNone(v)) null else hookRef(v, what)
 
-// ---- Script-compatible values (SPEC §3.2) ------------------------------------------------------
+// ---- Script-compatible values -------------------------------------------------------------------
 
 /** Converts a script value for storage. `None` maps to null ("absent"). */
 internal fun toAttr(v: Any?, what: String, limits: ScriptLimits): AttrValue? =
@@ -178,7 +178,7 @@ internal fun checkValue(v: Any?, what: String, limits: ScriptLimits) {
   }
 }
 
-/** Size of the attributes as compact JSON, the way they are persisted (SPEC §3.2, §6.1). */
+/** Size of the attributes as compact JSON, the way they are persisted. */
 internal fun jsonSize(attrs: Map<String, AttrValue>): Int = jsonSize(AttrValue.M(attrs))
 
 private fun jsonSize(v: AttrValue): Int =

@@ -11,7 +11,7 @@ import gups.core.world.SpawnState
 import gups.core.world.TickCommand
 import java.util.TreeMap
 
-// Live entities (SPEC §3.3). Static data is read through `proto`; everything mutable lives
+// Live entities. Static data is read through `proto`; everything mutable lives
 // on the instance. Only the world mutates these, on the world thread.
 
 sealed class Entity(val id: EntityId, val protoLabel: Label) {
@@ -22,7 +22,7 @@ sealed class Entity(val id: EntityId, val protoLabel: Label) {
   val anchorReasons: MutableSet<String> = linkedSetOf()
   var dirty: Boolean = true
 
-  /** Spawned by a builder's `@spawn`, or dropped by such a mob: never persisted (SPEC §4.9). */
+  /** Spawned by a builder's `@spawn`, or dropped by such a mob: never persisted. */
   var debug: Boolean = false
 
   abstract val name: String
@@ -58,17 +58,17 @@ class Exit(proto: ExitProto) {
 }
 
 class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
-  /** The pulse the room went dormant at, or null while it is simulated (SPEC §5.9). */
+  /** The pulse the room went dormant at, or null while it is simulated. */
   var dormantSince: Long? = null
     internal set
 
-  /** A zone reset passed while the room was dormant; applied when it wakes (SPEC §5.9). */
+  /** A zone reset passed while the room was dormant; applied when it wakes. */
   internal var resetMissed = false
 
   val isDormant: Boolean
     get() = dormantSince != null
 
-  /** Replaced by a reload (SPEC §5.10). */
+  /** Replaced by a reload. */
   var proto: RoomProto = proto
     internal set
 
@@ -106,7 +106,7 @@ class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
   fun hasFlag(flag: String): Boolean = flag in proto.flags
 }
 
-/** A timed buff or debuff (SPEC §3.3). */
+/** A timed buff or debuff. */
 class Affect(
   val id: Long,
   val name: String,
@@ -119,13 +119,13 @@ class Affect(
   val onTick: HookRef? = null,
   val onExpire: HookRef? = null,
   val expireMessage: String = "",
-  /** Modifiers that apply to the host while the affect lasts (SPEC §4.6). */
+  /** Modifiers that apply to the host while the affect lasts. */
   val modifiers: Modifiers = emptyMap(),
-  /** The worn item this lasts as long as, or null for a timed affect (D-181). */
+  /** The worn item this lasts as long as, or null for a timed affect. */
   val wornFrom: EntityId? = null,
 )
 
-/** A pending script callback (SPEC §3.3). Exactly one of [due] and [remaining] is set. */
+/** A pending script callback. Exactly one of [due] and [remaining] is set. */
 class ScriptTimer(
   val id: Long,
   val fn: HookRef,
@@ -134,7 +134,7 @@ class ScriptTimer(
   var remaining: Int? = null,
 )
 
-/** An action in its warmup (SPEC §5.3). */
+/** An action in its warmup. */
 class CastState(val action: Action, val startedAt: Long, val endsAt: Long)
 
 /** A tick-lane command waiting in an actor's queue. Parsed into an [Action] when popped. */
@@ -170,10 +170,10 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   val actionQueue: ArrayDeque<QueuedAction> = ArrayDeque()
   var waitState: Int = 0
 
-  /** Recovery held aside while the actor is stunned, restored when the stun ends (D-004). */
+  /** Recovery held aside while the actor is stunned, restored when the stun ends. */
   internal var stunnedWaitState: Int = 0
 
-  /** The pulse the current stun started, so a paused warmup can be pushed back (D-004). */
+  /** The pulse the current stun started, so a paused warmup can be pushed back. */
   internal var stunnedSince: Long = 0
 
   var casting: CastState? = null
@@ -217,7 +217,7 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
       equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
       (encumbrance[name] ?: 0)
 
-  /** True if an affect carries [flag], including those applied by worn items (D-181). */
+  /** True if an affect carries [flag], including those applied by worn items. */
   fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
 
   val isStunned: Boolean
@@ -244,7 +244,7 @@ class Player(
   room: Room,
   trackIndex: Int,
   var recallRoom: Label,
-  /** The owning account (SPEC §3.6 `players.account_id`); null for characters without one. */
+  /** The owning account; null for characters without one. */
   var accountId: Long? = null,
 ) : Actor(id, Prototypes.PLAYER, room, trackIndex) {
   override val keywords: List<String> = listOf(name.lowercase())
@@ -261,13 +261,13 @@ class Player(
   var lastInputPulse: Long = 0
     internal set
 
-  /** Instructors are exempt from the idle auto-quit (SPEC §5.12). */
+  /** Instructors are exempt from the idle auto-quit. */
   var idleExempt: Boolean = false
 
-  /** The account's role, which gates builder and instructor commands (SPEC §3.5, §4.9). */
+  /** The account's role, which gates builder and instructor commands. */
   var role: Role = Role.PLAYER
 
-  /** The packages a builder may work on (SPEC §3.5); ignored for instructors and admins. */
+  /** The packages a builder may work on; ignored for instructors and admins. */
   var scope: Set<String> = emptySet()
 
   /**
@@ -297,20 +297,20 @@ class Mob(id: EntityId, var proto: MobProto, room: Room, trackIndex: Int) :
   var lastThink: Long = Long.MIN_VALUE / 2
     internal set
 
-  /** Where it was spawned; restored from a checkpoint (SPEC §5.11). */
+  /** Where it was spawned; restored from a checkpoint. */
   var homeRoom: Label = room.label
   var dormantRecovery: DormantRecovery = proto.dormantRecovery
 
-  /** Whom a `follow` behavior is following, once it has seen a match (SPEC §4.7). */
+  /** Whom a `follow` behavior is following, once it has seen a match. */
   var leader: EntityId? = null
     internal set
 
   internal var spawnedBy: SpawnState? = null
 
-  /** Who summoned it, or null if it wasn't summoned (SPEC §4.3). It gives no XP or loot. */
+  /** Who summoned it, or null if it wasn't summoned. It gives no XP or loot. */
   var summonedBy: EntityId? = null
 
-  /** For a debug mob: the player who spawned it, and the pulse it despawns at (SPEC §4.9). */
+  /** For a debug mob: the player who spawned it, and the pulse it despawns at. */
   var debugOwner: EntityId? = null
     internal set
 
@@ -364,7 +364,7 @@ class Item(id: EntityId, var proto: ItemProto, location: ItemLocation, var count
   val container: ContainerState? = proto.container?.let(::ContainerState)
   var decayAt: Long? = null
 
-  /** For a tombstone: the payload the item was last saved with, kept as is (SPEC §3.4). */
+  /** For a tombstone: the payload the item was last saved with, kept as is. */
   var savedPayload: String? = null
 
   internal val contentsIndex = TreeMap<EntityId, Item>()

@@ -134,13 +134,13 @@ class ItemCommandsTest {
     assertTrue(p.isStunned)
     assertTrue(
       p.affects.any { it.name == "worn:${h.id.v}:no_regen" },
-      "worn flags are real affects (D-181)",
+      "worn flags are real affects",
     )
-    assertEquals(0, p.waitState, "an equipment stun holds recovery like a spell's (D-004)")
+    assertEquals(0, p.waitState, "an equipment stun holds recovery like a spell's")
     f.run(3)
-    assertFalse(p.isStunned, "the stun runs out though the helm is still worn (D-181)")
+    assertFalse(p.isStunned, "the stun runs out though the helm is still worn")
     assertEquals(ItemLocation.Equipped(p.id, "head"), h.location)
-    assertEquals(4, p.waitState, "recovery comes back when the stun ends (D-004)")
+    assertEquals(4, p.waitState, "recovery comes back when the stun ends")
     assertTrue(p.hasFlag("no_regen"))
     f.w.moveItem(h, ItemLocation.Carried(p.id))
     assertFalse(p.hasFlag("no_regen"))

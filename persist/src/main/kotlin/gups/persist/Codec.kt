@@ -33,7 +33,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
-// Row payloads (SPEC §3.4, §3.6). An instance stores its prototype label and version plus only
+// Row payloads. An instance stores its prototype label and version plus only
 // what differs from the prototype; players have no prototype and store everything. Every
 // payload carries a format_version for engine-side schema evolution.
 
@@ -44,7 +44,7 @@ internal val JSON = Json {
   explicitNulls = false
 }
 
-/** A `world_entities` row. Item locations live only here (SPEC §3.6). */
+/** A `world_entities` row. Item locations live only here. */
 data class EntityRow(
   val id: Long,
   val kind: String,
@@ -88,7 +88,7 @@ data class AffectJson(
   val onTick: RefJson? = null,
   val onExpire: RefJson? = null,
   val expireMessage: String = "",
-  /** Modifier functions by point name (SPEC §4.6). */
+  /** Modifier functions by point name. */
   val modifiers: Map<String, RefJson> = emptyMap(),
 )
 
@@ -120,7 +120,7 @@ data class RoomPayload(
   val sensesBlocked: Map<String, List<String>> = emptyMap(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
-  /** `set_active` and `set_anchor` reasons (SPEC §5.9). */
+  /** `set_active` and `set_anchor` reasons. */
   val active: List<String> = emptyList(),
   val anchor: List<String> = emptyList(),
 )
@@ -158,7 +158,7 @@ data class MobPayload(
 @Serializable
 data class ItemPayload(
   @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
-  /** Kept so a tombstone can show what the item was (SPEC §3.4). */
+  /** Kept so a tombstone can show what the item was. */
   val name: String,
   val count: Int = 1,
   val decayAt: Long? = null,
@@ -200,7 +200,7 @@ data class PlayerPayload(
 
 @Serializable data class RespawnJson(val room: String, val rule: Int, val at: Long)
 
-/** A `zone_states` payload: reset and respawn deadlines, and quarantine (SPEC §3.6, §6.3). */
+/** A `zone_states` payload: reset and respawn deadlines, and quarantine. */
 @Serializable
 data class ZonePayload(
   @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
@@ -209,7 +209,8 @@ data class ZonePayload(
   val respawns: List<RespawnJson> = emptyList(),
 )
 
-// ---- Attribute values (SPEC §3.2) ---------------------------------------------------------------
+// ---- Attribute values
+// ----------------------------------------------------------------------------
 
 fun AttrValue.toJson(): JsonElement =
   when (this) {
@@ -254,7 +255,7 @@ internal fun restoreTimers(e: Entity, timers: List<TimerJson>) {
 }
 
 internal fun affectsJson(a: Actor) =
-  // Worn items' affects are rebuilt when the item is restored, not saved (D-181).
+  // Worn items' affects are rebuilt when the item is restored, not saved.
   a.affects
     .filter { it.wornFrom == null }
     .map {
@@ -458,7 +459,8 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
   )
 }
 
-// ---- Overlaying a delta (SPEC §3.4 step 3) ------------------------------------------------------
+// ---- Overlaying a delta
+// ---------------------------------------------------------------------------
 
 internal fun applyRoom(room: Room, p: RoomPayload) {
   for ((dir, state) in p.doors) room.exits.values

@@ -9,9 +9,8 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * One checkpoint (SPEC §5.11): JSON rows captured on the world thread. `null` in [entities] deletes
- * that row. Periodic batches merge, last write wins per entity; immediate ones never merge past one
- * another.
+ * One checkpoint: JSON rows captured on the world thread. `null` in [entities] deletes that row.
+ * Periodic batches merge, last write wins per entity; immediate ones never merge past one another.
  */
 class Batch(
   val immediate: Boolean,
@@ -24,7 +23,7 @@ class Batch(
   val zones: LinkedHashMap<String, String> = LinkedHashMap(),
   val events: MutableList<ItemEventRow> = mutableListOf(),
   val diagnostics: MutableList<DiagnosticRow> = mutableListOf(),
-  /** Account changes, written before the world rows in the same transaction (D-128). */
+  /** Account changes, written before the world rows in the same transaction. */
   val accounts: MutableList<AccountOp> = mutableListOf(),
 ) {
   /** Completed once this batch is committed. */
@@ -41,7 +40,7 @@ class Batch(
   }
 }
 
-/** One account, password or invite change (SPEC §3.6, §3.5). */
+/** One account, password or invite change. */
 sealed interface AccountOp {
   /** Inserts [account] unless its login is taken; [result] gets the new id, or null. */
   class Create(val account: Account) : AccountOp {
@@ -76,13 +75,13 @@ sealed interface AccountOp {
   }
 }
 
-/** How long a failing write waits before it tries again, at most (SPEC §6.4). */
+/** How long a failing write waits before it tries again, at most. */
 private const val MAX_BACKOFF_MS = 5_000L
 
 /**
- * The only SQLite writer (SPEC §2.5): commits batches in FIFO order, each in one transaction, on
- * its own thread so the world thread never waits (D-096). A failed write stays at the head of the
- * queue and is retried with backoff; while it waits, later periodic captures merge into it.
+ * The only SQLite writer: commits batches in FIFO order, each in one transaction, on its own thread
+ * so the world thread never waits. A failed write stays at the head of the queue and is retried
+ * with backoff; while it waits, later periodic captures merge into it.
  */
 class CheckpointWriter(
   /** Commits one batch in one transaction; [Database.write] in production. */
