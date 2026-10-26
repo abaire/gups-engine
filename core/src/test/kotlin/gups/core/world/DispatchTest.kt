@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 
 class DispatchTest {
   @Test
-  fun `hooks fire on the subject, the room, other actors, room items, then carried items`() {
+  fun `before hooks fire on the subject, the actor, the room, other actors, then items`() {
     val host = RecordingHost()
     host.handlers[HookName.BEFORE_GET] = { _, _, _ -> null }
     val f = Fixture(scripts = host)
@@ -23,11 +23,40 @@ class DispatchTest {
     f.input(p, "get key")
     f.run()
     assertEquals(
-      listOf("a brass key", "The Hall", "a training dummy", "a goblin", "a short bow", "a bag")
+      listOf(
+          "a brass key",
+          "Ann",
+          "The Hall",
+          "a training dummy",
+          "a goblin",
+          "a short bow",
+          "a bag",
+        )
         .map { "before_get:$it" },
       host.calls,
     )
     assertEquals(dummy.id.v + 1, goblin.id.v)
+  }
+
+  @Test
+  fun `carried items fire grouped by owner in owner order`() {
+    val host = RecordingHost()
+    host.handlers[HookName.BEFORE_GET] = { _, _, _ -> null }
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    val goblin = f.mob()
+    f.w.spawnItem(T.KEY, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    // Ann's bag has the higher id, but Ann's items still come before the goblin's.
+    f.w.spawnItem(T.BOW, ItemLocation.Carried(goblin.id))
+    f.w.spawnItem(T.BAG, ItemLocation.Carried(p.id))
+    f.input(p, "get key")
+    f.run()
+    assertEquals(
+      listOf("a brass key", "Ann", "The Hall", "a goblin", "a bag", "a short bow").map {
+        "before_get:$it"
+      },
+      host.calls,
+    )
   }
 
   @Test
@@ -42,7 +71,10 @@ class DispatchTest {
     f.w.spawnItem(T.KEY, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
     f.input(p, "get key")
     f.run()
-    assertEquals(listOf("before_get:a brass key", "before_get:The Hall"), host.calls)
+    assertEquals(
+      listOf("before_get:a brass key", "before_get:Ann", "before_get:The Hall"),
+      host.calls,
+    )
     assertEquals("It's glued down.\n", f.out(p))
     assertTrue(p.inventory.isEmpty())
   }

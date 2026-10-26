@@ -2270,7 +2270,8 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
   weapon's `range` (unarmed or melee: `MELEE`; a ranged weapon: up to `FAR`). Otherwise no
   swing occurs that round, and the actor is told "<target> is out of reach."
 - **Resolution:**
-  1. Call `before_attack` (vetoable).
+  1. Call `before_attack` (vetoable) on the defender first (§5.6), so defensive wards
+     evaluate before the attacker and its wielded weapon.
   2. Roll `rng.int(1,100)` against `to_hit` (through the modifier chain).
   3. On a hit, compute `damage` (chain), then `mitigate`, then `ctx.damage`.
   - Messages show no numbers: "You hit X." / "X hits you." / "X misses Y."
@@ -2402,10 +2403,13 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 
 - **Order:**
   1. The acting entity's own hook.
-  2. The room's hook.
-  3. The other actors in the room, ascending `EntityId`.
-  4. The items in the room, then items carried or equipped by those actors, ascending
-     `EntityId`.
+  2. For `before_*` hooks, the actor performing the action (`ctx.actor`), if it isn't the
+     acting entity. `on_*` hooks skip it, so an actor never observes its own events.
+  3. The room's hook.
+  4. The other actors in the room, ascending `EntityId`.
+  5. The items in the room, ascending `EntityId`. Then the items carried or equipped by
+     each actor above, grouped by owner in the order the owners fired and ascending
+     `EntityId` within each owner.
 
   For `before_*` hooks, the first `deny` short-circuits.
 - **Containment:** Exceptions from the script host are always logged as script diagnostics

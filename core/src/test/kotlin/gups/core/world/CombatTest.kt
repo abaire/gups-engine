@@ -45,6 +45,42 @@ class CombatTest {
   }
 
   @Test
+  fun `before_attack fires on the defender, then the attacker, then each one's items`() {
+    val host = RecordingHost()
+    val seen = mutableListOf<String>()
+    val f = Fixture(rules = FixedRules(damage = 3), scripts = host)
+    val p = f.player("Ann")
+    host.handlers[HookName.BEFORE_ATTACK] = { _, owner, ctx ->
+      if (ctx.actor === p) seen += owner.name
+      null
+    }
+    val g = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    val bag = f.w.spawnItem(T.BAG, ItemLocation.Carried(g.id))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf(g.name, p.name, "The Hall", bag.name, sword.name), seen)
+  }
+
+  @Test
+  fun `the attacker's wielded weapon can veto an attack`() {
+    val host = RecordingHost()
+    val f = Fixture(rules = FixedRules(damage = 3), scripts = host)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    host.handlers[HookName.BEFORE_ATTACK] = { _, owner, _ ->
+      if (owner === sword) HookOutcome.Deny("Your sword refuses to strike.") else null
+    }
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertContains(f.out(p), "Your sword refuses to strike.")
+    assertEquals(1000, g.hp)
+  }
+
+  @Test
   fun `a casting actor does not auto-attack`() {
     val f = Fixture(rules = FixedRules(damage = 3))
     val p = f.player("Ann")

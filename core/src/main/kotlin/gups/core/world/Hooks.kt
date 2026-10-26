@@ -164,10 +164,11 @@ interface ScriptHost {
 }
 
 /**
- * Fires [hook] in dispatch order (SPEC §5.6): [primary], the room, other actors in the room by
- * ascending id, the room's items, then items carried or equipped by those actors. The acting actor
- * ([HookContext.actor]) only observes its own events when it is [primary]. Returns the first denial
- * of a `before_*` hook, or null.
+ * Fires [hook] in dispatch order (SPEC §5.6): [primary], the acting actor ([HookContext.actor]) for
+ * `before_*` hooks, the room, other actors in the room by ascending id, the room's items, then the
+ * items carried or equipped by each of those actors in that order, ascending id within each owner.
+ * The acting actor observes its own `on_*` events only when it is [primary]. Returns the first
+ * denial of a `before_*` hook, or null.
  */
 internal fun World.dispatch(
   hook: HookName,
@@ -179,17 +180,22 @@ internal fun World.dispatch(
     diagnose("cascade", "${hook.scriptName} dropped: cascade deeper than $CASCADE_MAX_DEPTH")
     return null
   }
-  val owners = LinkedHashSet<Entity>()
-  primary?.let(owners::add)
+  // The actor may veto its own action, but doesn't hear its own on_* events, which would let a
+  // mob answer itself.
+  val actor = ctx.actor?.takeIf { hook.vetoable }
+  val entities = LinkedHashSet<Entity>()
+  val items = LinkedHashSet<Entity>()
+  primary?.let(entities::add)
+  actor?.let(entities::add)
   if (room != null) {
-    owners += room
+    entities += room
     val actors = room.actorIndex.values.filter { it !== primary && it !== ctx.actor }
-    owners += actors
-    owners += room.itemIndex.values
-    val holders = listOfNotNull(primary as? Actor) + actors
-    owners +=
-      holders.flatMap { it.inventoryIndex.values + it.equipmentIndex.values }.sortedBy { it.id }
+    entities += actors
+    items += room.itemIndex.values
+    for (holder in listOfNotNull(primary as? Actor, actor).distinct() + actors) items +=
+      (holder.inventoryIndex.values + holder.equipmentIndex.values).sortedBy { it.id }
   }
+  val owners = entities + items
   cascadeDepth++
   try {
     for (owner in owners) {
