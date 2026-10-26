@@ -277,3 +277,159 @@ cooperation, such as a `rain` plugin adding `Gups.Weather.Rain` next to `weather
   sub-command to another's), attribute namespaces, or calling another plugin's builtins?
 - Does a dependency between plugins need a declared version range, and how does that relate
   to `PluginApi.VERSION`?
+
+## World shape across terms
+
+Each term's course world may use a different genre: high fantasy with spells one term, a
+post-apocalyptic world with robots, mutants and tech the next. Whole mechanics such as ranged
+combat or spellcasting may change shape or disappear. Race and class are already content (no
+engine concept), but the actor model, the command set and several mechanics are fixed in
+`core`. The two entries below propose moving genre out of the engine's types and into the
+world's configuration, while keeping the mechanisms in Kotlin. Neither is settled.
+
+Moving every command into `.jar` plugins was considered and rejected as the main route.
+Plugins are trusted Kotlin that only instructors approve, so students couldn't change a
+world's genre. They carry no compatibility promises and must be rebuilt every release. They
+need a restart to change. And commands such as `get`, `flee` and `kill` depend on stacking,
+pinning, combat rounds and the invariant checks, so the `PluginWorld` facade would have to
+expose nearly all of `core`. Plugins stay the route for genuinely new mechanics (§4.15).
+
+### Configurable actor schema
+**Spec:** §3.3 (Actor stats, "fixed v0 schema"), §3.6, §4.3 (`cost`), §4.6 (`regen`,
+`interrupt_check`), §4.10 (`Char.Vitals`), §4.15 (facade).
+**Today:**
+- Base stats are already a map (`Actor.baseStats`), but the names are fixed to `STAT_NAMES`
+  (`str`, `dex`, `con`, `int`, `wis`), and `stat_deltas` accepts only those.
+- Vitals are typed fields: `hp/maxHp`, `mana/maxMana`, `move/maxMove`. A skill's `cost` keys
+  must be `hp`, `mana` or `move`. `regen` returns those three keys, `Char.Vitals` sends them,
+  and persistence stores them as columns.
+- Damage types are already free-form (`DamageType`).
+- A robot world that wants `integrity`, `power` and `heat`, or no `mana` at all, can't
+  express it. It can only rename things in prose.
+
+**Sketch (not settled):** the world declares its stats and vitals in `MODULE.gups`, because
+changing them affects persisted state and already needs a restart. Formulas stay in the
+rules module. A vital gets a `role` when the engine itself has to find it:
+
+| Role | Engine use | Required |
+|---|---|---|
+| `life` | Damage lowers it; the actor dies at 0. `interrupt_check` and `flee(at_hp_pct)` read it. | exactly one |
+| `movement` | `move_cost` spends it; at 0 the actor can't leave the room. | at most one |
+| none | Spent only by skill `cost`s and scripts. | any number |
+
+```python
+# A fantasy term: the same as today's built-in schema, and the default when omitted.
+module(
+    api_version = 2,
+    stats = ["str", "dex", "con", "int", "wis"],
+    vitals = [
+        vital("hp", role = "life", label = "Hit points", start = 20),
+        vital("mana", label = "Mana", start = 20),
+        vital("move", role = "movement", label = "Movement", start = 100),
+    ],
+)
+```
+
+```python
+# A post-apocalyptic term.
+module(
+    api_version = 2,
+    stats = ["might", "agility", "tech", "grit", "psi"],
+    vitals = [
+        vital("integrity", role = "life", label = "Integrity", start = 30),
+        vital("power", label = "Power", start = 10),
+        vital("rads", label = "Radiation", start = 0, max = 100, regen = False),
+    ],
+)
+```
+
+With this, every place that names a stat or vital checks it against the schema at load:
+`stat_deltas`, `cost`, mob prototypes, `regen`'s returned keys, `ctx.actor.stats[...]` and
+`ctx.actor.vitals[...]` in scripts. `Char.Vitals` sends every vital with its label. The
+built-in Kotlin ruleset is valid only for the default schema. A world that declares its own
+must define every rules export that reads a stat, and `gups lint` reports any it is missing.
+
+**Questions:**
+- A character saved under the old schema meets a changed one mid-term. Does a new vital start
+  at its `start` or its max? Is a removed stat dropped silently or with a diagnostic? Does
+  `gups migrate-check` cover schema changes?
+- Do `level` and `xp` stay engine concepts, or become optional for skill-based worlds with no
+  levels? `xp_for_kill` and `xp_to_level` assume them.
+- Do `armor` and `resists` stay typed fields, or become ordinary stats the rules interpret?
+  This interacts with "Armor from equipment" above.
+- Should vitals declare a regen floor or ceiling (a `rads` vital that only rises), or is that
+  left to `regen` in the rules?
+- Are stats always ints, or can a world declare a float or a string stat?
+- Does the plugin facade switch to `getStat(actor, name)` / `getVital(actor, name)`, and is
+  that a `PluginApi.VERSION` bump in the same release?
+- Is this `api_version = 2` on its own, or bundled with other breaking changes?
+
+### Engine feature modules
+**Spec:** §4.3, §4.9 (command lists), §5.3 (action lifecycle), §5.4 (combat rounds), §5.5
+(the track), §5.7 (perception channels), §4.15.
+**Today:** every engine command is in `EngineCommands.kt`, and the mechanics behind them are
+always on. Every actor has `casting: CastState?`. Exits can block the `SPELL` channel. Every
+room has a track with bands, and items have `range`. A world without magic can only leave
+`cast` unused, and a world without ranged combat still has `advance`, `retreat` and bands.
+
+**Sketch (not settled):** split `core` internally into a small kernel plus feature modules.
+Each module registers its own commands, actor state, world-loop phase work, rules exports
+(with built-in defaults), GMCP packages and load-time checks through an internal Kotlin
+interface. The modules ship inside the engine: they are reviewed, versioned and tested with
+it, and are not plugins. A world turns them on in `MODULE.gups`.
+
+| Module | Owns | Depends on |
+|---|---|---|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects, movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, `get`/`drop`/`give`/`inventory`/`equipment`/`wear`/`remove`, `use` | — |
+| `combat` | `kill`, `flee`, combat rounds, initiative, auto-attacks, death and corpses, `to_hit`/`damage`/`mitigate`/`initiative`/`flee_chance` | — |
+| `track` | `advance`, `retreat`, bands, `range` on items, band-based `get_lag`, `Room.Bands` | — |
+| `skills` | `cast` (renameable), warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill `cost`s, the `SPELL` channel (renameable) | — |
+| `doors` | doors on exits, `open`/`close`/`lock`/`unlock` on exits | — |
+| `containers` | `put`, `get ... from`, `open`/`close`/`lock`/`unlock` on containers | — |
+
+```python
+module(
+    api_version = 2,
+    # Omitting `features` turns every module on, which is today's behavior.
+    features = [
+        feature("combat"),
+        feature("skills",
+            # Players type `invoke`, not `cast`; `cast` is no longer a command.
+            rename = {"cast": "invoke"},
+            # The perception channel exits block, shown as "psionic" to builders.
+            channel = "psionic",
+        ),
+        feature("doors"),
+        feature("containers"),
+        # No "track": every room is a single point, so everything is in melee reach.
+    ],
+    aliases = {"iv": "invoke", "k": "kill"},
+    prefixes = {"%": "invoke"},
+)
+```
+
+Content that needs a module that is off fails its package's load with a diagnostic naming
+the module: a skill when `skills` is off, an item with `range` when `track` is off, a door
+when `doors` is off. `aliases`, `prefixes` and reserved exit names use the commands after
+renaming. `help` and `gups docs --world` list only what the world has turned on, so students
+never see `advance` in a world without a track. A plugin can declare the modules it requires
+and fails to load without them.
+
+**Questions:**
+- Without `track`, does each room behave as a track of size 1 (keeping the code paths), or do
+  bands disappear from the model altogether? The first is much cheaper. The second keeps
+  `Room.Bands` and `@where` out of worlds that don't use them.
+- Is `combat` really optional? A world with no fighting is plausible, but `damage`, `heal` and
+  death are used by skills and hooks. Does death belong to the kernel, with `combat` adding only
+  rounds and auto-attacks?
+- How fine should modules be? `doors` and `containers` may be too small to be worth a switch,
+  and `skills` may be too large: a world might want skills without warmups.
+- Is renaming enough to reskin a module, or do modules also need their player-facing messages
+  overridable ("You begin casting" → "You spin up your implant")? Does that go in `MODULE.gups`,
+  in the rules module, or in a messages file?
+- Do perception channels become world-declared (`channels = ["sight", "sound", "psionic"]`),
+  rather than a module renaming one built-in channel?
+- What happens to persisted state that belongs to a module that is later turned off mid-term?
+- Should the internal module interface later become the public plugin interface, so plugins and
+  built-in modules register the same way? That would put the module interface under the same
+  "no compatibility promises" policy as plugins until it settles.
