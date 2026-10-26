@@ -14,6 +14,7 @@ selenium = "4.49.0"
 micrometer = "1.17.0"
 slf4j = "2.0.19"
 ktfmt = "0.25.0"
+commonmark = "0.31.0"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -39,6 +40,8 @@ micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 # The headless browser test of the web client, Linux CI only (SPEC §7.1).
 selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
+# The changelog and plugin guide in the HTML reference (SPEC §4.16).
+commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-launcher = { module = "org.junit.platform:junit-platform-launcher" }

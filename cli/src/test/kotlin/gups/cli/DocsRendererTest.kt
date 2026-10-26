@@ -151,9 +151,9 @@ class DocsRendererTest {
   }
 
   @Test
-  fun `markdown renders the supported subset`() {
+  fun `markdown renders CommonMark with raw HTML escaped and links as text`() {
     val html =
-      Markdown.toHtml(
+      markdownToHtml(
         """
         # Changelog
 
@@ -166,6 +166,11 @@ class DocsRendererTest {
 
         - one
         - two `x<y`
+
+        1. first, *emphasised*
+        2. second ![logo](https://example.com/logo.png)
+
+        <div onclick="x()">block</div>
 
         ```starlark
         ctx.walk(ctx.self, "north")  # <here>
@@ -186,7 +191,13 @@ class DocsRendererTest {
       <li>one</li>
       <li>two <code>x&lt;y</code></li>
       </ul>
-      <pre><code>ctx.walk(ctx.self, &quot;north&quot;)  # &lt;here&gt;</code></pre>
+      <ol>
+      <li>first, <em>emphasised</em></li>
+      <li>second logo</li>
+      </ol>
+      <p>&lt;div onclick=&quot;x()&quot;&gt;block&lt;/div&gt;</p>
+      <pre><code class="language-starlark">ctx.walk(ctx.self, &quot;north&quot;)  # &lt;here&gt;
+      </code></pre>
       <h3 id="renamed-ctx-act-move-to-ctx-walk-2">Renamed <code>ctx.act_move</code> to <code>ctx.walk</code></h3>
       """
         .trimIndent() + "\n",

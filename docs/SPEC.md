@@ -2101,11 +2101,10 @@ that world's plugins, after checking its `MODULE.gups`. The files, in order:
   world with the template's `rules/`, a fixture room `start`, and the example as package
   `zones/ex` (or as `MODULE.gups` for `module`); it passes when its test passes with no
   warnings.
-- **Markdown:** the changelog and the guide are rendered by a small built-in Markdown subset:
-  `#`–`####` headings with ids (`api_version-<N>` for version headings, otherwise a slug,
-  with `-2`, `-3`, … for repeats), paragraphs, `- ` lists, fenced code, inline code and
-  `**bold**`. `[text](url)` renders as `text` only, so links can't leave the reference. All
-  text is escaped first; no raw HTML passes through.
+- **Markdown:** the changelog and the guide are rendered as CommonMark. Headings get ids
+  (`api_version-<N>` for version headings, otherwise a lowercase slug, with `-2`, `-3`, … for
+  repeats). Links and images render as their text only, so nothing leaves the reference. Raw
+  HTML is escaped; none passes through.
 - **Where it goes:** the release zip `gups-docs-<version>.zip` (under a top-level
   `gups-docs-<version>/`), `docs/` in the install directory, the jlink image and the OCI image
   (§2.2), and the running server. Both profiles render it once at startup, with the world's
@@ -2118,7 +2117,7 @@ that world's plugins, after checking its `MODULE.gups`. The files, in order:
 
 **`docs/CHANGELOG.md`** is plain, human-written Markdown listing script-facing changes per
 `api_version`, newest first, with before/after snippets for breaking ones. The engine never
-parses its structure; `changelog.html` renders it with the Markdown subset of §4.16. Each
+parses its structure; `changelog.html` renders it as Markdown (§4.16). Each
 version heading `## api_version <N>` gets the anchor `api_version-<N>` that the
 `api_version` mismatch diagnostic links to (§1.3).
 

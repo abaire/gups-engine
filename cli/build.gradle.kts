@@ -19,6 +19,7 @@ dependencies {
   runtimeOnly(libs.slf4j.nop)
   implementation(libs.clikt)
   implementation(libs.micrometer.prometheus)
+  implementation(libs.commonmark)
   testImplementation(libs.selenium.java)
   // Test plugins and buildPluginJar (PluginIntegrationTest).
   testImplementation(testFixtures(project(":plugin-api")))
