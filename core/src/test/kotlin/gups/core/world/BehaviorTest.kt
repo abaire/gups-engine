@@ -59,6 +59,26 @@ class BehaviorTest {
   }
 
   @Test
+  fun `fleeing combat doesn't slip past guarded exits`() {
+    val f =
+      fixture(
+        mob("north_warden", Guard(Direction.NORTH)),
+        mob("east_warden", Guard(Direction.EAST)),
+      )
+    f.mob(Label("//t:north_warden"))
+    f.mob(Label("//t:east_warden"))
+    val p = f.player("Ann")
+    f.w.startCombat(p, f.mob(T.GOBLIN))
+    f.input(p, "flee")
+    f.run()
+    // The vault door is locked and the other two exits are guarded, so every flee is denied.
+    assertContains(f.out(p), "blocks your way.")
+    assertEquals(T.HALL, p.room.label)
+    assertTrue(p.isEngaged)
+    assertEquals(4, p.waitState, "a denied flee lags like a failed one")
+  }
+
+  @Test
   fun `a guard bars its exit to non-allies while it can act`() {
     val f = fixture(mob("warden", Guard(Direction.NORTH)))
     val warden = f.mob(Label("//t:warden"))

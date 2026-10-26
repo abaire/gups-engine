@@ -475,15 +475,15 @@
 </tbody>
 </table>
 </article>
-<article id="ctx.set_exit_blocks" class="entry">
-<h4><code>set_exit_blocks(room, dir, channels)</code> <span class="since">since api_version 1</span></h4>
-<p>Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.</p>
+<article id="ctx.set_exit_senses_blocked" class="entry">
+<h4><code>set_exit_senses_blocked(room, dir, channels)</code> <span class="since">since api_version 1</span></h4>
+<p>Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.set_exit_blocks.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
-<tr id="ctx.set_exit_blocks.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
-<tr id="ctx.set_exit_blocks.channels"><td><code>channels</code></td><td>positional or named</td><td></td><td>Channels to block: any of 'sight', 'sound', 'noise', 'spell'.</td></tr>
+<tr id="ctx.set_exit_senses_blocked.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.set_exit_senses_blocked.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+<tr id="ctx.set_exit_senses_blocked.channels"><td><code>channels</code></td><td>positional or named</td><td></td><td>Channels to block: any of 'sight', 'sound', 'noise', 'spell'.</td></tr>
 </tbody>
 </table>
 </article>
@@ -566,13 +566,13 @@
 <table>
 <thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="view-exit.blocks"><td><code>blocks</code></td><td>1</td><td>Effective blocked channels: the exit's own plus its door's.</td></tr>
 <tr id="view-exit.direction"><td><code>direction</code></td><td>1</td><td>The exit's direction name.</td></tr>
 <tr id="view-exit.door"><td><code>door</code></td><td>1</td><td>'open', 'closed' or 'locked'; None without a door.</td></tr>
 <tr id="view-exit.entry_index"><td><code>entry_index</code></td><td>1</td><td>Destination track index where travellers arrive, or -1 for the back.</td></tr>
 <tr id="view-exit.key"><td><code>key</code></td><td>1</td><td>The door's key label, or None.</td></tr>
 <tr id="view-exit.one_way"><td><code>one_way</code></td><td>1</td><td>True if this exit intentionally has no return exit.</td></tr>
 <tr id="view-exit.passable"><td><code>passable</code></td><td>1</td><td>False while a door is closed or locked.</td></tr>
+<tr id="view-exit.senses_blocked"><td><code>senses_blocked</code></td><td>1</td><td>Effective blocked channels: the exit's own plus its door's.</td></tr>
 <tr id="view-exit.to"><td><code>to</code></td><td>1</td><td>The destination room's label.</td></tr>
 </tbody>
 </table>

@@ -38,8 +38,8 @@ val DEFAULT_STATS: Map<String, Int> = STAT_NAMES.associateWith { 10 }
 data class DoorProto(
   val state: DoorState = DoorState.CLOSED,
   val key: Label? = null,
-  val openBlocks: Set<Channel> = emptySet(),
-  val closedBlocks: Set<Channel> = setOf(Channel.SIGHT, Channel.SOUND),
+  val openSensesBlocked: Set<Channel> = emptySet(),
+  val closedSensesBlocked: Set<Channel> = setOf(Channel.SIGHT, Channel.SOUND),
 )
 
 data class ExitProto(
@@ -47,7 +47,7 @@ data class ExitProto(
   val to: Label,
   /** Arrival index; `-1` means the back of the destination (`trackSize - 1`). */
   val entryIndex: Int = 0,
-  val blocks: Set<Channel> = emptySet(),
+  val sensesBlocked: Set<Channel> = emptySet(),
   val door: DoorProto? = null,
   val oneWay: Boolean = false,
 )

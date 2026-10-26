@@ -80,7 +80,7 @@ internal fun World.deliverPerceptions() {
   for (ev in events) {
     for (a in ev.room.actorIndex.values) if (a is Mob) offer(a, ev, null)
     for ((from, exit) in inbound(ev.room)) {
-      if (ev.channel in exit.effectiveBlocks) continue
+      if (ev.channel in exit.effectiveSensesBlocked) continue
       for (a in from.actorIndex.values) {
         if (a is Mob && (a.proto.senses[senseFor(ev.channel)] ?: 0) >= 1) offer(a, ev, exit)
       }

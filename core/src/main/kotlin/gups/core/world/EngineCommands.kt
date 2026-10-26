@@ -116,7 +116,7 @@ internal object EngineCommands {
     w.echo(c.actor.room, "${c.actor.name.cap()} shouts, '${c.args}'", c.actor)
     val near =
       w.inbound(c.actor.room)
-        .filter { (_, exit) -> Channel.NOISE !in exit.effectiveBlocks }
+        .filter { (_, exit) -> Channel.NOISE !in exit.effectiveSensesBlocked }
         .map { it.first }
         .distinct()
     for (room in near) w.echo(room, "Someone nearby shouts, '${c.args}'")

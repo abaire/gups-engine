@@ -35,7 +35,7 @@
 <tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
 <tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
 <tr id="exit.entry_index"><td><code>entry_index</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
-<tr id="exit.blocks"><td><code>blocks</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td><code>sight</code>, <code>sound</code>, <code>noise</code>, <code>spell</code></td><td>Perception and spell channels blocked by this exit.</td></tr>
+<tr id="exit.senses_blocked"><td><code>senses_blocked</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td><code>sight</code>, <code>sound</code>, <code>noise</code>, <code>spell</code></td><td>Perception and spell channels blocked by this exit.</td></tr>
 <tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
 <tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
 </tbody>

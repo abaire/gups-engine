@@ -21,11 +21,13 @@ import gups.core.model.Room
 import gups.core.model.ScriptTimer
 import gups.core.world.World
 import gups.core.world.spawnOf
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -108,8 +110,14 @@ data class RoomPayload(
   @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   /** Door states that differ from the prototype, by direction. */
   val doors: Map<String, String> = emptyMap(),
-  /** Exit blocks that differ from the prototype, by direction. */
-  val blocks: Map<String, List<String>> = emptyMap(),
+  /**
+   * Exit `senses_blocked` sets that differ from the prototype, by direction. Saves written before
+   * the rename used the key `blocks`; it is still read.
+   */
+  @OptIn(ExperimentalSerializationApi::class)
+  @SerialName("senses_blocked")
+  @JsonNames("blocks")
+  val sensesBlocked: Map<String, List<String>> = emptyMap(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   /** `set_active` and `set_anchor` reasons (SPEC §5.9). */
@@ -321,12 +329,12 @@ internal fun World.encode(e: Entity): EntityRow? =
                 if (state == was) null else x.direction.name to state.name.lowercase()
               }
               .toMap(),
-          blocks =
+          sensesBlocked =
             e.exits.values
               .mapNotNull { x ->
-                val was = e.proto.exits.first { it.direction == x.direction }.blocks
-                if (x.blocks == was) null
-                else x.direction.name to x.blocks.map { it.name.lowercase() }.sorted()
+                val was = e.proto.exits.first { it.direction == x.direction }.sensesBlocked
+                if (x.sensesBlocked == was) null
+                else x.direction.name to x.sensesBlocked.map { it.name.lowercase() }.sorted()
               }
               .toMap(),
           attrs = attrsJson(e.customAttributes),
@@ -455,9 +463,9 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
     .firstOrNull { it.direction.name == dir }
     ?.door
     ?.state = DoorState.valueOf(state.uppercase())
-  for ((dir, blocks) in p.blocks) {
-    room.exits.values.firstOrNull { it.direction.name == dir }?.blocks =
-      blocks.mapTo(LinkedHashSet()) { Channel.valueOf(it.uppercase()) }
+  for ((dir, channels) in p.sensesBlocked) {
+    room.exits.values.firstOrNull { it.direction.name == dir }?.sensesBlocked =
+      channels.mapTo(LinkedHashSet()) { Channel.valueOf(it.uppercase()) }
   }
   room.customAttributes.clear()
   room.customAttributes.putAll(p.attrs.toAttrs())

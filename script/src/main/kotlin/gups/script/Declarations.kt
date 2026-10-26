@@ -649,7 +649,7 @@ internal class DeclarationBuiltins {
           direction = dir,
           to = to,
           entryIndex = d.int("entry_index") ?: 0,
-          blocks = channels(d["blocks"], d.what("blocks")),
+          sensesBlocked = channels(d["senses_blocked"], d.what("senses_blocked")),
           door =
             d["door"]?.let {
               (it as? DoorDecl)?.proto
@@ -676,12 +676,14 @@ internal class DeclarationBuiltins {
         DoorProto(
           state = d.choice("state")?.let { DoorState.valueOf(it.uppercase()) } ?: def.state,
           key = d.str("key")?.let { label(it, ctx.pkg.path, d.what("key")) },
-          openBlocks =
-            if (d["open_blocks"] != null) channels(d["open_blocks"], d.what("open_blocks"))
-            else def.openBlocks,
-          closedBlocks =
-            if (d["closed_blocks"] != null) channels(d["closed_blocks"], d.what("closed_blocks"))
-            else def.closedBlocks,
+          openSensesBlocked =
+            if (d["open_senses_blocked"] != null)
+              channels(d["open_senses_blocked"], d.what("open_senses_blocked"))
+            else def.openSensesBlocked,
+          closedSensesBlocked =
+            if (d["closed_senses_blocked"] != null)
+              channels(d["closed_senses_blocked"], d.what("closed_senses_blocked"))
+            else def.closedSensesBlocked,
         )
       DoorDecl(proto)
     }
@@ -1615,7 +1617,7 @@ internal class DeclarationBuiltins {
               default = "0",
             ),
             DeclParam(
-              "blocks",
+              "senses_blocked",
               "list[str]",
               "Perception and spell channels blocked by this exit.",
               default = "[]",
@@ -1656,14 +1658,14 @@ internal class DeclarationBuiltins {
               default = "None",
             ),
             DeclParam(
-              "open_blocks",
+              "open_senses_blocked",
               "list[str]",
               "Channels blocked while the door is open.",
               default = "[]",
               allowedValues = CHANNELS,
             ),
             DeclParam(
-              "closed_blocks",
+              "closed_senses_blocked",
               "list[str]",
               "Channels blocked while the door is closed or locked.",
               default = "['sight', 'sound']",

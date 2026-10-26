@@ -42,7 +42,7 @@ import gups.core.world.send
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
-import gups.core.world.setExitBlocks
+import gups.core.world.setExitSensesBlocked
 import gups.core.world.spawnItem
 import gups.core.world.splitItem
 import gups.core.world.startCombat
@@ -1006,8 +1006,9 @@ internal constructor(
     door(room, dir, thread, "unlock_door") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
 
   @StarlarkMethod(
-    name = "set_exit_blocks",
-    doc = "Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+    name = "set_exit_senses_blocked",
+    doc =
+      "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
     parameters =
       [
         Param(name = "room", named = true, doc = "Room, or room label, that has the exit."),
@@ -1020,16 +1021,16 @@ internal constructor(
       ],
     useStarlarkThread = true,
   )
-  fun setExitBlocks(room: Any, dir: Any, channels: Any, thread: StarlarkThread): Any =
-    verb("set_exit_blocks") {
+  fun setExitSensesBlocked(room: Any, dir: Any, channels: Any, thread: StarlarkThread): Any =
+    verb("set_exit_senses_blocked") {
       val names = Channel.entries.map { it.name.lowercase() }
       val set =
-        strList(channels, "set_exit_blocks(channels)").mapTo(LinkedHashSet()) {
-          Channel.valueOf(choice(it, "set_exit_blocks(channels)", names).uppercase())
+        strList(channels, "set_exit_senses_blocked(channels)").mapTo(LinkedHashSet()) {
+          Channel.valueOf(choice(it, "set_exit_senses_blocked(channels)", names).uppercase())
         }
-      world.setExitBlocks(
-        roomArg(room, "set_exit_blocks(room)", thread),
-        dir(dir, "set_exit_blocks(dir)"),
+      world.setExitSensesBlocked(
+        roomArg(room, "set_exit_senses_blocked(room)", thread),
+        dir(dir, "set_exit_senses_blocked(dir)"),
         set,
       )
       Starlark.NONE

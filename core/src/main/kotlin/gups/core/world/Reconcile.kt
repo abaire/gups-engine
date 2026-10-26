@@ -155,7 +155,7 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
       val live = oldExits[ep.direction]
       val wasProto = was?.exits?.firstOrNull { it.direction == ep.direction }
       if (live != null && wasProto != null) {
-        if (live.blocks != wasProto.blocks) exit.blocks = live.blocks
+        if (live.sensesBlocked != wasProto.sensesBlocked) exit.sensesBlocked = live.sensesBlocked
         val door = exit.door
         val liveDoor = live.door
         if (door != null && liveDoor != null && liveDoor.state != wasProto.door?.state)

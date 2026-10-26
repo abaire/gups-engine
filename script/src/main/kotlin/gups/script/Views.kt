@@ -364,11 +364,13 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
   fun entryIndex(): Any = read { sInt(exit.entryIndex) }
 
   @StarlarkMethod(
-    name = "blocks",
+    name = "senses_blocked",
     structField = true,
     doc = "Effective blocked channels: the exit's own plus its door's.",
   )
-  fun blocks(): Any = read { sList(exit.effectiveBlocks.map { it.name.lowercase() }.sorted()) }
+  fun sensesBlocked(): Any = read {
+    sList(exit.effectiveSensesBlocked.map { it.name.lowercase() }.sorted())
+  }
 
   @StarlarkMethod(
     name = "door",

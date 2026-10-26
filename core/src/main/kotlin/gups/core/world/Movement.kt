@@ -60,6 +60,29 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
   }
 }
 
+/**
+ * Guard denial, then `before_exit` on the room [actor] is in and `before_enter` on the room through
+ * [dir]; null to allow, else the denial message. Walking and fleeing both check it.
+ */
+internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
+  val from = roomOf(actor)
+  val to = room(from.exits.getValue(dir).to)
+  // Guards are built-in before_exit observers (SPEC §4.7).
+  return guardDenial(actor, from, dir)
+    ?: dispatch(
+      HookName.BEFORE_EXIT,
+      null,
+      from,
+      HookContext(actor = actor, direction = dir, toRoom = to),
+    )
+    ?: dispatch(
+      HookName.BEFORE_ENTER,
+      null,
+      to,
+      HookContext(actor = actor, direction = dir, fromRoom = from),
+    )
+}
+
 /** Walking through an exit: one action plus `move_cost` move points. */
 internal class MoveAction(private val dir: Direction) : Action {
   override fun validate(w: World, actor: Actor): String? {
@@ -70,25 +93,7 @@ internal class MoveAction(private val dir: Direction) : Action {
     return null
   }
 
-  override fun veto(w: World, actor: Actor): String? {
-    val from = w.roomOf(actor)
-    val exit = from.exits.getValue(dir)
-    val to = w.room(exit.to)
-    // Guards are built-in before_exit observers (SPEC §4.7).
-    return w.guardDenial(actor, from, dir)
-      ?: w.dispatch(
-        HookName.BEFORE_EXIT,
-        null,
-        from,
-        HookContext(actor = actor, direction = dir, toRoom = to),
-      )
-      ?: w.dispatch(
-        HookName.BEFORE_ENTER,
-        null,
-        to,
-        HookContext(actor = actor, direction = dir, fromRoom = from),
-      )
-  }
+  override fun veto(w: World, actor: Actor): String? = w.exitDenial(actor, dir)
 
   override fun resolve(w: World, actor: Actor): Int {
     val exit = w.roomOf(actor).exits.getValue(dir)
@@ -157,7 +162,11 @@ internal class RetreatAction(private val from: Actor?) : Action {
   }
 }
 
-/** Instant; rolls `flee_chance`, ignores pinning, and leaves through a random open exit. */
+/**
+ * Instant; rolls `flee_chance`, ignores pinning, and leaves through a random open exit. The exit's
+ * guards and `before_exit`/`before_enter` hooks still apply, so combat can't be used to slip past
+ * them; a denial counts as a failed flee.
+ */
 internal object FleeAction : Action {
   override fun validate(w: World, actor: Actor): String? =
     if (w.roomOf(actor).exits.values.none { it.passable }) "There's nowhere to flee!" else null
@@ -168,6 +177,10 @@ internal object FleeAction : Action {
       return w.rules.fleeFailLag(RulesContext(w, actor))
     }
     val exit = w.rng.choice(actor.room.exits.values.filter { it.passable })
+    w.exitDenial(actor, exit.direction)?.let {
+      w.send(actor, it)
+      return w.rules.fleeFailLag(RulesContext(w, actor))
+    }
     w.send(actor, "You flee ${exit.direction}!")
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit, "flees") }
     return 0

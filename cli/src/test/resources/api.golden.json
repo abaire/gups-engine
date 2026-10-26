@@ -93,8 +93,8 @@
           "since": 1
         },
         {
-          "symbol": "door.open_blocks",
-          "name": "open_blocks",
+          "symbol": "door.open_senses_blocked",
+          "name": "open_senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -105,8 +105,8 @@
           "since": 1
         },
         {
-          "symbol": "door.closed_blocks",
-          "name": "closed_blocks",
+          "symbol": "door.closed_senses_blocked",
+          "name": "closed_senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -163,8 +163,8 @@
           "since": 1
         },
         {
-          "symbol": "exit.blocks",
-          "name": "blocks",
+          "symbol": "exit.senses_blocked",
+          "name": "senses_blocked",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
@@ -3172,13 +3172,13 @@
         ]
       },
       {
-        "symbol": "ctx.set_exit_blocks",
-        "name": "set_exit_blocks",
-        "doc": "Replaces the channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+        "symbol": "ctx.set_exit_senses_blocked",
+        "name": "set_exit_senses_blocked",
+        "doc": "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
         "since": 1,
         "params": [
           {
-            "symbol": "ctx.set_exit_blocks.room",
+            "symbol": "ctx.set_exit_senses_blocked.room",
             "name": "room",
             "positional": true,
             "named": true,
@@ -3188,7 +3188,7 @@
             "doc": "Room, or room label, that has the exit."
           },
           {
-            "symbol": "ctx.set_exit_blocks.dir",
+            "symbol": "ctx.set_exit_senses_blocked.dir",
             "name": "dir",
             "positional": true,
             "named": true,
@@ -3198,7 +3198,7 @@
             "doc": "Direction of the exit."
           },
           {
-            "symbol": "ctx.set_exit_blocks.channels",
+            "symbol": "ctx.set_exit_senses_blocked.channels",
             "name": "channels",
             "positional": true,
             "named": true,
@@ -3756,12 +3756,6 @@
       "since": 1,
       "fields": [
         {
-          "symbol": "view:exit.blocks",
-          "name": "blocks",
-          "doc": "Effective blocked channels: the exit's own plus its door's.",
-          "since": 1
-        },
-        {
           "symbol": "view:exit.direction",
           "name": "direction",
           "doc": "The exit's direction name.",
@@ -3795,6 +3789,12 @@
           "symbol": "view:exit.passable",
           "name": "passable",
           "doc": "False while a door is closed or locked.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.senses_blocked",
+          "name": "senses_blocked",
+          "doc": "Effective blocked channels: the exit's own plus its door's.",
           "since": 1
         },
         {

@@ -468,16 +468,18 @@ stored on prototypes: the host looks them up by prototype label.
 - `direction`.
 - `to: Label`.
 - `entryIndex: Int`. Default `0`; `-1` means `trackSize - 1`.
-- `blocks: Set<Channel>`, where `Channel` is one of `SIGHT`, `SOUND`, `NOISE`, `SPELL`.
+- `sensesBlocked: Set<Channel>`, where `Channel` is one of `SIGHT`, `SOUND`, `NOISE`,
+  `SPELL`. It only stops perception and spells (§5.7); it never affects whether the exit
+  can be walked through.
 - `door: Door?`.
 - `oneWay: Boolean`.
 
 **Door**
 - `state`: `OPEN`, `CLOSED`, or `LOCKED`.
 - `keyLabel: Label?`.
-- `openBlocks`, `closedBlocks: Set<Channel>`.
+- `openSensesBlocked`, `closedSensesBlocked: Set<Channel>`.
 
-The **effective** `blocks` set of an exit is the exit's `blocks` plus the door's set for its
+The **effective** `sensesBlocked` set of an exit is the exit's `sensesBlocked` plus the door's set for its
 current state.
 
 **Actor** (sealed: `Player`, `Mob`)
@@ -583,7 +585,7 @@ platforms. Changing the algorithm changes every replay.
   prototype's takes the new prototype's value; any other field keeps its live value.
   - Mobs: level, max hp/mana/move, armor, base stats, resists, skills, `think_every` and
     `dormant_recovery` follow that rule. Current vitals stay, capped at the new maximum.
-  - Rooms: door states and exit blocks follow the same rule.
+  - Rooms: door states and exit `senses_blocked` sets follow the same rule.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
   - Spawn rules carry their live mobs over by label. New rooms fill their spawns, then get
@@ -680,7 +682,7 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
   actor or container by id. Rooms keep their saved ids across restarts, so ids stay unique,
   but nothing refers to a room by id.
 - **Deltas:**
-  - Rooms store door states and exit blocks that differ from the prototype, plus
+  - Rooms store door states and exit `senses_blocked` sets that differ from the prototype, plus
     attributes and timers.
   - Mobs always store position, vitals, xp, home room and spawn binding. Level, maxima,
     armor, stats, resists, skills, `think_every` and `dormant_recovery` are stored only when
@@ -762,8 +764,9 @@ room("entrance",
     exits = [
         exit("north", to=":tunnel",
              door=door(state="closed", key="//zones/goblin_caves:rusty_key",
-                       open_blocks=[], closed_blocks=["sight", "sound", "noise"])),
-        exit("east", to=":long_hall", blocks=ALL),     # never carries anything
+                       open_senses_blocked=[],
+                       closed_senses_blocked=["sight", "sound", "noise"])),
+        exit("east", to=":long_hall", senses_blocked=ALL),  # never carries anything
         exit("south", to="//zones/forest:clearing", entry_index=-1),  # arrive at back
     ],
     spawns = [spawn(":goblin_scout", count=2, respawn_pulses=1200, at_index=2)],
@@ -975,7 +978,7 @@ engine validates each verb and applies it immediately, on the world thread.
 **Room view:**
 - Identity: `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`.
 - Contents: `exits()`, `actors()`, `items()`, `contents()`.
-- `exit(dir)`, an exit view that includes its effective `blocks` and door state.
+- `exit(dir)`, an exit view that includes its effective `senses_blocked` and door state.
 
 **Item view:** `id`, `label`, `name`, `keywords`, `desc`, `kind`, `count`, `weight`,
 `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`,
@@ -993,7 +996,7 @@ engine validates each verb and applies it immediately, on the world thread.
 | Movement | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks. |
 | Combat | `damage(target, amount, type, source=None)`, `heal(target, amount)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` |
 | Items | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=1)`, `move_item(item, to)`, `destroy(item)`, `split(item, n)` |
-| Doors and exits | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`, `set_exit_blocks(room, dir, channels)` |
+| Doors and exits | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`, `set_exit_senses_blocked(room, dir, channels)` |
 | State | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)` |
 | Timers | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)` |
 | Simulation | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)` |
@@ -2504,8 +2507,11 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   - A pinned actor must `retreat` first, or `flee`.
 - **`flee`:**
   - Warmup 0. It rolls `flee_chance` and ignores pinning.
-  - **On success:** the actor leaves through a random exit whose effective `blocks` doesn't
-    make it impassable (closed or locked doors are excluded), and engagement ends.
+  - **On success:** the actor picks a random passable exit (closed or locked doors are
+    excluded). The exit is then checked like a walk: guards (§4.7), then `before_exit` and
+    `before_enter`. If they allow it, the actor leaves through it and engagement ends; a
+    denial shows its message and counts as a failure, so combat can't be used to slip past
+    them.
   - **On failure:** lag (default 4).
 - **Items on the ground:**
   - Items sit at the dropper's index.
@@ -2553,10 +2559,10 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   actor is the speaker. `combat_start`: the attacker. `combat` (once per room per round): no
   actor. `death`: the one who died. `enter` and `exit`, including teleports: the mover.
 - **Propagation:** An event in room R reaches a listening mob in a room adjacent to R only
-  if the connecting exit's effective `blocks` doesn't contain the event's channel. The exit
+  if the connecting exit's effective `senses_blocked` doesn't contain the event's channel. The exit
   checked is the listener's exit toward the source, so a one-way exit into the source room
   carries events and one out of it doesn't. A closed default door blocks `SIGHT` and `SOUND`
-  but not `NOISE`. `blocks = ALL` blocks everything.
+  but not `NOISE`. `senses_blocked = ALL` blocks everything.
 - **Delivery:**
   - It's **deferred** to phase 5 of the current pulse, and calls `on_nearby` on the mob.
     Events raised while phase 5 delivers wait for the next pulse's phase 5.
@@ -2587,7 +2593,7 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **Anchors:** Every in-world player (including link-dead ones), plus every entity with a
   non-empty `anchorReasons`.
 - **Active set:** All rooms within `BUBBLE_RADIUS = 3` exits of any anchor's room. Exit
-  `blocks` and door state are ignored when computing it. Rooms flagged `always_active`
+  `senses_blocked` and door state are ignored when computing it. Rooms flagged `always_active`
   are always in the set.
 - **Simulated entities:** Players, and entities with non-empty `activeReasons` or
   `anchorReasons`, wherever they are. Anything else is simulated when its room (following
@@ -2660,8 +2666,8 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **Pathfinding:** `ctx.path_to` runs a BFS over the full room graph, over exits in
   declaration order (so ties resolve the same way every time) and through open doors only:
   closed and locked doors block. Results are cached per `(source, dest)`. A door change and
-  a reload clear the cache; `set_exit_blocks` doesn't, since blocks never affect
-  passability.
+  a reload clear the cache; `set_exit_senses_blocked` doesn't, since `senses_blocked` never
+  affects passability.
 
 ### 5.10 Hot Reload and Deploy
 
@@ -3084,7 +3090,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     and cramped rooms.
   - **Event dispatch:** ordering, short-circuiting, cascade depth limit, and the shared
     step budget.
-  - **Perception:** channels × exit `blocks` × door states, deferral, and coalescing.
+  - **Perception:** channels × exit `senses_blocked` × door states, deferral, and coalescing.
   - **Rules chain:** ordering and fallback to the Kotlin ruleset.
   - **Reality bubble:** incremental BFS correctness against a full recompute, the
     dormant/wake timer conversion, lazy catch-up, and active vs anchor semantics.

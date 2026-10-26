@@ -47,11 +47,12 @@ fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
 }
 
 /**
- * The `set_exit_blocks` verb: replaces the exit's own `blocks`; the door's set still adds to it.
+ * The `set_exit_senses_blocked` verb: replaces the exit's own `senses_blocked`; the door's set
+ * still adds to it.
  */
-fun World.setExitBlocks(room: Room, dir: Direction, blocks: Set<Channel>) {
+fun World.setExitSensesBlocked(room: Room, dir: Direction, channels: Set<Channel>) {
   val exit = requireNotNull(room.exits[dir]) { "${room.label} has no exit $dir" }
-  exit.blocks = blocks
+  exit.sensesBlocked = channels
   room.dirty = true
 }
 

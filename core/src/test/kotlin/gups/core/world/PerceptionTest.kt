@@ -69,7 +69,7 @@ class PerceptionTest {
     f.run()
     assertEquals("[ear:say:north:hall:again]", heard.toString())
     heard.clear()
-    f.w.setExitBlocks(f.w.room(T.VAULT), Direction.NORTH, Channel.ALL)
+    f.w.setExitSensesBlocked(f.w.room(T.VAULT), Direction.NORTH, Channel.ALL)
     f.input(p, "shout HELLO")
     f.run()
     assertEquals("[]", heard.toString())

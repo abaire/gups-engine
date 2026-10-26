@@ -33,24 +33,24 @@ sealed class Entity(val id: EntityId, val protoLabel: Label) {
 class Door(proto: DoorProto) {
   var state: DoorState = proto.state
   val key: Label? = proto.key
-  val openBlocks: Set<Channel> = proto.openBlocks
-  val closedBlocks: Set<Channel> = proto.closedBlocks
+  val openSensesBlocked: Set<Channel> = proto.openSensesBlocked
+  val closedSensesBlocked: Set<Channel> = proto.closedSensesBlocked
 
-  val blocks: Set<Channel>
-    get() = if (state == DoorState.OPEN) openBlocks else closedBlocks
+  val sensesBlocked: Set<Channel>
+    get() = if (state == DoorState.OPEN) openSensesBlocked else closedSensesBlocked
 }
 
 class Exit(proto: ExitProto) {
   val direction: Direction = proto.direction
   val to: Label = proto.to
   val entryIndex: Int = proto.entryIndex
-  var blocks: Set<Channel> = proto.blocks
+  var sensesBlocked: Set<Channel> = proto.sensesBlocked
   val door: Door? = proto.door?.let(::Door)
   val oneWay: Boolean = proto.oneWay
 
-  /** The exit's own blocks plus the door's set for its current state. */
-  val effectiveBlocks: Set<Channel>
-    get() = door?.let { blocks + it.blocks } ?: blocks
+  /** The exit's own `sensesBlocked` plus the door's set for its current state. */
+  val effectiveSensesBlocked: Set<Channel>
+    get() = door?.let { sensesBlocked + it.sensesBlocked } ?: sensesBlocked
 
   /** Closed and locked doors cannot be walked through. */
   val passable: Boolean
