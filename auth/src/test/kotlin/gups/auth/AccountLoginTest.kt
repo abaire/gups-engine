@@ -161,6 +161,7 @@ class AccountLoginTest {
     c.send("new")
     assertContains(c.send("x"), "Names are 2 to 16 letters.")
     assertContains(c.send("Ann2"), "Names are 2 to 16 letters.")
+    assertContains(c.send("Ann Lee"), "Names are 2 to 16 letters.")
     for (name in listOf("north", "Self", "look", "gandalf", "new", "Guard", "brom")) assertTrue(
       "That name is reserved." in c.send(name),
       name,
