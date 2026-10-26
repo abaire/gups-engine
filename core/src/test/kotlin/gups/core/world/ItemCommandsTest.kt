@@ -22,6 +22,10 @@ class ItemCommandsTest {
   private val chest = Label("//t:chest")
   private val anvil = Label("//t:anvil")
   private val potion = Label("//t:potion")
+  private val chainKey = Label("//t:chain_key")
+  private val bareKey = Label("//t:bare_key")
+  private val chainBox = Label("//t:strongbox")
+  private val ironBox = Label("//t:coffer")
 
   private val extra =
     listOf(
@@ -52,6 +56,20 @@ class ItemCommandsTest {
       ),
       ItemProto(anvil, "an anvil", listOf("anvil"), weight = 95),
       ItemProto(potion, "a potion", listOf("potion")),
+      ItemProto(chainKey, "a key on a chain", listOf("chain"), wear = "neck"),
+      ItemProto(bareKey, "an iron key", listOf("iron"), kind = "key"),
+      ItemProto(
+        chainBox,
+        "a strongbox",
+        listOf("strongbox"),
+        container = ContainerProto(1, 5, state = DoorState.LOCKED, key = chainKey),
+      ),
+      ItemProto(
+        ironBox,
+        "a coffer",
+        listOf("coffer"),
+        container = ContainerProto(1, 5, state = DoorState.LOCKED, key = bareKey),
+      ),
     )
 
   private fun fixture(host: ScriptHost = ScriptHost.NONE) =
@@ -165,6 +183,39 @@ class ItemCommandsTest {
     assertEquals(2, box.contents.single().count)
     f.doLine(p, "close chest")
     assertContains(f.doLine(p, "put key in chest"), "A chest is closed.")
+  }
+
+  @Test
+  fun `a worn key locks and unlocks containers`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.w.spawnItem(chainBox, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    f.w.spawnItem(chainKey, ItemLocation.Equipped(p.id, "neck"))
+    assertContains(f.doLine(p, "unlock strongbox"), "You unlock a strongbox.")
+    assertContains(f.doLine(p, "lock strongbox"), "You lock a strongbox.")
+  }
+
+  @Test
+  fun `key-only items go on the keyring and still unlock`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.w.spawnItem(ironBox, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    f.carry(p, bareKey)
+    f.carry(p, coin)
+    val inv = f.doLine(p, "inventory")
+    assertContains(inv, "a gold coin")
+    assertFalse("an iron key" in inv, inv)
+    assertContains(f.doLine(p, "keyring"), "Your keyring holds:\n  an iron key")
+    assertContains(f.doLine(p, "unlock coffer"), "You unlock a coffer.")
+  }
+
+  @Test
+  fun `keys with another purpose stay in the inventory`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.carry(p, chainKey)
+    assertContains(f.doLine(p, "inventory"), "a key on a chain")
+    assertContains(f.doLine(p, "keyring"), "Your keyring is empty.")
   }
 
   @Test

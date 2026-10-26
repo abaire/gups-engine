@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Channel
@@ -8,6 +9,7 @@ import gups.core.model.DoorState
 import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.Player
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
@@ -28,6 +30,7 @@ internal object EngineCommands {
       FastCommand("score") { score(it) },
       FastCommand("inventory") { inventory(it) },
       FastCommand("equipment") { equipment(it) },
+      FastCommand("keyring") { keyring(it) },
       FastCommand("who") { who(it) },
       FastCommand("help") { help(it) },
       FastCommand("stop") { stop(it) },
@@ -155,11 +158,21 @@ internal object EngineCommands {
   }
 
   private fun inventory(c: CommandCall) {
-    val items = c.actor.inventory
+    // Keys live on the keyring, so they don't clutter the inventory.
+    val items = c.actor.inventory.filterNot { it.proto.isKeyOnly }
     c.world.send(
       c.actor,
       if (items.isEmpty()) "You are carrying nothing."
       else "You are carrying:\n" + items.joinToString("\n") { "  ${it.name}" },
+    )
+  }
+
+  private fun keyring(c: CommandCall) {
+    val keys = c.actor.inventory.filter { it.proto.isKeyOnly }
+    c.world.send(
+      c.actor,
+      if (keys.isEmpty()) "Your keyring is empty."
+      else "Your keyring holds:\n" + keys.joinToString("\n") { "  ${it.name}" },
     )
   }
 
@@ -498,7 +511,7 @@ internal object EngineCommands {
         if (door.state !in verb.from) return "The door $dir is ${door.state.name.lowercase()}."
         if (verb == DoorVerb.LOCK || verb == DoorVerb.UNLOCK) {
           val key = door.key ?: return "The door $dir has no lock."
-          if (actor.inventory.none { it.protoLabel == key }) return "You don't have the key."
+          if (!actor.hasKey(key)) return "You don't have the key."
         }
         return null
       }
@@ -519,7 +532,7 @@ internal object EngineCommands {
     }
   }
 
-  /** Opening, closing, locking and unlocking a container item, with its key in inventory. */
+  /** Opening, closing, locking and unlocking a container item, with its key carried or worn. */
   private fun planContainer(box: Item, verb: DoorVerb): Action =
     object : Action {
       override fun validate(w: World, actor: Actor): String? {
@@ -532,7 +545,7 @@ internal object EngineCommands {
           return "${box.name.cap()} is ${state.state.name.lowercase()}."
         if (verb == DoorVerb.LOCK || verb == DoorVerb.UNLOCK) {
           val key = state.key ?: return "${box.name.cap()} has no lock."
-          if (actor.inventory.none { it.protoLabel == key }) return "You don't have the key."
+          if (!actor.hasKey(key)) return "You don't have the key."
         }
         return null
       }
@@ -851,6 +864,25 @@ internal fun World.slotFor(actor: Actor, wanted: String): String? {
   val family = slots.filter { it.startsWith("${wanted}_") }
   return family.firstOrNull { actor.equipped(it) == null } ?: family.firstOrNull()
 }
+
+/**
+ * True if this item does nothing but open locks: `kind = "key"` and no slot, container, commands,
+ * dice or wear effects. Such keys go on the keyring instead of the inventory listing.
+ */
+internal val ItemProto.isKeyOnly: Boolean
+  get() =
+    kind == "key" &&
+      wear == null &&
+      container == null &&
+      commands.isEmpty() &&
+      dice == null &&
+      statDeltas.isEmpty() &&
+      equipAffects.isEmpty() &&
+      modifiers.isEmpty()
+
+/** True if [this] carries or wears an item of prototype [key], keyring keys included. */
+internal fun Actor.hasKey(key: Label): Boolean =
+  inventory.any { it.protoLabel == key } || equipment.values.any { it.protoLabel == key }
 
 /** The other side of [exit], if it leads back here with a door. */
 internal fun World.reverseExit(

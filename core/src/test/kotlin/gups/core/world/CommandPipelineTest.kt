@@ -64,7 +64,7 @@ class CommandPipelineTest {
     val reg = f.w.commands
     assertNull(reg.resolve(p, "attack"))
     assertNull(reg.resolve(p, "take"))
-    assertEquals("kill", reg.resolve(p, "k")?.name) // only as a unique prefix
+    assertEquals("kill", reg.resolve(p, "ki")?.name) // only as a unique prefix
     f.input(p, "'hello")
     assertEquals("Huh?\n", f.out(p))
   }

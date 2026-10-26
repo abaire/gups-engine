@@ -1195,13 +1195,18 @@ def _scout_think(ctx):
 ### 4.9 Commands
 
 **Player commands, fast lane:** `say`, `tell`, `gossip`, `shout`, `whisper`, `look`,
-`score`, `inventory`, `equipment`, `who`, `help`, `quests`, `stop`, `clear`, `quit`.
+`score`, `inventory`, `equipment`, `keyring`, `who`, `help`, `quests`, `stop`, `clear`,
+`quit`.
 
 - **`tell <name>`** finds an in-world player by name first, otherwise a mob in the room by
   keyword, which receives `on_tell`.
 - **`shout`** reaches the room and every room whose exit toward it doesn't block `noise`
   (§5.7), players included.
 - **`whisper`** shows bystanders "X whispers something to Y."
+- **`keyring`** lists the keys on the keyring: carried items with `kind = "key"` and no
+  other purpose (no `wear` slot, `container`, `commands`, `dice`, `stat_deltas`,
+  `equip_affects` or `modifiers`). `inventory` leaves them out; item commands still find
+  them by keyword.
 - **`gossip`** goes to every player, including link-dead ones (who see nothing).
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The
   link-dead auto-quit ignores combat.
@@ -1225,7 +1230,9 @@ def _scout_think(ctx):
 - **`put <item> in|into <container>`:** the container is carried, or on the ground within
   `get_lag` reach, and open.
 - **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a
-  door direction here. Locking needs the container's key in the inventory.
+  door direction here.
+- **Keys:** locking or unlocking a door or container needs its key carried (keyring
+  included) or equipped.
 - **`use <item> [target]`:** the item is carried or worn and must have an `on_use` hook ("You
   can't use that." otherwise). `before_use` can veto. The target is an actor in the room,
   else an item. The engine never uses an item up; `on_use` destroys it if it should be.

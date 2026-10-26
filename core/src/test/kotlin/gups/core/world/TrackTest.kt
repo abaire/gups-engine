@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.model.Band
 import gups.core.model.DoorState
 import gups.core.model.ItemLocation
+import gups.core.model.Prototypes
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -193,6 +194,20 @@ class TrackTest {
     f.run(3)
     assertEquals(T.VAULT, p.room.label)
     assertEquals(DoorState.OPEN, f.w.room(T.VAULT).exits.values.single().door!!.state)
+  }
+
+  @Test
+  fun `a worn key locks and unlocks doors`() {
+    val items = T.items.map { if (it.label == T.KEY) it.copy(wear = "neck") else it }
+    val f = Fixture(protos = Prototypes(T.rooms, T.mobs, items, T.skills))
+    val p = f.player("Ann")
+    f.w.spawnItem(T.KEY, ItemLocation.Equipped(p.id, "neck"))
+    f.input(p, "unlock south")
+    f.run()
+    assertEquals("You unlock the door south.\n", f.out(p))
+    f.input(p, "lock south")
+    f.run()
+    assertEquals("You lock the door south.\n", f.out(p))
   }
 
   @Test

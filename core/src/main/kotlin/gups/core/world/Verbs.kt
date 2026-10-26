@@ -31,8 +31,8 @@ fun World.emote(actor: Actor, text: String) {
 }
 
 /**
- * Sets the door on [room]'s exit [dir], and on the matching door on the other side (D-031). Silent:
- * callers do their own messaging.
+ * Sets the door on [room]'s exit [dir], and on the matching door on the other side, so both sides
+ * always agree. Silent: callers do their own messaging.
  */
 fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
   val exit = requireNotNull(room.exits[dir]) { "${room.label} has no exit $dir" }
