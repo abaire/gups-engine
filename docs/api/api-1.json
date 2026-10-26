@@ -813,15 +813,15 @@
           "since": 1
         },
         {
-          "symbol": "package.reset_pulses",
-          "name": "reset_pulses",
+          "symbol": "package.reset_world_ticks",
+          "name": "reset_world_ticks",
           "type": "int",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "None",
           "allowed_values": [],
-          "doc": "Pulses between zone resets, or None for no periodic reset.",
+          "doc": "World ticks (30 s each) between zone resets, or None for no periodic reset.",
           "since": 1
         },
         {

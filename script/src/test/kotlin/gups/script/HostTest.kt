@@ -455,7 +455,7 @@ class HostTest {
     val f =
       ScriptFixture(
         mapOf(
-          "zones/z/package.star" to zonePkg(", reset_pulses = 240"),
+          "zones/z/package.star" to zonePkg(", reset_world_ticks = 2"),
           "zones/z/rooms.star" to
             """
                     def _loaded(ctx):

@@ -64,7 +64,7 @@ class HookCtxFieldsTest {
     val f =
       ScriptFixture(
         mapOf(
-          "zones/z/package.star" to zonePkg(", reset_pulses = 3"),
+          "zones/z/package.star" to zonePkg(", reset_world_ticks = 1"),
           "zones/z/a.star" to
             """
                     def _h(ctx):

@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.Label
+import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Effect
@@ -52,7 +53,7 @@ class LoaderTest {
     val r =
       load(
         mapOf(
-          "zones/z/package.star" to zonePkg(", reset_pulses = 600"),
+          "zones/z/package.star" to zonePkg(", reset_world_ticks = 5"),
           "zones/z/rooms.star" to
             """
                     room("start", name = "Start", size = LARGE,
@@ -254,6 +255,16 @@ class LoaderTest {
         )
       )
     assertTrue(cycle.errors.any { "load cycle" in it.message }, cycle.report())
+  }
+
+  @Test
+  fun `zone reset intervals are whole world ticks`() {
+    val ok = load(mapOf("zones/z/package.star" to zonePkg(", reset_world_ticks = 3")))
+    assertEquals(3 * WORLD_TICK_PULSES, ok.prototypes().zones.getValue("zones/z").resetPulses)
+    val pulses = load(mapOf("zones/z/package.star" to zonePkg(", reset_pulses = 7200")))
+    assertContains(only(pulses).message, "reset_pulses")
+    val zero = load(mapOf("zones/z/package.star" to zonePkg(", reset_world_ticks = 0")))
+    assertContains(only(zero).message, "package(reset_world_ticks): must be at least 1")
   }
 
   @Test

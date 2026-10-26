@@ -20,6 +20,23 @@ line, such as `'` for `say`. A world keeps `'` only by listing it, as the templa
 
 `server.gups` can set how many seconds a shutdown waits for the final checkpoint.
 
+### `package(reset_pulses)` is now `package(reset_world_ticks)`
+
+A zone's reset interval is given in world ticks (30 seconds each), so a reset always lands on
+a world tick.
+
+Before:
+
+```python
+package(api_version = 1, kind = "zone", reset_pulses = 7200)
+```
+
+After:
+
+```python
+package(api_version = 1, kind = "zone", reset_world_ticks = 60)
+```
+
 ### `dispel(filter)` is now `dispel(name, flag, all, count)`
 
 `dispel` takes keyword criteria instead of a filter string: `name` (a trailing `*` matches a

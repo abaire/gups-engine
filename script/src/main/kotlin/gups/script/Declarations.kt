@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.PERCEPTION_MAX_RADIUS
+import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.ContainerProto
@@ -551,9 +552,12 @@ internal class DeclarationBuiltins {
         d.choice("kind")?.let(PackageKind::parse)
           ?: fail("package(): kind is required (zone, lib, rules or skills)")
       p.title = d.str("title") ?: p.path
+      // Counted in world ticks so a reset always lands on a world-tick boundary.
       p.resetPulses =
-        d.int("reset_pulses")?.also {
-          if (it < 1) fail("package(reset_pulses): must be at least 1")
+        d.int("reset_world_ticks")?.let {
+          if (it < 1) fail("package(reset_world_ticks): must be at least 1")
+          if (it > Int.MAX_VALUE / WORLD_TICK_PULSES) fail("package(reset_world_ticks): too large")
+          it * WORLD_TICK_PULSES
         }
       p.sharedNamespaces = d.strList("shared_namespaces")
       if (p.sharedNamespaces.isNotEmpty() && !p.kind.privileged) {
@@ -1510,9 +1514,9 @@ internal class DeclarationBuiltins {
               default = "package path",
             ),
             DeclParam(
-              "reset_pulses",
+              "reset_world_ticks",
               "int",
-              "Pulses between zone resets, or None for no periodic reset.",
+              "World ticks (30 s each) between zone resets, or None for no periodic reset.",
               default = "None",
             ),
             DeclParam(

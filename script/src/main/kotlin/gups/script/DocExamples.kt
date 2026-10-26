@@ -185,7 +185,7 @@ object DocExamples {
                     api_version = 1,
                     kind = "zone",
                     title = "Examples",
-                    reset_pulses = 1200,
+                    reset_world_ticks = 10,
                 )
             """
         ),

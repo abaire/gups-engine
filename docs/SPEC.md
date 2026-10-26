@@ -750,7 +750,7 @@ package(
     api_version = 1,
     kind = "zone",                    # zone | lib | rules | skills
     title = "Goblin Caves",
-    reset_pulses = 7200,              # zone reset interval (30 min); fires on_reset
+    reset_world_ticks = 60,           # zone reset interval (30 min); fires on_reset
     modifiers = {},                   # zone-wide modifiers (§4.6)
     shared_namespaces = [],           # privileged packages only (§3.7)
     expected_tombstones = [],         # §7.3 gate 5

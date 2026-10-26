@@ -202,7 +202,7 @@ class World(
   internal val spawnStates = mutableListOf<SpawnState>()
   private val diagnosticLog = mutableListOf<Diagnostic>()
 
-  /** Next zone reset per package that declares `reset_pulses` (SPEC §4.1). */
+  /** Next zone reset per package that declares `reset_world_ticks` (SPEC §4.1). */
   internal val zoneResets = TreeMap<String, Long>()
 
   // Persistence bookkeeping (SPEC §5.11), drained by each checkpoint capture.
@@ -653,8 +653,8 @@ class World(
   }
 
   /**
-   * A zone reset (D-061): refill every spawn rule in the package, then fire `on_reset` on its
-   * rooms, ascending id.
+   * A zone reset: refill every spawn rule in the package, then fire `on_reset` on its rooms,
+   * ascending id.
    */
   private fun resetZone(pkg: String) {
     val interval = protos.zones.getValue(pkg).resetPulses ?: return

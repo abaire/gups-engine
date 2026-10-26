@@ -15,7 +15,7 @@ package(
     kind = "zone",
     title = "The Tutorial",
 
-    # Every 1200 pulses (5 minutes) the zone resets: its spawns refill and every room's
+    # Every 10 world ticks (5 minutes) the zone resets: its spawns refill and every room's
     # on_reset hook runs. See the armory in rooms.star.
-    reset_pulses = 1200,
+    reset_world_ticks = 10,
 )
