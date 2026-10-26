@@ -449,13 +449,13 @@
         {
           "symbol": "item.equip_affects",
           "name": "equip_affects",
-          "type": "list[str]",
+          "type": "list[str | dict]",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "[]",
           "allowed_values": [],
-          "doc": "Affect flags granted while the item is worn.",
+          "doc": "Affects applied when the item is worn: a flag held while worn, or {'flag': str, 'pulses': int} for a timed one. 'stunned' must be timed.",
           "since": 1
         },
         {
@@ -3414,7 +3414,7 @@
         {
           "symbol": "view:actor.flags",
           "name": "flags",
-          "doc": "Flags from affects and worn items' equip_affects, sorted.",
+          "doc": "Flags from affects, including those worn items apply, sorted.",
           "since": 1
         },
         {
@@ -5078,7 +5078,7 @@
         {
           "symbol": "p.flags",
           "name": "flags",
-          "doc": "Flags from affects and worn items' equip_affects, sorted.",
+          "doc": "Flags from affects, including those worn items apply, sorted.",
           "since": 1
         },
         {

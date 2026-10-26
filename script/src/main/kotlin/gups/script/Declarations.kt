@@ -16,6 +16,7 @@ import gups.core.model.DoorProto
 import gups.core.model.DoorState
 import gups.core.model.DormantRecovery
 import gups.core.model.Effect
+import gups.core.model.EquipAffect
 import gups.core.model.ExitProto
 import gups.core.model.Interrupt
 import gups.core.model.ItemProto
@@ -460,9 +461,34 @@ internal fun modifiers(v: Any?, what: String): Modifiers {
 
 /** Affect flags such as `no_regen`: lowercase words. */
 private fun flags(v: Any?, what: String): Set<String> =
-  strList(v, what)
-    .onEach { if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag") }
-    .toSet()
+  strList(v, what).onEach { flag(it, what) }.toSet()
+
+private fun flag(f: String, what: String): String =
+  f.also { if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag") }
+
+/**
+ * `equip_affects` entries (SPEC §4.6): a flag name, held while worn, or `{"flag": ..., "pulses":
+ * n}`, applied for `n` pulses on equip. A stun must be timed so an item can't stun its wearer for
+ * good (D-181).
+ */
+private fun equipAffects(v: Any?, what: String): List<EquipAffect> =
+  (if (isNone(v)) emptyList() else list(v, what)).map { e ->
+    val affect =
+      if (e is String) {
+        EquipAffect(flag(e, what))
+      } else {
+        val m = dict(e, what)
+        for (k in m.keys) choice(k, what, listOf("flag", "pulses"))
+        val flag = flag(str(m["flag"], "$what[\"flag\"]"), what)
+        val pulses = int(m["pulses"], "$what[\"pulses\"]")
+        if (pulses < 1) fail("$what: '$flag' needs \"pulses\" of at least 1")
+        EquipAffect(flag, pulses)
+      }
+    if (affect.flag == "stunned" && affect.pulses == null) {
+      fail("$what: 'stunned' needs a duration, as {\"flag\": \"stunned\", \"pulses\": n}")
+    }
+    affect
+  }
 
 /**
  * Whom a behavior means: `players`, `mobs`, `all`, or label patterns with `*` such as `goblin_*`
@@ -842,7 +868,7 @@ internal class DeclarationBuiltins {
           decayPulses = d.int("decay_pulses"),
           container = container,
           commands = commands(d["commands"], d.what("commands"), pkg),
-          equipAffects = flags(d["equip_affects"], d.what("equip_affects")),
+          equipAffects = equipAffects(d["equip_affects"], d.what("equip_affects")),
           modifiers = modifiers(d["modifiers"], d.what("modifiers")),
           version = version(d),
         )
@@ -1907,8 +1933,9 @@ internal class DeclarationBuiltins {
             ),
             DeclParam(
               "equip_affects",
-              "list[str]",
-              "Affect flags granted while the item is worn.",
+              "list[str | dict]",
+              "Affects applied when the item is worn: a flag held while worn, or " +
+                "{'flag': str, 'pulses': int} for a timed one. 'stunned' must be timed.",
               default = "[]",
             ),
             DeclParam(

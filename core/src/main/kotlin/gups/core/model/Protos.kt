@@ -131,8 +131,8 @@ data class ItemProto(
   val decayPulses: Int? = null,
   val container: ContainerProto? = null,
   val commands: Map<String, ZoneCommand> = emptyMap(),
-  /** Affect flags the wearer has while this is equipped, for example `no_regen`. */
-  val equipAffects: Set<String> = emptySet(),
+  /** Affects equipping this applies to the wearer, for example `no_regen` (SPEC §4.6). */
+  val equipAffects: List<EquipAffect> = emptyList(),
   /** Modifiers that apply to the wearer while this is equipped. */
   val modifiers: Modifiers = emptyMap(),
   val version: Int = 1,
@@ -155,6 +155,12 @@ enum class TargetKind {
 }
 
 /** When an in-progress cast is broken (SPEC §5.3). */
+/**
+ * One `equip_affects` entry (SPEC §4.6): [flag] for as long as the item is worn, or for [pulses]
+ * from the moment it is equipped when that is set.
+ */
+data class EquipAffect(val flag: String, val pulses: Int? = null)
+
 data class Interrupt(val damagePct: Int? = null, val stun: Boolean = true) {
   companion object {
     val NONE = Interrupt(damagePct = null, stun = false)

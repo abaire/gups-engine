@@ -170,7 +170,11 @@ private fun World.index(item: Item, at: ItemLocation) {
   when (at) {
     is ItemLocation.InRoom -> (entity(at.room) as Room).itemIndex[item.id] = item
     is ItemLocation.Carried -> actor(at.actor)!!.inventoryIndex[item.id] = item
-    is ItemLocation.Equipped -> actor(at.actor)!!.equipmentIndex[at.slot] = item
+    is ItemLocation.Equipped -> {
+      val wearer = actor(at.actor)!!
+      wearer.equipmentIndex[at.slot] = item
+      applyEquipAffects(wearer, item)
+    }
     is ItemLocation.Contained -> item(at.container)!!.contentsIndex[item.id] = item
   }
 }
@@ -179,7 +183,11 @@ private fun World.unindex(item: Item) {
   when (val at = item.location) {
     is ItemLocation.InRoom -> (entity(at.room) as? Room)?.itemIndex?.remove(item.id)
     is ItemLocation.Carried -> actor(at.actor)?.inventoryIndex?.remove(item.id)
-    is ItemLocation.Equipped -> actor(at.actor)?.equipmentIndex?.remove(at.slot)
+    is ItemLocation.Equipped ->
+      actor(at.actor)?.let { wearer ->
+        wearer.equipmentIndex.remove(at.slot)
+        removeEquipAffects(wearer, item)
+      }
     is ItemLocation.Contained -> item(at.container)?.contentsIndex?.remove(item.id)
   }
 }

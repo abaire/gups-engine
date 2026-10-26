@@ -1,12 +1,15 @@
 package gups.core.world
 
+import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
+import gups.core.model.CastState
 import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Effect
+import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Modifiers
@@ -145,6 +148,8 @@ internal fun World.processDeath(victim: Actor) {
   victim.casting = null
   victim.actionQueue.clear()
   victim.waitState = 0
+  victim.stunnedWaitState = 0
+  victim.stunnedSince = 0
   disengageAll(victim)
   removedThisPhase += victim.id
   send(victim, "You are DEAD!")
@@ -214,9 +219,11 @@ fun World.applyAffect(
   expireMessage: String = "",
   source: Actor? = null,
   modifiers: Modifiers = emptyMap(),
+  wornFrom: EntityId? = null,
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
+  val wasStunned = target.isStunned
   target.affects.removeIf { it.name == name }
   val affect =
     Affect(
@@ -224,7 +231,8 @@ fun World.applyAffect(
       name,
       source?.id,
       pulse,
-      pulse + duration,
+      // A worn item's affect lasts until the item comes off (D-181).
+      if (wornFrom != null) Long.MAX_VALUE else pulse + duration,
       statDeltas,
       flags,
       tickEvery,
@@ -232,19 +240,30 @@ fun World.applyAffect(
       onExpire,
       expireMessage,
       modifiers,
+      wornFrom,
     )
   target.affects += affect
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
+  stunChanged(target, wasStunned)
   return affect
 }
 
-fun World.removeAffect(target: Actor, name: String): Boolean =
-  target.affects.removeIf { it.name == name }.also { if (it) target.dirty = true }
+fun World.removeAffect(target: Actor, name: String): Boolean {
+  val wasStunned = target.isStunned
+  return target.affects
+    .removeIf { it.name == name }
+    .also {
+      if (it) target.dirty = true
+      stunChanged(target, wasStunned)
+    }
+}
 
 internal fun World.expireAffect(a: Actor, affect: Affect) {
+  val wasStunned = a.isStunned
   if (!a.affects.remove(affect)) return
   a.dirty = true
+  stunChanged(a, wasStunned)
   if (affect.expireMessage.isNotEmpty()) send(a, affect.expireMessage)
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect)) }
   if ("summoned" in affect.flags && a is Mob) {
@@ -253,6 +272,48 @@ internal fun World.expireAffect(a: Actor, affect: Affect) {
     removeActor(a)
   }
 }
+
+/**
+ * Clears [a]'s recovery when a stun starts and puts it back when the last stun ends, so recovery
+ * neither counts down nor runs out during the stun (D-004). Any lag from a cast the stun broke is
+ * part of what is put back. A cast the stun didn't break has its warmup pushed back by the stun's
+ * length, so it stays paused.
+ */
+private fun World.stunChanged(a: Actor, wasStunned: Boolean) {
+  val stunned = a.isStunned
+  if (stunned && !wasStunned) {
+    a.stunnedWaitState = a.waitState
+    a.stunnedSince = pulse
+    a.waitState = 0
+  } else if (wasStunned && !stunned) {
+    a.waitState = maxOf(a.waitState, a.stunnedWaitState)
+    a.stunnedWaitState = 0
+    a.casting?.let { c ->
+      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.stunnedSince))
+    }
+  }
+}
+
+/**
+ * Applies [item]'s `equip_affects` to [wearer] as it is equipped, through [applyAffect] like any
+ * other affect (D-181). Untimed entries last until [removeEquipAffects]; timed ones count down.
+ */
+internal fun World.applyEquipAffects(wearer: Actor, item: Item) {
+  for (e in item.proto.equipAffects) {
+    val name = equipAffectName(item, e.flag)
+    if (e.pulses != null) applyAffect(wearer, name, e.pulses, flags = setOf(e.flag))
+    else applyAffect(wearer, name, 1, flags = setOf(e.flag), wornFrom = item.id)
+  }
+}
+
+/** Removes the untimed `equip_affects` of [item] from [wearer] as it comes off (D-181). */
+internal fun World.removeEquipAffects(wearer: Actor, item: Item) {
+  for (e in item.proto.equipAffects) {
+    if (e.pulses == null) removeAffect(wearer, equipAffectName(item, e.flag))
+  }
+}
+
+private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag"
 
 // ---- Effect primitives (SPEC §4.3) -----------------------------------------------------------
 

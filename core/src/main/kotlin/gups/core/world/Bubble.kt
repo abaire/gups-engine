@@ -268,9 +268,7 @@ private fun World.recover(m: Mob, since: Long) {
   when (m.dormantRecovery) {
     DormantRecovery.NONE -> Unit
     DormantRecovery.FULL -> {
-      val suppressed =
-        live.any { "no_regen" in it.flags } ||
-          m.equipmentIndex.values.any { "no_regen" in it.proto.equipAffects }
+      val suppressed = live.any { "no_regen" in it.flags }
       if (suppressed) {
         catchUpRegen(m, since)
       } else {

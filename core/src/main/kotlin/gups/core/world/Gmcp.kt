@@ -101,7 +101,9 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
       p.affects.map { a ->
         mapOf(
           "name" to a.name,
-          "remaining" to (a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000,
+          "remaining" to
+            if (a.wornFrom != null) null
+            else (a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000,
           "flags" to a.flags.sorted(),
         )
       }

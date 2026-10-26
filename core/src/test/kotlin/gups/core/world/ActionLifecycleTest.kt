@@ -59,7 +59,61 @@ class ActionLifecycleTest {
     f.run(2)
     f.w.applyEffect(gups.core.model.Effect.Stun(3), g, p)
     assertFalse(p.isCasting)
-    assertEquals(2, p.waitState)
+    assertEquals(0, p.waitState, "no recovery while stunned (D-004)")
+    f.run(2)
+    assertTrue(p.isStunned)
+    assertEquals(0, p.waitState)
+    f.run() // the stun expires in the timer phase, then the action phase counts down one pulse
+    assertFalse(p.isStunned)
+    assertEquals(1, p.waitState, "the broken cast's half lag applies once the stun ends (D-004)")
+    assertEquals(1000, g.hp, "the interrupted cast never resolves")
+    assertEquals(50, p.mana)
+  }
+
+  @Test
+  fun `a stun pauses the warmup of a cast it doesn't interrupt`() {
+    val skills =
+      T.skills.map {
+        if (it.label == T.BOLT) it.copy(interrupt = gups.core.model.Interrupt(stun = false)) else it
+      }
+    val f =
+      Fixture(
+        rules = FixedRules(toHit = 0),
+        protos = gups.core.model.Prototypes(T.rooms, T.mobs, T.items, skills),
+      )
+    val p = f.player("Ann")
+    p.skills[T.BOLT] = 100
+    val g = f.mob(T.DUMMY, index = 2)
+    f.input(p, "cast bolt dummy")
+    f.run(2) // warmup started at pulse 1, due at pulse 5
+    f.w.applyEffect(gups.core.model.Effect.Stun(3), g, p)
+    assertTrue(p.isCasting)
+    f.run(3) // the stun ends at pulse 5, the cast's original end
+    assertTrue(p.isCasting, "the warmup didn't run during the stun (D-004)")
+    assertEquals(1000, g.hp)
+    f.run(3)
+    assertFalse(p.isCasting)
+    assertEquals(1000 - 8, g.hp, "the cast resolves once its paused pulses have passed")
+  }
+
+  @Test
+  fun `a stun holds recovery aside and restores it in full when it ends`() {
+    val f = Fixture(rules = FixedRules(toHit = 0))
+    val p = f.player("Ann")
+    val g = f.mob(index = 2)
+    p.waitState = 4
+    f.w.applyAffect(p, "stun", 3, flags = setOf("stunned"))
+    assertEquals(0, p.waitState, "the stun removes recovery (D-004)")
+    f.run(2)
+    assertEquals(0, p.waitState)
+    f.w.removeAffect(p, "stun")
+    assertEquals(4, p.waitState, "recovery did not count down during the stun (D-004)")
+    f.input(p, "advance goblin")
+    f.run(4)
+    assertEquals(0, p.trackIndex, "the queued action still waits out the restored recovery")
+    f.run()
+    assertEquals(1, p.trackIndex)
+    assertEquals(2, g.trackIndex)
   }
 
   @Test

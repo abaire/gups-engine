@@ -270,16 +270,9 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(
     name = "flags",
     structField = true,
-    doc = "Flags from affects and worn items' equip_affects, sorted.",
+    doc = "Flags from affects, including those worn items apply, sorted.",
   )
-  fun flags(): Any = read {
-    sList(
-      (actor.affects.flatMap { it.flags } +
-          actor.equipment.values.flatMap { it.proto.equipAffects })
-        .distinct()
-        .sorted()
-    )
-  }
+  fun flags(): Any = read { sList(actor.affects.flatMap { it.flags }.distinct().sorted()) }
 
   @StarlarkMethod(
     name = "has_flag",

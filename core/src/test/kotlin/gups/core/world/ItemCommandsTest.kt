@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.Label
 import gups.core.model.ContainerProto
 import gups.core.model.DoorState
+import gups.core.model.EquipAffect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Prototypes
@@ -16,6 +17,7 @@ import kotlin.test.assertTrue
 class ItemCommandsTest {
   private val ring = Label("//t:ring")
   private val cap = Label("//t:cap")
+  private val helm = Label("//t:helm")
   private val coin = Label("//t:coin")
   private val chest = Label("//t:chest")
   private val anvil = Label("//t:anvil")
@@ -29,8 +31,15 @@ class ItemCommandsTest {
         "a cursed cap",
         listOf("cap"),
         wear = "head",
-        equipAffects = setOf("no_regen"),
+        equipAffects = listOf(EquipAffect("no_regen")),
         statDeltas = mapOf("con" to 2),
+      ),
+      ItemProto(
+        helm,
+        "a dazing helm",
+        listOf("helm"),
+        wear = "head",
+        equipAffects = listOf(EquipAffect("stunned", pulses = 3), EquipAffect("no_regen")),
       ),
       ItemProto(coin, "a gold coin", listOf("coin", "gold"), stackable = true),
       ItemProto(
@@ -77,6 +86,28 @@ class ItemCommandsTest {
     assertTrue(p.hasFlag("no_regen"))
     assertEquals(12, p.stat("con"))
     f.doLine(p, "remove cap")
+    assertFalse(p.hasFlag("no_regen"))
+  }
+
+  @Test
+  fun `a worn item's affects go through apply_affect, and its stun counts down while worn`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val h = f.carry(p, helm)
+    p.waitState = 5
+    f.w.moveItem(h, ItemLocation.Equipped(p.id, "head"))
+    assertTrue(p.isStunned)
+    assertTrue(
+      p.affects.any { it.name == "worn:${h.id.v}:no_regen" },
+      "worn flags are real affects (D-181)",
+    )
+    assertEquals(0, p.waitState, "an equipment stun holds recovery like a spell's (D-004)")
+    f.run(3)
+    assertFalse(p.isStunned, "the stun runs out though the helm is still worn (D-181)")
+    assertEquals(ItemLocation.Equipped(p.id, "head"), h.location)
+    assertEquals(4, p.waitState, "recovery comes back when the stun ends (D-004)")
+    assertTrue(p.hasFlag("no_regen"))
+    f.w.moveItem(h, ItemLocation.Carried(p.id))
     assertFalse(p.hasFlag("no_regen"))
   }
 

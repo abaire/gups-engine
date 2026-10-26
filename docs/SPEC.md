@@ -507,7 +507,7 @@ current state.
 - `kind`, for example `melee`, `ranged`, `armor`, or `consumable`.
 - `statDeltas`.
 - `decayAt: Long?`.
-- `modifiers` and `equipAffects` (affect flags), which apply while the item is worn (§4.6).
+- `modifiers` and `equipAffects`, which apply when the item is worn (§4.6, §4.2).
 - `wear`: the item's slot or slot family (§4.2).
 
 ```kotlin
@@ -805,8 +805,12 @@ def migrate(old_version, attrs):                       # optional, per package (
   `keywords` default to the display name's words minus articles, or else the identifier.
 - **Item slots:** an item's slot is `wear = "<slot>"`; `wield = "<slot>"` is an alias. A
   slot family such as `wear = "finger"` fits the first free `finger_*` slot. An item with
-  `equip_affects` or `modifiers` needs a `wear` slot. `equip_affects` is a list of affect
-  flags (for example `no_regen` or `silenced`) the wearer has while the item is worn.
+  `equip_affects` or `modifiers` needs a `wear` slot. Each `equip_affects` entry is either
+  an affect flag (for example `no_regen` or `silenced`), which the wearer has while the item
+  is worn, or `{"flag": ..., "pulses": n}`, which is applied for `n` pulses when the item is
+  equipped and runs out even if the item stays on. Equipping applies each entry to the wearer
+  as an affect, through `apply_affect` like a spell's, and removing the item removes the
+  untimed ones. `stunned` must be timed, so an item can't stun its wearer for good (§5.4.1).
 - **Containers:** `container(capacity, max_weight, state, key)` makes an item a container.
   `capacity` counts items; `max_weight` weighs the contents.
 - **Regions:** `region(name, modifiers = {...})` declares a region's modifiers. Region names
@@ -2408,6 +2412,13 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
   dropped. If it was healed above 0, the transition goes ahead.
 - **Stuns between tiers:** A stun or incapacitation applied during a tier stops the
   target from acting in *later* tiers, but never stops a same-tier action.
+- **Recovery during a stun:** When a stun starts, the target's `waitState` is set aside
+  and cleared. This includes the `lag / 2` from a cast the stun interrupted (§5.3). When the
+  last `stunned` affect expires or is removed, the set-aside value is restored as
+  `waitState = max(waitState, held)`. So recovery doesn't count down during a stun, and an
+  interrupted cast never resolves. A cast whose `interrupt.stun` is false is not broken; it
+  stays paused, and its warmup ends that many pulses later. The action queue is kept, and
+  queued actions run once the stun ends.
 - **Determinism:** The rolls use the seeded `rng`, so the same seed and inputs always
   produce the same order. That's what keeps replays exact.
 - **Fallback:** The built-in Kotlin ruleset uses `dex` plus `level`, with no roll.

@@ -357,6 +357,27 @@ class PersistenceTest {
   }
 
   @Test
+  fun `a worn item's affects are rebuilt on restart, not saved twice`() {
+    val file = tempDb()
+    val first = PersistWorld(file)
+    val rat = first.w.actors.filterIsInstance<Mob>().first()
+    first.w.spawnItem(P.HAT, gups.core.model.ItemLocation.Equipped(rat.id, "head"))
+    assertTrue(rat.hasFlag("no_regen"))
+    first.save()
+    first.close()
+
+    val second = PersistWorld(file)
+    val back = second.w.actor(rat.id) as Mob
+    assertEquals(
+      listOf(setOf("no_regen")),
+      back.affects.map { it.flags },
+      "one worn affect (D-181)",
+    )
+    assertTrue(back.affects.single().wornFrom != null)
+    second.close()
+  }
+
+  @Test
   fun `affect modifiers and active and anchor reasons survive a restart`() {
     val file = tempDb()
     val first = PersistWorld(file)

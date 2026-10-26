@@ -28,6 +28,22 @@ class M5ScriptTest {
     assertContains(point.report(), "'to_hti' is not a modifier point (did you mean 'to_hit'?)")
     val unworn = load(zone("item(\"ring\", equip_affects = [\"no_regen\"])"))
     assertContains(unworn.report(), "needs a wear slot")
+    val untimed = load(zone("item(\"helm\", wear = \"head\", equip_affects = [\"stunned\"])"))
+    assertContains(untimed.report(), "'stunned' needs a duration")
+    val timed =
+      load(
+        zone(
+          "item(\"helm\", wear = \"head\", equip_affects = [\"no_regen\", {\"flag\": \"stunned\", \"pulses\": 3}])"
+        )
+      )
+    assertEquals(
+      listOf(
+        gups.core.model.EquipAffect("no_regen"),
+        gups.core.model.EquipAffect("stunned", pulses = 3),
+      ),
+      timed.prototypes().items.values.single { it.label.name == "helm" }.equipAffects,
+      timed.report(),
+    )
     val pattern = load(zone("mob(\"rat\", behaviors = [aggressive(toward = \"Bad Pattern!\")])"))
     assertContains(pattern.report(), "is not players, mobs, all, or a label pattern")
     val ok =

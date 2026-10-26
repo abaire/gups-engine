@@ -81,6 +81,8 @@ fun World.restoreItem(id: EntityId, proto: ItemProto, at: ItemLocation, count: I
         "${a.name} already wears something in ${at.slot}"
       }
       a.equipmentIndex[at.slot] = item
+      // Untimed equip affects aren't saved; they are rebuilt from what is worn (D-181).
+      applyEquipAffects(a, item)
     }
     is ItemLocation.Contained -> {
       val c = requireNotNull(item(at.container)) { "No container ${at.container}" }

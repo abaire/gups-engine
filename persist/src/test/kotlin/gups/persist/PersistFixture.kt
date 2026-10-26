@@ -34,6 +34,7 @@ object P {
   val COIN = Label("//t:coin")
   val BAG = Label("//t:bag")
   val GEM = Label("//t:gem")
+  val HAT = Label("//t:hat")
 
   fun rooms(ratHp: Int = 10) =
     listOf(
@@ -67,6 +68,13 @@ object P {
           ItemProto(COIN, "a coin", listOf("coin"), stackable = true),
           ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto()),
           ItemProto(GEM, "a gem", listOf("gem")).takeIf { withGem },
+          ItemProto(
+            HAT,
+            "a hat",
+            listOf("hat"),
+            wear = "head",
+            equipAffects = listOf(gups.core.model.EquipAffect("no_regen")),
+          ),
         ),
       zones = listOf(ZoneProto("t", resetPulses = 600)),
     )

@@ -8,7 +8,7 @@ the decisions log has been partitioned into 3 logical subdocuments:
 
 1. **[DECISIONS_PART1.md](DECISIONS_PART1.md) — Part 1: Core Engine & Mechanics (Milestone 1)**
    - Covers: Commands, Action Lifecycle, Tactical Track, Combat, Default Ruleset, Event Dispatch & Hooks, Kotlin Seams & Types.
-   - Decision IDs: `D-001` through `D-059`
+   - Decision IDs: `D-001` through `D-059`, and `D-181`
    - Active review files: [`REVISE_DECISIONS_PART1.md`](REVISE_DECISIONS_PART1.md) and [`LIKELY_OBVIATED_PART1.md`](LIKELY_OBVIATED_PART1.md)
 
 2. **[DECISIONS_PART2.md](DECISIONS_PART2.md) — Part 2: Scripting, Networking, Persistence & Plugins (Milestones 2–4, Milestone 7)**

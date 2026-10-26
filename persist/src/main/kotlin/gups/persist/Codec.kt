@@ -245,22 +245,25 @@ internal fun restoreTimers(e: Entity, timers: List<TimerJson>) {
 }
 
 internal fun affectsJson(a: Actor) =
-  a.affects.map {
-    AffectJson(
-      it.id,
-      it.name,
-      it.source?.v,
-      it.appliedAt,
-      it.expiresAt,
-      it.statDeltas,
-      it.flags.sorted(),
-      it.tickEvery,
-      it.onTick?.json(),
-      it.onExpire?.json(),
-      it.expireMessage,
-      it.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
-    )
-  }
+  // Worn items' affects are rebuilt when the item is restored, not saved (D-181).
+  a.affects
+    .filter { it.wornFrom == null }
+    .map {
+      AffectJson(
+        it.id,
+        it.name,
+        it.source?.v,
+        it.appliedAt,
+        it.expiresAt,
+        it.statDeltas,
+        it.flags.sorted(),
+        it.tickEvery,
+        it.onTick?.json(),
+        it.onExpire?.json(),
+        it.expireMessage,
+        it.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
+      )
+    }
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {
   e.activeReasons.clear()
@@ -270,7 +273,7 @@ internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String
 }
 
 internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
-  a.affects.clear()
+  a.affects.removeIf { it.wornFrom == null }
   for (x in affects) {
     a.affects +=
       Affect(

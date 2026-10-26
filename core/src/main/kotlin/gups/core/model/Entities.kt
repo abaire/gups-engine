@@ -121,6 +121,8 @@ class Affect(
   val expireMessage: String = "",
   /** Modifiers that apply to the host while the affect lasts (SPEC §4.6). */
   val modifiers: Modifiers = emptyMap(),
+  /** The worn item this lasts as long as, or null for a timed affect (D-181). */
+  val wornFrom: EntityId? = null,
 )
 
 /** A pending script callback (SPEC §3.3). Exactly one of [due] and [remaining] is set. */
@@ -167,6 +169,13 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   val actionQueue: ArrayDeque<QueuedAction> = ArrayDeque()
   var waitState: Int = 0
+
+  /** Recovery held aside while the actor is stunned, restored when the stun ends (D-004). */
+  internal var stunnedWaitState: Int = 0
+
+  /** The pulse the current stun started, so a paused warmup can be pushed back (D-004). */
+  internal var stunnedSince: Long = 0
+
   var casting: CastState? = null
   val fighting: java.util.TreeSet<EntityId> = java.util.TreeSet()
   var primaryTarget: EntityId? = null
@@ -208,9 +217,8 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
       equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
       (encumbrance[name] ?: 0)
 
-  /** True if an affect or an equipped item's `equip_affects` carries [flag]. */
-  fun hasFlag(flag: String): Boolean =
-    affects.any { flag in it.flags } || equipmentIndex.values.any { flag in it.proto.equipAffects }
+  /** True if an affect carries [flag], including those applied by worn items (D-181). */
+  fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
 
   val isStunned: Boolean
     get() = hasFlag("stunned")

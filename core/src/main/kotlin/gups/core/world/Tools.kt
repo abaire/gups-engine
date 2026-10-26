@@ -443,7 +443,8 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
           if (e.affects.isEmpty()) "none"
           else
             e.affects.joinToString(", ") { a ->
-              "${a.name} (${(a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000}s left" +
+              (if (a.wornFrom != null) "${a.name} (while worn"
+              else "${a.name} (${(a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000}s left") +
                 (if (a.flags.isEmpty()) "" else "; ${a.flags.joinToString()}") +
                 ")"
             }
