@@ -27,6 +27,10 @@ internal constructor(
     internal set
 
   internal val bucket = TokenBucket(startNanos = connectedNanos)
+
+  /** Caps every raw input line, whatever it parses to, so floods can't bypass [bucket]. */
+  internal val lines =
+    TokenBucket(capacity = LINE_RATE, refillPerSecond = LINE_RATE, startNanos = connectedNanos)
   internal val drops = ArrayDeque<Long>()
   internal val out = StringBuilder()
 
@@ -40,6 +44,7 @@ internal constructor(
 
 private const val DROP_WINDOW_NANOS = 60_000_000_000L
 private const val MAX_DROPS = 3
+private const val LINE_RATE = 25.0
 
 fun World.session(id: SessionId): Session? = sessions[id]
 
@@ -87,6 +92,11 @@ fun World.attach(session: SessionId, player: Player) {
 /** Handles one line of input between pulses (SPEC §5.1, §5.2). */
 fun World.handle(event: ClientInputEvent) {
   val s = sessions[event.session] ?: return
+  // Floods are dropped silently, before login or parsing, so they cost no reply traffic.
+  if (!s.lines.tryTake(event.receivedNanos)) {
+    dropped(s, event.receivedNanos)
+    return
+  }
   val player = s.player
   if (player == null) {
     val handler = login
@@ -100,20 +110,24 @@ fun World.handle(event: ClientInputEvent) {
   val def = commands.resolve(player, verb)
   if (def?.lane == Lane.FAST && !s.bucket.tryTake(event.receivedNanos)) {
     s.out.append("Slow down.\n")
-    s.drops.addLast(event.receivedNanos)
-    while (s.drops.isNotEmpty() && event.receivedNanos - s.drops.first() > DROP_WINDOW_NANOS) s
-      .drops
-      .removeFirst()
     flush(s)
-    if (s.drops.size > MAX_DROPS) {
-      s.sink.close("Too much input.")
-      disconnect(s.id)
-    }
+    dropped(s, event.receivedNanos)
     return
   }
   submit(player, event.line)
   flushImmediate()
   flush(s)
+}
+
+/** Records a dropped line; more than [MAX_DROPS] within a minute disconnects (SPEC §5.2). */
+private fun World.dropped(s: Session, nowNanos: Long) {
+  s.drops.addLast(nowNanos)
+  while (s.drops.isNotEmpty() && nowNanos - s.drops.first() > DROP_WINDOW_NANOS) s.drops
+    .removeFirst()
+  if (s.drops.size > MAX_DROPS) {
+    s.sink.close("Too much input.")
+    disconnect(s.id)
+  }
 }
 
 /** The connection dropped: the character goes link-dead and keeps auto-attacking (SPEC §5.12). */

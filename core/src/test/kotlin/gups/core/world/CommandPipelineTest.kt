@@ -232,6 +232,36 @@ class CommandPipelineTest {
   }
 
   @Test
+  fun `every input line counts against a raw line limit`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    // Unknown verbs and tick-lane commands skip the fast-lane bucket but not the line limit.
+    repeat(15) { f.input(p, "xyzzy") }
+    repeat(10) { f.input(p, "advance") }
+    f.out(p)
+    f.input(p, "xyzzy")
+    assertEquals("", f.out(p), "lines over the limit are dropped silently")
+    repeat(2) { f.input(p, "xyzzy") }
+    assertNull(f.sink(p).closedReason)
+    f.input(p, "xyzzy")
+    assertEquals("Too much input.", f.sink(p).closedReason)
+    assertNull(p.session)
+  }
+
+  @Test
+  fun `the raw line limit refills at twenty-five lines a second`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    repeat(25) { f.input(p, "xyzzy") }
+    f.out(p)
+    f.nanos += 200_000_000 // a fifth of a second refills five lines
+    repeat(5) { f.input(p, "xyzzy") }
+    assertEquals("Huh?\n".repeat(5), f.out(p))
+    f.input(p, "xyzzy")
+    assertEquals("", f.out(p))
+  }
+
+  @Test
   fun `stop flushes the queue and cancels a cast but keeps combat and recovery`() {
     val f = Fixture(rules = FixedRules(toHit = 0))
     val p = f.player("Ann")

@@ -54,6 +54,18 @@ class LoginTest {
   }
 
   @Test
+  fun `a flood before login is dropped and disconnected`() {
+    val w = world()
+    val sink = PromptSink()
+    w.handle(WorldControlEvent.Connect(SessionId(9), sink, "127.0.0.1", "telnet"))
+    repeat(28) { w.handle(ClientInputEvent(SessionId(9), "x", 0)) }
+    assertNull(sink.closed)
+    w.handle(ClientInputEvent(SessionId(9), "x", 0))
+    assertEquals("Too much input.", sink.closed)
+    assertNull(w.session(SessionId(9)))
+  }
+
+  @Test
   fun `remote connections are refused and a name can be taken over`() {
     val w = world()
     val far = PromptSink()

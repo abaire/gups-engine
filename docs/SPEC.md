@@ -2310,10 +2310,14 @@ boundaries come from `System.nanoTime()`.
      than one command (`cl` for `clear` and `close`) is ambiguous and gets "Huh?". Prefixes
      are tried only after every room and item command. An `@` prefix follows the same rule
      among the `@` commands the actor may use (§4.9).
+   - **Line limit:** Before any of this, and before login, every input line takes a token
+     from a second per-session bucket: capacity 25, refill 25 tokens/s. When it is empty
+     the line is dropped silently, whatever it would have parsed to. These drops count
+     toward the fast-lane disconnect below.
 2. **Fast lane:**
    - Rate limiting uses a per-session token bucket: capacity 20, refill 5 tokens/s.
    - When the bucket is empty, input is dropped with "Slow down." More than 3 drops
-     within 60s disconnects the session.
+     within 60s, counting line-limit drops, disconnects the session.
 3. **Tick lane:**
    - The command is appended to the actor's queue.
    - If the queue already holds 10, it's rejected with "You can't plan that far ahead."
