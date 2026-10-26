@@ -14,35 +14,43 @@ import kotlin.io.path.writeText
 
 /** Writes [files] (paths relative to the world root) into a fresh temporary world. */
 fun tempWorld(files: Map<String, String>): Path {
-    val root = Files.createTempDirectory("gups-plugin-world")
-    for ((path, text) in files) {
-        val p = root.resolve(path)
-        p.parent.createDirectories()
-        p.writeText(text.trimIndent() + "\n")
-    }
-    return root
+  val root = Files.createTempDirectory("gups-plugin-world")
+  for ((path, text) in files) {
+    val p = root.resolve(path)
+    p.parent.createDirectories()
+    p.writeText(text.trimIndent() + "\n")
+  }
+  return root
 }
 
-val ZONE = mapOf(
+val ZONE =
+  mapOf(
     "zones/z/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Z\")",
-    "zones/z/rooms.star" to """
+    "zones/z/rooms.star" to
+      """
         room("a", name = "Glade", desc = "A glade.", size = LARGE, regions = ["forest", "outdoors"], exits = [exit("north", ":b")])
         room("b", name = "Cave", desc = "A cave.", regions = ["underground"], flags = ["dead_end_ok"], exits = [exit("south", ":a")])
         mob("wolf", name = "a wolf", desc = "A wolf.", keywords = ["wolf"])
         item("stick", name = "a stick", desc = "A stick.", keywords = ["stick", "wood"])
     """,
-)
+  )
 
 /** A headless world of [files], built as `TestCtx.world` builds one, with [plugins] wired in. */
-fun world(files: Map<String, String> = ZONE, plugins: WorldPluginWiring = WorldPluginWiring.NONE, seed: Long = 7): World {
-    val dir = WorldDir(tempWorld(files))
-    val result = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals).load(dir.packages())
-    check(result.ok) { result.report() }
-    val host = StarlarkHost(result, ScriptLimits.HARNESS)
-    val world = World(result.prototypes(), host.rules(), host, WorldConfig(seed = seed, checkInvariants = true))
-    plugins.install(world)
-    host.install(world)
-    world.fireOnLoad()
-    plugins.started(world)
-    return world
+fun world(
+  files: Map<String, String> = ZONE,
+  plugins: WorldPluginWiring = WorldPluginWiring.NONE,
+  seed: Long = 7,
+): World {
+  val dir = WorldDir(tempWorld(files))
+  val result =
+    ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals).load(dir.packages())
+  check(result.ok) { result.report() }
+  val host = StarlarkHost(result, ScriptLimits.HARNESS)
+  val world =
+    World(result.prototypes(), host.rules(), host, WorldConfig(seed = seed, checkInvariants = true))
+  plugins.install(world)
+  host.install(world)
+  world.fireOnLoad()
+  plugins.started(world)
+  return world
 }

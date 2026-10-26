@@ -8,66 +8,102 @@ import gups.core.model.ItemLocation
 import gups.core.model.Player
 
 /**
- * The persistence seam (SPEC §2.2, §5.11), implemented by the `persist` module. Every call
- * comes from the world thread and must not block it: capture serializes, a writer elsewhere
- * commits.
+ * The persistence seam (SPEC §2.2, §5.11), implemented by the `persist` module. Every call comes
+ * from the world thread and must not block it: capture serializes, a writer elsewhere commits.
  */
 interface Persistence {
-    /**
-     * Captures dirty state. A routine capture is written at once. An [immediate] one (an
-     * ownership change, a level-up, character creation, quit) is held and written with the
-     * next routine one, so both sides of a transfer always land together (SPEC §5.11).
-     */
-    fun checkpoint(world: World, cause: String, immediate: Boolean)
+  /**
+   * Captures dirty state. A routine capture is written at once. An [immediate] one (an ownership
+   * change, a level-up, character creation, quit) is held and written with the next routine one, so
+   * both sides of a transfer always land together (SPEC §5.11).
+   */
+  fun checkpoint(world: World, cause: String, immediate: Boolean)
 
-    /** Restores the saved character [name] into [world] at login, or returns null if there is none. */
-    fun loadCharacter(world: World, name: String): Player? = null
+  /**
+   * Restores the saved character [name] into [world] at login, or returns null if there is none.
+   */
+  fun loadCharacter(world: World, name: String): Player? = null
 
-    /** Records a diagnostic in the diagnostics table, with a repro bundle for script errors. */
-    fun diagnostic(world: World, d: Diagnostic) = Unit
+  /** Records a diagnostic in the diagnostics table, with a repro bundle for script errors. */
+  fun diagnostic(world: World, d: Diagnostic) = Unit
 
-    /** Non-null while new logins must be refused, for example while the database is unwritable (SPEC §6.4). */
-    val maintenance: String? get() = null
+  /**
+   * Non-null while new logins must be refused, for example while the database is unwritable (SPEC
+   * §6.4).
+   */
+  val maintenance: String?
+    get() = null
 
-    /** Names of account [accountId]'s saved characters, oldest first. Reads memory only. */
-    fun characters(accountId: Long): List<String> = emptyList()
+  /** Names of account [accountId]'s saved characters, oldest first. Reads memory only. */
+  fun characters(accountId: Long): List<String> = emptyList()
 
-    /** The saved character called [name] in any case, or null if no character has that name. Reads memory only. */
-    fun savedCharacter(name: String): SavedCharacter? = null
+  /**
+   * The saved character called [name] in any case, or null if no character has that name. Reads
+   * memory only.
+   */
+  fun savedCharacter(name: String): SavedCharacter? = null
 
-    /**
-     * Account storage (M6 design §2.3), or null when this persistence keeps no accounts. Its
-     * calls block, so the world thread never makes them.
-     */
-    val accounts: AccountStore? get() = null
+  /**
+   * Account storage (SPEC §3.5), or null when this persistence keeps no accounts. Its calls block,
+   * so the world thread never makes them.
+   */
+  val accounts: AccountStore?
+    get() = null
 
-    /** Batches waiting for the database writer, for `@stats` (M6 design §4.3). */
-    val backlog: Int get() = 0
+  /** Batches waiting for the database writer, for `@stats` (SPEC §4.9). */
+  val backlog: Int
+    get() = 0
 
-    /** Takes a `manual` backup and says where it went (`@snapshot`). Blocks, so never on the world thread. */
-    fun backup(): String = throw UnsupportedOperationException("this world has no database to back up")
+  /**
+   * Takes a `manual` backup and says where it went (`@snapshot`). Blocks, so never on the world
+   * thread.
+   */
+  fun backup(): String =
+    throw UnsupportedOperationException("this world has no database to back up")
 
-    /** An item's committed `item_events`, oldest first (`@audit item`). Blocks, so never on the world thread. */
-    fun itemHistory(itemId: Long): List<ItemHistory> = emptyList()
+  /**
+   * An item's committed `item_events`, oldest first (`@audit item`). Blocks, so never on the world
+   * thread.
+   */
+  fun itemHistory(itemId: Long): List<ItemHistory> = emptyList()
 
-    companion object {
-        val NONE: Persistence = object : Persistence {
-            override fun checkpoint(world: World, cause: String, immediate: Boolean) = Unit
-        }
-    }
+  companion object {
+    val NONE: Persistence =
+      object : Persistence {
+        override fun checkpoint(world: World, cause: String, immediate: Boolean) = Unit
+      }
+  }
 }
 
 /** One committed custody change of an item; [from] and [to] are the saved location JSON. */
-data class ItemHistory(val pulse: Long, val wallTime: Long, val from: String?, val to: String?, val cause: String)
+data class ItemHistory(
+  val pulse: Long,
+  val wallTime: Long,
+  val from: String?,
+  val to: String?,
+  val cause: String,
+)
 
 /** A saved character's exact name and owning account. */
 data class SavedCharacter(val name: String, val accountId: Long?)
 
 /** One custody change of an item involving a player, for the `item_events` audit (SPEC §3.6). */
-data class ItemEvent(val item: EntityId, val pulse: Long, val from: ItemLocation?, val to: ItemLocation?, val cause: String)
+data class ItemEvent(
+  val item: EntityId,
+  val pulse: Long,
+  val from: ItemLocation?,
+  val to: ItemLocation?,
+  val cause: String,
+)
 
 /** A tick-lane command or `say` since the last checkpoint, for repro bundles (SPEC §6.2). */
-data class InputRecord(val pulse: Long, val actor: EntityId, val actorName: String, val room: Label, val line: String)
+data class InputRecord(
+  val pulse: Long,
+  val actor: EntityId,
+  val actorName: String,
+  val room: Label,
+  val line: String,
+)
 
 /** Ids of entities gone from the world since the last call: their rows can be deleted. */
 fun World.drainRemoved(): Set<EntityId> = LinkedHashSet(removed).also { removed.clear() }
@@ -75,13 +111,14 @@ fun World.drainRemoved(): Set<EntityId> = LinkedHashSet(removed).also { removed.
 fun World.drainItemEvents(): List<ItemEvent> = itemEvents.toList().also { itemEvents.clear() }
 
 /** Inputs recorded since the last periodic checkpoint. */
-val World.recentInputs: List<InputRecord> get() = inputs
+val World.recentInputs: List<InputRecord>
+  get() = inputs
 
 /** Starts a new input window, as each periodic checkpoint does. */
 fun World.clearInputs() = inputs.clear()
 
 /** Marks [item] and everything inside it as gone for good. */
 internal fun World.markRemoved(item: Item) {
-    removed += item.id
-    for (inner in item.contentsIndex.values) markRemoved(inner)
+  removed += item.id
+  for (inner in item.contentsIndex.values) markRemoved(inner)
 }

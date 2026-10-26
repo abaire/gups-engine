@@ -1,0 +1,1 @@
+* Get rid of the spec links in the code; comments should not link back to specific sections of the spec as they may change over time. Add an AGENTS.md reminder so agents do not produce these links in the future.

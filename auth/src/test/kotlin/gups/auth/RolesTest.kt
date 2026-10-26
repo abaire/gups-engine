@@ -9,162 +9,235 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CodeOwnersTest {
-    private val packages = listOf("rules", "lib", "zones/forest", "zones/forest/cave", "zones/town", "zones/townhall", "skills/fire")
+  private val packages =
+    listOf(
+      "rules",
+      "lib",
+      "zones/forest",
+      "zones/forest/cave",
+      "zones/town",
+      "zones/townhall",
+      "skills/fire",
+    )
 
-    @Test
-    fun `patterns own packages and the last match wins`() {
-        val c = CodeOwners.parse(
-            """
-            # Instructors own everything by default.
-            *                    @prof
-            /zones/forest/       @Ann @bob
-            /zones/forest/cave/  @cy
-            zones/town           @dee
-            skills/**            @ed
-            /lib/                @org/staff someone@example.com
-            /rules/
-            """.trimIndent(),
+  @Test
+  fun `patterns own packages and the last match wins`() {
+    val c =
+      CodeOwners.parse(
+        """
+        # Instructors own everything by default.
+        *                    @prof
+        /zones/forest/       @Ann @bob
+        /zones/forest/cave/  @cy
+        zones/town           @dee
+        skills/**            @ed
+        /lib/                @org/staff someone@example.com
+        /rules/
+        """
+          .trimIndent()
+      )
+    assertEquals(
+      listOf("prof"),
+      c.owners("zones/townhall"),
+      "zones/town doesn't match zones/townhall",
+    )
+    assertEquals(listOf("ann", "bob"), c.owners("zones/forest"))
+    assertEquals(listOf("cy"), c.owners("zones/forest/cave"), "the later, deeper line wins")
+    assertEquals(listOf("dee"), c.owners("zones/town"))
+    assertEquals(listOf("ed"), c.owners("skills/fire"))
+    assertEquals(emptyList(), c.owners("lib"), "only @user owners count")
+    assertEquals(emptyList(), c.owners("rules"), "a line without owners leaves it unowned")
+    assertTrue(c.covers("zones/town"))
+    assertTrue(!c.covers("rules"))
+    assertEquals(2, c.warnings.size, c.warnings.joinToString())
+    assertContains(c.warnings[0], "team owner @org/staff")
+    assertEquals(
+      mapOf(
+        "prof" to setOf("zones/townhall"),
+        "ann" to setOf("zones/forest"),
+        "bob" to setOf("zones/forest"),
+        "cy" to setOf("zones/forest/cave"),
+        "dee" to setOf("zones/town"),
+        "ed" to setOf("skills/fire"),
+      ),
+      c.scopes(packages),
+    )
+  }
+
+  @Test
+  fun `unanchored names match at any depth and directories own what is below them`() {
+    val c = CodeOwners.parse("/zones/ @zed\n/zones/forest @ann\ncave @cy\n")
+    assertEquals(listOf("cy"), c.owners("zones/forest/cave"))
+    assertEquals(listOf("ann"), c.owners("zones/forest"))
+    assertEquals(listOf("zed"), c.owners("zones/town"))
+    assertEquals(emptyList(), c.owners("rules"))
+    assertEquals(
+      emptyList(),
+      CodeOwners.parse("*.star @x").owners("zones/forest"),
+      "file patterns own no package",
+    )
+  }
+
+  @Test
+  fun `a sync replaces scopes and never changes roles`() {
+    val f = LoginFixture()
+    val ann =
+      f.store.create(
+        Account(
+          0,
+          "ann",
+          null,
+          Role.BUILDER,
+          scope = listOf("zones/old"),
+          manualScope = listOf("zones/town", "lib"),
+          githubHandle = "Ann",
         )
-        assertEquals(listOf("prof"), c.owners("zones/townhall"), "zones/town doesn't match zones/townhall")
-        assertEquals(listOf("ann", "bob"), c.owners("zones/forest"))
-        assertEquals(listOf("cy"), c.owners("zones/forest/cave"), "the later, deeper line wins")
-        assertEquals(listOf("dee"), c.owners("zones/town"))
-        assertEquals(listOf("ed"), c.owners("skills/fire"))
-        assertEquals(emptyList(), c.owners("lib"), "only @user owners count")
-        assertEquals(emptyList(), c.owners("rules"), "a line without owners leaves it unowned")
-        assertTrue(c.covers("zones/town"))
-        assertTrue(!c.covers("rules"))
-        assertEquals(2, c.warnings.size, c.warnings.joinToString())
-        assertContains(c.warnings[0], "team owner @org/staff")
-        assertEquals(
-            mapOf(
-                "prof" to setOf("zones/townhall"),
-                "ann" to setOf("zones/forest"),
-                "bob" to setOf("zones/forest"),
-                "cy" to setOf("zones/forest/cave"),
-                "dee" to setOf("zones/town"),
-                "ed" to setOf("skills/fire"),
-            ),
-            c.scopes(packages),
+      )!!
+    val prof =
+      f.store.create(
+        Account(
+          0,
+          "prof",
+          null,
+          Role.INSTRUCTOR,
+          scope = listOf("zones/forest"),
+          githubHandle = "prof",
         )
-    }
-
-    @Test
-    fun `unanchored names match at any depth and directories own what is below them`() {
-        val c = CodeOwners.parse("/zones/ @zed\n/zones/forest @ann\ncave @cy\n")
-        assertEquals(listOf("cy"), c.owners("zones/forest/cave"))
-        assertEquals(listOf("ann"), c.owners("zones/forest"))
-        assertEquals(listOf("zed"), c.owners("zones/town"))
-        assertEquals(emptyList(), c.owners("rules"))
-        assertEquals(emptyList(), CodeOwners.parse("*.star @x").owners("zones/forest"), "file patterns own no package")
-    }
-
-    @Test
-    fun `a sync replaces scopes and never changes roles`() {
-        val f = LoginFixture()
-        val ann = f.store.create(Account(0, "ann", null, Role.BUILDER, scope = listOf("zones/old"), manualScope = listOf("zones/town", "lib"), githubHandle = "Ann"))!!
-        val prof = f.store.create(Account(0, "prof", null, Role.INSTRUCTOR, scope = listOf("zones/forest"), githubHandle = "prof"))!!
-        f.store.create(Account(0, "bob", null, Role.PLAYER, githubHandle = "bob"))
-        val c = CodeOwners.parse("/zones/forest/ @ann @bob @ghost\n/zones/town/ @dee\n")
-        val report = syncScopes(f.store, c, listOf("zones/forest", "zones/town", "lib"))
-        val a = f.store.byId(ann.id)!!
-        assertEquals(Role.BUILDER, a.role)
-        assertEquals(listOf("zones/forest"), a.scope)
-        assertEquals(listOf("lib"), a.manualScope, "hand scope loses packages CODEOWNERS now covers")
-        assertEquals(emptyList(), f.store.byId(prof.id)!!.scope, "instructors are never scoped")
-        assertEquals(Role.PLAYER, f.store.byLogin("bob")!!.role)
-        assertEquals(3, report.changed.size)
-        assertEquals(listOf("CODEOWNERS owner @dee matches no account's GitHub handle", "CODEOWNERS owner @ghost matches no account's GitHub handle"), report.warnings)
-        assertEquals(emptyList(), syncScopes(f.store, c, listOf("zones/forest", "zones/town", "lib")).changed, "a second sync changes nothing")
-    }
+      )!!
+    f.store.create(Account(0, "bob", null, Role.PLAYER, githubHandle = "bob"))
+    val c = CodeOwners.parse("/zones/forest/ @ann @bob @ghost\n/zones/town/ @dee\n")
+    val report = syncScopes(f.store, c, listOf("zones/forest", "zones/town", "lib"))
+    val a = f.store.byId(ann.id)!!
+    assertEquals(Role.BUILDER, a.role)
+    assertEquals(listOf("zones/forest"), a.scope)
+    assertEquals(listOf("lib"), a.manualScope, "hand scope loses packages CODEOWNERS now covers")
+    assertEquals(emptyList(), f.store.byId(prof.id)!!.scope, "instructors are never scoped")
+    assertEquals(Role.PLAYER, f.store.byLogin("bob")!!.role)
+    assertEquals(3, report.changed.size)
+    assertEquals(
+      listOf(
+        "CODEOWNERS owner @dee matches no account's GitHub handle",
+        "CODEOWNERS owner @ghost matches no account's GitHub handle",
+      ),
+      report.warnings,
+    )
+    assertEquals(
+      emptyList(),
+      syncScopes(f.store, c, listOf("zones/forest", "zones/town", "lib")).changed,
+      "a second sync changes nothing",
+    )
+  }
 }
 
 class AccountToolsTest {
-    private val pw = "correct horse"
+  private val pw = "correct horse"
 
-    /** A fixture with the account commands and an instructor, Ida, playing. */
-    private fun setup(codeOwners: CodeOwners = CodeOwners.EMPTY): Pair<LoginFixture, LoginFixture.Client> {
-        val f = LoginFixture()
-        f.w.wallClock = { f.now }
-        AccountTools.install(f.w, f.service, DEFAULT_LADDER) { codeOwners }
-        f.account("ida", pw, Role.INSTRUCTOR)
-        val c = f.connect()
-        c.play("ida", pw, "Ida", create = true)
-        return f to c
-    }
+  /** A fixture with the account commands and an instructor, Ida, playing. */
+  private fun setup(
+    codeOwners: CodeOwners = CodeOwners.EMPTY
+  ): Pair<LoginFixture, LoginFixture.Client> {
+    val f = LoginFixture()
+    f.w.wallClock = { f.now }
+    AccountTools.install(f.w, f.service, DEFAULT_LADDER) { codeOwners }
+    f.account("ida", pw, Role.INSTRUCTOR)
+    val c = f.connect()
+    c.play("ida", pw, "Ida", create = true)
+    return f to c
+  }
 
-    @Test
-    fun `role changes roles and hand scope, and updates characters in play`() {
-        val (f, i) = setup(CodeOwners.parse("/zones/forest/ @someone\n"))
-        f.account("ann", pw)
-        val ann = f.connect()
-        ann.play("ann", pw, "Ann", create = true)
-        assertContains(i.send("@role ann builder zones/town,//lib"), "ann is now a builder with packages lib, zones/town.")
-        val p = ann.player!!
-        assertEquals(Role.BUILDER to setOf("lib", "zones/town"), p.role to p.scope)
-        assertContains(i.send("@role ann builder zones/forest"), "//zones/forest is owned through CODEOWNERS")
-        assertContains(i.send("@role ann"), "Packages by hand: lib, zones/town")
-        assertContains(i.send("@role nobody builder"), "There is no account 'nobody'.")
-        assertContains(i.send("@role ann wizard"), "'wizard' is not a role")
-        assertContains(i.send("@role ida player"), "You can't change your own role.")
-        assertContains(i.send("@role ann admin"), "Only an admin can make or change admins.")
-        assertContains(i.send("@role ann instructor"), "ann is now an instructor.")
-        assertTrue(p.idleExempt)
-        assertEquals(emptyList(), f.store.byLogin("ann")!!.manualScope)
-        assertContains(ann.sink.drain() + i.send("@role ann player"), "ann is now a player.")
-        assertContains(i.send("@restrict ann gossip"), "ann can't use gossip")
-    }
+  @Test
+  fun `role changes roles and hand scope, and updates characters in play`() {
+    val (f, i) = setup(CodeOwners.parse("/zones/forest/ @someone\n"))
+    f.account("ann", pw)
+    val ann = f.connect()
+    ann.play("ann", pw, "Ann", create = true)
+    assertContains(
+      i.send("@role ann builder zones/town,//lib"),
+      "ann is now a builder with packages lib, zones/town.",
+    )
+    val p = ann.player!!
+    assertEquals(Role.BUILDER to setOf("lib", "zones/town"), p.role to p.scope)
+    assertContains(
+      i.send("@role ann builder zones/forest"),
+      "//zones/forest is owned through CODEOWNERS",
+    )
+    assertContains(i.send("@role ann"), "Packages by hand: lib, zones/town")
+    assertContains(i.send("@role nobody builder"), "There is no account 'nobody'.")
+    assertContains(i.send("@role ann wizard"), "'wizard' is not a role")
+    assertContains(i.send("@role ida player"), "You can't change your own role.")
+    assertContains(i.send("@role ann admin"), "Only an admin can make or change admins.")
+    assertContains(i.send("@role ann instructor"), "ann is now an instructor.")
+    assertTrue(p.idleExempt)
+    assertEquals(emptyList(), f.store.byLogin("ann")!!.manualScope)
+    assertContains(ann.sink.drain() + i.send("@role ann player"), "ann is now a player.")
+    assertContains(i.send("@restrict ann gossip"), "ann can't use gossip")
+  }
 
-    @Test
-    fun `reset clears the password and hands out a setup code, revoke revokes tokens`() {
-        val (f, i) = setup()
-        val a = f.account("ann", pw)
-        val out = i.send("@role ann reset")
-        assertContains(out, "ann's password is cleared and their web sessions are revoked. Their new setup code is ")
-        assertNull(f.store.byLogin("ann")!!.pwHash)
-        val code = Regex("[A-Z0-9]{5}-[A-Z0-9]{5}").find(out)!!.value
-        val r = f.service.redeem(code, "ignored", "a brand new password")
-        assertTrue(r is Redeemed.Ok && r.account.id == a.id)
-        assertContains(i.send("@role ann revoke"), "ann's web sessions are revoked.")
-        assertEquals(listOf(a.id), f.store.revoked)
-        assertContains(i.send("@invite builder 3"), "makes one new builder account within 3 days.")
-        assertContains(i.send("@invite admin"), "Only an admin can invite an admin.")
-    }
+  @Test
+  fun `reset clears the password and hands out a setup code, revoke revokes tokens`() {
+    val (f, i) = setup()
+    val a = f.account("ann", pw)
+    val out = i.send("@role ann reset")
+    assertContains(
+      out,
+      "ann's password is cleared and their web sessions are revoked. Their new setup code is ",
+    )
+    assertNull(f.store.byLogin("ann")!!.pwHash)
+    val code = Regex("[A-Z0-9]{5}-[A-Z0-9]{5}").find(out)!!.value
+    val r = f.service.redeem(code, "ignored", "a brand new password")
+    assertTrue(r is Redeemed.Ok && r.account.id == a.id)
+    assertContains(i.send("@role ann revoke"), "ann's web sessions are revoked.")
+    assertEquals(listOf(a.id), f.store.revoked)
+    assertContains(i.send("@invite builder 3"), "makes one new builder account within 3 days.")
+    assertContains(i.send("@invite admin"), "Only an admin can invite an admin.")
+  }
 
-    @Test
-    fun `restrictions follow the ladder, can be lifted, and keep their history`() {
-        val (f, i) = setup()
-        val a = f.account("ann", pw, Role.BUILDER)
-        val day = 86_400_000L
-        assertContains(i.send("@restrict ann goto_player spamming"), "ann can't use goto_player until 1970-01-13 13:46 UTC (restriction 1: 1d): spamming.")
-        assertTrue(f.w.restrictions.single().let { it.until == f.now + day && it.reason == "spamming" })
-        f.now += 2 * day
-        assertContains(i.send("@restrict ann goto_player"), "(restriction 2: 7d)")
-        assertContains(i.send("@unrestrict ann goto_player"), "ann may use goto_player again.")
-        assertContains(i.send("@unrestrict ann goto_player"), "ann has no active restriction on goto_player.")
-        assertContains(i.send("@restrict ann goto_player"), "until an instructor lifts it (restriction 3: permanent)")
-        assertTrue("(restriction 4: permanent)" in i.send("@restrict ann goto_player"), "the ladder stays on its last step")
-        assertContains(i.send("@restrict ann spawn 30m"), "ann can't use spawn until")
-        assertContains(i.send("@restrict ann flying"), "'flying' is not a capability")
-        assertContains(i.send("@restrict ida gossip"), "Instructors and admins can't be restricted.")
+  @Test
+  fun `restrictions follow the ladder, can be lifted, and keep their history`() {
+    val (f, i) = setup()
+    val a = f.account("ann", pw, Role.BUILDER)
+    val day = 86_400_000L
+    assertContains(
+      i.send("@restrict ann goto_player spamming"),
+      "ann can't use goto_player until 1970-01-13 13:46 UTC (restriction 1: 1d): spamming.",
+    )
+    assertTrue(f.w.restrictions.single().let { it.until == f.now + day && it.reason == "spamming" })
+    f.now += 2 * day
+    assertContains(i.send("@restrict ann goto_player"), "(restriction 2: 7d)")
+    assertContains(i.send("@unrestrict ann goto_player"), "ann may use goto_player again.")
+    assertContains(
+      i.send("@unrestrict ann goto_player"),
+      "ann has no active restriction on goto_player.",
+    )
+    assertContains(
+      i.send("@restrict ann goto_player"),
+      "until an instructor lifts it (restriction 3: permanent)",
+    )
+    assertTrue(
+      "(restriction 4: permanent)" in i.send("@restrict ann goto_player"),
+      "the ladder stays on its last step",
+    )
+    assertContains(i.send("@restrict ann spawn 30m"), "ann can't use spawn until")
+    assertContains(i.send("@restrict ann flying"), "'flying' is not a capability")
+    assertContains(i.send("@restrict ida gossip"), "Instructors and admins can't be restricted.")
 
-        val now = i.send("@restrictions")
-        assertContains(now, "Restrictions in effect:")
-        assertEquals(3, now.lines().count { it.startsWith("  ann ") }, now)
-        val history = i.send("@restrictions ann")
-        assertContains(history, "ann's restrictions, oldest first:")
-        assertContains(history, "ended 1970-01-13")
-        assertContains(history, "lifted by ida")
-        assertContains(history, "set by ida")
-        assertEquals(5, f.store.restrictions(a.id).size)
-        assertEquals(5, f.w.restrictions.size)
-    }
+    val now = i.send("@restrictions")
+    assertContains(now, "Restrictions in effect:")
+    assertEquals(3, now.lines().count { it.startsWith("  ann ") }, now)
+    val history = i.send("@restrictions ann")
+    assertContains(history, "ann's restrictions, oldest first:")
+    assertContains(history, "ended 1970-01-13")
+    assertContains(history, "lifted by ida")
+    assertContains(history, "set by ida")
+    assertEquals(5, f.store.restrictions(a.id).size)
+    assertEquals(5, f.w.restrictions.size)
+  }
 
-    @Test
-    fun `durations`() {
-        assertEquals(30 * 60_000L, parseDuration("30m").getOrThrow())
-        assertEquals(14 * 86_400_000L, parseDuration("2w").getOrThrow())
-        assertNull(parseDuration("Permanent").getOrThrow())
-        assertTrue(parseDuration("soon").isFailure)
-    }
+  @Test
+  fun `durations`() {
+    assertEquals(30 * 60_000L, parseDuration("30m").getOrThrow())
+    assertEquals(14 * 86_400_000L, parseDuration("2w").getOrThrow())
+    assertNull(parseDuration("Permanent").getOrThrow())
+    assertTrue(parseDuration("soon").isFailure)
+  }
 }

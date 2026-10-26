@@ -1,7 +1,7 @@
 # Writing Plugins
 
 Plugins are `.jar` files that extend the engine with host builtins, commands, effect primitives,
-GMCP packages and a world-start hook (SPEC_MILESTONE7.md §5). This guide uses the sample plugin in
+GMCP packages and a world-start hook (SPEC.md §4.15). This guide uses the sample plugin in
 `samples/weather-plugin` as its running example: deterministic weather by region.
 
 There are **no compatibility promises**. Any change to the plugin interface or the facade bumps
@@ -84,7 +84,9 @@ r.addBuiltin(
     params = listOf(PluginParam("room", "room", "The room to look at.")),
     returnType = "str",
 ) { world, pos, _ ->
-    val room = pos[0] as? PluginRoom ?: throw IllegalArgumentException("weather.now(room): expected a room")
+    val room =
+        pos[0] as? PluginRoom
+            ?: throw IllegalArgumentException("weather.now(room): expected a room")
     stateFor(world, room)
 }
 ```
@@ -95,7 +97,8 @@ tests are deterministic:
 ```kotlin
 fun stateFor(world: PluginWorld, room: PluginRoom): String {
     val region = room.regions.minOrNull() ?: return "clear"
-    var z = world.seed xor (world.pulse / 240L) * -0x61c8864680b583ebL xor region.hashCode().toLong()
+    var z =
+        world.seed xor (world.pulse / 240L) * -0x61c8864680b583ebL xor region.hashCode().toLong()
     z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
     z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
     z = z xor (z ushr 31)
@@ -110,9 +113,18 @@ may not shadow engine commands, directions or another plugin's commands, and a s
 `global_command` with the same name is skipped.
 
 ```kotlin
-r.addCommand("weather", PluginLane.FAST, PluginRole.PLAYER, "Describes the weather where you stand.") { call ->
+r.addCommand(
+    "weather",
+    PluginLane.FAST,
+    PluginRole.PLAYER,
+    "Describes the weather where you stand.",
+) { call ->
     val room = call.actor.room
-    call.world.send(call.actor, if (room.regions.isEmpty()) "You are indoors." else "The weather here is ${stateFor(call.world, room)}.")
+    call.world.send(
+        call.actor,
+        if (room.regions.isEmpty()) "You are indoors."
+        else "The weather here is ${stateFor(call.world, room)}.",
+    )
 }
 ```
 
@@ -127,7 +139,16 @@ calls `apply` when the skill resolves; `target` is null for `target = "none"` sk
 r.addEffectPrimitive(
     name = "soak",
     doc = "Soaks the target: dex -1 for the given number of pulses.",
-    params = listOf(PluginParam("pulses", "int", "How long the target stays soaked.", required = false, defaultValue = 2L)),
+    params =
+        listOf(
+            PluginParam(
+                "pulses",
+                "int",
+                "How long the target stays soaked.",
+                required = false,
+                defaultValue = 2L,
+            )
+        ),
 ) { call ->
     val target = call.target ?: return@addEffectPrimitive
     val pulses = (call.args["pulses"] as Number).toInt()

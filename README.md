@@ -24,7 +24,8 @@ Requires JDK 21 or newer to run Gradle; the build compiles against a JDK 21 tool
 downloads one if it is missing.
 
 ```bash
-./gradlew check                # all tests, plus the module graph check
+./gradlew check                # all tests, code formatting (ktfmt), and module graph check
+./gradlew ktfmtFormat          # reformat all Kotlin files with ktfmt (Google style)
 ./gradlew :cli:installDist     # builds the `gups` launcher
 cli/build/install/gups/bin/gups --help
 ```
@@ -209,8 +210,7 @@ client, which otherwise runs only on Linux CI.
 `./gradlew checkModuleGraph` (part of `check`) fails if a module declares a dependency
 outside these rules. The allowed graph is defined in the root `build.gradle.kts`.
 
-`docs/` holds `SPEC.md` and its detailed designs (`SPEC_MILESTONE6.md`,
-`SPEC_MILESTONE7.md`), `DECISIONS.md`, `DESIGN_NEEDED.md` (unbuilt features the spec doesn't
+`docs/` holds `SPEC.md` (the design), `DECISIONS.md`, `DESIGN_NEEDED.md` (unbuilt features the spec doesn't
 settle yet), `PLUGINS.md` (the plugin developer guide), `CHANGELOG.md` and `MIGRATING.md`.
 
 `template-world/` is the seed of the course world template. It holds `MODULE.gups` (world

@@ -1,6 +1,6 @@
 # Course World Template
 
-This repository is the template for a term's GUPS course world (SPEC §7.3, SPEC_MILESTONE6 §8.1).
+This repository is the template for a term's GUPS course world (SPEC §2.3, §7.3).
 
 ## Starting a New Term
 

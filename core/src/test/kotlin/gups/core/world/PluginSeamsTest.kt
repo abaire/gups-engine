@@ -10,60 +10,65 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class PluginSeamsTest {
-    @Test
-    fun `Effect Plugin reaches pluginEffects, also inside a sequence and without a target`() {
-        val f = Fixture()
-        val ann = f.player("Ann")
-        val goblin = f.mob()
-        val seen = mutableListOf<Triple<Effect.Plugin, Actor, Actor?>>()
-        f.w.pluginEffects = PluginEffectRunner { w, e, caster, target ->
-            assertSame(f.w, w)
-            seen += Triple(e, caster, target)
-        }
-        val soak = Effect.Plugin("weather", "soak", mapOf("pulses" to 3L))
-        f.w.applyEffect(soak, ann, goblin)
-        f.w.applyEffect(Effect.Sequence(soak), ann, null)
-        assertEquals(listOf(Triple(soak, ann as Actor, goblin as Actor?), Triple(soak, ann, null)), seen)
+  @Test
+  fun `Effect Plugin reaches pluginEffects, also inside a sequence and without a target`() {
+    val f = Fixture()
+    val ann = f.player("Ann")
+    val goblin = f.mob()
+    val seen = mutableListOf<Triple<Effect.Plugin, Actor, Actor?>>()
+    f.w.pluginEffects = PluginEffectRunner { w, e, caster, target ->
+      assertSame(f.w, w)
+      seen += Triple(e, caster, target)
     }
+    val soak = Effect.Plugin("weather", "soak", mapOf("pulses" to 3L))
+    f.w.applyEffect(soak, ann, goblin)
+    f.w.applyEffect(Effect.Sequence(soak), ann, null)
+    assertEquals(
+      listOf(Triple(soak, ann as Actor, goblin as Actor?), Triple(soak, ann, null)),
+      seen,
+    )
+  }
 
-    @Test
-    fun `plugin commands may not shadow engine commands, directions or each other`() {
-        val r = CommandRegistry()
-        for (name in listOf("look", "north", "n")) {
-            assertFailsWith<IllegalArgumentException>(name) { r.registerPlugin(FastCommand(name) {}) }
-        }
-        r.registerPlugin(FastCommand("forecast") {})
-        assertFailsWith<IllegalArgumentException> { r.registerPlugin(FastCommand("forecast") {}) }
-        assertFailsWith<IllegalArgumentException> { r.registerPlugin(FastCommand("weather", aliases = listOf("forecast")) {}) }
-        assertFailsWith<IllegalArgumentException> { r.registerGlobal(FastCommand("forecast") {}) }
-        assertTrue(r.isPluginCommand("forecast"))
+  @Test
+  fun `plugin commands may not shadow engine commands, directions or each other`() {
+    val r = CommandRegistry()
+    for (name in listOf("look", "north", "n")) {
+      assertFailsWith<IllegalArgumentException>(name) { r.registerPlugin(FastCommand(name) {}) }
     }
+    r.registerPlugin(FastCommand("forecast") {})
+    assertFailsWith<IllegalArgumentException> { r.registerPlugin(FastCommand("forecast") {}) }
+    assertFailsWith<IllegalArgumentException> {
+      r.registerPlugin(FastCommand("weather", aliases = listOf("forecast")) {})
+    }
+    assertFailsWith<IllegalArgumentException> { r.registerGlobal(FastCommand("forecast") {}) }
+    assertTrue(r.isPluginCommand("forecast"))
+  }
 
-    @Test
-    fun `clearGlobals keeps plugin commands, and they resolve`() {
-        val f = Fixture()
-        val ann = f.player("Ann")
-        f.w.commands.registerPlugin(FastCommand("forecast") { it.world.send(it.actor, "Rain.") })
-        f.w.commands.registerGlobal(FastCommand("quests") {})
-        f.w.commands.clearGlobals()
-        assertEquals(listOf("forecast"), f.w.commands.pluginCommands.map { it.name })
-        assertEquals("forecast", f.w.commands.resolve(ann, "forecast")?.name)
-        assertEquals("forecast", f.w.commands.resolve(ann, "forec")?.name)
-    }
+  @Test
+  fun `clearGlobals keeps plugin commands, and they resolve`() {
+    val f = Fixture()
+    val ann = f.player("Ann")
+    f.w.commands.registerPlugin(FastCommand("forecast") { it.world.send(it.actor, "Rain.") })
+    f.w.commands.registerGlobal(FastCommand("quests") {})
+    f.w.commands.clearGlobals()
+    assertEquals(listOf("forecast"), f.w.commands.pluginCommands.map { it.name })
+    assertEquals("forecast", f.w.commands.resolve(ann, "forecast")?.name)
+    assertEquals("forecast", f.w.commands.resolve(ann, "forec")?.name)
+  }
 
-    @Test
-    fun `help lists plugin commands the actor may use`() {
-        val f = Fixture()
-        val ann = f.player("Ann")
-        f.w.commands.registerPlugin(FastCommand("forecast") {})
-        f.w.commands.registerPlugin(TickCommand("rake") { null })
-        f.w.commands.registerPlugin(FastCommand("storm", role = Role.BUILDER) {})
-        f.out(ann)
-        f.input(ann, "help")
-        val out = f.out(ann)
-        val (fast, tick) = out.lines()
-        assertTrue(" forecast" in fast, out)
-        assertTrue(" rake" in tick, out)
-        assertTrue("storm" !in out, out)
-    }
+  @Test
+  fun `help lists plugin commands the actor may use`() {
+    val f = Fixture()
+    val ann = f.player("Ann")
+    f.w.commands.registerPlugin(FastCommand("forecast") {})
+    f.w.commands.registerPlugin(TickCommand("rake") { null })
+    f.w.commands.registerPlugin(FastCommand("storm", role = Role.BUILDER) {})
+    f.out(ann)
+    f.input(ann, "help")
+    val out = f.out(ann)
+    val (fast, tick) = out.lines()
+    assertTrue(" forecast" in fast, out)
+    assertTrue(" rake" in tick, out)
+    assertTrue("storm" !in out, out)
+  }
 }

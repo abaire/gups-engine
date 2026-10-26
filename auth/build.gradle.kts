@@ -1,8 +1,6 @@
-plugins {
-    id("gups.kotlin-module")
-}
+plugins { id("gups.kotlin-module") }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(libs.bouncycastle)
+  implementation(project(":core"))
+  implementation(libs.bouncycastle)
 }

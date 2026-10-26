@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    # A version tag also publishes the release images (M6 design §7.3).
+    # A version tag also publishes the release images (SPEC §2.2).
     tags: ["v*"]
   pull_request:
 
@@ -49,6 +49,9 @@ jobs:
           fi
           # macOS runners have bash 3.2, which lacks ${VAR,,}.
           echo "owner_arg=-PimageOwner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Verify code formatting
+        run: ./gradlew ktfmtCheck --console=plain
 
       - name: Build and test
         env:

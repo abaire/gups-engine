@@ -1,4 +1,4 @@
-# The gups server image (M6 design §7.3): a slim JRE with git for deploys (Q10), and the
+# The gups server image (SPEC §2.2): a slim JRE with git for deploys (SPEC §5.10), and the
 # installed gups distribution. Build it after `./gradlew :cli:installDist`:
 #   docker build -f docker/Dockerfile -t gups .
 FROM eclipse-temurin:21-jre-noble
@@ -13,7 +13,7 @@ COPY cli/build/install/gups /opt/gups
 ENV PATH=/opt/gups/bin:$PATH
 
 # The course repository's working tree, the database and backups, and the server
-# configuration with its secrets (M6 design §2.1).
+# configuration with its secrets (SPEC §2.4).
 VOLUME ["/world", "/data", "/etc/gups"]
 EXPOSE 4443 443 9090
 

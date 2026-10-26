@@ -12,25 +12,30 @@ import gups.core.model.Player
 import gups.core.model.Room
 
 /** World-side state of one connection. */
-class Session internal constructor(
-    val id: SessionId,
-    val sink: OutputSink,
-    connectedNanos: Long,
-    /** Peer address, for example `127.0.0.1`. */
-    val remote: String = "local",
-    val transport: String = "local",
-    /** The account a web session token already proved, if any (M6 design §6.1). */
-    val account: Long? = null,
+class Session
+internal constructor(
+  val id: SessionId,
+  val sink: OutputSink,
+  connectedNanos: Long,
+  /** Peer address, for example `127.0.0.1`. */
+  val remote: String = "local",
+  val transport: String = "local",
+  /** The account a web session token already proved, if any (SPEC §4.10). */
+  val account: Long? = null,
 ) {
-    var player: Player? = null
-        internal set
-    internal val bucket = TokenBucket(startNanos = connectedNanos)
-    internal val drops = ArrayDeque<Long>()
-    internal val out = StringBuilder()
+  var player: Player? = null
+    internal set
 
-    /** The last state payload sent per GMCP package, and events waiting for the next flush (M6 design §5.2). */
-    internal val gmcpLast = HashMap<String, Any?>()
-    internal val gmcpOut = mutableListOf<Pair<String, Any?>>()
+  internal val bucket = TokenBucket(startNanos = connectedNanos)
+  internal val drops = ArrayDeque<Long>()
+  internal val out = StringBuilder()
+
+  /**
+   * The last state payload sent per GMCP package, and events waiting for the next flush (SPEC
+   * §4.10).
+   */
+  internal val gmcpLast = HashMap<String, Any?>()
+  internal val gmcpOut = mutableListOf<Pair<String, Any?>>()
 }
 
 private const val DROP_WINDOW_NANOS = 60_000_000_000L
@@ -39,148 +44,152 @@ private const val MAX_DROPS = 3
 fun World.session(id: SessionId): Session? = sessions[id]
 
 fun World.handle(event: WorldControlEvent, nowNanos: Long = System.nanoTime()) {
-    when (event) {
-        is WorldControlEvent.Connect -> {
-            require(event.session !in sessions) { "${event.session} is already connected" }
-            val s = Session(event.session, event.sink, nowNanos, event.remote, event.transport, event.account)
-            sessions[event.session] = s
-            login?.connected(this, s)
-        }
-        is WorldControlEvent.Disconnect -> disconnect(event.session)
-        is WorldControlEvent.Shutdown -> scheduleShutdown(event.delayPulses, event.reason)
-        is WorldControlEvent.Reload -> reload(event.packages)
-        is WorldControlEvent.Deploy -> {
-            val d = deploys ?: return diagnose("control", "$event: this server can't deploy")
-            d.start(event.commit.ifEmpty { null }, {}) {}
-        }
-        is WorldControlEvent.AuthResult -> {
-            // A session that closed meanwhile simply drops its result.
-            val s = sessions[event.session] ?: return
-            login?.completed(this, s, event.outcome)
-            flush(s)
-        }
-        is WorldControlEvent.Task -> {
-            guarded("background task") { event.run(this) }
-            flushOutput()
-        }
+  when (event) {
+    is WorldControlEvent.Connect -> {
+      require(event.session !in sessions) { "${event.session} is already connected" }
+      val s =
+        Session(event.session, event.sink, nowNanos, event.remote, event.transport, event.account)
+      sessions[event.session] = s
+      login?.connected(this, s)
     }
+    is WorldControlEvent.Disconnect -> disconnect(event.session)
+    is WorldControlEvent.Shutdown -> scheduleShutdown(event.delayPulses, event.reason)
+    is WorldControlEvent.Reload -> reload(event.packages)
+    is WorldControlEvent.Deploy -> {
+      val d = deploys ?: return diagnose("control", "$event: this server can't deploy")
+      d.start(event.commit.ifEmpty { null }, {}) {}
+    }
+    is WorldControlEvent.AuthResult -> {
+      // A session that closed meanwhile simply drops its result.
+      val s = sessions[event.session] ?: return
+      login?.completed(this, s, event.outcome)
+      flush(s)
+    }
+    is WorldControlEvent.Task -> {
+      guarded("background task") { event.run(this) }
+      flushOutput()
+    }
+  }
 }
 
 /** Binds [player] to [session]. Reconnecting to a link-dead character resumes it (SPEC §5.12). */
 fun World.attach(session: SessionId, player: Player) {
-    val s = requireNotNull(sessions[session]) { "Unknown $session" }
-    require(player.inWorld) { "$player is not in the world" }
-    player.session?.let { old -> if (old != session) sessions[old]?.player = null }
-    s.player = player
-    s.gmcpLast.clear()
-    player.session = session
-    player.linkDeadSince = null
-    player.lastInputPulse = pulse
+  val s = requireNotNull(sessions[session]) { "Unknown $session" }
+  require(player.inWorld) { "$player is not in the world" }
+  player.session?.let { old -> if (old != session) sessions[old]?.player = null }
+  s.player = player
+  s.gmcpLast.clear()
+  player.session = session
+  player.linkDeadSince = null
+  player.lastInputPulse = pulse
 }
 
 /** Handles one line of input between pulses (SPEC §5.1, §5.2). */
 fun World.handle(event: ClientInputEvent) {
-    val s = sessions[event.session] ?: return
-    val player = s.player
-    if (player == null) {
-        val handler = login
-        if (handler != null) handler.input(this, s, event.line) else s.out.append("You are not playing a character.\n")
-        flush(s)
-        return
-    }
-    player.lastInputPulse = pulse
-    val (verb, _) = parseLine(event.line) ?: return
-    val def = commands.resolve(player, verb)
-    if (def?.lane == Lane.FAST && !s.bucket.tryTake(event.receivedNanos)) {
-        s.out.append("Slow down.\n")
-        s.drops.addLast(event.receivedNanos)
-        while (s.drops.isNotEmpty() && event.receivedNanos - s.drops.first() > DROP_WINDOW_NANOS) s.drops.removeFirst()
-        flush(s)
-        if (s.drops.size > MAX_DROPS) {
-            s.sink.close("Too much input.")
-            disconnect(s.id)
-        }
-        return
-    }
-    submit(player, event.line)
-    flushImmediate()
+  val s = sessions[event.session] ?: return
+  val player = s.player
+  if (player == null) {
+    val handler = login
+    if (handler != null) handler.input(this, s, event.line)
+    else s.out.append("You are not playing a character.\n")
     flush(s)
+    return
+  }
+  player.lastInputPulse = pulse
+  val (verb, _) = parseLine(event.line) ?: return
+  val def = commands.resolve(player, verb)
+  if (def?.lane == Lane.FAST && !s.bucket.tryTake(event.receivedNanos)) {
+    s.out.append("Slow down.\n")
+    s.drops.addLast(event.receivedNanos)
+    while (s.drops.isNotEmpty() && event.receivedNanos - s.drops.first() > DROP_WINDOW_NANOS) s
+      .drops
+      .removeFirst()
+    flush(s)
+    if (s.drops.size > MAX_DROPS) {
+      s.sink.close("Too much input.")
+      disconnect(s.id)
+    }
+    return
+  }
+  submit(player, event.line)
+  flushImmediate()
+  flush(s)
 }
 
 /** The connection dropped: the character goes link-dead and keeps auto-attacking (SPEC §5.12). */
 fun World.disconnect(id: SessionId) {
-    val s = sessions.remove(id) ?: return
-    login?.disconnected(this, id)
-    val p = s.player ?: return
-    if (p.session != id) return
-    p.session = null
-    p.linkDeadSince = pulse
-    p.actionQueue.clear()
-    echo(p.room, "${p.name} has lost their link.", p)
+  val s = sessions.remove(id) ?: return
+  login?.disconnected(this, id)
+  val p = s.player ?: return
+  if (p.session != id) return
+  p.session = null
+  p.linkDeadSince = pulse
+  p.actionQueue.clear()
+  echo(p.room, "${p.name} has lost their link.", p)
 }
 
 /** Removes [player] from the world. Persistence takes its immediate checkpoint here from M4. */
 fun World.quit(player: Player, message: String = "Goodbye.") {
-    if (!player.inWorld) return
-    send(player, message)
-    player.session?.let { id ->
-        sessions[id]?.let { s ->
-            flush(s)
-            s.player = null
-            s.sink.close(message)
-            sessions.remove(id)
-        }
+  if (!player.inWorld) return
+  send(player, message)
+  player.session?.let { id ->
+    sessions[id]?.let { s ->
+      flush(s)
+      s.player = null
+      s.sink.close(message)
+      sessions.remove(id)
     }
-    player.session = null
-    disengageAll(player)
-    despawnDebugMobs(player)
-    // Logout saves the character and everything it carries, at once (SPEC §5.11).
-    player.dirty = true
-    for (item in player.inventory + player.equipment.values) markDirtyTree(item)
-    immediateCause = null
-    guarded("checkpoint") { persistence.checkpoint(this, "quit", immediate = true) }
-    val room = player.room
-    removeActor(player)
-    echo(room, "${player.name} has left the game.")
+  }
+  player.session = null
+  disengageAll(player)
+  despawnDebugMobs(player)
+  // Logout saves the character and everything it carries, at once (SPEC §5.11).
+  player.dirty = true
+  for (item in player.inventory + player.equipment.values) markDirtyTree(item)
+  immediateCause = null
+  guarded("checkpoint") { persistence.checkpoint(this, "quit", immediate = true) }
+  val room = player.room
+  removeActor(player)
+  echo(room, "${player.name} has left the game.")
 }
 
 /** Link-dead and idle auto-quit (SPEC §5.12). */
 internal fun World.expireSessions() {
-    login?.let { guarded("login timeouts") { it.pulse(this) } }
-    for (p in players) {
-        val dead = p.linkDeadSince
-        when {
-            dead != null && pulse - dead >= LINKDEAD_PULSES -> quit(p)
-            dead == null && !p.idleExempt && pulse - p.lastInputPulse >= IDLE_QUIT_PULSES ->
-                quit(p, "You have been idle too long. Goodbye.")
-        }
+  login?.let { guarded("login timeouts") { it.pulse(this) } }
+  for (p in players) {
+    val dead = p.linkDeadSince
+    when {
+      dead != null && pulse - dead >= LINKDEAD_PULSES -> quit(p)
+      dead == null && !p.idleExempt && pulse - p.lastInputPulse >= IDLE_QUIT_PULSES ->
+        quit(p, "You have been idle too long. Goodbye.")
     }
+  }
 }
 
 // ---- Output ----------------------------------------------------------------------------------
 
 /** Sends one line to [actor]. Mobs and link-dead players see nothing. */
 fun World.send(actor: Actor, text: String) {
-    val p = actor as? Player ?: return
-    val s = p.session?.let(sessions::get) ?: return
-    s.out.append(text).append('\n')
+  val p = actor as? Player ?: return
+  val s = p.session?.let(sessions::get) ?: return
+  s.out.append(text).append('\n')
 }
 
 /** Sends one line to every player in [room] except [exclude]. */
 fun World.echo(room: Room, text: String, vararg exclude: Actor) {
-    for (a in room.actorIndex.values) if (exclude.none { it === a }) send(a, text)
+  for (a in room.actorIndex.values) if (exclude.none { it === a }) send(a, text)
 }
 
 /** Sends [s] its queued output, then its prompt if it is playing. */
 fun World.flush(s: Session) {
-    if (s.out.isEmpty() && s.gmcpOut.isEmpty()) return
-    val text = s.out.toString()
-    s.out.setLength(0)
-    if (text.isNotEmpty()) s.sink.send(text)
-    // GMCP follows the text it goes with (M6 design §5.2).
-    for ((pkg, data) in s.gmcpOut) s.sink.gmcp(pkg, data)
-    s.gmcpOut.clear()
-    if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
+  if (s.out.isEmpty() && s.gmcpOut.isEmpty()) return
+  val text = s.out.toString()
+  s.out.setLength(0)
+  if (text.isNotEmpty()) s.sink.send(text)
+  // GMCP follows the text it goes with (SPEC §4.10).
+  for ((pkg, data) in s.gmcpOut) s.sink.gmcp(pkg, data)
+  s.gmcpOut.clear()
+  if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
 }
 
 /** The prompt shown after each burst of output (D-083). */
@@ -188,45 +197,49 @@ fun promptFor(p: Player): String = "<${p.hp}hp ${p.mana}m ${p.move}mv> "
 
 /** Queues [text] for a session that may have no character yet, such as during login. */
 fun World.sendSession(s: Session, text: String) {
-    s.out.append(text).append('\n')
+  s.out.append(text).append('\n')
 }
 
 /** Ends [s] from the world side, without making a character link-dead. */
 fun World.closeSession(s: Session, reason: String) {
-    flush(s)
-    s.player?.let { p -> if (p.session == s.id) p.session = null }
-    s.player = null
-    sessions.remove(s.id)
-    login?.disconnected(this, s.id)
-    s.sink.close(reason)
+  flush(s)
+  s.player?.let { p -> if (p.session == s.id) p.session = null }
+  s.player = null
+  sessions.remove(s.id)
+  login?.disconnected(this, s.id)
+  s.sink.close(reason)
 }
 
 /**
- * Reloads packages through the script host (SPEC §5.10), then tells builders and instructors
- * how it went. A failed reload keeps the old version live.
+ * Reloads packages through the script host (SPEC §5.10), then tells builders and instructors how it
+ * went. A failed reload keeps the old version live.
  */
 internal fun World.reload(packages: List<String>) {
-    val result = try {
-        scripts.reload(this, packages)
+  val result =
+    try {
+      scripts.reload(this, packages)
     } catch (e: InvariantViolation) {
-        throw e
+      throw e
     } catch (e: Exception) {
-        if (config.strict) throw e
-        ReloadResult(false, listOf("reload of ${packages.joinToString()} crashed: $e"))
+      if (config.strict) throw e
+      ReloadResult(false, listOf("reload of ${packages.joinToString()} crashed: $e"))
     }
-    if (!result.ok) record(Diagnostic(pulse, "reload", result.messages.joinToString("\n")))
-    // A successful reload ends with a checkpoint (SPEC §5.10 step 6).
-    if (result.ok) checkpointNow("reload")
-    for (p in players) if (p.role.atLeast(Role.BUILDER)) result.messages.forEach { send(p, it) }
-    flushOutput()
+  if (!result.ok) record(Diagnostic(pulse, "reload", result.messages.joinToString("\n")))
+  // A successful reload ends with a checkpoint (SPEC §5.10 step 6).
+  if (result.ok) checkpointNow("reload")
+  for (p in players) if (p.role.atLeast(Role.BUILDER)) result.messages.forEach { send(p, it) }
+  flushOutput()
 }
 
-/** Phase 7 (SPEC §5.1): text, then GMCP events and state deltas. The harness also flushes after input. */
+/**
+ * Phase 7 (SPEC §5.1): text, then GMCP events and state deltas. The harness also flushes after
+ * input.
+ */
 fun World.flushOutput() {
-    for (s in sessions.values.toList()) {
-        guarded("GMCP for ${s.id}") { gmcpDeltas(s) }
-        flush(s)
-    }
+  for (s in sessions.values.toList()) {
+    guarded("GMCP for ${s.id}") { gmcpDeltas(s) }
+    flush(s)
+  }
 }
 
 internal fun String.cap(): String = replaceFirstChar { it.uppercase() }

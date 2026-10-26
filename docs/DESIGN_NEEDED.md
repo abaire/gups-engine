@@ -42,6 +42,16 @@ skills granted by level through the rules?
 **Today:** a level-up raises `level` and nothing else (D-039).
 **Question:** should a rules export such as `on_level_up(ctx)` return stat and max-vital gains?
 
+### Experience subsystem and scaling
+**Spec:** §4.6 (`xp_for_kill`, `xp_to_level`), §5.4.
+**Today:** `xp_for_kill(ctx)` awards a flat `50 * victim.level` and `xp_to_level(level)` scales linearly `1000 * level` (D-045). There is no level-difference scaling (killing trivial mobs yields full XP), no group/party XP sharing, no diminishing returns, and death XP loss (`xp / 10`) does not consider level loss or de-leveling floors.
+**Questions:**
+- Should kill XP factor in the level difference between killer and victim (e.g. reduced/zero XP for grey/trivial mobs, bonus XP for challenging mobs)?
+- How should XP be distributed among group members or multi-attacker assists?
+- Should the default curve support non-linear / polynomial scaling to prevent linear grinding?
+- What are the boundaries for death XP penalties (e.g. can a player de-level, or is there a floor at the start of the current level)?
+
+
 ### Rules-defined starting stats
 **Spec:** §5.12 says new characters get "rules-defined starting stats". §4.6 lists no export
 for it.
@@ -68,6 +78,31 @@ creation offer the player any choice?
 exports for them.
 **Today:** they are Kotlin-only rules methods, and a successful retreat costs 2 (D-026).
 **Question:** should these become Starlark exports in the next `api_version`?
+
+### Defender-side modifiers in combat
+**Spec:** §4.6 (Rules Module and the Modifier Chain: `to_hit`, `damage`, chain order).
+**Today:** the modifier chain for `to_hit` and `damage` evaluates only the attacker's chain:
+zone, region, room, attacker affects, and attacker worn items (D-111). Defender affects and
+worn items are not evaluated in the chain. Defensive scaling is limited to entity stats
+(`dex`), `armor`, and `resists` evaluated in `to_hit` and `mitigate`.
+**Questions:**
+- How should defender items and affects contribute to combat resolution (e.g. an evasion cloak
+  reducing hit chance, or a damage-ward affect absorbing flat damage)?
+- Should there be distinct modifier points such as `defend_hit` / `incoming_damage`, or should
+  the defender's affects and equipment be appended to the existing `to_hit` and `damage` chains?
+- If appended, in what order do attacker and defender modifiers apply?
+
+### Spell damage modifiers
+**Spec:** §4.3 (effect primitives, `damage`), §4.6 (Modifier points: `damage`).
+**Today:** spell `damage(...)` effects roll their dice and pass the amount directly to
+`rules.mitigate(ctx, amount, type)`, completely bypassing the `damage` modifier point (D-111).
+Only auto-attacks evaluate `damageChain`. A room, zone, or item cannot scale or modify spell
+damage (e.g. elemental sanctums or spellpower bonuses).
+**Questions:**
+- Should spell damage evaluate a modifier chain (either a dedicated `spell_damage` modifier
+  point or the existing `damage` modifier point with `ctx.skill` populated)?
+- If using the existing `damage` modifier point, how do we distinguish general damage buffs
+  from weapon-only physical damage bonuses?
 
 ## Mobs and AI
 
@@ -169,19 +204,19 @@ BFS (D-121, D-124). With hundreds of players and many pursuers this may cost too
 ## Accounts
 
 ### Disabling an account
-**Spec:** §3.6 (`accounts.disabled`), M6 design §3.1 ("a disabled account's characters that
-are online are quit"), §4.3 (`@role`).
+**Spec:** §3.6 (`accounts.disabled`), §3.5 ("its online characters are quit"), §4.9
+(`@role`).
 **Today:** a disabled account can't log in (D-130), but no command or tool sets the flag, so
 nothing ever quits a disabled account's online characters (D-135).
 **Questions:**
 - Which command disables and re-enables an account: a `@role <account> disable` form, a
-  restriction (§4.4), or a CLI tool?
+  restriction (§4.9), or a CLI tool?
 - Does disabling also revoke web tokens and drop link-dead characters at once?
 
 ## Plugins
 
 ### Plugins that share a GMCP package tree
-**Spec:** M7 design §5.1 (GMCP), §5.3 (loading order); SPEC §4.10.
+**Spec:** §4.15 (GMCP, loading order), §4.10.
 **Today:** a plugin's GMCP package may not equal, contain or nest in another plugin's, and the
 plugin that registers later (larger id) fails to load (D-178). That stops a plugin from silently
 sending under another's tree, since clients subscribe by prefix. It also rules out deliberate
