@@ -118,6 +118,27 @@ class RulesTest {
   }
 
   @Test
+  fun `a public function in combat star that isn't a rules export fails the rules package`() {
+    val root =
+      tempWorld(
+        mapOf(
+          rulesPkg,
+          "rules/combat.star" to
+            "def _clamp(n):\n    return n\n\ndef tohit(ctx):\n    return 100\n\n" +
+              "def damage(ctx):\n    return 1\n",
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to DEFAULT_ROOMS,
+        )
+      )
+    val result = ScriptLoader(WorldDir(root), ScriptLimits.HARNESS).load(listOf("zones/z", "rules"))
+    assertTrue("rules" in result.failed)
+    assertTrue("zones/z" in result.packages)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "'tohit' is not a rules export")
+    assertEquals(4, error.line)
+  }
+
+  @Test
   fun `rules get their own 200,000-step budget, even inside a hook`() {
     val f =
       world(

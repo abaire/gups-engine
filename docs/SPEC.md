@@ -1057,8 +1057,12 @@ Verbs without a player command (`say`, `emote`, door and exit-block setters, `sp
 
 ### 4.6 Rules Module and the Modifier Chain
 
-`//rules:combat.star` must export the following functions. The engine calls them with
-a rules `ctx` that is read-only, apart from `deny`.
+`//rules:combat.star` may export the following functions. Every export is an optional
+override: a function it doesn't export uses the built-in Kotlin ruleset below. The engine
+calls them with a rules `ctx` that is read-only, apart from `deny`. Any other public
+top-level function in `combat.star` (one whose name doesn't start with `_`) is a load error
+for the rules package, which then falls back for everything (§6.3). A misspelled export
+can't be silently ignored; helpers take a `_` prefix.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the
 other actor, if any: the defender, the pinner, the killed or the killer), `weapon`, `item`,

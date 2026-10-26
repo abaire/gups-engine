@@ -338,6 +338,23 @@ class ScriptLoader(
         }
         return null
       }
+      if (!test && st.pkg.kind == PackageKind.RULES && file.name == RULES_FILE) {
+        val unknown = unknownRulesExports(module)
+        if (unknown.isNotEmpty()) {
+          for (name in unknown) {
+            err(
+              LoadError(
+                st.pkg.path,
+                "rules",
+                "'$name' is not a rules export; prefix helpers with '_'",
+                file.v,
+                bindingLine(parsed, name),
+              )
+            )
+          }
+          return null
+        }
+      }
       if (test) testModules[file] = module else modules[file] = module
       return ctx
     }
@@ -577,3 +594,18 @@ private fun bindingLine(file: StarlarkFile, name: String): Int? =
     }
     ?.startLocation
     ?.line()
+
+/** The file of a rules package whose functions the engine calls (SPEC §4.6). */
+internal const val RULES_FILE = "combat.star"
+
+/**
+ * Public top-level functions of a rules [module] that aren't a [RulesExport], sorted. The engine
+ * would never call them, so they're almost always a misspelled export (SPEC §4.6).
+ */
+internal fun unknownRulesExports(module: Module): List<String> {
+  val known = RulesExport.entries.mapTo(HashSet()) { it.scriptName }
+  return module.globals
+    .filter { (name, v) -> v is StarlarkFunction && !name.startsWith("_") && name !in known }
+    .keys
+    .sorted()
+}
