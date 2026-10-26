@@ -611,13 +611,16 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 ```
 
 - **Account fields:** `id`, `login`, `pwHash` (Argon2id; absent until a roster account is
-  set up), `roles`, `githubHandle?`, `disabled`, and `createdAt`.
+  set up), `roles`, `githubHandle?`, `disabled` (with `disabledBy?`, `disabledAt?` and
+  `disabledReason?`), and `createdAt`.
   - Logins are 3–24 characters from `[a-z0-9_.-]`, unique case-insensitively and stored
     lowercase.
   - An account has one role; the higher roles imply the lower, so `roles_json` stores
     `{"role": "BUILDER", "scope": [...], "manual": [...]}`.
-  - A disabled account can't log in, and its online characters are quit. (No command
-    disables an account yet.)
+  - A disabled account can't log in (§5.12). Disabling it does four things at once: it quits
+    the account's characters and closes its sessions, deletes its web tokens and unused setup
+    codes, and records who disabled it, when and why. Re-enabling clears that record and
+    restores nothing else. Accounts are disabled with `@role` (§4.9) or the roster (§4.13).
 - **Characters:** An account owns 1..N characters (`max_characters`, default 5; instructors
   and admins unlimited) and plays one at a time, across every transport (§5.12). Character
   names are 2–16 letters, unique across all accounts (case-insensitive), and checked against
@@ -653,8 +656,9 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
     also makes single use hold across processes.
   - Reads use a read-only connection of the store's own beside the writer (WAL). Accounts
     aren't cached, so CLI tools writing the same database directly are safe.
-  - `update` writes role, scopes, GitHub handle and the disabled flag, never the password.
-    `setPassword` also deletes the account's `session_tokens`.
+  - `update` writes role, scopes, GitHub handle and the disabled flag with its record, never
+    the password. `setPassword` deletes the account's `session_tokens`. Disabling an account
+    deletes them too, along with its unused setup codes.
 - **Invite and setup codes:** 10 characters grouped as `XXXXX-XXXXX`, drawn from the
   alphabet `23456789ABCDEFGHJKMNPQRSTWXYZ` (no 0/O, 1/I/L, U/V). They are compared after uppercasing and removing spaces and dashes, and
   stored as the SHA-256 hex of that canonical form; they are random enough that an unsalted
@@ -665,7 +669,7 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 | Table | Columns (abridged) | Notes |
 |---|---|---|
 | `meta` | `key`, `value` | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `snapshot_taken_at` (sanitized copies only) |
-| `accounts` | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `created_at` | `roles_json` holds the role, CODEOWNERS `scope` and `manual` scope |
+| `accounts` | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at` | `roles_json` holds the role, CODEOWNERS `scope` and `manual` scope; the `disabled_*` columns record the current disable (migration 4) |
 | `session_tokens` | `token_hash`, `account_id`, `expires_at` | web client; revocable |
 | `invites` | `code_hash`, `role`, `expires_at`, `used_by`, `account_id` | `account_id` binds a setup code to its account (migration 2) |
 | `restrictions` | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at` | migration 3 (§4.9) |
@@ -1324,7 +1328,7 @@ prefix only matches other `@` commands.
 | `@snapshot` | A routine checkpoint, a wait for the writer, then a `manual` backup. |
 | `@shutdown [seconds] [reason]` | A first word that isn't a number starts the reason. Warns at once, then at 60, 30, 10 and 5 seconds left. |
 | `@audit item <id>` | The item's committed `item_events` with UTC wall times, plus where it is now if it is in the world. Changes not yet checkpointed don't show. |
-| `@role <account> [role] [packages]` | Show or set an account's role (below). |
+| `@role <account> [role] [packages]` | Show or set an account's role, or disable it (below). |
 | `@invite <role>` | Create an invite code. |
 | `@restrict <account> <capability> [length] [reason]`, `@unrestrict <account> <capability>`, `@restrictions [account]` | Per-account restrictions (below). |
 
@@ -1339,6 +1343,18 @@ prefix only matches other `@` commands.
   exemption.
 - `@role <account> reset` clears the password, revokes web tokens and shows a 7-day setup
   code bound to the account. `@role <account> revoke` deletes the account's web tokens only.
+- `@role <account> disable [reason]` disables the account (§3.5).
+  - Each of its characters in the world is quit with "This account has been disabled.",
+    including link-dead characters and characters in a fight. Connections still at login or
+    the character menu get the same line and are closed. The player isn't told the reason.
+  - A login already in progress when the account is disabled is refused or closed, so no
+    session of the account outlives the instructor's reply.
+  - `@role <account> enable` clears the flag and its record.
+  - Both are refused on the instructor's own account, and on an admin's account unless the
+    instructor is an admin. Disabling a disabled account, or enabling an enabled one, changes
+    nothing and says so.
+- For a disabled account, `@role <account>` also shows "disabled by <login> <UTC time>:
+  <reason>", or "disabled by the roster" when an import disabled it.
 
 **Restrictions:** instructors can take a capability away from one account, for a while or
 for good, without changing its role.
@@ -1699,12 +1715,20 @@ def test_scout_flees_when_hurt(t):
 - **`gups import-roster`:**
   - The CSV has a header row in any column order. Blank lines and `#` lines are skipped,
     double quotes are allowed, a leading `@` on a GitHub handle is dropped, and roles are
-    case-insensitive. Any bad row (unknown column or role, bad or repeated login, too many
+    case-insensitive. An optional `disabled` column takes `true`/`false`, `yes`/`no` or
+    `1`/`0`, in any case. A blank cell leaves the flag alone. Any bad row (unknown column or role, bad or repeated login, too many
     fields) fails the whole import with every problem listed, and nothing is written.
   - Output is a `login,setup_code` header, then one line per new account; a summary goes to
     standard error. `--days N` sets the codes' lifetime.
   - Existing accounts without a password get no new code, so a re-import is idempotent;
     `@role <account> reset` issues a fresh one.
+  - A row with `disabled` true disables its account as `@role disable` does, with the reason
+    `roster` and no `disabledBy`. A new login listed as disabled is created disabled and gets
+    no setup code. `false` re-enables the account. A change to the flag alone counts as an
+    update, and the summary also counts the accounts disabled and enabled. Only an import
+    through `--admin` closes the account's characters and sessions at once. Offline, the
+    disable applies from the next login, and the summary warns that characters already in the
+    world weren't quit.
   - With `--admin ADDR` it goes through a running server's admin port (and refuses `--days`:
     codes last the default 7 days). Without it, it and `gups invite` write the database
     directly, which is safe beside a running server because SQLite serializes the writes.
@@ -1739,7 +1763,7 @@ bearer token.
 |---|---|
 | `GET /metrics` | Prometheus metrics (Micrometer). |
 | `POST /deploy` | `{"commit"}`, or `{}` for the fetched tip of `deploy_branch`. Answers `application/x-ndjson`: one `{"progress": line}` per step, then `{"ok", "commit", "packages", "errors"}`, naming the commit it deployed. |
-| `POST /roster` | The roster CSV as the body, for `gups import-roster --admin` against a running server. Answers the `login,setup_code` lines (200) or the problems (400). |
+| `POST /roster` | The roster CSV as the body, for `gups import-roster --admin` against a running server. Answers the `login,setup_code` lines (200) or the problems (400). Accounts it disables are closed at once, as `@role disable` does. |
 | `GET /snapshot` | A sanitized copy of the database (§4.13) for the CI migration check (§7.3), as a download. |
 | `GET /healthz` | `{"pulse", "uptime_s", "writer_healthy"}`, where `pulse` is the last finished pulse. 503 when no pulse has finished for 5 s or the writer is unhealthy. No token needed. |
 
@@ -2730,7 +2754,8 @@ reload is refused for it.
     password, each with a **setup code**: a one-time, 7-day invite bound to that account,
     printed for the instructor to hand out. Students choose their own password with it; the
     server never hands out a usable password. Existing logins have their GitHub handle and
-    role updated, and their passwords left alone.
+    role updated, and their passwords left alone. An optional `disabled` column disables or
+    re-enables listed accounts (§4.13).
   - `gups invite --role R [--days N]` and `@invite <role>` make an unbound invite code
     (default 7 days). Only its hash is stored.
   - Open signup (`open_signup = True`) lets a new login be created at the telnet login prompt
@@ -2759,8 +2784,8 @@ reload is refused for it.
   - The web client may exchange a successful login for a 30-day session token (§4.10):
     32 random bytes as unpadded base64url, stored as SHA-256 hex with a wall-clock expiry.
     Expired rows are pruned whenever a token is added. A token stops working when it
-    expires, at logout, when the password is changed or reset, at `@role revoke`, and while
-    its account is disabled.
+    expires, at logout, when the password is changed or reset, at `@role revoke`, and when
+    its account is disabled, which deletes it.
 - **Telnet login flow:**
 
   ```
@@ -3152,3 +3177,4 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
 | **M5** | Rules module, modifier chain, skills and affects, behaviors and `think`, perception, reality bubble, items/equipment/containers, `//lib:quest.star` |
 | **M6** | Built in six stages: **M6.1** accounts and login, and the `--prod` profile; **M6.2** roles, builder scope and the in-game tools, restrictions and alerts; **M6.3** TLS and GMCP; **M6.4** WebSocket and the web client; **M6.5** the admin port, metrics, the deploy pipeline and release images; **M6.6** the course world template and CI gates. The load test was deferred (§1.7). |
 | **M7** | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15). |
+| **M8** | Disabling accounts: `@role disable`/`enable`, the disabled record (migration 4), and the roster's `disabled` column (§3.5, §4.9, §4.13). |

@@ -213,18 +213,6 @@ never perceived.
 BFS (D-121, D-124). With hundreds of players and many pursuers this may cost too much.
 **Question:** should `pursue` have a maximum range, or a slower think cadence?
 
-## Accounts
-
-### Disabling an account
-**Spec:** §3.6 (`accounts.disabled`), §3.5 ("its online characters are quit"), §4.9
-(`@role`).
-**Today:** a disabled account can't log in (D-130), but no command or tool sets the flag, so
-nothing ever quits a disabled account's online characters (D-135).
-**Questions:**
-- Which command disables and re-enables an account: a `@role <account> disable` form, a
-  restriction (§4.9), or a CLI tool?
-- Does disabling also revoke web tokens and drop link-dead characters at once?
-
 ## Commands
 
 ### Exits named after a plugin command
