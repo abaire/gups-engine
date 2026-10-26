@@ -267,4 +267,53 @@ class ActionLifecycleTest {
     assertEquals(2, p.trackIndex)
     assertEquals(g.trackIndex, p.trackIndex)
   }
+
+  @Test
+  fun `a silenced actor can't speak, so mobs never hear it`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_SAY] = { _, _, _ -> null }
+    host.handlers[HookName.ON_TELL] = { _, _, _ -> null }
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    val bob = f.player("Bob")
+    f.mob(T.DUMMY)
+    f.w.applyAffect(p, "hexed", 10, flags = setOf("silenced"))
+    f.w.flushOutput()
+    f.out(bob)
+    for (line in listOf("say hi", "tell dummy hi", "whisper bob hi", "shout hi", "gossip hi")) {
+      f.input(p, line)
+      f.w.flushOutput()
+      assertTrue("You can't get the words out!" in f.out(p), line)
+    }
+    assertEquals("", f.out(bob), "nobody hears a word")
+    assertEquals(emptyList(), host.calls, "no on_say or on_tell fires")
+    f.w.removeAffect(p, "hexed")
+    f.input(p, "say hi")
+    f.input(p, "tell dummy hi")
+    assertEquals(
+      listOf(
+        "on_say:The Hall",
+        "on_say:Bob",
+        "on_say:a training dummy",
+        "on_tell:a training dummy",
+      ),
+      host.calls,
+    )
+  }
+
+  @Test
+  fun `re-applying an affect only replaces it when the new one lasts longer`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    val long = f.w.applyAffect(p, "stun", 10, flags = setOf("stunned"))
+    f.run(2)
+    val short = f.w.applyAffect(p, "stun", 3, flags = setOf("stunned"))
+    assertTrue(short === long, "a shorter stun leaves the longer one in place")
+    assertEquals(f.w.pulse + 8, p.affects.single().expiresAt)
+    val longer = f.w.applyAffect(p, "stun", 9, flags = setOf("stunned"))
+    assertTrue(longer !== long, "a stun that outlasts the old one replaces it")
+    assertEquals(f.w.pulse + 9, p.affects.single().expiresAt)
+    f.w.applyEffect(Effect.Stun(1), p, p)
+    assertEquals(f.w.pulse + 9, p.affects.single().expiresAt, "the stun primitive follows suit")
+  }
 }

@@ -206,7 +206,11 @@ fun World.awardXp(a: Actor, amount: Long) {
 
 // ---- Affects ---------------------------------------------------------------------------------
 
-/** The `apply_affect` verb. Re-applying a name replaces the old affect. */
+/**
+ * The `apply_affect` verb. Re-applying a name replaces the old affect only if the new one would run
+ * out later; otherwise the old one stays and is returned, so a short stun or debuff can't cut a
+ * longer one short.
+ */
 fun World.applyAffect(
   target: Actor,
   name: String,
@@ -223,6 +227,9 @@ fun World.applyAffect(
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
+  // A worn item's affect lasts until the item comes off (D-181).
+  val expiresAt = if (wornFrom != null) Long.MAX_VALUE else pulse + duration
+  target.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
   val wasStunned = target.isStunned
   target.affects.removeIf { it.name == name }
   val affect =
@@ -231,8 +238,7 @@ fun World.applyAffect(
       name,
       source?.id,
       pulse,
-      // A worn item's affect lasts until the item comes off (D-181).
-      if (wornFrom != null) Long.MAX_VALUE else pulse + duration,
+      expiresAt,
       statDeltas,
       flags,
       tickEvery,

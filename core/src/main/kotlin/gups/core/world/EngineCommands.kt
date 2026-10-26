@@ -16,17 +16,20 @@ import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 
+/** What a `silenced` actor is told when it tries to speak or cast. */
+private const val SILENCED = "You can't get the words out!"
+
 /** The engine's player commands (SPEC §4.9). Their aliases come from the world (SPEC §2.3). */
 internal object EngineCommands {
   fun all(): List<CommandDef> =
     listOf(
       // Fast lane.
       FastCommand("look") { look(it) },
-      FastCommand("say") { say(it) },
-      FastCommand("tell") { tell(it) },
-      FastCommand("gossip") { gossip(it) },
-      FastCommand("shout") { shout(it) },
-      FastCommand("whisper") { whisper(it) },
+      FastCommand("say") { spoken(it, ::say) },
+      FastCommand("tell") { spoken(it, ::tell) },
+      FastCommand("gossip") { spoken(it, ::gossip) },
+      FastCommand("shout") { spoken(it, ::shout) },
+      FastCommand("whisper") { spoken(it, ::whisper) },
       FastCommand("score") { score(it) },
       FastCommand("inventory") { inventory(it) },
       FastCommand("equipment") { equipment(it) },
@@ -82,6 +85,15 @@ internal object EngineCommands {
         else "It contains: " + inside.joinToString(", ") { it.name } + ".",
       )
     }
+  }
+
+  /**
+   * Runs a speech command unless the speaker is `silenced`, which stops all speech, and with it any
+   * dialogue or quest step a mob would run on hearing it.
+   */
+  private fun spoken(c: CommandCall, speak: (CommandCall) -> Unit) {
+    if (c.actor.hasFlag("silenced")) return c.world.send(c.actor, SILENCED)
+    speak(c)
   }
 
   private fun say(c: CommandCall) {
@@ -673,7 +685,7 @@ internal class CastAction(
     Result.failure(IllegalArgumentException("They aren't here."))
 
   override fun validate(w: World, actor: Actor): String? {
-    if (actor.hasFlag("silenced")) return "You can't get the words out!"
+    if (actor.hasFlag("silenced")) return SILENCED
     val t =
       chooseTarget(w, actor).getOrElse {
         return it.message

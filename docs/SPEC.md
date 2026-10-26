@@ -538,8 +538,12 @@ current state.
 - `source: EntityId?`.
 - `expiresAt: Long`, an absolute pulse.
 - `statDeltas`.
-- `flags`, for example `stunned`, `silenced`, or `no_regen` (suppresses all vitals regen,
-  including dormant catch-up, until the affect expires).
+- `flags`, for example `stunned`, `silenced` (blocks casting, §5.3, and speech, §4.9), or
+  `no_regen` (suppresses all vitals regen, including dormant catch-up, until the affect
+  expires).
+- Re-applying an affect with the same name, a `stun` included, replaces the old one only if
+  the new one would expire later. Otherwise the old one stays as it is, so a shorter affect
+  never cuts a longer one short.
 - `tickEvery: Int?`.
 - `onTick` and `onExpire`: `HookRef?`.
 - `modifiers`: modifier functions stored as `HookRef`s, so they persist (§4.6).
@@ -1208,6 +1212,8 @@ def _scout_think(ctx):
   `equip_affects` or `modifiers`). `inventory` leaves them out; item commands still find
   them by keyword.
 - **`gossip`** goes to every player, including link-dead ones (who see nothing).
+- A `silenced` speaker can't use `say`, `tell`, `gossip`, `shout` or `whisper`: it is told
+  "You can't get the words out!", nobody hears anything, and no `on_say` or `on_tell` fires.
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The
   link-dead auto-quit ignores combat.
 
