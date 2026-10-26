@@ -18,6 +18,28 @@ class LoaderTest {
     vararg pkgs: String = arrayOf("zones/z"),
   ): LoadResult = ScriptLoader(WorldDir(tempWorld(files)), ScriptLimits.HARNESS).load(pkgs.toList())
 
+  @Test
+  fun `global commands and exits may not take the world's alias words`() {
+    val files =
+      mapOf(
+        "lib/package.star" to libPkg(),
+        "lib/a.star" to
+          "def f(ctx):\n    pass\nglobal_command(\"peer\", f)\nglobal_command(\"k\", f)",
+        "zones/z/package.star" to zonePkg(),
+        "zones/z/a.star" to "room(\"start\", exits = [exit(\"gaze\", \":start\")])",
+      )
+    val plain = load(files, "lib", "zones/z")
+    assertTrue(plain.errors.isEmpty(), plain.report())
+    val aliased =
+      load(
+        files + ("MODULE.gups" to "module(aliases = {\"peer\": \"look\", \"gaze\": \"look\"})"),
+        "lib",
+        "zones/z",
+      )
+    assertContains(only(aliased, "lib").message, "'peer' clashes with the engine command")
+    assertContains(only(aliased).message, "'gaze' is a reserved keyword")
+  }
+
   private fun only(r: LoadResult, pkg: String = "zones/z"): LoadError {
     val errs = r.errors.filter { it.pkg == pkg }
     assertTrue(errs.isNotEmpty(), "expected an error for $pkg, got: ${r.report()}")
@@ -285,6 +307,7 @@ class LoaderTest {
         mapOf(
           "zones/z/package.star" to zonePkg(),
           "zones/z/a.star" to "room(\"start\", exits = [exit(\"inv\", \":start\")])",
+          "MODULE.gups" to "module(aliases = {\"inv\": \"inventory\"})",
         )
       )
     assertContains(only(alias).message, "'inv' is a reserved keyword")

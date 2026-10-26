@@ -232,6 +232,23 @@ class RecordingHost : ScriptHost {
 /** A modifier reference for [RecordingHost.modifiers]. */
 fun mod(name: String) = HookRef(Label("//t:mods.star"), name)
 
+/** The aliases and prefixes the template world's `MODULE.gups` ships with. */
+val TEMPLATE_ALIASES =
+  CommandAliases(
+    words =
+      mapOf(
+        "l" to "look",
+        "i" to "inventory",
+        "inv" to "inventory",
+        "eq" to "equipment",
+        "k" to "kill",
+        "attack" to "kill",
+        "c" to "cast",
+        "take" to "get",
+      ),
+    prefixes = mapOf('\'' to "say", '"' to "say", '%' to "cast"),
+  )
+
 /** A headless world with connected players and a virtual clock. */
 class Fixture(
   seed: Long = 1,
@@ -240,13 +257,20 @@ class Fixture(
   protos: Prototypes = T.protos(),
   strict: Boolean = true,
   bubble: Boolean = false,
+  aliases: CommandAliases = TEMPLATE_ALIASES,
 ) {
   val w =
     World(
       protos,
       rules,
       scripts,
-      WorldConfig(seed = seed, checkInvariants = true, strict = strict, bubble = bubble),
+      WorldConfig(
+        seed = seed,
+        checkInvariants = true,
+        strict = strict,
+        bubble = bubble,
+        aliases = aliases,
+      ),
     )
   private var nextSession = 1L
   private val sinks = mutableMapOf<Player, CapturingSink>()

@@ -27,6 +27,9 @@ sealed class CommandDef(val name: String, val aliases: List<String>, val role: R
 
   fun allows(actor: Actor): Boolean =
     role == Role.PLAYER || (actor is Player && actor.role.atLeast(role))
+
+  /** This command with [extra] appended to its aliases. */
+  internal abstract fun withAliases(extra: List<String>): CommandDef
 }
 
 class FastCommand(
@@ -37,6 +40,8 @@ class FastCommand(
 ) : CommandDef(name, aliases, role) {
   override val lane: Lane
     get() = Lane.FAST
+
+  override fun withAliases(extra: List<String>) = FastCommand(name, aliases + extra, role, run)
 }
 
 /**
@@ -51,15 +56,59 @@ class TickCommand(
 ) : CommandDef(name, aliases, role) {
   override val lane: Lane
     get() = Lane.TICK
+
+  override fun withAliases(extra: List<String>) = TickCommand(name, aliases + extra, role, plan)
 }
 
 /**
- * Verb lookup (SPEC §5.2): engine commands (including exits), global commands, then the room's and
- * nearby items' `commands`. Exact names and aliases win over unique prefixes; a prefix of the names
- * or aliases of more than one command resolves to nothing.
+ * A world's shorthands for engine commands, from `MODULE.gups` (SPEC §2.3): [words] maps an alias
+ * such as `l` to a command name, and [prefixes] maps a single character such as `'` to the command
+ * that the rest of the line is passed to.
  */
-class CommandRegistry {
-  private val engine: List<CommandDef> = EngineCommands.all()
+data class CommandAliases(
+  val words: Map<String, String> = emptyMap(),
+  val prefixes: Map<Char, String> = emptyMap(),
+) {
+  /** Why these aliases can't be used, such as an alias naming a command that doesn't exist. */
+  fun problems(): List<String> = buildList {
+    val engine = EngineCommands.all().map { it.name }.filter { !it.startsWith("@") }.toSet()
+    for ((alias, target) in words.toSortedMap()) {
+      when {
+        !WORD.matches(alias) -> add("alias '$alias' must match [a-z][a-z0-9_]*")
+        alias in engine -> add("alias '$alias' is already an engine command")
+        Direction.parse(alias) in Direction.STANDARD -> add("alias '$alias' is a direction")
+        target !in engine -> add("alias '$alias' names '$target', which is not an engine command")
+      }
+    }
+    for ((prefix, target) in prefixes.toSortedMap()) {
+      when {
+        prefix.isLetterOrDigit() || prefix.isWhitespace() || prefix == '@' ->
+          add("prefix '$prefix' must not be a letter, digit, space or @")
+        target !in engine -> add("prefix '$prefix' names '$target', which is not an engine command")
+      }
+    }
+  }
+
+  companion object {
+    val NONE = CommandAliases()
+    private val WORD = Regex("[a-z][a-z0-9_]*")
+  }
+}
+
+/**
+ * Verb lookup (SPEC §5.2): engine commands (with the world's aliases, including exits), global
+ * commands, then the room's and nearby items' `commands`. Exact names and aliases win over unique
+ * prefixes; a prefix of the names or aliases of more than one command resolves to nothing.
+ */
+class CommandRegistry(
+  /** The world's aliases; [CommandAliases.problems] must be empty. */
+  val aliases: CommandAliases = CommandAliases.NONE
+) {
+  private val engine: List<CommandDef> =
+    EngineCommands.all().map { def ->
+      val extra = aliases.words.filterValues { it == def.name }.keys.sorted()
+      if (extra.isEmpty()) def else def.withAliases(extra)
+    }
   private val global = mutableListOf<CommandDef>()
   private val tools = mutableListOf<CommandDef>()
   private val plugins = mutableListOf<CommandDef>()
@@ -195,18 +244,26 @@ class CommandRegistry {
     }
 }
 
-/** Splits `verb args`; a leading `'` is shorthand for `say`. */
-internal fun parseLine(line: String): Pair<String, String>? {
+/**
+ * Splits `verb args`; a leading character in [prefixes] (such as `'` for `say`) stands for its
+ * command.
+ */
+internal fun parseLine(
+  line: String,
+  prefixes: Map<Char, String> = emptyMap(),
+): Pair<String, String>? {
   val t = line.trim()
   if (t.isEmpty()) return null
-  if (t.startsWith("'")) return "say" to t.substring(1).trim()
+  prefixes[t[0]]?.let {
+    return it to t.substring(1).trim()
+  }
   val space = t.indexOfFirst { it.isWhitespace() }
   return if (space < 0) t to "" else t.substring(0, space) to t.substring(space + 1).trim()
 }
 
 /** Classifies and admits one line for [actor]: fast-lane runs now, tick-lane queues. */
 fun World.submit(actor: Actor, line: String): Boolean {
-  val (verb, args) = parseLine(line) ?: return false
+  val (verb, args) = parseLine(line, commands.aliases.prefixes) ?: return false
   val def = commands.resolve(actor, verb)
   if (def == null) {
     send(actor, "Huh?")

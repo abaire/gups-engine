@@ -5,6 +5,21 @@ before/after snippets.
 
 ## api_version 2 (unreleased)
 
+### Added `module.aliases`
+- kind: added
+- symbol: module.aliases
+
+`MODULE.gups` sets the alias words for engine commands, such as `l` for `look`. The engine no
+longer has built-in aliases, so a world keeps `l`, `i`, `inv`, `eq`, `k`, `attack`, `c` and
+`take` only by listing them, as the template world does.
+
+### Added `module.prefixes`
+- kind: added
+- symbol: module.prefixes
+
+`MODULE.gups` sets the single characters that stand for an engine command at the start of a
+line, such as `'` for `say`. A world keeps `'` only by listing it, as the template world does.
+
 ### Added `server.shutdown_timeout`
 - kind: added
 - symbol: server.shutdown_timeout

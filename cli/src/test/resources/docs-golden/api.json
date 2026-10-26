@@ -153,6 +153,30 @@
           "allowed_values": [],
           "doc": "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.",
           "since": 1
+        },
+        {
+          "symbol": "module.aliases",
+          "name": "aliases",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Alias words for engine commands, such as {\"l\": \"look\"}.",
+          "since": 1
+        },
+        {
+          "symbol": "module.prefixes",
+          "name": "prefixes",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Single characters that stand for an engine command, such as {\"'\": \"say\"}.",
+          "since": 1
         }
       ]
     }

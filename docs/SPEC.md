@@ -211,7 +211,7 @@ gups-engine/
 ```
 <course-world>/
   MODULE.gups              pins engine version and api_version; world settings such as
-                           checkpoint_minutes (§5.11)
+                           checkpoint_minutes (§5.11) and command aliases (§5.2)
   CODEOWNERS               package ownership → builder roles
   rules/                   instructor-owned; package kind "rules"
     package.star
@@ -263,8 +263,8 @@ gups-engine/
     command. An attribute namespace used by two packages (or by a package and a shared
     namespace, or equal to a plugin id) fails every package involved.
 - **`MODULE.gups`:** Starlark with exactly one call,
-  `module(engine, api_version, checkpoint_minutes, start_room, plugins)`, every argument
-  optional. A world without the file gets the defaults.
+  `module(engine, api_version, checkpoint_minutes, start_room, plugins, aliases, prefixes)`,
+  every argument optional. A world without the file gets the defaults.
   - A pinned `api_version` the engine doesn't support stops the server. A different pinned
     `engine` version only warns.
   - `start_room` sets where new characters start, in both profiles (`--start` overrides it).
@@ -273,6 +273,15 @@ gups-engine/
   - `plugins = {"<id>": "sha256:<64 lowercase hex>"}` pins plugin jars (§4.15). An id that
     doesn't match `[a-z][a-z0-9_]*`, that equals a reserved name, or whose checksum is
     malformed is a `MODULE.gups` problem, so it stops the server.
+  - `aliases = {"l": "look", "inv": "inventory"}` gives engine commands shorter words, and
+    `prefixes = {"'": "say", "%": "cast"}` makes a single character at the start of a line
+    stand for a command (§5.2). Several aliases or prefixes may name the same command. The
+    engine hardcodes none: a world without them has no aliases, and the template world's
+    `MODULE.gups` ships the defaults (`l`, `i`/`inv`, `eq`, `k`/`attack`, `c`, `take`; `'`
+    and `"` for `say`, `%` for `cast`). An alias that isn't `[a-z][a-z0-9_]*`, is an engine
+    command or a standard direction, or names something other than a non-`@` engine
+    command, and a prefix that isn't one character other than a letter, digit, space or
+    `@`, or that names something other than such a command, stop the server.
   - Changing the file needs a restart (§5.10). The file watcher and reload never read it.
 - **CODEOWNERS:** the first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS`, in
   GitHub's order. No file means no CODEOWNERS scope.
@@ -1197,7 +1206,7 @@ def _scout_think(ctx):
 **Player commands, tick lane:**
 - Movement: `north`, `south`, `east`, `west`, `up`, `down` and other exits, `advance`,
   `retreat`, `flee`.
-- Combat: `kill` / `attack`, `cast`, `use`.
+- Combat: `kill`, `cast`, `use`.
 - Items: `get`, `drop`, `give`, `put`, `wear`, `wield`, `remove`.
 - Doors: `open`, `close`, `lock`, `unlock`.
 - Zone-defined `commands`.
@@ -2288,13 +2297,15 @@ boundaries come from `System.nanoTime()`.
 
 ### 5.2 Command Classification and Admission
 
-1. Parse the verb, resolve aliases, and look it up in the engine commands, global
+1. Parse the verb, resolve the world's aliases and prefixes (§2.3), and look it up in the engine commands, global
    commands, then room and item `commands`. Ambiguity resolves in that order.
    - Room `commands` are checked before item `commands`. Item `commands` come from equipped
      items, then inventory, then items on the ground; within a layer the lowest item ID
      wins. Items inside containers grant no commands.
-   - An exact name or alias wins and is never ambiguous (`l` is `look`'s alias, though
-     `lock` also starts with `l`). Otherwise a verb that is a prefix of the names or aliases
+   - A line starting with a prefix character runs that prefix's command with the rest of
+     the line as its arguments (`'hello` is `say hello` in the template world).
+   - An exact name or alias wins and is never ambiguous (in the template world `l` is
+     `look`'s alias, though `lock` also starts with `l`). Otherwise a verb that is a prefix of the names or aliases
      of exactly one engine, global or plugin command resolves to it; a prefix matching more
      than one command (`cl` for `clear` and `close`) is ambiguous and gets "Huh?". Prefixes
      are tried only after every room and item command. An `@` prefix follows the same rule

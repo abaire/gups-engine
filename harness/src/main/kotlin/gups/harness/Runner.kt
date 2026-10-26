@@ -6,6 +6,7 @@ import gups.script.LoadResult
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.WorldDir
+import gups.script.WorldModule
 import gups.script.WorldPluginWiring
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Mutability
@@ -99,6 +100,8 @@ class TestRunner(
   /** The rules package is always loaded implicitly when the world has one (SPEC §4.12). */
   private val implicit: List<String> = listOf("rules").filter(dir::hasPackage)
 
+  private val aliases = WorldModule.read(dir).first.aliases
+
   private fun loadWorld(pkgs: List<String>): LoadResult {
     val key = (pkgs + implicit).distinct().sorted()
     return cache.getOrPut(key) { loader.load(key) }
@@ -155,7 +158,7 @@ class TestRunner(
   }
 
   private fun runTest(pkg: String, file: Label, name: String, fn: StarlarkFunction): TestResult {
-    val t = TestCtx(pkg, ::loadWorld, listOf(pkg), plugins = plugins)
+    val t = TestCtx(pkg, ::loadWorld, listOf(pkg), plugins = plugins, aliases = aliases)
     val printed = StringBuilder()
     var status = Status.PASS
     var message: String? = null

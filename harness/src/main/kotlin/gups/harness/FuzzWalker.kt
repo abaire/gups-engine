@@ -17,6 +17,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
+import gups.script.WorldModule
 import gups.script.WorldPluginWiring
 import java.util.Random
 
@@ -103,7 +104,12 @@ class FuzzWalker(
         loadResult.prototypes(),
         host.rules(),
         host,
-        WorldConfig(seed = seed, bubble = false, checkInvariants = true),
+        WorldConfig(
+          seed = seed,
+          bubble = false,
+          checkInvariants = true,
+          aliases = WorldModule.read(dir).first.aliases,
+        ),
       )
     plugins.install(world)
     host.install(world)

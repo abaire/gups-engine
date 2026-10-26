@@ -249,6 +249,7 @@ class GupsServer(
         checkpointPulses = module.checkpointPulses,
         bubble = true,
         production = prod != null,
+        aliases = module.aliases,
       )
     world = World(protos, host.rules(), host, config, boot)
     plugins.install(world)

@@ -40,6 +40,27 @@ class WorldModuleTest {
   }
 
   @Test
+  fun `command aliases and prefixes are read and checked`() {
+    assertEquals(gups.core.world.CommandAliases.NONE, read(null).first.aliases)
+    val ok =
+      read(
+          "module(aliases = {\"l\": \"look\", \"peer\": \"look\"}, prefixes = {\"'\": \"say\", \"%\": \"cast\"})"
+        )
+        .first
+    assertEquals(mapOf("l" to "look", "peer" to "look"), ok.aliases.words)
+    assertEquals(mapOf('\'' to "say", '%' to "cast"), ok.aliases.prefixes)
+    assertTrue(ok.problems().isEmpty())
+    assertContains(
+      read("module(aliases = {\"zz\": \"dance\"})").first.problems().single(),
+      "MODULE.gups: alias 'zz' names 'dance'",
+    )
+    assertContains(
+      assertNotNull(read("module(prefixes = {\"!!\": \"say\"})").second).message,
+      "must be a single character",
+    )
+  }
+
+  @Test
   fun `plugins are pinned by checksum and checked`() {
     val sum = "sha256:" + "ab".repeat(32)
     val ok = read("module(plugins = {\"weather\": \"$sum\"})").first

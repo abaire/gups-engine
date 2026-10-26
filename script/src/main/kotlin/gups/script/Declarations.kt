@@ -69,6 +69,8 @@ internal class LoadCtx(
   val file: FileInfo,
   val pkg: ScriptPackage,
   val header: Boolean,
+  /** Names an exit may not take: engine commands and the world's aliases for them. */
+  val engineVerbs: Set<String>,
   private val onStep: () -> Unit,
 ) {
   var packageDeclared = false
@@ -639,7 +641,7 @@ internal class DeclarationBuiltins {
       val dir = Direction.parse(d.reqStr("direction", "exit() direction"))
       if (!Regex("[a-z][a-z0-9_]*").matches(dir.name))
         fail("exit(): '${dir.name}' is not a valid exit name")
-      if (dir.name in ENGINE_VERBS)
+      if (dir.name in ctx.engineVerbs)
         fail("exit(): '${dir.name}' is a reserved keyword: it is an engine command")
       val to = label(d.reqStr("to", "exit() destination"), ctx.pkg.path, d.what("to"))
       val proto =

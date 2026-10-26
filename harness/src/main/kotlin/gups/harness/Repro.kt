@@ -10,6 +10,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
+import gups.script.WorldModule
 import gups.script.WorldPluginWiring
 
 /** Pulses a replay keeps running after the failure's pulse, to give it time to happen. */
@@ -50,7 +51,11 @@ class ReproRunner(
         result.prototypes(),
         host.rules(),
         host,
-        WorldConfig(seed = seed, checkInvariants = true),
+        WorldConfig(
+          seed = seed,
+          checkInvariants = true,
+          aliases = WorldModule.read(dir).first.aliases,
+        ),
         Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
       )
     plugins.install(world)

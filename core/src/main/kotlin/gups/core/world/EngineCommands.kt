@@ -14,32 +14,32 @@ import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 
-/** The engine's player commands (SPEC §4.9). */
+/** The engine's player commands (SPEC §4.9). Their aliases come from the world (SPEC §2.3). */
 internal object EngineCommands {
   fun all(): List<CommandDef> =
     listOf(
       // Fast lane.
-      FastCommand("look", listOf("l")) { look(it) },
+      FastCommand("look") { look(it) },
       FastCommand("say") { say(it) },
       FastCommand("tell") { tell(it) },
       FastCommand("gossip") { gossip(it) },
       FastCommand("shout") { shout(it) },
       FastCommand("whisper") { whisper(it) },
       FastCommand("score") { score(it) },
-      FastCommand("inventory", listOf("i", "inv")) { inventory(it) },
-      FastCommand("equipment", listOf("eq")) { equipment(it) },
+      FastCommand("inventory") { inventory(it) },
+      FastCommand("equipment") { equipment(it) },
       FastCommand("who") { who(it) },
       FastCommand("help") { help(it) },
       FastCommand("stop") { stop(it) },
       FastCommand("clear") { stop(it) },
       FastCommand("quit") { quit(it) },
       // Tick lane.
-      TickCommand("kill", listOf("k", "attack")) { planKill(it) },
-      TickCommand("cast", listOf("c")) { planCast(it) },
+      TickCommand("kill") { planKill(it) },
+      TickCommand("cast") { planCast(it) },
       TickCommand("advance") { planAdvance(it) },
       TickCommand("retreat") { planRetreat(it) },
       TickCommand("flee") { FleeAction },
-      TickCommand("get", listOf("take")) { planGet(it) },
+      TickCommand("get") { planGet(it) },
       TickCommand("drop") { planDrop(it) },
       TickCommand("give") { planGive(it) },
       TickCommand("put") { planPut(it) },

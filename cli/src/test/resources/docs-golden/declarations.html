@@ -54,6 +54,8 @@
 <tr id="module.checkpoint_minutes"><td><code>checkpoint_minutes</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>30</code></td><td></td><td>Minutes between routine database checkpoints.</td></tr>
 <tr id="module.start_room"><td><code>start_room</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Room label where new characters start.</td></tr>
 <tr id="module.plugins"><td><code>plugins</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Plugin jars in plugins/&lt;id&gt;.jar, each pinned by its 'sha256:&lt;hex&gt;' checksum.</td></tr>
+<tr id="module.aliases"><td><code>aliases</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Alias words for engine commands, such as {&quot;l&quot;: &quot;look&quot;}.</td></tr>
+<tr id="module.prefixes"><td><code>prefixes</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Single characters that stand for an engine command, such as {&quot;'&quot;: &quot;say&quot;}.</td></tr>
 </tbody>
 </table>
 </section>

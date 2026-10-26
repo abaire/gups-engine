@@ -58,6 +58,61 @@ class CommandPipelineTest {
   }
 
   @Test
+  fun `a world without aliases has no shorthands for engine commands`() {
+    val f = Fixture(aliases = CommandAliases.NONE)
+    val p = f.player("Ann")
+    val reg = f.w.commands
+    assertNull(reg.resolve(p, "attack"))
+    assertNull(reg.resolve(p, "take"))
+    assertEquals("kill", reg.resolve(p, "k")?.name) // only as a unique prefix
+    f.input(p, "'hello")
+    assertEquals("Huh?\n", f.out(p))
+  }
+
+  @Test
+  fun `the world's aliases and prefixes resolve to their commands`() {
+    val aliases =
+      CommandAliases(
+        words = mapOf("peer" to "look", "gaze" to "look"),
+        prefixes = mapOf('!' to "say", ';' to "say", '%' to "cast"),
+      )
+    val f = Fixture(aliases = aliases)
+    val p = f.player("Ann")
+    val reg = f.w.commands
+    assertEquals("look", reg.resolve(p, "peer")?.name)
+    assertEquals("look", reg.resolve(p, "gaze")?.name)
+    assertNull(reg.resolve(p, "attack")) // not one of this world's aliases
+    assertEquals("say" to "hi there", parseLine("!hi there", aliases.prefixes))
+    assertEquals("say" to "hi", parseLine(";  hi", aliases.prefixes))
+    assertEquals("cast" to "spark", parseLine("%spark", aliases.prefixes))
+    assertEquals("'hi" to "", parseLine("'hi", aliases.prefixes))
+    f.input(p, "!hello")
+    assertContains(f.out(p), "hello")
+  }
+
+  @Test
+  fun `alias problems name bad aliases and unknown commands`() {
+    val problems =
+      CommandAliases(
+          words = mapOf("look" to "look", "n" to "look", "zz" to "dance", "Ok" to "look"),
+          prefixes = mapOf('a' to "say", '#' to "dance"),
+        )
+        .problems()
+    assertEquals(
+      listOf(
+        "alias 'Ok' must match [a-z][a-z0-9_]*",
+        "alias 'look' is already an engine command",
+        "alias 'n' is a direction",
+        "alias 'zz' names 'dance', which is not an engine command",
+        "prefix '#' names 'dance', which is not an engine command",
+        "prefix 'a' must not be a letter, digit, space or @",
+      ),
+      problems,
+    )
+    assertEquals(emptyList(), TEMPLATE_ALIASES.problems())
+  }
+
+  @Test
   fun `prefixes match aliases, and an exact alias is never ambiguous`() {
     val f = Fixture()
     val p = f.player("Ann")

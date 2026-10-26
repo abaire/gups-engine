@@ -43,6 +43,8 @@ class WorldConfig(
   val bubble: Boolean = false,
   /** `--prod`: `@reload` is refused in favour of deploys (SPEC §1.4, §4.9). */
   val production: Boolean = false,
+  /** Command aliases and prefixes from `MODULE.gups` (SPEC §2.3); a world without them has none. */
+  val aliases: CommandAliases = CommandAliases.NONE,
 )
 
 /** 30 minutes of pulses (SPEC §5.11). */
@@ -187,7 +189,7 @@ class World(
   internal var slotCache: List<String>? = null
 
   val rng = Rng(config.seed)
-  val commands = CommandRegistry()
+  val commands = CommandRegistry(config.aliases)
 
   internal var nextEntityId =
     maxOf(boot.nextEntityId, (boot.roomIds.values.maxOfOrNull { it.v } ?: 0) + 1)

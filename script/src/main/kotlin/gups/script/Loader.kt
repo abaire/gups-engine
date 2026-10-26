@@ -5,6 +5,7 @@ import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.Prototypes
 import gups.core.model.ZoneProto
+import gups.core.world.CommandAliases
 import gups.core.world.CommandRegistry
 import gups.core.world.HookName
 import kotlin.io.path.isRegularFile
@@ -101,6 +102,12 @@ class ScriptLoader(
   val pluginGlobals: Map<String, Any> = emptyMap(),
 ) {
   private val packageGlobals: Map<String, Any> = PACKAGE_GLOBALS + pluginGlobals
+
+  /**
+   * Engine command names and the world's aliases for them, which no global command or exit may
+   * take.
+   */
+  private val engineVerbs: Set<String> by lazy { engineVerbs(WorldModule.read(dir).first.aliases) }
 
   /**
    * Loads [requested] (package paths such as `zones/tutorial`) and their dependencies. [tests] are
@@ -290,7 +297,8 @@ class ScriptLoader(
       } finally {
         inProgress -= file
       }
-      val ctx = LoadCtx(module.clientData as FileInfo, st.pkg, header) { checkWall(st) }
+      val ctx =
+        LoadCtx(module.clientData as FileInfo, st.pkg, header, engineVerbs) { checkWall(st) }
       try {
         Mutability.create(file.v).use { mu ->
           val thread = StarlarkThread(mu, SEMANTICS)
@@ -302,7 +310,7 @@ class ScriptLoader(
           } else {
             thread.setThreadLocal(
               LoadCtx::class.java,
-              LoadCtx(module.clientData as FileInfo, st.pkg, header = false) {},
+              LoadCtx(module.clientData as FileInfo, st.pkg, header = false, engineVerbs) {},
             )
           }
           try {
@@ -478,7 +486,7 @@ class ScriptLoader(
         for (c in st.pkg.globalCommands) {
           val clash =
             when {
-              c.name in ENGINE_VERBS -> "engine command"
+              c.name in engineVerbs -> "engine command"
               else -> seen.put(c.name, st.pkg.path)?.let { "global command of //$it" }
             } ?: continue
           st.errors +=
@@ -543,10 +551,12 @@ class ScriptLoader(
   }
 }
 
-/** Engine command names and aliases, which no global command or exit may take (SPEC §4.9). */
-internal val ENGINE_VERBS: Set<String> by lazy {
-  CommandRegistry().engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
-}
+/**
+ * Engine command names and [aliases] for them, which no global command or exit may take (SPEC
+ * §4.9).
+ */
+internal fun engineVerbs(aliases: CommandAliases): Set<String> =
+  CommandRegistry(aliases).engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
 
 /** The innermost Starlark (not builtin) frame of an error's stack. */
 internal fun innermost(e: EvalException): Location? =

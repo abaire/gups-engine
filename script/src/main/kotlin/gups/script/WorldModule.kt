@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.PULSE_MS
+import gups.core.world.CommandAliases
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 import net.starlark.java.annot.Param
@@ -35,6 +36,8 @@ data class WorldModule(
   val startRoom: Label? = null,
   /** Plugin ids → `sha256:<hex>` checksums of `plugins/<id>.jar` (SPEC §4.15). */
   val plugins: Map<String, String> = emptyMap(),
+  /** Shorthands for engine commands, from `aliases` and `prefixes` (SPEC §2.3, §5.2). */
+  val aliases: CommandAliases = CommandAliases.NONE,
 ) {
   /** The checkpoint interval in pulses. */
   val checkpointPulses: Long
@@ -57,6 +60,7 @@ data class WorldModule(
           "MODULE.gups: plugin '$id' checksum must be 'sha256:' and 64 lowercase hex digits, not '$checksum'"
         )
     }
+    aliases.problems().forEach { add("MODULE.gups: $it") }
   }
 
   /** Things worth a warning, such as a different pinned engine version. */
@@ -114,6 +118,18 @@ data class WorldModule(
               "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.",
               default = "{}",
             ),
+            DeclParam(
+              "aliases",
+              "dict[str, str]",
+              "Alias words for engine commands, such as {\"l\": \"look\"}.",
+              default = "{}",
+            ),
+            DeclParam(
+              "prefixes",
+              "dict[str, str]",
+              "Single characters that stand for an engine command, such as {\"'\": \"say\"}.",
+              default = "{}",
+            ),
           ),
       )
 
@@ -157,6 +173,16 @@ data class WorldModule(
           d.dict("plugins").mapValues { (id, v) ->
             v as? String ?: fail("module(plugins): the checksum of '$id' must be a string")
           }
+        val words =
+          d.dict("aliases").mapValues { (alias, v) ->
+            v as? String ?: fail("module(aliases): the command of '$alias' must be a string")
+          }
+        val prefixes =
+          d.dict("prefixes").entries.associate { (prefix, v) ->
+            if (prefix.length != 1) fail("module(prefixes): '$prefix' must be a single character")
+            prefix[0] to
+              (v as? String ?: fail("module(prefixes): the command of '$prefix' must be a string"))
+          }
         result =
           WorldModule(
             engine = d.str("engine"),
@@ -164,6 +190,7 @@ data class WorldModule(
             checkpointMinutes = minutes,
             startRoom = start,
             plugins = plugins,
+            aliases = CommandAliases(words, prefixes),
           )
         Starlark.NONE
       }

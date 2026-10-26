@@ -96,7 +96,7 @@ fun World.handle(event: ClientInputEvent) {
     return
   }
   player.lastInputPulse = pulse
-  val (verb, _) = parseLine(event.line) ?: return
+  val (verb, _) = parseLine(event.line, commands.aliases.prefixes) ?: return
   val def = commands.resolve(player, verb)
   if (def?.lane == Lane.FAST && !s.bucket.tryTake(event.receivedNanos)) {
     s.out.append("Slow down.\n")

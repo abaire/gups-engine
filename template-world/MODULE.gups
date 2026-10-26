@@ -10,4 +10,24 @@ module(
     # The room new characters start in. Without it they start at //zones/tutorial:gate, or
     # in the first room by label if there is no tutorial.
     # start_room = "//zones/tutorial:gate",
+
+    # Shorter words for engine commands. Several aliases may name the same command; remove an
+    # entry to drop that alias.
+    aliases = {
+        "l": "look",
+        "i": "inventory",
+        "inv": "inventory",
+        "eq": "equipment",
+        "k": "kill",
+        "attack": "kill",
+        "c": "cast",
+        "take": "get",
+    },
+
+    # Single characters that stand for a command at the start of a line: 'hello says hello.
+    prefixes = {
+        "'": "say",
+        "\"": "say",
+        "%": "cast",
+    },
 )
