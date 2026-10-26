@@ -89,6 +89,9 @@ documented but carries no compatibility promises.
 | Reality bubble | The set of rooms currently simulated. Everything outside it is dormant. |
 | Active / anchor | Per-entity flags that keep an entity simulated outside the bubble (active), or make it project a bubble of its own (anchor). |
 | Affect | A timed buff or debuff attached to an actor or item. |
+| Schema | The world's declared stats, vitals, damage types and extra perception channels (§3.9). Fixed for the life of a database. |
+| Feature | An engine mechanic a world can turn off: `combat`, `track`, `skills` or `leveling` (§3.10). Everything else is the kernel. |
+| Condition | An actor's life state, `ok`, `incapacitated` or `dead`, decided by the rules (§4.6). |
 
 ### 1.7 Out of Scope for v0 (Deferred)
 
@@ -114,8 +117,9 @@ documented but carries no compatibility promises.
 - A plugin marketplace, plugin hot reload, and plugin sandboxing (§4.15).
 - Automating the `api_version` bump in the release job (§4.17 explains why it is a pre-tag
   step).
-- Everything in [DESIGN_NEEDED.md](DESIGN_NEEDED.md), including rules-defined starting
-  stats.
+- Everything in [DESIGN_NEEDED.md](DESIGN_NEEDED.md), including a player's choice of
+  starting stats at character creation.
+- Changing a world's schema (§3.9) or features (§3.10) without a server wipe.
 
 ---
 
@@ -154,7 +158,8 @@ gups-engine/
   cli/         the `gups` binary, the docs renderer (§4.16)
   webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
                as resources
-  samples/     sample plugins: weather-plugin (§4.15)
+  samples/     sample plugins: weather-plugin (§4.15); robot-world, a small non-fantasy
+               course world with its own schema and features (§3.9, §3.10)
   template-world/  the course world template, including the canonical tutorial zone,
                //lib and //rules (§2.3)
   docs/        SPEC.md, CHANGELOG.md, PLUGINS.md (the
@@ -209,10 +214,12 @@ gups-engine/
 
 ```
 <course-world>/
-  MODULE.gups              pins engine version and api_version; world settings such as
+  MODULE.gups              required; pins engine version and api_version; the world's
+                           schema (§3.9) and features (§3.10); world settings such as
                            checkpoint_minutes (§5.11) and command aliases (§5.2)
+  MESSAGES.gups            optional; overrides of engine message text (§4.18)
   CODEOWNERS               package ownership → builder roles
-  rules/                   instructor-owned; package kind "rules"
+  rules/                   instructor-owned; package kind "rules"; required (§4.6)
     package.star
     combat.star
   lib/                     instructor-owned shared libraries; package kind "lib"
@@ -231,7 +238,9 @@ gups-engine/
 
 - **Template:** The canonical template lives in the engine repository as `template-world/`.
   It holds the tutorial zone (whose tests must pass on every engine commit, §7.2), `lib/`
-  (including `quest.star`) and `rules/`. A release job packages it as the course world
+  (including `quest.star`) and `rules/`. Its `MODULE.gups` declares the fantasy schema of
+  §3.9 with every feature on, and its `rules/combat.star` implements the template ruleset
+  of §4.6; both are starting points the instructor edits. A release job packages it as the course world
   template; each term, instructors create the term's repository from it on GitHub.
   - In the engine repository its `MODULE.gups` is unpinned. Packaging the template stamps
     the engine version into `MODULE.gups` and the image owner and version tag into
@@ -262,8 +271,14 @@ gups-engine/
     command. An attribute namespace used by two packages (or by a package and a shared
     namespace, or equal to a plugin id) fails every package involved.
 - **`MODULE.gups`:** Starlark with exactly one call,
-  `module(engine, api_version, checkpoint_minutes, start_room, plugins, aliases, prefixes)`,
-  every argument optional. A world without the file gets the defaults.
+  `module(engine, api_version, checkpoint_minutes, start_room, plugins, aliases, prefixes,
+  stats, vitals, damage_types, unarmed_damage_type, channels, prompt, features, rename)`.
+  The file is required, and so are `stats`, `vitals`, `damage_types` and
+  `unarmed_damage_type`; every other argument is optional. A world without the file, or
+  without one of the required arguments, stops the server.
+  - `stats`, `vitals`, `damage_types`, `unarmed_damage_type`, `channels` and `prompt` are
+    the world's schema (§3.9); `features` and `rename` choose its feature modules and
+    command names (§3.10).
   - A pinned `api_version` the engine doesn't support stops the server. A different pinned
     `engine` version only warns.
   - `start_room` sets where new characters start, in both profiles (`--start` overrides it).
@@ -281,7 +296,13 @@ gups-engine/
     command or a standard direction, or names something other than a non-`@` engine
     command, and a prefix that isn't one character other than a letter, digit, space or
     `@`, or that names something other than such a command, stop the server.
+  - Command names in `aliases` and `prefixes` are the names after `rename` (§3.10); an alias
+    or prefix naming a command of a feature that is off stops the server.
   - Changing the file needs a restart (§5.10). The file watcher and reload never read it.
+    Changing its schema or features also needs a server wipe (§3.9).
+- **`MESSAGES.gups`:** optional Starlark with exactly one call, `messages({...})`, that
+  overrides engine message text (§4.18). Like `MODULE.gups`, it is instructor-owned, read
+  only at startup, and a problem in it stops the server.
 - **CODEOWNERS:** the first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS`, in
   GitHub's order. No file means no CODEOWNERS scope.
   - Each line is a path pattern, then owners. A pattern maps to every package whose
@@ -304,6 +325,7 @@ gups-engine/
 | `--dev` | Raw telnet on `127.0.0.1:4000` (`--port` changes the port). Auto-creates a passwordless local `instructor` account bound to localhost. Auto-reload on file save. `@eval` and `@reload` enabled. Loads every package under `--world` (default: the current directory); packages that fail to load are reported and left out. Serves the API reference over plain HTTP at `http://127.0.0.1:4080/docs/` (`--docs-port PORT` changes the port; `0` picks a free one). Checkpoints still run. |
 | `--prod` | Account logins (§5.12). Listeners as configured: raw telnet only when asked, telnet over TLS, and HTTPS with the web client and `/docs/` (at least one is required). The admin port is always on. `@eval`, `@reload`, auto-reload and the file watcher are off. Deploys only through `gups deploy` / `@deploy`. The §3.8 check runs at each world tick, not every pulse. Requires a `git` binary. `--docs-port` is a usage error. |
 | `--fresh` | Usable with either profile. Ignores saved **world** state (mob positions, ground items, room and zone state) and boots purely from the `.star` definitions. Accounts, characters, and items whose location chain ends in a player character are still loaded. |
+| `--wipe` | A server wipe, usable with either profile. Like `--fresh`, and also deletes every character and every item, then records the current schema and features (§3.9). Accounts, restrictions, web tokens and setup codes are kept. A `prewipe` backup (§5.11) is taken first. |
 
 - **Database:** `--db` defaults to `<world>/.gups/world.db` in both profiles. The hidden
   directory is skipped by the package scan and the file watcher. `gups backup`, `restore`
@@ -455,7 +477,8 @@ sealed class Entity {
 stored on prototypes: the host looks them up by prototype label.
 
 **Room**
-- `trackSize`: `CRAMPED = 1`, `NORMAL = 3`, or `LARGE = 5`.
+- `trackSize`: `CRAMPED = 1`, `NORMAL = 3`, or `LARGE = 5`. Always 1 without the `track`
+  feature (§3.10).
 - `exits: Map<Direction, Exit>`.
 - `regions: Set<String>`.
 - `modifiers: Map<ModifierPoint, StarlarkCallable>`, frozen with the prototype.
@@ -467,9 +490,9 @@ stored on prototypes: the host looks them up by prototype label.
 - `direction`.
 - `to: Label`.
 - `entryIndex: Int`. Default `0`; `-1` means `trackSize - 1`.
-- `sensesBlocked: Set<Channel>`, where `Channel` is one of `SIGHT`, `SOUND`, `NOISE`,
-  `SPELL`. It only stops perception and spells (§5.7); it never affects whether the exit
-  can be walked through.
+- `sensesBlocked: Set<Channel>`, where a `Channel` is one of the built-in `sight`, `sound`
+  and `noise`, or a channel the world declares (§3.9). It only stops perception (§5.7); it
+  never affects whether the exit can be walked through.
 - `door: Door?`.
 - `oneWay: Boolean`.
 
@@ -482,19 +505,25 @@ The **effective** `sensesBlocked` set of an exit is the exit's `sensesBlocked` p
 current state.
 
 **Actor** (sealed: `Player`, `Mob`)
-- **Position:** `room: RoomRef` and `trackIndex: Int`.
-- **Stats** (fixed v0 schema, typed):
-  - Attributes: `str`, `dex`, `con`, `int`, `wis`.
-  - Vitals: `hp/maxHp`, `mana/maxMana`, `move/maxMove`.
-  - Leveling: `level`, `xp`.
-  - Combat ratings: `armor`, and `resists: Map<DamageType, Int>`.
-- **Skills:** `Map<Label, Int>`, the skill label and a proficiency of 0–100.
+- **Position:** `room: RoomRef` and `trackIndex: Int` (always 0 without the `track`
+  feature, §3.10).
+- **Stats and vitals,** keyed by the names the world's schema declares (§3.9):
+  - `baseStats: Map<String, Int>`, one entry per declared stat. The effective value adds
+    affect, equipment and encumbrance deltas.
+  - `vitals: Map<String, Vital>`, one per declared vital. A `Vital` has `current` and `max`
+    (`current ≤ max`; `current` may be negative) and `belowZeroSince: Long?`, the pulse
+    `current` last dropped below 0, cleared when it is 0 or more again.
+  - `resists: Map<DamageType, Int>`, keyed by declared damage types.
+  - `condition`: `OK`, `INCAPACITATED` or `DEAD`, as `rules.condition` last decided (§4.6).
+  - Leveling (the `leveling` feature): `level`, `xp`.
+- **Skills** (the `skills` feature): `Map<Label, Int>`, the skill label and a proficiency of
+  0–100.
 - **Affects:** `affects: List<Affect>`.
 - **Action state:**
   - `actionQueue: ArrayDeque<QueuedAction>`, capacity 10.
   - `waitState: Int`, in pulses.
-  - `casting: CastState?`.
-  - `fighting: Set<EntityId>`.
+  - `casting: CastState?` (only with the `skills` feature).
+  - `fighting: Set<EntityId>` (only with the `combat` feature).
 - **Mob only:**
   - `behaviors`.
   - `thinkFn`.
@@ -517,9 +546,9 @@ current state.
 - `weight`.
 - `container: ContainerState?` with `capacity`, `maxWeight`, `state` (OPEN, CLOSED, or
   LOCKED), and `keyLabel`.
-- `range: Band`, for weapons.
+- `range: Band`, for weapons (the `track` feature).
 - `kind`, for example `melee`, `ranged`, `armor`, or `consumable`.
-- `statDeltas`.
+- `statDeltas`, keyed by declared stats.
 - `decayAt: Long?`.
 - `modifiers` and `equipAffects`, which apply when the item is worn (§4.6, §4.2).
 - `wear`: the item's slot or slot family (§4.2).
@@ -538,7 +567,7 @@ current state.
 - `label`, the skill or affect prototype.
 - `source: EntityId?`.
 - `expiresAt: Long`, an absolute pulse.
-- `statDeltas`.
+- `statDeltas`, keyed by declared stats.
 - `flags`, for example `stunned`, `silenced` (blocks casting, §5.3, and speech, §4.9), or
   `no_regen` (suppresses all vitals regen, including dormant catch-up, until the affect
   expires).
@@ -587,8 +616,10 @@ platforms. Changing the algorithm changes every replay.
     as they were and logs a diagnostic. The version still moves up.
 - **Live reconciliation (reload):** A field whose live value still equals the old
   prototype's takes the new prototype's value; any other field keeps its live value.
-  - Mobs: level, max hp/mana/move, armor, base stats, resists, skills, `think_every` and
-    `dormant_recovery` follow that rule. Current vitals stay, capped at the new maximum.
+  - Mobs: level, vital maxima, base stats, resists, skills, `think_every` and
+    `dormant_recovery` follow that rule, compared with the prototype's declared values (so
+    values `rules.starting_stats` changed at spawn are kept). Current vitals stay, capped at
+    the new maximum.
   - Rooms: door states and exit `senses_blocked` sets follow the same rule.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
@@ -668,7 +699,7 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 
 | Table | Columns (abridged) | Notes |
 |---|---|---|
-| `meta` | `key`, `value` | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `snapshot_taken_at` (sanitized copies only) |
+| `meta` | `key`, `value` | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `world_schema` and `world_features` (§3.9), `snapshot_taken_at` (sanitized copies only) |
 | `accounts` | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at` | `roles_json` holds the role, CODEOWNERS `scope` and `manual` scope; the `disabled_*` columns record the current disable (migration 4) |
 | `session_tokens` | `token_hash`, `account_id`, `expires_at` | web client; revocable |
 | `invites` | `code_hash`, `role`, `expires_at`, `used_by`, `account_id` | `account_id` binds a setup code to its account (migration 2) |
@@ -693,9 +724,11 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 - **Deltas:**
   - Rooms store door states and exit `senses_blocked` sets that differ from the prototype, plus
     attributes and timers.
-  - Mobs always store position, vitals, xp, home room and spawn binding. Level, maxima,
-    armor, stats, resists, skills, `think_every` and `dormant_recovery` are stored only when
-    they differ from the prototype, each as a whole value.
+  - Mobs always store position, current vitals, xp, home room and spawn binding. Level,
+    vital maxima, stats, resists, skills, `think_every` and `dormant_recovery` are stored
+    only when they differ from the prototype, each as a whole value.
+  - Stats, vitals and resists are stored as objects keyed by their schema names; a vital is
+    `{"cur", "max"}`, plus `"belowZeroSince"` when set.
   - Items store count, decay, name override, container state, attributes, timers and their
     prototype name.
   - Players store everything, role included.
@@ -730,13 +763,142 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 1. Every item has exactly one `ItemLocation`. The containment graph is a forest: no
    cycles.
 2. Every actor's `trackIndex` satisfies `0 ≤ trackIndex < room.trackSize`.
-3. `hp ≤ maxHp`, and similarly for mana and move. Death is processed exactly once per life.
+3. Every vital's `current ≤ max`. Death is processed exactly once per life.
 4. An actor is either idle, in recovery (`waitState > 0`), or casting
-   (`casting != null`). It is never both in recovery and casting.
+   (`casting != null`). It is never both in recovery and casting. Without the `skills`
+   feature, `casting` is always null.
 5. `actionQueue.size ≤ 10`.
 6. A world mutation happens on the world thread or not at all.
 7. A dormant room has no running timers, AI, or combat. Its timers are all paused.
 8. Stack merges only happen between instances with identical deltas.
+
+### 3.9 World Schema
+
+Each world declares in `MODULE.gups` the names its actors are measured by. The engine names
+no stat, vital or damage type itself; everything that gives them meaning (damage, costs,
+regeneration, death) is in the rules module (§4.6).
+
+```python
+# The template world: a fantasy term.
+module(
+    api_version = 1,
+    stats = [
+        stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
+        stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
+        stat("wis", label = "Wisdom"), "armor",
+    ],
+    vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
+    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+    unarmed_damage_type = "bludgeon",
+    channels = ["spell"],
+    prompt = "<{hp}hp {mana}m {move}mv> ",
+)
+```
+
+```python
+# samples/robot-world: a post-apocalyptic term.
+module(
+    api_version = 1,
+    stats = ["might", "agility", "tech", "grit", "plating"],
+    vitals = [vital("integrity", label = "Integrity"), "sanity", "power",
+              vital("rads", label = "Radiation")],
+    damage_types = ["kinetic", "energy", "psychic"],
+    unarmed_damage_type = "kinetic",
+    channels = ["psionic"],
+    features = ["combat", "skills"],
+    rename = {"cast": "invoke"},
+)
+```
+
+- **Declarations:** `stat(name, label = None)` and `vital(name, label = None)`; a plain string
+  is the same as the call with only a name. The label is shown to players (`score`, GMCP)
+  and defaults to the name with its first letter capitalized. Declaration order is display
+  order everywhere.
+- **Numbers belong to actors, not the schema.** A schema has no starting values, maxima or
+  floors: every new character and every spawned mob gets its numbers from
+  `rules.starting_stats` (§4.6), so they may differ per actor and be randomized.
+- **Names** of stats, vitals, damage types and channels match `[a-z][a-z0-9_]*`.
+  - Stat and vital names are unique together, and may not equal an actor view field
+    (§4.5), `base`, or `max_<vital>` for a declared vital. Vital names may not start with
+    `max`.
+  - Damage type names are unique; `unarmed_damage_type` must be one of them. It is the type
+    of an unarmed auto-attack.
+  - Channel names are unique and may not be a built-in channel (`sight`, `sound`, `noise`).
+    Declared channels can be blocked by exits and doors and listed in a skill's `channels`,
+    but nothing in the engine raises events on them.
+  - A schema problem stops the server, with a "did you mean" suggestion where one applies.
+- **`prompt`** is the telnet prompt (§4.10). Its placeholders are `{<vital>}` and
+  `{max_<vital>}` for declared vitals; another placeholder stops the server. The default
+  is `<` then `{<vital>}<vital>` for each vital, space-separated, then `> `.
+- **Typed values.** Wherever the API takes or returns numbers keyed by schema names, it
+  uses a constructor that checks its keywords against the schema, with a suggestion for a
+  misspelling. A plain dict in their place is an error that names the constructor.
+
+  | Constructor | Keys | Used for |
+  |---|---|---|
+  | `vitals(**n)` | declared vitals | skill `cost`, mob `vitals`, and the results of `mitigate`, `move_cost`, `regen` and `starting_stats` |
+  | `stats(**n)` | declared stats | `stat_deltas` on items, affects and `apply_affect`; mob `stats`; the results of `encumbrance` and `starting_stats` |
+  | `resists(**n)` | declared damage types | mob `resists` |
+
+  Their values are ints, and they read back like structs (`cost.mana`). `DAMAGE` is a
+  struct of the declared damage types (`DAMAGE.fire == "fire"`), so a misspelling fails at
+  that line; plain strings are accepted wherever a damage type is, and checked too.
+- **Where names are checked:**
+  - At package load: `stat_deltas`, `cost`, mob `stats`/`vitals`/`resists`, item
+    `damage_type`, the `damage(...)` and `heal(...)` primitives, `flee(below = ...)`,
+    channels in `senses_blocked` and skill `channels`.
+  - When the rules package loads: the dry run (§4.6).
+  - At run time: actor view fields (`ctx.actor.lfe` is an error suggesting `life`), and the
+    `type` and `vital` arguments of verbs.
+- **Fixed per database.** The first start records the schema's names (stats, vitals,
+  damage types and channels, in order) in `meta.world_schema`. A later start whose
+  `MODULE.gups` declares different names refuses to start, lists what changed, and points
+  to `--wipe` (§2.4). Labels, `prompt` and `unarmed_damage_type` aren't recorded and need
+  only a restart. `gups migrate-check` fails the same way (§7.3).
+
+### 3.10 Feature Modules
+
+The engine is a kernel plus four feature modules. A world lists the features it uses in
+`MODULE.gups`, `features = ["combat", "track", "skills", "leveling"]`; leaving `features`
+out turns all four on.
+
+| Feature | Owns | Requires |
+|---|---|---|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | — |
+| `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
+| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, `Room.Bands`, `@where`, `band_of`, the `index` arguments of verbs, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
+| `skills` | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives (`damage`, `heal`, `stun`, `summon`, `sequence`, …), `casting` in `Char.Status` | — |
+| `leveling` | `level` and `xp`, `xp_for_kill`, `xp_to_level`, XP loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who` | — |
+
+- **A feature that is off doesn't exist** for the world:
+  - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
+  - Its declarations, declaration arguments, hooks, behaviors and package kinds fail their
+    package's load with "`<name>` needs the `<feature>` feature".
+  - Its `ctx` verbs and view fields are errors naming the feature.
+  - Its rules exports are neither required nor allowed (§4.6).
+  - Its GMCP packages and fields aren't sent.
+- **Without `track`,** every room has one track slot and every actor and item sits at index
+  0, so combat, movement and items keep one code path; nothing shows bands. `look` lists
+  actors and items without band groups. A skill's `range` may be omitted (any one target in
+  the room), `self` or `room`. The rules `ctx.band` is `None`, and `get` costs no lag.
+- **Without `combat`,** nobody engages. Damage from skills and verbs still lowers vitals and
+  can still kill through `condition` (§5.4), with the last actor who damaged the victim as
+  its killer. `quit` is never refused for fighting.
+- **Without `skills`,** `use` and item `on_use` hooks are the way to act on things; affects
+  still come from `ctx.apply_affect` and `equip_affects`.
+- **Without `leveling`,** no XP is awarded and nothing levels up; `on_player_death`'s
+  `xp_loss` is refused.
+- **Renaming commands:** `rename = {"cast": "invoke", "kill": "attack"}` renames non-`@`
+  engine commands, of the kernel or of an enabled feature. The old name stops being a
+  command and is free for global or plugin commands. Aliases, prefixes, reserved exit and
+  character names, `help` and the docs use the new names. Renaming a command that doesn't
+  exist (or whose feature is off), or to a name that isn't `[a-z][a-z0-9_]*`, is a
+  direction, or is another command or alias, stops the server.
+- **Problems:** an unknown feature, or one whose requirement is off, stops the server.
+- **Fixed per database:** the enabled features are recorded in `meta.world_features` with
+  the schema and checked the same way (§3.9). `rename` and `MESSAGES.gups` aren't recorded
+  and need only a restart.
+- **Plugins** declare the features they need (§4.15).
 
 ---
 
@@ -790,12 +952,12 @@ room("entrance",
 
 mob("goblin_scout",
     name = "a goblin scout", keywords = ["goblin", "scout"],
-    level = 3, stats = {"str": 10, "dex": 14, "con": 9, "int": 6, "wis": 6},
-    hp = 30, armor = 2, resists = {"fire": -10},
+    level = 3, stats = stats(str = 10, dex = 14, con = 9, int = 6, wis = 6, armor = 2),
+    vitals = vitals(hp = 30), resists = resists(fire = -10),   # schema-checked (§3.9)
     skills = {"//skills/martial:kick": 40},
     senses = {"hearing": 1, "sight": 0},
     behaviors = [wander(radius=4, chance=0.1), aggressive(toward="players"),
-                 assist(allies=["goblin_*"]), flee(at_hp_pct=20)],
+                 assist(allies=["goblin_*"]), flee(below=vitals(hp = 20))],
     think = _scout_think, think_every = 4,
     dormant_recovery = "full",       # full | regen | none (§5.9)
     loot = [loot(":rusty_key", chance=0.25)],
@@ -805,7 +967,7 @@ mob("goblin_scout",
 item("short_bow",
     name = "a short bow", kind = "ranged", range = "far", weight = 2,
     wear = "wield", dice = "1d6", damage_type = "pierce",
-    stat_deltas = {"dex": 1},
+    stat_deltas = stats(dex = 1),
     modifiers = {}, equip_affects = [],               # apply while worn (§4.6)
     stackable = False, decay_pulses = None,
     commands = {}, on_use = None,
@@ -846,8 +1008,15 @@ def migrate(old_version, attrs):                       # optional, per package (
   the same name both fail to load. A room may carry a region nobody declares; it is then
   only a tag.
 - **Loot:** a loot `chance` is a probability between 0 and 1.
+- **Mob numbers:** a mob's `stats`, `vitals` (maxima) and `resists` are its prototype's
+  declared values, the input `rules.starting_stats` sees at each spawn (§4.6). There are no
+  `hp` or `armor` arguments; those are schema names.
+- **Features:** arguments that belong to a feature that is off (`size`, `entry_index`,
+  `at_index` and `range` with `track`; `skills` with `skills`; `level` with `leveling`)
+  fail the load, naming the feature (§3.10).
 - **Constants:** `CRAMPED`, `NORMAL` and `LARGE` are the strings `"cramped"`, `"normal"` and
-  `"large"`. `ALL` is the list of all channel names.
+  `"large"`. `ALL` is the list of every channel name, built-in and declared. `DAMAGE` holds
+  the declared damage types (§3.9).
 - **`struct(**fields)`** makes an immutable record. Libraries use it to export a namespace of
   functions (`quest.start`).
 - **When builtins work:** declaration builtins work only while a package loads; effect
@@ -857,25 +1026,35 @@ def migrate(old_version, attrs):                       # optional, per package (
 
 ### 4.3 Skills and Spells
 
+Everything in this section is the `skills` feature (§3.10).
+
 ```python
 skill("fireball",
     kind      = "spell",              # free-form; rules interpret it
-    cost      = {"mana": 25},
+    cost      = vitals(mana = 25),    # schema-checked (§3.9)
     warmup    = 6,                    # pulses in CASTING; 0 = instant
     lag       = 4,                    # waitState pulses after resolution
     range     = "far",                # melee | near | far | self | room
     target    = "enemy",              # enemy | ally | self | item | none
-    channels  = ["spell", "noise"],
+    channels  = ["spell", "noise"],   # built-in or declared channels
     interrupt = {"damage_pct": 10, "stun": True},
     attack_while_casting = False,     # default; True lets auto-attacks continue during warmup
-    effect    = damage(dice="4d6", type="fire"),
+    effect    = damage(dice="4d6", type=DAMAGE.fire),
     resolve   = None,                 # optional custom Starlark effect: def f(ctx)
 )
 ```
 
 **Range semantics:** `melee` means a band of 0, `near` means ≤1, `far` means any band in
 the same room, `self` targets the caster only, and `room` affects everyone in the room
-except the caster (and, with a bubble, except dormant actors).
+except the caster (and, with a bubble, except dormant actors). Without the `track` feature,
+`melee`, `near` and `far` are load errors, and an omitted `range` means any one target in
+the room.
+
+**Costs:** a cost is affordable when each named vital's `current` is at least the amount.
+Otherwise the cast fails validation with "You don't have enough <label>." (§4.18).
+
+**`interrupt`:** the engine reads only `stun`. The whole dict is given to
+`rules.interrupt_check` as `ctx.skill.interrupt`, which decides what `damage_pct` means.
 
 **Targeting:**
 - An `enemy` skill with no keyword targets the caster's primary target.
@@ -892,12 +1071,12 @@ Rules functions can read it from `ctx.actor.skills`.
 
 | Primitive | Purpose |
 |---|---|
-| `damage(dice, type)` | Deal damage. |
-| `heal(dice)` | Restore hit points. |
-| `apply_affect(name, duration, stat_deltas={}, flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff. |
+| `damage(dice, type)` | Deal damage of a declared type. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6). |
+| `heal(dice, vital)` | Restore a declared vital, up to its maximum. |
+| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff. |
 | `dispel(name=None, flag=None, all=False, count=None)` | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
-| `knockback(steps)` | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. |
-| `pull(steps)` | Draw the target toward the caster, never past it. Clamped to the track. |
+| `knockback(steps)` | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only. |
+| `pull(steps)` | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only. |
 | `stun(pulses)` | Stun the target. |
 | `summon(label, count=1, duration=None)` | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world. |
 | `sequence(*effects)` | Combine several primitives, passed as varargs. |
@@ -927,7 +1106,7 @@ of `on_*` hooks are ignored.
 | `on_give` | — | Mob (receiver), Item | `actor`, `item`, `target` |
 | `before_attack` | ✓ | Mob, Item (equipped) | `actor`, `target`, `weapon` |
 | `before_cast` / `on_cast_start` / `on_cast` | ✓ / — / — | Mob, Item (equipped), Room | `actor`, `skill`, `target` |
-| `on_damage` | — | Mob, Item (equipped) | `actor` (source), `target`, `amount`, `type` |
+| `on_damage` | — | Mob, Item (equipped) | `actor` (source), `target`, `amount`, `type`, `losses` |
 | `on_death` | — | Mob, Room | `actor` (killer), `target` |
 | `on_combat_tick` | — | Mob, Item (equipped) | `self`, `actor`, `targets` |
 | `on_tick` | — | Any (world tick) | `self` |
@@ -947,7 +1126,12 @@ exit hooks only `to_room`.
 
 **Catalog enforcement:** A hook keyword argument must be a catalog name (a typo is an error
 that suggests the right one) and must be attachable to that kind of entity per the "Attach
-to" column.
+to" column. `before_attack` and `on_combat_tick` need the `combat` feature, and the cast
+hooks need `skills` (§3.10).
+
+**`on_damage`:** `ctx.amount` is the total of the vital losses and `ctx.losses` the losses
+themselves, a `vitals(...)` value (§3.9); `ctx.type` is the damage type. It fires once per
+damage event, after the losses are applied.
 
 **Timing:**
 - `on_load` fires once on every entity, ascending id, after the world is built (or
@@ -966,7 +1150,7 @@ Entity accessors return **read-only views**. Every mutation goes through a verb.
 engine validates each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`,
-`args`, `event`, `source_room`, `via_exit`, `skill`, `weapon`, `amount`, `type`,
+`args`, `event`, `source_room`, `via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`,
 `proposals`, `elapsed_pulses`, `from_room`, `to_room`, `affect` (affect hooks), `reason`
 (affect `on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"`
 for `remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as
@@ -985,12 +1169,21 @@ expired), `targets`
 
 **Actor view:**
 - Identity: `id`, `name`, `label`, `keywords`, `is_player`, `in_world`.
-- Stats: `level`, `xp`, `hp`, `max_hp`, `mana`, `max_mana`, `move`, `max_move`, `stats`,
-  `armor`, `resists`.
-- Position: `room`, `track_index`, `band_of(other)`, `home_room`, `recall_room`.
-- State: `attrs`, `affects`, `skills`, `flags`, `has_flag(flag)`, `equipped(slot)`,
-  `inventory()`, `carried_weight`, `has_item(label)`, `fighting()`, `is_casting`,
-  `casting`, `wait_state`.
+- Schema fields (§3.9), generated from the world's schema:
+  - `<stat>`, the effective value, for each declared stat (`ctx.actor.dex`), and
+    `base.<stat>` for the base value.
+  - `<vital>` and `max_<vital>` for each declared vital (`ctx.actor.hp`,
+    `ctx.actor.max_hp`), and `below_zero_since(vital)`, the pulse the vital last dropped
+    below 0, or `None`.
+  - `resists.<type>` for each declared damage type.
+  - An undeclared name is an error with a suggestion.
+- Life: `condition`, one of `"ok"`, `"incapacitated"` and `"dead"`.
+- Leveling (`leveling` feature): `level`, `xp`.
+- Position: `room`, `track_index` and `band_of(other)` (`track` feature), `home_room`,
+  `recall_room`.
+- State: `attrs`, `affects`, `skills` and `is_casting`/`casting` (`skills` feature),
+  `flags`, `has_flag(flag)`, `equipped(slot)`, `inventory()`, `carried_weight`,
+  `has_item(label)`, `fighting()` (`combat` feature), `wait_state`.
 
 **Room view:**
 - Identity: `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`.
@@ -1011,7 +1204,7 @@ expired), `targets`
 | Veto | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers. |
 | Mob actions | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks. |
-| Combat | `damage(target, amount, type, source=None)`, `heal(target, amount)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` |
+| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` |
 | Items | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=1)`, `move_item(item, to)`, `destroy(item)`, `split(item, n)` |
 | Doors and exits | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`, `set_exit_senses_blocked(room, dir, channels)` |
 | State | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)` |
@@ -1027,7 +1220,13 @@ expired), `targets`
   modifier).
 - **Timers:** callbacks are called as `fn(ctx, **args)` and also see the arguments as
   `ctx.args`. The timer's owner is the scheduling hook's `ctx.self`.
-- **`damage`** is raw: no to-hit roll and no mitigation.
+- **`damage`** is raw: no to-hit roll and no mitigation. It lowers the named vital by
+  `amount`, with no floor, and fires `on_damage` with `losses` holding just that vital.
+  **`heal`** raises the named vital up to its maximum. Both name a declared vital and
+  damage type, checked when called.
+- **Features:** `start_combat`, `stop_combat`, `enemies_near` and `act_attack` need
+  `combat`; `act_cast` needs `skills`; `act_advance`, `act_retreat` and the `index`
+  arguments of `teleport`, `spawn` and `move_item` need `track` (§3.10).
 - **Items:**
   - `spawn` returns a view, or a list when it makes several entities. For items, `at` may
     be a room or room label (ground, at `index`), an actor (carried) or a container.
@@ -1061,74 +1260,109 @@ Verbs without a player command (`say`, `emote`, door and exit-block setters, `sp
 
 ### 4.6 Rules Module and the Modifier Chain
 
-`//rules:combat.star` may export the following functions. Every export is an optional
-override: a function it doesn't export uses the built-in Kotlin ruleset below. The engine
-calls them with a rules `ctx` that is read-only, apart from `deny`. Any other public
-top-level function in `combat.star` (one whose name doesn't start with `_`) is a load error
-for the rules package, which then falls back for everything (§6.3). A misspelled export
-can't be silently ignored; helpers take a `_` prefix.
+The rules package is required, and its `//rules:combat.star` defines the world's rules as
+the functions below. The engine has no built-in ruleset and nothing to fall back to: every
+export that an enabled feature uses (the "Feature" column) must be defined, and an export
+of a feature that is off must not be. The engine calls them with a rules `ctx` that is
+read-only, apart from `deny`. Any other public top-level function in `combat.star` (one
+whose name doesn't start with `_`) is a load error for the rules package. A misspelled
+export can't be silently ignored; helpers take a `_` prefix.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the
 other actor, if any: the defender, the pinner, the killed or the killer), `weapon`, `item`,
-`band` (a word), `skill`, `room` (the actor's), `pulse`, `rng`, `roll(dice)`, and
-`deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs.
+`band` (a word, or `None` without the `track` feature), `skill`, `room` (the actor's),
+`pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its
+modifiers. It has no verbs. Its actor views have the schema fields of §4.5.
 
-| Function | Returns |
-|---|---|
-| `equipment_slots()` | `list[str]`. Default: `head, neck, body, arms, hands, finger_l, finger_r, waist, legs, feet, wield, offhand, held` |
-| `to_hit(ctx)` | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`. |
-| `damage(ctx)` | Raw damage, an int. |
-| `mitigate(ctx, amount, type)` | Damage after armor and resists. |
-| `initiative(ctx)` | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`. |
-| `cast_allowed(ctx)` | `None` or `deny(msg)`. |
-| `interrupt_check(ctx, amount)` | Whether a casting actor is interrupted, a bool. |
-| `retreat_check(ctx)` | Success chance in percent, used when pinned. |
-| `flee_chance(ctx)` | Percent. |
-| `move_cost(ctx)` | Move points for a room transition. |
-| `regen(ctx)` | `{"hp", "mana", "move"}` per world tick. |
-| `carry_limit(ctx)` | Weight. |
-| `encumbrance(ctx)` | Modifiers dict applied while over the limit. |
-| `get_lag(ctx, band)` | Extra lag for picking up an item at a band. `None` means not allowed. |
-| `xp_for_kill(ctx)`, `xp_to_level(level)` | Ints. |
-| `on_player_death(ctx)` | `{"respawn": label, "xp_loss": int}` |
+| Function | Feature | Returns |
+|---|---|---|
+| `equipment_slots()` | kernel | `list[str]`, the equipment slots. |
+| `starting_stats(ctx)` | kernel | `struct(stats = stats(...), max = vitals(...), current = vitals(...))`, every field optional. Numbers for a new character or a spawned mob. |
+| `condition(ctx)` | kernel | `"ok"`, `"incapacitated"` or `"dead"`. |
+| `mitigate(ctx, amount, type)` | kernel | `vitals(...)`, the vital losses that `amount` damage of `type` causes. |
+| `move_cost(ctx)` | kernel | `vitals(...)`, what a room transition spends. |
+| `regen(ctx)` | kernel | `vitals(...)`, what each vital gains per world tick (negative to lose). |
+| `carry_limit(ctx)` | kernel | Weight. |
+| `encumbrance(ctx)` | kernel | `stats(...)`, deltas applied while over the limit. |
+| `on_player_death(ctx)` | kernel | `{"respawn": label, "vitals": vitals(...), "xp_loss": int}` |
+| `to_hit(ctx)` | `combat` | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`. |
+| `damage(ctx)` | `combat` | Raw auto-attack damage, an int. |
+| `initiative(ctx)` | `combat` | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`. |
+| `flee_chance(ctx)` | `combat` | Percent. |
+| `retreat_check(ctx)` | `track` | Success chance in percent, used when pinned. |
+| `get_lag(ctx, band)` | `track` | Extra lag for picking up an item at a band. `None` means not allowed. |
+| `cast_allowed(ctx)` | `skills` | `None` or `deny(msg)`. |
+| `interrupt_check(ctx, amount)` | `skills` | Whether a casting actor is interrupted, a bool. |
+| `xp_for_kill(ctx)`, `xp_to_level(level)` | `leveling` | Ints. |
 
 **Signatures and results:**
 - `mitigate(ctx, amount, type)` gets the damage type as a string, `get_lag(ctx, band)` the
-  band as a word, and `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill`.
-  `equipment_slots()` and `xp_to_level(level)` get no ctx.
-- `regen` returns a dict with `hp`, `mana` and `move`; missing keys are 0.
-- `on_player_death` resolves relative labels against the rules package.
+  band as a word, and `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill`
+  and the total of the damage event's losses as `amount`. `equipment_slots()` and
+  `xp_to_level(level)` get no ctx.
+- `mitigate` is called for auto-attacks and the `damage(...)` effect primitive, never for
+  the raw `ctx.damage` verb. Its result may name any vitals, so a world can send psychic
+  damage to `sanity` or let a `shield` vital soak damage first. Each loss is subtracted
+  with no floor.
+- `move_cost` spends from each named vital. A transition the actor can't afford (some
+  vital's `current` below its cost) fails with "You are too exhausted." (§4.18).
+- `regen` adds its result to each vital, up to the vital's maximum; vitals it doesn't name
+  don't change.
+- `starting_stats(ctx)`: `ctx.actor` is the new actor. A player has every stat and vital at
+  0; a mob carries its prototype's declared `stats`, `vitals` (as maxima) and `resists`.
+  The result overrides those values. A `current` it doesn't give equals the maximum, so a
+  vital that starts empty gives both: `max = vitals(rads = 100), current = vitals(rads = 0)`.
+  It runs before the actor enters the world, so it can randomize with `ctx.rng`.
+- `condition(ctx)` decides `ctx.actor`'s life state (§5.4): after any change to one of the
+  actor's vitals, and for every simulated actor at each world tick, so a rule such as "dead
+  after 60 pulses with `oxygen` below zero" can use `below_zero_since`.
+- `on_player_death`: `respawn` resolves relative labels against the rules package;
+  `vitals` sets the respawned character's current vitals (capped at their maxima);
+  `xp_loss` is allowed only with the `leveling` feature.
 - `get_lag` returns `None` for out of reach.
 - `equipment_slots` returns lowercase slot names. It is asked once, and again after each
   reload.
 
-**Engine-only rules:** The track-movement lags are Kotlin `RulesEngine` methods, not
-Starlark exports in `api_version` 1: `advanceLag` 2, `retreatLag` (success) 2,
-`retreatFailLag` 4 and `fleeFailLag` 4.
+**The dry run.** Rules functions are pure, so each time the rules package loads (at
+startup, on reload and on deploy, and in `gups lint`), the engine calls every export it
+defines against synthetic actors built from the schema: a fresh actor after
+`starting_stats`, both as a player and as each mob prototype, and `mitigate` once per
+declared damage type. An error, a wrong return type or an undeclared name in a result
+fails the rules package's load with the usual diagnostic. A branch the dry run doesn't
+reach is checked when it first runs.
 
-**Built-in Kotlin ruleset** (used when no rules package is loaded, and as the fallback,
-§6.3):
+**Engine-only rules:** The track-movement lags are fixed values of the `track` feature, not
+Starlark exports in `api_version` 1: advance 2, retreat (success) 2, failed retreat 4. A
+failed flee (`combat`) costs 4.
+
+**Template ruleset.** The template world's `rules/combat.star` implements these, for its
+schema (§3.9). They are the formulas an instructor starts from:
 
 | Function | Formula |
 |---|---|
+| `equipment_slots` | `head, neck, body, arms, hands, finger_l, finger_r, waist, legs, feet, wield, offhand, held` |
+| `starting_stats` | players: every stat 10 (`armor` 0), `hp` 20, `mana` 20, `move` 100; mobs: their prototype's values, with every stat 10 (`armor` 0), `hp` 10, `mana` 0 and `move` 100 where the prototype sets none |
+| `condition` | `"dead"` at `hp ≤ 0`, else `"ok"` |
 | `to_hit` | `60 + 2·(dex_a − dex_d) + 3·(level_a − level_d)`, clamped 5..95. Armor is not used here. |
 | `damage` | weapon dice (unarmed `1d4`) + `(str − 10) / 2`, at least 1 |
-| `mitigate` | `max(1, amount − armor/2)`, then `× (100 − resist) / 100`, at least 0 |
+| `mitigate` | `hp` loses `max(1, amount − armor/2)`, then `× (100 − resist) / 100`, at least 0 |
 | `initiative` | `dex + level` |
-| `interrupt_check` | damage ≥ the skill's `interrupt.damage_pct` percent of max hp |
+| `interrupt_check` | `amount` ≥ the skill's `interrupt.damage_pct` percent of `max_hp` |
 | `retreat_check` | `50 + 3·(dex − pinner dex)`, clamped 5..95 |
 | `flee_chance` | `40 + 2·(dex − 10)`, clamped 5..95 |
-| `move_cost` | 1 |
+| `move_cost` | `move` 1 |
 | `regen` | hp `1 + con/4 + level/2`; mana `1 + (int + wis)/8`; move `2 + dex/4` |
 | `carry_limit` | `str × 10` |
-| `encumbrance` | `{"dex": -2}` |
+| `encumbrance` | `dex` −2 |
 | `get_lag` | 0 for `MELEE`, 2 for `NEAR`, not allowed at `FAR` |
 | `xp_for_kill` | `50 × victim level` |
 | `xp_to_level` | `1000 × level` |
-| `on_player_death` | respawn at the recall room, lose 10% of XP |
+| `on_player_death` | respawn at the recall room with `hp` 1, lose 10% of XP |
 
 **Modifier points (v0):** `to_hit`, `damage`, `initiative`, `cast_allowed`, `move_cost`,
-`regen`. The list grows with `api_version`. `mitigate` is not a modifier point.
+`regen`. The list grows with `api_version`. `mitigate` is not a modifier point. Modifiers
+of `move_cost` and `regen` take and return `vitals(...)` values; modifier points of a
+feature that is off can't be named.
 
 **Whose chain:** the attacker's for `to_hit` and `damage`, the caster's for `cast_allowed`,
 the mover's for `move_cost` (from the room being left), and the actor's own for `regen` and
@@ -1178,9 +1412,9 @@ the first. `wield` only takes items whose slot is `wield`; `wear` takes any slot
 | Behavior | Priority | What it does |
 |---|---|---|
 | `wander(radius=3, chance=0.1)` | 10 | Moves randomly within `radius` exits of the home room, counted through open doors. `chance` is the probability per think. |
-| `aggressive(toward="players", unless_level_above=None)` | 60 | Attacks the lowest-id matching target on sight. |
-| `assist(allies)` | 50 | Attacks an ally's primary target, or else its lowest-id opponent. |
-| `flee(at_hp_pct=20)` | 100 | Flees at or below the HP threshold, engaged or not. |
+| `aggressive(toward="players", unless_level_above=None)` | 60 | Attacks the lowest-id matching target on sight. `combat` feature; `unless_level_above` also needs `leveling`. |
+| `assist(allies)` | 50 | Attacks an ally's primary target, or else its lowest-id opponent. `combat` feature. |
+| `flee(below=vitals(...))` | 100 | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature. |
 | `guard(exit, allies="mobs")` | — | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act. |
 | `follow(target)` | 30 | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader. |
 | `pursue(target)` | 40 | Heads for the nearest simulated match by path length, then lowest id, using `path_to` across the whole world. |
@@ -1220,6 +1454,10 @@ def _scout_think(ctx):
 `score`, `inventory`, `equipment`, `keyring`, `who`, `help`, `quests`, `stop`, `clear`,
 `quit`.
 
+Commands of a feature that is off don't exist, and a world can rename any non-`@` engine
+command (§3.10); this section uses the default names. Every player-facing message here is
+the default text of an engine message (§4.18).
+
 - **`tell <name>`** finds an in-world player by name first, otherwise a mob in the room by
   keyword, which receives `on_tell`.
 - **`shout`** reaches the room and every room whose exit toward it doesn't block `noise`
@@ -1234,11 +1472,15 @@ def _scout_think(ctx):
   "You can't get the words out!", nobody hears anything, and no `on_say` or `on_tell` fires.
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The
   link-dead auto-quit ignores combat.
+- **`score`** lists the character's stats and vitals by label in schema order, its resists
+  by damage type, and its level and XP with the `leveling` feature.
 
 **Player commands, tick lane:**
 - Movement: `north`, `south`, `east`, `west`, `up`, `down` and other exits, `advance`,
-  `retreat`, `flee`.
-- Combat: `kill`, `cast`, `use`.
+  `retreat` (`track`), `flee` (`combat`).
+- Combat: `kill` (`combat`), `cast` (`skills`), `use`.
+- An incapacitated actor (§5.4) can't use tick-lane commands: "You can't do that while
+  incapacitated." Its queue is kept.
 - Items: `get`, `drop`, `give`, `put`, `wear`, `wield`, `remove`.
 - Doors: `open`, `close`, `lock`, `unlock`.
 - Zone-defined `commands`.
@@ -1268,8 +1510,9 @@ def _scout_think(ctx):
 `global_command("quests", fn, lane="fast")`. This is how `//lib:quest.star` provides
 `quests`, which lists active and finished quests.
 
-**Reserved exit names:** an exit's direction or custom name may not be an engine command
-name or alias, or the name of any global command. Such an exit fails its package's load with
+**Reserved exit names:** an exit's direction or custom name may not be the name or alias
+of an engine command the world has (after `rename`, §3.10), or the name of any global
+command. Such an exit fails its package's load with
 a diagnostic saying the exit name is a reserved keyword.
 
 **`//lib:quest.star`:** `quest.define(id, title, steps)` returns a quest description.
@@ -1291,7 +1534,7 @@ prefix only matches other `@` commands.
 | `@spawn <label> [n]` | Spawn 1 to 10 mobs or items (flagged `debug`). |
 | `@trace [all\|zone [pkg]\|entity <target>\|hook <name>\|rules\|off]` | Stream hook execution (§5.13). |
 | `@errors [package]` | Show the last 10 diagnostics. |
-| `@where` | Show your track index and bands numerically. |
+| `@where` | Show your track index and bands numerically (`track` feature). |
 | `@eval <expr>` | Starlark REPL; `--dev` only. |
 
 - **Ownership:** a builder owns the packages in their scope. Rooms belong to their package,
@@ -1429,8 +1672,8 @@ for good, without changing its role.
     newline the client didn't echo.
 - **Line framing:** a line ends at CR, LF, CR LF or CR NUL. Backspace edits the line; other
   control characters are dropped, and invalid UTF-8 becomes U+FFFD.
-- **Prompts:** after each burst of output, a playing session gets
-  `<{hp}hp {mana}m {move}mv> `. Telnet ends it with IAC EOR when the client agreed to EOR,
+- **Prompts:** after each burst of output, a playing session gets the world's `prompt`
+  (§3.9) with its vitals filled in, for example `<20hp 20m 100mv> `. Telnet ends it with IAC EOR when the client agreed to EOR,
   else IAC GA.
 - **Color markup:** text may contain `{red}` and the other base colors, `{bright_red}` etc.,
   `{bold}`, `{underline}`, `{/}` (reset) and `{x0}`–`{x255}`. `{{` is a literal brace;
@@ -1447,11 +1690,12 @@ for good, without changing its role.
 
   | Package | Payload | Sent |
   |---|---|---|
-  | `Char.Vitals` | `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}` | When any field changed |
-  | `Char.Status` | `{"name", "level", "xp", "xp_next", "wait", "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}` | When changed |
+  | `Char.Schema` | `{"stats": [{"name", "label"}], "vitals": [{"name", "label"}], "damage_types": [names], "features": [names]}` | Once a session takes a character, and when the client starts supporting it |
+  | `Char.Vitals` | `{"<vital>", "max<vital>"}` for every declared vital, for example `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}` | When any field changed |
+  | `Char.Status` | `{"name", "level", "xp", "xp_next", "wait", "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}`; `level`, `xp` and `xp_next` only with `leveling`, `casting` only with `skills`, `initiative` and `fighting` only with `combat` | When changed |
   | `Char.Affects` | `[{"name", "remaining", "flags"}]` | When the set or a whole second of time left changed |
   | `Room.Info` | `{"label", "name", "exits": {dir: "open"/"closed"/"locked"/null}, "regions"}` | On entering a room, and when a door here changes |
-  | `Room.Bands` | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}` | When anything in the room moves, arrives or leaves |
+  | `Room.Bands` | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only | When anything in the room moves, arrives or leaves |
   | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}` | With each message |
   | `Gups.Trace` | `{"line"}` | Builders with `@trace` on, instead of the `[trace]` text lines |
 
@@ -1475,6 +1719,10 @@ for good, without changing its role.
     Events (`Comm.Channel.Text`, `Gups.Trace`) are never cached.
   - IAC bytes in a payload are doubled.
 - **GMCP payloads:**
+  - `Char.Schema` is static for the life of the server (§3.9), in declaration order. Its
+    `features` are the enabled features. Clients draw vitals bars and stat labels from it
+    instead of hardcoding names; the bundled web client does.
+  - `Char.Vitals` keys are the vital names and `max` plus the name, in schema order.
   - `Char.Status`: `wait` is the recovery left in pulses; `xp_next` is the total XP for the
     next level (`rules.xp_to_level`); `casting.skill` is the skill's name, or `action` for a
     warmup that isn't a cast, with `progress` 0–100 through the warmup; `fighting` lists
@@ -1582,7 +1830,7 @@ interface ScriptHost {
     fun unquarantine(world: World, pkg: String)
     val quarantinedPackages: Set<String>
 }
-interface RulesEngine {                                              // Starlark-backed, Kotlin fallback
+interface RulesEngine {                                              // Starlark-backed; engine tests use a Kotlin fixture
     fun toHit(c: AttackContext): Int
     fun damage(c: AttackContext): Int
     /* ... one method per §4.6 function, plus the engine-only track lags ... */
@@ -1666,7 +1914,7 @@ def test_scout_flees_when_hurt(t):
 | Object | API |
 |---|---|
 | `t` | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail` |
-| `w` | `spawn_player(name, at, level, hp, mana, move, index, stats, skills)`, `spawn`, `run(pulses)`, `damage(target, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| `w` | `spawn_player(name, at, level, vitals, stats, skills, index)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
 | player handle `p` | `do(line) -> output`, `output()`, plus view fields |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use
@@ -1812,6 +2060,7 @@ interface GupsPlugin {
     val id: String                       // [a-z][a-z0-9_]*, unique
     val pluginApiVersion: Int            // must equal PluginApi.VERSION
     val doc: String get() = ""
+    val requiredFeatures: Set<String> get() = emptySet()   // feature ids (§3.10)
     fun register(r: PluginRegistry)
 }
 
@@ -1895,7 +2144,9 @@ fun interface PluginEffect {
   diagnostic and does nothing.
 - **Commands** go through the normal command registry (§5.2). Names must be lowercase, contain
   no whitespace, and can't start with `@` (an `@` word only reaches engine tools). They may
-  not shadow engine commands or aliases, directions, or an earlier plugin's commands. A
+  not shadow the world's engine commands (after `rename`, §3.10) or aliases, directions, or
+  an earlier plugin's commands. A name freed by `rename`, or of a feature that is off, is
+  free. A
   script `global_command` with a plugin command's name is skipped with a `load` diagnostic,
   since plugins are installed first. Reloads and deploys keep plugin commands. Plugin
   commands with a role don't exist for other players; `help` lists the allowed ones after the
@@ -1917,8 +2168,9 @@ fun interface PluginEffect {
   ```kotlin
   fun send(target: PluginActor, text: String)
   fun echo(room: PluginRoom, text: String, exclude: List<PluginActor> = emptyList())
-  fun damage(target: PluginActor, amount: Int, type: String, source: PluginActor? = null)
-  fun heal(target: PluginActor, amount: Int)
+  fun damage(target: PluginActor, amount: Int, type: String, vital: String,
+             source: PluginActor? = null)
+  fun heal(target: PluginActor, amount: Int, vital: String)
   fun applyAffect(target: PluginActor, name: String, duration: Int,
                   statDeltas: Map<String, Int> = emptyMap(), flags: Set<String> = emptySet())
   fun removeAffect(target: PluginActor, name: String): Boolean
@@ -1935,7 +2187,12 @@ fun interface PluginEffect {
   may read any namespace and write only its own. Values are the attribute types of §3.2
   (`Double` is refused), and `null` deletes. The script attribute size limit doesn't apply
   to plugins (trusted code).
-- **Reads:** `pulse`, `seed`, `rng: PluginRng` (`int(min, max)`, and `chance(pct)` taking a
+- **Schema names:** a vital, stat or damage type the schema doesn't declare (§3.9), in a verb
+  or a `statDeltas` key, throws `IllegalArgumentException` with a "did you mean"
+  suggestion, which a builtin's caller sees as `<id>.<name>() failed: …`.
+- **Reads:** `schema: PluginSchema` (`stats`, `vitals`, each with `name` and `label`, and
+  `damageTypes`, in declaration order), `features: Set<String>` (the enabled feature ids),
+  `pulse`, `seed`, `rng: PluginRng` (`int(min, max)`, and `chance(pct)` taking a
   percentage like `ctx.rng.chance`, seeded from the world's RNG), `rooms()` (sorted by
   label), `room(label)`, and `regions()` (every region tag a room carries, sorted).
 - **Diagnostics:** `diagnose(message)` records a `plugin` diagnostic, and `log(message)`
@@ -1946,8 +2203,10 @@ fun interface PluginEffect {
     null for players), `name`;
   - `PluginRoom`: `regions` (sorted), `flags` (sorted), `size` (lowercase track size), `exits`
     (direction → room label), `actors`, `items`;
-  - `PluginActor`: `isPlayer`, `room`, `hp`, `maxHp`, `mana`, `maxMana`, `move`, `maxMove`,
-    `level`, `affects` (names), `hasAffect(name)`;
+  - `PluginActor`: `isPlayer`, `room`, `stat(name)` (effective), `baseStat(name)`,
+    `vital(name)`, `maxVital(name)`, `resist(type)`, `level`, `affects` (names),
+    `hasAffect(name)`. An undeclared name throws as above; `level` throws
+    `IllegalStateException` naming the feature without `leveling`;
   - `PluginItem`: `keywords`.
 - **`PluginViews`:** `world(thread)`, and `room/actor/item(value)`, which accept a facade value
   or a script view (typed `Any?`, so no `script` type leaks). The world reached through
@@ -1982,7 +2241,9 @@ implementations live in `gups.pluginapi.host`, which may use `core` and `script`
   `ServiceLoader` finds the plugin. Loaders stay open while the plugins are in use.
 - **Checks**, per pinned id in id order: the jar is present; its checksum matches; it has
   exactly one `GupsPlugin` provider (instantiating it may throw); `plugin.id` is the declared
-  id; `pluginApiVersion` matches; `register` succeeds with no invalid or clashing name.
+  id; `pluginApiVersion` matches; every id in `requiredFeatures` is a feature the world has
+  on (otherwise `plugin '<id>': needs the '<feature>' feature`); `register` succeeds with no
+  invalid or clashing name.
   Registration is atomic: a failed plugin adds nothing. A plugin that fails any check is
   skipped with a warning starting `plugin '<id>': ` (for example
   `plugin 'weather': checksum mismatch for plugins/weather.jar (expected sha256:…, got sha256:…)`),
@@ -2075,6 +2336,16 @@ changelog check and plugin docs, so they can't drift apart.
   `gups.script` and `gups.harness` (nested classes included), and every hook name must be in
   the model.
 
+- **Schema fields:** the view fields generated from a world's schema (§3.9) are pattern
+  entries, `view:actor.<stat>`, `view:actor.<vital>`, `view:actor.max_<vital>`,
+  `view:actor.base.<stat>` and `view:actor.resists.<type>`, never a world's own names, so
+  the model doesn't depend on a world. The constructors `vitals`, `stats` and `resists`, and
+  `DAMAGE`, are ordinary entries.
+- **Features:** every entry that belongs to a feature (§3.10) carries `feature`, its
+  feature id; kernel entries carry none.
+- **Messages:** the engine message catalog (§4.18) is a model list of its own, each entry
+  with its id, placeholders, default text and `feature`.
+
 **`api.json`** is a canonical dump of the model, tagged with `api_version` and the engine
 version. Top-level keys come in a fixed order (`api_version`, `engine_version`,
 `declarations`, `settings`, `constants`, `hooks`, `ctx`, `views`, `effects`, `behaviors`,
@@ -2089,7 +2360,9 @@ snapshot of the *current* model, separate from the released baselines of §4.17.
 
 **The HTML reference.** `gups docs [--out DIR] [--world DIR]` writes it into `DIR` (default
 `build/docs`); an existing file or a `.json` name is a usage error. With `--world` it includes
-that world's plugins, after checking its `MODULE.gups`. The files, in order:
+that world's plugins, schema, features and messages, after checking its `MODULE.gups` and
+`MESSAGES.gups`, and leaves out entries of features the world has off; commands appear by
+their renamed names. The files, in order:
 
 | File | Contents |
 |---|---|
@@ -2101,11 +2374,13 @@ that world's plugins, after checking its `MODULE.gups`. The files, in order:
 | `effects.html` | Effect primitives, then behaviors. |
 | `rules.html` | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields. |
 | `harness.html` | `t`, `w`, `p`, `diagnostic`. |
+| `world.html` | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override. |
 | `plugins.html` | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands and GMCP packages, badged `plugin: <id>`, or "No plugins are loaded." |
 | `changelog.html` | `docs/CHANGELOG.md` rendered as Markdown (§4.17). |
 | `api.json` | Byte for byte what `gups docs --json` writes. |
 
-- **Entries** show name, `since`, doc, example if any, and parameters, fields and methods as
+- **Entries** show name, `since`, a `feature: <id>` badge for feature entries, doc, example
+  if any, and parameters, fields and methods as
   tables (declaration parameters with type, positional/keyword, required, default, allowed
   values and doc).
 - **Page rules:** every page is HTML5 with a UTF-8 charset, a viewport meta tag, the title
@@ -2163,6 +2438,39 @@ the new baseline (the tag-triggered release job can't commit it): set the engine
 `api_version`, then run `gups docs --update-baseline [--docs-dir DIR]`. It writes only
 `docs/api/api-<N>.json` and keeps older baselines. It takes no `--json`, `--out` or
 `--world`. A release with only additions keeps `N` and rewrites that file.
+
+### 4.18 Engine Messages
+
+Every player-facing line the engine sends is an entry of the **message catalog**, so a world
+can change the words without changing the mechanics ("You begin casting" becomes "Your
+implant spins up").
+
+- **Entries:** each has a stable dotted id, named placeholders and default text, for example
+  `cast.begin.known` = `"{actor} begins casting {skill}."` and
+  `combat.quit_refused` = `"No way! You're fighting for your life!"`. The defaults are the
+  texts this specification gives. Ids are grouped by the feature that sends them; an id of a
+  feature that is off is never sent.
+- **Coverage:** every message to players and onlookers from the engine and its features:
+  command replies and refusals, combat, cast and condition messages, `look`, `score`, `who`
+  and `help` framing, and login and character-menu text. Output of `@` tools isn't in the
+  catalog; staff see engine terms.
+- **Placeholders** are `{name}`, filled in when the line is sent. Actor placeholders take the
+  name as the viewer sees it. `{{` is a literal brace, as in color markup (§4.10), which
+  message text may use.
+- **Overrides:** `MESSAGES.gups` at the world root, with one call:
+
+  ```python
+  messages({
+      "cast.begin.known": "{actor}'s implant whines as it spins up {skill}.",
+      "cast.begin.unknown": "{actor}'s implant whines.",
+  })
+  ```
+
+  An unknown id, an unknown placeholder, or text that leaves out a placeholder the entry
+  marks required stops the server, with a "did you mean" suggestion. An id of a feature the
+  world has off is a warning. The file is read only at startup (§2.3).
+- **Docs:** `gups docs` lists the catalog on `world.html`, with the world's overrides when
+  given `--world` (§4.16).
 
 ---
 
@@ -2265,7 +2573,7 @@ boundaries come from `System.nanoTime()`.
 For each popped action:
 
 1. **Validate:** Check that the target still exists and is in range (band), that the
-   actor can pay the cost, and that it isn't stunned or silenced.
+   actor can pay the cost (§4.3), and that it isn't stunned, incapacitated or silenced.
    - On failure, send a message. No lag is applied.
 2. **Veto phase:**
    - Fire `before_*` hooks in dispatch order (§5.6). For casts, `cast_allowed` runs through
@@ -2291,9 +2599,14 @@ For each popped action:
 6. **Recovery:** Set `waitState = max(waitState, lag)`, so recovery never shortens existing
    lag. No lag is applied if the resolve left the actor out of the world or casting.
 
-Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
+Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse. Casts, warmups
+and interrupts are the `skills` feature; other tick-lane actions follow the same steps with
+no warmup.
 
 ### 5.4 Combat Rounds
+
+Everything in this section is the `combat` feature, except conditions, death, corpses and
+respawns, which are the kernel and work with or without it (§3.10).
 
 - **Engagement:**
   - Combat starts through `kill`/`attack`, `aggressive`/`assist` behaviors, a hostile
@@ -2321,25 +2634,42 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
   1. Call `before_attack` (vetoable) on the defender first (§5.6), so defensive wards
      evaluate before the attacker and its wielded weapon.
   2. Roll `rng.int(1,100)` against `to_hit` (through the modifier chain).
-  3. On a hit, compute `damage` (chain), then `mitigate`, then `ctx.damage`.
+  3. On a hit, compute `damage` (chain), then `mitigate` with the weapon's damage type
+     (or the world's `unarmed_damage_type`), then subtract the vital losses it returns.
   - Messages show no numbers: "You hit X." / "X hits you." / "X misses Y."
 - **Regen** at the world tick applies to every actor without `no_regen`, engaged or not.
+- **Conditions:** `rules.condition` (§4.6) decides each actor's condition after any change
+  to one of its vitals, and for every simulated actor at each world tick. The engine acts
+  when the condition changes:
+  - **`incapacitated`:** the actor is told "You are incapacitated." and the room sees
+    "<actor> collapses." Until its condition is `ok` again it is treated like a stunned
+    actor (§5.4.1), without a `stunned` affect: it takes no actions and makes no
+    auto-attacks, its cast is interrupted as by a stun with `interrupt.stun`, its recovery
+    is held, and it can't use tick-lane commands (§4.9). It stays engaged, can be targeted
+    and regenerates. When it ends the actor is told "You come to." and the room sees
+    "<actor> stirs."
+  - **`dead`:** the actor dies, as below.
+  - **`ok`** again ends incapacitation. A rules error keeps the previous condition (§6.3).
 - **Death:**
-  - Engine-owned. The killer is the last actor who damaged the victim, if still in the
-    world. The order is: messages, `on_death` (target's own hook, then the room, then
-    observers), XP, then the corpse.
+  - Engine-owned, and part of the kernel: any vital can kill, in or out of combat. The
+    killer is the last actor who damaged the victim, if still in the world. The order is:
+    messages, `on_death` (target's own hook, then the room, then observers), XP (with the
+    `leveling` feature), then the corpse.
   - **For mobs:** awards XP via `xp_for_kill` and creates a corpse container holding the
     mob's inventory, its equipment and the loot rolls. A summoned mob (`summonedBy` set)
     awards no XP and rolls no loot.
   - **For players:** applies `rules.on_player_death` and leaves a corpse holding the carried
     inventory only; equipment stays on the player. The player respawns at index 0 of the
-    respawn room with 1 hp and all affects removed.
+    respawn room with the vitals `on_player_death` returned, its condition `ok`, and all
+    affects removed. If `condition` still says `dead` for the respawned player, that is a
+    rules error, and the player's vitals are set to their maxima.
   - Corpses decay after `CORPSE_DECAY_PULSES`. Decay drops a container's contents where it
     lay.
   - Death clears `casting`, the queue, and engagement. It's processed exactly once. During
     phases 2 and 3 it's deferred to the end of the current initiative tier (§5.4.1).
-- **Levelling:** awarding XP raises `level` while `xp >= xp_to_level(level)`. There are no
-  stat or vital gains yet: the rules have no hook for them.
+- **Levelling** (the `leveling` feature): awarding XP raises `level` while
+  `xp >= xp_to_level(level)`. There are no stat or vital gains yet: the rules have no hook
+  for them.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves
   the world. The rule refills to `count` at the first world tick at or after the deadline.
   Rooms fill their spawns when the world is constructed.
@@ -2375,8 +2705,8 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
      `teleport`).
   4. **Example:** A and B tie and each deals a killing blow to the other. Both blows
      land, both `on_damage` hooks fire, and both deaths are processed when the tier ends.
-- **Mortally wounded:** An actor at `hp ≤ 0` waiting for end-of-tier death processing is
-  *mortally wounded*. It still takes its own action, and can still be targeted. If a
+- **Mortally wounded:** An actor whose condition became `dead` during a tier, waiting for
+  end-of-tier death processing, is *mortally wounded*. It still takes its own action, and can still be targeted. If a
   same-tier heal brings it back above 0 before the tier ends, it doesn't die.
 - **Death beats movement:** If an actor is still mortally wounded when its tier ends, its
   death is processed and any deferred room transition of its own (move, flee, teleport) is
@@ -2392,13 +2722,15 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse.
   queued actions run once the stun ends.
 - **Determinism:** The rolls use the seeded `rng`, so the same seed and inputs always
   produce the same order. That's what keeps replays exact.
-- **Fallback:** The built-in Kotlin ruleset uses `dex` plus `level`, with no roll.
+- **Template:** The template ruleset uses `dex` plus `level`, with no roll (§4.6).
 - **Visibility:** `@trace rules` prints each round's initiative order, and `Char.Status`
   carries the character's own initiative.
 
 ### 5.5 Intra-Room Spatial Model
 
-All combat is self-contained within a single room. No projectiles cross exits.
+All combat is self-contained within a single room. No projectiles cross exits. The track,
+bands, `advance`, `retreat` and pinning are the `track` feature; without it every room has
+one slot (§3.10), and only room transitions below apply.
 
 ```
 Room Track Index:     [ 0 ]            [ 1 ]            [ 2 ]            [ 3 ]
@@ -2427,8 +2759,8 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
     roll against the first opponent at the actor's index. Failure applies extra lag
     (default 4) and no movement.
 - **Room transitions:**
-  - Non-combat movement costs one action plus `move_cost` move points. The action is the
-    action pulse itself: walking leaves no recovery lag.
+  - Non-combat movement costs one action plus the vitals `rules.move_cost` returns (§4.6).
+    The action is the action pulse itself: walking leaves no recovery lag.
   - Arrivals are placed at the exit's `entryIndex`: by default `0`, and `-1` maps to
     `trackSize−1`. When the destination is smaller, the index is clamped.
 - **Pinning and exits:**
@@ -2481,15 +2813,18 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 
 - **Opt-in:** It's per mob, through `senses`, with a radius of 0 or 1. The default is 0
   (same room only). A mob perceives events in its own room whatever its senses, with no
-  `via_exit`. A sense of 1 adds the rooms its own exits lead to: `hearing` covers `SOUND`
-  and `NOISE`, `sight` covers `SIGHT`.
+  `via_exit`. A sense of 1 adds the rooms its own exits lead to: `hearing` covers `sound`
+  and `noise`, `sight` covers `sight`.
+- **Channels:** `sight`, `sound` and `noise` are built in, and the engine's events use only
+  them. Channels a world declares (§3.9) can be blocked by exits and doors, but no event is
+  raised on them yet.
 - **Channels by event type:**
 
 | Event | Channel | Carries to |
 |---|---|---|
-| `say`, `emote` | `SOUND` | `hearing ≥ 1` |
-| `shout`, combat start, combat round, `death` | `NOISE` | `hearing ≥ 1` |
-| `enter`, `exit` (visible movement) | `SIGHT` | `sight ≥ 1` |
+| `say`, `emote` | `sound` | `hearing ≥ 1` |
+| `shout`, combat start, combat round, `death` | `noise` | `hearing ≥ 1` |
+| `enter`, `exit` (visible movement) | `sight` | `sight ≥ 1` |
 | `whisper`, `tell` | — | never |
 
 - **Event names and `ctx.actor`:** `say`, `emote` and `shout` carry their text, and the
@@ -2644,9 +2979,10 @@ carries package paths (`zones/forest`), since a reload swaps whole packages.
    branch is fetched, so a commit the server doesn't know is reported as not on the branch.
 3. **Checks:** before anything is staged, the deploy is refused if the commit isn't an
    ancestor of the fetched tip, if the live tree has uncommitted changes to tracked files,
-   if `MODULE.gups` differs between `meta.world_commit` (or `HEAD` if none) and the commit
-   (an engine upgrade needs a restart), or if any changed file is under `plugins/` (plugin
-   changes need a restart, §4.15).
+   if `MODULE.gups` or `MESSAGES.gups` differs between `meta.world_commit` (or `HEAD` if
+   none) and the commit (an engine upgrade, a schema or feature change, or new messages need
+   a restart), or if any changed file is under `plugins/` (plugin changes need a restart,
+   §4.15).
 4. **Changed packages:** each changed file is charged to the deepest package directory, old
    or new, that contains it.
 5. **Staging:** a `predeploy` backup, then `git worktree add --detach` into a temporary
@@ -2663,8 +2999,9 @@ carries package paths (`zones/forest`), since a reload swaps whole packages.
 8. **Failure:** the world is unchanged. The errors go to the response, to a `deploy`
    diagnostic (so `@errors`), and to an instructor alert.
 
-A change to `MODULE.gups` (an engine upgrade) needs a restart with the new image. Hot
-reload is refused for it.
+A change to `MODULE.gups` (an engine upgrade) or `MESSAGES.gups` needs a restart, with the
+new image for an upgrade, and a schema or feature change also needs `--wipe` (§3.9). Hot
+reload is refused for both.
 
 ### 5.11 Persistence and Checkpoints
 
@@ -2720,7 +3057,8 @@ reload is refused for it.
   - Snapshots are taken with the SQLite online-backup API, as
     `<kind>-<UTC yyyyMMdd-HHmmss>.db` in `backups/` next to the database.
   - Kinds: `hourly` (keep 48), `daily` (keep 14), `manual` (`gups backup` and `@snapshot`,
-    never pruned) and `predeploy` (each deploy, never pruned).
+    never pruned), `predeploy` (each deploy, never pruned) and `prewipe` (each `--wipe`,
+    never pruned).
   - The server checks every 5 minutes, and once at startup, whether the newest snapshot of
     a kind is older than its period.
   - `gups restore` rolls the world back, for example to before a broken merge.
@@ -2815,7 +3153,7 @@ reload is refused for it.
     replayed in order when it finishes: to the login, or as game commands once a character
     is playing.
 - **Characters:** After login, the player chooses a character, or creates one with the
-  engine's default starting stats (the rules module has no export for them yet). The menu
+  stats `rules.starting_stats` gives it (§4.6); the player makes no choices. The menu
   lists saved characters plus any of the account's characters in the world not saved yet.
   Creating a character triggers an immediate checkpoint. The character is placed in its
   saved room, which becomes an anchor; new characters start in the start room (§2.3). The
@@ -2958,7 +3296,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
      with at most one per package per 10 s.
    - **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always
      to the server log, at most once a minute per kind. Kinds include `quarantine`,
-     `rules_fallback`, `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy
+     `rules_error`, `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy
      results.
    - Players see nothing. For a failed zone command, they see "Nothing happens."
 
@@ -2979,11 +3317,31 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
 - **Clearing:** Quarantine clears on the next successful deploy or reload of that package,
   or by `@unquarantine`. Quarantine state persists in `zone_states`; `@quarantine` and
   `@unquarantine` take a checkpoint so it does.
-- **Rules package exception:**
-  - If the rules package fails to load or throws, the engine falls **back** to the
-    built-in Kotlin default ruleset for that call. A load failure falls back for
-    everything.
-  - It logs loudly and alerts instructors. Combat keeps working.
+- **Rules package exception:** the rules package is never quarantined; there is no
+  built-in ruleset to fall back to (§4.6).
+  - **Load:** a rules package that fails to load, or fails its dry run, stops the server at
+    startup. A reload or deploy with such a package is refused, and the previous rules stay
+    live.
+  - **Run time:** a rules function that throws, or returns the wrong
+    type or an undeclared name, records a `script_error` diagnostic against the rules
+    package, raises a `rules_error` alert, and gives a neutral result. A rules error never
+    hurts, kills, rewards or traps anyone:
+
+    | Export | Neutral result |
+    |---|---|
+    | `to_hit`, `retreat_check`, `flee_chance` | 0 |
+    | `damage`, `mitigate` | no damage |
+    | `initiative` | 0 |
+    | `cast_allowed` | denied with "Nothing happens.", no lag |
+    | `interrupt_check` | false |
+    | `move_cost`, `regen`, `encumbrance`, `starting_stats` | nothing spent, gained, changed or overridden |
+    | `carry_limit` | no limit |
+    | `get_lag` | 0 |
+    | `condition` | the actor's previous condition |
+    | `xp_for_kill` | 0 |
+    | `xp_to_level` | no level-up |
+    | `on_player_death` | respawn at the recall room, vitals at their maxima, no XP loss |
+    | `equipment_slots` | the last good list |
 
 ### 6.4 Engine-Side Failures
 
@@ -3029,7 +3387,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
   - **Event dispatch:** ordering, short-circuiting, cascade depth limit, and the shared
     step budget.
   - **Perception:** channels × exit `senses_blocked` × door states, deferral, and coalescing.
-  - **Rules chain:** ordering and fallback to the Kotlin ruleset.
+  - **Rules chain:** ordering; the dry run; each export's neutral result (§6.3).
   - **Reality bubble:** incremental BFS correctness against a full recompute, the
     dormant/wake timer conversion, lazy catch-up, and active vs anchor semantics.
   - **Dormant recovery:** each `dormant_recovery` mode, and piecewise catch-up across
@@ -3064,6 +3422,19 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     every link resolves, nothing unescaped gets through, and a small model matches golden
     files; every doc example runs; the API-change check (§4.17) passes and covers removal,
     addition, rename, signature and version-bump cases.
+  - **Schema:** each schema problem stopping the server (§3.9); constructors refusing
+    undeclared names and plain dicts; view fields and suggestions; the dry run catching a
+    misspelled vital and a wrong return type; `starting_stats` for players and mobs,
+    randomized and not; conditions, incapacitation and time-based deaths; a changed schema
+    or feature set refusing to start, and `--wipe` keeping accounts. Every test that
+    touches vitals runs against two fixture schemas: the template's, and a non-fantasy one
+    with no `hp` or `mana`.
+  - **Features:** `FeatureMatrixTest` runs every valid feature set (12) through a smoke
+    scenario (moving, getting, using, a death through `condition`, plus what each enabled
+    feature adds) with the invariant check every pulse. For each feature that is off: its
+    commands say "Huh?", its declarations, hooks and exports fail to load naming it, and its
+    GMCP packages and fields are absent. Renames, and the message catalog (every id has a
+    default; overrides apply; bad ids and placeholders stop the server).
   - **Plugins:** every extension point end to end in the server and in `gups test`; each
     loading failure skipping only its plugin; every name clash refused; deploys touching
     `plugins/` refused while other deploys keep plugins working; no `core` or `script` type
@@ -3131,10 +3502,11 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
    - The whole world loads together in the harness, with the bubble off and a default seed
      of 42.
    - The fuzz walker runs 10,000 pulses through the changed zones with one bot player per
-     changed zone. Each pulse, dead or absent bots respawn in a zone room, bots near death
-     heal to full, and a bot whose `wait_state` exceeds 50 pulses has it cleared. Idle bots
+     changed zone. Each pulse, dead or absent bots respawn in a zone room, bots whose
+     condition isn't `ok` or who have a vital below a quarter of its maximum get every
+     vital set to its maximum, and a bot whose `wait_state` exceeds 50 pulses has it cleared. Idle bots
      pick randomly among exits, zone and item commands with empty arguments,
-     get/drop/wear/use, `kill` on a random actor, and `say`.
+     get/drop/wear/use, `kill` on a random actor (with the `combat` feature), and `say`.
    - It fails at once on an invariant violation or any diagnostic of kind `script_error`,
      `step_limit`, `wall_clock`, `quarantine`, `alloc_limit`, `invariant` or `missing`. On
      failure it prints the exact rerun command (`gups fuzz --seed S --pulses P <patterns>`)
@@ -3146,6 +3518,9 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
      asset `snapshot.db` of a release tagged `migration-snapshot` in the course repository.
      If there is none yet, CI warns and skips the gate, so a new term's first PRs pass.
      Otherwise it reports the snapshot's age in the PR summary.
+   - The snapshot's `world_schema` and `world_features` must match the PR's `MODULE.gups`;
+     a difference fails the gate with "this schema or feature change needs a server wipe"
+     (§3.9).
    - Every version bump on an entity in `world_entities` must have `migrate()` or be listed
      in `package(migrate_noop=[...])`.
    - Reconciliation must produce no tombstones for items in player custody that the PR
@@ -3178,3 +3553,5 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
 | **M6** | Built in six stages: **M6.1** accounts and login, and the `--prod` profile; **M6.2** roles, builder scope and the in-game tools, restrictions and alerts; **M6.3** TLS and GMCP; **M6.4** WebSocket and the web client; **M6.5** the admin port, metrics, the deploy pipeline and release images; **M6.6** the course world template and CI gates. The load test was deferred (§1.7). |
 | **M7** | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15). |
 | **M8** | Disabling accounts: `@role disable`/`enable`, the disabled record (migration 4), and the roster's `disabled` column (§3.5, §4.9, §4.13). |
+| **M9** | Configurable actor schema: stats, vitals, damage types and channels declared in `MODULE.gups`; typed constructors and schema view fields; no built-in ruleset, with `starting_stats`, `condition`, vital-keyed `mitigate`/`move_cost`/`regen`, the dry run and neutral results; incapacitation; `Char.Schema`; the plugin facade by name; `--wipe`; `samples/robot-world` (§3.9, §4.6, §6.3). |
+| **M10** | Feature modules: `combat`, `track`, `skills` and `leveling` turned on per world, command renames, the engine message catalog and `MESSAGES.gups`, plugin feature requirements (§3.10, §4.18). Ships in the same release as M9. |
