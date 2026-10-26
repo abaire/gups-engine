@@ -1225,6 +1225,10 @@ def _scout_think(ctx):
 `global_command("quests", fn, lane="fast")`. This is how `//lib:quest.star` provides
 `quests`, which lists active and finished quests.
 
+**Reserved exit names:** an exit's direction or custom name may not be an engine command
+name or alias, or the name of any global command. Such an exit fails its package's load with
+a diagnostic saying the exit name is a reserved keyword.
+
 **`//lib:quest.star`:** `quest.define(id, title, steps)` returns a quest description.
 `start`, `advance(..., from_step=None)`, `complete`, `step`, `is_active` and `is_done` take
 `(ctx, actor, quest)`. Progress is a `quests` dict in the lib's own `lib` namespace on the

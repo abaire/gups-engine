@@ -271,6 +271,46 @@ class LoaderTest {
   }
 
   @Test
+  fun `an exit named after an engine or global command fails to load`() {
+    val engine =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "room(\"start\", exits = [exit(\"look\", \":start\")])",
+        )
+      )
+    assertContains(only(engine).message, "'look' is a reserved keyword")
+    val alias =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "room(\"start\", exits = [exit(\"inv\", \":start\")])",
+        )
+      )
+    assertContains(only(alias).message, "'inv' is a reserved keyword")
+    val global =
+      load(
+        mapOf(
+          "lib/package.star" to libPkg(),
+          "lib/a.star" to "def f(ctx):\n    pass\nglobal_command(\"dance\", f)",
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "room(\"start\", exits = [exit(\"dance\", \":start\")])",
+        ),
+        "lib",
+        "zones/z",
+      )
+    assertContains(only(global).message, "exit 'dance' of //zones/z:start is a reserved keyword")
+    val custom =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "room(\"start\", exits = [exit(\"portal\", \":start\")])",
+        )
+      )
+    assertTrue(custom.errors.isEmpty(), custom.errors.toString())
+  }
+
+  @Test
   fun `package star holds only package() and must call it`() {
     val missing = load(mapOf("zones/z/package.star" to "x = 1"))
     assertContains(only(missing).message, "must call package(")

@@ -473,17 +473,32 @@ class ScriptLoader(
 
     /** Global commands may not shadow engine commands or each other. */
     fun checkCommands() {
-      val engine = CommandRegistry().engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
       val seen = HashMap<String, String>()
       for (st in live) {
         for (c in st.pkg.globalCommands) {
           val clash =
             when {
-              c.name in engine -> "engine command"
+              c.name in ENGINE_VERBS -> "engine command"
               else -> seen.put(c.name, st.pkg.path)?.let { "global command of //$it" }
             } ?: continue
           st.errors +=
             LoadError(st.pkg.path, "command", "global_command '${c.name}' clashes with the $clash")
+        }
+      }
+      // A global command would shadow an exit of the same name, so the name is reserved
+      // (engine verbs are rejected by exit() itself).
+      for (st in live) {
+        for (room in st.pkg.rooms) {
+          for (exit in room.exits) {
+            val owner = seen[exit.direction.name] ?: continue
+            st.errors +=
+              LoadError(
+                st.pkg.path,
+                "command",
+                "exit '${exit.direction.name}' of ${room.label} is a reserved keyword: " +
+                  "the global command of //$owner",
+              )
+          }
         }
       }
     }
@@ -526,6 +541,11 @@ class ScriptLoader(
         if (column != null && column > 0) "\n    " + " ".repeat(column - 1) + "^" else ""
     }
   }
+}
+
+/** Engine command names and aliases, which no global command or exit may take (SPEC §4.9). */
+internal val ENGINE_VERBS: Set<String> by lazy {
+  CommandRegistry().engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
 }
 
 /** The innermost Starlark (not builtin) frame of an error's stack. */

@@ -213,6 +213,31 @@ nothing ever quits a disabled account's online characters (D-135).
   restriction (§4.9), or a CLI tool?
 - Does disabling also revoke web tokens and drop link-dead characters at once?
 
+## Commands
+
+### Exits named after a plugin command
+**Spec:** §4.9 (reserved exit names), §4.15, §5.2.
+**Today:** a package fails to load if an exit is named after an engine command, an engine
+alias or a global command. Plugin commands aren't checked: the script loader doesn't know
+which plugin commands are registered. Movement is resolved before plugin commands, so an exit
+named after a plugin command silently hides that command in the exit's room.
+**Questions:**
+- Should the loader receive the registered plugin command names and aliases, and reject such
+  an exit like any other reserved name?
+- Plugins load before packages but can be added or removed between runs. Does a newly added
+  plugin command fail packages that loaded fine before, or does the plugin fail instead?
+- Do role-gated plugin commands reserve the name for everyone, even players who can't use
+  them?
+
+### Global commands named after a direction
+**Spec:** §4.9 (global commands), §5.2.
+**Today:** `global_command("north", …)` (or `n`, or any standard direction) loads, but it can
+never run: a standard direction always resolves to movement before global commands are
+looked up. Plugin commands named after a direction are already refused.
+**Questions:**
+- Should such a global command fail its package's load, as plugin commands do?
+- Should the check cover direction aliases (`n`, `ne`) as well as full names?
+
 ## Plugins
 
 ### Plugins that share a GMCP package tree
