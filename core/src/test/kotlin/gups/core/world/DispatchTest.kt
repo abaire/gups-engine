@@ -120,4 +120,20 @@ class DispatchTest {
     f.w.act(g, "say hi")
     assertEquals(listOf("on_say:The Hall", "on_say:a training dummy"), host.calls)
   }
+
+  @Test
+  fun `the actor's items observe its events even though the actor does not`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_SAY] = { _, _, _ -> null }
+    val f = Fixture(scripts = host)
+    val g = f.mob()
+    val dummy = f.mob(T.DUMMY)
+    f.w.spawnItem(T.BAG, ItemLocation.Carried(g.id))
+    f.w.spawnItem(T.BOW, ItemLocation.Carried(dummy.id))
+    f.w.act(g, "say hi")
+    assertEquals(
+      listOf("The Hall", "a training dummy", "a bag", "a short bow").map { "on_say:$it" },
+      host.calls,
+    )
+  }
 }

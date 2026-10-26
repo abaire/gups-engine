@@ -176,9 +176,9 @@ interface ScriptHost {
 /**
  * Fires [hook] in dispatch order (SPEC §5.6): [primary], the acting actor ([HookContext.actor]) for
  * `before_*` hooks, the room, other actors in the room by ascending id, the room's items, then the
- * items carried or equipped by each of those actors in that order, ascending id within each owner.
- * The acting actor observes its own `on_*` events only when it is [primary]. Returns the first
- * denial of a `before_*` hook, or null.
+ * items carried or equipped by [primary], the acting actor and the other actors in that order,
+ * ascending id within each owner. The acting actor observes its own `on_*` events only when it is
+ * [primary], but its items always do. Returns the first denial of a `before_*` hook, or null.
  */
 internal fun World.dispatch(
   hook: HookName,
@@ -191,7 +191,8 @@ internal fun World.dispatch(
     return null
   }
   // The actor may veto its own action, but doesn't hear its own on_* events, which would let a
-  // mob answer itself.
+  // mob answer itself. Its gear still observes them, so a wielded weapon sees its wielder's
+  // actions.
   val actor = ctx.actor?.takeIf { hook.vetoable }
   val entities = LinkedHashSet<Entity>()
   val items = LinkedHashSet<Entity>()
@@ -202,7 +203,7 @@ internal fun World.dispatch(
     val actors = room.actorIndex.values.filter { it !== primary && it !== ctx.actor }
     entities += actors
     items += room.itemIndex.values
-    for (holder in listOfNotNull(primary as? Actor, actor).distinct() + actors) items +=
+    for (holder in listOfNotNull(primary as? Actor, ctx.actor).distinct() + actors) items +=
       (holder.inventoryIndex.values + holder.equipmentIndex.values).sortedBy { it.id }
   }
   val owners = entities + items

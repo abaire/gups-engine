@@ -2428,8 +2428,10 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   3. The room's hook.
   4. The other actors in the room, ascending `EntityId`.
   5. The items in the room, ascending `EntityId`. Then the items carried or equipped by
-     each actor above, grouped by owner in the order the owners fired and ascending
-     `EntityId` within each owner.
+     the acting entity (if an actor), the actor performing the action, and the other
+     actors in the room, grouped by owner in that order and ascending `EntityId` within
+     each owner. The performing actor's items fire for `on_*` hooks too, even though the
+     actor itself is skipped.
 
   For `before_*` hooks, the first `deny` short-circuits.
 - **Containment:** Exceptions from the script host are always logged as script diagnostics
