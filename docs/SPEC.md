@@ -1578,7 +1578,9 @@ plugin-agnostic hooks in `core` and `script` they fill in) are in §4.15.
 - **Loading:** `loadPackages` is not on `ScriptHost`. The script loader returns a
   `LoadResult`, and the script host is built from it before the `World`. Reloads go through
   `ScriptHost.reload`.
-- **The world:** `World.login: LoginHandler?` handles sessions without a character.
+- **The world:** `World.login: LoginHandler?` handles sessions without a character. With
+  no handler, input from such a session gets "You are not playing a character." and the
+  world closes and disconnects the session (§5.2).
   `World.onDiagnostic` lets the server log diagnostics as they happen. `World.later` and
   `WorldControlEvent.Task` run slow work off the world thread (§2.5).
 - **Login outcomes:** `AuthResult(session, outcome)` carries the login handler's own

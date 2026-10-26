@@ -128,7 +128,8 @@ class World(
   var persistence: Persistence = Persistence.NONE
 
   /**
-   * Handles sessions that have no character yet; null answers "You are not playing a character."
+   * Handles sessions that have no character yet; when null, such a session's first input answers
+   * "You are not playing a character." and closes it.
    */
   var login: LoginHandler? = null
 

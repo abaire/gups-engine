@@ -82,6 +82,17 @@ class SessionTest {
   }
 
   @Test
+  fun `input without a character or login handler is answered and the session closed`() {
+    val f = Fixture()
+    val sink = CapturingSink()
+    f.w.handle(WorldControlEvent.Connect(SessionId(99), sink))
+    f.w.handle(ClientInputEvent(SessionId(99), "look", System.nanoTime()))
+    assertEquals("You are not playing a character.\n", sink.transcript)
+    assertEquals("You are not playing a character.", sink.closedReason)
+    assertEquals(null, f.w.session(SessionId(99)))
+  }
+
+  @Test
   fun `the world loop applies input between pulses on its own thread`() = runBlocking {
     val f = Fixture()
     val p = f.w.spawnPlayer("Ann", T.HALL)

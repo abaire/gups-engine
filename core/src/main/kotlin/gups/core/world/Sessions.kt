@@ -100,9 +100,16 @@ fun World.handle(event: ClientInputEvent) {
   val player = s.player
   if (player == null) {
     val handler = login
-    if (handler != null) handler.input(this, s, event.line)
-    else s.out.append("You are not playing a character.\n")
+    if (handler != null) {
+      handler.input(this, s, event.line)
+      flush(s)
+      return
+    }
+    // Nothing can ever give this session a character, so it must not linger.
+    s.out.append("You are not playing a character.\n")
     flush(s)
+    s.sink.close("You are not playing a character.")
+    disconnect(s.id)
     return
   }
   player.lastInputPulse = pulse
