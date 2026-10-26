@@ -51,8 +51,9 @@ object Names {
     input.trim().takeIf { CHARACTER.matches(it) }?.lowercase()?.replaceFirstChar { it.uppercase() }
 
   /**
-   * Every reserved character name in [world], lowercase: the built-in list, [extra], and the
-   * world's command names.
+   * Every reserved character name in [world], lowercase: the built-in list, [extra], the world's
+   * command names, and the keywords and name words of every mob prototype, so no player can pass
+   * for an NPC.
    */
   fun reserved(world: World, extra: Collection<String>): Set<String> = buildSet {
     addAll(BUILTIN_RESERVED)
@@ -60,6 +61,10 @@ object Names {
     val c = world.commands
     for (def in c.engineCommands + c.globalCommands + c.toolCommands) {
       for (n in listOf(def.name) + def.aliases) add(n.removePrefix("@").lowercase())
+    }
+    for (mob in world.protos.mobs.values) {
+      mob.keywords.forEach { add(it.lowercase()) }
+      mob.name.split(Regex("[^A-Za-z]+")).filter { it.isNotEmpty() }.forEach { add(it.lowercase()) }
     }
   }
 

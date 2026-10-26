@@ -151,7 +151,7 @@ class AccountLoginTest {
   }
 
   @Test
-  fun `character names are checked, and the limit binds everyone below instructor`() {
+  fun `character names are checked, NPC names included, and the limit binds everyone below instructor`() {
     val f = LoginFixture(LoginSettings(maxCharacters = 2, reservedNames = setOf("Gandalf")))
     f.account("ann", pw)
     f.persistence.saved["Bob"] = 99
@@ -161,7 +161,7 @@ class AccountLoginTest {
     c.send("new")
     assertContains(c.send("x"), "Names are 2 to 16 letters.")
     assertContains(c.send("Ann2"), "Names are 2 to 16 letters.")
-    for (name in listOf("north", "Self", "look", "gandalf", "new")) assertTrue(
+    for (name in listOf("north", "Self", "look", "gandalf", "new", "Guard", "brom")) assertTrue(
       "That name is reserved." in c.send(name),
       name,
     )

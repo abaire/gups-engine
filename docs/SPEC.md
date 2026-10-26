@@ -626,7 +626,8 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
     `quit`, `guest`, `instructor`, `admin`, and every standard direction with its
     abbreviation.
   - Per world: the name and aliases of every engine, global and tool command (without `@`),
-    and the server configuration's `reserved_names`.
+    every keyword and every word of the name of each mob prototype (so no player can pass
+    for an NPC), and the server configuration's `reserved_names`.
   - Logins reserve only `new`.
 - **Builder scope:** The `BUILDER` role is scoped to a set of package paths, the union of
   two scopes stored in `roles_json`:

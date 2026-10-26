@@ -11,6 +11,7 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Direction
 import gups.core.model.ExitProto
+import gups.core.model.MobProto
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.RoomProto
@@ -35,7 +36,8 @@ fun testProtos() =
           exits = listOf(ExitProto(Direction.NORTH, YARD)),
         ),
         RoomProto(YARD, "The Yard", exits = listOf(ExitProto(Direction.SOUTH, HALL))),
-      )
+      ),
+    mobs = listOf(MobProto(Label("//t:guard"), "Captain Brom", listOf("guard", "captain"))),
   )
 
 /** Accounts in memory, for tests. */
