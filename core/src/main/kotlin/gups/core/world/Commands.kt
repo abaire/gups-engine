@@ -55,7 +55,8 @@ class TickCommand(
 
 /**
  * Verb lookup (SPEC §5.2): engine commands (including exits), global commands, then the room's and
- * nearby items' `commands`. Exact names and aliases win over unique prefixes.
+ * nearby items' `commands`. Exact names and aliases win over unique prefixes; a prefix of the names
+ * or aliases of more than one command resolves to nothing.
  */
 class CommandRegistry {
   private val engine: List<CommandDef> = EngineCommands.all()
@@ -128,7 +129,7 @@ class CommandRegistry {
     val v = verb.lowercase()
     if (v.startsWith("@")) {
       val all = (engine + tools).filter { it.name.startsWith("@") && it.allows(actor) }
-      return exact(all, v) ?: all.firstOrNull { it.name.startsWith(v) }
+      return exact(all, v) ?: prefix(all, v)
     }
     exact(engine, v)?.let {
       return it
@@ -147,20 +148,26 @@ class CommandRegistry {
     actor.room.proto.commands[v]?.let {
       return zoneCommand(v, actor.room, it)
     }
-    val items =
-      (actor.inventoryIndex.values + actor.equipmentIndex.values + actor.room.itemIndex.values)
-        .sortedBy { it.id }
-    for (item in items) item.proto.commands[v]?.let {
-      return zoneCommand(v, item, it)
+    // Equipped items, then inventory, then the ground; contents of containers grant nothing.
+    val layers =
+      listOf(actor.equipmentIndex.values, actor.inventoryIndex.values, actor.room.itemIndex.values)
+    for (layer in layers) {
+      for (item in layer.sortedBy { it.id }) item.proto.commands[v]?.let {
+        return zoneCommand(v, item, it)
+      }
     }
-    return prefix(engine, v) ?: prefix(global, v) ?: prefix(usable, v)
+    return prefix((engine + global + usable).filter { !it.name.startsWith("@") }, v)
   }
 
   private fun exact(defs: List<CommandDef>, v: String) =
     defs.firstOrNull { it.name == v || v in it.aliases }
 
+  /** The one command whose name or an alias starts with [v], or null if none or several do. */
   private fun prefix(defs: List<CommandDef>, v: String) =
-    defs.firstOrNull { it.name.startsWith(v) && !it.name.startsWith("@") }
+    defs
+      .filter { d -> (listOf(d.name) + d.aliases).any { it.startsWith(v) } }
+      .distinct()
+      .singleOrNull()
 
   private fun zoneCommand(verb: String, owner: Entity, handler: ZoneCommand) =
     TickCommand(verb) { call ->

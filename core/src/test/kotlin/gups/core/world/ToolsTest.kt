@@ -28,6 +28,20 @@ class ToolsTest {
     }
 
   @Test
+  fun `an at-prefix resolves only when it matches one usable tool`() {
+    val f = fixture()
+    val b = f.builder()
+    val reg = f.w.commands
+    assertEquals("@spawn", reg.resolve(b, "@sp")?.name)
+    assertNull(reg.resolve(b, "@s"), "@stat and @spawn")
+    // @stats needs an instructor, so for a builder @sta can only mean @stat.
+    assertEquals("@stat", reg.resolve(b, "@sta")?.name)
+    b.role = Role.INSTRUCTOR
+    assertNull(reg.resolve(b, "@sta"), "@stat and @stats")
+    assertEquals("@stat", reg.resolve(b, "@stat")?.name)
+  }
+
+  @Test
   fun `builder commands are confined to the builder's packages`() {
     val f = fixture()
     val b = f.builder()

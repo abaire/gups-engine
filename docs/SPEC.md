@@ -2286,6 +2286,15 @@ boundaries come from `System.nanoTime()`.
 
 1. Parse the verb, resolve aliases, and look it up in the engine commands, global
    commands, then room and item `commands`. Ambiguity resolves in that order.
+   - Room `commands` are checked before item `commands`. Item `commands` come from equipped
+     items, then inventory, then items on the ground; within a layer the lowest item ID
+     wins. Items inside containers grant no commands.
+   - An exact name or alias wins and is never ambiguous (`l` is `look`'s alias, though
+     `lock` also starts with `l`). Otherwise a verb that is a prefix of the names or aliases
+     of exactly one engine, global or plugin command resolves to it; a prefix matching more
+     than one command (`cl` for `clear` and `close`) is ambiguous and gets "Huh?". Prefixes
+     are tried only after every room and item command. An `@` prefix follows the same rule
+     among the `@` commands the actor may use (§4.9).
 2. **Fast lane:**
    - Rate limiting uses a per-session token bucket: capacity 20, refill 5 tokens/s.
    - When the bucket is empty, input is dropped with "Slow down." More than 3 drops
