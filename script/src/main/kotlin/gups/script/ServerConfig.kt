@@ -32,6 +32,8 @@ data class ServerConfig(
   val maxCharacters: Int = 5,
   val restrictionLadder: List<String> = listOf("1d", "7d", "permanent"),
   val reservedNames: List<String> = emptyList(),
+  /** Seconds a shutdown waits for the final checkpoint to commit (SPEC §5.11). */
+  val shutdownTimeout: Int = 30,
 ) {
   companion object {
     val SPEC =
@@ -111,6 +113,12 @@ data class ServerConfig(
               "Character names players may not register.",
               default = "[]",
             ),
+            DeclParam(
+              "shutdown_timeout",
+              "int",
+              "Seconds a shutdown waits for the final checkpoint to be saved.",
+              default = "30",
+            ),
           ),
       )
 
@@ -144,6 +152,8 @@ data class ServerConfig(
       return SPEC.bind(kwargs = kwargs) { d ->
         val max = d.int("max_characters") ?: 5
         if (max < 1) fail("server(max_characters): must be at least 1")
+        val timeout = d.int("shutdown_timeout") ?: 30
+        if (timeout < 1) fail("server(shutdown_timeout): must be at least 1")
         result =
           ServerConfig(
             world = d.str("world"),
@@ -164,6 +174,7 @@ data class ServerConfig(
               d["restriction_ladder"]?.let { d.strList("restriction_ladder") }
                 ?: listOf("1d", "7d", "permanent"),
             reservedNames = d["reserved_names"]?.let { d.strList("reserved_names") } ?: emptyList(),
+            shutdownTimeout = timeout,
           )
         Starlark.NONE
       }

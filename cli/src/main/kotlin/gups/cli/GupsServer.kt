@@ -75,6 +75,8 @@ class ProdOptions(
   val deploy: DeploySettings = DeploySettings(),
   /** Start even if the working tree isn't at `meta.world_commit` (SPEC §2.4). */
   val forceCommit: Boolean = false,
+  /** How long a shutdown waits for the final checkpoint (`shutdown_timeout`, SPEC §5.11). */
+  val shutdownTimeoutMs: Long = SHUTDOWN_WAIT_MS,
 )
 
 /** Where the admin port listens, and its bearer token (null: only `/healthz` works). */
@@ -112,6 +114,9 @@ class GupsServer(
   private val log: (String) -> Unit = { System.err.println(it) },
 ) {
   private var persistence: SqlitePersistence? = null
+
+  /** How long a shutdown waits for the final checkpoint to commit (SPEC §5.11). */
+  val shutdownTimeoutMs: Long = prod?.shutdownTimeoutMs ?: SHUTDOWN_WAIT_MS
 
   /** The world's plugins, loaded once at boot (SPEC §4.15); closed when the server stops. */
   private var plugins: PluginHost? = null
@@ -531,7 +536,7 @@ class GupsServer(
     webServer?.stop()
     adminServer?.stop()
     docsServer?.stop()
-    persistence?.close()?.let { ok ->
+    persistence?.close(shutdownTimeoutMs)?.let { ok ->
       if (!ok) log("Some changes could not be saved before shutdown.")
     }
     plugins?.close()
@@ -540,8 +545,11 @@ class GupsServer(
 
   fun stop() = loop.stop()
 
-  /** Waits for [run] to finish its final checkpoint, for the JVM shutdown hook. */
-  fun awaitStopped(timeoutMs: Long): Boolean = stopped.await(timeoutMs, TimeUnit.MILLISECONDS)
+  /**
+   * Waits up to [shutdownTimeoutMs] for [run] to finish its final checkpoint, for the JVM shutdown
+   * hook.
+   */
+  fun awaitStopped(): Boolean = stopped.await(shutdownTimeoutMs, TimeUnit.MILLISECONDS)
 
   companion object {
     /** The `--dev` local instructor's account (SPEC §5.12). */

@@ -223,6 +223,13 @@ class Serve : CliktCommand(name = "serve") {
         help = "--prod: characters per account (default 5; instructors unlimited).",
       )
       .int()
+  val shutdownTimeout by
+    option(
+        "--shutdown-timeout",
+        metavar = "SECONDS",
+        help = "--prod: how long shutdown waits for the final checkpoint (default 30).",
+      )
+      .int()
 
   override fun help(context: Context) = "Run the server."
 
@@ -250,6 +257,7 @@ class Serve : CliktCommand(name = "serve") {
             repository,
             deployBranch,
             deployKeyFile,
+            shutdownTimeout,
           )
         if (prodOnly.any { it != null } || selfSigned || forceCommit) {
           throw UsageError(
@@ -273,7 +281,7 @@ class Serve : CliktCommand(name = "serve") {
       .addShutdownHook(
         Thread {
           server.stop()
-          server.awaitStopped(SHUTDOWN_WAIT_MS)
+          server.awaitStopped()
         }
       )
     runBlocking {
@@ -342,6 +350,8 @@ class Serve : CliktCommand(name = "serve") {
       }
     if (cfg.restrictionLadder.isEmpty())
       throw UsageError("restriction_ladder needs at least one step")
+    val timeout = shutdownTimeout ?: cfg.shutdownTimeout
+    if (timeout < 1) throw UsageError("--shutdown-timeout must be at least 1")
     val (adminHost, adminPort) = parseAddress(adminAddress ?: cfg.admin ?: DEFAULT_ADMIN)
     val token =
       readSecret(adminTokenFile ?: cfg.adminTokenFile?.let(::File), "GUPS_ADMIN_TOKEN_FILE")
@@ -375,6 +385,7 @@ class Serve : CliktCommand(name = "serve") {
         AdminListener(adminHost, adminPort, token),
         deploy,
         forceCommit,
+        timeout * 1000L,
       ),
     ) {
       echo(it, err = true)
@@ -873,7 +884,9 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
   )
 }
 
-/** How long a shutdown waits for the final checkpoint. */
+/**
+ * How long a shutdown waits for the final checkpoint by default (`shutdown_timeout`, SPEC §5.11).
+ */
 const val SHUTDOWN_WAIT_MS = 30_000L
 
 /** `--db`, defaulting to the database of `--world` (D-099). */

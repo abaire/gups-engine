@@ -1542,6 +1542,18 @@
           "allowed_values": [],
           "doc": "Character names players may not register.",
           "since": 1
+        },
+        {
+          "symbol": "server.shutdown_timeout",
+          "name": "shutdown_timeout",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "30",
+          "allowed_values": [],
+          "doc": "Seconds a shutdown waits for the final checkpoint to be saved.",
+          "since": 1
         }
       ]
     }

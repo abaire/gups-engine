@@ -5,6 +5,12 @@ before/after snippets.
 
 ## api_version 2 (unreleased)
 
+### Added `server.shutdown_timeout`
+- kind: added
+- symbol: server.shutdown_timeout
+
+`server.gups` can set how many seconds a shutdown waits for the final checkpoint.
+
 ### `item(equip_affects)` entries can be timed, and a stun must be
 - kind: signature
 - symbol: item.equip_affects

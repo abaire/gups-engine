@@ -129,6 +129,28 @@ class GupsServerTest {
   }
 
   @Test
+  fun `shutdown waits only as long as the configured timeout`() {
+    val root = copyTemplate()
+    assertEquals(
+      SHUTDOWN_WAIT_MS,
+      GupsServer(WorldDir(root), port = 0, db = null).shutdownTimeoutMs,
+    )
+    val server =
+      GupsServer(
+        WorldDir(root),
+        port = 0,
+        db = null,
+        prod = ProdOptions("127.0.0.1", shutdownTimeoutMs = 200),
+      )
+    // Never run, so the final checkpoint never finishes: the wait gives up after 200 ms, not the
+    // old fixed 30 s (D-010).
+    val started = System.nanoTime()
+    assertTrue(!server.awaitStopped(), "a server that never ran can't have stopped")
+    val waitedMs = (System.nanoTime() - started) / 1_000_000
+    assertTrue(waitedMs in 150..5_000, "waited $waitedMs ms for a 200 ms shutdown timeout (D-010)")
+  }
+
+  @Test
   fun `characters and the world survive a restart`() {
     val root = copyTemplate()
     withServer(root) { s ->

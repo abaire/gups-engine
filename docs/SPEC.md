@@ -327,6 +327,7 @@ gups-engine/
       max_characters = 5,                      # per account; instructors are unlimited
       restriction_ladder = ["1d", "7d", "permanent"],  # §4.9
       reserved_names = [],                     # extra character names to refuse
+      shutdown_timeout = 30,                   # seconds to wait for the final checkpoint (§5.11)
   )
   ```
 
@@ -340,6 +341,8 @@ gups-engine/
     `restriction_ladder`.
   - Deploys: `--repository`, `--deploy-branch` and `--deploy-key-file` (or
     `GUPS_DEPLOY_KEY_FILE`), with configuration keys of the same names.
+  - Shutdown: `--shutdown-timeout`/`shutdown_timeout`, in seconds (default 30, at least 1;
+    §5.11).
   - The existing `--world`, `--db`, `--start` and `--fresh`.
   - The startup message lists the bound port of each transport (`telnet`, `tls`, `ws`,
     `admin`).
@@ -2729,7 +2732,12 @@ reload is refused for it.
   - An ownership transfer is either saved with both sides or lost with both sides.
   - The database is never inconsistent.
 - **Shutdown and reload:** `@shutdown` and a successful reload both perform a final
-  checkpoint (§5.10).
+  checkpoint (§5.10). A shutdown broadcasts its reason, stops the world loop once its delay has
+  passed, takes the final checkpoint on the world thread, and waits up to the server
+  configuration's `shutdown_timeout` (default 30 seconds; §2.4) for the writer to commit it. A
+  JVM shutdown (Ctrl-C, `SIGTERM`) does the same with no delay. `--dev` always waits 30 seconds.
+  If the commit isn't done in time, the server logs "Some changes could not be saved before
+  shutdown." and exits anyway; the uncommitted state is lost as in a crash.
 - **Backups:**
   - Snapshots are taken with the SQLite online-backup API, as
     `<kind>-<UTC yyyyMMdd-HHmmss>.db` in `backups/` next to the database.

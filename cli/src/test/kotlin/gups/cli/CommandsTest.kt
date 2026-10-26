@@ -526,6 +526,14 @@ class CommandsTest {
       gupsCommand().test(listOf("serve", "--dev", "--telnet", ":4000")).stderr,
       "are for --prod",
     )
+    assertContains(
+      gupsCommand()
+        .test(
+          listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--shutdown-timeout", "0")
+        )
+        .stderr,
+      "--shutdown-timeout must be at least 1",
+    )
     val cfg =
       java.nio.file.Files.createTempFile("server", ".gups").toFile().apply {
         writeText("server(telnet = \":4000\", colour = 1)\n")

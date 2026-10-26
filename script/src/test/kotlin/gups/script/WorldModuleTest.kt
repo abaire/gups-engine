@@ -93,10 +93,12 @@ class WorldModuleTest {
                 open_signup = True,
                 max_characters = 3,
                 reserved_names = ["Gandalf"],
+                shutdown_timeout = 90,
             )
             """
               .trimIndent(),
           "bad.gups" to "server(max_characters = 0)",
+          "no-wait.gups" to "server(shutdown_timeout = 0)",
           "twice.gups" to "server()\nserver()",
         )
       )
@@ -110,8 +112,15 @@ class WorldModuleTest {
         openSignup = true,
         maxCharacters = 3,
         reservedNames = listOf("Gandalf"),
+        shutdownTimeout = 90,
       ),
       c,
+    )
+    // The shutdown timeout is configurable, not a fixed 30 s (D-010).
+    assertEquals(30, ServerConfig().shutdownTimeout)
+    assertContains(
+      assertNotNull(ServerConfig.read(dir.resolve("no-wait.gups")).second).message,
+      "shutdown_timeout",
     )
     assertEquals(ServerConfig(), ServerConfig.read(dir.resolve("empty.gups")).first)
     assertContains(
