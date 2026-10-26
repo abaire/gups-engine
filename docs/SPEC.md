@@ -2443,7 +2443,9 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **Cascades:**
   - Verbs that cause events (`damage` → `on_damage` → `on_death` → loot `on_spawn`) dispatch
     synchronously, nested.
-  - The maximum nesting depth is 8. Deeper events are dropped with a diagnostic.
+  - The maximum nesting depth is 8. Every script entry counts toward it: dispatched events,
+    self-only hooks (`on_tick`, `on_spawn`, …), and timer and affect callbacks. An entry that
+    would nest deeper is dropped with a diagnostic.
   - All nested hooks share the top-level event's step budget (§6.1).
 - **Quarantine:** Hooks of a quarantined package aren't invoked.
 

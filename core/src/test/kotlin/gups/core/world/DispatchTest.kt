@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.CASCADE_MAX_DEPTH
+import gups.core.HookRef
 import gups.core.model.DamageType
 import gups.core.model.ItemLocation
 import kotlin.test.Test
@@ -96,6 +97,38 @@ class DispatchTest {
     assertEquals(CASCADE_MAX_DEPTH, depth)
     assertEquals(1000 - CASCADE_MAX_DEPTH - 1, g.hp)
     assertTrue(f.w.diagnostics.any { it.kind == "cascade" })
+  }
+
+  @Test
+  fun `self-only hooks that recurse are dropped at the cascade limit`() {
+    val host = RecordingHost()
+    var depth = 0
+    host.handlers[HookName.ON_TELL] = { w, owner, ctx ->
+      depth++
+      w.invokeOn(owner, HookName.ON_TELL, ctx)
+      null
+    }
+    val f = Fixture(scripts = host)
+    val g = f.mob()
+    f.w.invokeOn(g, HookName.ON_TELL, HookContext())
+    assertEquals(CASCADE_MAX_DEPTH, depth)
+    assertTrue(f.w.diagnostics.any { it.kind == "cascade" && "on_tell" in it.message })
+  }
+
+  @Test
+  fun `callbacks that recurse are dropped at the cascade limit`() {
+    val host = RecordingHost()
+    val ref = HookRef(T.HALL, "again")
+    var depth = 0
+    host.refHandlers["again"] = { w, owner, ctx ->
+      depth++
+      w.invokeRef(owner, ref, ctx)
+    }
+    val f = Fixture(scripts = host)
+    val g = f.mob()
+    f.w.invokeRef(g, ref, HookContext())
+    assertEquals(CASCADE_MAX_DEPTH, depth)
+    assertTrue(f.w.diagnostics.any { it.kind == "cascade" && "again" in it.message })
   }
 
   @Test

@@ -186,10 +186,6 @@ internal fun World.dispatch(
   room: Room?,
   ctx: HookContext,
 ): String? {
-  if (cascadeDepth >= CASCADE_MAX_DEPTH) {
-    diagnose("cascade", "${hook.scriptName} dropped: cascade deeper than $CASCADE_MAX_DEPTH")
-    return null
-  }
   // The actor may veto its own action, but doesn't hear its own on_* events, which would let a
   // mob answer itself. Its gear still observes them, so a wielded weapon sees its wielder's
   // actions.
@@ -207,8 +203,7 @@ internal fun World.dispatch(
       (holder.inventoryIndex.values + holder.equipmentIndex.values).sortedBy { it.id }
   }
   val owners = entities + items
-  cascadeDepth++
-  try {
+  return withCascadeGuard(hook.scriptName) {
     for (owner in owners) {
       val outcome =
         try {
@@ -218,32 +213,47 @@ internal fun World.dispatch(
           diagnose("script", "${hook.scriptName} on $owner failed: ${e.message}", e)
           HookOutcome.Allow
         }
-      if (hook.vetoable && outcome is HookOutcome.Deny) return outcome.message
+      if (hook.vetoable && outcome is HookOutcome.Deny) return@withCascadeGuard outcome.message
     }
-    return null
-  } finally {
-    cascadeDepth--
+    null
   }
 }
 
 /** Fires [hook] on [owner] alone, for per-entity hooks such as `on_tick`. */
 internal fun World.invokeOn(owner: Entity, hook: HookName, ctx: HookContext) {
-  cascadeDepth++
-  try {
-    scripts.invokeHook(this, owner, hook, ctx)
-  } catch (e: Exception) {
-    diagnose("script", "${hook.scriptName} on $owner failed: ${e.message}", e)
-  } finally {
-    cascadeDepth--
+  withCascadeGuard(hook.scriptName) {
+    try {
+      scripts.invokeHook(this, owner, hook, ctx)
+    } catch (e: Exception) {
+      diagnose("script", "${hook.scriptName} on $owner failed: ${e.message}", e)
+    }
   }
 }
 
+/** Runs the timer or affect callback [ref] on [owner]. */
 internal fun World.invokeRef(owner: Entity, ref: HookRef, ctx: HookContext) {
+  withCascadeGuard("${ref.file}:${ref.name}") {
+    try {
+      scripts.invokeRef(this, owner, ref, ctx)
+    } catch (e: Exception) {
+      diagnose("script", "${ref.file}:${ref.name} on $owner failed: ${e.message}", e)
+    }
+  }
+}
+
+/**
+ * Runs [block] one cascade level deeper, or drops it with a `cascade` diagnostic naming [what] and
+ * returns null when the cascade is already [CASCADE_MAX_DEPTH] deep (SPEC §5.6). Every script entry
+ * point goes through here, so self-only hooks and callbacks can't recurse past the limit.
+ */
+private inline fun <T> World.withCascadeGuard(what: String, block: () -> T): T? {
+  if (cascadeDepth >= CASCADE_MAX_DEPTH) {
+    diagnose("cascade", "$what dropped: cascade deeper than $CASCADE_MAX_DEPTH")
+    return null
+  }
   cascadeDepth++
   try {
-    scripts.invokeRef(this, owner, ref, ctx)
-  } catch (e: Exception) {
-    diagnose("script", "${ref.file}:${ref.name} on $owner failed: ${e.message}", e)
+    return block()
   } finally {
     cascadeDepth--
   }
