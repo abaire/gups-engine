@@ -272,17 +272,22 @@ internal fun World.expireAffect(a: Actor, affect: Affect) =
   endAffect(a, affect, AffectEndReason.EXPIRED)
 
 /**
- * Takes [affect] off [a] and runs its end: the expire message (on expiry only), `on_expire` and,
- * for a summon, the banishing. An affect that has reached its expiry pulse counts as expired
- * however it was taken off.
+ * Takes [affect] off [a] and runs its end: the expire message (on expiry, or always when
+ * [announce]), `on_expire` and, for a summon, the banishing. An affect that has reached its expiry
+ * pulse counts as expired however it was taken off.
  */
-private fun World.endAffect(a: Actor, affect: Affect, reason: AffectEndReason) {
+private fun World.endAffect(
+  a: Actor,
+  affect: Affect,
+  reason: AffectEndReason,
+  announce: Boolean = false,
+) {
   val wasStunned = a.isStunned
   if (!a.affects.remove(affect)) return
   a.dirty = true
   stunChanged(a, wasStunned)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
-  if (why == AffectEndReason.EXPIRED && affect.expireMessage.isNotEmpty())
+  if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())
     send(a, affect.expireMessage)
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
   if ("summoned" in affect.flags && a is Mob && a.inWorld) {
@@ -385,10 +390,14 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             effect.modifiers,
           )
         is Effect.Dispel -> {
-          val f = effect.filter
-          val matches: (Affect) -> Boolean =
-            if (f.endsWith("*")) { a -> a.name.startsWith(f.dropLast(1)) } else { a -> a.name == f }
-          removeAffects(t, matches)
+          val gone = t.affects.filter(effect::matches)
+          // Unlike remove_affect, a dispel tells the target its affect ended.
+          for (affect in gone.take(effect.count ?: gone.size)) endAffect(
+            t,
+            affect,
+            AffectEndReason.REMOVED,
+            announce = true,
+          )
         }
         is Effect.Knockback -> shove(t, awayFrom = caster, steps = effect.steps)
         is Effect.Pull -> pull(t, toward = caster, steps = effect.steps)

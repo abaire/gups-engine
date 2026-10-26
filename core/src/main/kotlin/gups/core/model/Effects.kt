@@ -52,8 +52,31 @@ sealed interface Effect {
     val modifiers: Modifiers = emptyMap(),
   ) : Effect
 
-  /** Removes affects whose name matches [filter]; a trailing `*` matches a prefix. */
-  data class Dispel(val filter: String) : Effect
+  /**
+   * Removes the target's affects that match every given criterion: [name] (exact, or a prefix when
+   * it ends in `*`), any of [flags], or anything when [all]. At most [count] are removed, in the
+   * order they were applied; `null` removes every match. Affects flagged `intrinsic` are never
+   * removed.
+   */
+  data class Dispel(
+    val name: String? = null,
+    val flags: Set<String> = emptySet(),
+    val all: Boolean = false,
+    val count: Int? = null,
+  ) : Effect {
+    init {
+      require(name != null || flags.isNotEmpty() || all) { "dispel needs a name, a flag or all" }
+      require(count == null || count >= 1) { "dispel count must be at least 1" }
+    }
+
+    /** Whether this dispel would remove [affect], ignoring [count]. */
+    fun matches(affect: Affect): Boolean =
+      "intrinsic" !in affect.flags &&
+        (name == null ||
+          if (name.endsWith("*")) affect.name.startsWith(name.dropLast(1))
+          else affect.name == name) &&
+        (flags.isEmpty() || flags.any { it in affect.flags })
+  }
 
   data class Knockback(val steps: Int) : Effect
 

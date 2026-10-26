@@ -3,6 +3,7 @@ package gups.script
 import gups.core.Label
 import gups.core.model.Direction
 import gups.core.model.DoorState
+import gups.core.model.Effect
 import gups.core.model.TrackSize
 import gups.core.world.HookName
 import kotlin.test.Test
@@ -385,6 +386,31 @@ class LoaderTest {
     assertTrue(empty.ok, empty.report())
     assertNull(empty.prototypes().mob(Label("//zones/z:rat")).think)
     assertNotNull(empty.packages["zones/z"])
+  }
+
+  @Test
+  fun `dispel takes structured criteria and needs at least one`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            "skill(\"cure\", effect = dispel(name = \"poison*\", flag = [\"poison\"], count = 2))",
+        )
+      )
+    assertTrue(r.ok, r.report())
+    assertEquals(
+      Effect.Dispel(name = "poison*", flags = setOf("poison"), count = 2),
+      r.prototypes().skill(Label("//zones/z:cure")).effect,
+    )
+    val empty =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "skill(\"cure\", effect = dispel())",
+        )
+      )
+    assertContains(only(empty).message, "dispel: give name, flag or all = True")
   }
 
   @Test

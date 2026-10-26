@@ -1300,17 +1300,45 @@ internal class DeclarationBuiltins {
 
   @StarlarkMethod(
     name = "dispel",
-    doc = "Remove matching affects; a trailing * matches a prefix.",
+    doc =
+      "Remove the target's affects that match every given criterion. Affects flagged " +
+        "'intrinsic' are never removed.",
     parameters =
       [
         Param(
-          name = "filter",
+          name = "name",
           named = true,
+          defaultValue = "None",
           doc = "Affect name to remove; a trailing * matches every name with that prefix.",
-        )
+        ),
+        Param(
+          name = "flag",
+          named = true,
+          defaultValue = "None",
+          doc = "A flag, or a list of flags; matches affects carrying any of them.",
+        ),
+        Param(
+          name = "all",
+          named = true,
+          defaultValue = "False",
+          doc = "True to match every affect.",
+        ),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "None",
+          doc = "Most affects to remove, oldest first, or None to remove every match.",
+        ),
       ],
   )
-  fun dispel(filter: Any): Any = EffectDecl(Effect.Dispel(str(filter, "dispel(filter)")))
+  fun dispel(name: Any, flag: Any, all: Any, count: Any): Any {
+    val n = strOrNull(name, "dispel(name)")
+    val flags = if (flag is String) setOf(flag) else strList(flag, "dispel(flag)").toSet()
+    val everything = bool(all, "dispel(all)")
+    if (n == null && flags.isEmpty() && !everything) fail("dispel: give name, flag or all = True")
+    val most = if (isNone(count)) null else positive(count, "dispel(count)")
+    return EffectDecl(Effect.Dispel(n, flags, everything, most))
+  }
 
   @StarlarkMethod(
     name = "knockback",

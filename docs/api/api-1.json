@@ -4373,18 +4373,48 @@
     {
       "symbol": "dispel",
       "name": "dispel",
-      "doc": "Remove matching affects; a trailing * matches a prefix.",
+      "doc": "Remove the target's affects that match every given criterion. Affects flagged 'intrinsic' are never removed.",
       "since": 1,
       "params": [
         {
-          "symbol": "dispel.filter",
-          "name": "filter",
+          "symbol": "dispel.name",
+          "name": "name",
           "positional": true,
           "named": true,
-          "default": null,
+          "default": "None",
           "varargs": false,
           "kwargs": false,
           "doc": "Affect name to remove; a trailing * matches every name with that prefix."
+        },
+        {
+          "symbol": "dispel.flag",
+          "name": "flag",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "A flag, or a list of flags; matches affects carrying any of them."
+        },
+        {
+          "symbol": "dispel.all",
+          "name": "all",
+          "positional": true,
+          "named": true,
+          "default": "False",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "True to match every affect."
+        },
+        {
+          "symbol": "dispel.count",
+          "name": "count",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Most affects to remove, oldest first, or None to remove every match."
         }
       ]
     },

@@ -737,6 +737,10 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 
 ## 4. Interface & API Signatures
 
+Builtins take structured arguments: keyword arguments and native Starlark values (lists,
+dicts, `None`, booleans) rather than strings with a syntax of their own, so that the loader
+can check them.
+
 ### 4.1 Package Declaration
 
 ```python
@@ -886,7 +890,7 @@ Rules functions can read it from `ctx.actor.skills`.
 | `damage(dice, type)` | Deal damage. |
 | `heal(dice)` | Restore hit points. |
 | `apply_affect(name, duration, stat_deltas={}, flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff. |
-| `dispel(filter)` | Remove matching affects, firing each one's `on_expire`. |
+| `dispel(name=None, flag=None, all=False, count=None)` | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
 | `knockback(steps)` | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. |
 | `pull(steps)` | Draw the target toward the caster, never past it. Clamped to the track. |
 | `stun(pulses)` | Stun the target. |

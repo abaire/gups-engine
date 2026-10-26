@@ -20,6 +20,25 @@ line, such as `'` for `say`. A world keeps `'` only by listing it, as the templa
 
 `server.gups` can set how many seconds a shutdown waits for the final checkpoint.
 
+### `dispel(filter)` is now `dispel(name, flag, all, count)`
+
+`dispel` takes keyword criteria instead of a filter string: `name` (a trailing `*` matches a
+prefix), `flag` (a string or a list), `all = True`, and an optional `count`. At least one of
+`name`, `flag` or `all` is required. Affects flagged `intrinsic` are never dispelled, and a
+dispelled affect now sends its `expire_msg`.
+
+Before:
+
+```python
+skill("cure", kind = "spell", target = "ally", effect = dispel(filter = "poison*"))
+```
+
+After:
+
+```python
+skill("cure", kind = "spell", target = "ally", effect = dispel(name = "poison*"))
+```
+
 ### `item(equip_affects)` entries can be timed, and a stun must be
 
 An `equip_affects` entry is now a flag name, held while the item is worn, or

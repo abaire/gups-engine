@@ -187,7 +187,7 @@ class CombatTest {
     f.w.applyAffect(p, "hex", 50, onExpire = done)
     f.w.applyAffect(p, "glow", 50, onExpire = done)
     f.w.removeAffect(p, "hex")
-    f.w.applyEffect(Effect.Dispel("glow"), p, p)
+    f.w.applyEffect(Effect.Dispel(name = "glow"), p, p)
     f.runTo(10)
     assertEquals(listOf("hex REMOVED", "glow REMOVED", "ward EXPIRED"), reasons)
   }
@@ -211,13 +211,39 @@ class CombatTest {
   }
 
   @Test
+  fun `dispel matches by flag, never removes intrinsic affects, and stops at its count`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    f.w.applyAffect(p, "hex", 50, flags = setOf("curse"))
+    f.w.applyAffect(p, "doom", 50, flags = setOf("curse"))
+    f.w.applyAffect(p, "venom", 50, flags = setOf("poison"))
+    f.w.applyAffect(p, "blessing", 50)
+    f.w.applyAffect(p, "birthmark", 50, flags = setOf("curse", "intrinsic"))
+    f.w.applyEffect(Effect.Dispel(flags = setOf("curse"), count = 1), p, p)
+    assertEquals(listOf("doom", "venom", "blessing", "birthmark"), p.affects.map { it.name })
+    f.w.applyEffect(Effect.Dispel(all = true), p, p)
+    assertEquals(listOf("birthmark"), p.affects.map { it.name })
+  }
+
+  @Test
+  fun `a dispelled affect sends its expire message`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    f.w.applyAffect(p, "haste", 50, expireMessage = "You slow down.")
+    f.out(p)
+    f.w.applyEffect(Effect.Dispel(name = "haste"), p, p)
+    f.run()
+    assertContains(f.out(p), "You slow down.")
+  }
+
+  @Test
   fun `a timed summon fades away when it expires or is dispelled`() {
     val f = Fixture()
     val p = f.player("Ann", at = T.YARD)
     f.w.applyEffect(Effect.Summon(T.GOBLIN, count = 2, duration = 50), p, null)
     val (a, b) = f.w.room(T.YARD).actors.filterIsInstance<Mob>()
     f.w.startCombat(a, p)
-    f.w.applyEffect(Effect.Dispel("summoned"), p, a)
+    f.w.applyEffect(Effect.Dispel(flags = setOf("summoned")), p, a)
     assertFalse(a.inWorld, "dispelling banishes it")
     assertTrue(p.fighting.isEmpty())
     assertTrue(b.inWorld)

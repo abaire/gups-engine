@@ -350,7 +350,10 @@ object DocExamples {
             """
                 # Removes "poison", "poison_strong" and every other affect named poison...
                 skill("cure", kind = "spell", cost = {"mana": 6}, target = "ally",
-                      effect = dispel(filter = "poison*"))
+                      effect = dispel(name = "poison*"))
+                # Lifts at most one curse, whatever it is called.
+                skill("uncurse", kind = "spell", cost = {"mana": 8}, target = "ally",
+                      effect = dispel(flag = "curse", count = 1))
             """
         ),
       "heal" to
