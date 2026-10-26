@@ -67,6 +67,23 @@ class ItemCommandsTest {
   }
 
   @Test
+  fun `remove and the template's unwield take off both wielded and worn items`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val sword = f.carry(p, T.SWORD)
+    val c = f.carry(p, cap)
+    f.doLine(p, "wield sword")
+    f.doLine(p, "wear cap")
+    assertContains(f.doLine(p, "unwield sword"), "You stop using a sword.")
+    assertEquals(ItemLocation.Carried(p.id), sword.location)
+    assertContains(f.doLine(p, "unwield cap"), "You stop using a cursed cap.")
+    assertEquals(ItemLocation.Carried(p.id), c.location)
+    f.doLine(p, "wield sword")
+    f.doLine(p, "remove sword")
+    assertEquals(ItemLocation.Carried(p.id), sword.location)
+  }
+
+  @Test
   fun `wear fills a slot family in order, then swaps, and worn items add flags and stats`() {
     val f = fixture()
     val p = f.player("Ann")

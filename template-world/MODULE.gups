@@ -22,6 +22,7 @@ module(
         "attack": "kill",
         "c": "cast",
         "take": "get",
+        "unwield": "remove",
     },
 
     # Single characters that stand for a command at the start of a line: 'hello says hello.

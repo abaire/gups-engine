@@ -245,6 +245,7 @@ val TEMPLATE_ALIASES =
         "attack" to "kill",
         "c" to "cast",
         "take" to "get",
+        "unwield" to "remove",
       ),
     prefixes = mapOf('\'' to "say", '"' to "say", '%' to "cast"),
   )

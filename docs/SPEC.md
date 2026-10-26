@@ -277,7 +277,7 @@ gups-engine/
     `prefixes = {"'": "say", "%": "cast"}` makes a single character at the start of a line
     stand for a command (§5.2). Several aliases or prefixes may name the same command. The
     engine hardcodes none: a world without them has no aliases, and the template world's
-    `MODULE.gups` ships the defaults (`l`, `i`/`inv`, `eq`, `k`/`attack`, `c`, `take`; `'`
+    `MODULE.gups` ships the defaults (`l`, `i`/`inv`, `eq`, `k`/`attack`, `c`, `take`, `unwield`; `'`
     and `"` for `say`, `%` for `cast`). An alias that isn't `[a-z][a-z0-9_]*`, is an engine
     command or a standard direction, or names something other than a non-`@` engine
     command, and a prefix that isn't one character other than a letter, digit, space or
@@ -1146,7 +1146,8 @@ check counts a container's contents.
 
 **Equipment:** Slots come from `rules.equipment_slots()`. Wearing into an occupied slot
 moves the old item back to the inventory; a slot family whose slots are all full swaps out
-the first. `wield` only takes items whose slot is `wield`; `wear` takes any slotted item.
+the first. `wield` only takes items whose slot is `wield`; `wear` takes any slotted item; `remove`
+(`unwield` in the template world) takes off an item in any slot, worn or wielded.
 
 ### 4.7 Behaviors (built in, implemented in Kotlin)
 
