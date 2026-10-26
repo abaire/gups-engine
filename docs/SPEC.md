@@ -2160,7 +2160,8 @@ boundaries come from `System.nanoTime()`.
        (§5.8).
   3. **Combat round** (`pulse % 8 == 0`): Roll initiative for the new round (§5.4.1).
      Then, for each engaged active actor in initiative order, resolve one auto-attack
-     (§5.4) and fire `on_combat_tick`.
+     (§5.4) and fire `on_combat_tick` on the actor, then on each item it has equipped
+     that declares the hook, in ascending `EntityId` order (§4.4).
 
   Within phases 2 and 3, actors act in **initiative tiers**, from the highest
   initiative to the lowest. An actor killed or incapacitated by a *higher* tier is

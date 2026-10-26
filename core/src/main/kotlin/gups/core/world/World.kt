@@ -586,7 +586,15 @@ class World(
     runTiers(engaged) { a ->
       if (a.isEngaged) {
         autoAttack(a)
-        invokeOn(a, HookName.ON_COMBAT_TICK, HookContext(actor = a, room = a.room))
+        val ctx = HookContext(actor = a, room = a.room)
+        invokeOn(a, HookName.ON_COMBAT_TICK, ctx)
+        // Equipped items take part in the round too (SPEC §4.4), after their wearer.
+        for (item in
+          a.equipmentIndex.values
+            .filter { scripts.hasHook(it, HookName.ON_COMBAT_TICK) }
+            .sortedBy { it.id }) {
+          invokeOn(item, HookName.ON_COMBAT_TICK, ctx)
+        }
       }
     }
     // The sound of a combat round carries as noise (SPEC §5.7).

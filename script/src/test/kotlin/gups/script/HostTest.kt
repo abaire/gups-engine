@@ -4,9 +4,12 @@ import gups.core.AttrValue
 import gups.core.Label
 import gups.core.model.DamageType
 import gups.core.model.DoorState
+import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.world.damage
+import gups.core.world.moveItem
 import gups.core.world.spawnItem
+import gups.core.world.startCombat
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -512,5 +515,31 @@ class HostTest {
       "room() can only be called while a package loads",
     )
     assertEquals("Nothing happens.\n", f.out(p))
+  }
+
+  @Test
+  fun `an equipped item's on_combat_tick sees its wearer's opponents`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _hum(ctx):
+                    for t in ctx.targets:
+                        ctx.send(ctx.actor, ctx.self.name + " hums at " + t.name + ".")
+
+                room("start")
+                mob("rat", name = "a rat", hp = 1000)
+                item("blade", name = "a blade", kind = "melee", wear = "wield", dice = "1d2", on_combat_tick = _hum)
+                """
+        )
+      )
+    val p = f.player()
+    val rat = f.mob("//zones/z:rat")
+    val blade = f.w.spawnItem(Label("//zones/z:blade"), ItemLocation.Carried(p.id))
+    f.w.moveItem(blade, ItemLocation.Equipped(p.id, "wield"))
+    f.w.startCombat(p, rat)
+    f.run(8)
+    assertContains(f.out(p), "a blade hums at a rat.")
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
   }
 }

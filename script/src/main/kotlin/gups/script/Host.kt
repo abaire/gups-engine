@@ -256,8 +256,8 @@ class StarlarkHost(
     val site =
       Site(owner.protoLabel.pkg, owner.protoLabel, hook.scriptName, hook.vetoable, owner.id)
     val extras =
-      if (hook == HookName.ON_COMBAT_TICK && owner is Actor)
-        CtxExtras(targets = world.opponentsOf(owner))
+      if (hook == HookName.ON_COMBAT_TICK && (ctx.actor ?: owner) is Actor)
+        CtxExtras(targets = world.opponentsOf(ctx.actor ?: owner as Actor))
       else CtxExtras()
     // on_wake(ctx, elapsed_pulses) takes the elapsed time as a second argument (SPEC §4.4).
     val positional: ((Frame) -> List<Any>)? =

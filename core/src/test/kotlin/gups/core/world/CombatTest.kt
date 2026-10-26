@@ -266,4 +266,25 @@ class CombatTest {
     assertEquals(0L, p.xp)
     assertTrue(f.w.room(T.YARD).items.single().contents.isEmpty(), "no loot rolled")
   }
+
+  @Test
+  fun `on_combat_tick fires on the fighter, then its equipped items in id order`() {
+    val host = RecordingHost()
+    val seen = mutableListOf<String>()
+    val f = Fixture(rules = FixedRules(toHit = 0), scripts = host)
+    val p = f.player("Ann")
+    val bow = f.w.spawnItem(T.BOW, ItemLocation.Carried(p.id))
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    f.w.moveItem(bow, ItemLocation.Equipped(p.id, "hold"))
+    // Carried, not equipped: stays out of the round.
+    f.w.spawnItem(T.KEY, ItemLocation.Carried(p.id))
+    host.handlers[HookName.ON_COMBAT_TICK] = { _, owner, ctx ->
+      if (ctx.actor === p) seen += owner.name
+      null
+    }
+    f.w.startCombat(p, f.mob(T.DUMMY))
+    f.runTo(8)
+    assertEquals(listOf(p.name) + listOf(bow, sword).sortedBy { it.id }.map { it.name }, seen)
+  }
 }
