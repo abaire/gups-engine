@@ -381,6 +381,7 @@ class World(
     initVitals(p)
     applyStartingStats(p, startingStatsOf(p))
     applyStartingStats(p, overrides, keepCurrent = true)
+    settleNewCondition(p, "starting_stats")
     p.lastInputPulse = pulse
     enter(p, room, p.trackIndex)
     return p
@@ -391,6 +392,7 @@ class World(
     val m = Mob(allocateId(), proto, at, index.coerceIn(0, at.trackSize - 1))
     declareMob(m, proto)
     applyStartingStats(m, startingStatsOf(m))
+    settleNewCondition(m, "starting_stats")
     enter(m, at, m.trackIndex)
     invokeOn(m, HookName.ON_SPAWN, HookContext(room = at))
     return m

@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.WORLD_TICK_PULSES
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Condition
@@ -441,5 +442,59 @@ class VitalsTest(private val fs: FixtureSchema) {
     val g = f.mob(T.GOBLIN)
     assertEquals(false, inWorld)
     assertTrue(g.inWorld)
+  }
+
+  @Test
+  fun `a spawn's condition is settled at once, and a dead start is a rules error that fills it`() {
+    val rules = rules {
+      conditionOf = { c ->
+        val now = c.actor.current(fs.health)
+        when {
+          now <= 0 -> Condition.DEAD
+          now < 10 -> Condition.INCAPACITATED
+          else -> Condition.OK
+        }
+      }
+      startingOf = { StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 5)) }
+    }
+    val f = Fixture(rules = rules)
+    val weak = f.mob(T.DUMMY)
+    assertEquals(Condition.INCAPACITATED, weak.condition)
+    assertFalse(f.w.canAct(weak))
+    rules.startingOf = {
+      StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 0))
+    }
+    val dead = f.mob(T.DUMMY)
+    assertEquals(Condition.OK, dead.condition)
+    assertEquals(50, dead.current(fs.health))
+    assertTrue(
+      f.w.diagnostics.any { it.kind == "rules" && "starting_stats" in it.message },
+      "the rules error is recorded",
+    )
+  }
+
+  @Test
+  fun `an actor restored dead dies at the next world tick`() {
+    val f = Fixture(rules = rules { regenOf = { emptyMap() } })
+    val g = f.mob(T.DUMMY)
+    f.w.restoreActorNumbers(
+      g,
+      g.baseStats.toMap(),
+      mapOf(fs.health to VitalState(0, g.max(fs.health))),
+      g.resists.toMap(),
+      Condition.DEAD,
+    )
+    assertTrue(g.inWorld)
+    f.run(WORLD_TICK_PULSES)
+    assertFalse(g.inWorld, "the pending death was processed")
+  }
+
+  @Test
+  fun `a vital driven far below zero is diagnosed once`() {
+    val f = Fixture(rules = rules { conditionOf = { Condition.OK } })
+    val g = f.mob(T.DUMMY)
+    f.w.changeVital(g, fs.health, -100_000)
+    f.w.changeVital(g, fs.health, -100_000)
+    assertEquals(1, f.w.diagnostics.count { "below -65535" in it.message })
   }
 }

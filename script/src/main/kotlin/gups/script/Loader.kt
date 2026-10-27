@@ -434,27 +434,29 @@ class ScriptLoader(
       checkRegions()
       checkCommands()
       propagate()
-      val ok =
-        states.values.filter { it.contentDone && !it.failed }.associate { it.pkg.path to it.pkg }
-      var errors = requestedMissing + states.values.flatMap { it.errors }
-      var live = ok
-      if (RULES_PACKAGE in live) {
-        val problems =
-          dryRunRules(
-            LoadResult(live, errors, modules, testModules, testErrors),
-            schema,
-            limits,
-            features = features,
-          )
-        if (problems.isNotEmpty()) {
-          errors +=
-            problems.map {
-              LoadError(RULES_PACKAGE, "rules", "dry run: $it", "//$RULES_PACKAGE:$RULES_FILE")
-            }
-          live = live - RULES_PACKAGE
+      dryRun()
+      return result()
+    }
+
+    fun result(): LoadResult =
+      LoadResult(
+        live.associate { it.pkg.path to it.pkg },
+        requestedMissing + states.values.flatMap { it.errors },
+        modules,
+        testModules,
+        testErrors,
+      )
+
+    /** Runs the rules dry run; a rules package that fails it fails, and so do its dependents. */
+    fun dryRun() {
+      val rules = states[RULES_PACKAGE]?.takeIf { it.contentDone && !it.failed } ?: return
+      val problems = dryRunRules(result(), schema, limits, features = features)
+      if (problems.isEmpty()) return
+      rules.errors +=
+        problems.map {
+          LoadError(RULES_PACKAGE, "rules", "dry run: $it", "//$RULES_PACKAGE:$RULES_FILE")
         }
-      }
-      return LoadResult(live, errors, modules, testModules, testErrors)
+      propagate()
     }
 
     val live: List<PkgState>

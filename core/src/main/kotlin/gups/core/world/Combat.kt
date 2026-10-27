@@ -226,11 +226,7 @@ private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
     v.current = next
   }
   victim.dirty = true
-  if (askCondition(victim) == Condition.DEAD) {
-    diagnose("rules", "on_player_death left ${victim.name} dead; vitals set to their maxima")
-    fillVitals(victim)
-  }
-  victim.condition = askCondition(victim)
+  settleNewCondition(victim, "on_player_death")
 }
 
 fun World.awardXp(a: Actor, amount: Long) {

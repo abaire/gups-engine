@@ -143,7 +143,9 @@ data class Flee(val below: Map<String, Int>) : Behavior {
     if (Feature.COMBAT !in world.features) return null
     val low =
       below.any { (vital, pct) ->
-        mob.current(vital).toLong() * 100 <= pct.toLong() * mob.max(vital)
+        val max = mob.max(vital)
+        // A vital the mob has no capacity for is never low.
+        max > 0 && mob.current(vital).toLong() * 100 <= pct.toLong() * max
       }
     if (!low) return null
     if (mob.room.exits.values.none { it.passable }) return null

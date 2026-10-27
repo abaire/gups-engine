@@ -9,6 +9,9 @@ import gups.core.rules.RulesContext
 // [changeVitals], which clamp at the maximum, track `belowZeroSince` and ask the rules for the
 // actor's condition.
 
+/** Vitals never go this low in a sane world; crossing it is diagnosed. */
+private const val VITAL_SANITY_FLOOR = -65535
+
 /** Adds [delta] to [vital], up to its maximum and with no floor, then settles the condition. */
 fun World.changeVital(actor: Actor, vital: String, delta: Int, source: Actor? = null) {
   changeVitals(actor, mapOf(vital to delta), source)
@@ -28,6 +31,12 @@ internal fun World.applyVitalDeltas(actor: Actor, deltas: Map<String, Int>, sour
     if (delta == 0) continue
     val next = (v.current.toLong() + delta).coerceIn(Int.MIN_VALUE.toLong(), v.max.toLong()).toInt()
     if (next == v.current) continue
+    if (next < VITAL_SANITY_FLOOR && v.current >= VITAL_SANITY_FLOOR)
+      diagnose(
+        "engine",
+        "${actor.name}'s $name fell to $next, below $VITAL_SANITY_FLOOR; a rules or script " +
+          "result is likely wrong",
+      )
     setVital(v, next)
     actor.dirty = true
     if (delta < 0 && source != null && source !== actor) actor.lastAttacker = source.id
@@ -68,7 +77,11 @@ internal fun World.refreshCondition(actor: Actor) {
 
 internal fun World.setCondition(actor: Actor, next: Condition) {
   val was = actor.condition
-  if (next == was) return
+  if (next == was) {
+    // A death not yet processed, as for an actor restored dead, is taken up again.
+    if (next == Condition.DEAD) deferRemoval(actor, Deferred.Kind.DEATH) { processDeath(actor) }
+    return
+  }
   val wasDisabled = actor.isDisabled
   actor.condition = next
   actor.dirty = true
@@ -85,6 +98,20 @@ internal fun World.setCondition(actor: Actor, next: Condition) {
   }
   disabledChanged(actor, wasDisabled)
   if (next == Condition.DEAD) deferRemoval(actor, Deferred.Kind.DEATH) { processDeath(actor) }
+}
+
+/**
+ * Sets [actor]'s condition quietly, for an actor that was just given its vitals at a spawn or
+ * respawn. A dead result is an error in [what]: it is diagnosed and the vitals are filled.
+ */
+internal fun World.settleNewCondition(actor: Actor, what: String) {
+  if (askCondition(actor) == Condition.DEAD) {
+    diagnose("rules", "$what left ${actor.name} dead; vitals set to their maxima")
+    fillVitals(actor)
+  }
+  val wasDisabled = actor.isDisabled
+  actor.condition = askCondition(actor)
+  disabledChanged(actor, wasDisabled)
 }
 
 /** Sets every vital of [actor] to its maximum through [changeVitals], as full healing does. */

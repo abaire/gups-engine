@@ -65,6 +65,15 @@ class BehaviorTest {
   }
 
   @Test
+  fun `flee ignores a listed vital the mob has no maximum of`() {
+    val f = fixture(mob("calm", Flee(mapOf("mana" to 50))))
+    val calm = f.mob(Label("//t:calm"))
+    assertEquals(0, calm.max("mana"))
+    f.runTo(10)
+    assertEquals(T.HALL, calm.room.label)
+  }
+
+  @Test
   fun `fleeing combat doesn't slip past guarded exits`() {
     val f =
       fixture(

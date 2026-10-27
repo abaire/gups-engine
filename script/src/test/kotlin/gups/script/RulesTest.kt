@@ -265,6 +265,27 @@ class RulesTest {
   }
 
   @Test
+  fun `a package that loads from rules that fail their dry run fails too`() {
+    val root =
+      tempWorld(
+        mapOf(
+          rulesPkg,
+          "rules/combat.star" to TestWorlds.rules("def condition(ctx):\n    return 'sleepy'\n"),
+          "rules/helpers.star" to "BONUS = 2\n",
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to "load(\"//rules:helpers.star\", \"BONUS\")\n$DEFAULT_ROOMS",
+        )
+      )
+    val result = ScriptLoader(WorldDir(root), ScriptLimits.HARNESS).load(listOf("zones/z", "rules"))
+    assertTrue("rules" !in result.packages)
+    assertTrue("zones/z" !in result.packages, result.errors.toString())
+    assertContains(
+      result.errors.single { it.pkg == "zones/z" }.message,
+      "depends on //rules, which failed to load",
+    )
+  }
+
+  @Test
   fun `a failing reload of the rules keeps the old rules live`() {
     val f = world("def to_hit(ctx):\n    return 77\n")
     f.w.runPulses(1)

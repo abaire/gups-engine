@@ -341,6 +341,27 @@ class OperationsTest {
   }
 
   @Test
+  fun `a wipe that the commit check refuses deletes nothing`() {
+    val repo = Repo()
+    withServer(repo) {}
+    repo.rooms(repo.world).writeText(repo.rooms(repo.world).readText() + "\n")
+    val logs = StringBuffer()
+    val refuse =
+      GupsServer(WorldDir(repo.world), port = 0, prod = ProdOptions("127.0.0.1"), wipe = true) {
+        logs.append(it).append('\n')
+      }
+    assertFalse(refuse.boot())
+    assertContains(logs, "changes nobody committed")
+    assertFalse("Wiped" in logs, logs.toString())
+    val backups = repo.db.resolveSibling("backups")
+    assertFalse(
+      Files.exists(backups) &&
+        Files.list(backups).use { s -> s.anyMatch { "prewipe-" in it.fileName.toString() } },
+      "no prewipe backup was taken",
+    )
+  }
+
+  @Test
   fun `metrics have the spec's names after one pulse, and healthz fails while the world stalls`() {
     val repo = Repo()
     withServer(repo) { r ->

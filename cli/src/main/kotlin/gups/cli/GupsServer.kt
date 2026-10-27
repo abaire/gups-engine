@@ -260,6 +260,11 @@ class GupsServer(
     val host = StarlarkHost(result, ScriptLimits(), loader)
     val saved = db?.let { SqlitePersistence.open(it, log) }
     persistence = saved
+    // Every refusal comes before a wipe, so a start that won't run never deletes anything.
+    if (prod != null && !checkCommit(saved!!)) {
+      saved.close()
+      return false
+    }
     if (saved != null) {
       val names = module.schema.names
       if (wipe) {
@@ -274,10 +279,6 @@ class GupsServer(
           return false
         }
       }
-    }
-    if (prod != null && !checkCommit(saved!!)) {
-      saved.close()
-      return false
     }
     val discardWorld = fresh || wipe
     val boot = saved?.boot(protos, discardWorld) ?: Boot()
