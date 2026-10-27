@@ -22,6 +22,12 @@ interface LoginHandler {
 
   /** Called once per pulse, for example to time out idle login prompts. */
   fun pulse(world: World) = Unit
+
+  /** An account was disabled; pre-game sessions for it are closed. */
+  fun accountDisabled(world: World, accountId: Long) = Unit
+
+  /** An account was re-enabled. */
+  fun accountEnabled(world: World, accountId: Long) = Unit
 }
 
 /**

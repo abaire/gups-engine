@@ -16,6 +16,9 @@ data class Account(
   val manualScope: List<String> = emptyList(),
   val githubHandle: String? = null,
   val disabled: Boolean = false,
+  val disabledBy: Long? = null,
+  val disabledAt: Long? = null,
+  val disabledReason: String? = null,
   /** Wall-clock milliseconds. */
   val createdAt: Long = 0,
 ) {
@@ -89,6 +92,13 @@ interface AccountStore {
    * touched.
    */
   fun update(account: Account)
+
+  /**
+   * Disables or enables account [id] in one immediate batch. Disabling stores the record and
+   * deletes the account's session tokens and unused setup codes; enabling clears the flag and the
+   * record. Returns false, changing nothing, if the flag already had that value.
+   */
+  fun setDisabled(id: Long, disabled: Boolean, by: Long?, at: Long, reason: String?): Boolean
 
   /** Sets or clears an account's password and revokes its web session tokens. */
   fun setPassword(id: Long, pwHash: String?)

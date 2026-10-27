@@ -305,6 +305,29 @@ class CommandsTest {
   }
 
   @Test
+  fun `import-roster offline with a disabled row prints counts, warning, and writes the flag`() {
+    val root = java.nio.file.Files.createTempDirectory("gups-accounts-disabled")
+    val roster =
+      root.resolve("roster.csv").toFile().apply { writeText("login,disabled\nann,true\n") }
+    val res = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
+    assertEquals(0, res.statusCode, res.output)
+    assertContains(res.stderr, "1 accounts created, 0 updated, 0 unchanged, 1 disabled, 0 enabled")
+    assertContains(
+      res.stderr,
+      "Warning: characters already in the world were not quit; use --admin against a running server.",
+    )
+
+    val dbFile = root.resolve(".gups").resolve("world.db")
+    gups.persist.Database.open(dbFile).use { d ->
+      gups.persist.SqliteAccountStore(dbFile, d::write).use { s ->
+        val ann = s.byLogin("ann")!!
+        assertTrue(ann.disabled)
+        assertEquals("roster", ann.disabledReason)
+      }
+    }
+  }
+
+  @Test
   fun `fuzz walker failure outputs rerun command and repro bundle that reproduces in repro`() {
     val root =
       tempWorld(

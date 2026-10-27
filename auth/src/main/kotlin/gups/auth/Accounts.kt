@@ -14,13 +14,23 @@ data class RosterEntry(
   val login: String,
   val githubHandle: String? = null,
   val role: Role = Role.PLAYER,
+  val disabled: Boolean? = null,
 )
 
 /**
  * What a roster import did. [codes] holds `login` to setup code for each new account, in roster
  * order.
  */
-data class RosterResult(val codes: List<Pair<String, String>>, val updated: Int, val unchanged: Int)
+data class RosterResult(
+  val codes: List<Pair<String, String>>,
+  val updated: Int,
+  val unchanged: Int,
+  val disabled: List<String> = emptyList(),
+  val enabled: List<String> = emptyList(),
+  val created: Int = codes.size,
+  val disabledIds: List<Long> = emptyList(),
+  val enabledIds: List<Long> = emptyList(),
+)
 
 /** Redeeming a code: the account it set up or created, or why it failed. */
 sealed interface Redeemed {
@@ -109,24 +119,82 @@ class AccountService(
    */
   fun importRoster(entries: List<RosterEntry>, days: Int = DEFAULT_INVITE_DAYS): RosterResult {
     val codes = mutableListOf<Pair<String, String>>()
+    val disabledLogins = mutableListOf<String>()
+    val enabledLogins = mutableListOf<String>()
+    val disabledIds = mutableListOf<Long>()
+    val enabledIds = mutableListOf<Long>()
+    var created = 0
     var updated = 0
     var unchanged = 0
+    val now = clock()
     for (e in entries) {
       val existing = store.byLogin(e.login)
       if (existing == null) {
+        val isNewDisabled = e.disabled == true
         val a =
           store.create(
-            Account(0, e.login, null, e.role, githubHandle = e.githubHandle, createdAt = clock())
+            Account(
+              id = 0,
+              login = e.login,
+              pwHash = null,
+              role = e.role,
+              githubHandle = e.githubHandle,
+              disabled = isNewDisabled,
+              disabledBy = null,
+              disabledAt = if (isNewDisabled) now else null,
+              disabledReason = if (isNewDisabled) "roster" else null,
+              createdAt = now,
+            )
           ) ?: error("login ${e.login} was taken during the import")
-        codes += e.login to createInvite(e.role, days, accountId = a.id)
-      } else if (existing.githubHandle != e.githubHandle || existing.role != e.role) {
-        store.update(existing.copy(githubHandle = e.githubHandle, role = e.role))
-        updated++
+        created++
+        if (isNewDisabled) {
+          disabledLogins += e.login
+          disabledIds += a.id
+        } else {
+          codes += e.login to createInvite(e.role, days, accountId = a.id)
+        }
       } else {
-        unchanged++
+        val flagChanged =
+          e.disabled != null &&
+            existing.disabled != e.disabled &&
+            store.setDisabled(
+              id = existing.id,
+              disabled = e.disabled,
+              by = null,
+              at = now,
+              reason = if (e.disabled) "roster" else null,
+            )
+        if (flagChanged) {
+          if (e.disabled == true) {
+            disabledLogins += e.login
+            disabledIds += existing.id
+          } else {
+            enabledLogins += e.login
+            enabledIds += existing.id
+          }
+        }
+        val fresh = if (flagChanged) store.byId(existing.id)!! else existing
+        val metaChanged = fresh.githubHandle != e.githubHandle || fresh.role != e.role
+        if (metaChanged) {
+          store.update(fresh.copy(githubHandle = e.githubHandle, role = e.role))
+        }
+        if (flagChanged || metaChanged) {
+          updated++
+        } else {
+          unchanged++
+        }
       }
     }
-    return RosterResult(codes, updated, unchanged)
+    return RosterResult(
+      codes,
+      updated,
+      unchanged,
+      disabledLogins,
+      enabledLogins,
+      created,
+      disabledIds,
+      enabledIds,
+    )
   }
 }
 
@@ -153,6 +221,7 @@ object Roster {
         (problems + "line ${lines.first().index + 1}: the header has no 'login' column")
     val handleAt = header.indexOf("github_handle")
     val roleAt = header.indexOf("role")
+    val disabledAt = header.indexOf("disabled")
     val seen = HashSet<String>()
     val out = mutableListOf<RosterEntry>()
     for ((i, line) in lines.drop(1)) {
@@ -172,12 +241,30 @@ object Roster {
       if (role == null)
         problems +=
           "line $n: unknown role '$roleText'; expected ${Role.entries.joinToString { it.name.lowercase() }}"
-      out += RosterEntry(login, handle, role ?: Role.PLAYER)
+      val disabled =
+        if (disabledAt >= 0) {
+          val text = f.getOrNull(disabledAt)?.trim().orEmpty()
+          if (text.isEmpty()) null
+          else
+            when (text.lowercase()) {
+              "true",
+              "yes",
+              "1" -> true
+              "false",
+              "no",
+              "0" -> false
+              else -> {
+                problems += "line $n: '$text' is not true or false"
+                null
+              }
+            }
+        } else null
+      out += RosterEntry(login, handle, role ?: Role.PLAYER, disabled)
     }
     return (if (problems.isEmpty()) out else emptyList()) to problems
   }
 
-  private val COLUMNS = listOf("login", "github_handle", "role")
+  private val COLUMNS = listOf("login", "github_handle", "role", "disabled")
 
   /** Splits one CSV line; `""` inside quotes is a quote. */
   private fun fields(line: String): List<String> {

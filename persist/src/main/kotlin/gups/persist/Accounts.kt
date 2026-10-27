@@ -61,6 +61,18 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
 
   override fun update(account: Account) = submit(AccountOp.Update(account))
 
+  override fun setDisabled(
+    id: Long,
+    disabled: Boolean,
+    by: Long?,
+    at: Long,
+    reason: String?,
+  ): Boolean {
+    val op = AccountOp.SetDisabled(id, disabled, by, at, reason)
+    submit(op)
+    return op.result.get(WRITE_TIMEOUT_S, TimeUnit.SECONDS)
+  }
+
   override fun setPassword(id: Long, pwHash: String?) = submit(AccountOp.SetPassword(id, pwHash))
 
   override fun addInvite(invite: Invite) = submit(AccountOp.AddInvite(invite))
@@ -164,7 +176,7 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
     synchronized(read) {
       read
         .prepareStatement(
-          "SELECT id, login, pw_hash, roles_json, github_handle, disabled, created_at FROM accounts $where ORDER BY id"
+          "SELECT id, login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at FROM accounts $where ORDER BY id"
         )
         .use { st ->
           args.forEachIndexed { i, a -> st.setObject(i + 1, a) }
@@ -182,7 +194,10 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
                     manualScope = roles.manual,
                     githubHandle = rs.getString(5),
                     disabled = rs.getInt(6) != 0,
-                    createdAt = rs.getLong(7),
+                    disabledBy = rs.nullableLong(7),
+                    disabledAt = rs.nullableLong(8),
+                    disabledReason = rs.getString(9),
+                    createdAt = rs.getLong(10),
                   )
                 )
               }

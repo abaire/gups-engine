@@ -182,4 +182,16 @@ class WebLoginsTest {
     f.now += 60_000
     assertIs<WebLogin.Ok>(web.signup(code, "bea", pw, "10.0.0.1"))
   }
+
+  @Test
+  fun `a web token issued before disable is refused afterward and is gone from the store`() {
+    val (f, web) = setup()
+    val a = f.account("ann", pw)
+    val ok = assertIs<WebLogin.Ok>(web.login("ann", pw, "ip"))
+    assertEquals(a.id, web.accountFor(ok.token))
+
+    f.store.setDisabled(a.id, disabled = true, by = 1, at = f.now, reason = "test")
+    assertNull(web.accountFor(ok.token))
+    assertTrue(f.store.tokens.isEmpty())
+  }
 }

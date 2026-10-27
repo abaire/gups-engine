@@ -91,6 +91,7 @@ class AccountLogin(
   private class Done(val conn: Conn, val then: (World, Session) -> Unit)
 
   private val conns = HashMap<SessionId, Conn>()
+  private val disabledAccounts = HashSet<Long>()
 
   /** Hashed for unknown logins, so a wrong login costs as much as a wrong password. */
   private val dummyHash: String by lazy { accounts.hasher.hash("no account has this password") }
@@ -102,7 +103,7 @@ class AccountLogin(
     val proven = session.account ?: return ask(world, session, c, Step.LOGIN, LOGIN_PROMPT)
     // A web session token already proved the account: straight to the characters.
     later(world, session, c, { accounts.store.byId(proven) }) { w, s, a ->
-      if (a == null || a.disabled) {
+      if (a == null || a.disabled || a.id in disabledAccounts) {
         w.sendSession(
           s,
           if (a == null) "That account no longer exists." else "This account is disabled.",
@@ -117,6 +118,24 @@ class AccountLogin(
 
   override fun disconnected(world: World, session: SessionId) {
     conns.remove(session)
+  }
+
+  override fun accountDisabled(world: World, accountId: Long) {
+    disabledAccounts.add(accountId)
+    for ((id, c) in conns.toList()) {
+      if (c.account?.id == accountId) {
+        val s = world.session(id)
+        if (s != null) {
+          if (c.step.hidden) s.sink.hideInput(false)
+          world.sendSession(s, "This account has been disabled.")
+          world.closeSession(s, "Goodbye.")
+        }
+      }
+    }
+  }
+
+  override fun accountEnabled(world: World, accountId: Long) {
+    disabledAccounts.remove(accountId)
   }
 
   override fun pulse(world: World) {
@@ -241,7 +260,7 @@ class AccountLogin(
           limiter.failure(accountKey, ipKey)
           strike(w, session, c, "Wrong login or password.")
         }
-        a.disabled -> {
+        a.disabled || a.id in disabledAccounts -> {
           w.sendSession(session, "This account is disabled.")
           w.closeSession(session, "Goodbye.")
         }
@@ -353,6 +372,11 @@ class AccountLogin(
     later(world, s, c, { accounts.redeem(code, login, password) }) { w, session, r ->
       when (r) {
         is Redeemed.Ok -> {
+          if (r.account.disabled || r.account.id in disabledAccounts) {
+            w.sendSession(session, "This account is disabled.")
+            w.closeSession(session, "Goodbye.")
+            return@later
+          }
           c.account = r.account
           c.login = r.account.login
           w.sendSession(session, "Your account '${r.account.login}' is ready.")

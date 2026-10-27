@@ -251,4 +251,40 @@ class AccountLoginTest {
     assertNotNull(d.sink.closed)
     assertTrue(IDLE_QUIT_PULSES > 240)
   }
+
+  @Test
+  fun `the race - login reading account before disable commits is refused when continuation runs`() {
+    val f = LoginFixture()
+    val a = f.account("ann", pw)
+    val c = f.connect()
+    c.send("ann")
+
+    c.type(pw)
+    assertEquals(1, f.queued)
+    // The login reads the still-enabled account before the disable commits.
+    f.runWork()
+    assertEquals(0, f.queued)
+
+    f.store.setDisabled(a.id, disabled = true, by = 1, at = f.now, reason = "dropped")
+    f.w.closeDisabledAccount(a.id)
+
+    f.settle()
+    assertContains(c.sink.transcript, "This account is disabled.")
+    assertEquals("Goodbye.", c.sink.closed)
+    assertFalse(c.sink.transcript.contains("Your characters"))
+  }
+
+  @Test
+  fun `the setup code of a password-less roster account is unusable after a disable`() {
+    val f = LoginFixture()
+    val r = f.service.importRoster(listOf(RosterEntry("ann")))
+    val code = r.codes.single().second
+    val ann = f.store.byLogin("ann")!!
+
+    f.store.setDisabled(ann.id, disabled = true, by = 1, at = f.now, reason = "dropped")
+    val c = f.connect()
+    c.send("new")
+    val out = c.send(code)
+    assertContains(out, "That code isn't valid, or it has expired.")
+  }
 }

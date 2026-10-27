@@ -183,4 +183,78 @@ class RosterTest {
     assertEquals(Redeemed.BadCode, f.service.redeem(codes.getValue("bob"), "bob", pw))
     assertNull(f.store.byLogin("bob")!!.pwHash)
   }
+
+  @Test
+  fun `roster parsing handles disabled column in any position, all spellings, blank and bad values`() {
+    val csv =
+      """
+      disabled,login,role
+      true,ann,player
+      FALSE,bob,builder
+      yes,cy.d,player
+      NO,dee,player
+      1,eddie,player
+      0,fay,player
+      ,gus,player
+      """
+        .trimIndent()
+    val (entries, problems) = Roster.parse(csv)
+    assertEquals(emptyList(), problems)
+    assertEquals(
+      listOf(
+        RosterEntry("ann", null, Role.PLAYER, disabled = true),
+        RosterEntry("bob", null, Role.BUILDER, disabled = false),
+        RosterEntry("cy.d", null, Role.PLAYER, disabled = true),
+        RosterEntry("dee", null, Role.PLAYER, disabled = false),
+        RosterEntry("eddie", null, Role.PLAYER, disabled = true),
+        RosterEntry("fay", null, Role.PLAYER, disabled = false),
+        RosterEntry("gus", null, Role.PLAYER, disabled = null),
+      ),
+      entries,
+    )
+
+    val (missingCol, noColProblems) = Roster.parse("login\nann")
+    assertEquals(emptyList(), noColProblems)
+    assertEquals(listOf(RosterEntry("ann", null, Role.PLAYER, disabled = null)), missingCol)
+
+    val (badEntries, badProblems) = Roster.parse("login,disabled\nann,maybe\nbob,true")
+    assertEquals(emptyList(), badEntries)
+    assertEquals(listOf("line 2: 'maybe' is not true or false"), badProblems)
+  }
+
+  @Test
+  fun `roster import creates disabled accounts without codes, re-enables, and updates flags`() {
+    val f = LoginFixture()
+
+    val res1 = f.service.importRoster(listOf(RosterEntry("ann", disabled = true)))
+    assertEquals(emptyList(), res1.codes)
+    assertEquals(listOf("ann"), res1.disabled)
+    assertEquals(1, res1.created)
+    assertEquals(0, res1.updated)
+    val ann = f.store.byLogin("ann")!!
+    assertTrue(ann.disabled)
+    assertNull(ann.disabledBy)
+    assertEquals("roster", ann.disabledReason)
+    assertEquals(f.now, ann.disabledAt)
+    assertNull(f.store.invites.values.firstOrNull { it.accountId == ann.id })
+
+    val res2 = f.service.importRoster(listOf(RosterEntry("ann", disabled = null)))
+    assertEquals(0, res2.updated)
+    assertEquals(1, res2.unchanged)
+    assertTrue(f.store.byLogin("ann")!!.disabled)
+
+    val res3 = f.service.importRoster(listOf(RosterEntry("ann", disabled = false)))
+    assertEquals(1, res3.updated)
+    assertEquals(listOf("ann"), res3.enabled)
+    val annEnabled = f.store.byLogin("ann")!!
+    assertFalse(annEnabled.disabled)
+    assertNull(annEnabled.disabledReason)
+    assertNull(annEnabled.disabledAt)
+
+    val res4 = f.service.importRoster(listOf(RosterEntry("ann", disabled = false)))
+    assertEquals(0, res4.updated)
+    assertEquals(1, res4.unchanged)
+    assertEquals(emptyList(), res4.disabled)
+    assertEquals(emptyList(), res4.enabled)
+  }
 }

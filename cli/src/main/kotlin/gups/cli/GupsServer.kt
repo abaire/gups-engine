@@ -9,6 +9,7 @@ import gups.auth.LoginLimiter
 import gups.auth.LoginSettings
 import gups.auth.WebLogins
 import gups.auth.applyAccount
+import gups.auth.closeDisabledAccount
 import gups.auth.syncScopes
 import gups.core.Account
 import gups.core.Label
@@ -40,6 +41,7 @@ import gups.script.WorldDir
 import gups.script.WorldModule
 import gups.script.WorldWatcher
 import java.nio.file.Path
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +92,9 @@ class TlsListener(val host: String, val port: Int, val tls: ServerTls)
 
 /** Password checks, account changes and other slow work run here, never on the world thread. */
 private const val BACKGROUND_THREADS = 4
+
+/** How long `POST /roster` waits for the world to close the accounts it disabled. */
+private const val ROSTER_KICK_TIMEOUT_S = 30L
 
 /**
  * A running server. Without [prod] it is the `--dev` profile: raw telnet on localhost, the
@@ -451,6 +456,27 @@ class GupsServer(
         val (entries, problems) = gups.auth.Roster.parse(csv)
         if (problems.isNotEmpty()) return 400 to problems.joinToString("\n", postfix = "\n")
         val r = AccountService(accounts).importRoster(entries)
+        if (r.disabledIds.isNotEmpty() || r.enabledIds.isNotEmpty()) {
+          val done = CompletableFuture<Unit>()
+          loop.submit(
+            WorldControlEvent.Task { w ->
+              try {
+                for (id in r.disabledIds) w.closeDisabledAccount(id)
+                for (id in r.enabledIds) w.login?.accountEnabled(w, id)
+                done.complete(Unit)
+              } catch (e: Throwable) {
+                done.completeExceptionally(e)
+                throw e
+              }
+            }
+          )
+          // A stopping loop may never run the task; the import itself has already committed.
+          try {
+            done.get(ROSTER_KICK_TIMEOUT_S, TimeUnit.SECONDS)
+          } catch (e: Exception) {
+            return 500 to "The roster was imported, but closing disabled accounts failed: $e\n"
+          }
+        }
         return 200 to
           (listOf("login,setup_code") + r.codes.map { (l, c) -> "$l,$c" }).joinToString(
             "\n",

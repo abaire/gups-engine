@@ -237,4 +237,133 @@ class AccountStoreTest {
     assertNull(s.tokenAccount("c", 0))
     assertTrue(sp.close())
   }
+
+  @Test
+  fun `migration 4 runs on a database at schema version 3 and existing accounts read back with null record`() {
+    val file = tempDb()
+    Database.open(file, MIGRATIONS.take(3)).close()
+    DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
+      c.createStatement().use { st ->
+        st.executeUpdate(
+          "INSERT INTO accounts (login, pw_hash, roles_json, github_handle, disabled, created_at) VALUES ('ann', 'hash', '{\"role\":\"PLAYER\"}', NULL, 0, 100)"
+        )
+      }
+    }
+    val sp = SqlitePersistence.open(file)
+    assertEquals(4, sp.db.schemaVersion)
+    val ann = sp.accounts.byLogin("ann")!!
+    assertFalse(ann.disabled)
+    assertNull(ann.disabledBy)
+    assertNull(ann.disabledAt)
+    assertNull(ann.disabledReason)
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `setDisabled stores record, deletes tokens and unused setup codes, and leaves others alone`() {
+    val file = tempDb()
+    val sp = SqlitePersistence.open(file)
+    val s = sp.accounts
+    val ida = s.create(Account(0, "ida", "h", Role.INSTRUCTOR))!!
+    val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+    val bob = s.create(Account(0, "bob", "h", Role.PLAYER))!!
+
+    s.addToken("ann-tok", ann.id, 10_000, 1_000)
+    s.addToken("bob-tok", bob.id, 10_000, 1_000)
+
+    s.addInvite(Invite("ann-code", Role.PLAYER, 10_000, accountId = ann.id))
+    s.addInvite(Invite("ann-used", Role.PLAYER, 10_000, accountId = ann.id))
+    assertTrue(s.useInvite("ann-used", ann.id))
+    s.addInvite(Invite("bob-code", Role.PLAYER, 10_000, accountId = bob.id))
+
+    val changed =
+      s.setDisabled(ann.id, disabled = true, by = ida.id, at = 2_000, reason = "dropped")
+    assertTrue(changed)
+
+    val updatedAnn = s.byId(ann.id)!!
+    assertTrue(updatedAnn.disabled)
+    assertEquals(ida.id, updatedAnn.disabledBy)
+    assertEquals(2_000L, updatedAnn.disabledAt)
+    assertEquals("dropped", updatedAnn.disabledReason)
+
+    assertNull(s.tokenAccount("ann-tok", 1_500))
+    assertEquals(bob.id, s.tokenAccount("bob-tok", 1_500))
+
+    assertNull(s.invite("ann-code"))
+    assertNotNull(s.invite("ann-used"))
+    assertNotNull(s.invite("bob-code"))
+
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `setDisabled to the current state returns false and changes nothing`() {
+    val sp = SqlitePersistence.open(tempDb())
+    val s = sp.accounts
+    val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+    assertFalse(s.setDisabled(ann.id, disabled = false, by = null, at = 1_000, reason = null))
+
+    assertTrue(s.setDisabled(ann.id, disabled = true, by = 1, at = 1_000, reason = "first"))
+    val first = s.byId(ann.id)!!
+    assertFalse(s.setDisabled(ann.id, disabled = true, by = 2, at = 2_000, reason = "second"))
+    val second = s.byId(ann.id)!!
+    assertEquals(first, second)
+
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `enabling clears the flag and record, deleted tokens stay deleted`() {
+    val sp = SqlitePersistence.open(tempDb())
+    val s = sp.accounts
+    val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+    s.addToken("tok", ann.id, 10_000, 1_000)
+    assertTrue(s.setDisabled(ann.id, disabled = true, by = 1, at = 1_000, reason = "test"))
+    assertNull(s.tokenAccount("tok", 1_500))
+
+    assertTrue(s.setDisabled(ann.id, disabled = false, by = null, at = 2_000, reason = null))
+    val enabledAnn = s.byId(ann.id)!!
+    assertFalse(enabledAnn.disabled)
+    assertNull(enabledAnn.disabledBy)
+    assertNull(enabledAnn.disabledAt)
+    assertNull(enabledAnn.disabledReason)
+
+    assertNull(s.tokenAccount("tok", 1_500))
+
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `update round-trips the disabled record`() {
+    val sp = SqlitePersistence.open(tempDb())
+    val s = sp.accounts
+    val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+    val withDisabled =
+      ann.copy(
+        role = Role.BUILDER,
+        disabled = true,
+        disabledBy = 42L,
+        disabledAt = 12345L,
+        disabledReason = "reason",
+      )
+    s.update(withDisabled)
+    val readBack = s.byId(ann.id)!!
+    assertEquals(withDisabled, readBack)
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `a sanitized copy has no accounts`() {
+    val file = tempDb()
+    val sp = SqlitePersistence.open(file)
+    sp.accounts.create(Account(0, "ann", "h", Role.PLAYER))!!
+    sp.accounts.create(Account(0, "bob", "h", Role.PLAYER))!!
+    assertTrue(sp.close())
+
+    val target = tempDb()
+    Database.sanitizedCopy(file, target)
+    Database.open(target).use { d ->
+      SqliteAccountStore(target, d::write).use { s -> assertEquals(emptyList(), s.all()) }
+    }
+  }
 }

@@ -1020,7 +1020,7 @@ class ImportRoster : CliktCommand(name = "import-roster") {
       .file(canBeDir = false)
 
   override fun help(context: Context) =
-    "Create accounts from a roster CSV (columns login,github_handle,role) and print each new login's setup code."
+    "Create accounts from a roster CSV (columns login,github_handle,role,disabled) and print each new login's setup code."
 
   override fun run() {
     if (days < 1) throw UsageError("--days must be at least 1")
@@ -1045,8 +1045,14 @@ class ImportRoster : CliktCommand(name = "import-roster") {
     echo("login,setup_code")
     for ((login, code) in result.codes) echo("$login,$code")
     echo(
-      "${result.codes.size} accounts created, ${result.updated} updated, ${result.unchanged} unchanged. Setup codes expire in $days days.",
+      "${result.created} accounts created, ${result.updated} updated, ${result.unchanged} unchanged, ${result.disabled.size} disabled, ${result.enabled.size} enabled. Setup codes expire in $days days.",
       err = true,
     )
+    if (result.disabled.isNotEmpty()) {
+      echo(
+        "Warning: characters already in the world were not quit; use --admin against a running server.",
+        err = true,
+      )
+    }
   }
 }

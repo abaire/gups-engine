@@ -1,10 +1,18 @@
 package gups.auth
 
 import gups.core.Account
+import gups.core.Label
 import gups.core.Role
+import gups.core.WebLogin
+import gups.core.world.disconnect
+import gups.core.world.handle
+import gups.core.world.startCombat
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -239,5 +247,187 @@ class AccountToolsTest {
     assertEquals(14 * 86_400_000L, parseDuration("2w").getOrThrow())
     assertNull(parseDuration("Permanent").getOrThrow())
     assertTrue(parseDuration("soon").isFailure)
+  }
+
+  @Test
+  fun `role disable quits characters including in combat or linkdead, checkpoints, and removes from world`() {
+    val (f, i) = setup()
+    val annAcc = f.account("ann", pw)
+    val annClient = f.connect()
+    annClient.play("ann", pw, "Ann", create = true)
+    val annPlayer = annClient.player!!
+    val guard = f.w.spawnMob(Label("//t:guard"), f.w.room(HALL))
+    f.w.startCombat(annPlayer, guard)
+    assertTrue(annPlayer.isEngaged)
+
+    val out = i.send("@role ann disable dropped the course")
+    assertContains(out, "ann is now disabled.")
+    assertContains(annClient.sink.transcript, "This account has been disabled.")
+    assertEquals("This account has been disabled.", annClient.sink.closed)
+    assertFalse(annPlayer.inWorld)
+    assertNull(annPlayer.session)
+    assertEquals(annAcc.id, f.persistence.saved["Ann"])
+
+    val bobAcc = f.account("bob", pw)
+    val bobClient = f.connect()
+    bobClient.play("bob", pw, "Bob", create = true)
+    val bobPlayer = bobClient.player!!
+    f.w.disconnect(bobClient.id)
+    assertNotNull(bobPlayer.linkDeadSince)
+    assertTrue(bobPlayer.inWorld)
+
+    i.send("@role bob disable")
+    assertFalse(bobPlayer.inWorld)
+    assertEquals(bobAcc.id, f.persistence.saved["Bob"])
+  }
+
+  @Test
+  fun `connection at character menu and websocket with token are closed on disable`() {
+    val (f, i) = setup()
+    f.account("ann", pw)
+
+    val annMenu = f.connect()
+    annMenu.send("ann")
+    val menuPrompt = annMenu.send(pw)
+    assertContains(menuPrompt, "Type a name to play")
+
+    val bobAcc = f.account("bob", pw)
+    val wsSink = RecordingSink()
+    f.w.handle(
+      gups.core.WorldControlEvent.Connect(
+        gups.core.SessionId(99),
+        wsSink,
+        "10.0.0.1",
+        "websocket",
+        account = bobAcc.id,
+      )
+    )
+    f.settle()
+    assertContains(wsSink.drain(), "Type a name to play")
+
+    i.send("@role ann disable")
+    assertContains(annMenu.sink.transcript, "This account has been disabled.")
+    assertEquals("Goodbye.", annMenu.sink.closed)
+
+    i.send("@role bob disable")
+    assertContains(wsSink.transcript, "This account has been disabled.")
+    assertEquals("Goodbye.", wsSink.closed)
+  }
+
+  @Test
+  fun `instructor reply comes after kick and role describe shows disabled record`() {
+    val (f, i) = setup()
+    f.account("ann", pw)
+    val annClient = f.connect()
+    annClient.play("ann", pw, "Ann", create = true)
+
+    val out = i.send("@role ann disable dropped the course")
+    assertContains(out, "ann is now disabled.")
+    assertFalse(annClient.player?.inWorld == true)
+    assertEquals("This account has been disabled.", annClient.sink.closed)
+
+    val desc = i.send("@role ann")
+    assertContains(desc, "disabled by ida")
+    assertContains(desc, ": dropped the course")
+  }
+
+  @Test
+  fun `disabling with no reason stores null and shows no colon suffix`() {
+    val (f, i) = setup()
+    f.account("ann", pw)
+    i.send("@role ann disable")
+    val a = f.store.byLogin("ann")!!
+    assertTrue(a.disabled)
+    assertNull(a.disabledReason)
+
+    val desc = i.send("@role ann")
+    assertContains(desc, "disabled by ida")
+    val disabledLine = desc.lines().first { it.contains("disabled by ida") }
+    assertFalse(disabledLine.contains(": "))
+  }
+
+  @Test
+  fun `disabling refused on own account and admin checks`() {
+    val (f, i) = setup()
+    f.account("admin1", pw, Role.ADMIN)
+    assertContains(i.send("@role ida disable"), "You can't disable your own account.")
+    assertContains(i.send("@role ida enable"), "You can't enable your own account.")
+
+    assertContains(i.send("@role admin1 disable"), "Only an admin can disable an admin.")
+    assertContains(i.send("@role admin1 enable"), "Only an admin can enable an admin.")
+
+    f.account("boss", pw, Role.ADMIN)
+    val bossClient = f.connect()
+    bossClient.play("boss", pw, "Boss", create = true)
+    assertContains(bossClient.send("@role admin1 disable"), "admin1 is now disabled.")
+    assertTrue(f.store.byLogin("admin1")!!.disabled)
+    assertContains(bossClient.send("@role admin1 enable"), "admin1 is now enabled.")
+    assertFalse(f.store.byLogin("admin1")!!.disabled)
+  }
+
+  @Test
+  fun `a character without an account can't disable, so a null disabler always means the roster`() {
+    val (f, i) = setup()
+    f.account("ann", pw)
+    i.player!!.accountId = null
+    assertContains(i.send("@role ann disable roster"), "Only an account can disable an account.")
+    assertFalse(f.store.byLogin("ann")!!.disabled)
+
+    f.service.importRoster(listOf(RosterEntry("ann", disabled = true)))
+    assertContains(i.send("@role ann"), "\n  disabled by the roster")
+  }
+
+  @Test
+  fun `disabling twice returns no-op and keeps first record`() {
+    val (f, i) = setup()
+    f.account("ann", pw)
+    f.account("prof2", pw, Role.INSTRUCTOR)
+    val prof2Client = f.connect()
+    prof2Client.play("prof2", pw, "Prof", create = true)
+
+    f.now = 1_000_000L
+    assertContains(i.send("@role ann disable first reason"), "ann is now disabled.")
+    val first = f.store.byLogin("ann")!!
+    assertEquals("first reason", first.disabledReason)
+
+    f.now = 2_000_000L
+    val secondReply = prof2Client.send("@role ann disable second reason")
+    assertContains(secondReply, "ann is already disabled.")
+    val second = f.store.byLogin("ann")!!
+    assertEquals(first.disabledBy, second.disabledBy)
+    assertEquals(first.disabledAt, second.disabledAt)
+    assertEquals(first.disabledReason, second.disabledReason)
+  }
+
+  @Test
+  fun `role enable clears flag and record and allows login`() {
+    val (f, i) = setup()
+    val a = f.account("ann", pw)
+    val web = WebLogins(f.service, f.limiter, { f.now })
+    val tok = assertIs<WebLogin.Ok>(web.login("ann", pw, "ip")).token
+    assertEquals(a.id, web.accountFor(tok))
+
+    i.send("@role ann disable")
+    assertTrue(f.store.byLogin("ann")!!.disabled)
+    assertNull(web.accountFor(tok))
+
+    val enableOut = i.send("@role ann enable")
+    assertContains(enableOut, "ann is now enabled.")
+    val enabledAcc = f.store.byLogin("ann")!!
+    assertFalse(enabledAcc.disabled)
+    assertNull(enabledAcc.disabledBy)
+    assertNull(enabledAcc.disabledAt)
+    assertNull(enabledAcc.disabledReason)
+
+    val desc = i.send("@role ann")
+    assertFalse(desc.contains("disabled"))
+
+    val annClient = f.connect()
+    annClient.send("ann")
+    val menu = annClient.send(pw)
+    assertContains(menu, "Type a name to play")
+
+    assertNull(web.accountFor(tok))
+    assertContains(i.send("@role ann enable"), "ann is already enabled.")
   }
 }

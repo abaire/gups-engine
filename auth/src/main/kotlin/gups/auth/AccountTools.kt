@@ -10,6 +10,7 @@ import gups.core.world.FastCommand
 import gups.core.world.World
 import gups.core.world.flush
 import gups.core.world.later
+import gups.core.world.quit
 import gups.core.world.send
 import gups.core.world.session
 import gups.core.world.wallTime
@@ -51,6 +52,16 @@ fun World.applyAccount(a: Account) {
   }
 }
 
+/** Quits [accountId]'s characters and closes its pre-game sessions. World thread only. */
+fun World.closeDisabledAccount(accountId: Long) {
+  for (p in players.toList()) {
+    if (p.accountId == accountId) {
+      quit(p, "This account has been disabled.")
+    }
+  }
+  login?.accountDisabled(this, accountId)
+}
+
 /**
  * The instructor commands that change accounts: `@role`, `@invite`, `@restrict`, `@unrestrict` and
  * `@restrictions`. Every store call runs off the world thread through [later].
@@ -81,31 +92,96 @@ private constructor(
     val w = c.world
     val words = c.args.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (words.isEmpty())
-      return w.send(p, "Usage: @role <account> [<role> [packages] | reset | revoke]")
+      return w.send(
+        p,
+        "Usage: @role <account> [<role> [packages] | reset | revoke | disable [reason] | enable]",
+      )
     val login = words[0].lowercase()
-    run(w, p, { store.byLogin(login) }) { a ->
+    val what = words.getOrNull(1)?.lowercase()
+    run(
+      w,
+      p,
+      {
+        val a = store.byLogin(login)
+        val byId = a?.disabledBy
+        val byLogin =
+          if (what == null && a?.disabled == true && byId != null) {
+            store.byId(byId)?.login
+          } else null
+        a to byLogin
+      },
+    ) { (a, byLogin) ->
       if (a == null) return@run reply(this, p, "There is no account '$login'.")
-      when (val what = words.getOrNull(1)?.lowercase()) {
-        null -> reply(this, p, describe(a))
+      when (what) {
+        null -> reply(this, p, describe(a, byLogin))
         "reset" -> reset(this, p, a)
         "revoke" ->
           run(this, p, { store.revokeTokens(a.id) }) {
             reply(this, p, "${a.login}'s web sessions are revoked.")
           }
+        "disable" -> disable(this, p, a, words.drop(2).joinToString(" ").ifEmpty { null })
+        "enable" -> enable(this, p, a)
         else -> setRole(this, p, a, what, words.drop(2))
       }
     }
   }
 
-  private fun describe(a: Account): String = buildString {
+  private fun describe(a: Account, byLogin: String? = null): String = buildString {
     append("${a.login}: ${a.role.name.lowercase()}")
     if (a.disabled) append(", disabled")
     a.githubHandle?.let { append(", GitHub @$it") }
+    if (a.disabled) {
+      val line =
+        when (val byId = a.disabledBy) {
+          null -> "disabled by the roster"
+          else -> {
+            val time = a.disabledAt?.let { " ${wallTime(it)}" } ?: ""
+            val why = a.disabledReason?.let { ": $it" } ?: ""
+            "disabled by ${byLogin ?: "#$byId"}$time$why"
+          }
+        }
+      append("\n  $line")
+    }
     if (a.role == Role.BUILDER || a.packages.isNotEmpty()) {
       append("\n  CODEOWNERS packages: ${a.scope.sorted().joinToString().ifEmpty { "none" }}")
       append("\n  Packages by hand: ${a.manualScope.sorted().joinToString().ifEmpty { "none" }}")
     }
     if (a.pwHash == null) append("\n  No password yet: they need a setup code.")
+  }
+
+  private fun disable(w: World, p: Player, a: Account, reason: String?) {
+    // Only the roster leaves no disabler, which is how `@role` tells the two apart.
+    if (p.accountId == null) return reply(w, p, "Only an account can disable an account.")
+    if (a.id == p.accountId) return reply(w, p, "You can't disable your own account.")
+    if (!mayManage(p, a)) return reply(w, p, "Only an admin can disable an admin.")
+    val at = w.wallClock()
+    run(
+      w,
+      p,
+      { store.setDisabled(a.id, disabled = true, by = p.accountId, at = at, reason = reason) },
+    ) { changed ->
+      if (!changed) {
+        reply(this, p, "${a.login} is already disabled.")
+      } else {
+        closeDisabledAccount(a.id)
+        reply(this, p, "${a.login} is now disabled.")
+      }
+    }
+  }
+
+  private fun enable(w: World, p: Player, a: Account) {
+    if (a.id == p.accountId) return reply(w, p, "You can't enable your own account.")
+    if (!mayManage(p, a)) return reply(w, p, "Only an admin can enable an admin.")
+    val at = w.wallClock()
+    run(w, p, { store.setDisabled(a.id, disabled = false, by = null, at = at, reason = null) }) {
+      changed ->
+      if (!changed) {
+        reply(this, p, "${a.login} is already enabled.")
+      } else {
+        login?.accountEnabled(this, a.id)
+        reply(this, p, "${a.login} is now enabled.")
+      }
+    }
   }
 
   /** Clears the password, revokes web tokens and hands the instructor a new setup code. */

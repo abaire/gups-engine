@@ -491,4 +491,36 @@ class OperationsTest {
       assertFalse(Files.exists(failSnapFile), "Failed snapshot download should not leave a file")
     }
   }
+
+  @Test
+  fun `POST roster with disabled=true for a logged-in player quits that character before response returns`() {
+    val repo = Repo()
+    withServer(repo) { r ->
+      val accounts = r.server.world.persistence.accounts!!
+      val ann = accounts.create(gups.core.Account(0, "ann", "hash", gups.core.Role.PLAYER))!!
+      r.onWorld { w ->
+        w.spawnPlayer("Ann", gate, accountId = ann.id)
+        w.requestImmediate("create")
+      }
+      r.onWorld { it.checkpointNow("test") }
+      // Changed after the last checkpoint, so only the quit's own checkpoint can save it.
+      r.onWorld { w -> w.players.single { it.accountId == ann.id }.hp = 7 }
+
+      val res =
+        http.send(
+          HttpRequest.newBuilder(URI("${r.admin}/roster"))
+            .header("Authorization", "Bearer $token")
+            .header("Content-Type", "text/csv")
+            .POST(HttpRequest.BodyPublishers.ofString("login,disabled\nann,true\n"))
+            .build(),
+          HttpResponse.BodyHandlers.ofString(),
+        )
+      assertEquals(200, res.statusCode(), res.body())
+
+      assertFalse(r.onWorld { it.players.any { p -> p.accountId == ann.id } })
+      assertEquals(7, r.onWorld { w -> w.persistence.loadCharacter(w, "Ann")?.hp })
+      assertTrue(accounts.byId(ann.id)!!.disabled)
+      assertEquals("roster", accounts.byId(ann.id)!!.disabledReason)
+    }
+  }
 }

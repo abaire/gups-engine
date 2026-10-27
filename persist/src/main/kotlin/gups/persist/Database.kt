@@ -46,6 +46,14 @@ val MIGRATIONS: List<Migration> =
         "CREATE INDEX restrictions_account ON restrictions (account_id)",
       ),
     ),
+    Migration(
+      4,
+      listOf(
+        "ALTER TABLE accounts ADD COLUMN disabled_by INTEGER",
+        "ALTER TABLE accounts ADD COLUMN disabled_at INTEGER",
+        "ALTER TABLE accounts ADD COLUMN disabled_reason TEXT",
+      ),
+    ),
   )
 
 /** A diagnostics row. */
@@ -176,7 +184,7 @@ class Database private constructor(val file: Path, private val conn: Connection)
       when (op) {
         is AccountOp.Create ->
           prepare(
-            "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
           ) { st ->
             val a = op.account
             st.setString(1, a.login)
@@ -184,18 +192,29 @@ class Database private constructor(val file: Path, private val conn: Connection)
             st.setString(3, rolesJson(a))
             st.setString(4, a.githubHandle)
             st.setInt(5, if (a.disabled) 1 else 0)
-            st.setLong(6, a.createdAt)
+            val by = a.disabledBy
+            if (by == null) st.setNull(6, java.sql.Types.INTEGER) else st.setLong(6, by)
+            val at = a.disabledAt
+            if (at == null) st.setNull(7, java.sql.Types.INTEGER) else st.setLong(7, at)
+            st.setString(8, a.disabledReason)
+            st.setLong(9, a.createdAt)
             val id = if (st.executeUpdate() == 1) scalar("SELECT last_insert_rowid()") else null
             results += { op.result.complete(id) }
           }
         is AccountOp.Update ->
           prepare(
-            "UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ? WHERE id = ?"
+            "UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ?, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
           ) { st ->
-            st.setString(1, rolesJson(op.account))
-            st.setString(2, op.account.githubHandle)
-            st.setInt(3, if (op.account.disabled) 1 else 0)
-            st.setLong(4, op.account.id)
+            val a = op.account
+            st.setString(1, rolesJson(a))
+            st.setString(2, a.githubHandle)
+            st.setInt(3, if (a.disabled) 1 else 0)
+            val by = a.disabledBy
+            if (by == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, by)
+            val at = a.disabledAt
+            if (at == null) st.setNull(5, java.sql.Types.INTEGER) else st.setLong(5, at)
+            st.setString(6, a.disabledReason)
+            st.setLong(7, a.id)
             st.executeUpdate()
           }
         is AccountOp.SetPassword -> {
@@ -275,6 +294,49 @@ class Database private constructor(val file: Path, private val conn: Connection)
             val used = st.executeUpdate() == 1
             results += { op.result.complete(used) }
           }
+        is AccountOp.SetDisabled -> {
+          var changed = false
+          prepare("SELECT disabled FROM accounts WHERE id = ?") { st ->
+            st.setLong(1, op.id)
+            st.executeQuery().use { rs ->
+              if (rs.next()) {
+                val current = rs.getInt(1) != 0
+                if (current != op.disabled) {
+                  changed = true
+                }
+              }
+            }
+          }
+          if (changed) {
+            if (op.disabled) {
+              prepare(
+                "UPDATE accounts SET disabled = 1, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
+              ) { st ->
+                if (op.by == null) st.setNull(1, java.sql.Types.INTEGER) else st.setLong(1, op.by)
+                st.setLong(2, op.at)
+                st.setString(3, op.reason)
+                st.setLong(4, op.id)
+                st.executeUpdate()
+              }
+              prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
+                st.setLong(1, op.id)
+                st.executeUpdate()
+              }
+              prepare("DELETE FROM invites WHERE account_id = ? AND used_by IS NULL") { st ->
+                st.setLong(1, op.id)
+                st.executeUpdate()
+              }
+            } else {
+              prepare(
+                "UPDATE accounts SET disabled = 0, disabled_by = NULL, disabled_at = NULL, disabled_reason = NULL WHERE id = ?"
+              ) { st ->
+                st.setLong(1, op.id)
+                st.executeUpdate()
+              }
+            }
+          }
+          results += { op.result.complete(changed) }
+        }
       }
     }
   }

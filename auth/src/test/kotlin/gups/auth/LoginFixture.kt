@@ -67,6 +67,29 @@ class MemoryAccountStore : AccountStore {
   }
 
   @Synchronized
+  override fun setDisabled(
+    id: Long,
+    disabled: Boolean,
+    by: Long?,
+    at: Long,
+    reason: String?,
+  ): Boolean {
+    val a = accounts[id] ?: return false
+    if (a.disabled == disabled) return false
+    accounts[id] =
+      if (disabled) {
+        a.copy(disabled = true, disabledBy = by, disabledAt = at, disabledReason = reason)
+      } else {
+        a.copy(disabled = false, disabledBy = null, disabledAt = null, disabledReason = null)
+      }
+    if (disabled) {
+      tokens.values.removeIf { it.first == id }
+      invites.values.removeIf { it.accountId == id && it.usedBy == null }
+    }
+    return true
+  }
+
+  @Synchronized
   override fun setPassword(id: Long, pwHash: String?) {
     accounts[id] = accounts.getValue(id).copy(pwHash = pwHash)
     tokens.values.removeIf { it.first == id }
@@ -240,6 +263,11 @@ class LoginFixture(
       val job = work.removeFirstOrNull() ?: return
       job.run()
     }
+  }
+
+  /** Runs queued background work, holding back the world-thread continuations it posts. */
+  fun runWork() {
+    while (true) work.removeFirstOrNull()?.run() ?: return
   }
 
   /** Background jobs waiting to run. */

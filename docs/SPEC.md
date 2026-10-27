@@ -1571,7 +1571,7 @@ prefix only matches other `@` commands.
 | `@snapshot` | A routine checkpoint, a wait for the writer, then a `manual` backup. |
 | `@shutdown [seconds] [reason]` | A first word that isn't a number starts the reason. Warns at once, then at 60, 30, 10 and 5 seconds left. |
 | `@audit item <id>` | The item's committed `item_events` with UTC wall times, plus where it is now if it is in the world. Changes not yet checkpointed don't show. |
-| `@role <account> [role] [packages]` | Show or set an account's role, or disable it (below). |
+| `@role <account> [<role> [packages] \| reset \| revoke \| disable [reason] \| enable]` | Show or set an account's role, or disable it (below). |
 | `@invite <role>` | Create an invite code. |
 | `@restrict <account> <capability> [length] [reason]`, `@unrestrict <account> <capability>`, `@restrictions [account]` | Per-account restrictions (below). |
 
@@ -1589,15 +1589,21 @@ prefix only matches other `@` commands.
 - `@role <account> disable [reason]` disables the account (§3.5).
   - Each of its characters in the world is quit with "This account has been disabled.",
     including link-dead characters and characters in a fight. Connections still at login or
-    the character menu get the same line and are closed. The player isn't told the reason.
+    the character menu get the same line and are closed with "Goodbye.". The player isn't
+    told the reason.
   - A login already in progress when the account is disabled is refused or closed, so no
     session of the account outlives the instructor's reply.
   - `@role <account> enable` clears the flag and its record.
-  - Both are refused on the instructor's own account, and on an admin's account unless the
-    instructor is an admin. Disabling a disabled account, or enabling an enabled one, changes
-    nothing and says so.
-- For a disabled account, `@role <account>` also shows "disabled by <login> <UTC time>:
-  <reason>", or "disabled by the roster" when an import disabled it.
+  - Both are refused on the instructor's own account ("You can't disable your own account." / "You can't enable your own account."),
+    and on an admin's account unless the instructor is an admin ("Only an admin can disable an admin." / "Only an admin can enable an admin.").
+    Disabling a disabled account, or enabling an enabled one, changes nothing and reports "<login> is already disabled." or "<login> is already enabled.".
+    On success, they report "<login> is now disabled." or "<login> is now enabled.".
+  - A character with no account (a `--dev` character) can't disable: "Only an account can
+    disable an account.". So an account with no `disabledBy` was always disabled by the roster.
+- For a disabled account, `@role <account>` also shows an indented line "disabled by <login>
+  <UTC time>: <reason>", without the `: <reason>` suffix when there is no reason and with
+  `#<id>` in place of the login if the disabling account no longer exists. With no
+  `disabledBy`, the line is "disabled by the roster".
 
 **Restrictions:** instructors can take a capability away from one account, for a while or
 for good, without changing its role.
@@ -1964,19 +1970,23 @@ def test_scout_flees_when_hurt(t):
   - The CSV has a header row in any column order. Blank lines and `#` lines are skipped,
     double quotes are allowed, a leading `@` on a GitHub handle is dropped, and roles are
     case-insensitive. An optional `disabled` column takes `true`/`false`, `yes`/`no` or
-    `1`/`0`, in any case. A blank cell leaves the flag alone. Any bad row (unknown column or role, bad or repeated login, too many
+    `1`/`0` (case-insensitive, trimmed). A blank cell leaves the flag alone; any other value
+    fails parsing with `line <N>: '<value>' is not true or false`. Any bad row (unknown column or role, bad or repeated login, too many
     fields) fails the whole import with every problem listed, and nothing is written.
   - Output is a `login,setup_code` header, then one line per new account; a summary goes to
-    standard error. `--days N` sets the codes' lifetime.
+    standard error: `<created> accounts created, <updated> updated, <unchanged> unchanged, <disabled> disabled, <enabled> enabled. Setup codes expire in <days> days.`.
+    `created` includes new accounts created disabled, which get no code.
+    `--days N` sets the codes' lifetime.
   - Existing accounts without a password get no new code, so a re-import is idempotent;
     `@role <account> reset` issues a fresh one.
   - A row with `disabled` true disables its account as `@role disable` does, with the reason
     `roster` and no `disabledBy`. A new login listed as disabled is created disabled and gets
     no setup code. `false` re-enables the account. A change to the flag alone counts as an
-    update, and the summary also counts the accounts disabled and enabled. Only an import
+    update, and the summary also counts the accounts disabled and enabled. A row whose flag
+    another change already set counts as none of these. Only an import
     through `--admin` closes the account's characters and sessions at once. Offline, the
-    disable applies from the next login, and the summary warns that characters already in the
-    world weren't quit.
+    disable applies from the next login, and the summary warns:
+    `Warning: characters already in the world were not quit; use --admin against a running server.`
   - With `--admin ADDR` it goes through a running server's admin port (and refuses `--days`:
     codes last the default 7 days). Without it, it and `gups invite` write the database
     directly, which is safe beside a running server because SQLite serializes the writes.
@@ -2011,7 +2021,7 @@ bearer token.
 |---|---|
 | `GET /metrics` | Prometheus metrics (Micrometer). |
 | `POST /deploy` | `{"commit"}`, or `{}` for the fetched tip of `deploy_branch`. Answers `application/x-ndjson`: one `{"progress": line}` per step, then `{"ok", "commit", "packages", "errors"}`, naming the commit it deployed. |
-| `POST /roster` | The roster CSV as the body, for `gups import-roster --admin` against a running server. Answers the `login,setup_code` lines (200) or the problems (400). Accounts it disables are closed at once, as `@role disable` does. |
+| `POST /roster` | The roster CSV as the body, for `gups import-roster --admin` against a running server. Answers the `login,setup_code` lines (200) or the problems (400). Accounts it disables are closed at once, as `@role disable` does, before it answers. If the world doesn't close them within 30 seconds (for example while the server stops), it answers 500: the roster was imported, but closing failed. |
 | `GET /snapshot` | A sanitized copy of the database (§4.13) for the CI migration check (§7.3), as a download. |
 | `GET /healthz` | `{"pulse", "uptime_s", "writer_healthy"}`, where `pulse` is the last finished pulse. 503 when no pulse has finished for 5 s or the writer is unhealthy. No token needed. |
 

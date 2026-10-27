@@ -73,6 +73,17 @@ sealed interface AccountOp {
   class UseInvite(val codeHash: String, val accountId: Long) : AccountOp {
     val result: CompletableFuture<Boolean> = CompletableFuture()
   }
+
+  /** Disables or enables account [id]. [result] is false if it already had that state. */
+  class SetDisabled(
+    val id: Long,
+    val disabled: Boolean,
+    val by: Long?,
+    val at: Long,
+    val reason: String?,
+  ) : AccountOp {
+    val result: CompletableFuture<Boolean> = CompletableFuture()
+  }
 }
 
 /** How long a failing write waits before it tries again, at most. */
