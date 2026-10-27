@@ -7,7 +7,6 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Prototypes
 import gups.core.model.RegionProto
 import gups.core.model.ZoneProto
-import gups.core.rules.Regen
 import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -111,7 +110,7 @@ class ModifierChainTest {
     val d = f.mob(T.DUMMY)
     f.w.startCombat(p, d)
     f.runTo(8)
-    assertEquals(1000 - 5, d.hp)
+    assertEquals(1000 - 5, d.current("hp"))
     assertTrue(
       lines.any { it.startsWith("rules.to_hit base=100") && it.endsWith("HIT") && "roll" in it },
       lines.toString(),
@@ -146,7 +145,7 @@ class ModifierChainTest {
     f.input(p, "cast bolt dummy")
     f.run()
     assertContains(f.out(p), "Your magic fizzles into nothing.")
-    assertEquals(50, p.mana)
+    assertEquals(50, p.current("mana"))
     assertEquals(0, p.waitState)
     assertNull(p.casting)
   }
@@ -156,8 +155,11 @@ class ModifierChainTest {
     val host = RecordingHost()
     host.modifiers["slow"] = { point, _, base ->
       when (point) {
-        ModifierPoint.REGEN -> (base as Regen).let { Regen(it.hp / 2, 0, 0) }
-        ModifierPoint.MOVE_COST -> (base as Int) + 4
+        ModifierPoint.REGEN ->
+          @Suppress("UNCHECKED_CAST") mapOf("hp" to (base as Map<String, Int>).getValue("hp") / 2)
+        ModifierPoint.MOVE_COST ->
+          @Suppress("UNCHECKED_CAST")
+          mapOf("move" to (base as Map<String, Int>).getValue("move") + 4)
         else -> base
       }
     }
@@ -169,11 +171,11 @@ class ModifierChainTest {
       10_000,
       modifiers = mapOf(ModifierPoint.REGEN to mod("slow"), ModifierPoint.MOVE_COST to mod("slow")),
     )
-    p.hp = 10
+    f.setVital(p, "hp", 10)
     val regen = f.w.regenOf(RulesContext(f.w, p))
-    assertEquals(Regen((1 + 10 / 4 + 1 / 2) / 2, 0, 0), regen)
+    assertEquals(mapOf("hp" to (1 + 10 / 4 + 1 / 2) / 2), regen)
     f.input(p, "north")
     f.run()
-    assertEquals(100 - 5, p.move)
+    assertEquals(100 - 5, p.current("move"))
   }
 }

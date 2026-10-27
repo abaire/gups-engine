@@ -48,8 +48,10 @@ telnet localhost 4000
 ```
 
 `--start //zones/tutorial:gate` picks the room new characters start in, `--port` the telnet
-port, and `--fresh` ignores saved state and boots from the `.star` files. World state is saved
-in `<world>/.gups/world.db`.
+port, and `--fresh` ignores saved state and boots from the `.star` files. `--wipe` is a server
+wipe: like `--fresh`, and it also deletes every character and item and records the world's
+current schema (after a `prewipe` backup; accounts stay). World state is saved in
+`<world>/.gups/world.db`.
 
 **Test and check packages.** These are the same gates a course world's CI runs on each pull
 request:
@@ -108,8 +110,11 @@ image. Build it from a checkout with `./gradlew :cli:courseWorldTemplateArchive`
    ```
    Push it to GitHub. To reuse it each term, mark it as a template repository and create
    each term's world with **Use this template**.
-2. **Configure it.** `MODULE.gups` sets the `api_version`, checkpoint cadence and
-   `start_room`, and pins any plugins. In `CODEOWNERS`, replace `@CHANGE_ME_INSTRUCTOR` with
+2. **Configure it.** `MODULE.gups` sets the `api_version`, declares the world's stats, vitals,
+   damage types and channels (the schema; the rules in `rules/combat.star` give them their
+   meaning, and the engine has no built-in rules), sets the checkpoint cadence and
+   `start_room`, and pins any plugins. A database is tied to its schema: changing a stat,
+   vital, damage type or channel name later needs `gups serve --wipe`. In `CODEOWNERS`, replace `@CHANGE_ME_INSTRUCTOR` with
    the instructor's GitHub handle, and give each student team its zone:
    ```
    /zones/goblin_caves/ @student1 @student2
@@ -213,8 +218,12 @@ outside these rules. The allowed graph is defined in the root `build.gradle.kts`
 settle yet), `PLUGINS.md` (the plugin developer guide), and `CHANGELOG.md`.
 
 `template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
-metadata), the `rules` package, the shared `lib` package, and `zones/tutorial`, the heavily
-commented reference zone whose tests run on every engine commit.
+metadata and schema), the `rules` package, the shared `lib` package, and `zones/tutorial`, the
+heavily commented reference zone whose tests run on every engine commit.
+
+`samples/robot-world/` is a second, complete course world with a different schema (integrity,
+sanity, power and radiation instead of hit points, mana and movement). It is linted, tested and
+fuzzed with the engine's own tests to show that nothing in the engine is fantasy-specific.
 
 ## Releasing
 

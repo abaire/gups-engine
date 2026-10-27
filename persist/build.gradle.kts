@@ -1,6 +1,7 @@
 plugins { id("gups.serialization") }
 
 dependencies {
+  testImplementation(testFixtures(project(":core")))
   implementation(project(":core"))
   api(libs.kotlinx.serialization.json)
   implementation(libs.sqlite.jdbc)

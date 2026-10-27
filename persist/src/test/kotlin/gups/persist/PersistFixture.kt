@@ -4,6 +4,8 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ContainerProto
 import gups.core.model.Direction
 import gups.core.model.DoorProto
@@ -17,7 +19,6 @@ import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.TrackSize
 import gups.core.model.ZoneProto
-import gups.core.rules.DefaultRules
 import gups.core.world.DevLogin
 import gups.core.world.ScriptHost
 import gups.core.world.World
@@ -61,7 +62,16 @@ object P {
     Prototypes(
       rooms = if (withRat) rooms(ratHp) else rooms(ratHp).map { it.copy(spawns = emptyList()) },
       mobs =
-        if (withRat) listOf(MobProto(RAT, "a rat", listOf("rat"), hp = ratHp, version = ratVersion))
+        if (withRat)
+          listOf(
+            MobProto(
+              RAT,
+              "a rat",
+              listOf("rat"),
+              vitals = mapOf(FixtureSchemas.current.health to ratHp),
+              version = ratVersion,
+            )
+          )
         else emptyList(),
       items =
         listOfNotNull(
@@ -87,13 +97,15 @@ class PersistWorld(
   fresh: Boolean = false,
   scripts: ScriptHost = ScriptHost.NONE,
   checkpointPulses: Long = gups.core.world.DEFAULT_CHECKPOINT_PULSES,
+  val fs: gups.core.fixtures.FixtureSchema = FixtureSchemas.current,
 ) {
   val persistence = SqlitePersistence.open(file)
   val boot = persistence.boot(protos, fresh)
   val w =
     World(
       protos,
-      DefaultRules(),
+      fs.schema,
+      FixtureRules(fs),
       scripts,
       WorldConfig(
         seed = 1,

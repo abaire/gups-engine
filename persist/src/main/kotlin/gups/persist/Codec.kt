@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package gups.persist
 
 import gups.core.AttrValue
@@ -8,6 +10,7 @@ import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Channel
+import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.DoorState
 import gups.core.model.DormantRecovery
@@ -19,8 +22,11 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
+import gups.core.world.VitalState
 import gups.core.world.World
+import gups.core.world.restoreActorNumbers
 import gups.core.world.spawnOf
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -37,7 +43,7 @@ import kotlinx.serialization.json.longOrNull
 // what differs from the prototype; players have no prototype and store everything. Every
 // payload carries a format_version for engine-side schema evolution.
 
-const val FORMAT_VERSION = 1
+const val FORMAT_VERSION = 2
 
 internal val JSON = Json {
   ignoreUnknownKeys = true
@@ -105,9 +111,16 @@ data class LocationJson(
 
 @Serializable data class SpawnJson(val room: String, val rule: Int)
 
+/**
+ * A vital as saved. A mob stores [max] only where it differs from its prototype's declared maximum;
+ * a player always stores it.
+ */
+@Serializable
+data class VitalJson(val cur: Int, val max: Int? = null, val belowZeroSince: Long? = null)
+
 @Serializable
 data class RoomPayload(
-  @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
+  @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   /** Door states that differ from the prototype, by direction. */
   val doors: Map<String, String> = emptyMap(),
   /**
@@ -127,22 +140,17 @@ data class RoomPayload(
 
 @Serializable
 data class MobPayload(
-  @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
+  @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   val room: String,
   val index: Int,
-  val hp: Int,
-  val mana: Int,
-  val move: Int,
+  val vitals: Map<String, VitalJson> = emptyMap(),
+  val condition: String = "ok",
   val xp: Long = 0,
   val home: String? = null,
   val spawn: SpawnJson? = null,
   val summonedBy: Long? = null,
   // The delta: present only where the instance differs from its prototype.
   val level: Int? = null,
-  val maxHp: Int? = null,
-  val maxMana: Int? = null,
-  val maxMove: Int? = null,
-  val armor: Int? = null,
   val stats: Map<String, Int>? = null,
   val resists: Map<String, Int>? = null,
   val skills: Map<String, Int>? = null,
@@ -157,7 +165,7 @@ data class MobPayload(
 
 @Serializable
 data class ItemPayload(
-  @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
+  @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   /** Kept so a tombstone can show what the item was. */
   val name: String,
   val count: Int = 1,
@@ -174,20 +182,15 @@ data class ItemPayload(
 
 @Serializable
 data class PlayerPayload(
-  @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
+  @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   val room: String,
   val index: Int,
   val recall: String,
   val role: String = Role.PLAYER.name,
   val level: Int,
   val xp: Long,
-  val hp: Int,
-  val maxHp: Int,
-  val mana: Int,
-  val maxMana: Int,
-  val move: Int,
-  val maxMove: Int,
-  val armor: Int,
+  val vitals: Map<String, VitalJson>,
+  val condition: String = "ok",
   val stats: Map<String, Int>,
   val resists: Map<String, Int> = emptyMap(),
   val skills: Map<String, Int> = emptyMap(),
@@ -203,7 +206,7 @@ data class PlayerPayload(
 /** A `zone_states` payload: reset and respawn deadlines, and quarantine. */
 @Serializable
 data class ZonePayload(
-  @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
+  @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   val resetAt: Long? = null,
   val quarantined: Boolean = false,
   val respawns: List<RespawnJson> = emptyList(),
@@ -360,18 +363,16 @@ internal fun World.encode(e: Entity): EntityRow? =
         MobPayload(
           room = e.room.label.v,
           index = e.trackIndex,
-          hp = e.hp,
-          mana = e.mana,
-          move = e.move,
+          vitals =
+            e.vitals.mapValues { (name, v) ->
+              VitalJson(v.current, delta(v.max, p.vitals[name] ?: 0), v.belowZeroSince)
+            },
+          condition = e.condition.word,
           xp = e.xp,
           home = e.homeRoom.v.takeIf { e.homeRoom != e.room.label },
           spawn = spawnOf(e)?.let { (room, rule) -> SpawnJson(room.v, rule) },
           summonedBy = e.summonedBy?.v,
           level = delta(e.level, p.level),
-          maxHp = delta(e.maxHp, p.hp),
-          maxMana = delta(e.maxMana, p.mana),
-          maxMove = delta(e.maxMove, p.move),
-          armor = delta(e.armor, p.armor),
           stats = delta(e.baseStats.toMap(), p.stats),
           resists = delta(e.resists.mapKeys { it.key.name }, p.resists.mapKeys { it.key.name }),
           skills = delta(e.skills.mapKeys { it.key.v }, p.skills.mapKeys { it.key.v }),
@@ -434,13 +435,8 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
       role = p.role.name,
       level = p.level,
       xp = p.xp,
-      hp = p.hp,
-      maxHp = p.maxHp,
-      mana = p.mana,
-      maxMana = p.maxMana,
-      move = p.move,
-      maxMove = p.maxMove,
-      armor = p.armor,
+      vitals = p.vitals.mapValues { (_, v) -> VitalJson(v.current, v.max, v.belowZeroSince) },
+      condition = p.condition.word,
       stats = p.baseStats.toMap(),
       resists = p.resists.mapKeys { it.key.name },
       skills = p.skills.mapKeys { it.key.v },
@@ -469,7 +465,7 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
     ?.state = DoorState.valueOf(state.uppercase())
   for ((dir, channels) in p.sensesBlocked) {
     room.exits.values.firstOrNull { it.direction.name == dir }?.sensesBlocked =
-      channels.mapTo(LinkedHashSet()) { Channel.valueOf(it.uppercase()) }
+      channels.mapTo(LinkedHashSet()) { Channel(it.lowercase()) }
   }
   room.customAttributes.clear()
   room.customAttributes.putAll(p.attrs.toAttrs())
@@ -477,20 +473,8 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
   restoreReasons(room, p.active, p.anchor)
 }
 
-internal fun applyMob(m: Mob, p: MobPayload) {
+internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   p.level?.let { m.level = it }
-  p.maxHp?.let { m.maxHp = it }
-  p.maxMana?.let { m.maxMana = it }
-  p.maxMove?.let { m.maxMove = it }
-  p.armor?.let { m.armor = it }
-  p.stats?.let {
-    m.baseStats.clear()
-    m.baseStats.putAll(it)
-  }
-  p.resists?.let { r ->
-    m.resists.clear()
-    m.resists.putAll(r.mapKeys { DamageType(it.key) })
-  }
   p.skills?.let { s ->
     m.skills.clear()
     m.skills.putAll(s.mapKeys { Label(it.key) })
@@ -499,9 +483,14 @@ internal fun applyMob(m: Mob, p: MobPayload) {
   p.dormantRecovery?.let { m.dormantRecovery = DormantRecovery.valueOf(it.uppercase()) }
   p.home?.let { m.homeRoom = Label(it) }
   m.summonedBy = p.summonedBy?.let(::EntityId)
-  m.hp = p.hp.coerceAtMost(m.maxHp)
-  m.mana = p.mana.coerceAtMost(m.maxMana)
-  m.move = p.move.coerceAtMost(m.maxMove)
+  world.restoreActorNumbers(
+    m,
+    stats = p.stats ?: m.baseStats.toMap(),
+    vitals =
+      p.vitals.mapValues { (name, v) -> VitalState(v.cur, v.max ?: m.max(name), v.belowZeroSince) },
+    resists = p.resists?.mapKeys { DamageType(it.key) } ?: m.resists.toMap(),
+    condition = Condition.parse(p.condition) ?: Condition.OK,
+  )
   m.xp = p.xp
   m.customAttributes.clear()
   m.customAttributes.putAll(p.attrs.toAttrs())
@@ -520,21 +509,17 @@ internal fun applyItem(item: Item, p: ItemPayload) {
   restoreReasons(item, p.active, p.anchor)
 }
 
-internal fun applyPlayer(pl: Player, p: PlayerPayload) {
+internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {
   pl.role = Role.valueOf(p.role)
   pl.level = p.level
   pl.xp = p.xp
-  pl.maxHp = p.maxHp
-  pl.hp = p.hp.coerceAtMost(p.maxHp)
-  pl.maxMana = p.maxMana
-  pl.mana = p.mana.coerceAtMost(p.maxMana)
-  pl.maxMove = p.maxMove
-  pl.move = p.move.coerceAtMost(p.maxMove)
-  pl.armor = p.armor
-  pl.baseStats.clear()
-  pl.baseStats.putAll(p.stats)
-  pl.resists.clear()
-  pl.resists.putAll(p.resists.mapKeys { DamageType(it.key) })
+  world.restoreActorNumbers(
+    pl,
+    stats = p.stats,
+    vitals = p.vitals.mapValues { (_, v) -> VitalState(v.cur, v.max ?: v.cur, v.belowZeroSince) },
+    resists = p.resists.mapKeys { DamageType(it.key) },
+    condition = Condition.parse(p.condition) ?: Condition.OK,
+  )
   pl.skills.clear()
   pl.skills.putAll(p.skills.mapKeys { Label(it.key) })
   pl.customAttributes.clear()

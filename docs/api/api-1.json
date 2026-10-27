@@ -100,7 +100,7 @@
           "keyword": true,
           "required": false,
           "default": "[]",
-          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "allowed_values": [],
           "doc": "Channels blocked while the door is open.",
           "since": 1
         },
@@ -112,7 +112,7 @@
           "keyword": true,
           "required": false,
           "default": "['sight', 'sound']",
-          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "allowed_values": [],
           "doc": "Channels blocked while the door is closed or locked.",
           "since": 1
         }
@@ -170,7 +170,7 @@
           "keyword": true,
           "required": false,
           "default": "[]",
-          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "allowed_values": [],
           "doc": "Perception and spell channels blocked by this exit.",
           "since": 1
         },
@@ -381,21 +381,21 @@
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "'bludgeon'",
+          "default": "unarmed_damage_type",
           "allowed_values": [],
-          "doc": "Weapon damage type, such as 'slash', 'pierce' or 'bludgeon'.",
+          "doc": "Weapon damage type, a declared damage type such as DAMAGE.slash.",
           "since": 1
         },
         {
           "symbol": "item.stat_deltas",
           "name": "stat_deltas",
-          "type": "dict[str, int]",
+          "type": "stats",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "{}",
-          "allowed_values": ["str", "dex", "con", "int", "wis"],
-          "doc": "Stat adjustments applied while the item is worn.",
+          "default": "stats()",
+          "allowed_values": [],
+          "doc": "Stat adjustments applied while the item is worn, built with stats(...).",
           "since": 1
         },
         {
@@ -601,73 +601,37 @@
         {
           "symbol": "mob.stats",
           "name": "stats",
-          "type": "dict[str, int]",
+          "type": "stats",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "{'str': 10, 'dex': 10, 'con': 10, 'int': 10, 'wis': 10}",
-          "allowed_values": ["str", "dex", "con", "int", "wis"],
-          "doc": "Base stats ('str', 'dex', 'con', 'int', 'wis').",
+          "default": "stats()",
+          "allowed_values": [],
+          "doc": "Base stats the mob starts from, built with stats(...).",
           "since": 1
         },
         {
-          "symbol": "mob.hp",
-          "name": "hp",
-          "type": "int",
+          "symbol": "mob.vitals",
+          "name": "vitals",
+          "type": "vitals",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "10",
+          "default": "vitals()",
           "allowed_values": [],
-          "doc": "Maximum hit points.",
-          "since": 1
-        },
-        {
-          "symbol": "mob.mana",
-          "name": "mana",
-          "type": "int",
-          "positional": false,
-          "keyword": true,
-          "required": false,
-          "default": "0",
-          "allowed_values": [],
-          "doc": "Maximum mana.",
-          "since": 1
-        },
-        {
-          "symbol": "mob.move",
-          "name": "move",
-          "type": "int",
-          "positional": false,
-          "keyword": true,
-          "required": false,
-          "default": "100",
-          "allowed_values": [],
-          "doc": "Maximum movement points.",
-          "since": 1
-        },
-        {
-          "symbol": "mob.armor",
-          "name": "armor",
-          "type": "int",
-          "positional": false,
-          "keyword": true,
-          "required": false,
-          "default": "0",
-          "allowed_values": [],
-          "doc": "Base armor rating.",
+          "doc": "Maximum vitals the mob starts from, built with vitals(...).",
           "since": 1
         },
         {
           "symbol": "mob.resists",
           "name": "resists",
-          "type": "dict[str, int]",
+          "type": "resists",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "{}",
+          "default": "resists()",
           "allowed_values": [],
-          "doc": "Damage resistance percentage by damage type.",
+          "doc": "Damage resistance percentage by damage type, built with resists(...).",
           "since": 1
         },
         {
@@ -909,6 +873,15 @@
       ]
     },
     {
+      "symbol": "resists",
+      "name": "resists",
+      "doc": "Percentages keyed by the world's declared damage types, such as resists(fire = 25). Used for mob resists.",
+      "hook_owner": null,
+      "extra_keywords": true,
+      "since": 1,
+      "params": []
+    },
+    {
       "symbol": "room",
       "name": "room",
       "doc": "Declares a room.",
@@ -1085,13 +1058,13 @@
         {
           "symbol": "skill.cost",
           "name": "cost",
-          "type": "dict[str, int]",
+          "type": "vitals",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "{}",
-          "allowed_values": ["hp", "mana", "move"],
-          "doc": "Vitals spent on cast ('hp', 'mana', 'move').",
+          "default": "vitals()",
+          "allowed_values": [],
+          "doc": "Vitals spent on cast, built with vitals(...).",
           "since": 1
         },
         {
@@ -1150,7 +1123,7 @@
           "keyword": true,
           "required": false,
           "default": "[]",
-          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "allowed_values": [],
           "doc": "Channels required and emitted when casting.",
           "since": 1
         },
@@ -1263,9 +1236,27 @@
       ]
     },
     {
+      "symbol": "stats",
+      "name": "stats",
+      "doc": "Numbers keyed by the world's declared stats, such as stats(str = 12). Used for stat_deltas, mob stats, and the results of encumbrance and starting_stats.",
+      "hook_owner": null,
+      "extra_keywords": true,
+      "since": 1,
+      "params": []
+    },
+    {
       "symbol": "struct",
       "name": "struct",
       "doc": "An immutable record of named fields, for example a library's exported functions: struct(start = _start).",
+      "hook_owner": null,
+      "extra_keywords": true,
+      "since": 1,
+      "params": []
+    },
+    {
+      "symbol": "vitals",
+      "name": "vitals",
+      "doc": "Numbers keyed by the world's declared vitals, such as vitals(hp = 20). Used for skill cost, mob vitals, flee(below), and the results of mitigate, move_cost, regen and starting_stats.",
       "hook_owner": null,
       "extra_keywords": true,
       "since": 1,
@@ -1327,6 +1318,78 @@
           "default": "None",
           "allowed_values": [],
           "doc": "Room label where new characters start.",
+          "since": 1
+        },
+        {
+          "symbol": "module.stats",
+          "name": "stats",
+          "type": "list[str | stat]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The stats actors have, each a name or stat(name, label).",
+          "since": 1
+        },
+        {
+          "symbol": "module.vitals",
+          "name": "vitals",
+          "type": "list[str | vital]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The vitals actors have, each a name or vital(name, label).",
+          "since": 1
+        },
+        {
+          "symbol": "module.damage_types",
+          "name": "damage_types",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The damage types of the world.",
+          "since": 1
+        },
+        {
+          "symbol": "module.unarmed_damage_type",
+          "name": "unarmed_damage_type",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The damage type of an unarmed auto-attack; one of damage_types.",
+          "since": 1
+        },
+        {
+          "symbol": "module.channels",
+          "name": "channels",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Perception channels beyond sight, sound and noise.",
+          "since": 1
+        },
+        {
+          "symbol": "module.prompt",
+          "name": "prompt",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'<' + '{v}v ' per vital + '> '",
+          "allowed_values": [],
+          "doc": "The telnet prompt, with {vital} and {max_vital} placeholders.",
           "since": 1
         },
         {
@@ -1580,6 +1643,74 @@
           "since": 1
         }
       ]
+    },
+    {
+      "symbol": "stat",
+      "name": "stat",
+      "doc": "Declares a stat with a label, for MODULE.gups.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "stat.name",
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The stat's name.",
+          "since": 1
+        },
+        {
+          "symbol": "stat.label",
+          "name": "label",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "name capitalized",
+          "allowed_values": [],
+          "doc": "The name players see.",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "symbol": "vital",
+      "name": "vital",
+      "doc": "Declares a vital with a label, for MODULE.gups.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "vital.name",
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The vital's name.",
+          "since": 1
+        },
+        {
+          "symbol": "vital.label",
+          "name": "label",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "name capitalized",
+          "allowed_values": [],
+          "doc": "The name players see.",
+          "since": 1
+        }
+      ]
     }
   ],
   "constants": [
@@ -1587,8 +1718,8 @@
       "symbol": "ALL",
       "name": "ALL",
       "type": "list[str]",
-      "value": "[\"sight\", \"sound\", \"noise\", \"spell\"]",
-      "doc": "All perception and spell channels: sight, sound, noise, spell.",
+      "value": "[\"sight\", \"sound\", \"noise\"]",
+      "doc": "Every channel name, built-in and declared by the world.",
       "since": 1
     },
     {
@@ -1597,6 +1728,14 @@
       "type": "str",
       "value": "\"cramped\"",
       "doc": "Track size constant for a 1-slot room.",
+      "since": 1
+    },
+    {
+      "symbol": "DAMAGE",
+      "name": "DAMAGE",
+      "type": "struct",
+      "value": "struct()",
+      "doc": "A struct of the world's declared damage types, such as DAMAGE.fire; a misspelling fails at that line.",
       "since": 1
     },
     {
@@ -1723,7 +1862,7 @@
       "signature": "fn(ctx)",
       "vetoable": false,
       "attach_to": ["mob", "item"],
-      "ctx_fields": ["self", "actor", "target", "amount", "type", "room", "pulse", "rng"],
+      "ctx_fields": ["self", "actor", "target", "amount", "type", "losses", "room", "pulse", "rng"],
       "doc": "Fires when an actor takes damage.",
       "since": 1
     },
@@ -1900,7 +2039,7 @@
       {
         "symbol": "ctx.amount",
         "name": "amount",
-        "doc": "The damage dealt, for on_damage.",
+        "doc": "The total of the vital losses a damage event caused, for on_damage.",
         "since": 1
       },
       {
@@ -1940,6 +2079,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.losses",
+        "name": "losses",
+        "doc": "The vital losses behind amount, as vitals(...), for on_damage.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.proposals",
         "name": "proposals",
         "doc": "For think: behavior proposals, best first.",
@@ -1949,6 +2094,12 @@
         "symbol": "ctx.pulse",
         "name": "pulse",
         "doc": "Game time.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.reason",
+        "name": "reason",
+        "doc": "Why the affect ended, 'expired' or 'removed', for affect on_expire.",
         "since": 1
       },
       {
@@ -2310,10 +2461,10 @@
             "name": "stat_deltas",
             "positional": true,
             "named": true,
-            "default": "{}",
+            "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Stat adjustments while the affect lasts, such as {'dex': -1}."
+            "doc": "Stat adjustments while the affect lasts, built with stats(...)."
           },
           {
             "symbol": "ctx.apply_affect.flags",
@@ -2353,7 +2504,7 @@
             "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Top-level function fn(ctx) called when the affect ends."
+            "doc": "Top-level function fn(ctx) called when the affect expires or is removed."
           },
           {
             "symbol": "ctx.apply_affect.expire_msg",
@@ -2482,7 +2633,7 @@
       {
         "symbol": "ctx.damage",
         "name": "damage",
-        "doc": "Deals damage directly (no to-hit roll, no mitigation); fires on_damage.",
+        "doc": "Deals damage directly to one vital (no to-hit roll, no mitigation); fires on_damage with just that loss.",
         "since": 1,
         "params": [
           {
@@ -2503,7 +2654,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Hit points of damage."
+            "doc": "Points of damage."
           },
           {
             "symbol": "ctx.damage.type",
@@ -2513,7 +2664,17 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Damage type, such as 'fire' or 'slash'."
+            "doc": "A declared damage type, such as DAMAGE.fire."
+          },
+          {
+            "symbol": "ctx.damage.vital",
+            "name": "vital",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The declared vital that loses the points."
           },
           {
             "symbol": "ctx.damage.source",
@@ -2792,7 +2953,7 @@
       {
         "symbol": "ctx.heal",
         "name": "heal",
-        "doc": "Restores hit points to target, up to max_hp.",
+        "doc": "Restores a vital of target, up to its maximum.",
         "since": 1,
         "params": [
           {
@@ -2813,7 +2974,17 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Hit points to restore."
+            "doc": "Points to restore."
+          },
+          {
+            "symbol": "ctx.heal.vital",
+            "name": "vital",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The declared vital to restore."
           }
         ]
       },
@@ -3174,7 +3345,7 @@
       {
         "symbol": "ctx.set_exit_senses_blocked",
         "name": "set_exit_senses_blocked",
-        "doc": "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+        "doc": "Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.",
         "since": 1,
         "params": [
           {
@@ -3205,7 +3376,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Channels to block: any of 'sight', 'sound', 'noise', 'spell'."
+            "doc": "Channels to block, built in or declared by the world."
           }
         ]
       },
@@ -3424,15 +3595,15 @@
           "since": 1
         },
         {
-          "symbol": "view:actor.armor",
-          "name": "armor",
-          "doc": "Armor rating.",
-          "since": 1
-        },
-        {
           "symbol": "view:actor.attrs",
           "name": "attrs",
           "doc": "Custom attributes; your package's own keys by short name.",
+          "since": 1
+        },
+        {
+          "symbol": "view:actor.base",
+          "name": "base",
+          "doc": "Base stat values, without affects, equipment or encumbrance: base.dex.",
           "since": 1
         },
         {
@@ -3448,6 +3619,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.condition",
+          "name": "condition",
+          "doc": "'ok', 'incapacitated' or 'dead', as the rules last decided.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.flags",
           "name": "flags",
           "doc": "Flags from affects, including those worn items apply, sorted.",
@@ -3457,12 +3634,6 @@
           "symbol": "view:actor.home_room",
           "name": "home_room",
           "doc": "A mob's home room label; None for players.",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.hp",
-          "name": "hp",
-          "doc": "Current hit points.",
           "since": 1
         },
         {
@@ -3508,36 +3679,6 @@
           "since": 1
         },
         {
-          "symbol": "view:actor.mana",
-          "name": "mana",
-          "doc": "Current mana.",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.max_hp",
-          "name": "max_hp",
-          "doc": "Maximum hit points.",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.max_mana",
-          "name": "max_mana",
-          "doc": "Maximum mana.",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.max_move",
-          "name": "max_move",
-          "doc": "Maximum movement points.",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.move",
-          "name": "move",
-          "doc": "Current movement points.",
-          "since": 1
-        },
-        {
           "symbol": "view:actor.name",
           "name": "name",
           "doc": "The entity's display name.",
@@ -3552,7 +3693,7 @@
         {
           "symbol": "view:actor.resists",
           "name": "resists",
-          "doc": "Damage resistance percentage by damage type.",
+          "doc": "Damage resistance percentage by declared damage type: resists.fire.",
           "since": 1
         },
         {
@@ -3565,12 +3706,6 @@
           "symbol": "view:actor.skills",
           "name": "skills",
           "doc": "Skill label to proficiency (0-100).",
-          "since": 1
-        },
-        {
-          "symbol": "view:actor.stats",
-          "name": "stats",
-          "doc": "Effective attributes, including affects and equipment.",
           "since": 1
         },
         {
@@ -3608,6 +3743,24 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Actor or item in the same room."
+            }
+          ]
+        },
+        {
+          "symbol": "view:actor.below_zero_since",
+          "name": "below_zero_since",
+          "doc": "The pulse the vital last dropped below 0, or None while it is 0 or more.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "view:actor.below_zero_since.vital",
+              "name": "vital",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "A declared vital."
             }
           ]
         },
@@ -4188,7 +4341,7 @@
         {
           "symbol": "view:skill.cost",
           "name": "cost",
-          "doc": "Vitals spent: keys 'hp', 'mana', 'move'.",
+          "doc": "The vitals spent, as vitals(...): cost.mana.",
           "since": 1
         },
         {
@@ -4275,10 +4428,10 @@
           "name": "stat_deltas",
           "positional": true,
           "named": true,
-          "default": "{}",
+          "default": "None",
           "varargs": false,
           "kwargs": false,
-          "doc": "Stat adjustments while the affect lasts, such as {'dex': -1}."
+          "doc": "Stat adjustments while the affect lasts, built with stats(...)."
         },
         {
           "symbol": "apply_affect.flags",
@@ -4318,7 +4471,7 @@
           "default": "None",
           "varargs": false,
           "kwargs": false,
-          "doc": "Top-level function fn(ctx) called when the affect ends."
+          "doc": "Top-level function fn(ctx) called when the affect expires or is removed."
         },
         {
           "symbol": "apply_affect.expire_msg",
@@ -4363,10 +4516,10 @@
           "name": "type",
           "positional": true,
           "named": true,
-          "default": "'bludgeon'",
+          "default": "None",
           "varargs": false,
           "kwargs": false,
-          "doc": "Damage type, such as 'slash', 'fire' or 'bludgeon'."
+          "doc": "A declared damage type, such as DAMAGE.fire; the unarmed type if omitted."
         }
       ]
     },
@@ -4421,7 +4574,7 @@
     {
       "symbol": "heal",
       "name": "heal",
-      "doc": "Restore hit points.",
+      "doc": "Restore a vital, up to its maximum.",
       "since": 1,
       "params": [
         {
@@ -4432,7 +4585,17 @@
           "default": null,
           "varargs": false,
           "kwargs": false,
-          "doc": "Hit points restored, as dice such as '2d4'."
+          "doc": "Amount restored, as dice such as '2d4'."
+        },
+        {
+          "symbol": "heal.vital",
+          "name": "vital",
+          "positional": true,
+          "named": true,
+          "default": null,
+          "varargs": false,
+          "kwargs": false,
+          "doc": "The declared vital to restore."
         }
       ]
     },
@@ -4597,18 +4760,18 @@
     {
       "symbol": "flee",
       "name": "flee",
-      "doc": "Behavior: flees at or below this percentage of max hp.",
+      "doc": "Behavior: flees when any listed vital is at or below its percentage of its maximum.",
       "since": 1,
       "params": [
         {
-          "symbol": "flee.at_hp_pct",
-          "name": "at_hp_pct",
+          "symbol": "flee.below",
+          "name": "below",
           "positional": true,
           "named": true,
-          "default": "20",
+          "default": null,
           "varargs": false,
           "kwargs": false,
-          "doc": "Percentage of max hp (0..100) at or below which the mob flees."
+          "doc": "Percentages (0..100) by vital, built with vitals(...)."
         }
       ]
     },
@@ -4853,6 +5016,15 @@
         "since": 1
       },
       {
+        "symbol": "rules:condition",
+        "name": "condition",
+        "signature": "condition(ctx)",
+        "return_type": "str",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "The actor's life state: 'ok', 'incapacitated' or 'dead'. Asked after any change to one of its vitals and at each world tick.",
+        "since": 1
+      },
+      {
         "symbol": "rules:damage",
         "name": "damage",
         "signature": "damage(ctx)",
@@ -4865,9 +5037,9 @@
         "symbol": "rules:encumbrance",
         "name": "encumbrance",
         "signature": "encumbrance(ctx)",
-        "return_type": "dict[str, int]",
+        "return_type": "stats",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
-        "doc": "Penalties applied while the actor carries more than carry_limit.",
+        "doc": "Stat deltas applied while the actor carries more than carry_limit.",
         "since": 1
       },
       {
@@ -4912,25 +5084,25 @@
         "signature": "interrupt_check(ctx, amount)",
         "return_type": "bool",
         "ctx_fields": ["actor", "skill", "room", "pulse", "rng"],
-        "doc": "True if taking amount damage interrupts an in-progress cast.",
+        "doc": "True if a damage event with this total loss interrupts an in-progress cast.",
         "since": 1
       },
       {
         "symbol": "rules:mitigate",
         "name": "mitigate",
         "signature": "mitigate(ctx, amount, type)",
-        "return_type": "int",
+        "return_type": "vitals",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "room", "pulse", "rng"],
-        "doc": "Damage remaining after armor and resistances.",
+        "doc": "The vital losses that amount damage of type causes the defender.",
         "since": 1
       },
       {
         "symbol": "rules:move_cost",
         "name": "move_cost",
         "signature": "move_cost(ctx)",
-        "return_type": "int",
+        "return_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
-        "doc": "Movement points spent when leaving a room.",
+        "doc": "The vitals spent when leaving a room.",
         "since": 1
       },
       {
@@ -4939,16 +5111,16 @@
         "signature": "on_player_death(ctx)",
         "return_type": "dict[str, any]",
         "ctx_fields": ["actor", "target", "room", "pulse", "rng"],
-        "doc": "Player death outcome as {'respawn': label, 'xp_loss': int}.",
+        "doc": "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int}; vitals sets the respawned character's current vitals.",
         "since": 1
       },
       {
         "symbol": "rules:regen",
         "name": "regen",
         "signature": "regen(ctx)",
-        "return_type": "dict[str, int]",
+        "return_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
-        "doc": "Vitals regenerated per world tick as {'hp': int, 'mana': int, 'move': int}.",
+        "doc": "What each vital gains per world tick; negative values lose.",
         "since": 1
       },
       {
@@ -4958,6 +5130,15 @@
         "return_type": "int",
         "ctx_fields": ["actor", "target", "room", "pulse", "rng"],
         "doc": "Chance in percent to retreat along the track when pinned in melee.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:starting_stats",
+        "name": "starting_stats",
+        "signature": "starting_stats(ctx)",
+        "return_type": "struct(stats, max, current)",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "Numbers for a new character or spawned mob, as struct(stats = stats(...), max = vitals(...), current = vitals(...)); every field is optional and a current value left out equals the maximum.",
         "since": 1
       },
       {
@@ -5020,18 +5201,18 @@
         "symbol": "modifier:move_cost",
         "name": "move_cost",
         "signature": "fn(ctx, base)",
-        "value_type": "int",
+        "value_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
-        "doc": "Adjusts movement point cost for leaving a room.",
+        "doc": "Adjusts the vitals spent for leaving a room.",
         "since": 1
       },
       {
         "symbol": "modifier:regen",
         "name": "regen",
         "signature": "fn(ctx, base)",
-        "value_type": "dict[str, int]",
+        "value_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
-        "doc": "Adjusts per-tick regeneration dict {'hp': int, 'mana': int, 'move': int}.",
+        "doc": "Adjusts the per-tick regeneration of each vital.",
         "since": 1
       },
       {
@@ -5118,15 +5299,15 @@
           "since": 1
         },
         {
-          "symbol": "p.armor",
-          "name": "armor",
-          "doc": "Armor rating.",
-          "since": 1
-        },
-        {
           "symbol": "p.attrs",
           "name": "attrs",
           "doc": "Custom attributes; your package's own keys by short name.",
+          "since": 1
+        },
+        {
+          "symbol": "p.base",
+          "name": "base",
+          "doc": "Base stat values, without affects, equipment or encumbrance: base.dex.",
           "since": 1
         },
         {
@@ -5142,6 +5323,12 @@
           "since": 1
         },
         {
+          "symbol": "p.condition",
+          "name": "condition",
+          "doc": "'ok', 'incapacitated' or 'dead', as the rules last decided.",
+          "since": 1
+        },
+        {
           "symbol": "p.flags",
           "name": "flags",
           "doc": "Flags from affects, including those worn items apply, sorted.",
@@ -5151,12 +5338,6 @@
           "symbol": "p.home_room",
           "name": "home_room",
           "doc": "A mob's home room label; None for players.",
-          "since": 1
-        },
-        {
-          "symbol": "p.hp",
-          "name": "hp",
-          "doc": "Current hit points.",
           "since": 1
         },
         {
@@ -5202,36 +5383,6 @@
           "since": 1
         },
         {
-          "symbol": "p.mana",
-          "name": "mana",
-          "doc": "Current mana.",
-          "since": 1
-        },
-        {
-          "symbol": "p.max_hp",
-          "name": "max_hp",
-          "doc": "Maximum hit points.",
-          "since": 1
-        },
-        {
-          "symbol": "p.max_mana",
-          "name": "max_mana",
-          "doc": "Maximum mana.",
-          "since": 1
-        },
-        {
-          "symbol": "p.max_move",
-          "name": "max_move",
-          "doc": "Maximum movement points.",
-          "since": 1
-        },
-        {
-          "symbol": "p.move",
-          "name": "move",
-          "doc": "Current movement points.",
-          "since": 1
-        },
-        {
           "symbol": "p.name",
           "name": "name",
           "doc": "The entity's display name.",
@@ -5246,7 +5397,7 @@
         {
           "symbol": "p.resists",
           "name": "resists",
-          "doc": "Damage resistance percentage by damage type.",
+          "doc": "Damage resistance percentage by declared damage type: resists.fire.",
           "since": 1
         },
         {
@@ -5259,12 +5410,6 @@
           "symbol": "p.skills",
           "name": "skills",
           "doc": "Skill label to proficiency (0-100).",
-          "since": 1
-        },
-        {
-          "symbol": "p.stats",
-          "name": "stats",
-          "doc": "Effective attributes, including affects and equipment.",
           "since": 1
         },
         {
@@ -5302,6 +5447,24 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Actor or item in the same room."
+            }
+          ]
+        },
+        {
+          "symbol": "p.below_zero_since",
+          "name": "below_zero_since",
+          "doc": "The pulse the vital last dropped below 0, or None while it is 0 or more.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "p.below_zero_since.vital",
+              "name": "vital",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "A declared vital."
             }
           ]
         },
@@ -5702,7 +5865,7 @@
         {
           "symbol": "w.damage",
           "name": "damage",
-          "doc": "Damages an actor by amount, or by pct of its max hp. Fires on_damage; death is processed at once.",
+          "doc": "Damages one vital of an actor by amount, or by pct of that vital's maximum. Fires on_damage; death is processed at once.",
           "since": 1,
           "params": [
             {
@@ -5716,6 +5879,16 @@
               "doc": "Actor to damage."
             },
             {
+              "symbol": "w.damage.vital",
+              "name": "vital",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The declared vital that loses the points."
+            },
+            {
               "symbol": "w.damage.amount",
               "name": "amount",
               "positional": true,
@@ -5723,7 +5896,7 @@
               "default": "None",
               "varargs": false,
               "kwargs": false,
-              "doc": "Hit points of damage, or None to use pct."
+              "doc": "Points of damage, or None to use pct."
             },
             {
               "symbol": "w.damage.pct",
@@ -5733,17 +5906,17 @@
               "default": "None",
               "varargs": false,
               "kwargs": false,
-              "doc": "Percentage of max hp, or None to use amount."
+              "doc": "Percentage of the vital's maximum, or None to use amount."
             },
             {
               "symbol": "w.damage.type",
               "name": "type",
               "positional": true,
               "named": true,
-              "default": "'bludgeon'",
+              "default": "None",
               "varargs": false,
               "kwargs": false,
-              "doc": "Damage type."
+              "doc": "A declared damage type, or None for the unarmed type."
             }
           ]
         },
@@ -5924,7 +6097,7 @@
         {
           "symbol": "w.spawn_player",
           "name": "spawn_player",
-          "doc": "Adds a connected player and returns its handle.",
+          "doc": "Adds a connected player and returns its handle. The numbers come from rules.starting_stats; vitals and stats override them.",
           "since": 1,
           "params": [
             {
@@ -5958,44 +6131,14 @@
               "doc": "Player level."
             },
             {
-              "symbol": "w.spawn_player.hp",
-              "name": "hp",
+              "symbol": "w.spawn_player.vitals",
+              "name": "vitals",
               "positional": true,
               "named": true,
-              "default": "20",
+              "default": "None",
               "varargs": false,
               "kwargs": false,
-              "doc": "Starting and maximum hit points."
-            },
-            {
-              "symbol": "w.spawn_player.mana",
-              "name": "mana",
-              "positional": true,
-              "named": true,
-              "default": "20",
-              "varargs": false,
-              "kwargs": false,
-              "doc": "Starting and maximum mana."
-            },
-            {
-              "symbol": "w.spawn_player.move",
-              "name": "move",
-              "positional": true,
-              "named": true,
-              "default": "100",
-              "varargs": false,
-              "kwargs": false,
-              "doc": "Starting and maximum movement points."
-            },
-            {
-              "symbol": "w.spawn_player.index",
-              "name": "index",
-              "positional": true,
-              "named": true,
-              "default": "0",
-              "varargs": false,
-              "kwargs": false,
-              "doc": "Track index in the starting room."
+              "doc": "Starting and maximum vitals, built with vitals(...), or None for the rules'."
             },
             {
               "symbol": "w.spawn_player.stats",
@@ -6005,7 +6148,7 @@
               "default": "None",
               "varargs": false,
               "kwargs": false,
-              "doc": "Base stats such as {'str': 12}, or None for the defaults."
+              "doc": "Base stats, built with stats(...), or None for the rules'."
             },
             {
               "symbol": "w.spawn_player.skills",
@@ -6016,6 +6159,16 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Known skills mapping skill label to proficiency, or None."
+            },
+            {
+              "symbol": "w.spawn_player.index",
+              "name": "index",
+              "positional": true,
+              "named": true,
+              "default": "0",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Track index in the starting room."
             }
           ]
         },

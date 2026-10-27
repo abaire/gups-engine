@@ -1,0 +1,33 @@
+# A post-apocalyptic robot world: the same engine as the template world, measured by a
+# different set of names. Changing this file needs a server restart, and changing a name needs
+# a server wipe (gups serve --wipe).
+module(
+    api_version = 1,
+
+    # Chassis qualities. "plating" soaks kinetic damage; "grit" steadies the mind.
+    stats = ["might", "agility", "tech", "grit", "plating"],
+
+    # integrity: how much damage the chassis takes. sanity: the mind, which psychic damage
+    # attacks. power: spent by actions and movement. rads: how much radiation the chassis can
+    # still absorb; below zero for a minute is fatal.
+    vitals = [
+        vital("integrity", label = "Integrity"),
+        "sanity",
+        "power",
+        vital("rads", label = "Radiation"),
+    ],
+
+    damage_types = ["kinetic", "energy", "psychic"],
+    unarmed_damage_type = "kinetic",
+
+    # Perception channel for the foundry's whispers; nothing in the engine raises events on it.
+    channels = ["psionic"],
+
+    prompt = "<{integrity}i {sanity}s {power}p> ",
+
+    aliases = {
+        "l": "look",
+        "i": "inventory",
+        "k": "kill",
+    },
+)

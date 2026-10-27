@@ -2,6 +2,8 @@ package gups.core.world
 
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -14,8 +16,28 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
-class CombatTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class CombatTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   @Test
   fun `kill engages, and auto-attacks swing once per round independent of lag`() {
     val f = Fixture(rules = FixedRules(damage = 3))
@@ -26,8 +48,8 @@ class CombatTest {
     assertTrue(p.isEngaged && g.isEngaged)
     p.waitState = 20
     f.runTo(16)
-    assertEquals(1000 - 6, g.hp)
-    assertEquals(50 - 6, p.hp)
+    assertEquals(1000 - 6, g.current(fs.health))
+    assertEquals(50 - 6, p.current(fs.health))
     assertContains(f.out(p), "You hit a training dummy.")
   }
 
@@ -39,13 +61,13 @@ class CombatTest {
     f.w.startCombat(p, g)
     f.runTo(8)
     assertContains(f.out(p), "A training dummy is out of reach.")
-    assertEquals(1000, g.hp)
+    assertEquals(1000, g.current(fs.health))
     f.w.moveItem(
       f.w.spawnItem(T.BOW, ItemLocation.Carried(p.id)),
       ItemLocation.Equipped(p.id, "wield"),
     )
     f.runTo(16)
-    assertEquals(1000 - 3, g.hp)
+    assertEquals(1000 - 3, g.current(fs.health))
   }
 
   @Test
@@ -81,7 +103,7 @@ class CombatTest {
     f.w.startCombat(p, g)
     f.runTo(8)
     assertContains(f.out(p), "Your sword refuses to strike.")
-    assertEquals(1000, g.hp)
+    assertEquals(1000, g.current(fs.health))
   }
 
   @Test
@@ -95,7 +117,7 @@ class CombatTest {
     f.input(p, "cast bolt dummy") // warms up through pulse 8
     f.runTo(8)
     assertTrue(p.isCasting)
-    assertEquals(1000, g.hp)
+    assertEquals(1000, g.current(fs.health))
   }
 
   @Test
@@ -158,7 +180,7 @@ class CombatTest {
     f.runTo(8)
     assertTrue(p.inWorld)
     assertEquals(T.YARD, p.room.label)
-    assertEquals(1, p.hp)
+    assertEquals(1, p.current(fs.health))
     assertEquals(450L, p.xp)
     assertTrue(p.inventory.isEmpty())
     assertEquals("the corpse of Ann", f.w.room(T.HALL).items.single().name)

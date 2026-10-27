@@ -172,7 +172,7 @@ class DevTools private constructor(private val world: World, private val host: S
     if (c.args.isBlank())
       return world.send(
         c.actor,
-        "Usage: @eval <starlark>, with ctx, self and room bound. Example: @eval self.hp",
+        "Usage: @eval <starlark>, with ctx, self and room bound. Example: @eval self.name",
       )
     val out = host.eval(world, c.actor, c.args)
     if (out.isNotEmpty()) world.send(c.actor, out)

@@ -27,18 +27,19 @@
 <h2>Effect primitives</h2>
 <p class="intro">Declarative effects for skill(effect=...).</p>
 <section id="heal" class="entry">
-<h3><code>heal(dice)</code> <span class="since">since api_version 1</span></h3>
-<p>Restore hit points.</p>
+<h3><code>heal(dice, vital)</code> <span class="since">since api_version 1</span></h3>
+<p>Restore a vital, up to its maximum.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="heal.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Hit points restored, as dice such as '2d4'.</td></tr>
+<tr id="heal.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Amount restored, as dice such as '2d4'.</td></tr>
+<tr id="heal.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital to restore.</td></tr>
 </tbody>
 </table>
 <div class="example">
 <p class="caption">Example</p>
-<pre><code>skill(&quot;mend&quot;, kind = &quot;spell&quot;, cost = {&quot;mana&quot;: 5}, target = &quot;ally&quot;,
-      effect = heal(dice = &quot;2d4&quot;))</code></pre>
+<pre><code>skill(&quot;mend&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 5), target = &quot;ally&quot;,
+      effect = heal(dice = &quot;2d4&quot;, vital = &quot;hp&quot;))</code></pre>
 </div>
 </section>
 <h2>Behaviors</h2>

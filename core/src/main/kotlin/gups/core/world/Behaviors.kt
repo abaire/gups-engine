@@ -4,6 +4,7 @@ import gups.core.BUBBLE_RADIUS
 import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Condition
 import gups.core.model.Direction
 import gups.core.model.Item
 import gups.core.model.Mob
@@ -54,7 +55,9 @@ data class ActorFilter(val patterns: List<String>) {
 }
 
 private fun World.others(mob: Mob): List<Actor> =
-  mob.room.actorIndex.values.filter { it !== mob && it.inWorld && it.hp > 0 && isSimulated(it) }
+  mob.room.actorIndex.values.filter {
+    it !== mob && it.inWorld && it.condition != Condition.DEAD && isSimulated(it)
+  }
 
 /**
  * `wander(radius, chance)`: with probability [chance] per think, steps through a random open exit
@@ -126,10 +129,17 @@ data class Assist(val allies: ActorFilter) : Behavior {
   }
 }
 
-/** `flee(at_hp_pct)`: flees once hit points are at or below the threshold, engaged or not. */
-data class Flee(val atHpPct: Int) : Behavior {
+/**
+ * `flee(below)`: flees once any listed vital is at or below its percentage of its maximum, engaged
+ * or not.
+ */
+data class Flee(val below: Map<String, Int>) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
-    if (mob.hp.toLong() * 100 > atHpPct.toLong() * mob.maxHp) return null
+    val low =
+      below.any { (vital, pct) ->
+        mob.current(vital).toLong() * 100 <= pct.toLong() * mob.max(vital)
+      }
+    if (!low) return null
     if (mob.room.exits.values.none { it.passable }) return null
     return Proposal("flee", PRIORITY_FLEE, "flee", FleeAction)
   }

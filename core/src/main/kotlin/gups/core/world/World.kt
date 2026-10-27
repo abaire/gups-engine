@@ -10,7 +10,7 @@ import gups.core.Rng
 import gups.core.SessionId
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Actor
-import gups.core.model.DEFAULT_STATS
+import gups.core.model.Condition
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
@@ -20,9 +20,10 @@ import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
 import gups.core.model.SpawnRule
-import gups.core.rules.DefaultRules
+import gups.core.model.WorldSchema
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
+import gups.core.rules.StartingStats
 import java.util.TreeMap
 
 class WorldConfig(
@@ -110,7 +111,9 @@ fun interface PluginEffectRunner {
 
 class World(
   protos: Prototypes,
-  val rules: RulesEngine = DefaultRules(),
+  /** The names this world's actors are measured by; fixed for the life of the world. */
+  val schema: WorldSchema,
+  val rules: RulesEngine,
   val scripts: ScriptHost = ScriptHost.NONE,
   val config: WorldConfig = WorldConfig(),
   boot: Boot = Boot(),
@@ -340,14 +343,15 @@ class World(
 
   // ---- Spawning ---------------------------------------------------------------------------
 
+  /**
+   * Creates a player with the numbers `rules.starting_stats` gives, then [overrides] on top: a stat
+   * or maximum it names replaces the rules' value, and so does a current value.
+   */
   fun spawnPlayer(
     name: String,
     at: Label,
     level: Int = 1,
-    hp: Int = 20,
-    mana: Int = 20,
-    move: Int = 100,
-    stats: Map<String, Int> = DEFAULT_STATS,
+    overrides: StartingStats = StartingStats(),
     index: Int = 0,
     accountId: Long? = null,
   ): Player {
@@ -365,13 +369,9 @@ class World(
         accountId = accountId,
       )
     p.level = level
-    p.baseStats.putAll(stats)
-    p.hp = hp
-    p.maxHp = hp
-    p.mana = mana
-    p.maxMana = mana
-    p.move = move
-    p.maxMove = move
+    initVitals(p)
+    applyStartingStats(p, startingStatsOf(p))
+    applyStartingStats(p, overrides, keepCurrent = true)
     p.lastInputPulse = pulse
     enter(p, room, p.trackIndex)
     return p
@@ -380,20 +380,46 @@ class World(
   fun spawnMob(label: Label, at: Room, index: Int = 0): Mob {
     val proto = protos.mob(label)
     val m = Mob(allocateId(), proto, at, index.coerceIn(0, at.trackSize - 1))
-    m.level = proto.level
-    m.baseStats.putAll(proto.stats)
-    m.hp = proto.hp
-    m.maxHp = proto.hp
-    m.mana = proto.mana
-    m.maxMana = proto.mana
-    m.move = proto.move
-    m.maxMove = proto.move
-    m.armor = proto.armor
-    m.resists.putAll(proto.resists)
-    m.skills.putAll(proto.skills)
+    declareMob(m, proto)
+    applyStartingStats(m, startingStatsOf(m))
     enter(m, at, m.trackIndex)
     invokeOn(m, HookName.ON_SPAWN, HookContext(room = at))
     return m
+  }
+
+  /** Fills [m] with its prototype's declared numbers, which `rules.starting_stats` then sees. */
+  internal fun declareMob(m: Mob, proto: gups.core.model.MobProto) {
+    m.level = proto.level
+    initVitals(m)
+    m.baseStats.putAll(proto.stats)
+    for ((name, max) in proto.vitals) {
+      val v = m.vitalMap[name] ?: continue
+      v.max = max
+      v.current = max
+    }
+    m.resists.putAll(proto.resists)
+    m.skills.putAll(proto.skills)
+  }
+
+  private fun startingStatsOf(a: Actor): StartingStats = rules.startingStats(RulesContext(this, a))
+
+  /**
+   * Applies a `starting_stats` result: stats and maxima it gives replace the actor's, and a current
+   * value it omits equals the maximum. With [keepCurrent], a current value is only replaced when
+   * the result names it or its maximum.
+   */
+  private fun applyStartingStats(a: Actor, r: StartingStats, keepCurrent: Boolean = false) {
+    a.baseStats.putAll(r.stats)
+    for ((name, v) in a.vitalMap) {
+      val max = r.max[name]
+      if (max != null) v.max = max
+      val cur = r.current[name]
+      when {
+        cur != null -> v.current = cur.coerceAtMost(v.max)
+        max != null || !keepCurrent -> v.current = v.max
+      }
+      v.belowZeroSince = if (v.current < 0) pulse else null
+    }
   }
 
   private fun enter(a: Actor, room: Room, index: Int) {
@@ -590,14 +616,10 @@ class World(
   /** Phase 4. Checkpoint capture arrives with persistence. */
   private fun runWorldTick() {
     for (a in actorIndex.values.toList()) {
-      if (a.hasFlag("no_regen") || !isSimulated(a)) continue
-      guarded("regen of $a") {
-        val r = regenOf(RulesContext(this, a))
-        a.hp = (a.hp + r.hp).coerceAtMost(a.maxHp)
-        a.mana = (a.mana + r.mana).coerceAtMost(a.maxMana)
-        a.move = (a.move + r.move).coerceAtMost(a.maxMove)
-        a.dirty = true
-      }
+      if (!isSimulated(a) || !a.inWorld) continue
+      if (!a.hasFlag("no_regen"))
+        guarded("regen of $a") { applyVitalDeltas(a, regenOf(RulesContext(this, a)), null) }
+      guarded("condition of $a") { refreshCondition(a) }
     }
     for (e in
       entities.values
@@ -703,7 +725,10 @@ class World(
     for ((_, group) in ops.groupBy { it.actor.id }) {
       val actor = group.first().actor
       // A death that still stands wins over the actor's own movement.
-      val dies = group.any { it.kind == Deferred.Kind.DEATH } && actor.inWorld && actor.hp <= 0
+      val dies =
+        group.any { it.kind == Deferred.Kind.DEATH } &&
+          actor.inWorld &&
+          actor.condition == Condition.DEAD
       for (op in group) {
         if (dies && op.kind != Deferred.Kind.DEATH) continue
         guarded("end-of-tier ${op.kind} of $actor") { op.run() }
@@ -718,7 +743,7 @@ class World(
 
   fun indexOf(a: Actor): Int = snapshot?.index(a) ?: a.trackIndex
 
-  fun canAct(a: Actor): Boolean = snapshot?.canAct(a) ?: (a.inWorld && !a.isStunned)
+  fun canAct(a: Actor): Boolean = snapshot?.canAct(a) ?: (a.inWorld && !a.isDisabled)
 
   /** True if [a] is in the world and, for validation, in [room]. */
   fun isPresent(a: Actor, room: Room): Boolean = a.inWorld && roomOf(a) === room
@@ -746,7 +771,7 @@ internal class TierSnapshot(actors: Collection<Actor>) {
     for (a in actors) {
       rooms[a.id] = a.room
       indices[a.id] = a.trackIndex
-      able[a.id] = a.inWorld && !a.isStunned
+      able[a.id] = a.inWorld && !a.isDisabled
     }
   }
 
@@ -754,7 +779,7 @@ internal class TierSnapshot(actors: Collection<Actor>) {
 
   fun index(a: Actor): Int = indices[a.id] ?: a.trackIndex
 
-  fun canAct(a: Actor): Boolean = able[a.id] ?: (a.inWorld && !a.isStunned)
+  fun canAct(a: Actor): Boolean = able[a.id] ?: (a.inWorld && !a.isDisabled)
 
   /** True if [a] was recorded when the tier started. */
   fun covers(a: Actor): Boolean = a.id in rooms

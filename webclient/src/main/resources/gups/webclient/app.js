@@ -1,7 +1,7 @@
 // The GUPS web client: log in over HTTPS, then play over a WebSocket.
 // Every frame is one JSON message:
 //   server: {"t":"text","d":"..."} {"t":"prompt","d":"..."} {"t":"hide","d":true}
-//           {"t":"gmcp","p":"Char.Vitals","d":{...}} {"t":"error","d":"..."}
+//           {"t":"gmcp","p":"Char.Schema","d":{...}} {"t":"gmcp","p":"Char.Vitals","d":{...}} {"t":"error","d":"..."}
 //   client: {"t":"auth","d":token} {"t":"input","d":"..."} {"t":"gmcp","p":"Core.Supports.Set","d":[...]}
 
 import { render } from "./markup.js";
@@ -53,9 +53,20 @@ function sendFrame(frame) {
   if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame));
 }
 
+/** @type {import("./panels.js").Schema} */
+let schema = { stats: [], vitals: [], damage_types: [], features: [] };
+let lastVitals = null;
+
 function onGmcp(pkg, data) {
   switch (pkg) {
-    case "Char.Vitals": drawVitals($("vitals"), data); break;
+    case "Char.Schema":
+      schema = data;
+      if (lastVitals) drawVitals($("vitals"), schema, lastVitals);
+      break;
+    case "Char.Vitals":
+      lastVitals = data;
+      drawVitals($("vitals"), schema, data);
+      break;
     case "Char.Affects": drawAffects($("affects"), data); break;
     case "Room.Bands": drawBands($("bands"), data); break;
     case "Room.Info": drawRoom($("room-name"), data); break;

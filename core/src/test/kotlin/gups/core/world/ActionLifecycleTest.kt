@@ -1,6 +1,8 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Effect
 import gups.core.model.Prototypes
 import gups.core.model.SkillProto
@@ -11,8 +13,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
-class ActionLifecycleTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class ActionLifecycleTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   private fun caster(): Triple<Fixture, gups.core.model.Player, gups.core.model.Mob> {
     val f = Fixture(rules = FixedRules(toHit = 0))
     val p = f.player("Ann")
@@ -44,7 +66,7 @@ class ActionLifecycleTest {
     val onlooker = f.player("Bea", index = 1)
     f.input(p, "cast zap dummy")
     f.run()
-    assertTrue(g.hp < 1000, "the instant cast resolved")
+    assertTrue(g.current(fs.health) < 1000, "the instant cast resolved")
     assertContains(f.out(onlooker), "Ann casts zap at ${g.name}.")
     assertFalse("Ann casts zap" in f.out(p), "the caster gets its own message only")
   }
@@ -59,11 +81,11 @@ class ActionLifecycleTest {
     assertEquals(5, cast.endsAt)
     f.run(3)
     assertTrue(p.isCasting)
-    assertEquals(1000, g.hp)
+    assertEquals(1000, g.current(fs.health))
     f.run() // pulse 5: resolves
     assertFalse(p.isCasting)
-    assertEquals(1000 - 8, g.hp)
-    assertEquals(40, p.mana)
+    assertEquals(1000 - 8, g.current(fs.health))
+    assertEquals(40, p.current(fs.energy))
     assertEquals(4, p.waitState)
     assertTrue(g.id in p.fighting, "a hostile skill landing starts combat")
     f.run(4)
@@ -131,12 +153,12 @@ class ActionLifecycleTest {
     val (f, p, g) = caster()
     f.input(p, "cast bolt dummy")
     f.run(2)
-    f.w.damage(p, 4, gups.core.model.DamageType.SLASH, g) // 8% of 50: below the threshold
+    f.hurt(p, 4, g) // 8% of 50: below the threshold
     assertTrue(p.isCasting)
-    f.w.damage(p, 5, gups.core.model.DamageType.SLASH, g) // 10%
+    f.hurt(p, 5, g) // 10%
     assertFalse(p.isCasting)
     assertEquals(2, p.waitState)
-    assertEquals(50, p.mana)
+    assertEquals(50, p.current(fs.energy))
     f.w.flushOutput()
     assertContains(f.out(p), "concentration is broken")
   }
@@ -155,8 +177,8 @@ class ActionLifecycleTest {
     f.run() // the stun expires in the timer phase, then the action phase counts down one pulse
     assertFalse(p.isStunned)
     assertEquals(1, p.waitState, "the broken cast's half lag applies once the stun ends")
-    assertEquals(1000, g.hp, "the interrupted cast never resolves")
-    assertEquals(50, p.mana)
+    assertEquals(1000, g.current(fs.health), "the interrupted cast never resolves")
+    assertEquals(50, p.current(fs.energy))
   }
 
   @Test
@@ -179,10 +201,14 @@ class ActionLifecycleTest {
     assertTrue(p.isCasting)
     f.run(3) // the stun ends at pulse 5, the cast's original end
     assertTrue(p.isCasting, "the warmup didn't run during the stun")
-    assertEquals(1000, g.hp)
+    assertEquals(1000, g.current(fs.health))
     f.run(3)
     assertFalse(p.isCasting)
-    assertEquals(1000 - 8, g.hp, "the cast resolves once its paused pulses have passed")
+    assertEquals(
+      1000 - 8,
+      g.current(fs.health),
+      "the cast resolves once its paused pulses have passed",
+    )
   }
 
   @Test
@@ -216,7 +242,7 @@ class ActionLifecycleTest {
     assertFalse(p.isCasting)
     assertContains(f.out(p), "A training dummy isn't here.")
     assertEquals(2, p.waitState)
-    assertEquals(50, p.mana)
+    assertEquals(50, p.current(fs.energy))
   }
 
   @Test

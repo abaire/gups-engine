@@ -417,7 +417,12 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
     is Actor -> {
       add("Location: ${e.room.label} index ${e.trackIndex}")
       add(
-        "Vitals: hp ${e.hp}/${e.maxHp}, mana ${e.mana}/${e.maxMana}, move ${e.move}/${e.maxMove}; level ${e.level}, xp ${e.xp}, armor ${e.armor}"
+        "Vitals: " +
+          e.vitalMap.entries.joinToString(", ") { (name, v) ->
+            "$name ${v.current}/${v.max}" +
+              (v.belowZeroSince?.let { " (below 0 since pulse $it)" } ?: "")
+          } +
+          "; level ${e.level}, xp ${e.xp}, condition ${e.condition.word}"
       )
       add(
         "Stats: " +

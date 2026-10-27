@@ -3,6 +3,7 @@ package gups.harness
 import gups.core.CapturingSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.Condition
 import gups.core.model.Player
 import gups.core.world.Diagnostic
 import gups.core.world.InvariantViolation
@@ -10,6 +11,7 @@ import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
 import gups.core.world.handle
+import gups.core.world.restoreVitals
 import gups.core.world.session
 import gups.core.world.submit
 import gups.script.PackageKind
@@ -69,6 +71,16 @@ class FuzzWalker(
     onProgress: ((Int) -> Unit)? = null,
   ): Outcome {
     val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+    val moduleProblems = moduleProblems(dir)
+    if (moduleProblems.isNotEmpty()) {
+      return Outcome(
+        ok = false,
+        pulsesRun = 0,
+        bots = 0,
+        zones = emptyList(),
+        failureMessage = "Load failed: ${moduleProblems.joinToString("; ")}",
+      )
+    }
     val loadResult = loader.load(dir.packages())
     if (!loadResult.ok) {
       val errs = loadResult.errors.joinToString("; ") { it.render() }
@@ -102,6 +114,7 @@ class FuzzWalker(
     val world =
       World(
         loadResult.prototypes(),
+        loader.schema,
         host.rules(),
         host,
         WorldConfig(
@@ -125,8 +138,7 @@ class FuzzWalker(
       if (zoneRooms.isEmpty()) continue
       val startRoom = zoneRooms[rng.nextInt(zoneRooms.size)]
       val botName = "Bot_${zone.replace('/', '_').replace('-', '_')}"
-      val bot =
-        world.spawnPlayer(botName, startRoom.label, level = 1, hp = 100, mana = 100, move = 100)
+      val bot = world.spawnPlayer(botName, startRoom.label, level = 1)
       bot.idleExempt = true
 
       val sessId = SessionId(nextSession++)
@@ -156,8 +168,7 @@ class FuzzWalker(
           val zoneRooms = world.rooms.filter { it.label.pkg == zone }.toList()
           if (zoneRooms.isNotEmpty()) {
             val room = zoneRooms[rng.nextInt(zoneRooms.size)]
-            val newBot =
-              world.spawnPlayer(bot.name, room.label, level = 1, hp = 100, mana = 100, move = 100)
+            val newBot = world.spawnPlayer(bot.name, room.label, level = 1)
             newBot.idleExempt = true
             val sessId = bot.session ?: SessionId(nextSession++)
             if (world.session(sessId) == null) {
@@ -168,10 +179,12 @@ class FuzzWalker(
             botStartRooms[newBot.id] = room.label
             bot = newBot
           }
-        } else if (bot.hp <= 20 || bot.waitState > 50) {
-          bot.hp = bot.maxHp
-          bot.mana = bot.maxMana
-          bot.move = bot.maxMove
+        } else if (
+          bot.condition != Condition.OK ||
+            bot.vitals.values.any { it.current * 4 < it.max } ||
+            bot.waitState > 50
+        ) {
+          world.restoreVitals(bot)
           // If lag/wait_state exceeds 50 pulses (5 seconds), clear it so the bot doesn't stay
           // frozen.
           bot.waitState = 0
@@ -316,4 +329,10 @@ class FuzzWalker(
       }
     }
   }
+}
+
+/** Why `MODULE.gups` can't be used, if it can't: it is required, and its schema must be sound. */
+internal fun moduleProblems(dir: WorldDir): List<String> {
+  val (module, error) = WorldModule.read(dir)
+  return if (error != null) listOf(error.render()) else module.problems()
 }

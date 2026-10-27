@@ -3,16 +3,38 @@ package gups.core.world
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Player
+import gups.core.rules.StartingStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
-class GmcpTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class GmcpTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   /** A client that supports the modules in [supports] and records what it gets. */
-  private class GmcpSink(
-    private val supports: Set<String> = setOf("Char", "Room", "Comm.Channel")
-  ) : OutputSink {
+  private class GmcpSink(var supports: Set<String> = setOf("Char", "Room", "Comm.Channel")) :
+    OutputSink {
     val messages = mutableListOf<Pair<String, Any?>>()
     val order = mutableListOf<String>()
 
@@ -41,7 +63,13 @@ class GmcpTest {
     index: Int = 0,
     sink: GmcpSink = GmcpSink(),
   ): Pair<Player, GmcpSink> {
-    val p = w.spawnPlayer(name, T.HALL, hp = 50, index = index)
+    val p =
+      w.spawnPlayer(
+        name,
+        T.HALL,
+        overrides = StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 50)),
+        index = index,
+      )
     val id = SessionId(nextSession++)
     w.handle(WorldControlEvent.Connect(id, sink))
     w.attach(id, p)
@@ -54,24 +82,30 @@ class GmcpTest {
     val (p, sink) = f.gmcpPlayer("Ann")
     f.run()
     assertEquals(
-      listOf("Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands"),
+      listOf(
+        "Char.Schema",
+        "Char.Vitals",
+        "Char.Status",
+        "Char.Affects",
+        "Room.Info",
+        "Room.Bands",
+      ),
       sink.packages(),
     )
     f.run(3)
     assertEquals(emptyList(), sink.packages(), "unchanged packages send nothing")
-    p.hp -= 5
+    f.setVital(p, fs.health, 45)
     f.run()
     val vitals = sink.take().single()
     assertEquals(
       "Char.Vitals" to
-        mapOf(
-          "hp" to 45,
-          "maxhp" to 50,
-          "mana" to 20,
-          "maxmana" to 20,
-          "move" to 100,
-          "maxmove" to 100,
-        ),
+        LinkedHashMap<String, Any?>().also { out ->
+          for (v in fs.vitals) {
+            out[v] =
+              if (v == fs.health) 45 else if (v in fs.startsEmpty) 0 else fs.playerMax.getValue(v)
+            out["max$v"] = if (v == fs.health) 50 else fs.playerMax.getValue(v)
+          }
+        },
       vitals,
     )
     f.mob(index = 1)
@@ -182,5 +216,69 @@ class GmcpTest {
     assertEquals(listOf("a goblin"), status["fighting"])
     assertEquals(1000L, status["xp_next"])
     assertEquals(null, status["casting"])
+  }
+
+  @Test
+  fun `Char Schema is sent once per character and again when the client starts supporting it`() {
+    val f = Fixture()
+    val sink = GmcpSink(setOf("Room"))
+    val (p, _) = f.gmcpPlayer("Ann", sink = sink)
+    f.run()
+    assertTrue("Char.Schema" !in sink.packages(), "a client without Char gets no schema")
+    sink.supports = setOf("Room", "Char")
+    f.run()
+    val sent = sink.take()
+    assertEquals(
+      listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects"),
+      sent.map { it.first },
+    )
+    assertEquals(
+      mapOf(
+        "stats" to fs.schema.stats.map { mapOf("name" to it.name, "label" to it.label) },
+        "vitals" to fs.schema.vitals.map { mapOf("name" to it.name, "label" to it.label) },
+        "damage_types" to fs.schema.damageTypes,
+        "features" to listOf("combat", "track", "skills", "leveling"),
+      ),
+      sent.first().second,
+    )
+    f.run(5)
+    assertEquals(emptyList(), sink.packages(), "the schema is static")
+    // A reconnect takes the character again: the cache resets and the schema comes once more.
+    val again = GmcpSink()
+    val id = SessionId(nextSession++)
+    f.w.handle(WorldControlEvent.Connect(id, again))
+    f.w.attach(id, p)
+    f.run()
+    assertEquals(1, again.packages().count { it == "Char.Schema" })
+  }
+
+  @Test
+  fun `Char Vitals keys follow the schema in order`() {
+    val f = Fixture()
+    val (p, _) = f.gmcpPlayer("Ann")
+    val keys = (f.w.gmcpPayload(p, "Char.Vitals") as Map<*, *>).keys.toList()
+    assertEquals(fs.vitals.flatMap { listOf(it, "max$it") }, keys)
+  }
+
+  @Test
+  fun `the prompt is generated from the schema`() {
+    val f = Fixture()
+    val (p, _) = f.gmcpPlayer("Ann")
+    val expected =
+      if (fs == FixtureSchemas.FANTASY) "<50hp 20m 100mv> " else "<0rads 50integrity 120power> "
+    assertEquals(expected, f.w.promptFor(p))
+  }
+
+  @Test
+  fun `a prompt template fills in current and maximum values`() {
+    val schema = FixtureSchemas.FANTASY.schema.copy(prompt = "[{hp}/{max_hp} {mana}m] ")
+    val w = World(T.protos(FixtureSchemas.FANTASY), schema, FixedRules(FixtureSchemas.FANTASY))
+    val p = w.spawnPlayer("Ann", T.HALL)
+    assertEquals("[20/20 20m] ", w.promptFor(p))
+    assertEquals("<{hp}hp {mana}m {move}mv> ", FixtureSchemas.FANTASY.schema.promptTemplate)
+    assertEquals(
+      "<{rads}rads {integrity}integrity {power}power> ",
+      FixtureSchemas.ROBOT.schema.promptTemplate,
+    )
   }
 }

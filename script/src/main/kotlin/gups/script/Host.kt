@@ -102,7 +102,7 @@ internal class Frame(
 internal sealed interface CallResult {
   data class Ok(val value: Any?) : CallResult
 
-  data object Failed : CallResult
+  data class Failed(val message: String) : CallResult
 
   data object Skipped : CallResult
 }
@@ -138,8 +138,14 @@ class StarlarkHost(
   val failedPackages: Set<String>
     get() = scripts.failed
 
-  /** The Starlark rules module of package [pkg], falling back to the built-in ruleset. */
-  fun rules(pkg: String = "rules"): StarlarkRules = StarlarkRules(this, pkg)
+  /** The package whose scripts are never quarantined: the rules have no fallback. */
+  private var rulesPackage = "rules"
+
+  /** The Starlark rules module of package [pkg]. */
+  fun rules(pkg: String = "rules"): StarlarkRules {
+    rulesPackage = pkg
+    return StarlarkRules(this, pkg)
+  }
 
   override val quarantinedPackages: Set<String>
     get() = quarantinedSet
@@ -147,8 +153,8 @@ class StarlarkHost(
   /** Receives one event per script call, verb and error while set (`@trace`, `w.trace`). */
   var tracer: ((TraceEvent) -> Unit)? = null
 
-  /** Instructor and owner notifications. */
-  var alerts: (String) -> Unit = {}
+  /** Instructor and owner notifications: `(kind, message)`, rate-limited per kind. */
+  var alerts: (String, String) -> Unit = { _, _ -> }
 
   internal fun trace(site: Site, pulse: Long, text: String) {
     tracer?.invoke(TraceEvent(pulse, site.pkg, site.owner, site.hook, text))
@@ -205,7 +211,7 @@ class StarlarkHost(
     world.record(
       Diagnostic(world.pulse, "quarantine", message, pkg = pkg, seed = world.config.seed)
     )
-    alerts(message)
+    alerts("quarantine", message)
   }
 
   override fun unquarantine(world: World, pkg: String) = unquarantine(pkg)
@@ -224,6 +230,7 @@ class StarlarkHost(
     get() = HashMap(steps)
 
   private fun countError(world: World, pkg: String) {
+    if (pkg == rulesPackage) return
     val times = errorPulses.getOrPut(pkg) { ArrayDeque() }
     times.addLast(world.pulse)
     while (times.isNotEmpty() && times.first() <= world.pulse - limits.quarantineWindowPulses) times
@@ -331,7 +338,7 @@ class StarlarkHost(
     val extras = CtxExtras(commandArgs = args, commandTarget = target)
     when (call(world, site, ref, { Ctx(it, owner, hc, extras) })) {
       is CallResult.Ok -> Unit
-      CallResult.Failed,
+      is CallResult.Failed,
       CallResult.Skipped -> world.send(actor, "Nothing happens.")
     }
   }
@@ -559,8 +566,7 @@ class StarlarkHost(
       val module =
         Module.withPredeclared(
           SEMANTICS,
-          PACKAGE_GLOBALS +
-            loader?.pluginGlobals.orEmpty() +
+          (loader?.globals ?: packageGlobals(world.schema)) +
             mapOf("ctx" to ctx, "self" to ctx.self(), "room" to ctx.room()),
         )
       module.clientData = FileInfo(Label("//$pkg:eval.star"), pkg)
@@ -606,20 +612,17 @@ class StarlarkHost(
     /** Arguments in place of the ctx, for `migrate` and rules functions; the ctx is still made. */
     positional: ((Frame) -> List<Any>)? = null,
     budget: Long? = null,
+    /** False to leave a failure to the caller, who gets its message in [CallResult.Failed]. */
+    recordErrors: Boolean = true,
   ): CallResult {
     if (site.pkg in quarantinedSet) return CallResult.Skipped
     val fn =
       scripts.function(ref)
         ?: run {
-          report(
-            world,
-            site,
-            "missing",
-            "function ${ref.name} no longer exists in ${ref.file}",
-            null,
-            null,
-          )
-          return CallResult.Failed
+          val message = "function ${ref.name} no longer exists in ${ref.file}"
+          if (!recordErrors) return CallResult.Failed(message)
+          report(world, site, "missing", message, null, null)
+          return CallResult.Failed(message)
         }
     val limit = budget ?: limits.hookSteps
     val remaining =
@@ -627,15 +630,9 @@ class StarlarkHost(
         ?: if (stack.isEmpty()) limits.hookSteps
         else stack.minOf { it.maxSteps - it.thread.executedSteps }
     if (remaining <= 0) {
-      report(
-        world,
-        site,
-        "step_limit",
-        "${site.hook} not run: the event's ${limits.hookSteps}-step budget is spent",
-        null,
-        null,
-      )
-      return CallResult.Failed
+      val message = "${site.hook} not run: the event's ${limits.hookSteps}-step budget is spent"
+      if (recordErrors) report(world, site, "step_limit", message, null, null)
+      return CallResult.Failed(message)
     }
     val root =
       if (budget != null) {
@@ -681,8 +678,9 @@ class StarlarkHost(
         trace(site, world.pulse, "  ${site.hook} done: $used steps")
       }
       if (failure != null) {
-        report(world, site, classify(failure), messageOf(failure, limit), failure, ctx as? Ctx)
-        return CallResult.Failed
+        val message = messageOf(failure, limit)
+        if (recordErrors) report(world, site, classify(failure), message, failure, ctx as? Ctx)
+        return CallResult.Failed(message)
       }
       return CallResult.Ok(value)
     }

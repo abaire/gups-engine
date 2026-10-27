@@ -54,7 +54,7 @@
           "keyword": true,
           "required": false,
           "default": "[]",
-          "allowed_values": ["sight", "sound", "noise", "spell"],
+          "allowed_values": [],
           "doc": "Perception and spell channels blocked by this exit.",
           "since": 1
         },
@@ -143,6 +143,78 @@
           "since": 1
         },
         {
+          "symbol": "module.stats",
+          "name": "stats",
+          "type": "list[str | stat]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The stats actors have, each a name or stat(name, label).",
+          "since": 1
+        },
+        {
+          "symbol": "module.vitals",
+          "name": "vitals",
+          "type": "list[str | vital]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The vitals actors have, each a name or vital(name, label).",
+          "since": 1
+        },
+        {
+          "symbol": "module.damage_types",
+          "name": "damage_types",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The damage types of the world.",
+          "since": 1
+        },
+        {
+          "symbol": "module.unarmed_damage_type",
+          "name": "unarmed_damage_type",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The damage type of an unarmed auto-attack; one of damage_types.",
+          "since": 1
+        },
+        {
+          "symbol": "module.channels",
+          "name": "channels",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Perception channels beyond sight, sound and noise.",
+          "since": 1
+        },
+        {
+          "symbol": "module.prompt",
+          "name": "prompt",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'<' + '{v}v ' per vital + '> '",
+          "allowed_values": [],
+          "doc": "The telnet prompt, with {vital} and {max_vital} placeholders.",
+          "since": 1
+        },
+        {
           "symbol": "module.plugins",
           "name": "plugins",
           "type": "dict[str, str]",
@@ -186,8 +258,8 @@
       "symbol": "ALL",
       "name": "ALL",
       "type": "list[str]",
-      "value": "[\"sight\", \"sound\", \"noise\", \"spell\"]",
-      "doc": "All perception and spell channels: sight, sound, noise, spell.",
+      "value": "[\"sight\", \"sound\", \"noise\"]",
+      "doc": "Every channel name, built-in and declared by the world.",
       "since": 1
     }
   ],
@@ -225,7 +297,7 @@
       {
         "symbol": "ctx.amount",
         "name": "amount",
-        "doc": "The damage dealt, for on_damage.",
+        "doc": "The total of the vital losses a damage event caused, for on_damage.",
         "since": 1
       },
       {
@@ -262,6 +334,12 @@
         "symbol": "ctx.item",
         "name": "item",
         "doc": "The item being picked up, dropped, used or given.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.losses",
+        "name": "losses",
+        "doc": "The vital losses behind amount, as vitals(...), for on_damage.",
         "since": 1
       },
       {
@@ -641,10 +719,10 @@
             "name": "stat_deltas",
             "positional": true,
             "named": true,
-            "default": "{}",
+            "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Stat adjustments while the affect lasts, such as {'dex': -1}."
+            "doc": "Stat adjustments while the affect lasts, built with stats(...)."
           },
           {
             "symbol": "ctx.apply_affect.flags",
@@ -813,7 +891,7 @@
       {
         "symbol": "ctx.damage",
         "name": "damage",
-        "doc": "Deals damage directly (no to-hit roll, no mitigation); fires on_damage.",
+        "doc": "Deals damage directly to one vital (no to-hit roll, no mitigation); fires on_damage with just that loss.",
         "since": 1,
         "params": [
           {
@@ -834,7 +912,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Hit points of damage."
+            "doc": "Points of damage."
           },
           {
             "symbol": "ctx.damage.type",
@@ -844,7 +922,17 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Damage type, such as 'fire' or 'slash'."
+            "doc": "A declared damage type, such as DAMAGE.fire."
+          },
+          {
+            "symbol": "ctx.damage.vital",
+            "name": "vital",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The declared vital that loses the points."
           },
           {
             "symbol": "ctx.damage.source",
@@ -1123,7 +1211,7 @@
       {
         "symbol": "ctx.heal",
         "name": "heal",
-        "doc": "Restores hit points to target, up to max_hp.",
+        "doc": "Restores a vital of target, up to its maximum.",
         "since": 1,
         "params": [
           {
@@ -1144,7 +1232,17 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Hit points to restore."
+            "doc": "Points to restore."
+          },
+          {
+            "symbol": "ctx.heal.vital",
+            "name": "vital",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The declared vital to restore."
           }
         ]
       },
@@ -1505,7 +1603,7 @@
       {
         "symbol": "ctx.set_exit_senses_blocked",
         "name": "set_exit_senses_blocked",
-        "doc": "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+        "doc": "Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.",
         "since": 1,
         "params": [
           {
@@ -1536,7 +1634,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Channels to block: any of 'sight', 'sound', 'noise', 'spell'."
+            "doc": "Channels to block, built in or declared by the world."
           }
         ]
       },
@@ -1804,7 +1902,7 @@
     {
       "symbol": "heal",
       "name": "heal",
-      "doc": "Restore hit points.",
+      "doc": "Restore a vital, up to its maximum.",
       "since": 1,
       "params": [
         {
@@ -1815,7 +1913,17 @@
           "default": null,
           "varargs": false,
           "kwargs": false,
-          "doc": "Hit points restored, as dice such as '2d4'."
+          "doc": "Amount restored, as dice such as '2d4'."
+        },
+        {
+          "symbol": "heal.vital",
+          "name": "vital",
+          "positional": true,
+          "named": true,
+          "default": null,
+          "varargs": false,
+          "kwargs": false,
+          "doc": "The declared vital to restore."
         }
       ]
     }

@@ -1,6 +1,8 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ContainerProto
 import gups.core.model.DoorState
 import gups.core.model.EquipAffect
@@ -13,8 +15,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
-class ItemCommandsTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class ItemCommandsTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   private val ring = Label("//t:ring")
   private val cap = Label("//t:cap")
   private val helm = Label("//t:helm")
@@ -36,7 +58,7 @@ class ItemCommandsTest {
         listOf("cap"),
         wear = "head",
         equipAffects = listOf(EquipAffect("no_regen")),
-        statDeltas = mapOf("con" to 2),
+        statDeltas = mapOf(FixtureSchemas.current.toughness to 2),
       ),
       ItemProto(
         helm,
@@ -119,7 +141,7 @@ class ItemCommandsTest {
     assertContains(f.doLine(p, "wield cap"), "You can't wield a cursed cap.")
     f.doLine(p, "wear cap")
     assertTrue(p.hasFlag("no_regen"))
-    assertEquals(12, p.stat("con"))
+    assertEquals(12, p.stat(fs.toughness))
     f.doLine(p, "remove cap")
     assertFalse(p.hasFlag("no_regen"))
   }
@@ -260,14 +282,14 @@ class ItemCommandsTest {
     val f = fixture()
     val p = f.player("Ann")
     f.carry(p, anvil)
-    assertEquals(10, p.stat("dex"))
+    assertEquals(10, p.stat(fs.agility))
     f.carry(p, chest)
-    assertEquals(mapOf("dex" to -2), p.encumbrance)
-    assertEquals(8, p.stat("dex"))
+    assertEquals(mapOf(fs.agility to -2), p.encumbrance)
+    assertEquals(8, p.stat(fs.agility))
     f.run()
     assertContains(f.out(p), "You are carrying more than you can manage.")
     f.doLine(p, "drop anvil")
-    assertNull(p.encumbrance["dex"])
-    assertEquals(10, p.stat("dex"))
+    assertNull(p.encumbrance[fs.agility])
+    assertEquals(10, p.stat(fs.agility))
   }
 }

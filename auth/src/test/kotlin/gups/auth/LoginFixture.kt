@@ -9,6 +9,8 @@ import gups.core.OutputSink
 import gups.core.Restriction
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Direction
 import gups.core.model.ExitProto
 import gups.core.model.MobProto
@@ -235,7 +237,13 @@ class LoginFixture(
   val limiter = LoginLimiter { now }
   private val work = ArrayDeque<Runnable>()
   private val events = ArrayDeque<WorldControlEvent>()
-  val w = World(testProtos(), config = WorldConfig(seed = 1, strict = true))
+  val w =
+    World(
+      testProtos(),
+      FixtureSchemas.FANTASY.schema,
+      FixtureRules(),
+      config = WorldConfig(seed = 1, strict = true),
+    )
   val persistence = MemoryPersistence()
   private var nextSession = 1L
 

@@ -167,14 +167,14 @@ class TrackTest {
   fun `movement costs move points`() {
     val f = Fixture()
     val p = f.player("Ann")
-    p.move = 0
+    f.setVital(p, "move", 0)
     f.input(p, "north")
     f.run()
     assertEquals("You are too exhausted.\n", f.out(p))
-    p.move = 5
+    f.setVital(p, "move", 5)
     f.input(p, "north")
     f.run()
-    assertEquals(4, p.move)
+    assertEquals(4, p.current("move"))
   }
 
   @Test

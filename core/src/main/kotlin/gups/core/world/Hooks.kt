@@ -70,6 +70,8 @@ data class HookContext(
   val weapon: Item? = null,
   val amount: Int? = null,
   val type: DamageType? = null,
+  /** For `on_damage`: the vital losses that make up [amount]. */
+  val losses: Map<String, Int>? = null,
   val affect: Affect? = null,
   /** Why [affect] ended, for its `on_expire`. */
   val affectEndReason: AffectEndReason? = null,
@@ -110,7 +112,7 @@ interface ScriptHost {
 
   /**
    * Runs one modifier `fn(ctx, base)` of the rules chain and returns its value: an `Int` for
-   * numeric points, a [gups.core.rules.Regen] for `regen`, and for `cast_allowed` null (allow) or
+   * numeric points, a vital map for `move_cost` and `regen`, and for `cast_allowed` null (allow) or
    * the denial message. A failing modifier returns [base]. [source] says where the modifier comes
    * from, for example `region:null_field`.
    */

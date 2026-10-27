@@ -76,7 +76,7 @@ class HookCtxFieldsTest {
                     room("start", exits = [exit("north", ":hall")], spawns = [spawn(":wolf")], ${hooks(OwnerKind.ROOM)})
                     room("hall", exits = [exit("south", ":start")], ${hooks(OwnerKind.ROOM)})
                     room("far", ${hooks(OwnerKind.ROOM)})
-                    mob("wolf", hp = 8, senses = {"hearing": 1, "sight": 1}, ${hooks(OwnerKind.MOB)})
+                    mob("wolf", vitals = vitals(hp = 8), senses = {"hearing": 1, "sight": 1}, ${hooks(OwnerKind.MOB)})
                     item("rock", kind = "melee", wear = "wield", dice = "1d2", ${hooks(OwnerKind.ITEM)})
                     item("cup", ${hooks(OwnerKind.ITEM)})
                     skill("zap", range = "far", warmup = 1, effect = damage(dice = "1d2"))

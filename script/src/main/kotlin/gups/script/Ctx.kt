@@ -3,7 +3,6 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.model.Actor
 import gups.core.model.Band
-import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
@@ -215,7 +214,7 @@ internal constructor(
     structField = true,
     doc = "The skill being cast, for before_cast, on_cast_start and on_cast.",
   )
-  fun skill(): Any = field { hc.skill?.let(::SkillView) ?: Starlark.NONE }
+  fun skill(): Any = field { hc.skill?.let { SkillView(it, frame.world.schema) } ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "weapon",
@@ -224,8 +223,22 @@ internal constructor(
   )
   fun weapon(): Any = field { v(hc.weapon) }
 
-  @StarlarkMethod(name = "amount", structField = true, doc = "The damage dealt, for on_damage.")
+  @StarlarkMethod(
+    name = "amount",
+    structField = true,
+    doc = "The total of the vital losses a damage event caused, for on_damage.",
+  )
   fun amount(): Any = field { hc.amount?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "losses",
+    structField = true,
+    doc = "The vital losses behind amount, as vitals(...), for on_damage.",
+  )
+  fun losses(): Any = field {
+    hc.losses?.let { TypedMap(TypedKind.VITALS, it, frame.world.schema.vitalNames) }
+      ?: Starlark.NONE
+  }
 
   @StarlarkMethod(name = "type", structField = true, doc = "The damage type, for on_damage.")
   fun type(): Any = field { hc.type?.name ?: Starlark.NONE }
@@ -606,12 +619,14 @@ internal constructor(
 
   @StarlarkMethod(
     name = "damage",
-    doc = "Deals damage directly (no to-hit roll, no mitigation); fires on_damage.",
+    doc =
+      "Deals damage directly to one vital (no to-hit roll, no mitigation); fires on_damage with just that loss.",
     parameters =
       [
         Param(name = "target", named = true, doc = "Actor to damage."),
-        Param(name = "amount", named = true, doc = "Hit points of damage."),
-        Param(name = "type", named = true, doc = "Damage type, such as 'fire' or 'slash'."),
+        Param(name = "amount", named = true, doc = "Points of damage."),
+        Param(name = "type", named = true, doc = "A declared damage type, such as DAMAGE.fire."),
+        Param(name = "vital", named = true, doc = "The declared vital that loses the points."),
         Param(
           name = "source",
           defaultValue = "None",
@@ -620,15 +635,24 @@ internal constructor(
         ),
       ],
   )
-  fun damage(target: Any, amount: Any, type: Any, source: Any): Any =
+  fun damage(target: Any, amount: Any, type: Any, vital: Any, source: Any): Any =
     verb("damage") {
       val t = actorArg(target, "damage(target)")
       val n = int(amount, "damage(amount)")
       if (n < 0) fail("damage(amount): can't be negative; use heal()")
+      val schema = world.schema
+      val damageType =
+        checkName(
+          str(type, "damage(type)").lowercase(),
+          schema.damageTypes,
+          "damage type",
+          "damage(type)",
+        )
+      val name = checkName(str(vital, "damage(vital)"), schema.vitalNames, "vital", "damage(vital)")
       world.damage(
         t,
-        n,
-        DamageType(str(type, "damage(type)").lowercase()),
+        mapOf(name to n),
+        DamageType(damageType),
         if (isNone(source)) null else actorArg(source, "damage(source)"),
       )
       Starlark.NONE
@@ -636,18 +660,21 @@ internal constructor(
 
   @StarlarkMethod(
     name = "heal",
-    doc = "Restores hit points to target, up to max_hp.",
+    doc = "Restores a vital of target, up to its maximum.",
     parameters =
       [
         Param(name = "target", named = true, doc = "Actor to heal."),
-        Param(name = "amount", named = true, doc = "Hit points to restore."),
+        Param(name = "amount", named = true, doc = "Points to restore."),
+        Param(name = "vital", named = true, doc = "The declared vital to restore."),
       ],
   )
-  fun heal(target: Any, amount: Any): Any =
+  fun heal(target: Any, amount: Any, vital: Any): Any =
     verb("heal") {
       val n = int(amount, "heal(amount)")
       if (n < 0) fail("heal(amount): can't be negative; use damage()")
-      world.heal(actorArg(target, "heal(target)"), n)
+      val name =
+        checkName(str(vital, "heal(vital)"), world.schema.vitalNames, "vital", "heal(vital)")
+      world.heal(actorArg(target, "heal(target)"), name, n)
       Starlark.NONE
     }
 
@@ -709,8 +736,8 @@ internal constructor(
         Param(
           name = "stat_deltas",
           named = true,
-          defaultValue = "{}",
-          doc = "Stat adjustments while the affect lasts, such as {'dex': -1}.",
+          defaultValue = "None",
+          doc = "Stat adjustments while the affect lasts, built with stats(...).",
         ),
         Param(
           name = "flags",
@@ -1015,7 +1042,7 @@ internal constructor(
   @StarlarkMethod(
     name = "set_exit_senses_blocked",
     doc =
-      "Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.",
+      "Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.",
     parameters =
       [
         Param(name = "room", named = true, doc = "Room, or room label, that has the exit."),
@@ -1023,18 +1050,14 @@ internal constructor(
         Param(
           name = "channels",
           named = true,
-          doc = "Channels to block: any of 'sight', 'sound', 'noise', 'spell'.",
+          doc = "Channels to block, built in or declared by the world.",
         ),
       ],
     useStarlarkThread = true,
   )
   fun setExitSensesBlocked(room: Any, dir: Any, channels: Any, thread: StarlarkThread): Any =
     verb("set_exit_senses_blocked") {
-      val names = Channel.entries.map { it.name.lowercase() }
-      val set =
-        strList(channels, "set_exit_senses_blocked(channels)").mapTo(LinkedHashSet()) {
-          Channel.valueOf(choice(it, "set_exit_senses_blocked(channels)", names).uppercase())
-        }
+      val set = gups.script.channels(channels, "set_exit_senses_blocked(channels)", world.schema)
       world.setExitSensesBlocked(
         roomArg(room, "set_exit_senses_blocked(room)", thread),
         dir(dir, "set_exit_senses_blocked(dir)"),

@@ -4,12 +4,12 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
-import gups.core.model.DEFAULT_STATS
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.rules.StartingStats
 import gups.core.world.Diagnostic
 import gups.core.world.World
 import gups.core.world.attach
@@ -26,10 +26,14 @@ import gups.script.StarlarkHost
 import gups.script.TypeSpec
 import gups.script.ViewScope
 import gups.script.callerPackage
+import gups.script.damageTypeName
 import gups.script.describeBuiltin
 import gups.script.starlarkValue
+import gups.script.statsValue
 import gups.script.storableValue
 import gups.script.view
+import gups.script.vitalName
+import gups.script.vitalsValue
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -102,42 +106,36 @@ internal constructor(
 
   @StarlarkMethod(
     name = "spawn_player",
-    doc = "Adds a connected player and returns its handle.",
+    doc =
+      "Adds a connected player and returns its handle. The numbers come from rules.starting_stats; vitals and stats override them.",
     parameters =
       [
         Param(name = "name", named = true, doc = "Player name."),
         Param(name = "at", named = true, doc = "Starting room label."),
         Param(name = "level", named = true, defaultValue = "1", doc = "Player level."),
         Param(
-          name = "hp",
+          name = "vitals",
           named = true,
-          defaultValue = "20",
-          doc = "Starting and maximum hit points.",
-        ),
-        Param(name = "mana", named = true, defaultValue = "20", doc = "Starting and maximum mana."),
-        Param(
-          name = "move",
-          named = true,
-          defaultValue = "100",
-          doc = "Starting and maximum movement points.",
-        ),
-        Param(
-          name = "index",
-          named = true,
-          defaultValue = "0",
-          doc = "Track index in the starting room.",
+          defaultValue = "None",
+          doc = "Starting and maximum vitals, built with vitals(...), or None for the rules'.",
         ),
         Param(
           name = "stats",
           named = true,
           defaultValue = "None",
-          doc = "Base stats such as {'str': 12}, or None for the defaults.",
+          doc = "Base stats, built with stats(...), or None for the rules'.",
         ),
         Param(
           name = "skills",
           named = true,
           defaultValue = "None",
           doc = "Known skills mapping skill label to proficiency, or None.",
+        ),
+        Param(
+          name = "index",
+          named = true,
+          defaultValue = "0",
+          doc = "Track index in the starting room.",
         ),
       ],
     useStarlarkThread = true,
@@ -146,32 +144,22 @@ internal constructor(
     name: Any,
     at: Any,
     level: Any,
-    hp: Any,
-    mana: Any,
-    move: Any,
-    index: Any,
+    vitals: Any,
     stats: Any,
     skills: Any,
+    index: Any,
     thread: StarlarkThread,
   ): Any {
     val room = roomArg(at, "spawn_player(at)", thread)
-    val baseStats =
-      DEFAULT_STATS +
-        if (isNone(stats)) emptyMap()
-        else
-          (stats as? Dict<*, *> ?: evalFail("spawn_player(stats): expected a dict"))
-            .entries
-            .associate { (k, v) -> str(k, "spawn_player(stats)") to int(v, "spawn_player(stats)") }
+    val overrideVitals = vitalsValue(vitals, "spawn_player(vitals)")
+    val overrideStats = statsValue(stats, "spawn_player(stats)")
     val p =
       guard("spawn_player") {
         world.spawnPlayer(
           str(name, "spawn_player(name)"),
           room.label,
           int(level, "spawn_player(level)"),
-          int(hp, "spawn_player(hp)"),
-          int(mana, "spawn_player(mana)"),
-          int(move, "spawn_player(move)"),
-          baseStats,
+          StartingStats(overrideStats, overrideVitals, overrideVitals),
           int(index, "spawn_player(index)"),
         )
       }
@@ -251,34 +239,45 @@ internal constructor(
   @StarlarkMethod(
     name = "damage",
     doc =
-      "Damages an actor by amount, or by pct of its max hp. Fires on_damage; death is processed at once.",
+      "Damages one vital of an actor by amount, or by pct of that vital's maximum. Fires on_damage; death is processed at once.",
     parameters =
       [
         Param(name = "target", named = true, doc = "Actor to damage."),
+        Param(name = "vital", named = true, doc = "The declared vital that loses the points."),
         Param(
           name = "amount",
           named = true,
           defaultValue = "None",
-          doc = "Hit points of damage, or None to use pct.",
+          doc = "Points of damage, or None to use pct.",
         ),
         Param(
           name = "pct",
           named = true,
           defaultValue = "None",
-          doc = "Percentage of max hp, or None to use amount.",
+          doc = "Percentage of the vital's maximum, or None to use amount.",
         ),
-        Param(name = "type", named = true, defaultValue = "'bludgeon'", doc = "Damage type."),
+        Param(
+          name = "type",
+          named = true,
+          defaultValue = "None",
+          doc = "A declared damage type, or None for the unarmed type.",
+        ),
       ],
   )
-  fun damage(target: Any, amount: Any, pct: Any, type: Any): Any {
+  fun damage(target: Any, vital: Any, amount: Any, pct: Any, type: Any): Any {
     val a =
       (target as? ActorView)?.actor
         ?: evalFail("damage(target): expected an actor, got ${typeName(target)}")
+    val schema = world.schema
+    val name = vitalName(str(vital, "damage(vital)"), schema, "damage(vital)")
     val n =
       intOrNull(amount, "damage(amount)")
-        ?: intOrNull(pct, "damage(pct)")?.let { a.maxHp * it / 100 }
+        ?: intOrNull(pct, "damage(pct)")?.let { a.max(name) * it / 100 }
         ?: evalFail("damage(): give amount or pct")
-    world.damage(a, n, DamageType(str(type, "damage(type)")))
+    val damageType =
+      if (isNone(type)) schema.unarmedDamageType
+      else damageTypeName(str(type, "damage(type)"), schema, "damage(type)")
+    world.damage(a, mapOf(name to n), DamageType(damageType))
     return Starlark.NONE
   }
 

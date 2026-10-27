@@ -8,6 +8,8 @@ import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.model.WorldSchema
+import gups.core.model.didYouMean
 import gups.core.world.Diagnostic
 import gups.core.world.World
 import gups.core.world.applyAffect
@@ -20,8 +22,10 @@ import gups.core.world.teleport
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginItem
+import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRoom
+import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginWorld
 import gups.script.ActorView
 import gups.script.ItemView
@@ -50,14 +54,14 @@ internal object Facades {
   fun room(value: Any?): PluginRoom? =
     when (value) {
       is RoomFacade -> value
-      is RoomView -> RoomFacade(value.room)
+      is RoomView -> RoomFacade(value.room, value.scope.world)
       else -> null
     }
 
   fun actor(value: Any?): PluginActor? =
     when (value) {
       is ActorFacade -> value
-      is ActorView -> ActorFacade(value.actor)
+      is ActorView -> ActorFacade(value.actor, value.scope.world)
       else -> null
     }
 
@@ -83,7 +87,8 @@ internal abstract class EntityFacade(open val entity: Entity) : PluginEntity {
   override fun toString(): String = entity.toString()
 }
 
-internal class RoomFacade(val room: Room) : EntityFacade(room), PluginRoom {
+internal class RoomFacade(val room: Room, private val world: World) :
+  EntityFacade(room), PluginRoom {
   override val label: String
     get() = room.label.v
 
@@ -100,13 +105,27 @@ internal class RoomFacade(val room: Room) : EntityFacade(room), PluginRoom {
     get() = room.exits.values.associate { it.direction.name to it.to.v }
 
   override val actors: List<PluginActor>
-    get() = room.actors.map(::ActorFacade)
+    get() = room.actors.map { ActorFacade(it, world) }
 
   override val items: List<PluginItem>
     get() = room.items.map(::ItemFacade)
 }
 
-internal class ActorFacade(val actor: Actor) : EntityFacade(actor), PluginActor {
+/** [name] if it is one of [known], else an `IllegalArgumentException` with a suggestion. */
+internal fun declared(
+  name: String,
+  known: List<String>,
+  noun: String,
+  what: String? = null,
+): String {
+  require(name in known) {
+    "${what?.let { "$it: " }.orEmpty()}unknown $noun '$name'${didYouMean(name, known)}"
+  }
+  return name
+}
+
+internal class ActorFacade(val actor: Actor, private val world: World) :
+  EntityFacade(actor), PluginActor {
   override val label: String?
     get() = if (actor is Player) null else actor.protoLabel.v
 
@@ -114,25 +133,23 @@ internal class ActorFacade(val actor: Actor) : EntityFacade(actor), PluginActor 
     get() = actor.isPlayer
 
   override val room: PluginRoom
-    get() = RoomFacade(actor.room)
+    get() = RoomFacade(actor.room, world)
 
-  override val hp: Int
-    get() = actor.hp
+  private val schema: WorldSchema
+    get() = world.schema
 
-  override val maxHp: Int
-    get() = actor.maxHp
+  private fun statName(name: String): String = declared(name, schema.statNames, "stat")
 
-  override val mana: Int
-    get() = actor.mana
+  override fun stat(name: String): Int = actor.stat(statName(name))
 
-  override val maxMana: Int
-    get() = actor.maxMana
+  override fun baseStat(name: String): Int = actor.baseStats[statName(name)] ?: 0
 
-  override val move: Int
-    get() = actor.move
+  override fun vital(name: String): Int = actor.current(declared(name, schema.vitalNames, "vital"))
 
-  override val maxMove: Int
-    get() = actor.maxMove
+  override fun maxVital(name: String): Int = actor.max(declared(name, schema.vitalNames, "vital"))
+
+  override fun resist(type: String): Int =
+    actor.resists[DamageType(declared(type, schema.damageTypes, "damage type"))] ?: 0
 
   override val level: Int
     get() = actor.level
@@ -200,19 +217,29 @@ internal class WorldFacade(
       *exclude.map { actorOf(it, "echo(exclude)") }.toTypedArray(),
     )
 
-  override fun damage(target: PluginActor, amount: Int, type: String, source: PluginActor?) {
+  override fun damage(
+    target: PluginActor,
+    amount: Int,
+    type: String,
+    vital: String,
+    source: PluginActor?,
+  ) {
     require(amount >= 0) { "damage(amount): can't be negative; use heal()" }
+    val damageType =
+      declared(type.lowercase(), world.schema.damageTypes, "damage type", "damage(type)")
+    val name = declared(vital, world.schema.vitalNames, "vital", "damage(vital)")
     world.damage(
       actorOf(target, "damage(target)"),
-      amount,
-      DamageType(type.lowercase()),
+      mapOf(name to amount),
+      DamageType(damageType),
       source?.let { actorOf(it, "damage(source)") },
     )
   }
 
-  override fun heal(target: PluginActor, amount: Int) {
+  override fun heal(target: PluginActor, amount: Int, vital: String) {
     require(amount >= 0) { "heal(amount): can't be negative; use damage()" }
-    world.heal(actorOf(target, "heal(target)"), amount)
+    val name = declared(vital, world.schema.vitalNames, "vital", "heal(vital)")
+    world.heal(actorOf(target, "heal(target)"), name, amount)
   }
 
   override fun applyAffect(
@@ -224,6 +251,12 @@ internal class WorldFacade(
   ) {
     require(name.isNotBlank()) { "apply_affect(name): must not be blank" }
     require(duration >= 1) { "apply_affect(duration): must be at least 1" }
+    for (stat in statDeltas.keys) declared(
+      stat,
+      world.schema.statNames,
+      "stat",
+      "apply_affect(statDeltas)",
+    )
     world.applyAffect(actorOf(target, "apply_affect(target)"), name, duration, statDeltas, flags)
   }
 
@@ -271,6 +304,16 @@ internal class WorldFacade(
     if (e.customAttributes.remove(key(key, write = true, "del_attr(key)")) != null) e.dirty = true
   }
 
+  override val schema: PluginSchema
+    get() =
+      world.schema.let { s ->
+        PluginSchema(
+          s.stats.map { PluginNamed(it.name, it.label) },
+          s.vitals.map { PluginNamed(it.name, it.label) },
+          s.damageTypes,
+        )
+      }
+
   override val pulse: Long
     get() = world.pulse
 
@@ -280,13 +323,14 @@ internal class WorldFacade(
   override val rng: PluginRng
     get() = RngFacade(world)
 
-  override fun rooms(): List<PluginRoom> = world.rooms.sortedBy { it.label.v }.map(::RoomFacade)
+  override fun rooms(): List<PluginRoom> =
+    world.rooms.sortedBy { it.label.v }.map { RoomFacade(it, world) }
 
   override fun room(label: String): PluginRoom? =
     runCatching { Label(label) }
       .getOrNull()
       ?.let { l -> world.rooms.firstOrNull { it.label == l } }
-      ?.let(::RoomFacade)
+      ?.let { RoomFacade(it, world) }
 
   override fun regions(): List<String> = world.rooms.flatMap { it.regions }.toSortedSet().toList()
 

@@ -22,6 +22,7 @@ class Backups(
     DAILY("daily", Duration.ofDays(1), 14),
     MANUAL("manual", null, Int.MAX_VALUE),
     PREDEPLOY("predeploy", null, Int.MAX_VALUE),
+    PREWIPE("prewipe", null, Int.MAX_VALUE),
   }
 
   private val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneOffset.UTC)

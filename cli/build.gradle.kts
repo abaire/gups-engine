@@ -8,6 +8,8 @@ plugins {
 }
 
 dependencies {
+  testImplementation(testFixtures(project(":script")))
+  testImplementation(testFixtures(project(":core")))
   implementation(project(":core"))
   implementation(project(":script"))
   implementation(project(":persist"))
@@ -43,6 +45,10 @@ tasks.test {
   val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
   inputs.dir(templateWorld).withPropertyName("templateWorld")
   systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
+  // The robot sample world, which lint, test and fuzz must pass.
+  val robotWorld = rootProject.layout.projectDirectory.dir("samples/robot-world")
+  inputs.dir(robotWorld).withPropertyName("robotWorld")
+  systemProperty("gups.robotWorld", robotWorld.asFile.absolutePath)
   // -Dgups.browserTest=true runs the headless Firefox test outside Linux CI too.
   systemProperty("gups.browserTest", System.getProperty("gups.browserTest") ?: "false")
   // The committed api.json the golden test compares with (a test resource, so already an

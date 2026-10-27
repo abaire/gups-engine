@@ -5,6 +5,8 @@ plugins {
 }
 
 dependencies {
+  testImplementation(testFixtures(project(":script")))
+  testImplementation(testFixtures(project(":core")))
   // Plugins compile only against gups.pluginapi.* and net.starlark.java.*.
   implementation(project(":core"))
   implementation(project(":script"))

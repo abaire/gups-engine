@@ -33,13 +33,14 @@
 <tbody>
 <tr id="ctx.actor"><td><code>actor</code></td><td>1</td><td>The actor performing the action, or the damage/kill source.</td></tr>
 <tr id="ctx.affect"><td><code>affect</code></td><td>1</td><td>The affect, for affect on_tick and on_expire.</td></tr>
-<tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The damage dealt, for on_damage.</td></tr>
+<tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The total of the vital losses a damage event caused, for on_damage.</td></tr>
 <tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
 <tr id="ctx.direction"><td><code>direction</code></td><td>1</td><td>The movement direction name, for enter and exit hooks.</td></tr>
 <tr id="ctx.elapsed_pulses"><td><code>elapsed_pulses</code></td><td>1</td><td>Pulses spent dormant, for on_wake.</td></tr>
 <tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.</td></tr>
 <tr id="ctx.from_room"><td><code>from_room</code></td><td>1</td><td>The room the actor came from, for enter hooks.</td></tr>
 <tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
+<tr id="ctx.losses"><td><code>losses</code></td><td>1</td><td>The vital losses behind amount, as vitals(...), for on_damage.</td></tr>
 <tr id="ctx.proposals"><td><code>proposals</code></td><td>1</td><td>For think: behavior proposals, best first.</td></tr>
 <tr id="ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
 <tr id="ctx.reason"><td><code>reason</code></td><td>1</td><td>Why the affect ended, 'expired' or 'removed', for affect on_expire.</td></tr>
@@ -149,7 +150,7 @@
 </table>
 </article>
 <article id="ctx.apply_affect" class="entry">
-<h4><code>apply_affect(target, name, duration, stat_deltas = {}, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {})</code> <span class="since">since api_version 1</span></h4>
+<h4><code>apply_affect(target, name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {})</code> <span class="since">since api_version 1</span></h4>
 <p>Attaches a timed buff or debuff; re-applying a name replaces it.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -157,7 +158,7 @@
 <tr id="ctx.apply_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to receive the affect.</td></tr>
 <tr id="ctx.apply_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name; applying the same name again replaces the existing affect.</td></tr>
 <tr id="ctx.apply_affect.duration"><td><code>duration</code></td><td>positional or named</td><td></td><td>Duration in pulses.</td></tr>
-<tr id="ctx.apply_affect.stat_deltas"><td><code>stat_deltas</code></td><td>positional or named</td><td><code>{}</code></td><td>Stat adjustments while the affect lasts, such as {'dex': -1}.</td></tr>
+<tr id="ctx.apply_affect.stat_deltas"><td><code>stat_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Stat adjustments while the affect lasts, built with stats(...).</td></tr>
 <tr id="ctx.apply_affect.flags"><td><code>flags</code></td><td>positional or named</td><td><code>[]</code></td><td>Flags the affect grants, such as 'no_regen'.</td></tr>
 <tr id="ctx.apply_affect.tick_every"><td><code>tick_every</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses between on_tick calls, or None for no ticking.</td></tr>
 <tr id="ctx.apply_affect.on_tick"><td><code>on_tick</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called every tick_every pulses.</td></tr>
@@ -211,14 +212,15 @@
 </table>
 </article>
 <article id="ctx.damage" class="entry">
-<h4><code>damage(target, amount, type, source = None)</code> <span class="since">since api_version 1</span></h4>
-<p>Deals damage directly (no to-hit roll, no mitigation); fires on_damage.</p>
+<h4><code>damage(target, amount, type, vital, source = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Deals damage directly to one vital (no to-hit roll, no mitigation); fires on_damage with just that loss.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.damage.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to damage.</td></tr>
-<tr id="ctx.damage.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Hit points of damage.</td></tr>
-<tr id="ctx.damage.type"><td><code>type</code></td><td>positional or named</td><td></td><td>Damage type, such as 'fire' or 'slash'.</td></tr>
+<tr id="ctx.damage.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points of damage.</td></tr>
+<tr id="ctx.damage.type"><td><code>type</code></td><td>positional or named</td><td></td><td>A declared damage type, such as DAMAGE.fire.</td></tr>
+<tr id="ctx.damage.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital that loses the points.</td></tr>
 <tr id="ctx.damage.source"><td><code>source</code></td><td>positional or named</td><td><code>None</code></td><td>Actor credited with the damage, or None.</td></tr>
 </tbody>
 </table>
@@ -324,13 +326,14 @@
 </table>
 </article>
 <article id="ctx.heal" class="entry">
-<h4><code>heal(target, amount)</code> <span class="since">since api_version 1</span></h4>
-<p>Restores hit points to target, up to max_hp.</p>
+<h4><code>heal(target, amount, vital)</code> <span class="since">since api_version 1</span></h4>
+<p>Restores a vital of target, up to its maximum.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.heal.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to heal.</td></tr>
-<tr id="ctx.heal.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Hit points to restore.</td></tr>
+<tr id="ctx.heal.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to restore.</td></tr>
+<tr id="ctx.heal.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital to restore.</td></tr>
 </tbody>
 </table>
 </article>
@@ -478,13 +481,13 @@
 </article>
 <article id="ctx.set_exit_senses_blocked" class="entry">
 <h4><code>set_exit_senses_blocked(room, dir, channels)</code> <span class="since">since api_version 1</span></h4>
-<p>Replaces the sensory channels an exit blocks: any of 'sight', 'sound', 'noise', 'spell'.</p>
+<p>Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.set_exit_senses_blocked.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
 <tr id="ctx.set_exit_senses_blocked.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
-<tr id="ctx.set_exit_senses_blocked.channels"><td><code>channels</code></td><td>positional or named</td><td></td><td>Channels to block: any of 'sight', 'sound', 'noise', 'spell'.</td></tr>
+<tr id="ctx.set_exit_senses_blocked.channels"><td><code>channels</code></td><td>positional or named</td><td></td><td>Channels to block, built in or declared by the world.</td></tr>
 </tbody>
 </table>
 </article>

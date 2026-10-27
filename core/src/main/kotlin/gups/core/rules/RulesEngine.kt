@@ -4,6 +4,7 @@ import gups.core.Label
 import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Item
 import gups.core.model.SkillProto
@@ -32,16 +33,35 @@ class RulesContext(
     get() = world.rng
 }
 
-data class Regen(val hp: Int, val mana: Int, val move: Int)
+/**
+ * The numbers `rules.starting_stats` gives a new actor. A [current] it omits equals the maximum in
+ * [max].
+ */
+data class StartingStats(
+  val stats: Map<String, Int> = emptyMap(),
+  val max: Map<String, Int> = emptyMap(),
+  val current: Map<String, Int> = emptyMap(),
+)
 
-data class PlayerDeathOutcome(val respawn: Label, val xpLoss: Long)
+/** What `rules.on_player_death` decides: where the player respawns and with which vitals. */
+data class PlayerDeathOutcome(
+  val respawn: Label,
+  /** Current vitals of the respawned player; the rest go to their maximum. */
+  val vitals: Map<String, Int>?,
+  val xpLoss: Long,
+)
 
 /**
- * One method per `//rules:combat.star` export. [DefaultRules] is the built-in Kotlin ruleset; the
- * Starlark-backed implementation falls back to it.
+ * One method per `//rules:combat.star` export; the Starlark-backed implementation is the only one.
  */
 interface RulesEngine {
   fun equipmentSlots(): List<String>
+
+  /** Numbers for [RulesContext.actor], a new character or a mob about to spawn. */
+  fun startingStats(c: RulesContext): StartingStats
+
+  /** The life state of [RulesContext.actor]. */
+  fun condition(c: RulesContext): Condition
 
   /** Hit chance in percent. */
   fun toHit(c: RulesContext): Int
@@ -49,8 +69,8 @@ interface RulesEngine {
   /** Raw auto-attack damage. */
   fun damage(c: RulesContext): Int
 
-  /** Damage after armor and resists; [RulesContext.target] is the one taking it. */
-  fun mitigate(c: RulesContext, amount: Int, type: DamageType): Int
+  /** The vital losses [amount] damage of [type] causes [RulesContext.target]. */
+  fun mitigate(c: RulesContext, amount: Int, type: DamageType): Map<String, Int>
 
   /** Higher acts first within a combat round. */
   fun initiative(c: RulesContext): Int
@@ -58,7 +78,7 @@ interface RulesEngine {
   /** Null to allow, or the denial message. */
   fun castAllowed(c: RulesContext): String?
 
-  /** Whether [RulesContext.actor], who is casting, is interrupted by [amount] damage. */
+  /** Whether [RulesContext.actor], who is casting, is interrupted by [amount] total loss. */
   fun interruptCheck(c: RulesContext, amount: Int): Boolean
 
   /** Success chance in percent for retreating while pinned by [RulesContext.target]. */
@@ -66,10 +86,11 @@ interface RulesEngine {
 
   fun fleeChance(c: RulesContext): Int
 
-  fun moveCost(c: RulesContext): Int
+  /** What a room transition spends, per vital. */
+  fun moveCost(c: RulesContext): Map<String, Int>
 
-  /** Vitals restored per world tick. */
-  fun regen(c: RulesContext): Regen
+  /** What each vital gains per world tick; negative to lose. */
+  fun regen(c: RulesContext): Map<String, Int>
 
   fun carryLimit(c: RulesContext): Int
 

@@ -7,6 +7,7 @@ import gups.core.model.DoorState
 import gups.core.model.Effect
 import gups.core.model.TrackSize
 import gups.core.world.HookName
+import gups.script.testing.TestWorlds
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -34,7 +35,9 @@ class LoaderTest {
     assertTrue(plain.errors.isEmpty(), plain.report())
     val aliased =
       load(
-        files + ("MODULE.gups" to "module(aliases = {\"peer\": \"look\", \"gaze\": \"look\"})"),
+        files +
+          ("MODULE.gups" to
+            TestWorlds.module("aliases = {\"peer\": \"look\", \"gaze\": \"look\"}")),
         "lib",
         "zones/z",
       )
@@ -64,7 +67,7 @@ class LoaderTest {
                 """,
           "zones/z/things.star" to
             """
-                    mob("rat", name = "a fat rat", hp = 5, loot = [loot(":key", chance = 0.5)])
+                    mob("rat", name = "a fat rat", vitals = vitals(hp = 5), loot = [loot(":key", chance = 0.5)])
                     item("key", name = "a brass key")
                     skill("bite", range = "melee", effect = sequence(damage("1d4", type = "pierce"), stun(2)))
                 """,
@@ -319,7 +322,7 @@ class LoaderTest {
         mapOf(
           "zones/z/package.star" to zonePkg(),
           "zones/z/a.star" to "room(\"start\", exits = [exit(\"inv\", \":start\")])",
-          "MODULE.gups" to "module(aliases = {\"inv\": \"inventory\"})",
+          "MODULE.gups" to TestWorlds.module("aliases = {\"inv\": \"inventory\"}"),
         )
       )
     assertContains(only(alias).message, "'inv' is a reserved keyword")

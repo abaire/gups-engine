@@ -268,9 +268,7 @@ private fun World.recover(m: Mob, since: Long) {
       if (suppressed) {
         catchUpRegen(m, since)
       } else {
-        m.hp = maxOf(m.hp, m.maxHp)
-        m.mana = maxOf(m.mana, m.maxMana)
-        m.move = maxOf(m.move, m.maxMove)
+        fillVitals(m)
       }
     }
     DormantRecovery.REGEN -> catchUpRegen(m, since)
@@ -296,7 +294,7 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
   val bounds = listOf(since + 1) + cuts + listOf(pulse + 1)
   try {
     for (i in 0 until bounds.size - 1) {
-      if (m.hp >= m.maxHp && m.mana >= m.maxMana && m.move >= m.maxMove) break
+      if (m.vitalMap.values.all { it.current >= it.max }) break
       val lo = bounds[i]
       val hi = bounds[i + 1]
       val n = ticksIn(lo, hi)
@@ -304,10 +302,11 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
       m.affects.clear()
       m.affects += all.filter { it.expiresAt > lo }
       if (m.hasFlag("no_regen")) continue
-      val r = regenOf(RulesContext(this, m))
-      m.hp = (m.hp + r.hp * n).coerceAtMost(m.maxHp.toLong()).toInt().coerceAtLeast(m.hp)
-      m.mana = (m.mana + r.mana * n).coerceAtMost(m.maxMana.toLong()).toInt().coerceAtLeast(m.mana)
-      m.move = (m.move + r.move * n).coerceAtMost(m.maxMove.toLong()).toInt().coerceAtLeast(m.move)
+      val gained =
+        regenOf(RulesContext(this, m)).mapValues { (_, per) ->
+          (per * n).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+        }
+      applyVitalDeltas(m, gained, null)
     }
   } finally {
     m.affects.clear()

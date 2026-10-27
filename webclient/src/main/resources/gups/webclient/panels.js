@@ -1,12 +1,17 @@
 // The side panel, drawn from GMCP: vitals bars, affects and bands.
 
 /**
- * @typedef {{hp: number, maxhp: number, mana: number, maxmana: number, move: number, maxmove: number}} Vitals
+ * @typedef {{name: string, label: string}} Named
+ * @typedef {{stats: Named[], vitals: Named[], damage_types: string[], features: string[]}} Schema
+ * @typedef {Object<string, number>} Vitals The current and maximum of each vital: `hp` and `maxhp`.
  * @typedef {{name: string, remaining: number, flags: string[]}} Affect
  * @typedef {{id: number, name: string, kind: "actor" | "item"}} BandEntry
  * @typedef {{melee: BandEntry[], near: BandEntry[], far: BandEntry[]}} Bands
  * @typedef {{label: string, name: string, exits: Object<string, string|null>, regions: string[]}} RoomInfo
  */
+
+/** How many bar colors the stylesheet defines; bars cycle through them. */
+const TONES = 4;
 
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -16,15 +21,18 @@ const el = (tag, cls, text) => {
 };
 
 /**
+ * One bar per vital in schema order, labeled with the schema's label.
  * @param {HTMLElement} box
+ * @param {Schema} schema
  * @param {Vitals} v
  */
-export function drawVitals(box, v) {
+export function drawVitals(box, schema, v) {
   box.replaceChildren();
-  for (const [key, label] of [["hp", "HP"], ["mana", "Mana"], ["move", "Move"]]) {
-    const now = v[key];
-    const max = v["max" + key] || 1;
-    const bar = el("div", `bar ${key}`);
+  schema.vitals.forEach(({ name, label }, i) => {
+    const now = v[name] ?? 0;
+    const max = v["max" + name] || 1;
+    const bar = el("div", `bar tone${i % TONES}`);
+    bar.dataset.vital = name;
     bar.dataset.value = `${now}/${max}`;
     const top = el("div", "label");
     top.append(el("span", "", label), el("span", "", `${now}/${max}`));
@@ -34,7 +42,7 @@ export function drawVitals(box, v) {
     track.append(fill);
     bar.append(top, track);
     box.append(bar);
-  }
+  });
 }
 
 /**

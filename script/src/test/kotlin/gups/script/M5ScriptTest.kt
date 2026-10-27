@@ -6,6 +6,7 @@ import gups.core.model.ItemLocation
 import gups.core.world.Aggressive
 import gups.core.world.Flee
 import gups.core.world.Guard
+import gups.core.world.changeVital
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import kotlin.test.Test
@@ -51,7 +52,7 @@ class M5ScriptTest {
         zone(
           """
                 room("start")
-                mob("rat", behaviors = [aggressive(toward = [":goblin_*", "players"]), flee(at_hp_pct = 30), guard("north")])
+                mob("rat", behaviors = [aggressive(toward = [":goblin_*", "players"]), flee(below = vitals(hp = 30)), guard("north")])
                 """
         )
       )
@@ -61,7 +62,7 @@ class M5ScriptTest {
       listOf("//zones/z:goblin_*", "players"),
       (behaviors[0] as Aggressive).toward.patterns,
     )
-    assertEquals(30, (behaviors[1] as Flee).atHpPct)
+    assertEquals(mapOf("hp" to 30), (behaviors[1] as Flee).below)
     assertEquals("north", (behaviors[2] as Guard).exit.name)
   }
 
@@ -147,7 +148,7 @@ class M5ScriptTest {
         zone(
           """
                 def _drink(ctx):
-                    ctx.heal(ctx.actor, 5)
+                    ctx.heal(ctx.actor, 5, "hp")
                     ctx.destroy(ctx.self)
 
                 def _no_fight(ctx):
@@ -160,19 +161,19 @@ class M5ScriptTest {
 
                 room("start")
                 item("tonic", on_use = _drink, before_use = _no_fight)
-                item("hat", wear = "head", equip_affects = ["no_regen"], stat_deltas = {"wis": 1})
+                item("hat", wear = "head", equip_affects = ["no_regen"], stat_deltas = stats(wis = 1))
                 mob("beggar", on_give = _thanks)
                 """
         )
       )
     val p = f.player(hp = 50)
-    p.hp = 40
+    f.w.changeVital(p, "hp", 40 - p.current("hp"))
     f.mob("//zones/z:beggar")
     f.w.spawnItem(Label("//zones/z:tonic"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:hat"), ItemLocation.Carried(p.id))
     f.input(p, "use tonic")
     f.run()
-    assertEquals(45, p.hp)
+    assertEquals(45, p.current("hp"))
     assertTrue(p.inventory.none { it.protoLabel.name == "tonic" })
     f.input(p, "wear hat")
     f.run()

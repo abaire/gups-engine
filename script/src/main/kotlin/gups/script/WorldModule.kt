@@ -4,7 +4,11 @@ import com.google.common.collect.ImmutableMap
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.PULSE_MS
+import gups.core.model.Channel
+import gups.core.model.SchemaName
+import gups.core.model.WorldSchema
 import gups.core.world.CommandAliases
+import gups.core.world.PROMPT_PLACEHOLDER
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 import net.starlark.java.annot.Param
@@ -15,6 +19,8 @@ import net.starlark.java.eval.Module
 import net.starlark.java.eval.Mutability
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkThread
+import net.starlark.java.eval.StarlarkValue
+import net.starlark.java.eval.Tuple
 import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.SyntaxError
 
@@ -35,6 +41,8 @@ data class WorldModule(
   val plugins: Map<String, String> = emptyMap(),
   /** Shorthands for engine commands, from `aliases` and `prefixes`. */
   val aliases: CommandAliases = CommandAliases.NONE,
+  /** The names the world's actors are measured by. */
+  val schema: WorldSchema = WorldSchema.EMPTY,
 ) {
   /** The checkpoint interval in pulses. */
   val checkpointPulses: Long
@@ -58,6 +66,61 @@ data class WorldModule(
         )
     }
     aliases.problems().forEach { add("MODULE.gups: $it") }
+    addAll(schemaProblems())
+  }
+
+  private fun schemaProblems(): List<String> = buildList {
+    val name = Regex("[a-z][a-z0-9_]*")
+    val reserved = reservedViewNames
+    val vitals = schema.vitalNames
+    val seen = HashSet<String>()
+    fun declared(kind: String, names: List<String>) {
+      for (n in names) {
+        when {
+          !name.matches(n) -> add("MODULE.gups: $kind name '$n' must match [a-z][a-z0-9_]*")
+          !seen.add(n) -> add("MODULE.gups: '$n' is declared more than once among stats and vitals")
+          n in reserved -> add("MODULE.gups: $kind name '$n' is reserved for the actor view")
+          else -> Unit
+        }
+        if (n.startsWith("max_") && n.removePrefix("max_") in vitals)
+          add(
+            "MODULE.gups: $kind name '$n' clashes with the maximum of vital '${n.removePrefix("max_")}'"
+          )
+      }
+    }
+    declared("stat", schema.statNames)
+    declared("vital", vitals)
+    for (v in vitals) if (v.startsWith("max"))
+      add("MODULE.gups: vital name '$v' may not start with 'max'")
+    val types = HashSet<String>()
+    for (t in schema.damageTypes) {
+      if (!name.matches(t)) add("MODULE.gups: damage type '$t' must match [a-z][a-z0-9_]*")
+      else if (!types.add(t)) add("MODULE.gups: damage type '$t' is declared more than once")
+    }
+    if (schema.unarmedDamageType !in schema.damageTypes)
+      add(
+        "MODULE.gups: unarmed_damage_type '${schema.unarmedDamageType}' is not a declared damage type" +
+          schema.suggest(schema.unarmedDamageType, schema.damageTypes)
+      )
+    val channels = HashSet<String>()
+    for (c in schema.channels) {
+      when {
+        !name.matches(c) -> add("MODULE.gups: channel '$c' must match [a-z][a-z0-9_]*")
+        Channel.BUILT_IN.any { it.name == c } -> add("MODULE.gups: channel '$c' is built in")
+        !channels.add(c) -> add("MODULE.gups: channel '$c' is declared more than once")
+      }
+    }
+    schema.prompt?.let { prompt ->
+      for (m in PROMPT_PLACEHOLDER.findAll(prompt)) {
+        val key = m.groupValues[1]
+        val vital = key.removePrefix("max_")
+        if (key !in vitals && !(key.startsWith("max_") && vital in vitals))
+          add(
+            "MODULE.gups: prompt placeholder '{$key}' is not a declared vital" +
+              schema.suggest(key, vitals + vitals.map { "max_$it" })
+          )
+      }
+    }
   }
 
   /** Things worth a warning, such as a different pinned engine version. */
@@ -71,6 +134,34 @@ data class WorldModule(
     const val DEFAULT_CHECKPOINT_MINUTES = 30
     val PLUGIN_ID = Regex("[a-z][a-z0-9_]*")
     val CHECKSUM = Regex("sha256:[0-9a-f]{64}")
+
+    /** Every field name of the actor view, which no stat or vital may take. */
+    val reservedViewNames: Set<String> by lazy {
+      Starlark.getMethodAnnotations(ActorView::class.java).values.mapTo(HashSet()) { it.name } +
+        setOf("base", "resists", "condition", "below_zero_since")
+    }
+
+    val STAT_SPEC =
+      DeclSpec(
+        name = "stat",
+        doc = "Declares a stat with a label, for MODULE.gups.",
+        params =
+          listOf(
+            DeclParam("name", "str", "The stat's name.", positional = true, required = true),
+            DeclParam("label", "str", "The name players see.", default = "name capitalized"),
+          ),
+      )
+
+    val VITAL_SPEC =
+      DeclSpec(
+        name = "vital",
+        doc = "Declares a vital with a label, for MODULE.gups.",
+        params =
+          listOf(
+            DeclParam("name", "str", "The vital's name.", positional = true, required = true),
+            DeclParam("label", "str", "The name players see.", default = "name capitalized"),
+          ),
+      )
 
     /** Names a plugin id may not take. */
     val reservedPluginIds: Set<String> by lazy {
@@ -110,6 +201,42 @@ data class WorldModule(
               default = "None",
             ),
             DeclParam(
+              "stats",
+              "list[str | stat]",
+              "The stats actors have, each a name or stat(name, label).",
+              required = true,
+            ),
+            DeclParam(
+              "vitals",
+              "list[str | vital]",
+              "The vitals actors have, each a name or vital(name, label).",
+              required = true,
+            ),
+            DeclParam(
+              "damage_types",
+              "list[str]",
+              "The damage types of the world.",
+              required = true,
+            ),
+            DeclParam(
+              "unarmed_damage_type",
+              "str",
+              "The damage type of an unarmed auto-attack; one of damage_types.",
+              required = true,
+            ),
+            DeclParam(
+              "channels",
+              "list[str]",
+              "Perception channels beyond sight, sound and noise.",
+              default = "[]",
+            ),
+            DeclParam(
+              "prompt",
+              "str",
+              "The telnet prompt, with {vital} and {max_vital} placeholders.",
+              default = "'<' + '{v}v ' per vital + '> '",
+            ),
+            DeclParam(
               "plugins",
               "dict[str, str]",
               "Plugin jars in plugins/<id>.jar, each pinned by its 'sha256:<hex>' checksum.",
@@ -130,10 +257,11 @@ data class WorldModule(
           ),
       )
 
-    /** Reads `MODULE.gups`; a world without one gets the defaults. Errors are [LoadError]s. */
+    /** Reads `MODULE.gups`, which every world needs. Errors are [LoadError]s. */
     fun read(dir: WorldDir): Pair<WorldModule, LoadError?> {
       val path = dir.root.resolve(FILE)
-      if (!path.isRegularFile()) return WorldModule() to null
+      if (!path.isRegularFile())
+        return WorldModule() to LoadError("", "module", "$FILE is required at the world root", FILE)
       val reader = Reader()
       execSettings(path, FILE, "module", reader)?.let {
         return WorldModule() to it
@@ -145,9 +273,45 @@ data class WorldModule(
     }
   }
 
+  /** A `stat(...)` or `vital(...)` value inside the `stats` and `vitals` lists. */
+  private class NameDecl(val name: String, val label: String?) : StarlarkValue
+
   /** The `module()` builtin: called exactly once. */
   private class Reader {
     var result: WorldModule? = null
+
+    @StarlarkMethod(
+      name = "stat",
+      doc = "Declares a stat with a label.",
+      extraPositionals = Param(name = "args"),
+      extraKeywords = Param(name = "kwargs"),
+    )
+    fun stat(args: Tuple, kwargs: Dict<String, Any>): Any = named(STAT_SPEC, args, kwargs)
+
+    @StarlarkMethod(
+      name = "vital",
+      doc = "Declares a vital with a label.",
+      extraPositionals = Param(name = "args"),
+      extraKeywords = Param(name = "kwargs"),
+    )
+    fun vital(args: Tuple, kwargs: Dict<String, Any>): Any = named(VITAL_SPEC, args, kwargs)
+
+    private fun named(spec: DeclSpec, args: Tuple, kwargs: Dict<String, Any>): Any =
+      spec.bind(args, kwargs) { d -> NameDecl(d.reqStr("name"), d.str("label")) }
+
+    private fun names(d: ParsedDecl, param: String): List<SchemaName> =
+      d.list(param).map {
+        when (it) {
+          is NameDecl -> SchemaName(it.name, it.label ?: label(it.name))
+          is String -> SchemaName(it, label(it))
+          else ->
+            fail(
+              "module($param): expected a name or ${param.removeSuffix("s")}(...), got ${typeName(it)}"
+            )
+        }
+      }
+
+    private fun label(name: String): String = name.replaceFirstChar { it.uppercase() }
 
     @StarlarkMethod(
       name = "module",
@@ -180,6 +344,15 @@ data class WorldModule(
             prefix[0] to
               (v as? String ?: fail("module(prefixes): the command of '$prefix' must be a string"))
           }
+        val schema =
+          WorldSchema(
+            stats = names(d, "stats"),
+            vitals = names(d, "vitals"),
+            damageTypes = d.strList("damage_types"),
+            unarmedDamageType = d.reqStr("unarmed_damage_type"),
+            channels = d.strList("channels"),
+            prompt = d.str("prompt"),
+          )
         result =
           WorldModule(
             engine = d.str("engine"),
@@ -188,6 +361,7 @@ data class WorldModule(
             startRoom = start,
             plugins = plugins,
             aliases = CommandAliases(words, prefixes),
+            schema = schema,
           )
         Starlark.NONE
       }

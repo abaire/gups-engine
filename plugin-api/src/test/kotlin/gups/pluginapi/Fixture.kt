@@ -7,6 +7,7 @@ import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
 import gups.script.WorldPluginWiring
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -15,7 +16,7 @@ import kotlin.io.path.writeText
 /** Writes [files] (paths relative to the world root) into a fresh temporary world. */
 fun tempWorld(files: Map<String, String>): Path {
   val root = Files.createTempDirectory("gups-plugin-world")
-  for ((path, text) in files) {
+  for ((path, text) in TestWorlds.withDefaults(files)) {
     val p = root.resolve(path)
     p.parent.createDirectories()
     p.writeText(text.trimIndent() + "\n")
@@ -42,12 +43,18 @@ fun world(
   seed: Long = 7,
 ): World {
   val dir = WorldDir(tempWorld(files))
-  val result =
-    ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals).load(dir.packages())
+  val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+  val result = loader.load(dir.packages())
   check(result.ok) { result.report() }
   val host = StarlarkHost(result, ScriptLimits.HARNESS)
   val world =
-    World(result.prototypes(), host.rules(), host, WorldConfig(seed = seed, checkInvariants = true))
+    World(
+      result.prototypes(),
+      loader.schema,
+      host.rules(),
+      host,
+      WorldConfig(seed = seed, checkInvariants = true),
+    )
   plugins.install(world)
   host.install(world)
   world.fireOnLoad()

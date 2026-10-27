@@ -1,8 +1,11 @@
 package gups.script
 
+import com.google.common.collect.ImmutableCollection
+import com.google.common.collect.ImmutableList
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
+import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.Entity
 import gups.core.model.Exit
@@ -10,8 +13,9 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Room
-import gups.core.model.STAT_NAMES
 import gups.core.model.SkillProto
+import gups.core.model.WorldSchema
+import gups.core.model.didYouMean
 import gups.core.world.Proposal
 import gups.core.world.World
 import gups.core.world.roomOfEntity
@@ -25,6 +29,7 @@ import net.starlark.java.eval.StarlarkInt
 import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
+import net.starlark.java.eval.Structure
 
 // Read-only views of live entities. Scripts never hold an entity directly: every
 // mutation goes through a ctx verb. A view reads the entity's current state on each access.
@@ -109,7 +114,7 @@ abstract class EntityView internal constructor(val scope: ViewScope, val entity:
 }
 
 @StarlarkBuiltin(name = "actor", doc = "A read-only view of a player or mob.")
-open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, actor) {
+open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, actor), Structure {
   @StarlarkMethod(
     name = "is_player",
     structField = true,
@@ -137,41 +142,78 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(name = "xp", structField = true, doc = "Current experience points.")
   fun xp(): Any = read { sInt(actor.xp) }
 
-  @StarlarkMethod(name = "hp", structField = true, doc = "Current hit points.")
-  fun hp(): Any = read { sInt(actor.hp) }
-
-  @StarlarkMethod(name = "max_hp", structField = true, doc = "Maximum hit points.")
-  fun maxHp(): Any = read { sInt(actor.maxHp) }
-
-  @StarlarkMethod(name = "mana", structField = true, doc = "Current mana.")
-  fun mana(): Any = read { sInt(actor.mana) }
-
-  @StarlarkMethod(name = "max_mana", structField = true, doc = "Maximum mana.")
-  fun maxMana(): Any = read { sInt(actor.maxMana) }
-
-  @StarlarkMethod(name = "move", structField = true, doc = "Current movement points.")
-  fun move(): Any = read { sInt(actor.move) }
-
-  @StarlarkMethod(name = "max_move", structField = true, doc = "Maximum movement points.")
-  fun maxMove(): Any = read { sInt(actor.maxMove) }
+  @StarlarkMethod(
+    name = "condition",
+    structField = true,
+    doc = "'ok', 'incapacitated' or 'dead', as the rules last decided.",
+  )
+  fun condition(): Any = read { actor.condition.word }
 
   @StarlarkMethod(
-    name = "stats",
+    name = "base",
     structField = true,
-    doc = "Effective attributes, including affects and equipment.",
+    doc = "Base stat values, without affects, equipment or encumbrance: base.dex.",
   )
-  fun stats(): Any = read { sDict(STAT_NAMES.associateWith { sInt(actor.stat(it)) }) }
-
-  @StarlarkMethod(name = "armor", structField = true, doc = "Armor rating.")
-  fun armor(): Any = read { sInt(actor.armor) }
+  fun base(): Any = read {
+    val stats = scope.world.schema.statNames
+    TypedMap(TypedKind.STATS, stats.associateWith { actor.baseStats[it] ?: 0 }, stats)
+  }
 
   @StarlarkMethod(
     name = "resists",
     structField = true,
-    doc = "Damage resistance percentage by damage type.",
+    doc = "Damage resistance percentage by declared damage type: resists.fire.",
   )
   fun resists(): Any = read {
-    sDict(actor.resists.entries.associate { it.key.name to sInt(it.value) })
+    val types = scope.world.schema.damageTypes
+    TypedMap(TypedKind.RESISTS, types.associateWith { actor.resists[DamageType(it)] ?: 0 }, types)
+  }
+
+  @StarlarkMethod(
+    name = "below_zero_since",
+    doc = "The pulse the vital last dropped below 0, or None while it is 0 or more.",
+    parameters = [Param(name = "vital", named = true, doc = "A declared vital.")],
+  )
+  fun belowZeroSince(vital: Any): Any = read {
+    val name =
+      checkName(
+        str(vital, "below_zero_since(vital)"),
+        scope.world.schema.vitalNames,
+        "vital",
+        "below_zero_since(vital)",
+      )
+    actor.vitals.getValue(name).belowZeroSince?.let { sInt(it) } ?: Starlark.NONE
+  }
+
+  override fun getValue(name: String): Any? = read {
+    val schema = scope.world.schema
+    when {
+      name in schema.statNames -> sInt(actor.stat(name))
+      name in schema.vitalNames -> sInt(actor.current(name))
+      name.startsWith("max_") && name.removePrefix("max_") in schema.vitalNames ->
+        sInt(actor.max(name.removePrefix("max_")))
+      else -> null
+    }
+  }
+
+  override fun setField(field: String, value: Any) {
+    throw Starlark.errorf(
+      "actor fields are read-only: can't set '%s'; use a ctx verb such as damage or heal",
+      field,
+    )
+  }
+
+  override fun getFieldNames(): ImmutableCollection<String> {
+    val schema = scope.world.schema
+    return ImmutableList.copyOf(
+      schema.statNames + schema.vitalNames + schema.vitalNames.map { "max_$it" }
+    )
+  }
+
+  override fun getErrorMessageForUnknownField(field: String): String {
+    val known =
+      getFieldNames() + Starlark.getMethodAnnotations(ActorView::class.java).values.map { it.name }
+    return "'actor' value has no field or method '$field'${didYouMean(field, known)}"
   }
 
   @StarlarkMethod(name = "room", structField = true, doc = "The room the actor is currently in.")
@@ -292,7 +334,9 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
 
   @StarlarkMethod(name = "casting", structField = true, doc = "The skill being cast, or None.")
   fun casting(): Any = read {
-    (actor.casting?.action as? gups.core.world.Castable)?.skill?.let(::SkillView) ?: Starlark.NONE
+    (actor.casting?.action as? gups.core.world.Castable)?.skill?.let {
+      SkillView(it, scope.world.schema)
+    } ?: Starlark.NONE
   }
 }
 
@@ -461,7 +505,9 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun dice(): Any = read { item.proto.dice?.toString() ?: Starlark.NONE }
 
   @StarlarkMethod(name = "damage_type", structField = true, doc = "Weapon damage type.")
-  fun damageType(): Any = read { item.proto.damageType.name }
+  fun damageType(): Any = read {
+    item.proto.damageType?.name ?: scope.world.schema.unarmedDamageType
+  }
 
   @StarlarkMethod(
     name = "range",
@@ -478,7 +524,9 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun wear(): Any = read { item.proto.wear ?: Starlark.NONE }
 
   @StarlarkMethod(name = "stat_deltas", structField = true, doc = "Stat changes while worn.")
-  fun statDeltas(): Any = read { sDict(item.proto.statDeltas.mapValues { sInt(it.value) }) }
+  fun statDeltas(): Any = read {
+    TypedMap(TypedKind.STATS, item.proto.statDeltas, scope.world.schema.statNames)
+  }
 }
 
 /** Where an item is. */
@@ -552,7 +600,7 @@ internal constructor(private val scope: ViewScope, private val host: Actor, val 
     structField = true,
     doc = "Stat adjustments granted by this affect.",
   )
-  fun statDeltas(): Any = sDict(affect.statDeltas.mapValues { sInt(it.value) })
+  fun statDeltas(): Any = TypedMap(TypedKind.STATS, affect.statDeltas, scope.world.schema.statNames)
 
   @StarlarkMethod(
     name = "source",
@@ -572,7 +620,8 @@ internal constructor(private val scope: ViewScope, private val host: Actor, val 
 }
 
 @StarlarkBuiltin(name = "skill", doc = "A read-only view of a skill.")
-class SkillView internal constructor(val skill: SkillProto) : StarlarkValue {
+class SkillView internal constructor(val skill: SkillProto, private val schema: WorldSchema) :
+  StarlarkValue {
   @StarlarkMethod(name = "label", structField = true, doc = "The skill's prototype label.")
   fun label(): Any = skill.label.v
 
@@ -601,9 +650,9 @@ class SkillView internal constructor(val skill: SkillProto) : StarlarkValue {
   @StarlarkMethod(
     name = "cost",
     structField = true,
-    doc = "Vitals spent: keys 'hp', 'mana', 'move'.",
+    doc = "The vitals spent, as vitals(...): cost.mana.",
   )
-  fun cost(): Any = sDict(skill.cost.mapValues { sInt(it.value) })
+  fun cost(): Any = TypedMap(TypedKind.VITALS, skill.cost, schema.vitalNames)
 
   @StarlarkMethod(
     name = "channels",

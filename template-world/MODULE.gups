@@ -7,6 +7,45 @@ module(
     # longer interval only matters if the server crashes. Defaults to 30.
     checkpoint_minutes = 30,
 
+    # The numbers every character and mob is measured by. The engine names none of them: the
+    # rules (rules/combat.star) give them meaning. Each is a name, or stat(name, label = ...) to
+    # set the label players see; the default label is the name capitalized. Order is display
+    # order in `score` and the web client. Changing a name later needs a server wipe
+    # (gups serve --wipe), because saved characters are keyed by these names.
+    stats = [
+        stat("str", label = "Strength"),
+        stat("dex", label = "Dexterity"),
+        stat("con", label = "Constitution"),
+        stat("int", label = "Intelligence"),
+        stat("wis", label = "Wisdom"),
+        "armor",
+    ],
+
+    # The values that rise and fall in play: damage lowers them, healing and regeneration raise
+    # them, and skill costs and movement spend them. Which of them incapacitates or kills is
+    # decided by `condition` in the rules. vital(name, label = ...) works like stat().
+    vitals = [
+        vital("hp", label = "Hit points"),
+        "mana",
+        vital("move", label = "Movement"),
+    ],
+
+    # The kinds of damage. A weapon's damage_type, damage(...) effects, resists(...) and
+    # `mitigate` in the rules all use these names (DAMAGE.fire in scripts).
+    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+
+    # The damage type of an unarmed auto-attack, and of a weapon that names none. One of
+    # damage_types.
+    unarmed_damage_type = "bludgeon",
+
+    # Perception channels beyond the built-in sight, sound and noise. Exits and doors can block
+    # them and skills can list them; the engine raises no events on them itself.
+    channels = ["spell"],
+
+    # The telnet prompt. {hp} is a vital's current value and {max_hp} its maximum. Without
+    # this line the prompt lists every vital: <20hp 20mana 100move> .
+    prompt = "<{hp}hp {mana}m {move}mv> ",
+
     # The room new characters start in. Without it they start at //zones/tutorial:gate, or
     # in the first room by label if there is no tutorial.
     # start_room = "//zones/tutorial:gate",

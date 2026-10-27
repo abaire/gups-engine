@@ -4,6 +4,8 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ContainerProto
 import gups.core.model.Direction
 import gups.core.model.DoorProto
@@ -17,13 +19,13 @@ import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.TrackSize
 import gups.core.model.ZoneProto
-import gups.core.rules.DefaultRules
 import gups.core.world.DevLogin
 import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.handle
 import gups.persist.SqlitePersistence
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -31,7 +33,7 @@ import kotlin.io.path.writeText
 
 fun tempWorld(files: Map<String, String>): Path {
   val root = Files.createTempDirectory("gups-world")
-  for ((path, text) in files) {
+  for ((path, text) in TestWorlds.withDefaults(files)) {
     val p = root.resolve(path)
     p.parent.createDirectories()
     p.writeText(text.trimIndent() + "\n")
@@ -74,7 +76,16 @@ object P {
     Prototypes(
       rooms = if (withRat) rooms(ratHp) else rooms(ratHp).map { it.copy(spawns = emptyList()) },
       mobs =
-        if (withRat) listOf(MobProto(RAT, "a rat", listOf("rat"), hp = ratHp, version = ratVersion))
+        if (withRat)
+          listOf(
+            MobProto(
+              RAT,
+              "a rat",
+              listOf("rat"),
+              vitals = mapOf("hp" to ratHp),
+              version = ratVersion,
+            )
+          )
         else emptyList(),
       items =
         listOfNotNull(
@@ -98,7 +109,8 @@ class PersistWorld(
   val w =
     World(
       protos,
-      DefaultRules(),
+      FixtureSchemas.FANTASY.schema,
+      FixtureRules(),
       scripts,
       WorldConfig(
         seed = 1,

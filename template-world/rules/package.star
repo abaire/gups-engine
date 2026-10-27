@@ -2,9 +2,9 @@
 #
 # combat.star exports one function per rules call. The engine calls them
 # with a read-only ctx: views of the actors and items involved, ctx.rng and ctx.roll for
-# randomness, and ctx.deny for cast_allowed. If a function is missing, raises an error or
-# returns something unusable, the engine uses its built-in formula for that call instead, so
-# combat keeps working while you experiment.
+# randomness, and ctx.deny for cast_allowed. There is no built-in ruleset: every export is
+# required, and a call that raises an error or returns something unusable is reported to the
+# instructors and counts as having done nothing, so nobody is hurt or rewarded by a mistake.
 #
 # Zones, regions, rooms, affects and worn items can adjust some results through modifiers
 # (to_hit, damage, initiative, cast_allowed, move_cost, regen). Use `@trace rules` in game,

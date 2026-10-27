@@ -1,6 +1,7 @@
 package gups.harness
 
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -12,9 +13,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RunnerTest {
-  private fun world(files: Map<String, String>): WorldDir {
+  private fun world(files: Map<String, String>, defaults: Boolean = true): WorldDir {
     val root: Path = Files.createTempDirectory("gups-runner")
-    for ((path, text) in files) {
+    for ((path, text) in if (defaults) TestWorlds.withDefaults(files) else files) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }
     return WorldDir(root)
@@ -30,12 +31,15 @@ class RunnerTest {
 
             room("start", name = "Start", exits = [exit("north", ":hall")], commands = {"ring": _fight})
             room("hall", name = "Hall", exits = [exit("south", ":start")])
-            mob("rat", hp = 8)
+            mob("rat", vitals = vitals(hp = 8))
         """,
     )
 
-  private fun run(files: Map<String, String>, vararg patterns: String): TestReport =
-    TestRunner(world(files)).run(patterns.toList())
+  private fun run(
+    files: Map<String, String>,
+    vararg patterns: String,
+    defaults: Boolean = true,
+  ): TestReport = TestRunner(world(files, defaults)).run(patterns.toList())
 
   @Test
   fun `passing, failing and erroring tests are told apart`() {
@@ -166,7 +170,7 @@ class RunnerTest {
           """
             def _fight(t, seed):
                 w = t.world(seed = seed)
-                p = w.spawn_player("Pat", at = ":start", hp = 30)
+                p = w.spawn_player("Pat", at = ":start", vitals = vitals(hp = 30))
                 rat = w.spawn(":rat", at = ":start")
                 p.do("kill rat")
                 w.run(pulses = 40)
@@ -192,7 +196,7 @@ class RunnerTest {
             def test_packages(t):
                 t.world(packages = ["zones/a"])
         """)
-    val r = run(files, "//zones/a").results
+    val r = run(files + ("MODULE.gups" to TestWorlds.MODULE), "//zones/a", defaults = false).results
     assertContains(r[0].message!!, "no package //rules")
     assertContains(r[1].message!!, "should be a package label")
   }
@@ -203,9 +207,9 @@ class RunnerTest {
       zone +
         mapOf(
           "rules/package.star" to "package(api_version = 1, kind = \"rules\")",
-          "rules/combat.star" to "def xp_to_level(level):\n    return 1",
+          "rules/combat.star" to TestWorlds.rules("def xp_to_level(level):\n    return 1"),
           "house/package.star" to "package(api_version = 1, kind = \"rules\")",
-          "house/combat.star" to "def xp_to_level(level):\n    return 2",
+          "house/combat.star" to TestWorlds.rules("def xp_to_level(level):\n    return 2"),
           "zones/a/a_test.star" to
             """
                 def test_default_rules(t):

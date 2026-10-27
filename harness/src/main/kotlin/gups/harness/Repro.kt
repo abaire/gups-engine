@@ -49,6 +49,7 @@ class ReproRunner(
     val world =
       World(
         result.prototypes(),
+        loader.schema,
         host.rules(),
         host,
         WorldConfig(

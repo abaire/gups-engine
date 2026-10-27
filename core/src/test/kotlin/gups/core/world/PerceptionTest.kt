@@ -1,7 +1,7 @@
 package gups.core.world
 
 import gups.core.Label
-import gups.core.model.Channel
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.MobProto
@@ -69,7 +69,11 @@ class PerceptionTest {
     f.run()
     assertEquals("[ear:say:north:hall:again]", heard.toString())
     heard.clear()
-    f.w.setExitSensesBlocked(f.w.room(T.VAULT), Direction.NORTH, Channel.ALL)
+    f.w.setExitSensesBlocked(
+      f.w.room(T.VAULT),
+      Direction.NORTH,
+      FixtureSchemas.current.schema.allChannels.toSet(),
+    )
     f.input(p, "shout HELLO")
     f.run()
     assertEquals("[]", heard.toString())
@@ -122,7 +126,7 @@ class PerceptionTest {
       "[a goblin:combat_start:-:hall, ear:combat_start:south:hall, a goblin:combat:-:hall, ear:combat:south:hall]",
       heard.toString(),
     )
-    f.w.damage(g, 100, gups.core.model.DamageType.SLASH, p)
+    f.hurt(g, 100, p)
     f.run()
     assertEquals("ear:death:south:hall", heard.last().toString())
   }

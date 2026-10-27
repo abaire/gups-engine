@@ -11,9 +11,16 @@ interface PluginWorld {
 
   fun echo(room: PluginRoom, text: String, exclude: List<PluginActor> = emptyList())
 
-  fun damage(target: PluginActor, amount: Int, type: String, source: PluginActor? = null)
+  /** Raw damage to one vital: no to-hit roll and no mitigation, as `ctx.damage`. */
+  fun damage(
+    target: PluginActor,
+    amount: Int,
+    type: String,
+    vital: String,
+    source: PluginActor? = null,
+  )
 
-  fun heal(target: PluginActor, amount: Int)
+  fun heal(target: PluginActor, amount: Int, vital: String)
 
   fun applyAffect(
     target: PluginActor,
@@ -37,6 +44,9 @@ interface PluginWorld {
 
   // ---- Reads ----
 
+  /** The names the world declares, in declaration order. */
+  val schema: PluginSchema
+
   val pulse: Long
   val seed: Long
   val rng: PluginRng
@@ -57,6 +67,16 @@ interface PluginWorld {
   /** Writes to the server log. */
   fun log(message: String)
 }
+
+/** A declared stat or vital: the name scripts use and the label players see. */
+data class PluginNamed(val name: String, val label: String)
+
+/** What the world's `MODULE.gups` declares. */
+data class PluginSchema(
+  val stats: List<PluginNamed>,
+  val vitals: List<PluginNamed>,
+  val damageTypes: List<String>,
+)
 
 /** The world's seeded RNG. */
 interface PluginRng {
@@ -89,13 +109,22 @@ interface PluginRoom : PluginEntity {
 interface PluginActor : PluginEntity {
   val isPlayer: Boolean
   val room: PluginRoom
-  val hp: Int
-  val maxHp: Int
-  val mana: Int
-  val maxMana: Int
-  val move: Int
-  val maxMove: Int
   val level: Int
+
+  /** The effective value of a declared stat. An undeclared name throws, with a suggestion. */
+  fun stat(name: String): Int
+
+  /** The base value of a declared stat, without affects, equipment or encumbrance. */
+  fun baseStat(name: String): Int
+
+  /** The current value of a declared vital. */
+  fun vital(name: String): Int
+
+  /** The maximum of a declared vital. */
+  fun maxVital(name: String): Int
+
+  /** The resistance percentage to a declared damage type. */
+  fun resist(type: String): Int
 
   /** Affect names. */
   val affects: List<String>

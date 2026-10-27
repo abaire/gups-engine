@@ -7,7 +7,12 @@ import gups.core.Label
 import gups.core.PULSE_MS
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
+import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
 import gups.core.model.DoorProto
@@ -27,9 +32,9 @@ import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
-import gups.core.rules.DefaultRules
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
+import gups.core.rules.StartingStats
 
 /**
  * The Kotlin test world:
@@ -101,17 +106,23 @@ object T {
       ),
     )
 
-  val mobs =
+  val mobs
+    get() = mobs(FixtureSchemas.current)
+
+  val skills
+    get() = skills(FixtureSchemas.current)
+
+  fun mobs(fs: FixtureSchema) =
     listOf(
       MobProto(
         GOBLIN,
         "a goblin",
         listOf("goblin"),
         level = 2,
-        hp = 20,
+        vitals = mapOf(fs.health to 20),
         loot = listOf(LootRule(KEY)),
       ),
-      MobProto(DUMMY, "a training dummy", listOf("dummy"), hp = 1000),
+      MobProto(DUMMY, "a training dummy", listOf("dummy"), vitals = mapOf(fs.health to 1000)),
     )
 
   val items =
@@ -137,52 +148,56 @@ object T {
       ItemProto(BAG, "a bag", listOf("bag"), container = gups.core.model.ContainerProto()),
     )
 
-  val skills =
+  fun skills(fs: FixtureSchema) =
     listOf(
       SkillProto(
         BOLT,
         kind = "spell",
-        cost = mapOf("mana" to 10),
+        cost = mapOf(fs.energy to 10),
         warmup = 4,
         lag = 4,
         range = SkillRange.FAR,
         interrupt = Interrupt(damagePct = 10, stun = true),
-        effect = Effect.Damage(Dice(1, 1, 7), gups.core.model.DamageType.FIRE),
+        effect = Effect.Damage(Dice(1, 1, 7), DamageType(fs.magic)),
       ),
       SkillProto(
         ZAP,
         kind = "spell",
         range = SkillRange.FAR,
-        effect = Effect.Damage(Dice(1, 1, 4), gups.core.model.DamageType.FIRE),
+        effect = Effect.Damage(Dice(1, 1, 4), DamageType(fs.magic)),
       ),
       SkillProto(
         MEND,
         kind = "spell",
         range = SkillRange.FAR,
         target = TargetKind.ALLY,
-        effect = Effect.Heal(Dice(1, 1, 9)),
+        effect = Effect.Heal(Dice(1, 1, 9), fs.health),
       ),
       SkillProto(BASH, range = SkillRange.MELEE, lag = 2, effect = Effect.Stun(3)),
     )
 
-  fun protos(extraRooms: List<RoomProto> = emptyList(), extraMobs: List<MobProto> = emptyList()) =
-    Prototypes(rooms + extraRooms, mobs + extraMobs, items, skills)
+  fun protos(
+    fs: FixtureSchema = FixtureSchemas.current,
+    extraRooms: List<RoomProto> = emptyList(),
+    extraMobs: List<MobProto> = emptyList(),
+  ) = Prototypes(rooms + extraRooms, mobs(fs) + extraMobs, items, skills(fs))
 }
 
-/** Rules with pinned results; anything left null falls back to [DefaultRules]. */
+/** Rules with pinned results; anything left null falls back to [FixtureRules]. */
 class FixedRules(
+  fs: FixtureSchema = FixtureSchemas.current,
   var toHit: Int? = 100,
   var damage: Int? = 5,
   var initiative: Map<String, Int> = emptyMap(),
   var flee: Int? = null,
   var retreat: Int? = null,
-) : DefaultRules() {
+) : FixtureRules(fs) {
   override fun toHit(c: RulesContext): Int = toHit ?: super.toHit(c)
 
   override fun damage(c: RulesContext): Int = damage ?: super.damage(c)
 
-  override fun mitigate(c: RulesContext, amount: Int, type: gups.core.model.DamageType): Int =
-    amount
+  override fun mitigate(c: RulesContext, amount: Int, type: DamageType): Map<String, Int> =
+    mitigation?.invoke(c, amount, type) ?: mapOf(fs.health to amount)
 
   override fun initiative(c: RulesContext): Int = initiative[c.actor.name] ?: 10
 
@@ -257,9 +272,10 @@ val TEMPLATE_ALIASES =
 /** A headless world with connected players and a virtual clock. */
 class Fixture(
   seed: Long = 1,
-  val rules: RulesEngine = FixedRules(),
+  val fs: FixtureSchema = FixtureSchemas.current,
+  val rules: RulesEngine = FixedRules(fs),
   scripts: ScriptHost = ScriptHost.NONE,
-  protos: Prototypes = T.protos(),
+  protos: Prototypes = T.protos(fs),
   strict: Boolean = true,
   bubble: Boolean = false,
   aliases: CommandAliases = TEMPLATE_ALIASES,
@@ -267,6 +283,7 @@ class Fixture(
   val w =
     World(
       protos,
+      fs.schema,
       rules,
       scripts,
       WorldConfig(
@@ -290,7 +307,14 @@ class Fixture(
     hp: Int = 50,
     mana: Int = 50,
   ): Player {
-    val p = w.spawnPlayer(name, at, hp = hp, mana = mana, index = index)
+    val numbers = mapOf(fs.health to hp, fs.energy to mana)
+    val p =
+      w.spawnPlayer(
+        name,
+        at,
+        overrides = StartingStats(max = numbers, current = numbers),
+        index = index,
+      )
     connect(p)
     return p
   }
@@ -324,4 +348,19 @@ class Fixture(
   fun runTo(pulse: Long) {
     while (w.pulse < pulse) run()
   }
+}
+
+/** Sets [vital] of [a] to [value] through the world, as play would. */
+fun Fixture.setVital(a: Actor, vital: String, value: Int) {
+  w.changeVital(a, vital, value - a.current(vital))
+}
+
+/** The schemas that parameterized engine tests run under. */
+object SchemaArgs {
+  @JvmStatic fun all(): List<FixtureSchema> = FixtureSchemas.ALL
+}
+
+/** Damages [target]'s health vital by [amount], as an attack of the unarmed type would. */
+fun Fixture.hurt(target: Actor, amount: Int, source: Actor? = null) {
+  w.damage(target, mapOf(fs.health to amount), DamageType(fs.unarmed), source)
 }

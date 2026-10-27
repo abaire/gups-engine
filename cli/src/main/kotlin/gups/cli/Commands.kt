@@ -113,6 +113,13 @@ class Serve : CliktCommand(name = "serve") {
       .required()
   val fresh by
     option("--fresh", help = "Ignore saved world state and boot from the .star definitions.").flag()
+  val wipe by
+    option(
+        "--wipe",
+        help =
+          "Like --fresh, and also delete every character and item and record the world's current schema. Accounts are kept.",
+      )
+      .flag()
   val world by
     option("--world", help = "Course world directory (default: the current directory).")
       .file(mustExist = true, canBeFile = false)
@@ -266,6 +273,7 @@ class Serve : CliktCommand(name = "serve") {
           db?.toPath() ?: GupsServer.defaultDb(dir),
           fresh,
           docsPort = docsPort ?: 4080,
+          wipe = wipe,
         ) {
           echo(it, err = true)
         }
@@ -381,6 +389,7 @@ class Serve : CliktCommand(name = "serve") {
         forceCommit,
         timeout * 1000L,
       ),
+      wipe = wipe,
     ) {
       echo(it, err = true)
     }

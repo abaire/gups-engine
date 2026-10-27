@@ -83,13 +83,14 @@ internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
     )
 }
 
-/** Walking through an exit: one action plus `move_cost` move points. */
+/** Walking through an exit: one action plus the vitals `move_cost` spends. */
 internal class MoveAction(private val dir: Direction) : Action {
   override fun validate(w: World, actor: Actor): String? {
     val exit = w.roomOf(actor).exits[dir] ?: return "You can't go that way."
     if (!exit.passable) return "The way $dir is closed."
     if (w.isPinned(actor)) return "You're pinned! Retreat or flee first."
-    if (actor.move < w.moveCost(RulesContext(w, actor))) return "You are too exhausted."
+    if (w.moveCost(RulesContext(w, actor)).any { (vital, cost) -> actor.current(vital) < cost })
+      return "You are too exhausted."
     return null
   }
 
@@ -97,7 +98,7 @@ internal class MoveAction(private val dir: Direction) : Action {
 
   override fun resolve(w: World, actor: Actor): Int {
     val exit = w.roomOf(actor).exits.getValue(dir)
-    actor.move = (actor.move - w.moveCost(RulesContext(w, actor))).coerceAtLeast(0)
+    w.changeVitals(actor, w.moveCost(RulesContext(w, actor)).mapValues { -it.value })
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit) }
     return 0
   }

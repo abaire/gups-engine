@@ -33,6 +33,7 @@ import gups.persist.Backups
 import gups.persist.SqlitePersistence
 import gups.pluginapi.host.PluginHost
 import gups.script.DevTools
+import gups.script.RULES_PACKAGE
 import gups.script.ScriptApi
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
@@ -112,6 +113,8 @@ class GupsServer(
   private val prod: ProdOptions? = null,
   /** `--dev`: the plain-HTTP port of the API reference on 127.0.0.1; null serves none. */
   private val docsPort: Int? = null,
+  /** `--wipe`: delete every character and item, record the schema, and boot like `--fresh`. */
+  private val wipe: Boolean = false,
   private val log: (String) -> Unit = { System.err.println(it) },
 ) {
   private var persistence: SqlitePersistence? = null
@@ -234,14 +237,36 @@ class GupsServer(
       log("--prod needs the git binary for deploys; install git.")
       return false
     }
+    if (RULES_PACKAGE !in result.packages) {
+      log(
+        "error: the rules package //$RULES_PACKAGE is required and did not load, so the world has no rules."
+      )
+      return false
+    }
     val host = StarlarkHost(result, ScriptLimits(), loader)
     val saved = db?.let { SqlitePersistence.open(it, log) }
     persistence = saved
+    if (saved != null) {
+      val names = module.schema.names
+      if (wipe) {
+        val gone = saved.wipe(names)
+        log(
+          "Wiped ${gone.characters} characters and ${gone.items} items; the previous database is at ${gone.backup}. Recorded the schema in MODULE.gups."
+        )
+      } else {
+        saved.checkSchema(names)?.let {
+          log("error: $it")
+          saved.close()
+          return false
+        }
+      }
+    }
     if (prod != null && !checkCommit(saved!!)) {
       saved.close()
       return false
     }
-    val boot = saved?.boot(protos, fresh) ?: Boot()
+    val discardWorld = fresh || wipe
+    val boot = saved?.boot(protos, discardWorld) ?: Boot()
     // --prod checks invariants only at world ticks, before capture.
     val config =
       WorldConfig(
@@ -252,11 +277,11 @@ class GupsServer(
         production = prod != null,
         aliases = module.aliases,
       )
-    world = World(protos, host.rules(), host, config, boot)
+    world = World(protos, module.schema, host.rules(), host, config, boot)
     plugins.install(world)
     host.install(world)
     if (saved != null) {
-      val report = saved.restore(world, fresh)
+      val report = saved.restore(world, discardWorld)
       report.notes.forEach(log)
       log(
         "Restored ${report.restored} entities from $db at pulse ${world.pulse}" +
@@ -264,8 +289,8 @@ class GupsServer(
       )
     }
     DevTools.install(world, host, eval = prod == null)
-    // Script alerts (quarantine, rules fallback) reach online instructors too.
-    host.alerts = { world.alert(it, it) }
+    // Script alerts (quarantine, rules errors) reach online instructors too.
+    host.alerts = { kind, message -> world.alert(kind, message) }
     world.onAlert = { log("alert: $it") }
     world.onDiagnostic = { d ->
       val where = listOfNotNull(d.file, d.line?.toString()).joinToString(":")

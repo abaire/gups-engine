@@ -9,7 +9,6 @@ import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.ContainerProto
-import gups.core.model.DEFAULT_STATS
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
@@ -27,13 +26,14 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Modifiers
 import gups.core.model.RegionProto
 import gups.core.model.RoomProto
-import gups.core.model.STAT_NAMES
 import gups.core.model.Sense
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.SpawnRule
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
+import gups.core.model.WorldSchema
+import gups.core.model.didYouMean
 import gups.core.world.ActorFilter
 import gups.core.world.Aggressive
 import gups.core.world.Assist
@@ -252,7 +252,8 @@ internal object HookCatalog {
         hook = HookName.ON_DAMAGE,
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
-        ctxFields = listOf("self", "actor", "target", "amount", "type", "room", "pulse", "rng"),
+        ctxFields =
+          listOf("self", "actor", "target", "amount", "type", "losses", "room", "pulse", "rng"),
         doc = "Fires when an actor takes damage.",
       ),
       HookSpec(
@@ -335,13 +336,13 @@ fun pluginEffect(pluginId: String, name: String, args: Map<String, Any?>): Starl
 internal class BehaviorDecl(val behavior: Behavior) : DeclValue("behavior")
 
 /** What `struct(**fields)` returns: read-only named fields. */
-internal class StructValue(private val fields: Map<String, Any>) : Structure {
+internal class StructValue(val fields: Map<String, Any>) : Structure {
   override fun getValue(name: String): Any? = fields[name]
 
   override fun getFieldNames(): ImmutableCollection<String> = ImmutableList.copyOf(fields.keys)
 
   override fun getErrorMessageForUnknownField(field: String): String =
-    "struct has no field '$field'${SpellChecker.didYouMean(field, fields.keys)}"
+    "struct has no field '$field'${didYouMean(field, fields.keys)}"
 
   override fun isImmutable(): Boolean = fields.values.all { Starlark.isImmutable(it) }
 
@@ -381,12 +382,11 @@ private fun declName(fn: String, d: ParsedDecl, ctx: LoadCtx): String {
   return name
 }
 
-private fun channels(v: Any?, what: String): Set<Channel> =
-  strList(v, what).mapTo(LinkedHashSet()) {
-    Channel.valueOf(choice(it, what, CHANNELS).uppercase())
-  }
-
-private val CHANNELS = Channel.entries.map { it.name.lowercase() }
+/** The channels named in [v], each built-in or declared by the world. */
+internal fun channels(v: Any?, what: String, schema: WorldSchema): Set<Channel> {
+  val known = schema.allChannels.map { it.name }
+  return strList(v, what).mapTo(LinkedHashSet()) { Channel(choice(it, what, known)) }
+}
 
 private fun dice(v: Any?, what: String): Dice =
   try {
@@ -400,20 +400,6 @@ private fun band(v: Any?, what: String): Band =
 
 private fun doorState(v: Any?, what: String): DoorState =
   DoorState.valueOf(choice(v, what, DoorState.entries.map { it.name.lowercase() }).uppercase())
-
-private fun stats(v: Any?, what: String): Map<String, Int> {
-  val given = intDict(v, what)
-  for (k in given.keys) if (k !in STAT_NAMES)
-    fail("$what: unknown stat '$k'${SpellChecker.didYouMean(k, STAT_NAMES)}")
-  return DEFAULT_STATS + given
-}
-
-private fun statDeltas(v: Any?, what: String): Map<String, Int> {
-  val given = intDict(v, what)
-  for (k in given.keys) if (k !in STAT_NAMES)
-    fail("$what: unknown stat '$k'${SpellChecker.didYouMean(k, STAT_NAMES)}")
-  return given
-}
 
 private fun displayName(id: String): String = id.replace('_', ' ')
 
@@ -522,7 +508,7 @@ private fun effectValue(v: Any?, what: String): Effect =
  * The declaration builtins, plus the effect primitives and constants. Effect primitives work
  * anywhere; everything else only while a package loads.
  */
-internal class DeclarationBuiltins {
+internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema.EMPTY) {
   @StarlarkMethod(
     name = "package",
     doc = "Declares the package. Must be called exactly once, in package.star.",
@@ -649,7 +635,7 @@ internal class DeclarationBuiltins {
           direction = dir,
           to = to,
           entryIndex = d.int("entry_index") ?: 0,
-          sensesBlocked = channels(d["senses_blocked"], d.what("senses_blocked")),
+          sensesBlocked = channels(d["senses_blocked"], d.what("senses_blocked"), schema),
           door =
             d["door"]?.let {
               (it as? DoorDecl)?.proto
@@ -678,11 +664,11 @@ internal class DeclarationBuiltins {
           key = d.str("key")?.let { label(it, ctx.pkg.path, d.what("key")) },
           openSensesBlocked =
             if (d["open_senses_blocked"] != null)
-              channels(d["open_senses_blocked"], d.what("open_senses_blocked"))
+              channels(d["open_senses_blocked"], d.what("open_senses_blocked"), schema)
             else def.openSensesBlocked,
           closedSensesBlocked =
             if (d["closed_senses_blocked"] != null)
-              channels(d["closed_senses_blocked"], d.what("closed_senses_blocked"))
+              channels(d["closed_senses_blocked"], d.what("closed_senses_blocked"), schema)
             else def.closedSensesBlocked,
         )
       DoorDecl(proto)
@@ -801,12 +787,12 @@ internal class DeclarationBuiltins {
           keywords = d["keywords"]?.let { d.strList("keywords") } ?: defaultKeywords(name, id),
           desc = d.str("desc") ?: "",
           level = d.int("level") ?: def.level,
-          stats = stats(d["stats"], d.what("stats")),
-          hp = d.int("hp") ?: def.hp,
-          mana = d.int("mana") ?: def.mana,
-          move = d.int("move") ?: def.move,
-          armor = d.int("armor") ?: def.armor,
-          resists = d.intDict("resists").mapKeys { DamageType(it.key.lowercase()) },
+          stats = typed(d["stats"], TypedKind.STATS, d.what("stats")),
+          vitals = typed(d["vitals"], TypedKind.VITALS, d.what("vitals")),
+          resists =
+            typed(d["resists"], TypedKind.RESISTS, d.what("resists")).mapKeys {
+              DamageType(it.key)
+            },
           skills = skills,
           senses = senses,
           think = d["think"]?.let { ScriptThink(hookRef(it, d.what("think")), pkg) },
@@ -824,7 +810,6 @@ internal class DeclarationBuiltins {
           loot = loot,
           version = version(d),
         )
-      if (proto.hp < 1) fail("mob(hp): must be at least 1")
       if (proto.thinkEvery < 1) fail("mob(think_every): must be at least 1")
       if (proto.keywords.isEmpty()) fail("mob(keywords): a mob needs at least one keyword")
       ctx.pkg.mobList += proto
@@ -868,8 +853,13 @@ internal class DeclarationBuiltins {
           weight = d.int("weight") ?: def.weight,
           wear = wear ?: wield,
           dice = d["dice"]?.let { dice(it, d.what("dice")) },
-          damageType = d.str("damage_type")?.let { DamageType(it.lowercase()) } ?: def.damageType,
-          statDeltas = statDeltas(d["stat_deltas"], d.what("stat_deltas")),
+          damageType =
+            d.str("damage_type")?.let {
+              DamageType(
+                checkName(it.lowercase(), schema.damageTypes, "damage type", d.what("damage_type"))
+              )
+            },
+          statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas")),
           stackable = d.bool("stackable") ?: false,
           decayPulses = d.int("decay_pulses"),
           container = container,
@@ -904,8 +894,7 @@ internal class DeclarationBuiltins {
       val id = declName("skill", d, ctx)
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
-      val cost = d.intDict("cost")
-      for (k in cost.keys) choice(k, d.what("cost"), listOf("hp", "mana", "move"))
+      val cost = typed(d["cost"], TypedKind.VITALS, d.what("cost"))
       val interrupt =
         d["interrupt"]?.let { v ->
           val m = dict(v, d.what("interrupt"))
@@ -925,7 +914,7 @@ internal class DeclarationBuiltins {
           lag = d.int("lag") ?: 0,
           range = d.choice("range")?.let { SkillRange.valueOf(it.uppercase()) } ?: def.range,
           target = d.choice("target")?.let { TargetKind.valueOf(it.uppercase()) } ?: def.target,
-          channels = channels(d["channels"], d.what("channels")),
+          channels = channels(d["channels"], d.what("channels"), schema),
           interrupt = interrupt,
           attackWhileCasting = d.bool("attack_while_casting") ?: false,
           effect = d["effect"]?.let { effectValue(it, d.what("effect")) },
@@ -1050,25 +1039,23 @@ internal class DeclarationBuiltins {
 
   @StarlarkMethod(
     name = "flee",
-    doc = "Behavior: flees at or below this percentage of max hp.",
+    doc = "Behavior: flees when any listed vital is at or below its percentage of its maximum.",
     parameters =
       [
         Param(
-          name = "at_hp_pct",
+          name = "below",
           named = true,
-          defaultValue = "20",
-          doc = "Percentage of max hp (0..100) at or below which the mob flees.",
+          doc = "Percentages (0..100) by vital, built with vitals(...).",
         )
       ],
     useStarlarkThread = true,
   )
-  fun flee(atHpPct: Any, thread: StarlarkThread): Any {
+  fun flee(below: Any, thread: StarlarkThread): Any {
     contentCtx(thread, "flee")
-    val pct =
-      int(atHpPct, "flee(at_hp_pct)").also {
-        if (it !in 0..100) fail("flee(at_hp_pct): must be 0..100")
-      }
-    return BehaviorDecl(Flee(pct))
+    val pcts = typed(below, TypedKind.VITALS, "flee(below)")
+    if (pcts.isEmpty()) fail("flee(below): name at least one vital")
+    for ((vital, pct) in pcts) if (pct !in 0..100) fail("flee(below): $vital must be 0..100")
+    return BehaviorDecl(Flee(pcts))
   }
 
   @StarlarkMethod(
@@ -1198,24 +1185,45 @@ internal class DeclarationBuiltins {
         Param(name = "dice", named = true, doc = "Damage dice such as '2d6+1'."),
         Param(
           name = "type",
-          defaultValue = "'bludgeon'",
+          defaultValue = "None",
           named = true,
-          doc = "Damage type, such as 'slash', 'fire' or 'bludgeon'.",
+          doc = "A declared damage type, such as DAMAGE.fire; the unarmed type if omitted.",
         ),
       ],
   )
   fun damage(dice: Any, type: Any): Any =
     EffectDecl(
-      Effect.Damage(dice(dice, "damage(dice)"), DamageType(str(type, "damage(type)").lowercase()))
+      Effect.Damage(
+        dice(dice, "damage(dice)"),
+        DamageType(
+          if (isNone(type)) schema.unarmedDamageType
+          else
+            checkName(
+              str(type, "damage(type)").lowercase(),
+              schema.damageTypes,
+              "damage type",
+              "damage(type)",
+            )
+        ),
+      )
     )
 
   @StarlarkMethod(
     name = "heal",
-    doc = "Restore hit points.",
+    doc = "Restore a vital, up to its maximum.",
     parameters =
-      [Param(name = "dice", named = true, doc = "Hit points restored, as dice such as '2d4'.")],
+      [
+        Param(name = "dice", named = true, doc = "Amount restored, as dice such as '2d4'."),
+        Param(name = "vital", named = true, doc = "The declared vital to restore."),
+      ],
   )
-  fun heal(dice: Any): Any = EffectDecl(Effect.Heal(dice(dice, "heal(dice)")))
+  fun heal(dice: Any, vital: Any): Any =
+    EffectDecl(
+      Effect.Heal(
+        dice(dice, "heal(dice)"),
+        checkName(str(vital, "heal(vital)"), schema.vitalNames, "vital", "heal(vital)"),
+      )
+    )
 
   @StarlarkMethod(
     name = "apply_affect",
@@ -1231,8 +1239,8 @@ internal class DeclarationBuiltins {
         Param(
           name = "stat_deltas",
           named = true,
-          defaultValue = "{}",
-          doc = "Stat adjustments while the affect lasts, such as {'dex': -1}.",
+          defaultValue = "None",
+          doc = "Stat adjustments while the affect lasts, built with stats(...).",
         ),
         Param(
           name = "flags",
@@ -1421,14 +1429,17 @@ internal class DeclarationBuiltins {
     private val SKILL_RANGES = SkillRange.entries.map { it.name.lowercase() }
     private val TARGET_KINDS = TargetKind.entries.map { it.name.lowercase() }
 
-    /** Constants available to every package file. */
-    val CONSTANTS: Map<String, Any> =
+    /** Constants available to every package file; `ALL` is the world's channels. */
+    fun constants(schema: WorldSchema): Map<String, Any> =
       mapOf(
         "CRAMPED" to "cramped",
         "NORMAL" to "normal",
         "LARGE" to "large",
-        "ALL" to StarlarkList.immutableCopyOf(CHANNELS),
+        "ALL" to StarlarkList.immutableCopyOf(schema.allChannels.map { it.name }),
+        "DAMAGE" to StructValue(schema.damageTypes.associateWith { it }),
       )
+
+    val CONSTANTS: Map<String, Any> = constants(WorldSchema.EMPTY)
 
     val CONSTANT_SPECS: List<ConstantSpec> =
       listOf(
@@ -1454,7 +1465,13 @@ internal class DeclarationBuiltins {
           "ALL",
           "list[str]",
           Starlark.repr(CONSTANTS.getValue("ALL")),
-          "All perception and spell channels: sight, sound, noise, spell.",
+          "Every channel name, built-in and declared by the world.",
+        ),
+        ConstantSpec(
+          "DAMAGE",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("DAMAGE")),
+          "A struct of the world's declared damage types, such as DAMAGE.fire; a misspelling fails at that line.",
         ),
       )
 
@@ -1649,7 +1666,6 @@ internal class DeclarationBuiltins {
               "list[str]",
               "Perception and spell channels blocked by this exit.",
               default = "[]",
-              allowedValues = CHANNELS,
             ),
             DeclParam(
               "door",
@@ -1690,14 +1706,12 @@ internal class DeclarationBuiltins {
               "list[str]",
               "Channels blocked while the door is open.",
               default = "[]",
-              allowedValues = CHANNELS,
             ),
             DeclParam(
               "closed_senses_blocked",
               "list[str]",
               "Channels blocked while the door is closed or locked.",
               default = "['sight', 'sound']",
-              allowedValues = CHANNELS,
             ),
           ),
       )
@@ -1824,20 +1838,21 @@ internal class DeclarationBuiltins {
             DeclParam("level", "int", "Mob level.", default = "1"),
             DeclParam(
               "stats",
-              "dict[str, int]",
-              "Base stats ('str', 'dex', 'con', 'int', 'wis').",
-              default = "{'str': 10, 'dex': 10, 'con': 10, 'int': 10, 'wis': 10}",
-              allowedValues = STAT_NAMES,
+              "stats",
+              "Base stats the mob starts from, built with stats(...).",
+              default = "stats()",
             ),
-            DeclParam("hp", "int", "Maximum hit points.", default = "10"),
-            DeclParam("mana", "int", "Maximum mana.", default = "0"),
-            DeclParam("move", "int", "Maximum movement points.", default = "100"),
-            DeclParam("armor", "int", "Base armor rating.", default = "0"),
+            DeclParam(
+              "vitals",
+              "vitals",
+              "Maximum vitals the mob starts from, built with vitals(...).",
+              default = "vitals()",
+            ),
             DeclParam(
               "resists",
-              "dict[str, int]",
-              "Damage resistance percentage by damage type.",
-              default = "{}",
+              "resists",
+              "Damage resistance percentage by damage type, built with resists(...).",
+              default = "resists()",
             ),
             DeclParam(
               "skills",
@@ -1931,15 +1946,14 @@ internal class DeclarationBuiltins {
             DeclParam(
               "damage_type",
               "str",
-              "Weapon damage type, such as 'slash', 'pierce' or 'bludgeon'.",
-              default = "'bludgeon'",
+              "Weapon damage type, a declared damage type such as DAMAGE.slash.",
+              default = "unarmed_damage_type",
             ),
             DeclParam(
               "stat_deltas",
-              "dict[str, int]",
-              "Stat adjustments applied while the item is worn.",
-              default = "{}",
-              allowedValues = STAT_NAMES,
+              "stats",
+              "Stat adjustments applied while the item is worn, built with stats(...).",
+              default = "stats()",
             ),
             DeclParam(
               "stackable",
@@ -2011,10 +2025,9 @@ internal class DeclarationBuiltins {
             ),
             DeclParam(
               "cost",
-              "dict[str, int]",
-              "Vitals spent on cast ('hp', 'mana', 'move').",
-              default = "{}",
-              allowedValues = listOf("hp", "mana", "move"),
+              "vitals",
+              "Vitals spent on cast, built with vitals(...).",
+              default = "vitals()",
             ),
             DeclParam(
               "warmup",
@@ -2047,7 +2060,6 @@ internal class DeclarationBuiltins {
               "list[str]",
               "Channels required and emitted when casting.",
               default = "[]",
-              allowedValues = CHANNELS,
             ),
             DeclParam(
               "interrupt",
@@ -2162,7 +2174,7 @@ internal class DeclarationBuiltins {
         REGION_SPEC,
         GLOBAL_COMMAND_SPEC,
         STRUCT_SPEC,
-      )
+      ) + SCHEMA_SPECS
   }
 }
 
@@ -2186,11 +2198,7 @@ internal fun affectEffect(
   return Effect.ApplyAffect(
     name = str(name, "$fn(name)"),
     duration = d,
-    statDeltas =
-      intDict(statDeltas, "$fn(stat_deltas)").onEach { (k, _) ->
-        if (k !in STAT_NAMES)
-          fail("$fn(stat_deltas): unknown stat '$k'${SpellChecker.didYouMean(k, STAT_NAMES)}")
-      },
+    statDeltas = typed(statDeltas, TypedKind.STATS, "$fn(stat_deltas)"),
     flags = strList(flags, "$fn(flags)").toSet(),
     tickEvery = every,
     onTick = hookRefOrNull(onTick, "$fn(on_tick)"),

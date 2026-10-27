@@ -1,6 +1,7 @@
 package gups.harness
 
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,8 +49,23 @@ class FuzzWalkerTest {
       """
         .trimIndent(),
     )
+    for ((path, text) in TestWorlds.withDefaults(emptyMap())) {
+      root
+        .resolve(path)
+        .also { java.nio.file.Files.createDirectories(it.parent) }
+        .toFile()
+        .writeText(text)
+    }
     val walker = FuzzWalker(WorldDir(root))
     val outcome = walker.run(listOf("//zones/z/..."), pulses = 30, seed = 42L)
     assertTrue(outcome.ok, outcome.failureMessage)
+  }
+
+  @Test
+  fun `fuzz walker refuses a world without MODULE gups`() {
+    val root = java.nio.file.Files.createTempDirectory("gups-fuzz-bare")
+    val outcome = FuzzWalker(WorldDir(root)).run(listOf("//..."), pulses = 5)
+    assertFalse(outcome.ok)
+    assertTrue("MODULE.gups is required" in outcome.failureMessage.orEmpty())
   }
 }

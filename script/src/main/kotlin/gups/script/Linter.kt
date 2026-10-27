@@ -123,7 +123,18 @@ class Linter(
 
     // 1. Load the packages to inspect prototypes and catch load errors.
     val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
+    WorldModule.read(dir).second?.let {
+      findings += Finding(Finding.Severity.ERROR, it.message, file = WorldModule.FILE)
+    }
+    for (problem in loader.module.problems()) findings +=
+      Finding(Finding.Severity.ERROR, problem, file = WorldModule.FILE)
     val loadResult = loader.load(dir.packages())
+    if (RULES_PACKAGE !in loadResult.packages && loadResult.errors.none { it.pkg == RULES_PACKAGE })
+      findings +=
+        Finding(
+          Finding.Severity.ERROR,
+          "the world needs a rules package //$RULES_PACKAGE; the engine has no built-in rules",
+        )
 
     // Load errors (catalog hook errors, namespace uniqueness, etc.)
     for (err in loadResult.errors) {

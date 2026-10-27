@@ -121,7 +121,7 @@ class LinterTest {
           "zones/z/content.star" to
             """
             room("r", name = "R", size = NORMAL, flags = ["dead_end_ok"], exits = [])
-            mob("m", name = "Goblin", hp = 50, version = 1)
+            mob("m", name = "Goblin", vitals = vitals(hp = 50), version = 1)
             item("i", name = "Sword", weight = 5, version = 1)
             """
               .trimIndent(),
@@ -146,7 +146,13 @@ class LinterTest {
           ),
         mobs =
           listOf(
-            MobProto(gups.core.Label("//zones/z:m"), "Goblin", emptyList(), hp = 30, version = 1)
+            MobProto(
+              gups.core.Label("//zones/z:m"),
+              "Goblin",
+              emptyList(),
+              vitals = mapOf("hp" to 30),
+              version = 1,
+            )
           ),
         items =
           listOf(
@@ -233,7 +239,7 @@ class LinterTest {
               wander(radius = 3, chance = 0.2),
               aggressive(toward = "players", unless_level_above = 5),
               assist(allies = ":rat"),
-              flee(at_hp_pct = 20),
+              flee(below = vitals(hp = 20)),
               guard(exit = "north", allies = "mobs"),
               follow(target = "players"),
               pursue(target = "players"),

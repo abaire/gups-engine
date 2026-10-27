@@ -7,6 +7,7 @@ import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.CastState
 import gups.core.model.Channel
+import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Effect
 import gups.core.model.Item
@@ -68,6 +69,7 @@ fun World.isPinned(a: Actor): Boolean = opponentsOf(a).any { indexOf(it) == inde
 internal fun World.autoAttack(a: Actor) {
   val cast = a.casting
   if (cast != null && !cast.action.attackWhileCasting) return
+  if (a.isIncapacitated) return
   val opponents = opponentsOf(a)
   if (opponents.isEmpty()) return
   val target = opponents.firstOrNull { it.id == a.primaryTarget } ?: opponents.first()
@@ -98,58 +100,68 @@ internal fun World.autoAttack(a: Actor) {
     echo(a.room, "${a.name.cap()} misses ${target.name}.", a, target)
     return
   }
-  val type = weapon?.proto?.damageType ?: DamageType.BLUDGEON
+  val type = weapon?.proto?.damageType ?: schema.unarmed
   val raw = damageChain(ctx)
-  val dealt = rules.mitigate(ctx, raw.value, type)
-  traceRules(a, "${raw.text} → mitigate $dealt $type")
+  val losses = rules.mitigate(ctx, raw.value, type)
+  traceRules(
+    a,
+    "${raw.text} → mitigate ${losses.entries.joinToString { "${it.key} ${it.value}" }} $type",
+  )
   send(a, "You hit ${target.name}.")
   send(target, "${a.name.cap()} hits you.")
   echo(a.room, "${a.name.cap()} hits ${target.name}.", a, target)
-  damage(target, dealt, type, a)
+  damage(target, losses, type, a)
 }
 
 // ---- Damage, healing, death ------------------------------------------------------------------
 
-/** The `damage` verb. A target at 0 hp or below is mortally wounded until death processing. */
-fun World.damage(target: Actor, amount: Int, type: DamageType, source: Actor? = null) {
-  if (!target.inWorld || amount <= 0) return
-  target.hp -= amount
-  target.dirty = true
-  if (source != null && source !== target) target.lastAttacker = source.id
+/**
+ * The `damage` verb: lowers each vital in [losses] by its amount, with no floor, then fires
+ * `on_damage` once with the total. A target whose condition becomes dead is mortally wounded until
+ * death processing.
+ */
+fun World.damage(target: Actor, losses: Map<String, Int>, type: DamageType, source: Actor? = null) {
+  if (!target.inWorld) return
+  val dealt = losses.filterValues { it > 0 }
+  val total = dealt.values.sum()
+  if (total <= 0) return
+  applyVitalDeltas(target, dealt.mapValues { -it.value }, source)
   dispatch(
     HookName.ON_DAMAGE,
     target,
     target.room,
-    HookContext(actor = source, target = target, amount = amount, type = type),
+    HookContext(actor = source, target = target, amount = total, type = type, losses = dealt),
   )
   val cast = target.casting
   if (
     cast != null &&
       rules.interruptCheck(
         RulesContext(this, target, source, skill = (cast.action as? Castable)?.skill),
-        amount,
+        total,
       )
   )
     interruptCast(target)
-  if (target.hp <= 0) deferRemoval(target, Deferred.Kind.DEATH) { processDeath(target) }
+  refreshCondition(target)
 }
 
-fun World.heal(target: Actor, amount: Int) {
+/** The `heal` verb: raises [vital] by [amount], up to its maximum. */
+fun World.heal(target: Actor, vital: String, amount: Int) {
   if (!target.inWorld || amount <= 0) return
-  target.hp = (target.hp + amount).coerceAtMost(target.maxHp)
-  target.dirty = true
+  changeVital(target, vital, amount)
 }
 
 /** Engine-owned death. Runs at most once per life. */
 internal fun World.processDeath(victim: Actor) {
-  if (!victim.inWorld || victim.hp > 0) return
+  if (!victim.inWorld || victim.condition != Condition.DEAD) return
+  val standing = askCondition(victim)
+  if (standing != Condition.DEAD) return setCondition(victim, standing)
   val room = victim.room
   val killer = victim.lastAttacker?.let(::actor)?.takeIf { it.inWorld && it !== victim }
   victim.casting = null
   victim.actionQueue.clear()
   victim.waitState = 0
-  victim.stunnedWaitState = 0
-  victim.stunnedSince = 0
+  victim.heldWaitState = 0
+  victim.heldSince = 0
   disengageAll(victim)
   removedThisPhase += victim.id
   send(victim, "You are DEAD!")
@@ -186,13 +198,32 @@ internal fun World.processDeath(victim: Actor) {
       for (item in victim.inventory) moveItem(item, into)
       val outcome = rules.onPlayerDeath(RulesContext(this, victim, killer))
       victim.xp = (victim.xp - outcome.xpLoss).coerceAtLeast(0)
-      victim.hp = 1
       victim.affects.clear()
+      victim.condition = Condition.OK
+      respawnVitals(victim, outcome.vitals)
       placeActor(victim, room(outcome.respawn), 0)
       echo(victim.room, "${victim.name} appears, looking shaken.", victim)
       send(victim, describeRoom(victim))
     }
   }
+}
+
+/**
+ * Sets the vitals of a respawned player: [given] where the rules name one (capped at its maximum),
+ * else the maximum. A rules result that still calls the player dead is an error, and fills them.
+ */
+private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
+  for ((name, v) in victim.vitalMap) {
+    val next = given?.get(name)?.coerceAtMost(v.max) ?: v.max
+    v.belowZeroSince = if (next < 0) pulse else null
+    v.current = next
+  }
+  victim.dirty = true
+  if (askCondition(victim) == Condition.DEAD) {
+    diagnose("rules", "on_player_death left ${victim.name} dead; vitals set to their maxima")
+    fillVitals(victim)
+  }
+  victim.condition = askCondition(victim)
 }
 
 fun World.awardXp(a: Actor, amount: Long) {
@@ -233,7 +264,7 @@ fun World.applyAffect(
   // A worn item's affect lasts until the item comes off.
   val expiresAt = if (wornFrom != null) Long.MAX_VALUE else pulse + duration
   target.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
-  val wasStunned = target.isStunned
+  val wasDisabled = target.isDisabled
   target.affects.removeIf { it.name == name }
   val affect =
     Affect(
@@ -254,7 +285,7 @@ fun World.applyAffect(
   target.affects += affect
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
-  stunChanged(target, wasStunned)
+  disabledChanged(target, wasDisabled)
   return affect
 }
 
@@ -282,10 +313,10 @@ private fun World.endAffect(
   reason: AffectEndReason,
   announce: Boolean = false,
 ) {
-  val wasStunned = a.isStunned
+  val wasDisabled = a.isDisabled
   if (!a.affects.remove(affect)) return
   a.dirty = true
-  stunChanged(a, wasStunned)
+  disabledChanged(a, wasDisabled)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
   if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())
     send(a, affect.expireMessage)
@@ -298,22 +329,22 @@ private fun World.endAffect(
 }
 
 /**
- * Clears [a]'s recovery when a stun starts and puts it back when the last stun ends, so recovery
- * neither counts down nor runs out during the stun. Any lag from a cast the stun broke is part of
- * what is put back. A cast the stun didn't break has its warmup pushed back by the stun's length,
- * so it stays paused.
+ * Clears [a]'s recovery when a stun or incapacitation starts and puts it back when the last one
+ * ends, so recovery neither counts down nor runs out meanwhile. Any lag from a cast that broke is
+ * part of what is put back. A cast that didn't break has its warmup pushed back by the length of
+ * the interruption, so it stays paused.
  */
-private fun World.stunChanged(a: Actor, wasStunned: Boolean) {
-  val stunned = a.isStunned
-  if (stunned && !wasStunned) {
-    a.stunnedWaitState = a.waitState
-    a.stunnedSince = pulse
+internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
+  val disabled = a.isDisabled
+  if (disabled && !wasDisabled) {
+    a.heldWaitState = a.waitState
+    a.heldSince = pulse
     a.waitState = 0
-  } else if (wasStunned && !stunned) {
-    a.waitState = maxOf(a.waitState, a.stunnedWaitState)
-    a.stunnedWaitState = 0
+  } else if (wasDisabled && !disabled) {
+    a.waitState = maxOf(a.waitState, a.heldWaitState)
+    a.heldWaitState = 0
     a.casting?.let { c ->
-      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.stunnedSince))
+      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.heldSince))
     }
   }
 }
@@ -366,15 +397,15 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
       if (hostile && t !== caster) startCombat(caster, t)
       when (effect) {
         is Effect.Damage -> {
-          val amount =
+          val losses =
             rules.mitigate(
               RulesContext(this, caster, t, skill = skill),
               effect.dice.roll(rng),
               effect.type,
             )
-          damage(t, amount, effect.type, caster)
+          damage(t, losses, effect.type, caster)
         }
-        is Effect.Heal -> heal(t, effect.dice.roll(rng))
+        is Effect.Heal -> heal(t, effect.vital, effect.dice.roll(rng))
         is Effect.ApplyAffect ->
           applyAffect(
             t,

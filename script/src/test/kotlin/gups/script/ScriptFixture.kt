@@ -8,11 +8,13 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Mob
 import gups.core.model.Player
+import gups.core.rules.StartingStats
 import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
 import gups.core.world.handle
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
@@ -27,7 +29,7 @@ fun libPkg(extra: String = "") = "package(api_version = 1, kind = \"lib\"$extra)
 /** Writes [files] (paths relative to the world root) into a fresh temporary world. */
 fun tempWorld(files: Map<String, String>): Path {
   val root = Files.createTempDirectory("gups-world")
-  for ((path, text) in files) {
+  for ((path, text) in TestWorlds.withDefaults(files)) {
     val p = root.resolve(path)
     p.parent.createDirectories()
     p.writeText(text.trimIndent() + "\n")
@@ -47,12 +49,14 @@ class ScriptFixture(
 ) {
   val root: Path = tempWorld(files)
   val loader = ScriptLoader(WorldDir(root), limits)
-  val result: LoadResult = loader.load(load)
+  val result: LoadResult =
+    loader.load((load + RULES_PACKAGE).distinct().filter { WorldDir(root).hasPackage(it) })
   val host: StarlarkHost by lazy { StarlarkHost(result, limits, loader) }
   val w: World by lazy {
     check(result.ok) { "load failed:\n" + result.report() }
     World(
         result.prototypes(),
+        loader.schema,
         host.rules(),
         wrap(host),
         WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble),
@@ -67,7 +71,12 @@ class ScriptFixture(
   private var nanos = 0L
 
   fun player(name: String = "Ann", at: String = "//zones/z:start", hp: Int = 50): Player {
-    val p = w.spawnPlayer(name, Label(at), hp = hp)
+    val p =
+      w.spawnPlayer(
+        name,
+        Label(at),
+        overrides = StartingStats(max = mapOf("hp" to hp), current = mapOf("hp" to hp)),
+      )
     val id = SessionId(nextSession++)
     val sink = CapturingSink()
     w.handle(WorldControlEvent.Connect(id, sink), nanos)

@@ -244,6 +244,9 @@ class ApiModelTest {
           it.pkg("lib").commandList.single()
         },
       "struct" to Case(zone, { "S = struct(${it.only()})" }) { null },
+      "vitals" to Case(zone, { "S = vitals(${it.only()})" }) { null },
+      "stats" to Case(zone, { "S = stats(${it.only()})" }) { null },
+      "resists" to Case(zone, { "S = resists(${it.only()})" }) { null },
     )
 
   /**
@@ -254,7 +257,12 @@ class ApiModelTest {
     when (spec.name) {
       "module" -> {
         val root = Files.createTempDirectory("gups-world")
-        root.resolve(WorldModule.FILE).writeText("module(${extra.only()})\n")
+        root
+          .resolve(WorldModule.FILE)
+          .writeText(
+            "module(stats = [\"str\"], vitals = [\"hp\"], damage_types = [\"fire\"], " +
+              "unarmed_damage_type = \"fire\"${extra.after()})\n"
+          )
         val (m, err) = WorldModule.read(WorldDir(root))
         return if (err == null) Result.success(m) else Result.failure(AssertionError(err.message))
       }
@@ -313,7 +321,14 @@ class ApiModelTest {
   }
 
   /** Defaults that describe a computed value instead of giving one. */
-  private val descriptive = setOf("id with spaces", "words of name", "package path")
+  private val descriptive =
+    setOf(
+      "id with spaces",
+      "words of name",
+      "package path",
+      "unarmed_damage_type",
+      "'<' + '{v}v ' per vital + '> '",
+    )
 
   @Test
   fun `each documented default is what the declaration really uses`() {

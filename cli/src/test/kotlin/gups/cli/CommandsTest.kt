@@ -384,7 +384,7 @@ class CommandsTest {
           "zones/z/rooms.star" to
             """
             room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
-            mob("goblin", name = "Goblin", hp = 10, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+            mob("goblin", name = "Goblin", vitals = vitals(hp = 10), behaviors = [wander(), flee(below = vitals(hp = 20))], version = 1)
             """
               .trimIndent(),
         )
@@ -405,7 +405,7 @@ class CommandsTest {
       .writeText(
         """
         room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
-        mob("goblin", name = "Goblin", hp = 20, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+        mob("goblin", name = "Goblin", vitals = vitals(hp = 20), behaviors = [wander(), flee(below = vitals(hp = 20))], version = 1)
         """
           .trimIndent() + "\n"
       )
@@ -419,7 +419,7 @@ class CommandsTest {
       .writeText(
         """
         room("start", name = "Start", flags = ["dead_end_ok"], exits = [])
-        mob("goblin", name = "Fierce Goblin", desc = "A scary goblin", hp = 10, behaviors = [wander(), flee(at_hp_pct = 20)], version = 1)
+        mob("goblin", name = "Fierce Goblin", desc = "A scary goblin", vitals = vitals(hp = 10), behaviors = [wander(), flee(below = vitals(hp = 20))], version = 1)
         """
           .trimIndent() + "\n"
       )

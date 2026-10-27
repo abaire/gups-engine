@@ -473,7 +473,9 @@ object ScriptApi {
       apiVersion = EngineInfo.API_VERSION,
       engineVersion = EngineInfo.version,
       declarations = DeclarationBuiltins.DECLARATION_SPECS.sortedBy { it.name },
-      settings = listOf(WorldModule.SPEC, ServerConfig.SPEC).sortedBy { it.name },
+      settings =
+        listOf(WorldModule.SPEC, WorldModule.STAT_SPEC, WorldModule.VITAL_SPEC, ServerConfig.SPEC)
+          .sortedBy { it.name },
       constants = DeclarationBuiltins.CONSTANT_SPECS.sortedBy { it.name },
       hooks = HookCatalog.specs.sortedBy { it.name },
       ctx = describeBuiltin(Ctx::class.java),

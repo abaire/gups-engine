@@ -128,7 +128,7 @@ class DevToolsTest {
     f.input(p, "chat")
     f.run()
     assertTrue((f.host.stepsByPackage["zones/z"] ?: 0) > 0)
-    assertEquals(setOf("zones/z"), f.host.packages)
+    assertEquals(setOf("zones/z", "rules"), f.host.packages)
     f.input(p, "@quarantine //zones/nope")
     assertEquals(
       "There is no package //zones/nope.\n",

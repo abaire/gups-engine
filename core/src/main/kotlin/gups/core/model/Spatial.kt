@@ -33,15 +33,17 @@ enum class TrackSize(val slots: Int) {
   LARGE(5),
 }
 
-/** Perception channels an exit may block. */
-enum class Channel {
-  SIGHT,
-  SOUND,
-  NOISE,
-  SPELL;
+/** A perception channel an exit may block: a built-in one or a channel the world declares. */
+@JvmInline
+value class Channel(val name: String) {
+  override fun toString(): String = name
 
   companion object {
-    val ALL: Set<Channel> = entries.toSet()
+    val SIGHT = Channel("sight")
+    val SOUND = Channel("sound")
+    val NOISE = Channel("noise")
+
+    val BUILT_IN: List<Channel> = listOf(SIGHT, SOUND, NOISE)
   }
 }
 
@@ -118,15 +120,8 @@ value class Direction(val name: String) {
   }
 }
 
-/** A damage type such as `fire` or `pierce`. Free-form; the rules interpret it. */
+/** A damage type the world's schema declares; the rules interpret it. */
 @JvmInline
 value class DamageType(val name: String) {
   override fun toString(): String = name
-
-  companion object {
-    val BLUDGEON = DamageType("bludgeon")
-    val SLASH = DamageType("slash")
-    val PIERCE = DamageType("pierce")
-    val FIRE = DamageType("fire")
-  }
 }

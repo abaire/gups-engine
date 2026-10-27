@@ -28,7 +28,8 @@ class DocExamplesTest {
         .copyRecursively(root.resolve("rules").toFile())
       val files =
         linkedMapOf(
-          "MODULE.gups" to "module(api_version = 1)\n",
+          "MODULE.gups" to
+            File(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText(),
           "zones/ex/package.star" to
             "package(api_version = 1, kind = \"${if (symbol in DocExamples.LIB_SYMBOLS) "lib" else "zone"}\")\n",
           "zones/ex/fixture.star" to DocExamples.FIXTURE,

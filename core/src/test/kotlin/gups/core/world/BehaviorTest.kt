@@ -13,7 +13,13 @@ import kotlin.test.assertTrue
 
 class BehaviorTest {
   private fun mob(name: String, vararg behaviors: Behavior, hp: Int = 40) =
-    MobProto(Label("//t:$name"), name, listOf(name), hp = hp, behaviors = behaviors.toList())
+    MobProto(
+      Label("//t:$name"),
+      name,
+      listOf(name),
+      vitals = mapOf("hp" to hp),
+      behaviors = behaviors.toList(),
+    )
 
   private fun fixture(vararg mobs: MobProto, rules: FixedRules = FixedRules(flee = 100)) =
     Fixture(rules = rules, protos = T.protos(extraMobs = mobs.toList()))
@@ -49,10 +55,10 @@ class BehaviorTest {
 
   @Test
   fun `flee runs at the threshold and beats every other proposal`() {
-    val f = fixture(mob("coward", Aggressive(ActorFilter("players")), Flee(20)))
+    val f = fixture(mob("coward", Aggressive(ActorFilter("players")), Flee(mapOf("hp" to 20))))
     val coward = f.mob(Label("//t:coward"))
     f.player("Ann")
-    coward.hp = 8
+    f.setVital(coward, "hp", 8)
     f.runTo(3)
     assertTrue(coward.room.label != T.HALL, "fled to ${coward.room.label}")
     assertFalse(coward.isEngaged)
@@ -127,9 +133,9 @@ class BehaviorTest {
 
   @Test
   fun `sentinel keeps a mob in its room whatever else it wants`() {
-    val f = fixture(mob("statue", Wander(3, 1.0), Flee(90), Sentinel))
+    val f = fixture(mob("statue", Wander(3, 1.0), Flee(mapOf("hp" to 90)), Sentinel))
     val statue = f.mob(Label("//t:statue"))
-    statue.hp = 1
+    f.setVital(statue, "hp", 1)
     f.runTo(100)
     assertEquals(T.HALL, statue.room.label)
   }

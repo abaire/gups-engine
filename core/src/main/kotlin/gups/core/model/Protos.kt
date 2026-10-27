@@ -11,8 +11,6 @@ import gups.core.world.ZoneCommand
 // Immutable prototypes. The `script` module produces them by evaluating
 // packages; Kotlin tests build them directly.
 
-val STAT_NAMES: List<String> = listOf("str", "dex", "con", "int", "wis")
-
 /** The points of the rules chain that zones, regions, rooms, affects and items may modify. */
 enum class ModifierPoint(val scriptName: String) {
   TO_HIT("to_hit"),
@@ -29,8 +27,6 @@ enum class ModifierPoint(val scriptName: String) {
 
 /** Modifier functions by point. Each is a top-level script function `fn(ctx, base)`. */
 typealias Modifiers = Map<ModifierPoint, HookRef>
-
-val DEFAULT_STATS: Map<String, Int> = STAT_NAMES.associateWith { 10 }
 
 data class DoorProto(
   val state: DoorState = DoorState.CLOSED,
@@ -83,11 +79,9 @@ data class MobProto(
   val keywords: List<String>,
   val desc: String = "",
   val level: Int = 1,
-  val stats: Map<String, Int> = DEFAULT_STATS,
-  val hp: Int = 10,
-  val mana: Int = 0,
-  val move: Int = 100,
-  val armor: Int = 0,
+  val stats: Map<String, Int> = emptyMap(),
+  /** Vital maxima. */
+  val vitals: Map<String, Int> = emptyMap(),
   val resists: Map<DamageType, Int> = emptyMap(),
   val skills: Map<Label, Int> = emptyMap(),
   val senses: Map<Sense, Int> = emptyMap(),
@@ -120,7 +114,8 @@ data class ItemProto(
   /** Equipment slot this item goes in, for example `wield`. */
   val wear: String? = null,
   val dice: Dice? = null,
-  val damageType: DamageType = DamageType.BLUDGEON,
+  /** Null means the world's unarmed damage type. */
+  val damageType: DamageType? = null,
   val statDeltas: Map<String, Int> = emptyMap(),
   val stackable: Boolean = false,
   val decayPulses: Int? = null,
@@ -165,7 +160,7 @@ data class Interrupt(val damagePct: Int? = null, val stun: Boolean = true) {
 data class SkillProto(
   val label: Label,
   val kind: String = "skill",
-  /** Keys `hp`, `mana`, `move`. */
+  /** Vital costs, keyed by declared vital. */
   val cost: Map<String, Int> = emptyMap(),
   val warmup: Int = 0,
   val lag: Int = 0,

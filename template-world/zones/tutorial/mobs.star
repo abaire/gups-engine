@@ -36,7 +36,7 @@ mob("guide",
     name = "the guide",
     desc = "A patient old adventurer with a lantern.",
     level = 10,
-    hp = 200,
+    vitals = vitals(hp = 200),
     senses = {"hearing": 1},
     # Built-in behaviors: sentinel() keeps the guide at its post.
     behaviors = [sentinel()],
@@ -49,7 +49,7 @@ def _mend(ctx):
     # A timer callback: a top-level function called with a fresh ctx whose self is the
     # entity that set the timer. Keyword arguments given to ctx.after arrive as keywords.
     if ctx.self.in_world and ctx.self.hp < ctx.self.max_hp:
-        ctx.heal(ctx.self, ctx.self.max_hp - ctx.self.hp)
+        ctx.heal(ctx.self, ctx.self.max_hp - ctx.self.hp, "hp")
         ctx.echo(ctx.self.room, "The training dummy creaks and mends itself.")
     ctx.del_attr(ctx.self, "mending")
 
@@ -69,6 +69,6 @@ mob("training_dummy",
     name = "a training dummy",
     keywords = ["dummy", "training"],
     desc = "A straw dummy on a post. It has seen better days.",
-    hp = 30,
+    vitals = vitals(hp = 30),
     on_damage = _dummy_hit,
 )

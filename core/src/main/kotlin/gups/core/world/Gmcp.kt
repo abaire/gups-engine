@@ -11,7 +11,7 @@ import gups.core.model.Player
 
 /** Packages recomputed every phase 7 and sent only when they changed. */
 private val STATE_PACKAGES =
-  listOf("Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands")
+  listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands")
 
 /** Every package the engine sends; plugin packages may not overlap them. */
 val ENGINE_GMCP_PACKAGES: Set<String> =
@@ -27,6 +27,9 @@ fun World.gmcp(p: Player, pkg: String, data: Any?): Boolean {
   s.gmcpOut += pkg to data
   return true
 }
+
+/** The feature modules every world has until worlds can turn them off. */
+private val FEATURES = listOf("combat", "track", "skills", "leveling")
 
 /** `Comm.Channel.Text` to each of [to] that is a player. */
 internal fun World.channel(
@@ -69,15 +72,20 @@ internal fun World.gmcpDeltas(s: Session) {
 /** The current value of state package [pkg] for [p]. */
 fun World.gmcpPayload(p: Player, pkg: String): Any? =
   when (pkg) {
-    "Char.Vitals" ->
+    "Char.Schema" ->
       mapOf(
-        "hp" to p.hp,
-        "maxhp" to p.maxHp,
-        "mana" to p.mana,
-        "maxmana" to p.maxMana,
-        "move" to p.move,
-        "maxmove" to p.maxMove,
+        "stats" to schema.stats.map { mapOf("name" to it.name, "label" to it.label) },
+        "vitals" to schema.vitals.map { mapOf("name" to it.name, "label" to it.label) },
+        "damage_types" to schema.damageTypes,
+        "features" to FEATURES,
       )
+    "Char.Vitals" ->
+      LinkedHashMap<String, Any?>().also { out ->
+        for (name in schema.vitalNames) {
+          out[name] = p.current(name)
+          out["max$name"] = p.max(name)
+        }
+      }
     "Char.Status" ->
       mapOf(
         "name" to p.name,

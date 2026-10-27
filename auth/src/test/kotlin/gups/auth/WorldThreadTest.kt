@@ -3,6 +3,8 @@ package gups.auth
 import gups.core.ClientInputEvent
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.loop.WorldLoop
 import gups.core.world.World
 import gups.core.world.WorldConfig
@@ -39,7 +41,13 @@ class WorldThreadTest {
     val cheap = Argon2Hasher(memoryKiB = 8, iterations = 1)
     store.create(gups.core.Account(0, "ann", cheap.hash("correct horse")))
     val hasher = SlowHasher(cheap)
-    val w = World(testProtos(), config = WorldConfig(seed = 1))
+    val w =
+      World(
+        testProtos(),
+        FixtureSchemas.FANTASY.schema,
+        FixtureRules(),
+        config = WorldConfig(seed = 1),
+      )
     w.persistence = MemoryPersistence()
     val loop = WorldLoop(w, pulseNanos = 20_000_000)
     val pool = Executors.newFixedThreadPool(2)

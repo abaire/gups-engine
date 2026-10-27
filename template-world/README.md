@@ -39,6 +39,15 @@ If the course server is already running with an admin port, import directly thro
 gups import-roster roster.csv --admin 127.0.0.1:9090
 ```
 
+## The World Schema
+
+`MODULE.gups` declares the world's stats, vitals, damage types and channels, with a comment per
+argument. `rules/combat.star` gives them meaning: starting values, damage, costs, regeneration
+and when an actor is incapacitated or dies. The engine has no built-in rules, so every function
+in `rules/combat.star` is required. Changing a name in the schema changes what saved
+characters mean, so a server refuses to start on a database made with different names until it
+is started once with `gups serve --wipe`, which deletes every character and item.
+
 ## Running Locally
 
 To test packages and play locally in developer mode:

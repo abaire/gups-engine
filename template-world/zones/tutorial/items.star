@@ -35,13 +35,13 @@ item("leather_cap",
     desc = "A scuffed leather cap. It smells of the last person who wore it.",
     kind = "armor",
     wear = "head",           # `wear cap`; slot names come from the rules' equipment_slots()
-    stat_deltas = {"con": 1},
+    stat_deltas = stats(con = 1),
 )
 
 def _drink(ctx):
     # on_use runs for `use draught`. Return ctx.deny(msg) from a before_use hook to refuse.
     # The engine doesn't use items up by itself: the hook destroys the draught.
-    ctx.heal(ctx.actor, 10)
+    ctx.heal(ctx.actor, 10, "hp")
     ctx.send(ctx.actor, "You drink the draught. Warmth spreads through you.")
     ctx.destroy(ctx.self)
 

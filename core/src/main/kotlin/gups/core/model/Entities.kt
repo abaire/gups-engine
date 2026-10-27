@@ -153,16 +153,20 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var trackIndex: Int = trackIndex
     internal set
 
-  val baseStats: MutableMap<String, Int> = LinkedHashMap(DEFAULT_STATS)
-  var hp: Int = 1
-  var maxHp: Int = 1
-  var mana: Int = 0
-  var maxMana: Int = 0
-  var move: Int = 0
-  var maxMove: Int = 0
+  /** One entry per stat the actor has a value for; a declared stat without one reads as 0. */
+  val baseStats: MutableMap<String, Int> = LinkedHashMap()
+  internal val vitalMap: MutableMap<String, Vital> = LinkedHashMap()
+
+  /** The actor's vitals, in schema order. Changed only through the world. */
+  val vitals: Map<String, Vital>
+    get() = vitalMap
+
+  /** As `rules.condition` last decided it; changed only through the world. */
+  var condition: Condition = Condition.OK
+    internal set
+
   var level: Int = 1
   var xp: Long = 0
-  var armor: Int = 0
   val resists: MutableMap<DamageType, Int> = linkedMapOf()
   val skills: MutableMap<Label, Int> = linkedMapOf()
   val affects: MutableList<Affect> = mutableListOf()
@@ -170,11 +174,11 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   val actionQueue: ArrayDeque<QueuedAction> = ArrayDeque()
   var waitState: Int = 0
 
-  /** Recovery held aside while the actor is stunned, restored when the stun ends. */
-  internal var stunnedWaitState: Int = 0
+  /** Recovery held aside while the actor is stunned or incapacitated, restored when that ends. */
+  internal var heldWaitState: Int = 0
 
-  /** The pulse the current stun started, so a paused warmup can be pushed back. */
-  internal var stunnedSince: Long = 0
+  /** The pulse the current disability started, so a paused warmup can be pushed back. */
+  internal var heldSince: Long = 0
 
   var casting: CastState? = null
   val fighting: java.util.TreeSet<EntityId> = java.util.TreeSet()
@@ -217,11 +221,22 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
       equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
       (encumbrance[name] ?: 0)
 
+  fun current(vital: String): Int = vitalMap[vital]?.current ?: 0
+
+  fun max(vital: String): Int = vitalMap[vital]?.max ?: 0
+
   /** True if an affect carries [flag], including those applied by worn items. */
   fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
 
   val isStunned: Boolean
     get() = hasFlag("stunned")
+
+  val isIncapacitated: Boolean
+    get() = condition == Condition.INCAPACITATED
+
+  /** Stunned or incapacitated: takes no actions and holds its recovery. */
+  val isDisabled: Boolean
+    get() = isStunned || isIncapacitated
 
   val isEngaged: Boolean
     get() = fighting.isNotEmpty()

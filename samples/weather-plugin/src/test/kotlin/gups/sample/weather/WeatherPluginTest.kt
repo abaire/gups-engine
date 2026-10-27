@@ -14,6 +14,7 @@ import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
+import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginWorld
 import gups.pluginapi.host.PluginLoader
 import gups.script.WorldDir
@@ -22,6 +23,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.copyTo
 import kotlin.io.path.createDirectories
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -105,23 +107,16 @@ class WeatherPluginTest {
     override val label: String? = null
     override val name = "Ann"
     override val isPlayer = true
-    override val hp
-      get() = TODO()
 
-    override val maxHp
-      get() = TODO()
+    override fun stat(name: String): Int = TODO()
 
-    override val mana
-      get() = TODO()
+    override fun baseStat(name: String): Int = TODO()
 
-    override val maxMana
-      get() = TODO()
+    override fun vital(name: String): Int = TODO()
 
-    override val move
-      get() = TODO()
+    override fun maxVital(name: String): Int = TODO()
 
-    override val maxMove
-      get() = TODO()
+    override fun resist(type: String): Int = TODO()
 
     override val level
       get() = TODO()
@@ -163,10 +158,18 @@ class WeatherPluginTest {
 
     override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) = TODO()
 
-    override fun damage(target: PluginActor, amount: Int, type: String, source: PluginActor?) =
-      TODO()
+    override fun damage(
+      target: PluginActor,
+      amount: Int,
+      type: String,
+      vital: String,
+      source: PluginActor?,
+    ) = TODO()
 
-    override fun heal(target: PluginActor, amount: Int) = TODO()
+    override fun heal(target: PluginActor, amount: Int, vital: String) = TODO()
+
+    override val schema: PluginSchema
+      get() = TODO()
 
     override fun removeAffect(target: PluginActor, name: String): Boolean = TODO()
 
@@ -270,10 +273,14 @@ class WeatherPluginTest {
     val tmp = Files.createTempDirectory("gups-weather")
     val jar = tmp.resolve("plugins/weather.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.weatherJar")).copyTo(jar)
+    val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
     write(
       tmp,
       "MODULE.gups",
-      """module(api_version = 1, plugins = {"weather": "${PluginLoader.sha256(jar)}"})""",
+      schema.replaceFirst(
+        "module(",
+        "module(\n    plugins = {\"weather\": \"${PluginLoader.sha256(jar)}\"},",
+      ),
     )
     val rules = Path.of(System.getProperty("gups.templateWorld")).resolve("rules")
     Files.list(rules)

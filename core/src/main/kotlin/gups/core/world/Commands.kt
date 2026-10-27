@@ -276,6 +276,10 @@ fun World.submit(actor: Actor, line: String): Boolean {
     is FastCommand ->
       guarded("command '$verb' of $actor") { def.run(CommandCall(this, actor, verb, args)) }
     is TickCommand -> {
+      if (actor.isIncapacitated) {
+        send(actor, "You can't do that while incapacitated.")
+        return false
+      }
       if (actor.actionQueue.size >= ACTION_QUEUE_MAX) {
         send(actor, "You can't plan that far ahead.")
         return false

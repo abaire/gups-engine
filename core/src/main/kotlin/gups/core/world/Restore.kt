@@ -2,6 +2,9 @@ package gups.core.world
 
 import gups.core.EntityId
 import gups.core.Label
+import gups.core.model.Actor
+import gups.core.model.Condition
+import gups.core.model.DamageType
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
@@ -31,6 +34,7 @@ fun World.restorePlayer(
     "A player named $name is already in the world"
   }
   val p = Player(id, name, room, index.coerceIn(0, room.trackSize - 1), recall, accountId)
+  initVitals(p)
   p.lastInputPulse = pulse
   register(p)
   actorIndex[p.id] = p
@@ -43,23 +47,40 @@ fun World.restorePlayer(
 fun World.restoreMob(id: EntityId, proto: MobProto, room: Room, index: Int): Mob {
   claim(id)
   val m = Mob(id, proto, room, index.coerceIn(0, room.trackSize - 1))
-  m.level = proto.level
-  m.baseStats.putAll(proto.stats)
-  m.hp = proto.hp
-  m.maxHp = proto.hp
-  m.mana = proto.mana
-  m.maxMana = proto.mana
-  m.move = proto.move
-  m.maxMove = proto.move
-  m.armor = proto.armor
-  m.resists.putAll(proto.resists)
-  m.skills.putAll(proto.skills)
+  declareMob(m, proto)
   register(m)
   actorIndex[m.id] = m
   m.inWorld = true
   placeActor(m, room, m.trackIndex)
   return m
 }
+
+/**
+ * Overwrites [actor]'s numbers with saved ones. A vital or stat the schema no longer declares is
+ * not accepted: the startup check keeps a database from meeting a different schema.
+ */
+fun World.restoreActorNumbers(
+  actor: Actor,
+  stats: Map<String, Int>,
+  vitals: Map<String, VitalState>,
+  resists: Map<DamageType, Int>,
+  condition: Condition,
+) {
+  actor.baseStats.clear()
+  actor.baseStats.putAll(stats)
+  for ((name, saved) in vitals) {
+    val v = requireNotNull(actor.vitalMap[name]) { "${actor.name} has no vital $name" }
+    v.max = saved.max
+    v.current = saved.current.coerceAtMost(saved.max)
+    v.belowZeroSince = saved.belowZeroSince
+  }
+  actor.resists.clear()
+  actor.resists.putAll(resists)
+  actor.condition = condition
+}
+
+/** A saved vital: its current value, maximum and `belowZeroSince`. */
+data class VitalState(val current: Int, val max: Int, val belowZeroSince: Long? = null)
 
 /** An item at [at], whose holder must already exist (restore holders and containers first). */
 fun World.restoreItem(id: EntityId, proto: ItemProto, at: ItemLocation, count: Int): Item {

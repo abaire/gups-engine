@@ -100,12 +100,12 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
       notes += "mob ${row.protoLabel} #${row.id} can't be restored: its prototype or room is gone"
       continue
     }
-    applyMob(world.restoreMob(EntityId(row.id), proto, room, p.index), p)
+    applyMob(world, world.restoreMob(EntityId(row.id), proto, room, p.index), p)
   }
   for (pl in bundle.players) {
     val p = JSON.decodeFromString(PlayerPayload.serializer(), pl.payload)
     val room = world.roomOrNull(Label(p.room)) ?: continue
-    applyPlayer(world.restorePlayer(EntityId(pl.id), pl.name, room, p.index, room.label), p)
+    applyPlayer(world, world.restorePlayer(EntityId(pl.id), pl.name, room, p.index, room.label), p)
   }
   placeItems(world, rows.filter { it.kind == "item" }, tombstones = true, LinkedHashSet(), notes)
   return notes

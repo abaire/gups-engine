@@ -110,6 +110,7 @@ class TestRunner(
   /** Runs every test matching [patterns], reporting each result to [listener] as it finishes. */
   fun run(patterns: List<String>, listener: (TestResult) -> Unit = {}): TestReport {
     val problems = mutableListOf<String>()
+    problems += moduleProblems(dir)
     val parsed =
       patterns.mapNotNull { p ->
         runCatching { LabelPattern(p) }.onFailure { problems += it.message ?: p }.getOrNull()
@@ -158,7 +159,15 @@ class TestRunner(
   }
 
   private fun runTest(pkg: String, file: Label, name: String, fn: StarlarkFunction): TestResult {
-    val t = TestCtx(pkg, ::loadWorld, listOf(pkg), plugins = plugins, aliases = aliases)
+    val t =
+      TestCtx(
+        pkg,
+        ::loadWorld,
+        listOf(pkg),
+        plugins = plugins,
+        aliases = aliases,
+        schema = loader.schema,
+      )
     val printed = StringBuilder()
     var status = Status.PASS
     var message: String? = null

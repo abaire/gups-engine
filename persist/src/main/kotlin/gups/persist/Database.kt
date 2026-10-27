@@ -95,6 +95,29 @@ class Database private constructor(val file: Path, private val conn: Connection)
   fun meta(): Map<String, String> =
     query("SELECT key, value FROM meta") { it.getString(1) to it.getString(2) }.toMap()
 
+  /** Sets one `meta` key at once, outside a checkpoint. */
+  fun setMeta(key: String, value: String) {
+    prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)") { st ->
+      st.setString(1, key)
+      st.setString(2, value)
+      st.executeUpdate()
+    }
+  }
+
+  /**
+   * A server wipe: deletes every character, every item row and the item audit trail. Accounts,
+   * restrictions, session tokens, invites and the rest of the world state stay.
+   */
+  fun wipeCharacters() {
+    transaction {
+      conn.createStatement().use { st ->
+        st.executeUpdate("DELETE FROM players")
+        st.executeUpdate("DELETE FROM world_entities WHERE kind = 'item'")
+        st.executeUpdate("DELETE FROM item_events")
+      }
+    }
+  }
+
   fun entityRows(): List<EntityRow> =
     query(
       "SELECT id, kind, proto_label, proto_version, location_json, payload_json, updated_pulse FROM world_entities ORDER BY id"

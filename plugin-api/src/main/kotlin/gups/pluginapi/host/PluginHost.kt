@@ -242,7 +242,7 @@ internal constructor(
         val role = Role.valueOf(c.role.name)
         fun run(w: World, actor: Actor, args: String) =
           guard(w, p.id, "command '${c.name}'") {
-            c.run(PluginCommandCall(facade(w, p.id), ActorFacade(actor), args))
+            c.run(PluginCommandCall(facade(w, p.id), ActorFacade(actor, w), args))
           }
         world.commands.registerPlugin(
           when (c.lane) {
@@ -264,7 +264,9 @@ internal constructor(
       }
       for (g in p.reg.gmcp) {
         // core records a failing producer and skips it for the pulse.
-        world.pluginGmcp[g.pkg] = { player -> g.produce(facade(world, p.id), ActorFacade(player)) }
+        world.pluginGmcp[g.pkg] = { player ->
+          g.produce(facade(world, p.id), ActorFacade(player, world))
+        }
       }
     }
     val effects =
@@ -286,8 +288,8 @@ internal constructor(
         e.apply.apply(
           PluginEffectCall(
             facade(w, id),
-            ActorFacade(caster),
-            target?.let(::ActorFacade),
+            ActorFacade(caster, w),
+            target?.let { ActorFacade(it, w) },
             effect.args,
           )
         )

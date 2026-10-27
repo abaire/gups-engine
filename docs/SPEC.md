@@ -619,7 +619,7 @@ platforms. Changing the algorithm changes every replay.
   - Mobs: level, vital maxima, base stats, resists, skills, `think_every` and
     `dormant_recovery` follow that rule, compared with the prototype's declared values (so
     values `rules.starting_stats` changed at spawn are kept). Current vitals stay, capped at
-    the new maximum.
+    the new maximum, except that a vital that was at its maximum moves to the new one.
   - Rooms: door states and exit `senses_blocked` sets follow the same rule.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
@@ -819,17 +819,22 @@ module(
   `rules.starting_stats` (§4.6), so they may differ per actor and be randomized.
 - **Names** of stats, vitals, damage types and channels match `[a-z][a-z0-9_]*`.
   - Stat and vital names are unique together, and may not equal an actor view field
-    (§4.5), `base`, or `max_<vital>` for a declared vital. Vital names may not start with
-    `max`.
+    (§4.5), `base`, `resists`, `condition`, `below_zero_since`, or `max_<vital>` for a
+    declared vital. The view fields are those of the actor view class itself, so a field
+    added to it is reserved too. Vital names may not start with `max`.
   - Damage type names are unique; `unarmed_damage_type` must be one of them. It is the type
     of an unarmed auto-attack.
   - Channel names are unique and may not be a built-in channel (`sight`, `sound`, `noise`).
     Declared channels can be blocked by exits and doors and listed in a skill's `channels`,
     but nothing in the engine raises events on them.
   - A schema problem stops the server, with a "did you mean" suggestion where one applies.
+    Suggestions come from an edit distance in which a swap of two letters counts as one
+    edit, and the nearest name is offered when it is within a third of the misspelled
+    name's length.
 - **`prompt`** is the telnet prompt (§4.10). Its placeholders are `{<vital>}` and
-  `{max_<vital>}` for declared vitals; another placeholder stops the server. The default
-  is `<` then `{<vital>}<vital>` for each vital, space-separated, then `> `.
+  `{max_<vital>}` for declared vitals; another placeholder stops the server. A placeholder
+  is `{name}` with `name` matching `[a-z][a-z0-9_]*`; braces that don't form one print as
+  written. The default is `<` then `{<vital>}<vital>` for each vital, space-separated, then `> `.
 - **Typed values.** Wherever the API takes or returns numbers keyed by schema names, it
   uses a constructor that checks its keywords against the schema, with a suggestion for a
   misspelling. A plain dict in their place is an error that names the constructor.
@@ -855,6 +860,12 @@ module(
   `MODULE.gups` declares different names refuses to start, lists what changed, and points
   to `--wipe` (§2.4). Labels, `prompt` and `unarmed_damage_type` aren't recorded and need
   only a restart. `gups migrate-check` fails the same way (§7.3).
+  - The refusal reads "The world's schema in MODULE.gups differs from the one this database
+    was started with:", then one line per kind that changed (`stats: added luck; removed
+    wis`; a reordering reads `reordered`), then that saved characters and items can't
+    follow a schema change and that `--wipe` starts again.
+  - A wipe reports "Wiped N characters and M items; the previous database is at <prewipe
+    backup>." and that the schema was recorded.
 
 ### 3.10 Feature Modules
 
@@ -993,6 +1004,9 @@ def migrate(old_version, attrs):                       # optional, per package (
   `api_version` gets the version-mismatch diagnostic before any unknown-argument error.
 - **Defaults:** the display `name` defaults to the identifier with `_` as spaces.
   `keywords` default to the display name's words minus articles, or else the identifier.
+- **Damage type:** an item's `damage_type` is a declared damage type, `DAMAGE.fire` or the
+  plain string, checked at load; an item that names none uses the world's
+  `unarmed_damage_type`.
 - **Item slots:** an item's slot is `wear = "<slot>"`; `wield = "<slot>"` is an alias. A
   slot family such as `wear = "finger"` fits the first free `finger_*` slot. An item with
   `equip_affects` or `modifiers` needs a `wear` slot. Each `equip_affects` entry is either
@@ -1071,7 +1085,7 @@ Rules functions can read it from `ctx.actor.skills`.
 
 | Primitive | Purpose |
 |---|---|
-| `damage(dice, type)` | Deal damage of a declared type. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6). |
+| `damage(dice, type)` | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6). |
 | `heal(dice, vital)` | Restore a declared vital, up to its maximum. |
 | `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff. |
 | `dispel(name=None, flag=None, all=False, count=None)` | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
@@ -1223,7 +1237,8 @@ expired), `targets`
 - **`damage`** is raw: no to-hit roll and no mitigation. It lowers the named vital by
   `amount`, with no floor, and fires `on_damage` with `losses` holding just that vital.
   **`heal`** raises the named vital up to its maximum. Both name a declared vital and
-  damage type, checked when called.
+  damage type, checked when called: an undeclared name raises an error with a suggestion
+  before anything changes.
 - **Features:** `start_combat`, `stop_combat`, `enemies_near` and `act_attack` need
   `combat`; `act_cast` needs `skills`; `act_advance`, `act_retreat` and the `index`
   arguments of `teleport`, `spawn` and `move_item` need `track` (§3.10).
@@ -1260,7 +1275,8 @@ Verbs without a player command (`say`, `emote`, door and exit-block setters, `sp
 
 ### 4.6 Rules Module and the Modifier Chain
 
-The rules package is required, and its `//rules:combat.star` defines the world's rules as
+The rules package is required, and its `//rules:combat.star` (the package is named
+`rules`, kind `rules`; `gups lint` reports its absence) defines the world's rules as
 the functions below. The engine has no built-in ruleset and nothing to fall back to: every
 export that an enabled feature uses (the "Feature" column) must be defined, and an export
 of a feature that is off must not be. The engine calls them with a rules `ctx` that is
@@ -1327,7 +1343,13 @@ modifiers. It has no verbs. Its actor views have the schema fields of §4.5.
 startup, on reload and on deploy, and in `gups lint`), the engine calls every export it
 defines against synthetic actors built from the schema: a fresh actor after
 `starting_stats`, both as a player and as each mob prototype, and `mitigate` once per
-declared damage type. An error, a wrong return type or an undeclared name in a result
+declared damage type. The actors live in a throwaway world with one room: two players and
+one mob per loaded mob prototype. Each actor is called against another (the first player
+against the second, everyone else against the first player), unarmed. `get_lag` runs once
+per band, and `cast_allowed` and `interrupt_check` get a synthetic skill with
+`interrupt = {"damage_pct": 10}`. A mob whose own package failed to load isn't checked.
+Only the package named `rules` is dry-run; a test world that names another rules package
+(§4.12) isn't. An error, a wrong return type or an undeclared name in a result
 fails the rules package's load with the usual diagnostic. A branch the dry run doesn't
 reach is checked when it first runs.
 
@@ -1473,7 +1495,15 @@ the default text of an engine message (§4.18).
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The
   link-dead auto-quit ignores combat.
 - **`score`** lists the character's stats and vitals by label in schema order, its resists
-  by damage type, and its level and XP with the `leveling` feature.
+  by damage type, and its level and XP with the `leveling` feature. It prints the name,
+  the stats as `<label> <value>`, the vitals as `<label> cur/max`, `Resists: <type> <n>`
+  for every declared damage type, and `Level N (X xp)`.
+- **`look`** describes another actor's health by its condition first: "is incapacitated" or
+  "is mortally wounded", and otherwise by its lowest vital as a share of its maximum
+  (among vitals with a positive maximum): 100% or more "is in excellent condition", 75%
+  "has a few scratches", 50% "is wounded", 25% "is badly hurt", below that "is in awful
+  condition". Onlookers see an incapacitation only as "<actor> collapses." and
+  "<actor> stirs.".
 
 **Player commands, tick lane:**
 - Movement: `north`, `south`, `east`, `west`, `up`, `down` and other exits, `advance`,
@@ -1546,7 +1576,8 @@ prefix only matches other `@` commands.
 - **Labels:** `//pkg:name`, or `:name` for the package of the builder's room.
 - **`@stat`** shows identity and version, location, vitals, effective and base stats,
   resists, skills, affects with seconds left, what the actor is doing, carried and worn
-  items, timers, attributes grouped by namespace, and simulation state with reasons. Mobs
+  items, timers, attributes grouped by namespace, and simulation state with reasons. Vitals
+  show `cur/max` and `belowZeroSince` when set, and the condition is shown. Mobs
   also show their debug owner; players their account, role and scope.
 - **`@spawn`:** builders may spawn both mobs and items of their own packages ("`debug`
   entities only" means every spawned entity is flagged `debug`). Mobs appear at the
@@ -1726,7 +1757,7 @@ for good, without changing its role.
   - IAC bytes in a payload are doubled.
 - **GMCP payloads:**
   - `Char.Schema` is static for the life of the server (§3.9), in declaration order. Its
-    `features` are the enabled features. Clients draw vitals bars and stat labels from it
+    `features` are the enabled features (all four ids until a world can turn features off). Clients draw vitals bars and stat labels from it
     instead of hardcoding names; the bundled web client does.
   - `Char.Vitals` keys are the vital names and `max` plus the name, in schema order.
   - `Char.Status`: `wait` is the recovery left in pulses; `xp_next` is the total XP for the
@@ -1910,12 +1941,17 @@ def test_guard_blocks_without_pass(t):
 def test_scout_flees_when_hurt(t):
     w = t.world(seed=7, packages=["//zones/goblin_caves"])
     g = w.spawn("//zones/goblin_caves:goblin_scout", at=":tunnel")
-    w.damage(g, pct=85)
+    w.damage(g, "hp", pct=85)
     w.run(pulses=8)
     t.ne(g.room, ":tunnel")
 ```
 
 `load` is a reserved word in Starlark, so the package list is `packages`.
+
+`spawn_player` takes its numbers from `rules.starting_stats` and lets `vitals` and `stats`
+(the constructors) override them: a named vital's maximum and current are both set to the
+given value, and a named stat is replaced. `w.damage` lowers the named vital by `amount`
+or by `pct` of its maximum, with `type` defaulting to the unarmed damage type.
 
 | Object | API |
 |---|---|
@@ -2646,6 +2682,9 @@ respawns, which are the kernel and work with or without it (§3.10).
   2. Roll `rng.int(1,100)` against `to_hit` (through the modifier chain).
   3. On a hit, compute `damage` (chain), then `mitigate` with the weapon's damage type
      (or the world's `unarmed_damage_type`), then subtract the vital losses it returns.
+     Every loss is subtracted, `on_damage` fires once, the interrupt check runs, and then
+     `condition` is asked once for the damage event (death is still deferred to the end of
+     an initiative tier). Outside a damage event, a vital change asks `condition` once.
   - Messages show no numbers: "You hit X." / "X hits you." / "X misses Y."
 - **Regen** at the world tick applies to every actor without `no_regen`, engaged or not.
 - **Conditions:** `rules.condition` (§4.6) decides each actor's condition after any change
@@ -3306,7 +3345,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
      with at most one per package per 10 s.
    - **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always
      to the server log, at most once a minute per kind. Kinds include `quarantine`,
-     `rules_error`, `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy
+     `rules_error` (at most once a minute per failing rules function), `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy
      results.
    - Players see nothing. For a failed zone command, they see "Nothing happens."
 
@@ -3345,13 +3384,13 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     | `cast_allowed` | denied with "Nothing happens.", no lag |
     | `interrupt_check` | false |
     | `move_cost`, `regen`, `encumbrance`, `starting_stats` | nothing spent, gained, changed or overridden |
-    | `carry_limit` | no limit |
+    | `carry_limit` | no limit (`Int.MAX_VALUE`) |
     | `get_lag` | 0 |
     | `condition` | the actor's previous condition |
     | `xp_for_kill` | 0 |
-    | `xp_to_level` | no level-up |
+    | `xp_to_level` | no level-up (`Long.MAX_VALUE`) |
     | `on_player_death` | respawn at the recall room, vitals at their maxima, no XP loss |
-    | `equipment_slots` | the last good list |
+    | `equipment_slots` | the last good list (empty before any) |
 
 ### 6.4 Engine-Side Failures
 

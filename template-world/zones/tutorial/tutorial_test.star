@@ -52,7 +52,7 @@ def test_the_dummy_mends_itself(t):
     w = _world(t)
     dummy = w.room(":arena").actors()[0]
     t.eq(dummy.label, "//zones/tutorial:training_dummy")
-    w.damage(dummy, pct = 60)
+    w.damage(dummy, "hp", pct = 60)
     t.eq(dummy.hp, 12)
     w.run(pulses = 8)
     t.eq(dummy.hp, dummy.max_hp)
@@ -96,12 +96,12 @@ def test_the_first_steps_quest(t):
     # The reward: a cap to wear and a draught to drink.
     t.contains(p.do("wear cap"), "You wear a leather cap.")
     t.eq(p.equipped("head").label, "//zones/tutorial:leather_cap")
-    t.eq(p.stats["con"], 11)
+    t.eq(p.con, 11)
 
 def test_a_draught_heals_and_is_used_up(t):
     w = _world(t)
-    p = w.spawn_player("Tess", at = ":gate", hp = 30)
-    w.damage(p, amount = 15)
+    p = w.spawn_player("Tess", at = ":gate", vitals = vitals(hp = 30))
+    w.damage(p, "hp", amount = 15)
     w.spawn(":healing_draught", at = p)
     t.contains(p.do("use draught"), "Warmth spreads through you.")
     t.eq(p.hp, 25)
@@ -119,7 +119,7 @@ def test_the_arena_only_wakes_with_someone_near(t):
     # waits while nobody is around.
     w = t.world(seed = 1, bubble = True)
     dummy = w.room(":arena").actors()[0]
-    w.damage(dummy, pct = 60)
+    w.damage(dummy, "hp", pct = 60)
     w.run(pulses = 40)
     t.eq(dummy.hp, 12)
     w.spawn_player("Tess", at = ":hall")

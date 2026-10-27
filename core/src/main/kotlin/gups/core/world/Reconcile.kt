@@ -179,14 +179,11 @@ private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
   m.proto = p
   upgrade(m, p.version)
   m.level = follow(m.level, was.level, p.level)
-  val full = m.hp == m.maxHp
-  m.maxHp = follow(m.maxHp, was.hp, p.hp)
-  if (full || m.hp > m.maxHp) m.hp = m.maxHp
-  m.maxMana = follow(m.maxMana, was.mana, p.mana)
-  m.mana = m.mana.coerceAtMost(m.maxMana)
-  m.maxMove = follow(m.maxMove, was.move, p.move)
-  m.move = m.move.coerceAtMost(m.maxMove)
-  m.armor = follow(m.armor, was.armor, p.armor)
+  for ((name, v) in m.vitalMap) {
+    val full = v.current == v.max
+    v.max = follow(v.max, was.vitals[name] ?: 0, p.vitals[name] ?: 0)
+    if (full || v.current > v.max) v.current = v.max
+  }
   for (stat in p.stats.keys + was.stats.keys) {
     m.baseStats[stat] = follow(m.baseStats[stat], was.stats[stat], p.stats[stat]) ?: 0
   }

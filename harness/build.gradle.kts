@@ -1,6 +1,8 @@
 plugins { id("gups.kotlin-module") }
 
 dependencies {
+  testImplementation(testFixtures(project(":script")))
+  testImplementation(testFixtures(project(":core")))
   implementation(project(":core"))
   implementation(project(":script"))
 }

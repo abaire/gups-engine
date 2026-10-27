@@ -4,6 +4,8 @@ import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Channel
+import gups.core.model.Condition
+import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Exit
@@ -157,16 +159,19 @@ internal object EngineCommands {
 
   private fun score(c: CommandCall) {
     val a = c.actor
-    val stats = gups.core.model.STAT_NAMES.joinToString("  ") { "$it ${a.stat(it)}" }
-    c.world.send(
-      a,
-      """
-            |${a.name}, level ${a.level} (${a.xp} xp)
-            |HP ${a.hp}/${a.maxHp}  Mana ${a.mana}/${a.maxMana}  Move ${a.move}/${a.maxMove}
-            |$stats  armor ${a.armor}
-            """
-        .trimMargin(),
-    )
+    val schema = c.world.schema
+    val lines = mutableListOf(a.name)
+    if (schema.stats.isNotEmpty())
+      lines += schema.stats.joinToString("  ") { "${it.label} ${a.stat(it.name)}" }
+    if (schema.vitals.isNotEmpty())
+      lines +=
+        schema.vitals.joinToString("  ") { "${it.label} ${a.current(it.name)}/${a.max(it.name)}" }
+    if (schema.damageTypes.isNotEmpty())
+      lines +=
+        "Resists: " +
+          schema.damageTypes.joinToString("  ") { "$it ${a.resists[DamageType(it)] ?: 0}" }
+    lines += "Level ${a.level} (${a.xp} xp)"
+    c.world.send(a, lines.joinToString("\n"))
   }
 
   private fun inventory(c: CommandCall) {
@@ -573,15 +578,23 @@ internal object EngineCommands {
 
   // ---- Helpers -----------------------------------------------------------------------------
 
+  /**
+   * How [a] looks to others: by its condition, else by its lowest vital as a share of its maximum.
+   */
   fun healthWord(a: Actor): String {
-    val pct = a.hp * 100 / a.maxHp.coerceAtLeast(1)
+    when (a.condition) {
+      Condition.DEAD -> return "is mortally wounded"
+      Condition.INCAPACITATED -> return "is incapacitated"
+      Condition.OK -> Unit
+    }
+    val pct =
+      a.vitalMap.values.filter { it.max > 0 }.minOfOrNull { it.current * 100 / it.max } ?: 100
     return when {
       pct >= 100 -> "is in excellent condition"
       pct >= 75 -> "has a few scratches"
       pct >= 50 -> "is wounded"
       pct >= 25 -> "is badly hurt"
-      pct > 0 -> "is in awful condition"
-      else -> "is mortally wounded"
+      else -> "is in awful condition"
     }
   }
 
@@ -711,14 +724,7 @@ internal class CastAction(
       if (!reach.reaches(band)) return "${t.name.cap()} is out of range."
     }
     for ((vital, need) in skill.cost) {
-      val have =
-        when (vital) {
-          "hp" -> actor.hp
-          "mana" -> actor.mana
-          "move" -> actor.move
-          else -> 0
-        }
-      if (have < need) return "You don't have enough $vital."
+      if (actor.current(vital) < need) return "You don't have enough ${w.schema.vitalLabel(vital)}."
     }
     return null
   }
@@ -753,13 +759,7 @@ internal class CastAction(
   }
 
   override fun resolve(w: World, actor: Actor): Int {
-    for ((vital, n) in skill.cost) {
-      when (vital) {
-        "hp" -> actor.hp -= n
-        "mana" -> actor.mana -= n
-        "move" -> actor.move -= n
-      }
-    }
+    w.changeVitals(actor, skill.cost.mapValues { -it.value })
     val t = target
     val onItem = targetItem
     w.send(

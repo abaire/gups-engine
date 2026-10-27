@@ -1,23 +1,45 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ItemLocation
 import gups.core.model.MobProto
-import gups.core.rules.DefaultRules
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
-class InitiativeTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class InitiativeTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   private val ogre = Label("//t:ogre")
   private val imp = Label("//t:imp")
   private val extra =
     listOf(
-      MobProto(ogre, "an ogre", listOf("ogre"), hp = 30),
-      MobProto(imp, "an imp", listOf("imp"), hp = 5),
+      MobProto(ogre, "an ogre", listOf("ogre"), vitals = mapOf(fs.health to 30)),
+      MobProto(imp, "an imp", listOf("imp"), vitals = mapOf(fs.health to 5)),
     )
 
   @Test
@@ -49,7 +71,7 @@ class InitiativeTest {
     f.w.startCombat(p, i)
     f.runTo(8)
     assertFalse(i.inWorld)
-    assertEquals(50, p.hp)
+    assertEquals(50, p.current(fs.health))
     assertTrue(f.w.room(T.HALL).items.any { it.name == "the corpse of an imp" })
     assertEquals(50L, p.xp)
   }
@@ -65,7 +87,7 @@ class InitiativeTest {
     f.runTo(8)
     assertFalse(i.inWorld, "the imp died")
     assertEquals(T.YARD, p.room.label, "Ann died and respawned")
-    assertEquals(1, p.hp)
+    assertEquals(1, p.current(fs.health))
     assertFalse(p.isEngaged)
     assertContains(f.out(p), "You are DEAD!")
   }
@@ -82,7 +104,7 @@ class InitiativeTest {
     f.input(p, "flee")
     f.w.act(g, "cast zap ann")
     f.run()
-    assertEquals(45, p.hp, "the zap landed")
+    assertEquals(45, p.current(fs.health), "the zap landed")
     assertNotEquals(T.HALL, p.room.label, "the flee went through")
     assertFalse(p.isEngaged)
     assertFalse(g.isEngaged)
@@ -100,7 +122,7 @@ class InitiativeTest {
     f.input(p, "flee")
     f.w.act(g, "cast zap ann")
     f.run()
-    assertEquals(50, p.hp, "Ann was gone before the goblin acted")
+    assertEquals(50, p.current(fs.health), "Ann was gone before the goblin acted")
   }
 
   @Test
@@ -116,7 +138,7 @@ class InitiativeTest {
     f.input(p, "flee")
     f.w.act(g, "cast zap ann")
     f.run() // pulse 16: the new roll must order this action pulse
-    assertEquals(45, p.hp, "the goblin acted before Ann's flee")
+    assertEquals(45, p.current(fs.health), "the goblin acted before Ann's flee")
   }
 
   @Test
@@ -138,7 +160,7 @@ class InitiativeTest {
       FixedRules(toHit = 0, initiative = mapOf("Ann" to 20, "a goblin" to 20, "an ogre" to 20))
     val f = Fixture(rules = rules, protos = T.protos(extraMobs = extra))
     val p = f.player("Ann")
-    p.hp = 4
+    f.setVital(p, fs.health, 4)
     val g = f.mob()
     val healer = f.mob(ogre)
     g.skills[T.ZAP] = 100
@@ -151,7 +173,7 @@ class InitiativeTest {
     f.run()
     assertTrue(p.inWorld)
     assertEquals(T.HALL, p.room.label)
-    assertEquals(9, p.hp)
+    assertEquals(9, p.current(fs.health))
   }
 
   @Test
@@ -168,7 +190,7 @@ class InitiativeTest {
     f.w.act(g, "cast zap ann")
     f.run()
     assertTrue(g.isStunned)
-    assertEquals(50, p.hp)
+    assertEquals(50, p.current(fs.health))
     assertEquals(1, g.actionQueue.size)
 
     // Same tier: the stun lands, but the goblin still acts.
@@ -184,13 +206,13 @@ class InitiativeTest {
     f2.w.act(g2, "cast zap ann")
     f2.run()
     assertTrue(g2.isStunned)
-    assertEquals(45, p2.hp)
+    assertEquals(45, p2.current(fs.health))
   }
 
   @Test
   fun `replays with the same seed are identical`() {
     fun fight(seed: Long): String {
-      val f = Fixture(seed = seed, rules = DefaultRules())
+      val f = Fixture(seed = seed, rules = FixtureRules(fs))
       val p = f.player("Ann", hp = 40)
       val s = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
       f.mob()
@@ -199,7 +221,7 @@ class InitiativeTest {
       f.input(p, "kill goblin")
       f.input(p, "kill 2.goblin")
       f.run(200)
-      return f.sink(p).transcript + "|${p.hp}|${p.xp}|${p.room.label}|${s.location}"
+      return f.sink(p).transcript + "|${p.current(fs.health)}|${p.xp}|${p.room.label}|${s.location}"
     }
     val a = fight(42)
     assertEquals(a, fight(42))

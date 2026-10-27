@@ -7,6 +7,7 @@ import gups.core.model.DoorState
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.world.TOMBSTONE
+import gups.core.world.changeVital
 import gups.core.world.handle
 import gups.core.world.spawnItem
 import kotlin.io.path.deleteExisting
@@ -25,7 +26,7 @@ class ReloadTest {
         room("start", name = "Old Start", commands = {"hello": _hello},
              exits = [exit("north", ":hall", door = door(state = "closed"))], spawns = [spawn(":rat")])
         room("hall", exits = [exit("south", ":start", door = door(state = "closed"))])
-        mob("rat", hp = 10, level = 1)
+        mob("rat", vitals = vitals(hp = 10), level = 1)
         item("gem")
         item("pebble")
     """
@@ -42,7 +43,7 @@ class ReloadTest {
     val p = f.player()
     p.role = Role.BUILDER
     val rat = f.w.actors.filterIsInstance<Mob>().single()
-    rat.hp = 4
+    f.w.changeVital(rat, "hp", 4 - rat.current("hp"))
     f.w.spawnItem(Label("//zones/z:gem"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:pebble"), ItemLocation.InRoom(p.room.id, 0))
     // Opened in play: stays open even though the prototype still says closed.
@@ -54,7 +55,7 @@ class ReloadTest {
       start
         .replace("Hello, old.", "Hello, new.")
         .replace("Old Start", "New Start")
-        .replace("hp = 10, level = 1", "hp = 30, level = 5")
+        .replace("vitals = vitals(hp = 10), level = 1", "vitals = vitals(hp = 30), level = 5")
         .replace("item(\"gem\")\n", "")
         .replace("item(\"pebble\")\n", ""),
     )
@@ -65,8 +66,8 @@ class ReloadTest {
     assertContains(out, "despawned: its prototype is gone")
     assertEquals("New Start", p.room.name)
     assertEquals(DoorState.OPEN, p.room.exits.values.single().door!!.state)
-    assertEquals(30, rat.maxHp, "max hp followed the prototype: it was never changed in play")
-    assertEquals(4, rat.hp, "current hp is live state")
+    assertEquals(30, rat.max("hp"), "max hp followed the prototype: it was never changed in play")
+    assertEquals(4, rat.current("hp"), "current hp is live state")
     assertEquals(5, rat.level)
     assertEquals(TOMBSTONE, p.inventory.single().kind)
     assertTrue(p.room.items.isEmpty())

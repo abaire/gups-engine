@@ -210,8 +210,20 @@ fun World.flush(s: Session) {
   if (text.isNotEmpty()) s.player?.let { s.sink.prompt(promptFor(it)) }
 }
 
-/** The prompt shown after each burst of output. */
-fun promptFor(p: Player): String = "<${p.hp}hp ${p.mana}m ${p.move}mv> "
+/** The prompt shown after each burst of output: the world's template with [p]'s vitals in it. */
+fun World.promptFor(p: Player): String =
+  PROMPT_PLACEHOLDER.replace(schema.promptTemplate) { m ->
+    val name = m.groupValues[1]
+    val vital = name.removePrefix("max_")
+    when {
+      name in schema.vitalNames -> p.current(name).toString()
+      name.startsWith("max_") && vital in schema.vitalNames -> p.max(vital).toString()
+      else -> m.value
+    }
+  }
+
+/** The `{vital}` and `{max_vital}` placeholders of a prompt template. */
+val PROMPT_PLACEHOLDER = Regex("\\{([a-z][a-z0-9_]*)}")
 
 /** Queues [text] for a session that may have no character yet, such as during login. */
 fun World.sendSession(s: Session, text: String) {

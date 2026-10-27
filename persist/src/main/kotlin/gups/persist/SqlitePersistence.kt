@@ -10,6 +10,7 @@ import gups.core.model.ItemProto
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.Room
+import gups.core.model.SchemaNames
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
 import gups.core.world.ItemHistory
@@ -32,6 +33,9 @@ import gups.core.world.tombstone
 import gups.core.world.upgrade
 import gups.core.world.zoneResetDeadlines
 import java.nio.file.Path
+
+/** What a server wipe removed, for the startup log. */
+data class WipeSummary(val backup: Path, val characters: Int, val items: Int)
 
 /** What a restore did, for the startup log. */
 data class RestoreReport(
@@ -67,8 +71,15 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
    */
   @Volatile var worldCommit: String? = null
 
+  /**
+   * The schema names this database was started with (`meta.world_schema`), as JSON; null before the
+   * first start.
+   */
+  @Volatile var worldSchema: String? = null
+
   init {
     worldCommit = db.meta()["world_commit"]
+    worldSchema = db.meta()["world_schema"]
     db.entityRows().forEach { entityRows[it.id] = it }
     db.playerRows().forEach { playerRows[it.id] = it }
     zoneRows.putAll(db.zoneStates())
@@ -76,6 +87,41 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   }
 
   // ---- Startup --------------------------------------------------------------------------------
+
+  /**
+   * Compares [names] with the schema this database was started with. The first start records it.
+   * Returns why the server must not start on this data, or null.
+   */
+  fun checkSchema(names: SchemaNames): String? {
+    val saved = worldSchema
+    if (saved == null) {
+      recordSchema(names)
+      return null
+    }
+    return SchemaRecord.mismatch(saved, names)
+  }
+
+  private fun recordSchema(names: SchemaNames) {
+    val text = SchemaRecord.encode(names)
+    db.setMeta("world_schema", text)
+    worldSchema = text
+  }
+
+  /**
+   * A server wipe: takes a `prewipe` backup, deletes every character and item, and records [names].
+   * Accounts, restrictions, session tokens and invites stay. The saved world state is dropped by
+   * restoring with `fresh`.
+   */
+  fun wipe(names: SchemaNames): WipeSummary {
+    val backup = backup(Backups.Kind.PREWIPE)
+    val summary =
+      WipeSummary(backup, playerRows.size, entityRows.values.count { it.kind == "item" })
+    db.wipeCharacters()
+    playerRows.clear()
+    entityRows.values.removeIf { it.kind == "item" }
+    recordSchema(names)
+    return summary
+  }
 
   /**
    * How to build the world: saved pulse and id counters, and saved room ids. With [fresh] the world
@@ -146,7 +192,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         continue
       }
       val m = world.restoreMob(EntityId(row.id), proto, room, p.index)
-      applyMob(m, p)
+      applyMob(world, m, p)
       p.spawn?.let { s -> world.roomOrNull(Label(s.room))?.let { world.bindSpawn(m, it, s.rule) } }
       m.protoVersion = row.protoVersion
       world.upgrade(m, proto.version)
@@ -195,7 +241,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     val recall = Label(p.recall).takeIf { world.roomOrNull(it) != null } ?: room.label
     val player =
       world.restorePlayer(EntityId(row.id), row.name, room, p.index, recall, row.accountId)
-    applyPlayer(player, p)
+    applyPlayer(world, player, p)
     val notes = mutableListOf<String>()
     val deleted = LinkedHashSet<Long>()
     placeItems(
@@ -220,6 +266,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     b.meta["next_entity_id"] = nextId.toString()
     b.meta["next_handle"] = nextHandle.toString()
     worldCommit?.let { b.meta["world_commit"] = it }
+    worldSchema?.let { b.meta["world_schema"] = it }
     val excluded = world.checkpointExclusions
     for (e in world.allEntities) {
       // Debug spawns are never saved.

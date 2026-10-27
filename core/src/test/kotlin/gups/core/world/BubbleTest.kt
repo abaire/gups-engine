@@ -2,6 +2,8 @@ package gups.core.world
 
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.fixtures.FixtureSchema
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Direction
 import gups.core.model.DormantRecovery
 import gups.core.model.ExitProto
@@ -13,7 +15,6 @@ import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.ZoneProto
-import gups.core.rules.Regen
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,6 +22,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.params.ParameterizedClass
+import org.junit.jupiter.params.provider.MethodSource
 
 /** A corridor `//c:r0` – `//c:r9`, east/west, plus a rat and a crumb. */
 object C {
@@ -54,14 +59,37 @@ object C {
         },
       mobs =
         listOf(
-          MobProto(RAT, "a rat", listOf("rat"), hp = 100, dormantRecovery = recovery, think = think)
+          MobProto(
+            RAT,
+            "a rat",
+            listOf("rat"),
+            vitals = mapOf(FixtureSchemas.current.health to 100),
+            dormantRecovery = recovery,
+            think = think,
+          )
         ),
       items = listOf(ItemProto(CRUMB, "a crumb", listOf("crumb"))),
       zones = listOf(ZoneProto("c", resetPulses = resetPulses)),
     )
 }
 
-class BubbleTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class BubbleTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   private fun active(f: Fixture) = f.w.rooms.filter { !it.isDormant }.map { it.label.name }.toSet()
 
   @Test
@@ -208,7 +236,7 @@ class BubbleTest {
       )
     val room = f.w.room(C.r(9))
     val rat = room.actors.single()
-    f.w.damage(rat, 1000, gups.core.model.DamageType.BLUDGEON)
+    f.hurt(rat, 1000)
     assertFalse(rat.inWorld)
     val crumb = f.w.spawnItem(C.CRUMB, ItemLocation.InRoom(room.id, 0))
     crumb.decayAt = 300
@@ -252,7 +280,23 @@ class BubbleTest {
   }
 }
 
-class DormantRecoveryTest {
+@ParameterizedClass
+@MethodSource("gups.core.world.SchemaArgs#all")
+class DormantRecoveryTest(private val fs: FixtureSchema) {
+  init {
+    FixtureSchemas.current = fs
+  }
+
+  @BeforeEach
+  fun useSchema() {
+    FixtureSchemas.current = fs
+  }
+
+  @AfterEach
+  fun resetSchema() {
+    FixtureSchemas.current = FixtureSchemas.FANTASY
+  }
+
   /** A rat at 10/100 hp, dormant from pulse 0 until a player arrives at pulse 1201. */
   private fun wakeAfter(
     recovery: DormantRecovery,
@@ -261,7 +305,7 @@ class DormantRecoveryTest {
   ): gups.core.model.Mob {
     val f = Fixture(protos = C.protos(recovery = recovery), scripts = host, bubble = true)
     val rat = f.w.spawnMob(C.RAT, f.w.room(C.r(9)))
-    rat.hp = 10
+    f.setVital(rat, fs.health, 10)
     setup(f, rat)
     f.runTo(1200)
     f.player("Ann", at = C.r(9))
@@ -272,13 +316,13 @@ class DormantRecoveryTest {
 
   @Test
   fun `full recovery resets vitals unless a no_regen affect is still running`() {
-    assertEquals(100, wakeAfter(DormantRecovery.FULL).hp)
+    assertEquals(100, wakeAfter(DormantRecovery.FULL).current(fs.health))
     val held =
       wakeAfter(
         DormantRecovery.FULL,
         { f, rat -> f.w.applyAffect(rat, "weakened", 3600, flags = setOf("no_regen")) },
       )
-    assertEquals(10, held.hp)
+    assertEquals(10, held.current(fs.health))
     // Expired during dormancy: the boss is back to full.
     assertEquals(
       100,
@@ -286,19 +330,19 @@ class DormantRecoveryTest {
           DormantRecovery.FULL,
           { f, rat -> f.w.applyAffect(rat, "weakened", 600, flags = setOf("no_regen")) },
         )
-        .hp,
+        .current(fs.health),
     )
   }
 
   @Test
   fun `none keeps vitals exactly as they were`() {
-    assertEquals(10, wakeAfter(DormantRecovery.NONE).hp)
+    assertEquals(10, wakeAfter(DormantRecovery.NONE).current(fs.health))
   }
 
   @Test
   fun `regen catches up one world tick at a time, piecewise across affects that expired`() {
     // 10 world ticks (120 … 1200) at 3 hp each (1 + con/4 + level/2).
-    assertEquals(40, wakeAfter(DormantRecovery.REGEN).hp)
+    assertEquals(40, wakeAfter(DormantRecovery.REGEN).current(fs.health))
     // no_regen until pulse 600 suppresses exactly the ticks before it; 600 … 1200 regenerate.
     assertEquals(
       28,
@@ -306,12 +350,12 @@ class DormantRecoveryTest {
           DormantRecovery.REGEN,
           { f, rat -> f.w.applyAffect(rat, "weakened", 600, flags = setOf("no_regen")) },
         )
-        .hp,
+        .current(fs.health),
     )
     // Slowed regen (a halving modifier) until 600: 4 slow ticks of 1, then 6 of 3.
     val host = RecordingHost()
     host.modifiers["slow"] = { _, _, base ->
-      (base as Regen).let { Regen(it.hp / 2, it.mana / 2, it.move / 2) }
+      @Suppress("UNCHECKED_CAST") (base as Map<String, Int>).mapValues { it.value / 2 }
     }
     val slowed =
       wakeAfter(
@@ -321,7 +365,7 @@ class DormantRecoveryTest {
         },
         host,
       )
-    assertEquals(32, slowed.hp)
+    assertEquals(32, slowed.current(fs.health))
     assertTrue(slowed.affects.isEmpty())
   }
 }

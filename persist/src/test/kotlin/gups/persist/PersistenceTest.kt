@@ -13,12 +13,14 @@ import gups.core.model.Mob
 import gups.core.world.Diagnostic
 import gups.core.world.ScriptHost
 import gups.core.world.TOMBSTONE
+import gups.core.world.VitalState
 import gups.core.world.World
 import gups.core.world.applyAffect
 import gups.core.world.checkInvariants
 import gups.core.world.damage
 import gups.core.world.moveItem
 import gups.core.world.quit
+import gups.core.world.restoreActorNumbers
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
@@ -77,7 +79,7 @@ class PersistenceTest {
     val ann = a.login("Ann")
     val hall = a.w.room(P.HALL)
     val rat = a.w.actors.filterIsInstance<Mob>().first()
-    a.w.damage(rat, 3, DamageType.FIRE)
+    a.w.damage(rat, mapOf("hp" to 3), DamageType("fire"))
     rat.customAttributes["t:angry"] = AttrValue.B(true)
     a.w.setDoor(hall, Direction.SOUTH, DoorState.OPEN)
     val bag = a.w.spawnItem(P.BAG, ItemLocation.Carried(ann.id))
@@ -99,7 +101,7 @@ class PersistenceTest {
     assertEquals(DoorState.OPEN, b.w.room(P.HALL).exits.values.single().door!!.state)
     assertEquals(DoorState.OPEN, b.w.room(P.VAULT).exits.values.single().door!!.state)
     val rat2 = b.w.actor(ratId) as Mob
-    assertEquals(rat.hp, rat2.hp, "vitals are saved as they were")
+    assertEquals(rat.current("hp"), rat2.current("hp"), "vitals are saved as they were")
     assertEquals(AttrValue.B(true), rat2.customAttributes["t:angry"])
     assertEquals(2, b.w.actors.count { it is Mob }, "both spawns came back, none refilled")
     assertEquals(listOf("a gem"), b.w.room(P.HALL).items.map { it.name })
@@ -129,7 +131,13 @@ class PersistenceTest {
     val a = PersistWorld(file)
     val ann = a.login("Ann")
     val rats = a.w.actors.filterIsInstance<Mob>()
-    rats[0].maxHp = 50
+    a.w.restoreActorNumbers(
+      rats[0],
+      stats = rats[0].baseStats.toMap(),
+      vitals = mapOf("hp" to VitalState(rats[0].current("hp"), 50)),
+      resists = rats[0].resists.toMap(),
+      condition = rats[0].condition,
+    )
     rats[0].dirty = true
     a.w.spawnItem(P.GEM, ItemLocation.Carried(ann.id))
     a.w.spawnItem(P.GEM, ItemLocation.InRoom(a.w.room(P.HALL).id, 0))
@@ -141,7 +149,7 @@ class PersistenceTest {
     val rats2 = b.w.actors.filterIsInstance<Mob>().sortedBy { it.id }
     assertEquals(
       listOf(50, 30),
-      rats2.map { it.maxHp },
+      rats2.map { it.max("hp") },
       "the changed field stays, the unchanged one follows the prototype",
     )
     assertTrue(
@@ -220,7 +228,9 @@ class PersistenceTest {
     val ann = a.login("Ann")
     a.w.spawnItem(P.GEM, ItemLocation.Carried(ann.id))
     a.w.spawnItem(P.GEM, ItemLocation.InRoom(a.w.room(P.HALL).id, 0))
-    a.w.actors.filterIsInstance<Mob>().forEach { a.w.damage(it, 100, DamageType.FIRE) }
+    a.w.actors.filterIsInstance<Mob>().forEach {
+      a.w.damage(it, mapOf("hp" to 100), DamageType("fire"))
+    }
     a.w.quit(ann)
     a.save()
     a.close()
@@ -296,7 +306,7 @@ class PersistenceTest {
       }
     val a = PersistWorld(file, scripts = host)
     val rat = a.w.actors.filterIsInstance<Mob>().first()
-    a.w.damage(rat, 100, DamageType.FIRE)
+    a.w.damage(rat, mapOf("hp" to 100), DamageType("fire"))
     quarantined += "t"
     a.run(120)
     val respawnAt = 1 + 300L

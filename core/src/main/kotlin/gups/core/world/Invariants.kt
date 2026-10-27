@@ -47,9 +47,8 @@ fun World.invariantViolations(): List<Violation> {
     if (a.room.actorIndex[a.id] !== a) out += "$a: missing from ${a.room.label}"
     if (a.trackIndex !in 0 until a.room.trackSize)
       out += "$a: track index ${a.trackIndex} outside ${a.room.label}"
-    if (a.hp > a.maxHp) out += "$a: hp ${a.hp} > max ${a.maxHp}"
-    if (a.mana > a.maxMana) out += "$a: mana ${a.mana} > max ${a.maxMana}"
-    if (a.move > a.maxMove) out += "$a: move ${a.move} > max ${a.maxMove}"
+    for ((name, v) in a.vitalMap) if (v.current > v.max)
+      out += "$a: $name ${v.current} > max ${v.max}"
     if (a.waitState > 0 && a.casting != null) out += "$a: both in recovery and casting"
     if (a.actionQueue.size > ACTION_QUEUE_MAX) out += "$a: action queue holds ${a.actionQueue.size}"
     for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id))

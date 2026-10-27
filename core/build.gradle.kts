@@ -1,4 +1,7 @@
-plugins { id("gups.kotlin-module") }
+plugins {
+  id("gups.kotlin-module")
+  `java-test-fixtures`
+}
 
 dependencies {
   // WorldLoop exposes suspend functions and its dispatcher.

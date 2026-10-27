@@ -171,7 +171,10 @@ class WebClientTest {
     frames.until("""{"t":"prompt","d":"What will your new character be called? "}""")
     ws.sendText("""{"t":"input","d":"Tess"}""", true).get()
     frames.until("Exits: north.")
-    assertContains(frames.until("\"p\":\"Char.Vitals\""), "\"maxhp\":")
+    val vitals = frames.until("\"p\":\"Char.Vitals\"")
+    assertContains(vitals, "\"maxhp\":")
+    assertContains(vitals, "\"p\":\"Char.Schema\"")
+    assertContains(vitals, "\"label\":\"Hit points\"")
     frames.until("\"p\":\"Room.Info\"")
     ws.sendText("""{"t":"input","d":"north"}""", true).get()
     frames.until("Welcome to the tutorial")
@@ -250,8 +253,18 @@ class WebClientTest {
           ExpectedConditions.textToBePresentInElementLocated(By.id("output"), "Exits: north.")
         )
         wait.until(
-          ExpectedConditions.attributeContains(By.cssSelector(".bar.hp"), "data-value", "/")
+          ExpectedConditions.attributeContains(
+            By.cssSelector(".bar[data-vital='hp']"),
+            "data-value",
+            "/",
+          )
         )
+        // One bar per vital of the schema, in order, each with its label.
+        val labels =
+          driver.findElements(By.cssSelector("#vitals .bar .label span:first-child")).map {
+            it.text
+          }
+        assertEquals(listOf("Hit points", "Mana", "Movement"), labels)
         input.sendKeys("north", Keys.ENTER)
         wait.until(
           ExpectedConditions.textToBePresentInElementLocated(

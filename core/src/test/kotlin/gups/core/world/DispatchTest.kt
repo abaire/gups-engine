@@ -87,15 +87,15 @@ class DispatchTest {
     host.handlers[HookName.ON_DAMAGE] = { w, owner, ctx ->
       if (owner === ctx.target) {
         depth++
-        w.damage(ctx.target, 1, DamageType.FIRE)
+        w.damage(ctx.target, mapOf("hp" to 1), DamageType("fire"))
       }
       null
     }
     val f = Fixture(scripts = host)
     val g = f.mob(T.DUMMY)
-    f.w.damage(g, 1, DamageType.FIRE)
+    f.w.damage(g, mapOf("hp" to 1), DamageType("fire"))
     assertEquals(CASCADE_MAX_DEPTH, depth)
-    assertEquals(1000 - CASCADE_MAX_DEPTH - 1, g.hp)
+    assertEquals(1000 - CASCADE_MAX_DEPTH - 1, g.current("hp"))
     assertTrue(f.w.diagnostics.any { it.kind == "cascade" })
   }
 

@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.Prototypes
+import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
 import gups.core.world.CommandAliases
 import gups.core.world.CommandRegistry
@@ -33,13 +34,20 @@ internal val SEMANTICS: StarlarkSemantics = StarlarkSemantics.DEFAULT
 internal val FILE_OPTIONS: FileOptions =
   FileOptions.builder().requireLoadStatementsFirst(true).allowToplevelRebinding(false).build()
 
-/** The builtins every package file sees: declarations, effect primitives and constants. */
-internal val PACKAGE_GLOBALS: Map<String, Any> by lazy {
+/**
+ * The builtins every package file sees under [schema]: declarations, effect primitives, constants
+ * and the schema's constructors.
+ */
+internal fun packageGlobals(schema: WorldSchema): Map<String, Any> {
   val b = ImmutableMap.builder<String, Any>()
-  Starlark.addMethods(b, DeclarationBuiltins())
-  b.putAll(DeclarationBuiltins.CONSTANTS)
-  b.build()
+  Starlark.addMethods(b, DeclarationBuiltins(schema))
+  b.putAll(DeclarationBuiltins.constants(schema))
+  b.putAll(schemaGlobals(schema))
+  return b.build()
 }
+
+/** The builtins under no schema, which is what the API model documents. */
+internal val PACKAGE_GLOBALS: Map<String, Any> by lazy { packageGlobals(WorldSchema.EMPTY) }
 
 /**
  * The outcome of loading packages. Loading is all-or-nothing per package: a package with any error,
@@ -100,13 +108,20 @@ class ScriptLoader(
   /** Plugin namespaces by id, predeclared in every package and test file. */
   val pluginGlobals: Map<String, Any> = emptyMap(),
 ) {
-  private val packageGlobals: Map<String, Any> = PACKAGE_GLOBALS + pluginGlobals
+  /** The world's `MODULE.gups`; a world without a valid one has an empty schema. */
+  val module: WorldModule by lazy { WorldModule.read(dir).first }
+
+  val schema: WorldSchema
+    get() = module.schema
+
+  /** The builtins of every package, test and `@eval` file of this world. */
+  internal val globals: Map<String, Any> by lazy { packageGlobals(schema) + pluginGlobals }
 
   /**
    * Engine command names and the world's aliases for them, which no global command or exit may
    * take.
    */
-  private val engineVerbs: Set<String> by lazy { engineVerbs(WorldModule.read(dir).first.aliases) }
+  private val engineVerbs: Set<String> by lazy { engineVerbs(module.aliases) }
 
   /**
    * Loads [requested] (package paths such as `zones/tutorial`) and their dependencies. [tests] are
@@ -161,7 +176,7 @@ class ScriptLoader(
       }
       drain()
       for (t in tests) {
-        evalFile(t, testGlobals + pluginGlobals, test = true)
+        evalFile(t, schemaGlobals(schema) + testGlobals + pluginGlobals, test = true)
         drain()
       }
       return finish()
@@ -212,7 +227,7 @@ class ScriptLoader(
       states[p] = st
       st.startedNanos = System.nanoTime()
       val file = Label("//$p:${WorldDir.PACKAGE_FILE}")
-      val ctx = evalFile(file, packageGlobals, header = true)
+      val ctx = evalFile(file, globals, header = true)
       st.headerDone = true
       if (ctx != null && !ctx.packageDeclared && !st.failed) {
         st.errors += LoadError(p, "package", "package.star must call package(...)", file.v, 1, 1)
@@ -236,7 +251,7 @@ class ScriptLoader(
         )
       val owner = header(file.pkg) ?: return fail("no package //${file.pkg} for $file")
       if (owner.failed) return fail("//${file.pkg} failed to load")
-      evalFile(file, packageGlobals)
+      evalFile(file, globals)
       return modules[file] ?: fail("$file failed to load")
     }
 
@@ -338,6 +353,13 @@ class ScriptLoader(
         return null
       }
       if (!test && st.pkg.kind == PackageKind.RULES && file.name == RULES_FILE) {
+        val missing = missingRulesExports(module)
+        if (missing.isNotEmpty()) {
+          for (name in missing) {
+            err(LoadError(st.pkg.path, "rules", "the rules package must define $name(...)", file.v))
+          }
+          return null
+        }
         val unknown = unknownRulesExports(module)
         if (unknown.isNotEmpty()) {
           for (name in unknown) {
@@ -387,8 +409,20 @@ class ScriptLoader(
       propagate()
       val ok =
         states.values.filter { it.contentDone && !it.failed }.associate { it.pkg.path to it.pkg }
-      val errors = requestedMissing + states.values.flatMap { it.errors }
-      return LoadResult(ok, errors, modules, testModules, testErrors)
+      var errors = requestedMissing + states.values.flatMap { it.errors }
+      var live = ok
+      if (RULES_PACKAGE in live) {
+        val problems =
+          dryRunRules(LoadResult(live, errors, modules, testModules, testErrors), schema, limits)
+        if (problems.isNotEmpty()) {
+          errors +=
+            problems.map {
+              LoadError(RULES_PACKAGE, "rules", "dry run: $it", "//$RULES_PACKAGE:$RULES_FILE")
+            }
+          live = live - RULES_PACKAGE
+        }
+      }
+      return LoadResult(live, errors, modules, testModules, testErrors)
     }
 
     val live: List<PkgState>
@@ -593,6 +627,16 @@ private fun bindingLine(file: StarlarkFile, name: String): Int? =
 
 /** The file of a rules package whose functions the engine calls. */
 internal const val RULES_FILE = "combat.star"
+
+/** The package the engine reads its rules from. */
+const val RULES_PACKAGE = "rules"
+
+/** The [RulesExport]s that [module] doesn't define as functions; every export is required. */
+internal fun missingRulesExports(module: Module): List<String> =
+  RulesExport.entries
+    .map { it.scriptName }
+    .filter { module.globals[it] !is StarlarkFunction }
+    .sorted()
 
 /**
  * Public top-level functions of a rules [module] that aren't a [RulesExport], sorted. The engine

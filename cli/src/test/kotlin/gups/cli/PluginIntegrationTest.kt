@@ -23,6 +23,7 @@ import gups.pluginapi.testplugins.WeatherRainGmcpPlugin
 import gups.pluginapi.testplugins.WrongVersionPlugin
 import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.nio.file.Path
 import kotlin.reflect.KClass
 import kotlin.test.Test
@@ -45,7 +46,7 @@ class PluginIntegrationTest {
             room("a", name = "Glade", desc = "A glade.", size = LARGE, exits = [exit("north", ":b")])
             room("b", name = "Cave", desc = "A cave.", flags = ["dead_end_ok"], exits = [exit("south", ":a")], on_enter = entered)
             skill("drench", kind = "spell", target = "none", effect = weather.soak(pulses = 5))
-            skill("deluge", kind = "spell", target = "none", effect = sequence(heal(dice = "1d1"), weather.soak()))
+            skill("deluge", kind = "spell", target = "none", effect = sequence(heal(dice = "1d1", vital = "hp"), weather.soak()))
         """,
       "zones/z/z_test.star" to
         """
@@ -121,9 +122,9 @@ class PluginIntegrationTest {
       .resolve("MODULE.gups")
       .toFile()
       .writeText(
-        "module(api_version = 1, plugins = {" +
-          pins.entries.joinToString(", ") { "\"${it.key}\": \"${it.value}\"" } +
-          "})\n"
+        TestWorlds.module(
+          "plugins = {" + pins.entries.joinToString(", ") { "\"${it.key}\": \"${it.value}\"" } + "}"
+        )
       )
     return root
   }

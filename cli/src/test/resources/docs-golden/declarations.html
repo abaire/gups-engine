@@ -35,7 +35,7 @@
 <tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
 <tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
 <tr id="exit.entry_index"><td><code>entry_index</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
-<tr id="exit.senses_blocked"><td><code>senses_blocked</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td><code>sight</code>, <code>sound</code>, <code>noise</code>, <code>spell</code></td><td>Perception and spell channels blocked by this exit.</td></tr>
+<tr id="exit.senses_blocked"><td><code>senses_blocked</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Perception and spell channels blocked by this exit.</td></tr>
 <tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
 <tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
 </tbody>
@@ -53,6 +53,12 @@
 <tr id="module.api_version"><td><code>api_version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Script API version the world pins.</td></tr>
 <tr id="module.checkpoint_minutes"><td><code>checkpoint_minutes</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>30</code></td><td></td><td>Minutes between routine database checkpoints.</td></tr>
 <tr id="module.start_room"><td><code>start_room</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Room label where new characters start.</td></tr>
+<tr id="module.stats"><td><code>stats</code></td><td><code>list[str | stat]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The stats actors have, each a name or stat(name, label).</td></tr>
+<tr id="module.vitals"><td><code>vitals</code></td><td><code>list[str | vital]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The vitals actors have, each a name or vital(name, label).</td></tr>
+<tr id="module.damage_types"><td><code>damage_types</code></td><td><code>list[str]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The damage types of the world.</td></tr>
+<tr id="module.unarmed_damage_type"><td><code>unarmed_damage_type</code></td><td><code>str</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The damage type of an unarmed auto-attack; one of damage_types.</td></tr>
+<tr id="module.channels"><td><code>channels</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Perception channels beyond sight, sound and noise.</td></tr>
+<tr id="module.prompt"><td><code>prompt</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'&lt;' + '{v}v ' per vital + '&gt; '</code></td><td></td><td>The telnet prompt, with {vital} and {max_vital} placeholders.</td></tr>
 <tr id="module.plugins"><td><code>plugins</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Plugin jars in plugins/&lt;id&gt;.jar, each pinned by its 'sha256:&lt;hex&gt;' checksum.</td></tr>
 <tr id="module.aliases"><td><code>aliases</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Alias words for engine commands, such as {&quot;l&quot;: &quot;look&quot;}.</td></tr>
 <tr id="module.prefixes"><td><code>prefixes</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Single characters that stand for an engine command, such as {&quot;'&quot;: &quot;say&quot;}.</td></tr>
@@ -63,8 +69,8 @@
 <p class="intro">Predeclared values in every package.</p>
 <section id="ALL" class="entry">
 <h3><code>ALL</code> <span class="since">since api_version 1</span></h3>
-<p>All perception and spell channels: sight, sound, noise, spell.</p>
-<p>Type <code>list[str]</code>, value <code>[&quot;sight&quot;, &quot;sound&quot;, &quot;noise&quot;, &quot;spell&quot;]</code></p>
+<p>Every channel name, built-in and declared by the world.</p>
+<p>Type <code>list[str]</code>, value <code>[&quot;sight&quot;, &quot;sound&quot;, &quot;noise&quot;]</code></p>
 </section>
 </main>
 </body>

@@ -4,6 +4,7 @@ import gups.core.Capabilities
 import gups.core.Label
 import gups.core.Restriction
 import gups.core.Role
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.RoomProto
@@ -123,8 +124,8 @@ class ToolsTest {
 
     // Killing one: no XP, and the corpse and its loot are debug.
     val g = goblins.first()
-    g.hp = 1
-    f.w.damage(g, 5, gups.core.model.DamageType.BLUDGEON, source = b)
+    f.setVital(g, "hp", 1)
+    f.hurt(g, 5, b)
     assertEquals(0, b.xp)
     val corpse = f.w.room(T.HALL).items.single { it.name.startsWith("the corpse") }
     assertTrue(corpse.debug && corpse.contents.all(Item::debug))
@@ -222,7 +223,13 @@ class ToolsTest {
 
   @Test
   fun `reload is refused in production`() {
-    val w = World(T.protos(), FixedRules(), config = WorldConfig(production = true))
+    val w =
+      World(
+        T.protos(),
+        FixtureSchemas.FANTASY.schema,
+        FixedRules(),
+        config = WorldConfig(production = true),
+      )
     val p = w.spawnPlayer("Ida", T.HALL).also { it.role = Role.INSTRUCTOR }
     val sink = gups.core.CapturingSink()
     w.handle(gups.core.WorldControlEvent.Connect(gups.core.SessionId(1), sink))

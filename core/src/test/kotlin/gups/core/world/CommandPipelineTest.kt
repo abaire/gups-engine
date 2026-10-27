@@ -276,7 +276,7 @@ class CommandPipelineTest {
     assertContains(f.out(p), "You stop casting.")
     assertFalse(p.isCasting)
     assertTrue(p.actionQueue.isEmpty())
-    assertEquals(50, p.mana, "no cost paid")
+    assertEquals(50, p.current("mana"), "no cost paid")
     assertEquals(0, p.waitState, "no lag applied")
     assertTrue(p.isEngaged)
 

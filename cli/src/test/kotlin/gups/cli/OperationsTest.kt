@@ -5,6 +5,7 @@ import gups.core.Label
 import gups.core.WorldControlEvent
 import gups.core.world.DeployOutcome
 import gups.core.world.World
+import gups.core.world.changeVital
 import gups.pluginapi.testplugins.TidesPlugin
 import gups.pluginapi.testplugins.WeatherPlugin
 import gups.pluginapi.testplugins.buildPluginJar
@@ -504,7 +505,10 @@ class OperationsTest {
       }
       r.onWorld { it.checkpointNow("test") }
       // Changed after the last checkpoint, so only the quit's own checkpoint can save it.
-      r.onWorld { w -> w.players.single { it.accountId == ann.id }.hp = 7 }
+      r.onWorld { w ->
+        val p = w.players.single { it.accountId == ann.id }
+        w.changeVital(p, "hp", 7 - p.current("hp"))
+      }
 
       val res =
         http.send(
@@ -518,7 +522,7 @@ class OperationsTest {
       assertEquals(200, res.statusCode(), res.body())
 
       assertFalse(r.onWorld { it.players.any { p -> p.accountId == ann.id } })
-      assertEquals(7, r.onWorld { w -> w.persistence.loadCharacter(w, "Ann")?.hp })
+      assertEquals(7, r.onWorld { w -> w.persistence.loadCharacter(w, "Ann")?.current("hp") })
       assertTrue(accounts.byId(ann.id)!!.disabled)
       assertEquals("roster", accounts.byId(ann.id)!!.disabledReason)
     }

@@ -3,7 +3,6 @@ package gups.core.world
 import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.ModifierPoint
-import gups.core.rules.Regen
 import gups.core.rules.RulesContext
 
 // The modifier chain. Each modifiable rules result is the base value from the rules
@@ -38,14 +37,7 @@ fun World.equipmentSlots(): List<String> {
   slotCache?.let {
     return it
   }
-  val slots =
-    try {
-      rules.equipmentSlots()
-    } catch (e: Exception) {
-      if (config.strict) throw e
-      diagnose("rules", "equipment_slots failed: ${e.message}", e)
-      gups.core.rules.DefaultRules.DEFAULT_SLOTS
-    }
+  val slots = rules.equipmentSlots()
   slotCache = slots
   return slots
 }
@@ -100,13 +92,11 @@ fun World.castAllowed(c: RulesContext): String? =
     },
   )
 
-fun World.moveCost(c: RulesContext): Int =
-  chain(ModifierPoint.MOVE_COST, c, rules.moveCost(c)) { "$it" }.value
+fun World.moveCost(c: RulesContext): Map<String, Int> =
+  chain(ModifierPoint.MOVE_COST, c, rules.moveCost(c)) { it.show() }.value
 
-fun World.regenOf(c: RulesContext): Regen =
-  traced(
-    c,
-    chain(ModifierPoint.REGEN, c, rules.regen(c)) {
-      "{hp ${it.hp}, mana ${it.mana}, move ${it.move}}"
-    },
-  )
+fun World.regenOf(c: RulesContext): Map<String, Int> =
+  traced(c, chain(ModifierPoint.REGEN, c, rules.regen(c)) { it.show() })
+
+private fun Map<String, Int>.show(): String =
+  entries.joinToString(", ", "{", "}") { "${it.key} ${it.value}" }

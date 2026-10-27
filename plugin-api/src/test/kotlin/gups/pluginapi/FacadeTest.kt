@@ -3,6 +3,7 @@ package gups.pluginapi
 import gups.core.Label
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.rules.StartingStats
 import gups.core.world.World
 import gups.core.world.destroy
 import gups.core.world.quit
@@ -11,6 +12,7 @@ import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.ItemFacade
 import gups.pluginapi.host.WorldFacade
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -22,8 +24,17 @@ class FacadeTest {
   private val f = WorldFacade(w, "weather") {}
   private val glade = f.room("//zones/z:a")!!
   private val cave = f.room("//zones/z:b")!!
-  private val ann = ActorFacade(w.spawnPlayer("Ann", Label("//zones/z:a"), hp = 20))
-  private val wolf = ActorFacade(w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a"))))
+  private val ann =
+    ActorFacade(
+      w.spawnPlayer(
+        "Ann",
+        Label("//zones/z:a"),
+        overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+      ),
+      w,
+    )
+  private val wolf =
+    ActorFacade(w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a"))), w)
 
   @Test
   fun `reads`() {
@@ -59,11 +70,11 @@ class FacadeTest {
   fun `verbs`() {
     f.send(ann, "Hello.")
     f.echo(glade, "Thunder.", exclude = listOf(wolf))
-    f.damage(ann, 5, "fire", source = wolf)
-    assertEquals(15, ann.hp)
-    f.heal(ann, 3)
-    assertEquals(18, ann.hp)
-    assertFailsWith<IllegalArgumentException> { f.damage(ann, -1, "fire") }
+    f.damage(ann, 5, "fire", "hp", source = wolf)
+    assertEquals(15, ann.vital("hp"))
+    f.heal(ann, 3, "hp")
+    assertEquals(18, ann.vital("hp"))
+    assertFailsWith<IllegalArgumentException> { f.damage(ann, -1, "fire", "hp") }
     f.applyAffect(ann, "soaked", 10, statDeltas = mapOf("str" to -1), flags = setOf("wet"))
     assertTrue(ann.hasAffect("soaked"))
     assertEquals(listOf("soaked"), ann.affects)
@@ -71,7 +82,7 @@ class FacadeTest {
     assertFalse(f.removeAffect(ann, "soaked"))
     f.teleport(ann, cave)
     assertEquals(cave, ann.room)
-    assertEquals(20, ann.maxHp)
+    assertEquals(20, ann.maxVital("hp"))
     assertEquals(1, ann.level)
   }
 
@@ -128,5 +139,52 @@ class FacadeTest {
     f.diagnose("odd")
     assertEquals(listOf("plugin 'weather': hi"), lines)
     assertTrue(w.diagnostics.any { it.kind == "plugin" && it.message == "plugin 'weather': odd" })
+  }
+
+  @Test
+  fun `actor reads go by schema name`() {
+    assertEquals(10, ann.stat("dex"))
+    assertEquals(10, ann.baseStat("dex"))
+    f.applyAffect(ann, "quick", 10, statDeltas = mapOf("dex" to 3))
+    assertEquals(13, ann.stat("dex"))
+    assertEquals(10, ann.baseStat("dex"))
+    assertEquals(20, ann.vital("hp"))
+    assertEquals(20, ann.maxVital("mana"))
+    assertEquals(0, ann.resist("fire"))
+  }
+
+  @Test
+  fun `an undeclared name throws with a suggestion`() {
+    assertEquals(
+      "unknown stat 'dxe' (did you mean 'dex'?)",
+      assertFailsWith<IllegalArgumentException> { ann.stat("dxe") }.message,
+    )
+    assertFailsWith<IllegalArgumentException> { ann.vital("health") }
+    assertFailsWith<IllegalArgumentException> { ann.resist("acid") }
+    assertEquals(
+      "damage(vital): unknown vital 'hpp' (did you mean 'hp'?)",
+      assertFailsWith<IllegalArgumentException> { f.damage(ann, 1, "fire", "hpp") }.message,
+    )
+    assertContains(
+      assertFailsWith<IllegalArgumentException> { f.damage(ann, 1, "fier", "hp") }.message!!,
+      "unknown damage type 'fier' (did you mean 'fire'?)",
+    )
+    assertFailsWith<IllegalArgumentException> { f.heal(ann, 1, "mnaa") }
+    assertContains(
+      assertFailsWith<IllegalArgumentException> {
+          f.applyAffect(ann, "weak", 5, statDeltas = mapOf("strength" to -1))
+        }
+        .message!!,
+      "unknown stat 'strength'",
+    )
+  }
+
+  @Test
+  fun `the schema lists names and labels in declaration order`() {
+    val s = f.schema
+    assertEquals(listOf("str", "dex", "con", "int", "wis", "armor"), s.stats.map { it.name })
+    assertEquals(PluginNamed("hp", "Hit points"), s.vitals.first())
+    assertEquals(listOf("hp", "mana", "move"), s.vitals.map { it.name })
+    assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)
   }
 }

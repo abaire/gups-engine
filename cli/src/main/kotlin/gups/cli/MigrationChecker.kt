@@ -5,6 +5,7 @@ import gups.core.world.World
 import gups.persist.EntityRow
 import gups.persist.ItemPayload
 import gups.persist.LocationJson
+import gups.persist.SchemaRecord
 import gups.persist.SqlitePersistence
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
@@ -51,6 +52,14 @@ class MigrationChecker(
 
     val persistence = SqlitePersistence.open(snapshotDb)
     try {
+      persistence.worldSchema?.let { saved ->
+        SchemaRecord.mismatch(saved, loader.schema.names)?.let {
+          return Outcome(
+            ok = false,
+            problems = listOf("this schema or feature change needs a server wipe:\n$it"),
+          )
+        }
+      }
       val db = persistence.db
       val entityRows = db.entityRows()
       val playerRows = db.playerRows()
@@ -64,7 +73,7 @@ class MigrationChecker(
 
       val host = StarlarkHost(loadResult, ScriptLimits(), loader)
       val boot = persistence.boot(loadResult.prototypes(), fresh = false)
-      val world = World(loadResult.prototypes(), host.rules(), host, boot = boot)
+      val world = World(loadResult.prototypes(), loader.schema, host.rules(), host, boot = boot)
       plugins.install(world)
       host.install(world)
       plugins.started(world)

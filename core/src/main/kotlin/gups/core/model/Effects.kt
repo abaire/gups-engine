@@ -38,7 +38,7 @@ data class Dice(val count: Int, val sides: Int, val bonus: Int = 0) {
 sealed interface Effect {
   data class Damage(val dice: Dice, val type: DamageType) : Effect
 
-  data class Heal(val dice: Dice) : Effect
+  data class Heal(val dice: Dice, val vital: String) : Effect
 
   data class ApplyAffect(
     val name: String,

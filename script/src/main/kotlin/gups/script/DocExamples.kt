@@ -25,7 +25,12 @@ object DocExamples {
    * `MODULE.gups`, and the `package` example is `package.star`.
    */
   val FILE_FOR_SYMBOL: Map<String, String> =
-    mapOf("module" to "MODULE.gups", "package" to "package.star")
+    mapOf(
+      "module" to "MODULE.gups",
+      "stat" to "MODULE.gups",
+      "vital" to "MODULE.gups",
+      "package" to "package.star",
+    )
 
   /**
    * Symbols whose example package is a `lib` package rather than a `zone`, because the declaration
@@ -144,13 +149,13 @@ object DocExamples {
             """
                 item("rat_tail", name = "a rat tail")
 
-                mob("rat", hp = 4, loot = [loot(":rat_tail", chance = 1.0, count = 1)])
+                mob("rat", vitals = vitals(hp = 4), loot = [loot(":rat_tail", chance = 1.0, count = 1)])
             """,
           test =
             """
                 w = t.world(seed = 1)
                 rat = w.spawn(":rat", at = ":start")
-                w.damage(rat, pct = 100)
+                w.damage(rat, "hp", pct = 100)
                 # Loot drops into the corpse.
                 corpse = [i for i in w.room(":start").items() if i.kind == "corpse"][0]
                 t.eq([i.label for i in corpse.contents()], ["//zones/ex:rat_tail"])
@@ -164,8 +169,8 @@ object DocExamples {
                     name = "the gatekeeper",
                     desc = "A stern woman with a ring of keys.",
                     level = 5,
-                    hp = 40,
-                    stats = {"str": 12, "dex": 10, "con": 12, "int": 10, "wis": 10},
+                    vitals = vitals(hp = 40),
+                    stats = stats(str = 12, dex = 10, con = 12, int = 10, wis = 10),
                     behaviors = [sentinel()],
                 )
             """,
@@ -188,6 +193,20 @@ object DocExamples {
                     reset_world_ticks = 10,
                 )
             """
+        ),
+      "resists" to
+        ex(
+          pkg =
+            """
+                mob("salamander", vitals = vitals(hp = 20), resists = resists(fire = 100, pierce = -25))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                s = w.spawn(":salamander", at = ":start")
+                t.eq(s.resists.fire, 100)
+                t.eq(s.resists.slash, 0)
+            """,
         ),
       "region" to
         ex(
@@ -225,26 +244,58 @@ object DocExamples {
                 t.contains(p.do("look"), "The Library")
             """,
         ),
+      "stats" to
+        ex(
+          pkg =
+            """
+                item("iron_cap", kind = "armor", wear = "head", stat_deltas = stats(armor = 2, con = 1))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":start", stats = stats(con = 12))
+                w.spawn(":iron_cap", at = p)
+                p.do("wear cap")
+                t.eq(p.con, 13)
+                t.eq(p.base.con, 12)
+            """,
+        ),
       "skill" to
         ex(
           pkg =
             """
                 skill("firebolt",
                     kind = "spell",
-                    cost = {"mana": 5},
+                    cost = vitals(mana = 5),
                     warmup = 4,
                     lag = 4,
                     range = "near",
                     target = "enemy",
-                    effect = damage(dice = "2d6", type = "fire"),
+                    effect = damage(dice = "2d6", type = DAMAGE.fire),
                 )
             """
+        ),
+      "vitals" to
+        ex(
+          pkg =
+            """
+                skill("ember", kind = "spell", cost = vitals(mana = 5, move = 2), range = "near",
+                      effect = damage(dice = "1d4", type = DAMAGE.fire))
+                mob("scarecrow", vitals = vitals(hp = 15))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                s = w.spawn(":scarecrow", at = ":start")
+                t.eq(s.max_hp, 15)
+                t.eq(s.hp, 15)
+            """,
         ),
       "spawn" to
         ex(
           pkg =
             """
-                mob("wolf", name = "a grey wolf", hp = 12)
+                mob("wolf", name = "a grey wolf", vitals = vitals(hp = 12))
 
                 room("den",
                     desc = "A den that smells of wet fur.",
@@ -277,6 +328,61 @@ object DocExamples {
             """
                 module(
                     api_version = 1,
+                    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+                    stats = [
+                        stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
+                        stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
+                        stat("wis", label = "Wisdom"), "armor",
+                    ],
+                    vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
+                    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+                    unarmed_damage_type = "bludgeon",
+                    channels = ["spell"],
+                    prompt = "<{hp}hp {mana}m {move}mv> ",
+                    checkpoint_minutes = 30,
+                    start_room = "//zones/ex:start",
+                )
+            """
+        ),
+      "stat" to
+        ex(
+          pkg =
+            """
+                module(
+                    api_version = 1,
+                    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+                    stats = [
+                        stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
+                        stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
+                        stat("wis", label = "Wisdom"), "armor",
+                    ],
+                    vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
+                    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+                    unarmed_damage_type = "bludgeon",
+                    channels = ["spell"],
+                    prompt = "<{hp}hp {mana}m {move}mv> ",
+                    checkpoint_minutes = 30,
+                    start_room = "//zones/ex:start",
+                )
+            """
+        ),
+      "vital" to
+        ex(
+          pkg =
+            """
+                module(
+                    api_version = 1,
+                    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+                    stats = [
+                        stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
+                        stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
+                        stat("wis", label = "Wisdom"), "armor",
+                    ],
+                    vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
+                    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+                    unarmed_damage_type = "bludgeon",
+                    channels = ["spell"],
+                    prompt = "<{hp}hp {mana}m {move}mv> ",
                     checkpoint_minutes = 30,
                     start_room = "//zones/ex:start",
                 )
@@ -295,6 +401,21 @@ object DocExamples {
                     exits = [exit("out", to = ":start", one_way = True, senses_blocked = ALL)],
                 )
             """
+        ),
+      "DAMAGE" to
+        ex(
+          pkg =
+            """
+                # A misspelling such as DAMAGE.fier fails at that line, with a suggestion.
+                item("flame_tongue", kind = "melee", wield = "wield", dice = "1d6",
+                     damage_type = DAMAGE.fire)
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                sword = w.spawn(":flame_tongue", at = ":start")
+                t.eq(sword.damage_type, "fire")
+            """,
         ),
       "CRAMPED" to
         ex(
@@ -325,12 +446,12 @@ object DocExamples {
             """
                 skill("slow",
                     kind = "spell",
-                    cost = {"mana": 4},
+                    cost = vitals(mana = 4),
                     range = "near",
                     effect = apply_affect(
                         name = "slowed",
                         duration = 40,
-                        stat_deltas = {"dex": -2},
+                        stat_deltas = stats(dex = -2),
                         expire_msg = "You feel quick again.",
                     ),
                 )
@@ -340,8 +461,8 @@ object DocExamples {
         ex(
           pkg =
             """
-                skill("frost_shard", kind = "spell", cost = {"mana": 3}, range = "near",
-                      effect = damage(dice = "1d8+1", type = "cold"))
+                skill("frost_shard", kind = "spell", cost = vitals(mana = 3), range = "near",
+                      effect = damage(dice = "1d8+1", type = DAMAGE.fire))
             """
         ),
       "dispel" to
@@ -349,10 +470,10 @@ object DocExamples {
           pkg =
             """
                 # Removes "poison", "poison_strong" and every other affect named poison...
-                skill("cure", kind = "spell", cost = {"mana": 6}, target = "ally",
+                skill("cure", kind = "spell", cost = vitals(mana = 6), target = "ally",
                       effect = dispel(name = "poison*"))
                 # Lifts at most one curse, whatever it is called.
-                skill("uncurse", kind = "spell", cost = {"mana": 8}, target = "ally",
+                skill("uncurse", kind = "spell", cost = vitals(mana = 8), target = "ally",
                       effect = dispel(flag = "curse", count = 1))
             """
         ),
@@ -360,46 +481,46 @@ object DocExamples {
         ex(
           pkg =
             """
-                skill("mend", kind = "spell", cost = {"mana": 5}, target = "ally",
-                      effect = heal(dice = "2d4"))
+                skill("mend", kind = "spell", cost = vitals(mana = 5), target = "ally",
+                      effect = heal(dice = "2d4", vital = "hp"))
             """
         ),
       "knockback" to
         ex(
           pkg =
             """
-                skill("shove", cost = {"move": 10}, effect = knockback(steps = 2))
+                skill("shove", cost = vitals(move = 10), effect = knockback(steps = 2))
             """
         ),
       "pull" to
         ex(
           pkg =
             """
-                skill("hook", cost = {"move": 10}, range = "near", effect = pull(steps = 1))
+                skill("hook", cost = vitals(move = 10), range = "near", effect = pull(steps = 1))
             """
         ),
       "sequence" to
         ex(
           pkg =
             """
-                skill("thunderclap", kind = "spell", cost = {"mana": 8},
-                      effect = sequence(damage(dice = "1d6", type = "sound"), stun(pulses = 4)))
+                skill("thunderclap", kind = "spell", cost = vitals(mana = 8),
+                      effect = sequence(damage(dice = "1d6", type = DAMAGE.pierce), stun(pulses = 4)))
             """
         ),
       "stun" to
         ex(
           pkg =
             """
-                skill("bash", cost = {"move": 15}, lag = 8, effect = stun(pulses = 8))
+                skill("bash", cost = vitals(move = 15), lag = 8, effect = stun(pulses = 8))
             """
         ),
       "summon" to
         ex(
           pkg =
             """
-                mob("wisp", name = "a glowing wisp", hp = 5)
+                mob("wisp", name = "a glowing wisp", vitals = vitals(hp = 5))
 
-                skill("call_wisps", kind = "spell", cost = {"mana": 10}, target = "none",
+                skill("call_wisps", kind = "spell", cost = vitals(mana = 10), target = "none",
                       effect = summon(label = ":wisp", count = 2, duration = 80))
             """
         ),
@@ -409,29 +530,29 @@ object DocExamples {
         ex(
           pkg =
             """
-                mob("bandit", hp = 20, behaviors = [aggressive(toward = "players", unless_level_above = 5)])
+                mob("bandit", vitals = vitals(hp = 20), behaviors = [aggressive(toward = "players", unless_level_above = 5)])
             """
         ),
       "assist" to
         ex(
           pkg =
             """
-                mob("goblin_scout", hp = 10)
-                mob("goblin_chief", hp = 30, behaviors = [assist(allies = ["goblin_*"])])
+                mob("goblin_scout", vitals = vitals(hp = 10))
+                mob("goblin_chief", vitals = vitals(hp = 30), behaviors = [assist(allies = ["goblin_*"])])
             """
         ),
       "flee" to
         ex(
           pkg =
             """
-                mob("hare", hp = 6, behaviors = [flee(at_hp_pct = 50)])
+                mob("hare", vitals = vitals(hp = 6), behaviors = [flee(below = vitals(hp = 50))])
             """
         ),
       "follow" to
         ex(
           pkg =
             """
-                mob("stray_dog", name = "a stray dog", hp = 8, behaviors = [follow(target = "players")])
+                mob("stray_dog", name = "a stray dog", vitals = vitals(hp = 8), behaviors = [follow(target = "players")])
             """
         ),
       "guard" to
@@ -439,35 +560,35 @@ object DocExamples {
           pkg =
             """
                 # Players can't go north while the sentry is here; other mobs can.
-                mob("sentry", hp = 30, behaviors = [sentinel(), guard(exit = "north", allies = "mobs")])
+                mob("sentry", vitals = vitals(hp = 30), behaviors = [sentinel(), guard(exit = "north", allies = "mobs")])
             """
         ),
       "pursue" to
         ex(
           pkg =
             """
-                mob("hound", hp = 15, behaviors = [pursue(target = "players")])
+                mob("hound", vitals = vitals(hp = 15), behaviors = [pursue(target = "players")])
             """
         ),
       "scavenge" to
         ex(
           pkg =
             """
-                mob("magpie", hp = 4, behaviors = [scavenge()])
+                mob("magpie", vitals = vitals(hp = 4), behaviors = [scavenge()])
             """
         ),
       "sentinel" to
         ex(
           pkg =
             """
-                mob("statue", name = "a watchful statue", hp = 100, behaviors = [sentinel()])
+                mob("statue", name = "a watchful statue", vitals = vitals(hp = 100), behaviors = [sentinel()])
             """
         ),
       "wander" to
         ex(
           pkg =
             """
-                mob("deer", hp = 10, behaviors = [wander(radius = 2, chance = 0.2)])
+                mob("deer", vitals = vitals(hp = 10), behaviors = [wander(radius = 2, chance = 0.2)])
             """
         ),
 
@@ -489,7 +610,7 @@ object DocExamples {
           test =
             """
                 w = t.world(seed = 1)
-                p = w.spawn_player("Tess", at = ":start", hp = 30)
+                p = w.spawn_player("Tess", at = ":start", vitals = vitals(hp = 30))
                 t.true(p.is_player)
                 t.contains(p.do("look"), "Start")
                 t.eq(p.hp, 30)
@@ -511,8 +632,8 @@ object DocExamples {
           test =
             """
                 w = t.world(seed = 1)
-                p = w.spawn_player("Tess", at = ":start", hp = 20)
-                w.damage(p, amount = 5)
+                p = w.spawn_player("Tess", at = ":start", vitals = vitals(hp = 20))
+                w.damage(p, "hp", amount = 5)
                 t.eq(p.hp, 15)
                 w.set_attr(p, "visits", 1)
                 t.eq(w.get_attr(p, "visits"), 1)

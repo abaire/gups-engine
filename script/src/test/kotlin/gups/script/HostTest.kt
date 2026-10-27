@@ -124,23 +124,23 @@ class HostTest {
                     if ctx.target != ctx.self:
                         return
                     _burn(15000)
-                    ctx.damage(ctx.find(":b")[0], 1, "fire")
+                    ctx.damage(ctx.find(":b")[0], 1, DAMAGE.fire, "hp")
 
                 def _b_hurt(ctx):
                     if ctx.target != ctx.self:
                         return
                     _burn(15000)
 
-                mob("a", hp = 100, on_damage = _a_hurt)
-                mob("b", hp = 100, on_damage = _b_hurt)
+                mob("a", vitals = vitals(hp = 100), on_damage = _a_hurt)
+                mob("b", vitals = vitals(hp = 100), on_damage = _b_hurt)
                 """
         )
       )
     f.mob("//zones/z:a")
     val b = f.mob("//zones/z:b")
     // Each hook alone fits easily; together they stay under the budget.
-    f.w.damage(f.w.actors.first { it.name == "a" }, 1, DamageType.FIRE)
-    assertEquals(99, b.hp)
+    f.w.damage(f.w.actors.first { it.name == "a" }, mapOf("hp" to 1), DamageType("fire"))
+    assertEquals(99, b.current("hp"))
     assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
 
     val tight =
@@ -150,8 +150,8 @@ class HostTest {
       )
     tight.mob("//zones/z:a")
     val b2 = tight.mob("//zones/z:b")
-    tight.w.damage(tight.w.actors.first { it.name == "a" }, 1, DamageType.FIRE)
-    assertEquals(99, b2.hp, "the damage verb applied before the nested hook ran out")
+    tight.w.damage(tight.w.actors.first { it.name == "a" }, mapOf("hp" to 1), DamageType("fire"))
+    assertEquals(99, b2.current("hp"), "the damage verb applied before the nested hook ran out")
     val limited = tight.diagnostics("step_limit")
     assertEquals(listOf("on_damage"), limited.map { it.hook }.distinct())
     assertTrue(limited.any { it.label == Label("//zones/z:b") }, limited.toString())
@@ -310,7 +310,7 @@ class HostTest {
     f.input(p, "north")
     f.run()
     val d = f.diagnostics("script_error").map { it.message }
-    assertEquals(50, p.hp)
+    assertEquals(50, p.current("hp"))
     assertContains(d[0], "hp")
     assertContains(d[1], "deny() is only valid as the return value of a before_* hook")
   }
@@ -361,12 +361,12 @@ class HostTest {
                         return "idle"
 
                     def _zap(ctx):
-                        ctx.damage(ctx.target, 7, "lightning", source = ctx.actor)
+                        ctx.damage(ctx.target, 7, DAMAGE.fire, "hp", source = ctx.actor)
                         ctx.emote(ctx.actor, "crackles.")
 
                     room("start", exits = [exit("east", "//zones/z:start")])
                     item("sign", commands = {"read": _read})
-                    mob("parrot", hp = 20, think = _think, think_every = 2, skills = {":zap": 50})
+                    mob("parrot", vitals = vitals(hp = 20), think = _think, think_every = 2, skills = {":zap": 50})
                     skill("zap", range = "far", resolve = _zap, lag = 2)
                 """,
           "lib/package.star" to libPkg(),
@@ -394,7 +394,7 @@ class HostTest {
     p.skills[Label("//zones/z:zap")] = 50
     f.input(p, "cast zap parrot")
     f.run()
-    assertEquals(13, parrot.hp)
+    assertEquals(13, parrot.current("hp"))
     assertContains(f.out(p), "Ann crackles.")
     f.run(3)
     assertContains(f.out(p), "Parrot says, 'Ouch!'")
@@ -480,7 +480,7 @@ class HostTest {
     f.run()
     assertContains(f.diagnostics("script_error").single().message, "mob actions apply only to mobs")
     val rat = f.w.actors.filterIsInstance<Mob>().single()
-    f.w.damage(rat, 100, DamageType.FIRE)
+    f.w.damage(rat, mapOf("hp" to 100), DamageType("fire"))
     assertTrue(f.w.actors.none { it is Mob })
     f.run(240)
     assertEquals(AttrValue.I(1), start.customAttributes["z:resets"])
@@ -528,7 +528,7 @@ class HostTest {
                         ctx.send(ctx.actor, ctx.self.name + " hums at " + t.name + ".")
 
                 room("start")
-                mob("rat", name = "a rat", hp = 1000)
+                mob("rat", name = "a rat", vitals = vitals(hp = 1000))
                 item("blade", name = "a blade", kind = "melee", wear = "wield", dice = "1d2", on_combat_tick = _hum)
                 """
         )
