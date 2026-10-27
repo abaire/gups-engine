@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine &lt;engine&gt;</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html" class="current">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>World</h1>
+<h2>Messages</h2>
+<p class="intro">Every player-facing line of the engine; MESSAGES.gups overrides them by id.</p>
+<table>
+<thead><tr><th>Id</th><th>Placeholders</th><th>Default text</th></tr></thead>
+<tbody>
+<tr id="message-affect.fades"><td><code>affect.fades</code></td><td><code>{actor}</code></td><td><code>{actor} fades away.</code></td></tr>
+<tr id="message-cast.at_whom"><td><code>cast.at_whom</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code></td><td><code>Cast {skill} at whom?</code></td></tr>
+<tr id="message-cast.begin.known"><td><code>cast.begin.known</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code>, <code>{skill}</code> (required)</td><td><code>{actor} begins casting {skill}.</code></td></tr>
+<tr id="message-cast.begin.self"><td><code>cast.begin.self</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code> (required)</td><td><code>You begin casting {skill}.</code></td></tr>
+<tr id="message-cast.begin.unknown"><td><code>cast.begin.unknown</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code></td><td><code>{actor} begins casting.</code></td></tr>
+<tr id="message-cast.done.item"><td><code>cast.done.item</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code> (required), <code>{target}</code></td><td><code>You cast {skill} on {target}.</code></td></tr>
+<tr id="message-cast.done.self"><td><code>cast.done.self</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code> (required)</td><td><code>You cast {skill}.</code></td></tr>
+<tr id="message-cast.done.target"><td><code>cast.done.target</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code> (required), <code>{target}</code></td><td><code>You cast {skill} at {target}.</code></td></tr>
+<tr id="message-cast.done.victim"><td><code>cast.done.victim</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code>, <code>{skill}</code> (required)</td><td><code>{actor} casts {skill} at you!</code></td></tr>
+<tr id="message-cast.interrupted"><td><code>cast.interrupted</code> <span class="badge feature">feature: skills</span></td><td></td><td><code>Your concentration is broken!</code></td></tr>
+<tr id="message-cast.not_enough"><td><code>cast.not_enough</code> <span class="badge feature">feature: skills</span></td><td><code>{vital}</code></td><td><code>You don't have enough {vital}.</code></td></tr>
+<tr id="message-cast.not_here"><td><code>cast.not_here</code> <span class="badge feature">feature: skills</span></td><td><code>{target}</code></td><td><code>{target} isn't here.</code></td></tr>
+<tr id="message-cast.on_what"><td><code>cast.on_what</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code></td><td><code>Cast {skill} on what?</code></td></tr>
+<tr id="message-cast.out_of_range"><td><code>cast.out_of_range</code> <span class="badge feature">feature: skills</span></td><td><code>{target}</code></td><td><code>{target} is out of range.</code></td></tr>
+<tr id="message-cast.room.item"><td><code>cast.room.item</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code>, <code>{skill}</code> (required), <code>{target}</code></td><td><code>{actor} casts {skill} on {target}.</code></td></tr>
+<tr id="message-cast.room.self"><td><code>cast.room.self</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code>, <code>{skill}</code> (required)</td><td><code>{actor} casts {skill}.</code></td></tr>
+<tr id="message-cast.room.target"><td><code>cast.room.target</code> <span class="badge feature">feature: skills</span></td><td><code>{actor}</code>, <code>{skill}</code> (required), <code>{target}</code></td><td><code>{actor} casts {skill} at {target}.</code></td></tr>
+<tr id="message-cast.self_only"><td><code>cast.self_only</code> <span class="badge feature">feature: skills</span></td><td><code>{skill}</code></td><td><code>You can only cast {skill} on yourself.</code></td></tr>
+<tr id="message-cast.unknown_skill"><td><code>cast.unknown_skill</code> <span class="badge feature">feature: skills</span></td><td></td><td><code>You don't know that skill.</code></td></tr>
+<tr id="message-cast.what"><td><code>cast.what</code> <span class="badge feature">feature: skills</span></td><td></td><td><code>Cast what?</code></td></tr>
+<tr id="message-combat.attack"><td><code>combat.attack</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You attack {target}!</code></td></tr>
+<tr id="message-combat.attacked"><td><code>combat.attacked</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code></td><td><code>{actor} attacks you!</code></td></tr>
+<tr id="message-combat.fighting"><td><code>combat.fighting</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} and {target} are fighting!</code></td></tr>
+<tr id="message-combat.flee.failed"><td><code>combat.flee.failed</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>You fail to escape!</code></td></tr>
+<tr id="message-combat.flee.nowhere"><td><code>combat.flee.nowhere</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>There's nowhere to flee!</code></td></tr>
+<tr id="message-combat.flee.room"><td><code>combat.flee.room</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} flees {direction}.</code></td></tr>
+<tr id="message-combat.flee.self"><td><code>combat.flee.self</code> <span class="badge feature">feature: combat</span></td><td><code>{direction}</code></td><td><code>You flee {direction}!</code></td></tr>
+<tr id="message-combat.hit.room"><td><code>combat.hit.room</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} hits {target}.</code></td></tr>
+<tr id="message-combat.hit.self"><td><code>combat.hit.self</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You hit {target}.</code></td></tr>
+<tr id="message-combat.hit.target"><td><code>combat.hit.target</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code></td><td><code>{actor} hits you.</code></td></tr>
+<tr id="message-combat.kill_already"><td><code>combat.kill_already</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You're already fighting {target}!</code></td></tr>
+<tr id="message-combat.kill_self"><td><code>combat.kill_self</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>You can't attack yourself.</code></td></tr>
+<tr id="message-combat.kill_whom"><td><code>combat.kill_whom</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>Kill whom?</code></td></tr>
+<tr id="message-combat.miss.room"><td><code>combat.miss.room</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} misses {target}.</code></td></tr>
+<tr id="message-combat.miss.self"><td><code>combat.miss.self</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You miss {target}.</code></td></tr>
+<tr id="message-combat.miss.target"><td><code>combat.miss.target</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code></td><td><code>{actor} misses you.</code></td></tr>
+<tr id="message-combat.out_of_reach"><td><code>combat.out_of_reach</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>{target} is out of reach.</code></td></tr>
+<tr id="message-combat.quit_refused"><td><code>combat.quit_refused</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>No way! You're fighting for your life!</code></td></tr>
+<tr id="message-common.cant_carry"><td><code>common.cant_carry</code></td><td></td><td><code>You can't carry that much.</code></td></tr>
+<tr id="message-common.cant_reach"><td><code>common.cant_reach</code></td><td><code>{item}</code></td><td><code>You can't reach {item} from here.</code></td></tr>
+<tr id="message-common.dont_see"><td><code>common.dont_see</code></td><td></td><td><code>You don't see that here.</code></td></tr>
+<tr id="message-common.huh"><td><code>common.huh</code></td><td></td><td><code>Huh?</code></td></tr>
+<tr id="message-common.incapacitated"><td><code>common.incapacitated</code></td><td></td><td><code>You can't do that while incapacitated.</code></td></tr>
+<tr id="message-common.not_carrying"><td><code>common.not_carrying</code></td><td></td><td><code>You aren't carrying that.</code></td></tr>
+<tr id="message-common.not_container"><td><code>common.not_container</code></td><td><code>{item}</code></td><td><code>{item} is not a container.</code></td></tr>
+<tr id="message-common.not_here"><td><code>common.not_here</code></td><td></td><td><code>They aren't here.</code></td></tr>
+<tr id="message-common.not_using"><td><code>common.not_using</code></td><td></td><td><code>You aren't using that.</code></td></tr>
+<tr id="message-common.nothing_happens"><td><code>common.nothing_happens</code></td><td></td><td><code>Nothing happens.</code></td></tr>
+<tr id="message-common.queue_full"><td><code>common.queue_full</code></td><td></td><td><code>You can't plan that far ahead.</code></td></tr>
+<tr id="message-common.silenced"><td><code>common.silenced</code></td><td></td><td><code>You can't get the words out!</code></td></tr>
+<tr id="message-condition.down"><td><code>condition.down</code></td><td></td><td><code>You are incapacitated.</code></td></tr>
+<tr id="message-condition.down_room"><td><code>condition.down_room</code></td><td><code>{actor}</code></td><td><code>{actor} collapses.</code></td></tr>
+<tr id="message-condition.up"><td><code>condition.up</code></td><td></td><td><code>You come to.</code></td></tr>
+<tr id="message-condition.up_room"><td><code>condition.up_room</code></td><td><code>{actor}</code></td><td><code>{actor} stirs.</code></td></tr>
+<tr id="message-container.no_lock"><td><code>container.no_lock</code></td><td><code>{item}</code></td><td><code>{item} has no lock.</code></td></tr>
+<tr id="message-container.room.close"><td><code>container.room.close</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} closes {item}.</code></td></tr>
+<tr id="message-container.room.lock"><td><code>container.room.lock</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} locks {item}.</code></td></tr>
+<tr id="message-container.room.open"><td><code>container.room.open</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} opens {item}.</code></td></tr>
+<tr id="message-container.room.unlock"><td><code>container.room.unlock</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} unlocks {item}.</code></td></tr>
+<tr id="message-container.self.close"><td><code>container.self.close</code></td><td><code>{item}</code></td><td><code>You close {item}.</code></td></tr>
+<tr id="message-container.self.lock"><td><code>container.self.lock</code></td><td><code>{item}</code></td><td><code>You lock {item}.</code></td></tr>
+<tr id="message-container.self.open"><td><code>container.self.open</code></td><td><code>{item}</code></td><td><code>You open {item}.</code></td></tr>
+<tr id="message-container.self.unlock"><td><code>container.self.unlock</code></td><td><code>{item}</code></td><td><code>You unlock {item}.</code></td></tr>
+<tr id="message-container.state"><td><code>container.state</code></td><td><code>{item}</code>, <code>{state}</code></td><td><code>{item} is {state}.</code></td></tr>
+<tr id="message-death.respawn"><td><code>death.respawn</code></td><td><code>{name}</code></td><td><code>{name} appears, looking shaken.</code></td></tr>
+<tr id="message-death.room"><td><code>death.room</code></td><td><code>{actor}</code></td><td><code>{actor} is DEAD!</code></td></tr>
+<tr id="message-death.self"><td><code>death.self</code></td><td></td><td><code>You are DEAD!</code></td></tr>
+<tr id="message-door.no_key"><td><code>door.no_key</code></td><td></td><td><code>You don't have the key.</code></td></tr>
+<tr id="message-door.no_lock"><td><code>door.no_lock</code></td><td><code>{direction}</code></td><td><code>The door {direction} has no lock.</code></td></tr>
+<tr id="message-door.none"><td><code>door.none</code></td><td><code>{direction}</code></td><td><code>There is no door {direction}.</code></td></tr>
+<tr id="message-door.other_closes"><td><code>door.other_closes</code></td><td><code>{direction}</code></td><td><code>The door {direction} closes.</code></td></tr>
+<tr id="message-door.other_opens"><td><code>door.other_opens</code></td><td><code>{direction}</code></td><td><code>The door {direction} opens.</code></td></tr>
+<tr id="message-door.room.close"><td><code>door.room.close</code></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} closes the door {direction}.</code></td></tr>
+<tr id="message-door.room.lock"><td><code>door.room.lock</code></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} locks the door {direction}.</code></td></tr>
+<tr id="message-door.room.open"><td><code>door.room.open</code></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} opens the door {direction}.</code></td></tr>
+<tr id="message-door.room.unlock"><td><code>door.room.unlock</code></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} unlocks the door {direction}.</code></td></tr>
+<tr id="message-door.self.close"><td><code>door.self.close</code></td><td><code>{direction}</code></td><td><code>You close the door {direction}.</code></td></tr>
+<tr id="message-door.self.lock"><td><code>door.self.lock</code></td><td><code>{direction}</code></td><td><code>You lock the door {direction}.</code></td></tr>
+<tr id="message-door.self.open"><td><code>door.self.open</code></td><td><code>{direction}</code></td><td><code>You open the door {direction}.</code></td></tr>
+<tr id="message-door.self.unlock"><td><code>door.self.unlock</code></td><td><code>{direction}</code></td><td><code>You unlock the door {direction}.</code></td></tr>
+<tr id="message-door.state"><td><code>door.state</code></td><td><code>{direction}</code>, <code>{state}</code></td><td><code>The door {direction} is {state}.</code></td></tr>
+<tr id="message-door.what.close"><td><code>door.what.close</code></td><td></td><td><code>Close what?</code></td></tr>
+<tr id="message-door.what.lock"><td><code>door.what.lock</code></td><td></td><td><code>Lock what?</code></td></tr>
+<tr id="message-door.what.open"><td><code>door.what.open</code></td><td></td><td><code>Open what?</code></td></tr>
+<tr id="message-door.what.unlock"><td><code>door.what.unlock</code></td><td></td><td><code>Unlock what?</code></td></tr>
+<tr id="message-drop.room"><td><code>drop.room</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} drops {item}.</code></td></tr>
+<tr id="message-drop.self"><td><code>drop.self</code></td><td><code>{item}</code></td><td><code>You drop {item}.</code></td></tr>
+<tr id="message-emote.room"><td><code>emote.room</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} {text}</code></td></tr>
+<tr id="message-encumbrance.off"><td><code>encumbrance.off</code></td><td></td><td><code>Your load feels manageable again.</code></td></tr>
+<tr id="message-encumbrance.on"><td><code>encumbrance.on</code></td><td></td><td><code>You are carrying more than you can manage.</code></td></tr>
+<tr id="message-equipment.empty"><td><code>equipment.empty</code></td><td></td><td><code>You are using nothing.</code></td></tr>
+<tr id="message-equipment.item"><td><code>equipment.item</code></td><td><code>{slot}</code>, <code>{item}</code> (required)</td><td><code>  &lt;{slot}&gt; {item}</code></td></tr>
+<tr id="message-equipment.list"><td><code>equipment.list</code></td><td><code>{items}</code> (required)</td><td><code>You are using:
+{items}</code></td></tr>
+<tr id="message-get.room"><td><code>get.room</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} gets {item}.</code></td></tr>
+<tr id="message-get.self"><td><code>get.self</code></td><td><code>{item}</code></td><td><code>You get {item}.</code></td></tr>
+<tr id="message-get.self_from"><td><code>get.self_from</code></td><td><code>{item}</code>, <code>{container}</code></td><td><code>You get {item} from {container}.</code></td></tr>
+<tr id="message-get.what"><td><code>get.what</code></td><td></td><td><code>Get what?</code></td></tr>
+<tr id="message-give.already"><td><code>give.already</code></td><td></td><td><code>You already have it.</code></td></tr>
+<tr id="message-give.full"><td><code>give.full</code></td><td><code>{target}</code></td><td><code>{target} can't carry that much.</code></td></tr>
+<tr id="message-give.room"><td><code>give.room</code></td><td><code>{actor}</code>, <code>{item}</code>, <code>{target}</code></td><td><code>{actor} gives {item} to {target}.</code></td></tr>
+<tr id="message-give.self"><td><code>give.self</code></td><td><code>{item}</code>, <code>{target}</code></td><td><code>You give {item} to {target}.</code></td></tr>
+<tr id="message-give.target"><td><code>give.target</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} gives you {item}.</code></td></tr>
+<tr id="message-give.usage"><td><code>give.usage</code></td><td></td><td><code>Give what to whom?</code></td></tr>
+<tr id="message-gossip.line"><td><code>gossip.line</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>[gossip] {actor}: {text}</code></td></tr>
+<tr id="message-gossip.what"><td><code>gossip.what</code></td><td></td><td><code>Gossip what?</code></td></tr>
+<tr id="message-guard.blocks"><td><code>guard.blocks</code></td><td><code>{actor}</code></td><td><code>{actor} blocks your way.</code></td></tr>
+<tr id="message-health.awful"><td><code>health.awful</code></td><td></td><td><code>is in awful condition</code></td></tr>
+<tr id="message-health.dead"><td><code>health.dead</code></td><td></td><td><code>is mortally wounded</code></td></tr>
+<tr id="message-health.excellent"><td><code>health.excellent</code></td><td></td><td><code>is in excellent condition</code></td></tr>
+<tr id="message-health.hurt"><td><code>health.hurt</code></td><td></td><td><code>is badly hurt</code></td></tr>
+<tr id="message-health.incapacitated"><td><code>health.incapacitated</code></td><td></td><td><code>is incapacitated</code></td></tr>
+<tr id="message-health.scratched"><td><code>health.scratched</code></td><td></td><td><code>has a few scratches</code></td></tr>
+<tr id="message-health.wounded"><td><code>health.wounded</code></td><td></td><td><code>is wounded</code></td></tr>
+<tr id="message-help.list"><td><code>help.list</code></td><td><code>{instant}</code>, <code>{actions}</code></td><td><code>Instant: {instant}
+Actions: {actions}, and any exit name</code></td></tr>
+<tr id="message-inventory.empty"><td><code>inventory.empty</code></td><td></td><td><code>You are carrying nothing.</code></td></tr>
+<tr id="message-inventory.item"><td><code>inventory.item</code></td><td><code>{item}</code> (required)</td><td><code>  {item}</code></td></tr>
+<tr id="message-inventory.list"><td><code>inventory.list</code></td><td><code>{items}</code> (required)</td><td><code>You are carrying:
+{items}</code></td></tr>
+<tr id="message-item.decays"><td><code>item.decays</code></td><td><code>{item}</code></td><td><code>{item} crumbles to dust.</code></td></tr>
+<tr id="message-keyring.empty"><td><code>keyring.empty</code></td><td></td><td><code>Your keyring is empty.</code></td></tr>
+<tr id="message-keyring.list"><td><code>keyring.list</code></td><td><code>{items}</code> (required)</td><td><code>Your keyring holds:
+{items}</code></td></tr>
+<tr id="message-leveling.gain"><td><code>leveling.gain</code> <span class="badge feature">feature: leveling</span></td><td><code>{amount}</code> (required)</td><td><code>You gain {amount} experience.</code></td></tr>
+<tr id="message-leveling.level_up"><td><code>leveling.level_up</code> <span class="badge feature">feature: leveling</span></td><td><code>{level}</code> (required)</td><td><code>You have reached level {level}!</code></td></tr>
+<tr id="message-leveling.score"><td><code>leveling.score</code> <span class="badge feature">feature: leveling</span></td><td><code>{level}</code>, <code>{xp}</code></td><td><code>Level {level} ({xp} xp)</code></td></tr>
+<tr id="message-login.account_disabled"><td><code>login.account_disabled</code></td><td></td><td><code>This account is disabled.</code></td></tr>
+<tr id="message-login.account_gone"><td><code>login.account_gone</code></td><td></td><td><code>That account no longer exists.</code></td></tr>
+<tr id="message-login.account_now_disabled"><td><code>login.account_now_disabled</code></td><td></td><td><code>This account has been disabled.</code></td></tr>
+<tr id="message-login.account_ready"><td><code>login.account_ready</code></td><td><code>{login}</code></td><td><code>Your account '{login}' is ready.</code></td></tr>
+<tr id="message-login.already_playing"><td><code>login.already_playing</code></td><td><code>{name}</code></td><td><code>You're already playing {name}.</code></td></tr>
+<tr id="message-login.bad_code"><td><code>login.bad_code</code></td><td></td><td><code>That code isn't valid, or it has expired.</code></td></tr>
+<tr id="message-login.cant_find"><td><code>login.cant_find</code></td><td><code>{name}</code></td><td><code>{name} can't be found.</code></td></tr>
+<tr id="message-login.character_limit"><td><code>login.character_limit</code></td><td><code>{count}</code></td><td><code>You already have {count} characters, the most an account may have.</code></td></tr>
+<tr id="message-login.characters"><td><code>login.characters</code></td><td><code>{names}</code> (required)</td><td><code>Your characters: {names}.</code></td></tr>
+<tr id="message-login.choose_password"><td><code>login.choose_password</code></td><td><code>{min}</code></td><td><code>Choose a password of at least {min} characters.</code></td></tr>
+<tr id="message-login.code_prompt"><td><code>login.code_prompt</code></td><td></td><td><code>Invite or setup code: </code></td></tr>
+<tr id="message-login.code_prompt_open"><td><code>login.code_prompt_open</code></td><td></td><td><code>Invite code (or press Enter to sign up without one): </code></td></tr>
+<tr id="message-login.code_used"><td><code>login.code_used</code></td><td></td><td><code>That code was used or ran out in the meantime.</code></td></tr>
+<tr id="message-login.dev.local_only"><td><code>login.dev.local_only</code></td><td></td><td><code>This development server only accepts connections from this machine.</code></td></tr>
+<tr id="message-login.dev.prompt"><td><code>login.dev.prompt</code></td><td></td><td><code>By what name do you wish to be known? </code></td></tr>
+<tr id="message-login.dev.welcome"><td><code>login.dev.welcome</code></td><td></td><td><code>Welcome to GUPS (development server). You are the local instructor.</code></td></tr>
+<tr id="message-login.error"><td><code>login.error</code></td><td></td><td><code>Something went wrong on the server. Please try again.</code></td></tr>
+<tr id="message-login.login_invalid"><td><code>login.login_invalid</code></td><td></td><td><code>Logins are 3 to 24 characters: lowercase letters, digits, '_', '.' and '-'.</code></td></tr>
+<tr id="message-login.login_reserved"><td><code>login.login_reserved</code></td><td></td><td><code>That login is reserved.</code></td></tr>
+<tr id="message-login.login_taken"><td><code>login.login_taken</code></td><td></td><td><code>That login is taken.</code></td></tr>
+<tr id="message-login.login_taken_meanwhile"><td><code>login.login_taken_meanwhile</code></td><td></td><td><code>Someone took that login in the meantime.</code></td></tr>
+<tr id="message-login.menu"><td><code>login.menu</code></td><td><code>{characters}</code></td><td><code>{characters}  Type a name to play, &quot;new&quot; to create, or &quot;password&quot; to change yours.</code></td></tr>
+<tr id="message-login.menu_prompt"><td><code>login.menu_prompt</code></td><td></td><td><code>&gt; </code></td></tr>
+<tr id="message-login.mismatch"><td><code>login.mismatch</code></td><td></td><td><code>The passwords don't match.</code></td></tr>
+<tr id="message-login.name_invalid"><td><code>login.name_invalid</code></td><td></td><td><code>Names are 2 to 16 letters.</code></td></tr>
+<tr id="message-login.name_prompt"><td><code>login.name_prompt</code></td><td></td><td><code>What will your new character be called? </code></td></tr>
+<tr id="message-login.name_reserved"><td><code>login.name_reserved</code></td><td></td><td><code>That name is reserved.</code></td></tr>
+<tr id="message-login.name_taken"><td><code>login.name_taken</code></td><td></td><td><code>That name is taken.</code></td></tr>
+<tr id="message-login.new_login_prompt"><td><code>login.new_login_prompt</code></td><td></td><td><code>Choose a login (3 to 24 characters: a-z, 0-9, _ . -): </code></td></tr>
+<tr id="message-login.new_password_again"><td><code>login.new_password_again</code></td><td></td><td><code>New password again: </code></td></tr>
+<tr id="message-login.new_password_prompt"><td><code>login.new_password_prompt</code></td><td></td><td><code>New password: </code></td></tr>
+<tr id="message-login.no_characters"><td><code>login.no_characters</code></td><td></td><td><code>You have no characters yet.</code></td></tr>
+<tr id="message-login.no_such_character"><td><code>login.no_such_character</code></td><td><code>{name}</code></td><td><code>You have no character called {name}.</code></td></tr>
+<tr id="message-login.not_current"><td><code>login.not_current</code></td><td></td><td><code>That isn't your current password.</code></td></tr>
+<tr id="message-login.old_password_prompt"><td><code>login.old_password_prompt</code></td><td></td><td><code>Current password: </code></td></tr>
+<tr id="message-login.one_second"><td><code>login.one_second</code></td><td></td><td><code>1 second</code></td></tr>
+<tr id="message-login.password_again"><td><code>login.password_again</code></td><td></td><td><code>Password again: </code></td></tr>
+<tr id="message-login.password_changed"><td><code>login.password_changed</code></td><td></td><td><code>Your password has been changed.</code></td></tr>
+<tr id="message-login.password_is_login"><td><code>login.password_is_login</code></td><td></td><td><code>Your password can't be your login.</code></td></tr>
+<tr id="message-login.password_prompt"><td><code>login.password_prompt</code></td><td></td><td><code>Password: </code></td></tr>
+<tr id="message-login.password_short"><td><code>login.password_short</code></td><td><code>{min}</code></td><td><code>Passwords need at least {min} characters.</code></td></tr>
+<tr id="message-login.prompt"><td><code>login.prompt</code></td><td></td><td><code>By what name do you wish to be known? (login, or &quot;new&quot; with an invite code) </code></td></tr>
+<tr id="message-login.seconds"><td><code>login.seconds</code></td><td><code>{n}</code></td><td><code>{n} seconds</code></td></tr>
+<tr id="message-login.setup_code"><td><code>login.setup_code</code></td><td><code>{login}</code>, <code>{min}</code></td><td><code>This code sets up the account '{login}'. Choose a password of at least {min} characters.</code></td></tr>
+<tr id="message-login.too_many_attempts"><td><code>login.too_many_attempts</code></td><td><code>{wait}</code></td><td><code>Too many failed attempts. Try again in {wait}.</code></td></tr>
+<tr id="message-login.too_many_logins"><td><code>login.too_many_logins</code></td><td><code>{wait}</code></td><td><code>Too many failed logins. Try again in {wait}.</code></td></tr>
+<tr id="message-login.too_many_wrong"><td><code>login.too_many_wrong</code></td><td></td><td><code>Too many wrong passwords. Goodbye.</code></td></tr>
+<tr id="message-login.too_slow"><td><code>login.too_slow</code></td><td></td><td><code>You took too long. Goodbye.</code></td></tr>
+<tr id="message-login.welcome"><td><code>login.welcome</code></td><td></td><td><code>Welcome to GUPS.</code></td></tr>
+<tr id="message-login.wrong"><td><code>login.wrong</code></td><td></td><td><code>Wrong login or password.</code></td></tr>
+<tr id="message-look.actors"><td><code>look.actors</code></td><td><code>{where}</code>, <code>{list}</code> (required)</td><td><code>{where}: {list}.</code></td></tr>
+<tr id="message-look.closed"><td><code>look.closed</code></td><td></td><td><code>It is closed.</code></td></tr>
+<tr id="message-look.contains"><td><code>look.contains</code></td><td><code>{items}</code> (required)</td><td><code>It contains: {items}.</code></td></tr>
+<tr id="message-look.empty"><td><code>look.empty</code></td><td></td><td><code>It is empty.</code></td></tr>
+<tr id="message-look.exit_door"><td><code>look.exit_door</code></td><td><code>{direction}</code>, <code>{state}</code></td><td><code>{direction} ({state})</code></td></tr>
+<tr id="message-look.exits"><td><code>look.exits</code></td><td><code>{exits}</code> (required)</td><td><code>Exits: {exits}.</code></td></tr>
+<tr id="message-look.ground.far"><td><code>look.ground.far</code></td><td></td><td><code>far off</code></td></tr>
+<tr id="message-look.ground.melee"><td><code>look.ground.melee</code></td><td></td><td><code>beside you</code></td></tr>
+<tr id="message-look.ground.near"><td><code>look.ground.near</code></td><td></td><td><code>nearby</code></td></tr>
+<tr id="message-look.health"><td><code>look.health</code></td><td><code>{name}</code>, <code>{health}</code> (required)</td><td><code>{name} {health}.</code></td></tr>
+<tr id="message-look.here.actors"><td><code>look.here.actors</code></td><td><code>{list}</code> (required)</td><td><code>Also here: {list}.</code></td></tr>
+<tr id="message-look.here.items"><td><code>look.here.items</code></td><td><code>{list}</code> (required)</td><td><code>On the ground: {list}.</code></td></tr>
+<tr id="message-look.items"><td><code>look.items</code></td><td><code>{where}</code>, <code>{list}</code> (required)</td><td><code>On the ground {where}: {list}.</code></td></tr>
+<tr id="message-look.no_exits"><td><code>look.no_exits</code></td><td></td><td><code>Exits: none.</code></td></tr>
+<tr id="message-look.nothing_special"><td><code>look.nothing_special</code></td><td><code>{name}</code></td><td><code>You see nothing special about {name}.</code></td></tr>
+<tr id="message-look.where.far"><td><code>look.where.far</code></td><td></td><td><code>Far off</code></td></tr>
+<tr id="message-look.where.melee"><td><code>look.where.melee</code></td><td></td><td><code>Beside you</code></td></tr>
+<tr id="message-look.where.near"><td><code>look.where.near</code></td><td></td><td><code>Nearby</code></td></tr>
+<tr id="message-move.arrives"><td><code>move.arrives</code></td><td><code>{actor}</code></td><td><code>{actor} arrives.</code></td></tr>
+<tr id="message-move.closed"><td><code>move.closed</code></td><td><code>{direction}</code></td><td><code>The way {direction} is closed.</code></td></tr>
+<tr id="message-move.exhausted"><td><code>move.exhausted</code></td><td></td><td><code>You are too exhausted.</code></td></tr>
+<tr id="message-move.leaves"><td><code>move.leaves</code></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} leaves {direction}.</code></td></tr>
+<tr id="message-move.no_exit"><td><code>move.no_exit</code></td><td></td><td><code>You can't go that way.</code></td></tr>
+<tr id="message-put.closed"><td><code>put.closed</code></td><td><code>{container}</code></td><td><code>{container} is closed.</code></td></tr>
+<tr id="message-put.full"><td><code>put.full</code></td><td><code>{container}</code></td><td><code>{container} is full.</code></td></tr>
+<tr id="message-put.itself"><td><code>put.itself</code></td><td></td><td><code>You can't put something inside itself.</code></td></tr>
+<tr id="message-put.room"><td><code>put.room</code></td><td><code>{actor}</code>, <code>{item}</code>, <code>{container}</code></td><td><code>{actor} puts {item} in {container}.</code></td></tr>
+<tr id="message-put.self"><td><code>put.self</code></td><td><code>{item}</code>, <code>{container}</code></td><td><code>You put {item} in {container}.</code></td></tr>
+<tr id="message-put.usage"><td><code>put.usage</code></td><td></td><td><code>Put what in what?</code></td></tr>
+<tr id="message-put.wont_fit"><td><code>put.wont_fit</code></td><td><code>{item}</code>, <code>{container}</code></td><td><code>{item} won't fit in {container}.</code></td></tr>
+<tr id="message-quit.goodbye"><td><code>quit.goodbye</code></td><td></td><td><code>Goodbye.</code></td></tr>
+<tr id="message-quit.idle"><td><code>quit.idle</code></td><td></td><td><code>You have been idle too long. Goodbye.</code></td></tr>
+<tr id="message-quit.left"><td><code>quit.left</code></td><td><code>{name}</code></td><td><code>{name} has left the game.</code></td></tr>
+<tr id="message-say.room"><td><code>say.room</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} says, '{text}'</code></td></tr>
+<tr id="message-say.self"><td><code>say.self</code></td><td><code>{text}</code> (required)</td><td><code>You say, '{text}'</code></td></tr>
+<tr id="message-say.what"><td><code>say.what</code></td><td></td><td><code>Say what?</code></td></tr>
+<tr id="message-score.resists"><td><code>score.resists</code></td><td><code>{resists}</code> (required)</td><td><code>Resists: {resists}</code></td></tr>
+<tr id="message-session.link_lost"><td><code>session.link_lost</code></td><td><code>{name}</code></td><td><code>{name} has lost their link.</code></td></tr>
+<tr id="message-session.no_character"><td><code>session.no_character</code></td><td></td><td><code>You are not playing a character.</code></td></tr>
+<tr id="message-session.slow_down"><td><code>session.slow_down</code></td><td></td><td><code>Slow down.</code></td></tr>
+<tr id="message-session.taken_over"><td><code>session.taken_over</code></td><td></td><td><code>Someone else has taken over this character.</code></td></tr>
+<tr id="message-session.too_much_input"><td><code>session.too_much_input</code></td><td></td><td><code>Too much input.</code></td></tr>
+<tr id="message-shout.near"><td><code>shout.near</code></td><td><code>{text}</code> (required)</td><td><code>Someone nearby shouts, '{text}'</code></td></tr>
+<tr id="message-shout.room"><td><code>shout.room</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} shouts, '{text}'</code></td></tr>
+<tr id="message-shout.self"><td><code>shout.self</code></td><td><code>{text}</code> (required)</td><td><code>You shout, '{text}'</code></td></tr>
+<tr id="message-shout.what"><td><code>shout.what</code></td><td></td><td><code>Shout what?</code></td></tr>
+<tr id="message-stop.cast"><td><code>stop.cast</code> <span class="badge feature">feature: skills</span></td><td></td><td><code>You stop casting.</code></td></tr>
+<tr id="message-stop.nothing"><td><code>stop.nothing</code></td><td></td><td><code>You have nothing to stop.</code></td></tr>
+<tr id="message-stop.plans"><td><code>stop.plans</code></td><td></td><td><code>You clear your plans.</code></td></tr>
+<tr id="message-teleport.appears"><td><code>teleport.appears</code></td><td><code>{actor}</code></td><td><code>{actor} appears.</code></td></tr>
+<tr id="message-teleport.vanishes"><td><code>teleport.vanishes</code></td><td><code>{actor}</code></td><td><code>{actor} vanishes.</code></td></tr>
+<tr id="message-tell.nobody"><td><code>tell.nobody</code></td><td></td><td><code>Nobody by that name is around.</code></td></tr>
+<tr id="message-tell.self"><td><code>tell.self</code></td><td><code>{target}</code>, <code>{text}</code> (required)</td><td><code>You tell {target}, '{text}'</code></td></tr>
+<tr id="message-tell.target"><td><code>tell.target</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} tells you, '{text}'</code></td></tr>
+<tr id="message-tell.usage"><td><code>tell.usage</code></td><td></td><td><code>Tell whom what?</code></td></tr>
+<tr id="message-track.advance.room"><td><code>track.advance.room</code> <span class="badge feature">feature: track</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} advances toward {target}.</code></td></tr>
+<tr id="message-track.advance.self"><td><code>track.advance.self</code> <span class="badge feature">feature: track</span></td><td><code>{target}</code></td><td><code>You advance toward {target}.</code></td></tr>
+<tr id="message-track.advance_whom"><td><code>track.advance_whom</code> <span class="badge feature">feature: track</span></td><td></td><td><code>Advance toward whom?</code></td></tr>
+<tr id="message-track.already_beside"><td><code>track.already_beside</code> <span class="badge feature">feature: track</span></td><td><code>{target}</code></td><td><code>You're already beside {target}.</code></td></tr>
+<tr id="message-track.pinned"><td><code>track.pinned</code> <span class="badge feature">feature: track</span></td><td></td><td><code>You're pinned! Retreat or flee first.</code></td></tr>
+<tr id="message-track.retreat.room"><td><code>track.retreat.room</code> <span class="badge feature">feature: track</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} falls back from {target}.</code></td></tr>
+<tr id="message-track.retreat.self"><td><code>track.retreat.self</code> <span class="badge feature">feature: track</span></td><td><code>{target}</code></td><td><code>You fall back from {target}.</code></td></tr>
+<tr id="message-track.retreat_failed"><td><code>track.retreat_failed</code> <span class="badge feature">feature: track</span></td><td></td><td><code>You fail to break away!</code></td></tr>
+<tr id="message-track.retreat_limit"><td><code>track.retreat_limit</code> <span class="badge feature">feature: track</span></td><td></td><td><code>You can't retreat any further.</code></td></tr>
+<tr id="message-track.retreat_nothing"><td><code>track.retreat_nothing</code> <span class="badge feature">feature: track</span></td><td></td><td><code>You have nothing to retreat from.</code></td></tr>
+<tr id="message-use.cant"><td><code>use.cant</code></td><td><code>{item}</code></td><td><code>You can't use {item}.</code></td></tr>
+<tr id="message-use.what"><td><code>use.what</code></td><td></td><td><code>Use what?</code></td></tr>
+<tr id="message-wear.cant_wear"><td><code>wear.cant_wear</code></td><td><code>{item}</code></td><td><code>You can't wear {item}.</code></td></tr>
+<tr id="message-wear.cant_wield"><td><code>wear.cant_wield</code></td><td><code>{item}</code></td><td><code>You can't wield {item}.</code></td></tr>
+<tr id="message-wear.room"><td><code>wear.room</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} wears {item}.</code></td></tr>
+<tr id="message-wear.self"><td><code>wear.self</code></td><td><code>{item}</code></td><td><code>You wear {item}.</code></td></tr>
+<tr id="message-wear.stop"><td><code>wear.stop</code></td><td><code>{item}</code></td><td><code>You stop using {item}.</code></td></tr>
+<tr id="message-welcome.back"><td><code>welcome.back</code></td><td><code>{name}</code></td><td><code>Welcome back, {name}.</code></td></tr>
+<tr id="message-welcome.new"><td><code>welcome.new</code></td><td><code>{name}</code></td><td><code>Welcome, {name}.</code></td></tr>
+<tr id="message-welcome.reconnected"><td><code>welcome.reconnected</code></td><td></td><td><code>Reconnected.</code></td></tr>
+<tr id="message-welcome.reconnected_room"><td><code>welcome.reconnected_room</code></td><td><code>{name}</code></td><td><code>{name} has reconnected.</code></td></tr>
+<tr id="message-whisper.room"><td><code>whisper.room</code></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} whispers something to {target}.</code></td></tr>
+<tr id="message-whisper.self"><td><code>whisper.self</code></td><td><code>{target}</code>, <code>{text}</code> (required)</td><td><code>You whisper to {target}, '{text}'</code></td></tr>
+<tr id="message-whisper.target"><td><code>whisper.target</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} whispers to you, '{text}'</code></td></tr>
+<tr id="message-whisper.usage"><td><code>whisper.usage</code></td><td></td><td><code>Whisper what to whom?</code></td></tr>
+<tr id="message-who.linkdead"><td><code>who.linkdead</code></td><td><code>{name}</code> (required)</td><td><code>  {name} (link-dead)</code></td></tr>
+<tr id="message-who.list"><td><code>who.list</code></td><td><code>{players}</code> (required)</td><td><code>Players:
+{players}</code></td></tr>
+<tr id="message-who.player"><td><code>who.player</code></td><td><code>{name}</code> (required)</td><td><code>  {name}</code></td></tr>
+<tr id="message-wield.room"><td><code>wield.room</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} wields {item}.</code></td></tr>
+<tr id="message-wield.self"><td><code>wield.self</code></td><td><code>{item}</code></td><td><code>You wield {item}.</code></td></tr>
+<tr id="message-world.shifts"><td><code>world.shifts</code></td><td></td><td><code>The world shifts around you.</code></td></tr>
+</tbody>
+</table>
+</main>
+</body>
+</html>

@@ -74,13 +74,13 @@ internal fun World.setCondition(actor: Actor, next: Condition) {
   actor.dirty = true
   when {
     next == Condition.INCAPACITATED -> {
-      send(actor, "You are incapacitated.")
-      echo(actor.room, "${actor.name.cap()} collapses.", actor)
+      tell(actor, KernelMsg.CONDITION_DOWN)
+      echo(actor.room, msg(KernelMsg.CONDITION_DOWN_ROOM, "actor" to actor.name.cap()), actor)
       if (actor.casting?.action?.interrupt?.stun == true) interruptCast(actor)
     }
     next == Condition.OK && was == Condition.INCAPACITATED -> {
-      send(actor, "You come to.")
-      echo(actor.room, "${actor.name.cap()} stirs.", actor)
+      tell(actor, KernelMsg.CONDITION_UP)
+      echo(actor.room, msg(KernelMsg.CONDITION_UP_ROOM, "actor" to actor.name.cap()), actor)
     }
   }
   disabledChanged(actor, wasDisabled)

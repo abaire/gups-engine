@@ -10,6 +10,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
+import gups.script.WorldMessages
 import gups.script.WorldModule
 import gups.script.WorldPluginWiring
 
@@ -52,11 +53,9 @@ class ReproRunner(
         loader.schema,
         host.rules(),
         host,
-        WorldConfig(
-          seed = seed,
-          checkInvariants = true,
-          aliases = WorldModule.read(dir).first.aliases,
-        ),
+        WorldModule.read(dir)
+          .first
+          .config(WorldConfig(seed = seed, checkInvariants = true), WorldMessages.read(dir).first),
         Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
       )
     plugins.install(world)

@@ -24,6 +24,13 @@ interface GupsPlugin {
     get() = ""
 
   /**
+   * Engine features (`combat`, `track`, `skills`, `leveling`) the world must have on. A plugin
+   * whose features are off is skipped with an error.
+   */
+  val requiredFeatures: Set<String>
+    get() = emptySet()
+
+  /**
    * Registers everything the plugin adds. Registration is atomic: if it throws, the plugin adds
    * nothing.
    */

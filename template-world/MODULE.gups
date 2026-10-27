@@ -46,6 +46,17 @@ module(
     # this line the prompt lists every vital: <20hp 20mana 100move> .
     prompt = "<{hp}hp {mana}m {move}mv> ",
 
+    # The engine features this world uses; leaving the line out turns all four on. track needs
+    # combat. A feature that is off doesn't exist for the world: its commands, declarations,
+    # hooks and messages are refused or left out. Fixed per database: changing the list needs a
+    # server wipe (gups serve --wipe).
+    # features = ["combat", "track", "skills", "leveling"],
+
+    # New names for engine commands, e.g. a world with no magic that calls casting "invoke".
+    # Aliases and prefixes below then name the new word, and the old one is free for your own
+    # global_command. Needs only a restart.
+    # rename = {"cast": "invoke"},
+
     # The room new characters start in. Without it they start at //zones/tutorial:gate, or
     # in the first room by label if there is no tutorial.
     # start_room = "//zones/tutorial:gate",

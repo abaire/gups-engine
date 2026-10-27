@@ -18,14 +18,14 @@ fun entryIndexFor(exit: Exit, to: Room): Int =
  * Moves [actor] through [exit]: ends its engagements, places it at the entry index, and fires
  * `on_exit`/`on_enter`. Callers inside an initiative tier go through [deferRemoval].
  */
-internal fun World.transition(actor: Actor, exit: Exit, verb: String = "leaves") {
+internal fun World.transition(actor: Actor, exit: Exit, leave: Msg = KernelMsg.MOVE_LEAVES) {
   if (!actor.inWorld) return
   val from = actor.room
   val to = room(exit.to)
   disengageAll(actor)
-  echo(from, "${actor.name.cap()} $verb ${exit.direction}.", actor)
+  echo(from, msg(leave, "actor" to actor.name.cap(), "direction" to exit.direction), actor)
   placeActor(actor, to, entryIndexFor(exit, to))
-  echo(to, "${actor.name.cap()} arrives.", actor)
+  echo(to, msg(KernelMsg.MOVE_ARRIVES, "actor" to actor.name.cap()), actor)
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
   perceive("enter", Channel.SIGHT, to, actor)
@@ -49,9 +49,9 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     if (!actor.inWorld) return@deferRemoval
     val from = actor.room
     disengageAll(actor)
-    echo(from, "${actor.name.cap()} vanishes.", actor)
+    echo(from, msg(KernelMsg.TELEPORT_VANISHES, "actor" to actor.name.cap()), actor)
     placeActor(actor, to, index ?: 0)
-    echo(to, "${actor.name.cap()} appears.", actor)
+    echo(to, msg(KernelMsg.TELEPORT_APPEARS, "actor" to actor.name.cap()), actor)
     if (actor is Player) send(actor, describeRoom(actor))
     perceive("exit", Channel.SIGHT, from, actor)
     perceive("enter", Channel.SIGHT, to, actor)
@@ -86,11 +86,11 @@ internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
 /** Walking through an exit: one action plus the vitals `move_cost` spends. */
 internal class MoveAction(private val dir: Direction) : Action {
   override fun validate(w: World, actor: Actor): String? {
-    val exit = w.roomOf(actor).exits[dir] ?: return "You can't go that way."
-    if (!exit.passable) return "The way $dir is closed."
-    if (w.isPinned(actor)) return "You're pinned! Retreat or flee first."
+    val exit = w.roomOf(actor).exits[dir] ?: return w.msg(KernelMsg.MOVE_NO_EXIT)
+    if (!exit.passable) return w.msg(KernelMsg.MOVE_CLOSED, "direction" to dir)
+    if (w.isPinned(actor)) return w.msg(TrackMsg.PINNED)
     if (w.moveCost(RulesContext(w, actor)).any { (vital, cost) -> actor.current(vital) < cost })
-      return "You are too exhausted."
+      return w.msg(KernelMsg.MOVE_EXHAUSTED)
     return null
   }
 
@@ -100,90 +100,6 @@ internal class MoveAction(private val dir: Direction) : Action {
     val exit = w.roomOf(actor).exits.getValue(dir)
     w.changeVitals(actor, w.moveCost(RulesContext(w, actor)).mapValues { -it.value })
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit) }
-    return 0
-  }
-}
-
-internal class AdvanceAction(private val target: Actor) : Action {
-  override fun validate(w: World, actor: Actor): String? {
-    if (!w.isPresent(target, w.roomOf(actor))) return "They aren't here."
-    if (w.indexOf(target) == w.indexOf(actor)) return "You're already beside ${target.name}."
-    return null
-  }
-
-  override fun resolve(w: World, actor: Actor): Int {
-    val step = Integer.signum(target.trackIndex - actor.trackIndex)
-    if (step != 0) w.placeActor(actor, actor.room, actor.trackIndex + step)
-    w.send(actor, "You advance toward ${target.name}.")
-    w.echo(actor.room, "${actor.name.cap()} advances toward ${target.name}.", actor)
-    return w.rules.advanceLag(RulesContext(w, actor, target))
-  }
-}
-
-/** Steps away from [from], or from the nearest opponent when null. */
-internal class RetreatAction(private val from: Actor?) : Action {
-  private fun threat(w: World, actor: Actor): Actor? = from ?: w.nearestOpponent(actor)
-
-  override fun validate(w: World, actor: Actor): String? {
-    val t = threat(w, actor) ?: return "You have nothing to retreat from."
-    if (!w.isPresent(t, w.roomOf(actor))) return "They aren't here."
-    if (step(w.indexOf(actor), w.indexOf(t), w.roomOf(actor).trackSize) == null)
-      return "You can't retreat any further."
-    return null
-  }
-
-  override fun resolve(w: World, actor: Actor): Int {
-    val t = threat(w, actor)!!
-    val pinner = w.opponentsOf(actor).firstOrNull { it.trackIndex == actor.trackIndex }
-    if (
-      pinner != null && w.rng.int(1, 100) > w.rules.retreatCheck(RulesContext(w, actor, pinner))
-    ) {
-      w.send(actor, "You fail to break away!")
-      return w.rules.retreatFailLag(RulesContext(w, actor, pinner))
-    }
-    val dir = step(actor.trackIndex, t.trackIndex, actor.room.trackSize) ?: return 0
-    w.placeActor(actor, actor.room, actor.trackIndex + dir)
-    w.send(actor, "You fall back from ${t.name}.")
-    w.echo(actor.room, "${actor.name.cap()} falls back from ${t.name}.", actor)
-    return w.rules.retreatLag(RulesContext(w, actor, t))
-  }
-
-  companion object {
-    /** Direction away from [threat]; on a shared index, toward the side with more room. */
-    fun step(mine: Int, threat: Int, size: Int): Int? {
-      val dir =
-        when {
-          mine < threat -> -1
-          mine > threat -> 1
-          size - 1 - mine >= mine -> 1
-          else -> -1
-        }
-      return if (mine + dir in 0 until size) dir else null
-    }
-  }
-}
-
-/**
- * Instant; rolls `flee_chance`, ignores pinning, and leaves through a random open exit. The exit's
- * guards and `before_exit`/`before_enter` hooks still apply, so combat can't be used to slip past
- * them; a denial counts as a failed flee.
- */
-internal object FleeAction : Action {
-  override fun validate(w: World, actor: Actor): String? =
-    if (w.roomOf(actor).exits.values.none { it.passable }) "There's nowhere to flee!" else null
-
-  override fun resolve(w: World, actor: Actor): Int {
-    if (w.rng.int(1, 100) > w.rules.fleeChance(RulesContext(w, actor))) {
-      w.send(actor, "You fail to escape!")
-      return w.rules.fleeFailLag(RulesContext(w, actor))
-    }
-    val exit = w.rng.choice(actor.room.exits.values.filter { it.passable })
-    w.exitDenial(actor, exit.direction)?.let {
-      w.send(actor, it)
-      return w.rules.fleeFailLag(RulesContext(w, actor))
-    }
-    w.send(actor, "You flee ${exit.direction}!")
-    w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit, "flees") }
     return 0
   }
 }

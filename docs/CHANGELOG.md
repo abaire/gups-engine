@@ -307,6 +307,87 @@ Renamed to match `exit(senses_blocked)`; the arguments are unchanged.
 
 Renamed to match `exit(senses_blocked)`.
 
+### Added `module.features`: `combat`, `track`, `skills` and `leveling`
+
+A world lists the engine features it uses; leaving the line out turns all four on, so existing
+worlds are unchanged. `track` needs `combat`. A feature that is off doesn't exist for the world:
+its commands give "Huh?" and are left out of `help` and `gups docs --world`, and its declarations,
+declaration arguments, hooks, behaviors, package kinds, effect primitives, modifier points and
+rules exports are refused (see the next entries). The set is recorded in `meta.world_features`
+with the schema: a start with different features refuses to run, and `gups serve --wipe` is the
+way forward. `gups migrate-check` fails on a changed set.
+
+```python
+module(
+    api_version = 1,
+    features = ["combat", "skills"],
+)
+```
+
+### Features that are off refuse their declarations, hooks, behaviors and rules
+
+With a feature off, a package that uses one of its entries fails to load with "`<name>` needs the
+`<feature>` feature":
+
+- `skills`: `skill(...)`, the `skills` package kind, `mob(skills)`, the hooks `before_cast`,
+  `on_cast_start` and `on_cast`, the modifier point `cast_allowed`, the effect primitives
+  `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`.
+- `combat`: the hooks `before_attack` and `on_combat_tick`, the behaviors `aggressive`, `assist`
+  and `flee`, the modifier points `to_hit`, `damage` and `initiative`.
+- `track`: `room(size)`, `exit(entry_index)`, `spawn(at_index)`, `item(range)`, the effect
+  primitives `knockback` and `pull`, and, for a skill, the ranges `melee`, `near` and `far` (a
+  skill may omit `range`, or use `self` or `room`).
+- `leveling`: `mob(level)` and `aggressive(unless_level_above)`.
+
+The rules package may not define the exports of a feature that is off, and must define those of
+one that is on: `to_hit`, `damage`, `initiative` and `flee_chance` (`combat`), `cast_allowed` and
+`interrupt_check` (`skills`), `retreat_check` and `get_lag` (`track`), `xp_for_kill` and
+`xp_to_level` (`leveling`). `on_player_death`'s `xp_loss` is an error without `leveling`.
+
+### `ctx` verbs and view fields of a feature that is off raise "`<name>` needs the `<feature>` feature"
+
+`ctx.start_combat`, `ctx.stop_combat`, `ctx.enemies_near`, `ctx.allies_near`, `ctx.act_attack`
+and the `fighting` method (`combat`); `ctx.act_advance`, `ctx.act_retreat`, a non-zero `index` of
+`ctx.teleport`, `ctx.spawn` and `ctx.move_item`, the actor's `track_index` and `band_of`, the
+room's `size` and `track_size`, an exit's `entry_index`, an item's `range` and an item location's
+`index` (`track`); `ctx.act_cast`, and an actor's `skills`, `casting` and `is_casting` (`skills`);
+an actor's `level` and `xp` (`leveling`). Without `track` the rules `ctx.band` is `None`.
+
+### Added `module.rename`
+
+`rename = {"cast": "invoke"}` renames engine commands that aren't `@` tools. Aliases, prefixes,
+reserved exit and character names, `help` and the docs use the new names; the old name is free for
+`global_command` and plugin commands. A rename of a command that doesn't exist (or whose feature
+is off), to a name that isn't `[a-z][a-z0-9_]*` or is a direction, another command or an alias
+stops the server. `rename` needs only a restart.
+
+### Added `MESSAGES.gups` and the engine message catalog
+
+Every player-facing engine message is an entry of a catalog with a stable id (`cast.begin.known`),
+named placeholders and default text. A world overrides entries with one `messages({...})` call
+in `MESSAGES.gups`; an unknown id, an unknown placeholder or a missing required one stops the
+server, and an id of a feature that is off warns. The file is read at startup only, and a deploy
+that changes it is refused. `api.json` lists the catalog under `messages`, and `gups docs` shows it
+on `world.html`.
+
+```python
+messages({
+    "cast.begin.known": "{actor}'s implant whines as it spins up {skill}.",
+    "cast.begin.unknown": "{actor}'s implant whines.",
+})
+```
+
+### Added `feature` to `api.json` entries, and `world.html`
+
+Entries owned by a feature carry `feature`, and `gups docs --world` leaves out the entries of
+features the world has off.
+
+### Added plugin `requiredFeatures` and `PluginWorld.features`
+
+A plugin that needs features lists their ids in `GupsPlugin.requiredFeatures`; it is skipped with
+"needs the '<feature>' feature" when one is off. `PluginActor.level` and `PluginRoom.size` throw
+`IllegalStateException` naming the feature when `leveling` or `track` is off.
+
 ## api_version 1
 
 Initial (unstable) script API.

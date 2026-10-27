@@ -228,6 +228,7 @@ class RecordingSink : OutputSink {
 class LoginFixture(
   val settings: LoginSettings = LoginSettings(),
   val hasher: CountingHasher = CountingHasher(),
+  config: WorldConfig = WorldConfig(seed = 1, strict = true),
 ) {
   val store = MemoryAccountStore()
 
@@ -237,13 +238,7 @@ class LoginFixture(
   val limiter = LoginLimiter { now }
   private val work = ArrayDeque<Runnable>()
   private val events = ArrayDeque<WorldControlEvent>()
-  val w =
-    World(
-      testProtos(),
-      FixtureSchemas.FANTASY.schema,
-      FixtureRules(),
-      config = WorldConfig(seed = 1, strict = true),
-    )
+  val w = World(testProtos(), FixtureSchemas.FANTASY.schema, FixtureRules(), config = config)
   val persistence = MemoryPersistence()
   private var nextSession = 1L
 

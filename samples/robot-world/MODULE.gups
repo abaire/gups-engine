@@ -25,9 +25,21 @@ module(
 
     prompt = "<{integrity}i {sanity}s {power}p> ",
 
+    # No spatial track and no experience: robots fight and invoke, and are never "levelled".
+    # Changing the features needs a server wipe, like changing a name.
+    features = ["combat", "skills"],
+
+    # Chassis software invokes routines instead of casting spells.
+    rename = {"cast": "invoke"},
+
     aliases = {
         "l": "look",
         "i": "inventory",
         "k": "kill",
+        "x": "invoke",
+    },
+
+    prefixes = {
+        "%": "invoke",
     },
 )

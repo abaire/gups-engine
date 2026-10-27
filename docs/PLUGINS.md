@@ -36,6 +36,14 @@ class WeatherPlugin : GupsPlugin {
 - `id` matches `[a-z][a-z0-9_]*`. Scripts reach the plugin's builtins and effects as fields of a
   global with that name (`weather.now(room)`), so it can't be a predeclared name such as `room`.
 - `pluginApiVersion` must equal `PluginApi.VERSION`.
+- `requiredFeatures` (default none) lists the engine features the plugin needs, such as
+  `setOf("leveling")`. A world that has one of them off, or that names an unknown one, skips the
+  plugin with `plugin '<id>': needs the '<feature>' feature`. `PluginWorld.features` lists the
+  features the world has on, for a plugin that only uses some of them optionally; `PluginActor.level`
+  throws an `IllegalStateException` naming `leveling`, and `PluginRoom.size` one naming `track`,
+  when the feature is off.
+- Command names are checked against the world's engine commands after `rename`: a plugin command
+  may take a name the world renamed away (or whose feature is off), and may not take the new name.
 - `register(r)` adds everything through the `PluginRegistry`. It is atomic: if it throws, or
   registers an invalid or clashing name, the plugin adds nothing and is skipped with a warning.
 

@@ -1,8 +1,11 @@
 package gups.cli
 
 import gups.core.Label
+import gups.core.world.Features
 import gups.core.world.World
+import gups.core.world.WorldConfig
 import gups.persist.EntityRow
+import gups.persist.FeatureRecord
 import gups.persist.ItemPayload
 import gups.persist.LocationJson
 import gups.persist.SchemaRecord
@@ -52,6 +55,17 @@ class MigrationChecker(
 
     val persistence = SqlitePersistence.open(snapshotDb)
     try {
+      // A database from before feature modules ran with all of them.
+      (persistence.worldFeatures
+          ?: persistence.worldSchema?.let { FeatureRecord.encode(Features.ALL) })
+        ?.let { saved ->
+          FeatureRecord.mismatch(saved, loader.module.features)?.let {
+            return Outcome(
+              ok = false,
+              problems = listOf("this schema or feature change needs a server wipe:\n$it"),
+            )
+          }
+        }
       persistence.worldSchema?.let { saved ->
         SchemaRecord.mismatch(saved, loader.schema.names)?.let {
           return Outcome(
@@ -73,7 +87,14 @@ class MigrationChecker(
 
       val host = StarlarkHost(loadResult, ScriptLimits(), loader)
       val boot = persistence.boot(loadResult.prototypes(), fresh = false)
-      val world = World(loadResult.prototypes(), loader.schema, host.rules(), host, boot = boot)
+      val config =
+        WorldConfig(
+          aliases = loader.module.aliases,
+          features = loader.module.features,
+          rename = loader.module.rename,
+        )
+      val world =
+        World(loadResult.prototypes(), loader.schema, host.rules(), host, config, boot = boot)
       plugins.install(world)
       host.install(world)
       plugins.started(world)

@@ -29,6 +29,7 @@ import gups.auth.parseDuration
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.Role
+import gups.core.world.CommandRegistry
 import gups.harness.FuzzWalker
 import gups.harness.HarnessApi
 import gups.harness.ReproRunner
@@ -55,6 +56,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.ServerConfig
 import gups.script.WorldDir
+import gups.script.WorldMessages
 import gups.script.WorldModule
 import java.io.File
 import java.nio.file.Files
@@ -711,6 +713,7 @@ class Docs : CliktCommand(name = "docs") {
     val dir = out ?: File("build/docs")
     if (dir.isFile || dir.name.endsWith(".json"))
       throw UsageError("--out: give a directory for the HTML reference, not ${dir.name}")
+    var spec: WorldDocSpec? = null
     val plugins =
       world
         ?.let { w ->
@@ -718,11 +721,16 @@ class Docs : CliktCommand(name = "docs") {
           val (module, error) = WorldModule.read(worldDir)
           if (error != null) throw UsageError("--world: ${error.render()}")
           module.problems().firstOrNull()?.let { throw UsageError("--world: $it") }
+          val (messages, messagesError) = WorldMessages.read(worldDir)
+          if (messagesError != null) throw UsageError("--world: ${messagesError.render()}")
+          messages.problems().firstOrNull()?.let { throw UsageError("--world: $it") }
+          spec = worldDocSpec(module, messages)
           loadPlugins(worldDir, module) { echo("warning: $it", err = true) }
             .use { it.describe().map(::toDocSpec) }
         }
         .orEmpty()
-    val files = DocsRenderer.render(ScriptApi.model(HarnessApi.specs()), plugins = plugins)
+    val files =
+      DocsRenderer.render(ScriptApi.model(HarnessApi.specs()), plugins = plugins, world = spec)
     dir.mkdirs()
     for ((name, text) in files) dir.resolve(name).writeText(text, Charsets.UTF_8)
     echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")
@@ -1065,3 +1073,13 @@ class ImportRoster : CliktCommand(name = "import-roster") {
     }
   }
 }
+
+/** What `world.html` and the feature filter of `gups docs --world` need from a world. */
+fun worldDocSpec(module: WorldModule, messages: WorldMessages): WorldDocSpec =
+  WorldDocSpec(
+    module.schema,
+    module.features,
+    module.rename,
+    CommandRegistry.describe(module.features, module.rename),
+    messages.texts,
+  )

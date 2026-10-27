@@ -5,6 +5,10 @@ package gups.pluginapi
 // current state on every access.
 
 interface PluginWorld {
+  /** The engine features this world has on: `combat`, `track`, `skills`, `leveling`. */
+  val features: Set<String>
+    get() = setOf("combat", "track", "skills", "leveling")
+
   // ---- Verbs ----
 
   fun send(target: PluginActor, text: String)

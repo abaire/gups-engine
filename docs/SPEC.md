@@ -871,14 +871,14 @@ module(
 
 The engine is a kernel plus four feature modules. A world lists the features it uses in
 `MODULE.gups`, `features = ["combat", "track", "skills", "leveling"]`; leaving `features`
-out turns all four on.
+out turns all four on, and listing all four is the same as leaving it out.
 
 | Feature | Owns | Requires |
 |---|---|---|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | — |
-| `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
-| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, `Room.Bands`, `@where`, `band_of`, the `index` arguments of verbs, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
-| `skills` | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives (`damage`, `heal`, `stun`, `summon`, `sequence`, …), `casting` in `Char.Status` | — |
+| `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
+| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, the `CRAMPED`, `NORMAL` and `LARGE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
+| `skills` | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status` | — |
 | `leveling` | `level` and `xp`, `xp_for_kill`, `xp_to_level`, XP loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who` | — |
 
 - **A feature that is off doesn't exist** for the world:
@@ -890,7 +890,7 @@ out turns all four on.
   - Its GMCP packages and fields aren't sent.
 - **Without `track`,** every room has one track slot and every actor and item sits at index
   0, so combat, movement and items keep one code path; nothing shows bands. `look` lists
-  actors and items without band groups. A skill's `range` may be omitted (any one target in
+  them as `Also here: …` and `On the ground: …`. A skill's `range` may be omitted (any one target in
   the room), `self` or `room`. The rules `ctx.band` is `None`, and `get` costs no lag.
 - **Without `combat`,** nobody engages. Damage from skills and verbs still lowers vitals and
   can still kill through `condition` (§5.4), with the last actor who damaged the victim as
@@ -907,7 +907,8 @@ out turns all four on.
   direction, or is another command or alias, stops the server.
 - **Problems:** an unknown feature, or one whose requirement is off, stops the server.
 - **Fixed per database:** the enabled features are recorded in `meta.world_features` with
-  the schema and checked the same way (§3.9). `rename` and `MESSAGES.gups` aren't recorded
+  the schema and checked the same way (§3.9). A database that predates feature modules is
+  taken to have all four. `rename` and `MESSAGES.gups` aren't recorded
   and need only a restart.
 - **Plugins** declare the features they need (§4.15).
 
@@ -2501,7 +2502,8 @@ implant spins up").
   and `help` framing, and login and character-menu text. Output of `@` tools isn't in the
   catalog; staff see engine terms.
 - **Placeholders** are `{name}`, filled in when the line is sent. Actor placeholders take the
-  name as the viewer sees it. `{{` is a literal brace, as in color markup (§4.10), which
+  name as the viewer sees it; `{actor}` is capitalized for the start of a sentence, other
+  actor and item placeholders are plain names. `{{` is a literal brace, as in color markup (§4.10), which
   message text may use.
 - **Overrides:** `MESSAGES.gups` at the world root, with one call:
 

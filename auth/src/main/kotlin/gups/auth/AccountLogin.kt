@@ -9,13 +9,16 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Player
 import gups.core.world.Diagnostic
+import gups.core.world.KernelMsg
 import gups.core.world.LoginHandler
+import gups.core.world.LoginMsg
 import gups.core.world.Session
 import gups.core.world.World
 import gups.core.world.closeSession
 import gups.core.world.enterGame
 import gups.core.world.flush
 import gups.core.world.handle
+import gups.core.world.msg
 import gups.core.world.sendSession
 import gups.core.world.session
 import gups.core.world.takeOver
@@ -39,8 +42,9 @@ data class LoginSettings(
 /** Lines a session may type ahead while a password check runs. */
 private const val MAX_HELD_LINES = 20
 
-const val LOGIN_PROMPT =
-  "By what name do you wish to be known? (login, or \"new\" with an invite code) "
+/** The default login prompt; a world may reword it. */
+val LOGIN_PROMPT: String
+  get() = LoginMsg.PROMPT.default
 
 /**
  * The account login of `--prod`: login and password, invite and setup codes, then character
@@ -99,16 +103,13 @@ class AccountLogin(
   override fun connected(world: World, session: Session) {
     val c = Conn(world.pulse)
     conns[session.id] = c
-    world.sendSession(session, "Welcome to GUPS.")
-    val proven = session.account ?: return ask(world, session, c, Step.LOGIN, LOGIN_PROMPT)
+    world.sendSession(session, world.msg(LoginMsg.WELCOME))
+    val proven = session.account ?: return ask(world, session, c, Step.LOGIN, loginPrompt(world))
     // A web session token already proved the account: straight to the characters.
     later(world, session, c, { accounts.store.byId(proven) }) { w, s, a ->
       if (a == null || a.disabled || a.id in disabledAccounts) {
-        w.sendSession(
-          s,
-          if (a == null) "That account no longer exists." else "This account is disabled.",
-        )
-        return@later w.closeSession(s, "Goodbye.")
+        w.sendSession(s, w.msg(if (a == null) LoginMsg.ACCOUNT_GONE else LoginMsg.ACCOUNT_DISABLED))
+        return@later w.closeSession(s, w.msg(KernelMsg.QUIT_GOODBYE))
       }
       c.account = a
       c.login = a.login
@@ -127,8 +128,8 @@ class AccountLogin(
         val s = world.session(id)
         if (s != null) {
           if (c.step.hidden) s.sink.hideInput(false)
-          world.sendSession(s, "This account has been disabled.")
-          world.closeSession(s, "Goodbye.")
+          world.sendSession(s, world.msg(LoginMsg.ACCOUNT_NOW_DISABLED))
+          world.closeSession(s, world.msg(KernelMsg.QUIT_GOODBYE))
         }
       }
     }
@@ -147,7 +148,7 @@ class AccountLogin(
         continue
       }
       if (c.step.hidden) s.sink.hideInput(false)
-      world.closeSession(s, "You took too long. Goodbye.")
+      world.closeSession(s, world.msg(LoginMsg.TOO_SLOW))
     }
   }
 
@@ -170,13 +171,13 @@ class AccountLogin(
       Step.CODE -> code(world, session, c, text)
       Step.NEW_LOGIN -> newLogin(world, session, c, text)
       Step.NEW_PASSWORD -> {
-        val problem = Names.passwordProblem(line, c.login)
+        val problem = Names.passwordProblem(line, c.login, world.config.messages)
         if (problem != null) {
           world.sendSession(session, problem)
-          ask(world, session, c, Step.NEW_PASSWORD, "Password: ")
+          ask(world, session, c, Step.NEW_PASSWORD, world.msg(LoginMsg.PASSWORD_PROMPT))
         } else {
           c.newPassword = line
-          ask(world, session, c, Step.NEW_PASSWORD_AGAIN, "Password again: ")
+          ask(world, session, c, Step.NEW_PASSWORD_AGAIN, world.msg(LoginMsg.PASSWORD_AGAIN))
         }
       }
       Step.NEW_PASSWORD_AGAIN -> redeem(world, session, c, line)
@@ -184,16 +185,16 @@ class AccountLogin(
       Step.NAME -> createCharacter(world, session, c, text)
       Step.OLD_PASSWORD -> {
         c.oldPassword = line
-        ask(world, session, c, Step.CHANGE_PASSWORD, "New password: ")
+        ask(world, session, c, Step.CHANGE_PASSWORD, world.msg(LoginMsg.NEW_PASSWORD_PROMPT))
       }
       Step.CHANGE_PASSWORD -> {
-        val problem = Names.passwordProblem(line, c.login)
+        val problem = Names.passwordProblem(line, c.login, world.config.messages)
         if (problem != null) {
           world.sendSession(session, problem)
-          ask(world, session, c, Step.CHANGE_PASSWORD, "New password: ")
+          ask(world, session, c, Step.CHANGE_PASSWORD, world.msg(LoginMsg.NEW_PASSWORD_PROMPT))
         } else {
           c.newPassword = line
-          ask(world, session, c, Step.CHANGE_PASSWORD_AGAIN, "New password again: ")
+          ask(world, session, c, Step.CHANGE_PASSWORD_AGAIN, world.msg(LoginMsg.NEW_PASSWORD_AGAIN))
         }
       }
       Step.CHANGE_PASSWORD_AGAIN -> changePassword(world, session, c, line)
@@ -223,11 +224,11 @@ class AccountLogin(
 
   private fun login(world: World, s: Session, c: Conn, text: String) {
     when {
-      text.isEmpty() -> ask(world, s, c, Step.LOGIN, LOGIN_PROMPT)
+      text.isEmpty() -> ask(world, s, c, Step.LOGIN, loginPrompt(world))
       text.equals("new", ignoreCase = true) -> askCode(world, s, c)
       else -> {
         c.login = text.lowercase()
-        ask(world, s, c, Step.PASSWORD, "Password: ")
+        ask(world, s, c, Step.PASSWORD, world.msg(LoginMsg.PASSWORD_PROMPT))
       }
     }
   }
@@ -238,7 +239,12 @@ class AccountLogin(
     val locked = limiter.lockedFor(accountKey, ipKey)
     // Refused without hashing, so a locked-out attacker can't spend the server's CPU.
     if (locked > 0)
-      return strike(world, s, c, "Too many failed logins. Try again in ${seconds(locked)}.")
+      return strike(
+        world,
+        s,
+        c,
+        world.msg(LoginMsg.TOO_MANY_LOGINS, "wait" to seconds(world, locked)),
+      )
     val login = c.login
     later(
       world,
@@ -258,11 +264,11 @@ class AccountLogin(
       when {
         a == null -> {
           limiter.failure(accountKey, ipKey)
-          strike(w, session, c, "Wrong login or password.")
+          strike(w, session, c, w.msg(LoginMsg.WRONG))
         }
         a.disabled || a.id in disabledAccounts -> {
-          w.sendSession(session, "This account is disabled.")
-          w.closeSession(session, "Goodbye.")
+          w.sendSession(session, w.msg(LoginMsg.ACCOUNT_DISABLED))
+          w.closeSession(session, w.msg(KernelMsg.QUIT_GOODBYE))
         }
         else -> {
           limiter.success(accountKey)
@@ -279,9 +285,9 @@ class AccountLogin(
     c.strikes++
     world.sendSession(s, message)
     if (c.strikes >= settings.maxWrongPasswords)
-      return world.closeSession(s, "Too many wrong passwords. Goodbye.")
+      return world.closeSession(s, world.msg(LoginMsg.TOO_MANY_WRONG))
     c.account = null
-    ask(world, s, c, Step.LOGIN, LOGIN_PROMPT)
+    ask(world, s, c, Step.LOGIN, loginPrompt(world))
   }
 
   // ---- New accounts ------------------------------------------------------------------------
@@ -292,27 +298,31 @@ class AccountLogin(
       s,
       c,
       Step.CODE,
-      if (settings.openSignup) "Invite code (or press Enter to sign up without one): "
-      else "Invite or setup code: ",
+      world.msg(if (settings.openSignup) LoginMsg.CODE_PROMPT_OPEN else LoginMsg.CODE_PROMPT),
     )
 
   private fun askNewLogin(world: World, s: Session, c: Conn) =
-    ask(world, s, c, Step.NEW_LOGIN, "Choose a login (3 to 24 characters: a-z, 0-9, _ . -): ")
+    ask(world, s, c, Step.NEW_LOGIN, world.msg(LoginMsg.NEW_LOGIN_PROMPT))
 
   private fun code(world: World, s: Session, c: Conn, text: String) {
     if (text.isEmpty()) {
-      if (!settings.openSignup) return ask(world, s, c, Step.LOGIN, LOGIN_PROMPT)
+      if (!settings.openSignup) return ask(world, s, c, Step.LOGIN, loginPrompt(world))
       c.code = null
       return askNewLogin(world, s, c)
     }
     val ipKey = LoginLimiter.ipKey(s.remote)
     val locked = limiter.lockedFor(ipKey)
     if (locked > 0)
-      return strike(world, s, c, "Too many failed attempts. Try again in ${seconds(locked)}.")
+      return strike(
+        world,
+        s,
+        c,
+        world.msg(LoginMsg.TOO_MANY_ATTEMPTS, "wait" to seconds(world, locked)),
+      )
     val code = Codes.normalize(text)
     if (code == null) {
       limiter.failure(ipKey)
-      return strike(world, s, c, "That code isn't valid, or it has expired.")
+      return strike(world, s, c, world.msg(LoginMsg.BAD_CODE))
     }
     later(
       world,
@@ -326,16 +336,16 @@ class AccountLogin(
       when {
         invite == null || (invite.accountId != null && bound == null) -> {
           limiter.failure(ipKey)
-          strike(w, session, c, "That code isn't valid, or it has expired.")
+          strike(w, session, c, w.msg(LoginMsg.BAD_CODE))
         }
         bound != null -> {
           c.code = code
           c.login = bound.login
           w.sendSession(
             session,
-            "This code sets up the account '${bound.login}'. Choose a password of at least ${Names.MIN_PASSWORD} characters.",
+            w.msg(LoginMsg.SETUP_CODE, "login" to bound.login, "min" to Names.MIN_PASSWORD),
           )
-          ask(w, session, c, Step.NEW_PASSWORD, "Password: ")
+          ask(w, session, c, Step.NEW_PASSWORD, w.msg(LoginMsg.PASSWORD_PROMPT))
         }
         else -> {
           c.code = code
@@ -347,25 +357,25 @@ class AccountLogin(
 
   private fun newLogin(world: World, s: Session, c: Conn, text: String) {
     val login = text.lowercase()
-    Names.loginProblem(login)?.let { problem ->
+    Names.loginProblem(login, world.config.messages)?.let { problem ->
       world.sendSession(s, problem)
       return askNewLogin(world, s, c)
     }
     later(world, s, c, { accounts.store.byLogin(login) != null }) { w, session, taken ->
       if (taken) {
-        w.sendSession(session, "That login is taken.")
+        w.sendSession(session, w.msg(LoginMsg.LOGIN_TAKEN))
         return@later askNewLogin(w, session, c)
       }
       c.login = login
-      w.sendSession(session, "Choose a password of at least ${Names.MIN_PASSWORD} characters.")
-      ask(w, session, c, Step.NEW_PASSWORD, "Password: ")
+      w.sendSession(session, w.msg(LoginMsg.CHOOSE_PASSWORD, "min" to Names.MIN_PASSWORD))
+      ask(w, session, c, Step.NEW_PASSWORD, w.msg(LoginMsg.PASSWORD_PROMPT))
     }
   }
 
   private fun redeem(world: World, s: Session, c: Conn, again: String) {
     if (again != c.newPassword) {
-      world.sendSession(s, "The passwords don't match.")
-      return ask(world, s, c, Step.NEW_PASSWORD, "Password: ")
+      world.sendSession(s, world.msg(LoginMsg.MISMATCH))
+      return ask(world, s, c, Step.NEW_PASSWORD, world.msg(LoginMsg.PASSWORD_PROMPT))
     }
     val (code, login, password) = Triple(c.code, c.login, c.newPassword)
     c.newPassword = ""
@@ -373,21 +383,21 @@ class AccountLogin(
       when (r) {
         is Redeemed.Ok -> {
           if (r.account.disabled || r.account.id in disabledAccounts) {
-            w.sendSession(session, "This account is disabled.")
-            w.closeSession(session, "Goodbye.")
+            w.sendSession(session, w.msg(LoginMsg.ACCOUNT_DISABLED))
+            w.closeSession(session, w.msg(KernelMsg.QUIT_GOODBYE))
             return@later
           }
           c.account = r.account
           c.login = r.account.login
-          w.sendSession(session, "Your account '${r.account.login}' is ready.")
+          w.sendSession(session, w.msg(LoginMsg.ACCOUNT_READY, "login" to r.account.login))
           menu(w, session, c)
         }
         Redeemed.BadCode -> {
-          w.sendSession(session, "That code was used or ran out in the meantime.")
-          ask(w, session, c, Step.LOGIN, LOGIN_PROMPT)
+          w.sendSession(session, w.msg(LoginMsg.CODE_USED))
+          ask(w, session, c, Step.LOGIN, loginPrompt(world))
         }
         Redeemed.LoginTaken -> {
-          w.sendSession(session, "Someone took that login in the meantime.")
+          w.sendSession(session, w.msg(LoginMsg.LOGIN_TAKEN_MEANWHILE))
           askNewLogin(w, session, c)
         }
       }
@@ -399,13 +409,10 @@ class AccountLogin(
   private fun menu(world: World, s: Session, c: Conn) {
     val names = characters(world, c.account!!)
     val list =
-      if (names.isEmpty()) "You have no characters yet."
-      else "Your characters: ${names.joinToString(", ")}."
-    world.sendSession(
-      s,
-      "$list  Type a name to play, \"new\" to create, or \"password\" to change yours.",
-    )
-    ask(world, s, c, Step.MENU, "> ")
+      if (names.isEmpty()) world.msg(LoginMsg.NO_CHARACTERS)
+      else world.msg(LoginMsg.CHARACTERS, "names" to names.joinToString(", "))
+    world.sendSession(s, world.msg(LoginMsg.MENU, "characters" to list))
+    ask(world, s, c, Step.MENU, world.msg(LoginMsg.MENU_PROMPT))
   }
 
   private fun again(world: World, s: Session, c: Conn, message: String) {
@@ -430,12 +437,13 @@ class AccountLogin(
       text.equals("new", ignoreCase = true) -> {
         val why =
           cantCreate(world, a)
-            ?: return ask(world, s, c, Step.NAME, "What will your new character be called? ")
+            ?: return ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
         again(world, s, c, why)
       }
       text.equals("password", ignoreCase = true) ->
-        ask(world, s, c, Step.OLD_PASSWORD, "Current password: ")
-      text.equals("quit", ignoreCase = true) -> world.closeSession(s, "Goodbye.")
+        ask(world, s, c, Step.OLD_PASSWORD, world.msg(LoginMsg.OLD_PASSWORD_PROMPT))
+      text.equals("quit", ignoreCase = true) ->
+        world.closeSession(s, world.msg(KernelMsg.QUIT_GOODBYE))
       else -> play(world, s, c, a, text)
     }
   }
@@ -443,10 +451,10 @@ class AccountLogin(
   private fun play(world: World, s: Session, c: Conn, a: Account, text: String) {
     val name =
       characters(world, a).firstOrNull { it.equals(text, ignoreCase = true) }
-        ?: return again(world, s, c, "You have no character called ${text.take(16)}.")
+        ?: return again(world, s, c, world.msg(LoginMsg.NO_SUCH_CHARACTER, "name" to text.take(16)))
     val other = playing(world, a)
     if (other != null && !other.name.equals(name, ignoreCase = true))
-      return again(world, s, c, "You're already playing ${other.name}.")
+      return again(world, s, c, world.msg(LoginMsg.ALREADY_PLAYING, "name" to other.name))
     if (other != null) {
       world.takeOver(other)
       return enter(world, s, c, other, null)
@@ -457,17 +465,17 @@ class AccountLogin(
     }
     val p =
       world.persistence.loadCharacter(world, name)
-        ?: return again(world, s, c, "$name can't be found.")
-    enter(world, s, c, p, "Welcome back, ${p.name}.")
+        ?: return again(world, s, c, world.msg(LoginMsg.CANT_FIND, "name" to name))
+    enter(world, s, c, p, world.msg(KernelMsg.WELCOME_BACK, "name" to p.name))
   }
 
   private fun cantCreate(world: World, a: Account): String? {
     playing(world, a)?.let {
-      return "You're already playing ${it.name}."
+      return world.msg(LoginMsg.ALREADY_PLAYING, "name" to it.name)
     }
     val count = characters(world, a).size
     if (!a.role.atLeast(Role.INSTRUCTOR) && count >= settings.maxCharacters) {
-      return "You already have $count characters, the most an account may have."
+      return world.msg(LoginMsg.CHARACTER_LIMIT, "count" to count)
     }
     return null
   }
@@ -477,16 +485,16 @@ class AccountLogin(
     if (text.isEmpty()) return menu(world, s, c)
     val retry = { message: String ->
       world.sendSession(s, message)
-      ask(world, s, c, Step.NAME, "What will your new character be called? ")
+      ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
     }
-    val name = Names.characterName(text) ?: return retry("Names are 2 to 16 letters.")
+    val name = Names.characterName(text) ?: return retry(world.msg(LoginMsg.NAME_INVALID))
     if (name.lowercase() in Names.reserved(world, settings.reservedNames))
-      return retry("That name is reserved.")
+      return retry(world.msg(LoginMsg.NAME_RESERVED))
     if (
       world.players.any { it.name.equals(name, ignoreCase = true) } ||
         world.persistence.savedCharacter(name) != null
     ) {
-      return retry("That name is taken.")
+      return retry(world.msg(LoginMsg.NAME_TAKEN))
     }
     cantCreate(world, a)?.let {
       return again(world, s, c, it)
@@ -497,7 +505,7 @@ class AccountLogin(
     }
     val p = world.spawnPlayer(name, start, accountId = a.id)
     world.requestImmediate("create")
-    enter(world, s, c, p, "Welcome, $name.")
+    enter(world, s, c, p, world.msg(KernelMsg.WELCOME_NEW, "name" to name))
   }
 
   private fun enter(world: World, s: Session, c: Conn, p: Player, welcome: String?) {
@@ -511,8 +519,8 @@ class AccountLogin(
 
   private fun changePassword(world: World, s: Session, c: Conn, again: String) {
     if (again != c.newPassword) {
-      world.sendSession(s, "The passwords don't match.")
-      return ask(world, s, c, Step.CHANGE_PASSWORD, "New password: ")
+      world.sendSession(s, world.msg(LoginMsg.MISMATCH))
+      return ask(world, s, c, Step.CHANGE_PASSWORD, world.msg(LoginMsg.NEW_PASSWORD_PROMPT))
     }
     val a = c.account!!
     val accountKey = LoginLimiter.accountKey(a.login)
@@ -522,7 +530,12 @@ class AccountLogin(
     c.newPassword = ""
     val locked = limiter.lockedFor(accountKey, ipKey)
     if (locked > 0)
-      return again(world, s, c, "Too many failed logins. Try again in ${seconds(locked)}.")
+      return again(
+        world,
+        s,
+        c,
+        world.msg(LoginMsg.TOO_MANY_LOGINS, "wait" to seconds(world, locked)),
+      )
     later(
       world,
       s,
@@ -537,14 +550,14 @@ class AccountLogin(
         }
       },
     ) { w, session, changed ->
-      if (changed) return@later again(w, session, c, "Your password has been changed.")
+      if (changed) return@later again(w, session, c, w.msg(LoginMsg.PASSWORD_CHANGED))
       limiter.failure(accountKey, ipKey)
       c.strikes++
       if (c.strikes >= settings.maxWrongPasswords) {
-        w.sendSession(session, "That isn't your current password.")
-        return@later w.closeSession(session, "Too many wrong passwords. Goodbye.")
+        w.sendSession(session, w.msg(LoginMsg.NOT_CURRENT))
+        return@later w.closeSession(session, w.msg(LoginMsg.TOO_MANY_WRONG))
       }
-      again(w, session, c, "That isn't your current password.")
+      again(w, session, c, w.msg(LoginMsg.NOT_CURRENT))
     }
   }
 
@@ -592,10 +605,14 @@ class AccountLogin(
 
   private fun failed(world: World, s: Session, c: Conn, step: Step, e: Throwable) {
     world.record(Diagnostic(world.pulse, "engine", "login of ${s.id} failed at $step: $e", e))
-    world.sendSession(s, "Something went wrong on the server. Please try again.")
-    if (c.account != null) menu(world, s, c) else ask(world, s, c, Step.LOGIN, LOGIN_PROMPT)
+    world.sendSession(s, world.msg(LoginMsg.ERROR))
+    if (c.account != null) menu(world, s, c) else ask(world, s, c, Step.LOGIN, loginPrompt(world))
   }
 
-  private fun seconds(ms: Long): String =
-    ((ms + 999) / 1000).let { if (it == 1L) "1 second" else "$it seconds" }
+  private fun seconds(world: World, ms: Long): String =
+    ((ms + 999) / 1000).let {
+      if (it == 1L) world.msg(LoginMsg.ONE_SECOND) else world.msg(LoginMsg.SECONDS, "n" to it)
+    }
+
+  private fun loginPrompt(world: World): String = world.msg(LoginMsg.PROMPT)
 }

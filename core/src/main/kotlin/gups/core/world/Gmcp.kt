@@ -28,9 +28,6 @@ fun World.gmcp(p: Player, pkg: String, data: Any?): Boolean {
   return true
 }
 
-/** The feature modules every world has until worlds can turn them off. */
-private val FEATURES = listOf("combat", "track", "skills", "leveling")
-
 /** `Comm.Channel.Text` to each of [to] that is a player. */
 internal fun World.channel(
   channel: String,
@@ -49,6 +46,7 @@ internal fun World.channel(
 internal fun World.gmcpDeltas(s: Session) {
   val p = s.player ?: return
   for (pkg in STATE_PACKAGES) {
+    if (pkg == "Room.Bands" && Feature.TRACK !in features) continue
     if (!s.sink.wantsGmcp(pkg)) continue
     val data = gmcpPayload(p, pkg)
     if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
@@ -77,7 +75,7 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
         "stats" to schema.stats.map { mapOf("name" to it.name, "label" to it.label) },
         "vitals" to schema.vitals.map { mapOf("name" to it.name, "label" to it.label) },
         "damage_types" to schema.damageTypes,
-        "features" to FEATURES,
+        "features" to features.ids,
       )
     "Char.Vitals" ->
       LinkedHashMap<String, Any?>().also { out ->
@@ -87,23 +85,28 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
         }
       }
     "Char.Status" ->
-      mapOf(
-        "name" to p.name,
-        "level" to p.level,
-        "xp" to p.xp,
-        "xp_next" to rules.xpToLevel(p.level),
-        "wait" to p.waitState,
-        "casting" to
-          p.casting?.let { c ->
-            val total = (c.endsAt - c.startedAt).coerceAtLeast(1)
-            mapOf(
-              "skill" to ((c.action as? Castable)?.skill?.name ?: "action"),
-              "progress" to ((pulse - c.startedAt) * 100 / total).coerceIn(0, 100),
-            )
-          },
-        "initiative" to p.initiative,
-        "fighting" to p.fighting.mapNotNull { actor(it)?.name },
-      )
+      LinkedHashMap<String, Any?>().also { out ->
+        out["name"] = p.name
+        if (Feature.LEVELING in features) {
+          out["level"] = p.level
+          out["xp"] = p.xp
+          out["xp_next"] = rules.xpToLevel(p.level)
+        }
+        out["wait"] = p.waitState
+        if (Feature.SKILLS in features)
+          out["casting"] =
+            p.casting?.let { c ->
+              val total = (c.endsAt - c.startedAt).coerceAtLeast(1)
+              mapOf(
+                "skill" to ((c.action as? Castable)?.skill?.name ?: "action"),
+                "progress" to ((pulse - c.startedAt) * 100 / total).coerceIn(0, 100),
+              )
+            }
+        if (Feature.COMBAT in features) {
+          out["initiative"] = p.initiative
+          out["fighting"] = p.fighting.mapNotNull { actor(it)?.name }
+        }
+      }
     "Char.Affects" ->
       p.affects.map { a ->
         mapOf(

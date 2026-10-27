@@ -209,3 +209,50 @@ fun buildPluginJar(jar: Path, vararg classes: KClass<out GupsPlugin>): String {
   val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(jar))
   return "sha256:" + digest.joinToString("") { "%02x".format(it) }
 }
+
+/** Needs the `skills` feature. */
+class CastyPlugin : GupsPlugin {
+  override val id = "casty"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("skills")
+
+  override fun register(r: PluginRegistry) =
+    r.addCommand("channel", PluginLane.FAST, doc = "Needs skills.") {}
+}
+
+/** Needs a feature that does not exist. */
+class BogusFeaturePlugin : GupsPlugin {
+  override val id = "bogus"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("telepathy")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Registers `cast`, which only a world without the engine's `cast` can have. */
+class CastClashPlugin : GupsPlugin {
+  override val id = "caster"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.addCommand("cast", PluginLane.FAST, doc = "Mine.") {}
+}
+
+/** Registers `invoke`, which a world that renames `cast` to `invoke` has for itself. */
+class InvokeClashPlugin : GupsPlugin {
+  override val id = "invoker"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) =
+    r.addCommand("invoke", PluginLane.FAST, doc = "Mine.") {}
+}
+
+/** Reads the level of the actor who runs `lvl`. */
+class LevelReaderPlugin : GupsPlugin {
+  override val id = "lvl"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) =
+    r.addCommand("lvl", PluginLane.FAST, doc = "Level.") { call ->
+      call.world.send(call.actor, "level ${call.actor.level}")
+    }
+}

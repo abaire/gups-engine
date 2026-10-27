@@ -57,7 +57,7 @@ object ApiDiff {
 
   /**
    * Every object with a `symbol`, mapped to its scalar fields and string lists, minus `symbol`,
-   * `doc` and `since`.
+   * `doc`, `since` and `feature`.
    */
   private fun symbolFields(root: JsonElement): Map<String, Symbol> {
     val out = HashMap<String, Symbol>()
@@ -69,7 +69,7 @@ object ApiDiff {
             out[sym.content] =
               Symbol(
                 e.filter { (k, v) ->
-                  k !in setOf("symbol", "doc", "since") &&
+                  k !in setOf("symbol", "doc", "since", "feature") &&
                     (v is JsonPrimitive ||
                       (v is JsonArray && v.isNotEmpty() && v.all { it is JsonPrimitive }))
                 },

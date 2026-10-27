@@ -1,0 +1,42 @@
+# The robot world's words. The mechanics are the engine's; only the text differs. A message
+# may use {name} placeholders its entry lists (see the message catalog in the API reference)
+# and must keep the ones it marks required. Changing this file needs a server restart.
+messages({
+    # Casting is "invoking" a routine.
+    "cast.what": "Invoke what?",
+    "cast.unknown_skill": "You have no such routine.",
+    "cast.on_what": "Invoke {skill} on what?",
+    "cast.at_whom": "Invoke {skill} at whom?",
+    "cast.not_enough": "Your routine needs more {vital}.",
+    "cast.begin.self": "Your implant spins up {skill}.",
+    "cast.begin.known": "{actor}'s implant whines as it spins up {skill}.",
+    "cast.begin.unknown": "{actor}'s implant whines.",
+    "cast.done.self": "You invoke {skill}.",
+    "cast.done.target": "You invoke {skill} at {target}.",
+    "cast.done.victim": "{actor} invokes {skill} at you!",
+    "cast.room.self": "{actor} invokes {skill}.",
+    "cast.room.target": "{actor} invokes {skill} at {target}.",
+    "cast.interrupted": "Your routine is interrupted!",
+    "stop.cast": "You abort the routine.",
+
+    # Conditions are chassis failures.
+    "condition.down": "Your systems fail and you power down.",
+    "condition.down_room": "{actor} powers down with a shudder.",
+    "condition.up": "Your systems reboot.",
+    "condition.up_room": "{actor} reboots.",
+    "death.self": "Your chassis is DESTROYED!",
+    "death.room": "{actor} is DESTROYED!",
+    "death.respawn": "{name} reassembles on the slab, rattled.",
+
+    # Combat.
+    "combat.attack": "You open fire on {target}!",
+    "combat.attacked": "{actor} opens fire on you!",
+    "combat.fighting": "{actor} and {target} are exchanging fire!",
+    "combat.miss.self": "Your shot goes wide of {target}.",
+    "combat.miss.target": "{actor}'s shot goes wide.",
+    "combat.miss.room": "{actor}'s shot goes wide of {target}.",
+    "combat.hit.self": "Your shot hammers {target}.",
+    "combat.hit.target": "{actor}'s shot hammers you.",
+    "combat.hit.room": "{actor}'s shot hammers {target}.",
+    "combat.quit_refused": "You can't disconnect mid-firefight!",
+})

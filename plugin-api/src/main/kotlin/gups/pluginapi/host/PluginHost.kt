@@ -8,6 +8,8 @@ import gups.core.world.CommandRegistry
 import gups.core.world.Diagnostic
 import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.FastCommand
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.PluginEffectRunner
 import gups.core.world.TickCommand
 import gups.core.world.World
@@ -91,6 +93,8 @@ internal class PluginRegistryImpl(
   private val pluginId: String,
   private val takenCommands: List<CommandDef>,
   private val takenGmcp: Set<String>,
+  /** The world's engine commands, renames applied, which a plugin command may not shadow. */
+  commandCheck: CommandRegistry = CommandRegistry(),
   private val log: (World) -> (String) -> Unit,
 ) : PluginRegistry {
   val members = LinkedHashMap<String, Any>()
@@ -99,8 +103,7 @@ internal class PluginRegistryImpl(
   val commands = mutableListOf<CommandReg>()
   val gmcp = mutableListOf<GmcpReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
-  private val commandCheck =
-    CommandRegistry().also { r -> takenCommands.forEach(r::registerPlugin) }
+  private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
 
   private fun member(name: String, value: Any) {
     require(MEMBER.matches(name)) { "member name '$name' must match [a-z][a-z0-9_]*" }
@@ -390,6 +393,7 @@ object PluginLoader {
           loader.close()
           continue
         }
+      val missing = missingFeature(plugin, module.features)
       when {
         plugin.id != id ->
           skip("the jar's plugin id is '${plugin.id}', but MODULE.gups pins it as '$id'")
@@ -397,6 +401,7 @@ object PluginLoader {
           skip(
             "built for plugin API version ${plugin.pluginApiVersion}; this engine has version ${PluginApi.VERSION}"
           )
+        missing != null -> skip("needs the '$missing' feature")
         else -> {
           found += plugin to loader
           continue
@@ -404,15 +409,23 @@ object PluginLoader {
       }
       loader.close()
     }
-    val host = register(found, log, warnings)
+    val host = register(found, log, warnings, module.features, module.rename)
     return host
   }
+
+  /** The first feature [plugin] requires that [features] lacks, whether unknown or off. */
+  private fun missingFeature(plugin: GupsPlugin, features: Features): String? =
+    plugin.requiredFeatures.sorted().firstOrNull { id ->
+      Feature.byId(id).let { it == null || it !in features }
+    }
 
   /** Runs each plugin's `register` in id order; a throwing or clashing one is skipped. */
   internal fun register(
     plugins: List<Pair<GupsPlugin, URLClassLoader?>>,
     log: (String) -> Unit,
     warnings: MutableList<String> = mutableListOf(),
+    features: Features = Features.ALL,
+    rename: Map<String, String> = emptyMap(),
   ): PluginHost {
     val loaded = mutableListOf<LoadedPlugin>()
     val logOf: (World) -> (String) -> Unit = { w -> Facades.logOf(w) }
@@ -423,6 +436,7 @@ object PluginLoader {
           takenCommands = loaded.flatMap { p -> p.reg.commands.map { FastCommand(it.name) {} } },
           takenGmcp = loaded.flatMap { p -> p.reg.gmcp.map { it.pkg } }.toSet(),
           log = logOf,
+          commandCheck = CommandRegistry(features = features, rename = rename),
         )
       try {
         plugin.register(reg)

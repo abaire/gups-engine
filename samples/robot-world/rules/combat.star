@@ -53,7 +53,7 @@ def condition(ctx):
 def to_hit(ctx):
     a = ctx.attacker
     d = ctx.defender
-    return _clamp(55 + (a.agility - d.agility) * 2 + (a.level - d.level) * 3, 5, 95)
+    return _clamp(55 + (a.agility - d.agility) * 2, 5, 95)
 
 def damage(ctx):
     dice = ctx.weapon.dice if ctx.weapon and ctx.weapon.dice else "1d4"
@@ -72,7 +72,7 @@ def mitigate(ctx, amount, type):
     return vitals(integrity = max(0, max(1, soaked) * (100 - resist) // 100))
 
 def initiative(ctx):
-    return ctx.actor.agility + ctx.actor.level
+    return ctx.actor.agility
 
 def cast_allowed(ctx):
     return None
@@ -82,10 +82,6 @@ def interrupt_check(ctx, amount):
     if pct == None:
         return False
     return amount * 100 >= pct * max(1, ctx.actor.max_integrity)
-
-def retreat_check(ctx):
-    pinner = ctx.target.agility if ctx.target else 10
-    return _clamp(50 + (ctx.actor.agility - pinner) * 3, 5, 95)
 
 def flee_chance(ctx):
     return _clamp(40 + (ctx.actor.agility - 10) * 2, 5, 95)
@@ -108,22 +104,8 @@ def carry_limit(ctx):
 def encumbrance(ctx):
     return stats(agility = -2)
 
-def get_lag(ctx, band):
-    if band == "melee":
-        return 0
-    if band == "near":
-        return 2
-    return None
-
-def xp_for_kill(ctx):
-    return 40 * ctx.target.level
-
-def xp_to_level(level):
-    return 800 * level
-
 def on_player_death(ctx):
     return {
         "respawn": ctx.actor.recall_room,
         "vitals": vitals(integrity = 5, sanity = 5),
-        "xp_loss": ctx.actor.xp // 10,
     }

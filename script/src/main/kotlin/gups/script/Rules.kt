@@ -16,8 +16,12 @@ import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
+import gups.core.world.Feature
+import gups.core.world.Features
+import gups.core.world.KernelMsg
 import gups.core.world.World
 import gups.core.world.WorldConfig
+import gups.core.world.msg
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -87,7 +91,9 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     structField = true,
     doc = "'melee', 'near' or 'far' between actor and target, or None.",
   )
-  fun band(): Any = field { c.band?.word ?: Starlark.NONE }
+  fun band(): Any = field {
+    if (Feature.TRACK !in c.world.features) Starlark.NONE else c.band?.word ?: Starlark.NONE
+  }
 
   @StarlarkMethod(
     name = "skill",
@@ -355,7 +361,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       run(RulesExport.CAST_ALLOWED, c, ctxArgs(c), deny = true) { v ->
         Allowed(denialValue(v, "rules.cast_allowed return value"))
       }
-    return if (answer == null) NOTHING_HAPPENS else answer.denial
+    return if (answer == null) c.world.msg(KernelMsg.NOTHING_HAPPENS) else answer.denial
   }
 
   private class Allowed(val denial: String?)
@@ -414,6 +420,8 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       val what = "rules.on_player_death return value"
       val d = dict(v, what)
       for (k in d.keys) choice(k, what, DEATH_FIELDS)
+      if ("xp_loss" in d && Feature.LEVELING !in c.world.features)
+        fail(FeatureOwnership.refusal("$what[\"xp_loss\"]", Feature.LEVELING))
       val respawn =
         label(
           str(d["respawn"], "rules.on_player_death[\"respawn\"]"),
@@ -430,7 +438,6 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     } ?: PlayerDeathOutcome((c.actor as? Player)?.recallRoom ?: c.actor.room.label, null, 0)
 
   companion object {
-    private const val NOTHING_HAPPENS = "Nothing happens."
     private val STARTING_FIELDS = listOf("stats", "max", "current")
     private val DEATH_FIELDS = listOf("respawn", "vitals", "xp_loss")
   }
@@ -707,6 +714,7 @@ internal fun dryRunRules(
   schema: WorldSchema,
   limits: ScriptLimits,
   pkg: String = "rules",
+  features: Features = Features.ALL,
 ): List<String> {
   val host = StarlarkHost(result, limits)
   val rules = host.rules(pkg)
@@ -715,9 +723,13 @@ internal fun dryRunRules(
   val room = RoomProto(Label("//engine:dry_run"), "The dry run")
   val protos = Prototypes(rooms = listOf(room), mobs = result.prototypes().mobs.values.toList())
   val world =
-    World(protos, schema, rules, config = WorldConfig(seed = 0, strict = false)).also {
-      rules.world = it
-    }
+    World(
+        protos,
+        schema,
+        rules,
+        config = WorldConfig(seed = 0, strict = false, features = features),
+      )
+      .also { rules.world = it }
   val skill = SkillProto(Label("//engine:dry_run_skill"), interrupt = Interrupt(damagePct = 10))
   try {
     val at = room.label
@@ -726,29 +738,34 @@ internal fun dryRunRules(
     val mobs = protos.mobs.keys.map { world.spawnMob(it, world.room(at)) }
     val actors = listOf(player, foe) + mobs
     rules.equipmentSlots()
-    rules.xpToLevel(1)
+    if (Feature.LEVELING in features) rules.xpToLevel(1)
     for (a in actors) {
       val other = if (a === player) foe else player
       val c = RulesContext(world, a, other)
       val withSkill = RulesContext(world, a, other, skill = skill)
       rules.condition(c)
-      rules.toHit(c)
-      rules.damage(c)
-      rules.initiative(c)
+      if (Feature.COMBAT in features) {
+        rules.toHit(c)
+        rules.damage(c)
+        rules.initiative(c)
+        rules.fleeChance(c)
+      }
       rules.carryLimit(c)
       rules.encumbrance(c)
       rules.regen(c)
       rules.moveCost(c)
-      rules.fleeChance(c)
-      rules.retreatCheck(c)
-      rules.castAllowed(withSkill)
-      rules.interruptCheck(withSkill, 1)
-      rules.xpForKill(c)
+      if (Feature.TRACK in features) rules.retreatCheck(c)
+      if (Feature.SKILLS in features) {
+        rules.castAllowed(withSkill)
+        rules.interruptCheck(withSkill, 1)
+      }
+      if (Feature.LEVELING in features) rules.xpForKill(c)
       for (type in schema.damageTypes) rules.mitigate(c, 5, DamageType(type))
-      for (band in Band.entries) rules.getLag(
-        RulesContext(world, a, item = null, band = band),
-        band,
-      )
+      if (Feature.TRACK in features)
+        for (band in Band.entries) rules.getLag(
+          RulesContext(world, a, item = null, band = band),
+          band,
+        )
       if (a is Player) rules.onPlayerDeath(RulesContext(world, a))
     }
   } catch (e: RuntimeException) {

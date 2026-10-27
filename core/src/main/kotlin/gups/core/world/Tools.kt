@@ -35,7 +35,6 @@ internal object Tools {
       FastCommand("@goto", role = Role.BUILDER) { goto(it) },
       FastCommand("@stat", role = Role.BUILDER) { stat(it) },
       FastCommand("@spawn", role = Role.BUILDER) { spawn(it) },
-      FastCommand("@where", role = Role.BUILDER) { where(it) },
       FastCommand("@errors", role = Role.BUILDER) { errors(it) },
       // Instructors.
       FastCommand("@reload", role = Role.INSTRUCTOR) { reload(it) },
@@ -127,7 +126,7 @@ internal object Tools {
     }
   }
 
-  private fun where(c: CommandCall) {
+  internal fun where(c: CommandCall) {
     val w = c.world
     val p = c.actor as? Player ?: return
     if (w.refuseRestricted(p, "where")) return
@@ -415,14 +414,18 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
   )
   when (e) {
     is Actor -> {
-      add("Location: ${e.room.label} index ${e.trackIndex}")
+      add(
+        "Location: ${e.room.label}" +
+          if (Feature.TRACK in features) " index ${e.trackIndex}" else ""
+      )
       add(
         "Vitals: " +
           e.vitalMap.entries.joinToString(", ") { (name, v) ->
             "$name ${v.current}/${v.max}" +
               (v.belowZeroSince?.let { " (below 0 since pulse $it)" } ?: "")
           } +
-          "; level ${e.level}, xp ${e.xp}, condition ${e.condition.word}"
+          (if (Feature.LEVELING in features) "; level ${e.level}, xp ${e.xp}" else "") +
+          "; condition ${e.condition.word}"
       )
       add(
         "Stats: " +

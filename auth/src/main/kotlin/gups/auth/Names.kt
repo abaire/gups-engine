@@ -1,7 +1,9 @@
 package gups.auth
 
 import gups.core.model.Direction
+import gups.core.world.LoginMsg
 import gups.core.world.World
+import gups.core.world.render
 
 /** Login, character-name and password rules. */
 object Names {
@@ -38,11 +40,10 @@ object Names {
   private val RESERVED_LOGINS = setOf("new")
 
   /** Why [login] can't be used, or null if it can. Logins are compared in lowercase. */
-  fun loginProblem(login: String): String? =
+  fun loginProblem(login: String, messages: Map<String, String> = emptyMap()): String? =
     when {
-      !LOGIN.matches(login) ->
-        "Logins are 3 to 24 characters: lowercase letters, digits, '_', '.' and '-'."
-      login in RESERVED_LOGINS -> "That login is reserved."
+      !LOGIN.matches(login) -> LoginMsg.LOGIN_INVALID.render(messages)
+      login in RESERVED_LOGINS -> LoginMsg.LOGIN_RESERVED.render(messages)
       else -> null
     }
 
@@ -69,10 +70,15 @@ object Names {
   }
 
   /** Why [password] is too weak for [login], or null if it will do. */
-  fun passwordProblem(password: String, login: String): String? =
+  fun passwordProblem(
+    password: String,
+    login: String,
+    messages: Map<String, String> = emptyMap(),
+  ): String? =
     when {
-      password.length < MIN_PASSWORD -> "Passwords need at least $MIN_PASSWORD characters."
-      password.equals(login, ignoreCase = true) -> "Your password can't be your login."
+      password.length < MIN_PASSWORD ->
+        LoginMsg.PASSWORD_SHORT.render(messages, "min" to MIN_PASSWORD)
+      password.equals(login, ignoreCase = true) -> LoginMsg.PASSWORD_IS_LOGIN.render(messages)
       else -> null
     }
 }

@@ -103,9 +103,9 @@ fun World.handle(event: ClientInputEvent) {
       return
     }
     // Nothing can ever give this session a character, so it must not linger.
-    s.out.append("You are not playing a character.\n")
+    s.out.append(msg(KernelMsg.NO_CHARACTER)).append('\n')
     flush(s)
-    s.sink.close("You are not playing a character.")
+    s.sink.close(msg(KernelMsg.NO_CHARACTER))
     disconnect(s.id)
     return
   }
@@ -113,7 +113,7 @@ fun World.handle(event: ClientInputEvent) {
   val (verb, _) = parseLine(event.line, commands.aliases.prefixes) ?: return
   val def = commands.resolve(player, verb)
   if (def?.lane == Lane.FAST && !s.bucket.tryTake(event.receivedNanos)) {
-    s.out.append("Slow down.\n")
+    s.out.append(msg(KernelMsg.SLOW_DOWN)).append('\n')
     flush(s)
     dropped(s, event.receivedNanos)
     return
@@ -129,7 +129,7 @@ private fun World.dropped(s: Session, nowNanos: Long) {
   while (s.drops.isNotEmpty() && nowNanos - s.drops.first() > DROP_WINDOW_NANOS) s.drops
     .removeFirst()
   if (s.drops.size > MAX_DROPS) {
-    s.sink.close("Too much input.")
+    s.sink.close(msg(LoginMsg.TOO_MUCH_INPUT))
     disconnect(s.id)
   }
 }
@@ -143,11 +143,11 @@ fun World.disconnect(id: SessionId) {
   p.session = null
   p.linkDeadSince = pulse
   p.actionQueue.clear()
-  echo(p.room, "${p.name} has lost their link.", p)
+  echo(p.room, msg(KernelMsg.LINK_LOST, "name" to p.name), p)
 }
 
 /** Removes [player] from the world. Persistence takes its immediate checkpoint here. */
-fun World.quit(player: Player, message: String = "Goodbye.") {
+fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   if (!player.inWorld) return
   send(player, message)
   player.session?.let { id ->
@@ -168,7 +168,7 @@ fun World.quit(player: Player, message: String = "Goodbye.") {
   guarded("checkpoint") { persistence.checkpoint(this, "quit", immediate = true) }
   val room = player.room
   removeActor(player)
-  echo(room, "${player.name} has left the game.")
+  echo(room, msg(KernelMsg.QUIT_LEFT, "name" to player.name))
 }
 
 /** Link-dead and idle auto-quit. */
@@ -179,7 +179,7 @@ internal fun World.expireSessions() {
     when {
       dead != null && pulse - dead >= LINKDEAD_PULSES -> quit(p)
       dead == null && !p.idleExempt && pulse - p.lastInputPulse >= IDLE_QUIT_PULSES ->
-        quit(p, "You have been idle too long. Goodbye.")
+        quit(p, msg(KernelMsg.QUIT_IDLE))
     }
   }
 }

@@ -279,6 +279,9 @@ class Fixture(
   strict: Boolean = true,
   bubble: Boolean = false,
   aliases: CommandAliases = TEMPLATE_ALIASES,
+  features: Features = Features.ALL,
+  rename: Map<String, String> = emptyMap(),
+  messages: Map<String, String> = emptyMap(),
 ) {
   val w =
     World(
@@ -292,6 +295,9 @@ class Fixture(
         strict = strict,
         bubble = bubble,
         aliases = aliases,
+        features = features,
+        rename = rename,
+        messages = messages,
       ),
     )
   private var nextSession = 1L

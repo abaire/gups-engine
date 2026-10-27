@@ -11,7 +11,6 @@
 room("gate",
     name = "The Foundry Gate",
     desc = "Rusted gates stand open on a yard of scrap.",
-    size = LARGE,
     exits = [
         exit("west", to = ":scrapyard"),
         exit("east", to = ":assembly"),
@@ -37,7 +36,6 @@ room("furnace",
 room("assembly",
     name = "The Assembly Hall",
     desc = "Idle arms hang above empty cradles.",
-    size = LARGE,
     exits = [
         exit("west", to = ":gate"),
         exit("east", to = ":control"),

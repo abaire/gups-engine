@@ -53,6 +53,8 @@ wipe: like `--fresh`, and it also deletes every character and item and records t
 current schema (after a `prewipe` backup; accounts stay). World state is saved in
 `<world>/.gups/world.db`.
 
+**Features, renames and messages.** `MODULE.gups` can turn off the engine features `combat`, `track`, `skills` and `leveling` (`features = [...]`, fixed per database) and rename engine commands (`rename = {"cast": "invoke"}`); `MESSAGES.gups` overrides engine messages by id. `samples/robot-world` uses all three.
+
 **Test and check packages.** These are the same gates a course world's CI runs on each pull
 request:
 

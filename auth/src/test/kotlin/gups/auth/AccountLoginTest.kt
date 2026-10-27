@@ -2,6 +2,8 @@ package gups.auth
 
 import gups.core.IDLE_QUIT_PULSES
 import gups.core.Role
+import gups.core.world.Features
+import gups.core.world.WorldConfig
 import gups.core.world.disconnect
 import gups.core.world.quit
 import kotlin.test.Test
@@ -286,5 +288,53 @@ class AccountLoginTest {
     c.send("new")
     val out = c.send(code)
     assertContains(out, "That code isn't valid, or it has expired.")
+  }
+
+  @Test
+  fun `login text follows the world's message overrides`() {
+    val f =
+      LoginFixture(
+        config =
+          WorldConfig(
+            seed = 1,
+            strict = true,
+            messages =
+              mapOf(
+                "login.welcome" to "Link established.",
+                "login.wrong" to "Credentials rejected.",
+                "login.menu" to "{characters} Pick one.",
+              ),
+          )
+      )
+    f.account("ann", pw)
+    val c = f.connect()
+    assertContains(c.sink.drain(), "Link established.")
+    c.send("ann")
+    assertContains(c.send("wrong"), "Credentials rejected.")
+    c.send("ann")
+    val menu = c.send(pw)
+    assertContains(menu, "You have no characters yet. Pick one.")
+  }
+
+  @Test
+  fun `reserved character names follow the world's renamed commands`() {
+    val f =
+      LoginFixture(
+        config =
+          WorldConfig(
+            seed = 1,
+            strict = true,
+            rename = mapOf("cast" to "invoke", "kill" to "attack"),
+          )
+      )
+    val reserved = Names.reserved(f.w, emptySet())
+    assertTrue("invoke" in reserved && "attack" in reserved)
+    assertFalse("cast" in reserved)
+    assertFalse("kill" in reserved)
+    val without =
+      LoginFixture(config = WorldConfig(seed = 1, strict = true, features = Features(emptySet())))
+    val names = Names.reserved(without.w, emptySet())
+    assertFalse("cast" in names || "kill" in names || "advance" in names)
+    assertTrue("look" in names)
   }
 }

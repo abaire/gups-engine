@@ -3,6 +3,9 @@ package gups.auth
 import gups.core.CodeCheck
 import gups.core.WebAccounts
 import gups.core.WebLogin
+import gups.core.world.LoginMsg
+import gups.core.world.Msg
+import gups.core.world.render
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
@@ -23,6 +26,8 @@ class WebLogins(
   /** Wall-clock milliseconds; tokens expire by it. */
   private val clock: () -> Long = System::currentTimeMillis,
   private val random: SecureRandom = SecureRandom(),
+  /** The world's `MESSAGES.gups` overrides, read on each refusal so they follow the live world. */
+  private val messages: () -> Map<String, String> = { emptyMap() },
 ) : WebAccounts {
   private val store
     get() = accounts.store
@@ -36,10 +41,7 @@ class WebLogins(
     val locked = limiter.lockedFor(accountKey, ipKey)
     // Refused without hashing.
     if (locked > 0)
-      return WebLogin.Refused(
-        429,
-        "Too many failed logins. Try again in ${(locked + 999) / 1000} seconds.",
-      )
+      return WebLogin.Refused(429, text(LoginMsg.TOO_MANY_LOGINS, "wait" to seconds(locked)))
     val a = store.byLogin(name)
     val hash = a?.pwHash
     val ok =
@@ -51,10 +53,10 @@ class WebLogins(
       }
     if (a == null || !ok) {
       limiter.failure(accountKey, ipKey)
-      return WebLogin.Refused(401, "Wrong login or password.")
+      return WebLogin.Refused(401, text(LoginMsg.WRONG))
     }
     limiter.success(accountKey)
-    if (a.disabled) return WebLogin.Refused(403, "This account is disabled.")
+    if (a.disabled) return WebLogin.Refused(403, text(LoginMsg.ACCOUNT_DISABLED))
     return issue(a.id)
   }
 
@@ -67,7 +69,15 @@ class WebLogins(
     return WebLogin.Ok(token, expires, accountId)
   }
 
-  private val badCode = "That code isn't valid, or it has expired."
+  private val badCode: String
+    get() = text(LoginMsg.BAD_CODE)
+
+  private fun text(m: Msg, vararg args: Pair<String, Any?>): String = m.render(messages(), *args)
+
+  private fun seconds(ms: Long): String =
+    ((ms + 999) / 1000).let {
+      if (it == 1L) text(LoginMsg.ONE_SECOND) else text(LoginMsg.SECONDS, "n" to it)
+    }
 
   /** The usable invite for [code], or why not; bad codes count against [remote]. */
   private fun invite(code: String, remote: String): Result<gups.core.Invite> {
@@ -75,7 +85,7 @@ class WebLogins(
     val locked = limiter.lockedFor(ipKey)
     if (locked > 0)
       return Result.failure(
-        Refusal(429, "Too many failed attempts. Try again in ${(locked + 999) / 1000} seconds.")
+        Refusal(429, text(LoginMsg.TOO_MANY_ATTEMPTS, "wait" to seconds(locked)))
       )
     val invite = accounts.validInvite(code)
     if (invite == null) {
@@ -102,18 +112,18 @@ class WebLogins(
     val bound = invite.accountId?.let { store.byId(it) ?: return WebLogin.Refused(404, badCode) }
     val name = bound?.login ?: login?.trim()?.lowercase().orEmpty()
     if (bound == null) {
-      Names.loginProblem(name)?.let {
+      Names.loginProblem(name, messages())?.let {
         return WebLogin.Refused(400, it)
       }
-      if (store.byLogin(name) != null) return WebLogin.Refused(409, "That login is taken.")
+      if (store.byLogin(name) != null) return WebLogin.Refused(409, text(LoginMsg.LOGIN_TAKEN))
     }
-    Names.passwordProblem(password, name)?.let {
+    Names.passwordProblem(password, name, messages())?.let {
       return WebLogin.Refused(400, it)
     }
     return when (val r = accounts.redeem(code, name, password)) {
       is Redeemed.Ok -> issue(r.account.id)
       Redeemed.BadCode -> WebLogin.Refused(404, badCode)
-      Redeemed.LoginTaken -> WebLogin.Refused(409, "That login is taken.")
+      Redeemed.LoginTaken -> WebLogin.Refused(409, text(LoginMsg.LOGIN_TAKEN))
     }
   }
 

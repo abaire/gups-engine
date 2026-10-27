@@ -55,6 +55,7 @@ pre {
   font-weight: 400;
 }
 .badge.plugin { border-color: var(--muted); color: var(--muted); }
+.badge.feature { border-color: #d29922; color: #d29922; }
 .since { color: var(--muted); font-size: 12px; font-weight: 400; }
 .intro, .caption { color: var(--muted); }
 .caption { margin-bottom: 0; font-size: 13px; }

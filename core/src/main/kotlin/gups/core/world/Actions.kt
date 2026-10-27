@@ -96,7 +96,7 @@ fun World.interruptCast(actor: Actor) {
   actor.casting = null
   actor.waitState = cast.action.lag / 2
   actor.dirty = true
-  send(actor, "Your concentration is broken!")
+  tell(actor, SkillMsg.INTERRUPTED)
 }
 
 /** Cancels [actor]'s cast for `stop`/`clear`: no cost and no lag. */

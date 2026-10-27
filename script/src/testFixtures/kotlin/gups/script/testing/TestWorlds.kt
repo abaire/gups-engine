@@ -47,6 +47,39 @@ object TestWorlds {
     return (blocks(base).filter { it.first !in names } + over).joinToString("\n") { it.second }
   }
 
+  /** The rules exports each feature owns; the others belong to the kernel. */
+  private val OWNED: Map<String, String> =
+    mapOf(
+      "to_hit" to "combat",
+      "damage" to "combat",
+      "initiative" to "combat",
+      "flee_chance" to "combat",
+      "cast_allowed" to "skills",
+      "interrupt_check" to "skills",
+      "retreat_check" to "track",
+      "get_lag" to "track",
+      "xp_for_kill" to "leveling",
+      "xp_to_level" to "leveling",
+    )
+
+  /** The template's rules without the exports of the features not in [enabled] (feature ids). */
+  fun rulesFor(enabled: Collection<String>, vararg overrides: String): String {
+    val over = overrides.flatMap { blocks(it.trimIndent() + "\n") }
+    val names = over.map { it.first }.toSet()
+    return (blocks(base).filter { it.first !in names } + over)
+      .filter { (name, _) -> OWNED[name].let { it == null || it in enabled } }
+      .joinToString("\n") { it.second }
+      .let { text ->
+        if ("leveling" in enabled) text
+        else
+          text
+            .replace(" + (a.level - d.level) * 3", "")
+            .replace("ctx.actor.dex + ctx.actor.level", "ctx.actor.dex")
+            .replace(" + a.level // 2", "")
+            .replace("        \"xp_loss\": ctx.actor.xp // 10,\n", "")
+      }
+  }
+
   /** Splits Starlark source into its top-level `def`s, each with the comments before the next. */
   private fun blocks(source: String): List<Pair<String, String>> {
     val out = mutableListOf<Pair<String, String>>()

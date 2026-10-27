@@ -2,7 +2,6 @@ package gups.harness
 
 import gups.core.Label
 import gups.core.model.WorldSchema
-import gups.core.world.CommandAliases
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.script.LoadResult
@@ -35,8 +34,8 @@ internal constructor(
   private val loadWorld: (List<String>) -> LoadResult,
   private val defaultLoad: List<String>,
   private val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
-  /** The world's command aliases from `MODULE.gups`. */
-  private val aliases: CommandAliases = CommandAliases.NONE,
+  /** The world's aliases, features, renames and messages from `MODULE.gups`. */
+  private val settings: WorldConfig = WorldConfig(),
   /** The names the world's actors are measured by, from `MODULE.gups`. */
   private val schema: WorldSchema = WorldSchema.EMPTY,
 ) : StarlarkValue {
@@ -109,12 +108,11 @@ internal constructor(
         schema,
         host.rules(rulesPkg),
         host,
-        WorldConfig(
+        settings.copy(
           seed = int(seed, "world(seed)").toLong(),
           checkInvariants = true,
           strict = true,
           bubble = (bubble as? Boolean) ?: evalFail("world(bubble): expected True or False"),
-          aliases = aliases,
         ),
       )
     plugins.install(world)

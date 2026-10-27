@@ -6,6 +6,7 @@ import gups.core.WorldControlEvent
 import gups.core.model.Condition
 import gups.core.model.Player
 import gups.core.world.Diagnostic
+import gups.core.world.Feature
 import gups.core.world.InvariantViolation
 import gups.core.world.World
 import gups.core.world.WorldConfig
@@ -19,6 +20,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
+import gups.script.WorldMessages
 import gups.script.WorldModule
 import gups.script.WorldPluginWiring
 import java.util.Random
@@ -117,12 +119,12 @@ class FuzzWalker(
         loader.schema,
         host.rules(),
         host,
-        WorldConfig(
-          seed = seed,
-          bubble = false,
-          checkInvariants = true,
-          aliases = WorldModule.read(dir).first.aliases,
-        ),
+        WorldModule.read(dir)
+          .first
+          .config(
+            WorldConfig(seed = seed, bubble = false, checkInvariants = true),
+            WorldMessages.read(dir).first,
+          ),
       )
     plugins.install(world)
     host.install(world)
@@ -260,7 +262,7 @@ class FuzzWalker(
           val exit = exits[rng.nextInt(exits.size)]
           world.submit(bot, exit.direction.name)
         } else {
-          world.submit(bot, "say dead end here")
+          world.submit(bot, "${world.commands.nameOf("say")} dead end here")
         }
       }
       // Category 1: zone or item command with empty arguments
@@ -272,7 +274,7 @@ class FuzzWalker(
           val cmd = cmds[rng.nextInt(cmds.size)]
           world.submit(bot, cmd)
         } else {
-          world.submit(bot, "say nothing to use here")
+          world.submit(bot, "${world.commands.nameOf("say")} nothing to use here")
         }
       }
       // Category 2: get, drop, wear or use
@@ -283,7 +285,7 @@ class FuzzWalker(
             if (ground.isNotEmpty()) {
               val item = ground[rng.nextInt(ground.size)]
               val kw = item.keywords.firstOrNull() ?: item.proto.name
-              world.submit(bot, "get $kw")
+              world.submit(bot, "${world.commands.nameOf("get")} $kw")
             }
           }
           1 -> { // drop
@@ -291,7 +293,7 @@ class FuzzWalker(
             if (inv.isNotEmpty()) {
               val item = inv[rng.nextInt(inv.size)]
               val kw = item.keywords.firstOrNull() ?: item.proto.name
-              world.submit(bot, "drop $kw")
+              world.submit(bot, "${world.commands.nameOf("drop")} $kw")
             }
           }
           2 -> { // wear
@@ -299,7 +301,7 @@ class FuzzWalker(
             if (wearable.isNotEmpty()) {
               val item = wearable[rng.nextInt(wearable.size)]
               val kw = item.keywords.firstOrNull() ?: item.proto.name
-              world.submit(bot, "wear $kw")
+              world.submit(bot, "${world.commands.nameOf("wear")} $kw")
             }
           }
           3 -> { // use
@@ -307,7 +309,7 @@ class FuzzWalker(
             if (items.isNotEmpty()) {
               val item = items[rng.nextInt(items.size)]
               val kw = item.keywords.firstOrNull() ?: item.proto.name
-              world.submit(bot, "use $kw")
+              world.submit(bot, "${world.commands.nameOf("use")} $kw")
             }
           }
         }
@@ -315,17 +317,17 @@ class FuzzWalker(
       // Category 3: kill on a random actor
       3 -> {
         val targets = bot.room.actors.filter { it !== bot }
-        if (targets.isNotEmpty()) {
+        if (Feature.COMBAT in world.features && targets.isNotEmpty()) {
           val target = targets[rng.nextInt(targets.size)]
           val kw = target.keywords.firstOrNull() ?: target.name
-          world.submit(bot, "kill $kw")
+          world.submit(bot, "${world.commands.nameOf("kill")} $kw")
         } else {
-          world.submit(bot, "say looking for a fight")
+          world.submit(bot, "${world.commands.nameOf("say")} looking for a fight")
         }
       }
       // Category 4: say
       4 -> {
-        world.submit(bot, "say exploring at pulse $pulse")
+        world.submit(bot, "${world.commands.nameOf("say")} exploring at pulse $pulse")
       }
     }
   }

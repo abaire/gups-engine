@@ -57,7 +57,8 @@ class Exit(proto: ExitProto) {
     get() = door == null || door.state == DoorState.OPEN
 }
 
-class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
+class Room(id: EntityId, proto: RoomProto, private val singleSlot: Boolean = false) :
+  Entity(id, proto.label) {
   /** The pulse the room went dormant at, or null while it is simulated. */
   var dormantSince: Long? = null
     internal set
@@ -82,8 +83,9 @@ class Room(id: EntityId, proto: RoomProto) : Entity(id, proto.label) {
   val label: Label
     get() = proto.label
 
+  /** The track's slots; a world without the track feature has one slot in every room. */
   val trackSize: Int
-    get() = proto.size.slots
+    get() = if (singleSlot) 1 else proto.size.slots
 
   val regions: Set<String>
     get() = proto.regions

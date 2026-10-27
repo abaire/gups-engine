@@ -1,11 +1,17 @@
 package gups.cli
 
+import gups.core.model.WorldSchema
+import gups.core.world.CommandInfo
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.script.DeclSpec
 import gups.script.DocExample
 import gups.script.DocExamples
+import gups.script.FeatureOwnership
 import gups.script.MethodSpec
 import gups.script.ScriptApiModel
 import gups.script.TypeSpec
+import gups.script.forFeatures
 import org.commonmark.node.Code
 import org.commonmark.node.Heading
 import org.commonmark.node.Image
@@ -39,6 +45,16 @@ data class PluginDocSpec(
   val gmcp: List<PluginGmcpDocSpec> = emptyList(),
 )
 
+/** What `world.html` shows about one world, and what its pages leave out. */
+data class WorldDocSpec(
+  val schema: WorldSchema,
+  val features: Features,
+  val rename: Map<String, String>,
+  val commands: List<CommandInfo>,
+  /** `MESSAGES.gups` overrides by message id. */
+  val messages: Map<String, String> = emptyMap(),
+)
+
 /**
  * Renders the HTML API reference from the script API model. Pages are static and offline: no
  * scripts, only relative links between the files in [FILES].
@@ -54,6 +70,7 @@ object DocsRenderer {
       "effects.html",
       "rules.html",
       "harness.html",
+      "world.html",
       "plugins.html",
       "changelog.html",
       "api.json",
@@ -69,6 +86,7 @@ object DocsRenderer {
       "effects.html" to "Effects and behaviors",
       "rules.html" to "Rules",
       "harness.html" to "Test harness",
+      "world.html" to "World",
       "plugins.html" to "Plugins",
       "changelog.html" to "Changelog",
     )
@@ -104,8 +122,10 @@ object DocsRenderer {
     plugins: List<PluginDocSpec> = emptyList(),
     examples: Map<String, DocExample> = DocExamples.ALL,
     pluginGuide: String = bundledPluginGuide(),
+    world: WorldDocSpec? = null,
   ): Map<String, String> {
-    val r = Renderer(model, examples)
+    val shown = world?.let { model.forFeatures(it.features) } ?: model
+    val r = Renderer(shown, examples, world)
     val pages =
       mapOf(
         "style.css" to STYLE,
@@ -116,6 +136,7 @@ object DocsRenderer {
         "effects.html" to r.page("effects.html") { with(r) { effects() } },
         "rules.html" to r.page("rules.html") { with(r) { rules() } },
         "harness.html" to r.page("harness.html") { with(r) { harness() } },
+        "world.html" to r.page("world.html") { with(r) { world() } },
         "plugins.html" to r.page("plugins.html") { with(r) { plugins(plugins, pluginGuide) } },
         "changelog.html" to r.page("changelog.html") { with(r) { changelog(changelogMarkdown) } },
         "api.json" to model.toJson(),
@@ -145,12 +166,23 @@ object DocsRenderer {
             model.rules.exports.map { "rules:${it.name}" } +
             model.rules.modifierPoints.map { "modifier:${it.name}" },
         "harness.html" to model.harness.flatMap { type(it, it.name) },
+        "world.html" to model.messages.map { "message:${it.id}" },
       )
       .mapValues { it.value.toSet() }
   }
 
-  private class Renderer(val model: ScriptApiModel, val examples: Map<String, DocExample>) {
+  private class Renderer(
+    val model: ScriptApiModel,
+    val examples: Map<String, DocExample>,
+    val world: WorldDocSpec?,
+  ) {
     val n = model.apiVersion
+
+    /** The `feature: <id>` badge of the entry named by [symbol], if a feature owns it. */
+    fun featureBadge(symbol: String): String = FeatureOwnership.of(symbol)?.let { badge(it) } ?: ""
+
+    fun badge(feature: Feature): String =
+      " <span class=\"badge feature\">feature: ${esc(feature.id)}</span>"
 
     fun page(file: String, body: StringBuilder.() -> Unit): String = buildString {
       val title = TITLES.getValue(file)
@@ -228,6 +260,7 @@ object DocsRenderer {
         "The rules module: rules_ctx, exports and modifier points",
       )
       row("harness.html", m.harness.size, "Test harness objects")
+      row("world.html", m.messages.size, "The world's schema, features and commands; the messages")
       row("plugins.html", plugins.size, "The world's plugins")
       row("changelog.html", null, "Script-facing changes per api_version")
       append("</tbody>\n</table>\n")
@@ -263,7 +296,9 @@ object DocsRenderer {
           .append(anchor("hook:${h.name}"))
           .append("\"><code>")
           .append(esc(h.name))
-          .append("</code></a></td><td><code>")
+          .append("</code></a>")
+          .append(featureBadge("hook:${h.name}"))
+          .append("</td><td><code>")
           .append(esc(h.signature))
           .append("</code></td><td>")
           .append(if (h.vetoable) "yes" else "no")
@@ -344,6 +379,88 @@ object DocsRenderer {
         "<p>Objects of <code>*_test.star</code> tests: <code>t</code> is the test, <code>w</code> a world, <code>p</code> a player.</p>\n"
       )
       for (t in model.harness) type(t, t.name)
+    }
+
+    fun StringBuilder.world() {
+      world?.let { w ->
+        h2("Schema", "The names this world's actors are measured by.")
+        fun names(title: String, list: List<gups.core.model.SchemaName>) {
+          if (list.isEmpty()) return
+          append("<h3>").append(esc(title)).append("</h3>\n")
+          append("<table>\n<thead><tr><th>Name</th><th>Label</th></tr></thead>\n<tbody>\n")
+          for (n in list) append("<tr><td><code>")
+            .append(esc(n.name))
+            .append("</code></td><td>")
+            .append(esc(n.label))
+            .append("</td></tr>\n")
+          append("</tbody>\n</table>\n")
+        }
+        names("Stats", w.schema.stats)
+        names("Vitals", w.schema.vitals)
+        append("<p>Damage types: ")
+          .append(w.schema.damageTypes.joinToString(", ") { "<code>${esc(it)}</code>" })
+          .append("; unarmed attacks do <code>")
+          .append(esc(w.schema.unarmedDamageType))
+          .append("</code>.</p>\n")
+        if (w.schema.channels.isNotEmpty())
+          append("<p>Channels: ")
+            .append(w.schema.channels.joinToString(", ") { "<code>${esc(it)}</code>" })
+            .append("</p>\n")
+        h2("Features", "The engine features this world has on.")
+        append("<ul>\n")
+        for (f in Feature.entries) append("<li><code>")
+          .append(esc(f.id))
+          .append("</code>: ")
+          .append(if (f in w.features) "on" else "off")
+          .append("</li>\n")
+        append("</ul>\n")
+        h2("Commands", "The engine commands of this world, by the names players type.")
+        append(
+          "<table>\n<thead><tr><th>Command</th><th>Lane</th><th>Renamed from</th><th>Feature</th></tr></thead>\n<tbody>\n"
+        )
+        for (c in w.commands) append("<tr id=\"command-")
+          .append(esc(c.name))
+          .append("\"><td><code>")
+          .append(esc(c.name))
+          .append("</code></td><td>")
+          .append(c.lane.name.lowercase())
+          .append("</td><td>")
+          .append(if (c.name != c.builtIn) "<code>${esc(c.builtIn)}</code>" else "")
+          .append("</td><td>")
+          .append(c.feature?.let { esc(it.id) } ?: "")
+          .append("</td></tr>\n")
+        append("</tbody>\n</table>\n")
+      }
+      h2("Messages", "Every player-facing line of the engine; MESSAGES.gups overrides them by id.")
+      append(
+        "<table>\n<thead><tr><th>Id</th><th>Placeholders</th><th>Default text</th>" +
+          (if (world != null) "<th>This world's text</th>" else "") +
+          "</tr></thead>\n<tbody>\n"
+      )
+      for (m in model.messages) {
+        val feature = m.feature?.let { Feature.byId(it) }
+        append("<tr id=\"")
+          .append(esc(anchor("message:${m.id}")))
+          .append("\"><td><code>")
+          .append(esc(m.id))
+          .append("</code>")
+          .append(feature?.let { badge(it) } ?: "")
+          .append("</td><td>")
+          .append(
+            m.placeholders.joinToString(", ") {
+              "<code>{${esc(it)}}</code>" + if (it in m.required) " (required)" else ""
+            }
+          )
+          .append("</td><td><code>")
+          .append(esc(m.default))
+          .append("</code></td>")
+        if (world != null)
+          append("<td>")
+            .append(world.messages[m.id]?.let { "<code>${esc(it)}</code>" } ?: "")
+            .append("</td>")
+        append("</tr>\n")
+      }
+      append("</tbody>\n</table>\n")
     }
 
     fun StringBuilder.plugins(plugins: List<PluginDocSpec>, guide: String) {
@@ -459,7 +576,9 @@ object DocsRenderer {
         .append(esc(name))
         .append("</code> <span class=\"since\">since api_version ")
         .append(since)
-        .append("</span></")
+        .append("</span>")
+        .append(featureBadge(symbol))
+        .append("</")
         .append(tag)
         .append(">\n")
     }
@@ -518,6 +637,7 @@ object DocsRenderer {
             .append("\"><td><code>")
             .append(esc(p.name))
             .append("</code>")
+            .append(featureBadge("${d.name}.${p.name}"))
           if (p.since != d.since)
             append(" <span class=\"since\">since api_version ").append(p.since).append("</span>")
           append("</td><td><code>")
@@ -556,7 +676,9 @@ object DocsRenderer {
             .append(esc(anchor(symbol)))
             .append("\"><td><code>")
             .append(esc(f.name))
-            .append("</code></td><td>")
+            .append("</code>")
+            .append(featureBadge(symbol))
+            .append("</td><td>")
             .append(f.since)
             .append("</td><td>")
             .append(esc(f.doc))
@@ -597,7 +719,9 @@ object DocsRenderer {
         if (path != null) append(" id=\"").append(esc(anchor("$path.${p.name}"))).append('"')
         append("><td><code>")
           .append(esc(paramName(p.name, p.varargs, p.kwargs)))
-          .append("</code></td><td>")
+          .append("</code>")
+          .append(if (path != null) featureBadge("$path.${p.name}") else "")
+          .append("</td><td>")
           .append(passed)
           .append("</td><td>")
           .append(p.default?.let { "<code>${esc(it)}</code>" } ?: "")
@@ -684,6 +808,7 @@ object DocsRenderer {
       font-weight: 400;
     }
     .badge.plugin { border-color: var(--muted); color: var(--muted); }
+    .badge.feature { border-color: #d29922; color: #d29922; }
     .since { color: var(--muted); font-size: 12px; font-weight: 400; }
     .intro, .caption { color: var(--muted); }
     .caption { margin-bottom: 0; font-size: 13px; }

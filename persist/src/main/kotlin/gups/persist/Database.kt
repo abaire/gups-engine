@@ -104,6 +104,14 @@ class Database private constructor(val file: Path, private val conn: Connection)
     }
   }
 
+  /** Removes one `meta` key at once, outside a checkpoint. */
+  fun deleteMeta(key: String) {
+    prepare("DELETE FROM meta WHERE key = ?") { st ->
+      st.setString(1, key)
+      st.executeUpdate()
+    }
+  }
+
   /**
    * A server wipe: deletes every character, every item row and the item audit trail. Accounts,
    * restrictions, session tokens, invites and the rest of the world state stay.

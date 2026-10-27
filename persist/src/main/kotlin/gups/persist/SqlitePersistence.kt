@@ -13,6 +13,7 @@ import gups.core.model.Room
 import gups.core.model.SchemaNames
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
+import gups.core.world.Features
 import gups.core.world.ItemHistory
 import gups.core.world.Persistence
 import gups.core.world.SavedCharacter
@@ -77,9 +78,16 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
    */
   @Volatile var worldSchema: String? = null
 
+  /**
+   * The features this database was started with (`meta.world_features`), as comma-separated ids;
+   * null before the first start, and for databases that predate feature modules.
+   */
+  @Volatile var worldFeatures: String? = null
+
   init {
     worldCommit = db.meta()["world_commit"]
     worldSchema = db.meta()["world_schema"]
+    worldFeatures = db.meta()["world_features"]
     db.entityRows().forEach { entityRows[it.id] = it }
     db.playerRows().forEach { playerRows[it.id] = it }
     zoneRows.putAll(db.zoneStates())
@@ -101,6 +109,30 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     return SchemaRecord.mismatch(saved, names)
   }
 
+  /**
+   * Compares [features] with the ones this database was started with. The first start records them;
+   * a database from before feature modules ran with all four. Call before [checkSchema], which
+   * records the schema. Returns why the server must not start on this data, or null.
+   */
+  fun checkFeatures(features: Features): String? {
+    val saved = worldFeatures
+    if (saved == null) {
+      if (worldSchema != null)
+        return FeatureRecord.mismatch(FeatureRecord.encode(Features.ALL), features).also {
+          if (it == null) recordFeatures(features)
+        }
+      recordFeatures(features)
+      return null
+    }
+    return FeatureRecord.mismatch(saved, features)
+  }
+
+  private fun recordFeatures(features: Features) {
+    val text = FeatureRecord.encode(features)
+    db.setMeta("world_features", text)
+    worldFeatures = text
+  }
+
   private fun recordSchema(names: SchemaNames) {
     val text = SchemaRecord.encode(names)
     db.setMeta("world_schema", text)
@@ -112,7 +144,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
    * Accounts, restrictions, session tokens and invites stay. The saved world state is dropped by
    * restoring with `fresh`.
    */
-  fun wipe(names: SchemaNames): WipeSummary {
+  fun wipe(names: SchemaNames, features: Features = Features.ALL): WipeSummary {
     val backup = backup(Backups.Kind.PREWIPE)
     val summary =
       WipeSummary(backup, playerRows.size, entityRows.values.count { it.kind == "item" })
@@ -120,6 +152,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     playerRows.clear()
     entityRows.values.removeIf { it.kind == "item" }
     recordSchema(names)
+    recordFeatures(features)
     return summary
   }
 
@@ -267,6 +300,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     b.meta["next_handle"] = nextHandle.toString()
     worldCommit?.let { b.meta["world_commit"] = it }
     worldSchema?.let { b.meta["world_schema"] = it }
+    worldFeatures?.let { b.meta["world_features"] = it }
     val excluded = world.checkpointExclusions
     for (e in world.allEntities) {
       // Debug spawns are never saved.

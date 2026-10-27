@@ -39,27 +39,21 @@ interface LoginHandler {
 class DevLogin(private val start: Label, private val accountId: Long? = null) : LoginHandler {
   override fun connected(world: World, session: Session) {
     if (!isLoopback(session.remote)) {
-      world.sendSession(
-        session,
-        "This development server only accepts connections from this machine.",
-      )
+      world.sendSession(session, world.msg(LoginMsg.DEV_LOCAL_ONLY))
       world.closeSession(session, "not a local connection")
       return
     }
-    world.sendSession(
-      session,
-      "Welcome to GUPS (development server). You are the local instructor.",
-    )
+    world.sendSession(session, world.msg(LoginMsg.DEV_WELCOME))
     world.flush(session)
-    session.sink.prompt("By what name do you wish to be known? ")
+    session.sink.prompt(world.msg(LoginMsg.DEV_PROMPT))
   }
 
   override fun input(world: World, session: Session, line: String) {
     val name = line.trim().lowercase().replaceFirstChar { it.uppercase() }
     if (!NAME.matches(name)) {
-      world.sendSession(session, "Names are 2 to 16 letters.")
+      world.sendSession(session, world.msg(LoginMsg.NAME_INVALID))
       world.flush(session)
-      session.sink.prompt("By what name do you wish to be known? ")
+      session.sink.prompt(world.msg(LoginMsg.DEV_PROMPT))
       return
     }
     val existing = world.players.firstOrNull { it.name.equals(name, ignoreCase = true) }
@@ -88,7 +82,8 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
       session,
       p,
       if (existing != null) null
-      else if (saved != null) "Welcome back, ${p.name}." else "Welcome, ${p.name}.",
+      else if (saved != null) world.msg(KernelMsg.WELCOME_BACK, "name" to p.name)
+      else world.msg(KernelMsg.WELCOME_NEW, "name" to p.name),
     )
   }
 
@@ -105,9 +100,7 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
  * over.
  */
 fun World.takeOver(p: Player) {
-  p.session?.let { old ->
-    session(old)?.let { closeSession(it, "Someone else has taken over this character.") }
-  }
+  p.session?.let { old -> session(old)?.let { closeSession(it, msg(KernelMsg.TAKEN_OVER)) } }
 }
 
 /**
@@ -116,8 +109,8 @@ fun World.takeOver(p: Player) {
  */
 fun World.enterGame(session: Session, p: Player, welcome: String?) {
   attach(session.id, p)
-  send(p, welcome ?: "Reconnected.")
+  send(p, welcome ?: msg(KernelMsg.RECONNECTED))
   flushImmediate()
-  if (welcome == null) echo(p.room, "${p.name} has reconnected.", p)
+  if (welcome == null) echo(p.room, msg(KernelMsg.RECONNECTED_ROOM, "name" to p.name), p)
   send(p, describeRoom(p))
 }

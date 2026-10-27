@@ -18,7 +18,7 @@ def test_psychic_damage_goes_to_sanity(t):
     w = t.world(seed = 1)
     p = w.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 100})
     drone = w.spawn(":welder_drone", at = ":gate")
-    t.contains(p.do("cast mind_lash drone"), "You cast mind_lash")
+    t.contains(p.do("invoke mind_lash drone"), "You invoke mind_lash")
     t.true(drone.sanity < drone.max_sanity)
     t.eq(drone.integrity, drone.max_integrity)
 
@@ -26,7 +26,7 @@ def test_energy_damage_goes_to_integrity_less_the_resistance(t):
     w = t.world(seed = 1)
     p = w.spawn_player("Ann", at = ":gate", skills = {":overload": 100})
     drone = w.spawn(":welder_drone", at = ":gate")
-    t.contains(p.do("cast overload drone"), "You cast overload")
+    t.contains(p.do("invoke overload drone"), "You invoke overload")
     t.true(drone.integrity < drone.max_integrity)
     t.eq(drone.sanity, drone.max_sanity)
     t.eq(drone.resists.energy, 25)
@@ -35,9 +35,9 @@ def test_a_skill_cost_comes_out_of_power(t):
     w = t.world(seed = 1)
     p = w.spawn_player("Ann", at = ":gate", skills = {":overload": 100}, vitals = vitals(power = 12))
     w.spawn(":welder_drone", at = ":gate")
-    t.contains(p.do("cast overload drone"), "You don't have enough Power.")
+    t.contains(p.do("invoke overload drone"), "Your routine needs more Power.")
     p2 = w.spawn_player("Bea", at = ":gate", skills = {":overload": 100})
-    p2.do("cast overload drone")
+    p2.do("invoke overload drone")
     t.eq(p2.power, p2.max_power - 15)
 
 def test_integrity_or_sanity_at_zero_incapacitates(t):
@@ -90,3 +90,37 @@ def test_the_whisperer_attacks_the_mind(t):
     t.eq(p.sanity, sanity)
     w.run(pulses = 1)
     t.eq(p.sanity, sanity - 3)
+
+def test_invoke_replaces_cast_and_has_its_own_words(t):
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 100})
+    w.spawn(":welder_drone", at = ":gate")
+    out = p.do("invoke mind_lash drone")
+    t.contains(out, "Your implant spins up mind_lash.")
+    t.contains(out, "You invoke mind_lash at a welder drone.")
+    t.contains(p.do("invoke"), "Invoke what?")
+
+def test_the_alias_and_prefix_use_the_new_name(t):
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate", skills = {":overload": 100})
+    w.spawn(":welder_drone", at = ":gate")
+    t.contains(p.do("x overload drone"), "You invoke overload at a welder drone.")
+    q = w.spawn_player("Bea", at = ":gate", skills = {":overload": 100})
+    t.contains(q.do("% overload drone"), "You invoke overload at a welder drone.")
+
+def test_cast_and_the_track_commands_do_not_exist(t):
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate", skills = {":overload": 100})
+    w.spawn(":welder_drone", at = ":gate")
+    t.contains(p.do("cast overload drone"), "Huh?")
+    t.contains(p.do("advance drone"), "Huh?")
+    t.contains(p.do("retreat"), "Huh?")
+
+def test_the_world_reskins_combat_and_conditions(t):
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate")
+    drone = w.spawn(":welder_drone", at = ":gate")
+    t.contains(p.do("kill drone"), "You open fire on a welder drone!")
+    t.contains(p.do("quit"), "You can't disconnect mid-firefight!")
+    w.damage(p, "integrity", amount = p.integrity)
+    t.contains(p.output(), "Your systems fail and you power down.")

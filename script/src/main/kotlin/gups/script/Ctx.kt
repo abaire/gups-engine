@@ -99,6 +99,7 @@ internal constructor(
   /** Every verb: validity, the wall-clock backstop, tracing, and engine errors as script errors. */
   private fun <T> verb(name: String, detail: String = "", block: () -> T): T {
     frame.check()
+    FeatureOwnership.refused("ctx.$name", "ctx.$name()", world.features)?.let { fail(it) }
     frame.checkClock()
     frame.trace("  $name($detail)")
     try {
@@ -115,6 +116,15 @@ internal constructor(
   }
 
   private fun v(e: Entity?): Any = view(frame, e)
+
+  /** A non-zero track [index] needs the track feature. */
+  private fun trackIndex(verb: String, index: Any?) {
+    val i = intOrNull(index, "$verb(index)") ?: return
+    if (i != 0)
+      FeatureOwnership.refused("ctx.$verb.index", "ctx.$verb(index)", world.features)?.let {
+        fail(it)
+      }
+  }
 
   private fun pkgOf(thread: StarlarkThread): String = callerFile(thread)?.pkg ?: frame.pkg
 
@@ -608,6 +618,7 @@ internal constructor(
   )
   fun teleport(actor: Any, room: Any, index: Any, thread: StarlarkThread): Any =
     verb("teleport") {
+      trackIndex("teleport", index)
       val r = roomArg(room, "teleport(room)", thread)
       val i = intOrNull(index, "teleport(index)")
       if (i != null && i !in 0 until r.trackSize) fail("teleport(index): $i is outside ${r.label}")
@@ -803,6 +814,7 @@ internal constructor(
           expireMsg,
           modifiers,
           "apply_affect",
+          world.features,
         )
       val a =
         world.applyAffect(
@@ -865,6 +877,7 @@ internal constructor(
   )
   fun spawn(label: Any, at: Any, index: Any, count: Any, thread: StarlarkThread): Any =
     verb("spawn", "$label") {
+      trackIndex("spawn", index)
       val l = label(str(label, "spawn(label)"), pkgOf(thread), "spawn(label)")
       val n = int(count, "spawn(count)")
       if (n < 1) fail("spawn(count): must be at least 1")
@@ -943,6 +956,7 @@ internal constructor(
   )
   fun moveItem(item: Any, to: Any, index: Any, thread: StarlarkThread): Any =
     verb("move_item") {
+      trackIndex("move_item", index)
       world.moveItem(itemArg(item, "move_item(item)"), location(to, index, "move_item(to)", thread))
       Starlark.NONE
     }

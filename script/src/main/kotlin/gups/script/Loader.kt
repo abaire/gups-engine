@@ -6,8 +6,9 @@ import gups.core.Label
 import gups.core.model.Prototypes
 import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
-import gups.core.world.CommandAliases
 import gups.core.world.CommandRegistry
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.HookName
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
@@ -38,9 +39,12 @@ internal val FILE_OPTIONS: FileOptions =
  * The builtins every package file sees under [schema]: declarations, effect primitives, constants
  * and the schema's constructors.
  */
-internal fun packageGlobals(schema: WorldSchema): Map<String, Any> {
+internal fun packageGlobals(
+  schema: WorldSchema,
+  features: Features = Features.ALL,
+): Map<String, Any> {
   val b = ImmutableMap.builder<String, Any>()
-  Starlark.addMethods(b, DeclarationBuiltins(schema))
+  Starlark.addMethods(b, DeclarationBuiltins(schema, features))
   b.putAll(DeclarationBuiltins.constants(schema))
   b.putAll(schemaGlobals(schema))
   return b.build()
@@ -115,13 +119,18 @@ class ScriptLoader(
     get() = module.schema
 
   /** The builtins of every package, test and `@eval` file of this world. */
-  internal val globals: Map<String, Any> by lazy { packageGlobals(schema) + pluginGlobals }
+  internal val globals: Map<String, Any> by lazy {
+    packageGlobals(schema, features) + pluginGlobals
+  }
+
+  val features: Features
+    get() = module.features
 
   /**
    * Engine command names and the world's aliases for them, which no global command or exit may
    * take.
    */
-  private val engineVerbs: Set<String> by lazy { engineVerbs(module.aliases) }
+  private val engineVerbs: Set<String> by lazy { engineVerbs(module) }
 
   /**
    * Loads [requested] (package paths such as `zones/tutorial`) and their dependencies. [tests] are
@@ -353,14 +362,32 @@ class ScriptLoader(
         return null
       }
       if (!test && st.pkg.kind == PackageKind.RULES && file.name == RULES_FILE) {
-        val missing = missingRulesExports(module)
+        val forbidden = forbiddenRulesExports(module, features)
+        if (forbidden.isNotEmpty()) {
+          for ((name, feature) in forbidden) {
+            err(
+              LoadError(
+                st.pkg.path,
+                "rules",
+                "the rules package defines $name(...), which needs the ${feature.id} feature",
+                file.v,
+                bindingLine(parsed, name),
+              )
+            )
+          }
+          return null
+        }
+        val missing = missingRulesExports(module, features)
         if (missing.isNotEmpty()) {
           for (name in missing) {
             err(LoadError(st.pkg.path, "rules", "the rules package must define $name(...)", file.v))
           }
           return null
         }
-        val unknown = unknownRulesExports(module)
+        val unknown =
+          unknownRulesExports(module).filter { name ->
+            forbiddenRulesExports(module, features).none { it.first == name }
+          }
         if (unknown.isNotEmpty()) {
           for (name in unknown) {
             err(
@@ -413,7 +440,12 @@ class ScriptLoader(
       var live = ok
       if (RULES_PACKAGE in live) {
         val problems =
-          dryRunRules(LoadResult(live, errors, modules, testModules, testErrors), schema, limits)
+          dryRunRules(
+            LoadResult(live, errors, modules, testModules, testErrors),
+            schema,
+            limits,
+            features = features,
+          )
         if (problems.isNotEmpty()) {
           errors +=
             problems.map {
@@ -602,8 +634,11 @@ class ScriptLoader(
 }
 
 /** Engine command names and [aliases] for them, which no global command or exit may take. */
-internal fun engineVerbs(aliases: CommandAliases): Set<String> =
-  CommandRegistry(aliases).engineCommands.flatMap { listOf(it.name) + it.aliases }.toSet()
+internal fun engineVerbs(module: WorldModule): Set<String> =
+  CommandRegistry(module.aliases, module.features, module.rename)
+    .engineCommands
+    .flatMap { listOf(it.name) + it.aliases }
+    .toSet()
 
 /** The innermost Starlark (not builtin) frame of an error's stack. */
 internal fun innermost(e: EvalException): Location? =
@@ -632,11 +667,26 @@ internal const val RULES_FILE = "combat.star"
 const val RULES_PACKAGE = "rules"
 
 /** The [RulesExport]s that [module] doesn't define as functions; every export is required. */
-internal fun missingRulesExports(module: Module): List<String> =
+internal fun missingRulesExports(module: Module, features: Features = Features.ALL): List<String> =
   RulesExport.entries
+    .filter {
+      FeatureOwnership.of("rules:${it.scriptName}").let { f -> f == null || f in features }
+    }
     .map { it.scriptName }
     .filter { module.globals[it] !is StarlarkFunction }
     .sorted()
+
+/** Exports of a feature that is off which [module] defines anyway, with the feature. */
+internal fun forbiddenRulesExports(
+  module: Module,
+  features: Features,
+): List<Pair<String, Feature>> =
+  RulesExport.entries
+    .mapNotNull { e ->
+      val f = FeatureOwnership.of("rules:${e.scriptName}")?.takeIf { it !in features }
+      if (f != null && module.globals[e.scriptName] is StarlarkFunction) e.scriptName to f else null
+    }
+    .sortedBy { it.first }
 
 /**
  * Public top-level functions of a rules [module] that aren't a [RulesExport], sorted. The engine

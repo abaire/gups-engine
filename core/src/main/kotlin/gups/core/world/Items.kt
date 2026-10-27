@@ -71,8 +71,8 @@ fun World.updateEncumbrance(a: Actor) {
   }
   if (was != a.encumbrance) {
     a.dirty = true
-    if (was.isEmpty()) send(a, "You are carrying more than you can manage.")
-    else if (a.encumbrance.isEmpty()) send(a, "Your load feels manageable again.")
+    if (was.isEmpty()) tell(a, KernelMsg.ENCUMBERED)
+    else if (a.encumbrance.isEmpty()) tell(a, KernelMsg.UNENCUMBERED)
   }
 }
 
@@ -130,7 +130,7 @@ internal fun World.decay(item: Item) {
   val loc = item.location
   if (loc is ItemLocation.InRoom) {
     for (inner in item.contents) moveItem(inner, loc)
-    entity(loc.room)?.let { room -> echo(room as Room, "${item.name.cap()} crumbles to dust.") }
+    entity(loc.room)?.let { room -> echo(room as Room, msg(KernelMsg.DECAYS, "item" to item.name)) }
   }
   destroy(item)
 }

@@ -8,6 +8,9 @@ import gups.core.model.Channel
 import gups.core.model.SchemaName
 import gups.core.model.WorldSchema
 import gups.core.world.CommandAliases
+import gups.core.world.CommandRegistry
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.PROMPT_PLACEHOLDER
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
@@ -43,7 +46,26 @@ data class WorldModule(
   val aliases: CommandAliases = CommandAliases.NONE,
   /** The names the world's actors are measured by. */
   val schema: WorldSchema = WorldSchema.EMPTY,
+  /** The feature ids as written; null when `features` is left out, which turns all of them on. */
+  val featureIds: List<String>? = null,
+  /** Engine command renames, old name to new. */
+  val rename: Map<String, String> = emptyMap(),
 ) {
+  /** The features the world has on. Unknown ids are left out here and reported by [problems]. */
+  val features: Features =
+    featureIds?.let { ids -> Features(ids.mapNotNull(Feature::byId).toSet()) } ?: Features.ALL
+
+  /** The world's non-`@` engine command names, renames applied. */
+  val commandNames: Set<String>
+    get() = CommandRegistry.names(features, rename)
+
+  /** [base] with this world's aliases, features, renames and message overrides. */
+  fun config(
+    base: gups.core.world.WorldConfig = gups.core.world.WorldConfig(),
+    messages: WorldMessages = WorldMessages(),
+  ): gups.core.world.WorldConfig =
+    base.copy(aliases = aliases, features = features, rename = rename, messages = messages.texts)
+
   /** The checkpoint interval in pulses. */
   val checkpointPulses: Long
     get() = checkpointMinutes * 60_000L / PULSE_MS
@@ -65,7 +87,15 @@ data class WorldModule(
           "MODULE.gups: plugin '$id' checksum must be 'sha256:' and 64 lowercase hex digits, not '$checksum'"
         )
     }
-    aliases.problems().forEach { add("MODULE.gups: $it") }
+    for (id in featureIds.orEmpty().distinct()) {
+      if (Feature.byId(id) == null)
+        add(
+          "MODULE.gups: unknown feature '$id'" + schema.suggest(id, Feature.entries.map { it.id })
+        )
+    }
+    features.problems().forEach { add("MODULE.gups: $it") }
+    CommandRegistry.renameProblems(features, rename, aliases).forEach { add("MODULE.gups: $it") }
+    aliases.problems(commandNames).forEach { add("MODULE.gups: $it") }
     addAll(schemaProblems())
   }
 
@@ -254,6 +284,18 @@ data class WorldModule(
               "Single characters that stand for an engine command, such as {\"'\": \"say\"}.",
               default = "{}",
             ),
+            DeclParam(
+              "features",
+              "list[str]",
+              "The engine features the world uses: combat, track, skills and leveling. Fixed per database; changing it needs --wipe.",
+              default = "['combat', 'track', 'skills', 'leveling']",
+            ),
+            DeclParam(
+              "rename",
+              "dict[str, str]",
+              "Renames engine commands, such as {\"cast\": \"invoke\"}. Aliases, prefixes and docs use the new names.",
+              default = "{}",
+            ),
           ),
       )
 
@@ -344,6 +386,15 @@ data class WorldModule(
             prefix[0] to
               (v as? String ?: fail("module(prefixes): the command of '$prefix' must be a string"))
           }
+        // Listing all four features is the same as leaving the line out.
+        val features =
+          d["features"]
+            ?.let { d.strList("features") }
+            ?.takeUnless { ids -> ids.toSet() == Feature.entries.map { it.id }.toSet() }
+        val rename =
+          d.dict("rename").mapValues { (old, v) ->
+            v as? String ?: fail("module(rename): the new name of '$old' must be a string")
+          }
         val schema =
           WorldSchema(
             stats = names(d, "stats"),
@@ -362,6 +413,8 @@ data class WorldModule(
             plugins = plugins,
             aliases = CommandAliases(words, prefixes),
             schema = schema,
+            featureIds = features,
+            rename = rename,
           )
         Starlark.NONE
       }

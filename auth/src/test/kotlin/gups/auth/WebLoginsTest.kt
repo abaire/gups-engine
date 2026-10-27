@@ -158,6 +158,29 @@ class WebLoginsTest {
   }
 
   @Test
+  fun `web refusals use the world's message overrides`() {
+    val f = LoginFixture()
+    val texts =
+      mapOf(
+        "login.login_taken" to "Someone already has that one.",
+        "login.password_short" to "At least {min}, please.",
+        "login.wrong" to "No such luck.",
+      )
+    val web = WebLogins(f.service, f.limiter, { f.now }, messages = { texts })
+    f.account("taken", pw)
+    val code = f.service.createInvite(Role.PLAYER)
+    assertEquals(
+      WebLogin.Refused(409, "Someone already has that one."),
+      web.signup(code, "taken", pw, "ip"),
+    )
+    assertEquals(
+      WebLogin.Refused(400, "At least 10, please."),
+      web.signup(code, "newbie", "short", "ip"),
+    )
+    assertEquals(WebLogin.Refused(401, "No such luck."), web.login("taken", "nope", "ip"))
+  }
+
+  @Test
   fun `bad codes are rate-limited per address`() {
     val (f, web) = setup()
     val code = f.service.createInvite(Role.PLAYER)

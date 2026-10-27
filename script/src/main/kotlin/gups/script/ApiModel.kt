@@ -3,7 +3,10 @@ package gups.script
 import gups.core.EngineInfo
 import gups.core.HookRef
 import gups.core.model.ModifierPoint
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.HookName
+import gups.core.world.Messages
 import java.lang.reflect.Method
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -84,9 +87,10 @@ data class DeclSpec(
     args: Tuple = Tuple.empty(),
     kwargs: Map<String, Any> = emptyMap(),
     beforeUnknownCheck: ((ParsedDecl) -> Unit)? = null,
+    features: Features = Features.ALL,
     body: (ParsedDecl) -> T,
   ): T {
-    val parsed = parse(args, kwargs, beforeUnknownCheck)
+    val parsed = parse(args, kwargs, beforeUnknownCheck, features)
     val result = body(parsed)
     val unread = params.map { it.name }.filterNot(parsed::wasRead)
     check(unread.isEmpty()) {
@@ -99,6 +103,7 @@ data class DeclSpec(
     args: Tuple,
     kwargs: Map<String, Any>,
     beforeUnknownCheck: ((ParsedDecl) -> Unit)?,
+    features: Features,
   ): ParsedDecl {
     if (args.size !in minPositional..positionalParams.size) {
       fail(
@@ -129,6 +134,7 @@ data class DeclSpec(
         if (hookOwner !in HookCatalog.attach.getValue(hook)) {
           fail("$name(): hook '$key' can't be attached to a ${hookOwner.word}")
         }
+        FeatureOwnership.refused("hook:$key", "hook '$key'", features)?.let { fail("$name(): $it") }
         if (!isNone(value)) hooks[hook] = hookRef(value, "$name($key)")
         continue
       }
@@ -137,6 +143,9 @@ data class DeclSpec(
       }
     }
     for (p in params) {
+      if (!isNone(values[p.name])) {
+        FeatureOwnership.refused("$name.${p.name}", "$name(${p.name})", features)?.let { fail(it) }
+      }
       if (p.required && isNone(values[p.name])) {
         if (p.allowedValues.isNotEmpty())
           fail("$name(): ${p.name} is required (${orList(p.allowedValues)})")
@@ -281,6 +290,60 @@ data class RulesExportSpec(
     get() = export.scriptName
 }
 
+/**
+ * This model without the entries of features that [features] lacks: what a world with those
+ * features can use. Used for `gups docs --world`.
+ */
+fun ScriptApiModel.forFeatures(features: Features): ScriptApiModel {
+  fun on(symbol: String) = FeatureOwnership.of(symbol).let { it == null || it in features }
+
+  fun decl(d: DeclSpec) =
+    if (!on(d.name)) null else d.copy(params = d.params.filter { on("${d.name}.${it.name}") })
+
+  fun method(m: MethodSpec, path: String) =
+    if (!on(path)) null else m.copy(params = m.params.filter { on("$path.${it.name}") })
+
+  fun type(t: TypeSpec, path: String) =
+    if (!on(path)) null
+    else
+      t.copy(
+        fields = t.fields.filter { on("$path.${it.name}") },
+        methods = t.methods.mapNotNull { method(it, "$path.${it.name}") },
+      )
+
+  return copy(
+    declarations = declarations.mapNotNull(::decl),
+    settings = settings.mapNotNull(::decl),
+    constants = constants.filter { on(it.name) },
+    hooks = hooks.filter { on("hook:${it.name}") },
+    ctx = type(ctx, "ctx") ?: ctx,
+    views = views.mapNotNull { type(it, "view:${it.name}") },
+    effects = effects.mapNotNull { method(it, it.name) },
+    behaviors = behaviors.mapNotNull { method(it, it.name) },
+    rules =
+      RulesApiSpec(
+        ctx = type(rules.ctx, rules.ctx.name) ?: rules.ctx,
+        exports = rules.exports.filter { on("rules:${it.name}") },
+        modifierPoints = rules.modifierPoints.filter { on("modifier:${it.name}") },
+      ),
+    messages =
+      messages.filter { m ->
+        m.feature?.let { id -> Feature.byId(id)?.let { it in features } } ?: true
+      },
+  )
+}
+
+/** One entry of the engine message catalog. */
+data class MessageSpec(
+  val id: String,
+  /** The feature that sends the message, or null for the kernel. */
+  val feature: String?,
+  val placeholders: List<String>,
+  val required: List<String>,
+  val default: String,
+  val since: Int = FIRST_API_VERSION,
+)
+
 /** One modifier point in the rules modifier chain. */
 data class ModifierPointSpec(
   val point: ModifierPoint,
@@ -318,6 +381,8 @@ data class ScriptApiModel(
   val behaviors: List<MethodSpec>,
   val rules: RulesApiSpec,
   val harness: List<TypeSpec>,
+  /** The engine message catalog, sorted by id. */
+  val messages: List<MessageSpec> = emptyList(),
 ) {
   /** Canonical, sorted, 2-space-indented JSON with `\n` line endings. */
   fun toJson(): String = JsonWriter().apply { writeModel(this@ScriptApiModel) }.toString()
@@ -474,7 +539,13 @@ object ScriptApi {
       engineVersion = EngineInfo.version,
       declarations = DeclarationBuiltins.DECLARATION_SPECS.sortedBy { it.name },
       settings =
-        listOf(WorldModule.SPEC, WorldModule.STAT_SPEC, WorldModule.VITAL_SPEC, ServerConfig.SPEC)
+        listOf(
+            WorldModule.SPEC,
+            WorldModule.STAT_SPEC,
+            WorldModule.VITAL_SPEC,
+            WorldMessages.SPEC,
+            ServerConfig.SPEC,
+          )
           .sortedBy { it.name },
       constants = DeclarationBuiltins.CONSTANT_SPECS.sortedBy { it.name },
       hooks = HookCatalog.specs.sortedBy { it.name },
@@ -490,6 +561,18 @@ object ScriptApi {
           modifierPoints = MODIFIER_POINTS.sortedBy { it.name },
         ),
       harness = harness.sortedBy { it.name },
+      messages =
+        Messages.all
+          .map { m ->
+            MessageSpec(
+              m.id,
+              m.feature?.id,
+              m.placeholders,
+              m.placeholders.filter { it in m.required },
+              m.default,
+            )
+          }
+          .sortedBy { it.id },
     )
 
   /**
@@ -687,6 +770,16 @@ private class JsonWriter {
     arrayField("behaviors", m.behaviors) { writeMethod(it, it.name) }
     objField("rules") { writeRules(m.rules) }
     arrayField("harness", m.harness) { writeType(it, it.name) }
+    arrayField("messages", m.messages) { msg ->
+      obj {
+        symbol("message:${msg.id}")
+        field("id", msg.id)
+        strListField("placeholders", msg.placeholders)
+        strListField("required", msg.required)
+        field("default", msg.default)
+        field("since", msg.since)
+      }
+    }
   }
 
   private fun writeDecl(d: DeclSpec) = obj {
@@ -778,6 +871,9 @@ private class JsonWriter {
   private fun symbol(path: String) {
     symbols += path
     field("symbol", path)
+    (if (path.startsWith("message:")) Messages.find(path.removePrefix("message:"))?.feature
+      else FeatureOwnership.of(path))
+      ?.let { field("feature", it.id) }
   }
 
   private var firstInObjStack = ArrayDeque<Boolean>()

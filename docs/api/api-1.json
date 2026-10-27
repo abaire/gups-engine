@@ -152,6 +152,7 @@
         },
         {
           "symbol": "exit.entry_index",
+          "feature": "track",
           "name": "entry_index",
           "type": "int",
           "positional": false,
@@ -316,6 +317,7 @@
         },
         {
           "symbol": "item.range",
+          "feature": "track",
           "name": "range",
           "type": "str",
           "positional": false,
@@ -588,6 +590,7 @@
         },
         {
           "symbol": "mob.level",
+          "feature": "leveling",
           "name": "level",
           "type": "int",
           "positional": false,
@@ -636,6 +639,7 @@
         },
         {
           "symbol": "mob.skills",
+          "feature": "skills",
           "name": "skills",
           "type": "dict[label, int]",
           "positional": false,
@@ -927,6 +931,7 @@
         },
         {
           "symbol": "room.size",
+          "feature": "track",
           "name": "size",
           "type": "str",
           "positional": false,
@@ -1025,6 +1030,7 @@
     },
     {
       "symbol": "skill",
+      "feature": "skills",
       "name": "skill",
       "doc": "Declares a skill or spell.",
       "hook_owner": null,
@@ -1033,6 +1039,7 @@
       "params": [
         {
           "symbol": "skill.id",
+          "feature": "skills",
           "name": "id",
           "type": "str",
           "positional": true,
@@ -1045,6 +1052,7 @@
         },
         {
           "symbol": "skill.kind",
+          "feature": "skills",
           "name": "kind",
           "type": "str",
           "positional": false,
@@ -1057,6 +1065,7 @@
         },
         {
           "symbol": "skill.cost",
+          "feature": "skills",
           "name": "cost",
           "type": "vitals",
           "positional": false,
@@ -1069,6 +1078,7 @@
         },
         {
           "symbol": "skill.warmup",
+          "feature": "skills",
           "name": "warmup",
           "type": "int",
           "positional": false,
@@ -1081,6 +1091,7 @@
         },
         {
           "symbol": "skill.lag",
+          "feature": "skills",
           "name": "lag",
           "type": "int",
           "positional": false,
@@ -1093,6 +1104,7 @@
         },
         {
           "symbol": "skill.range",
+          "feature": "skills",
           "name": "range",
           "type": "str",
           "positional": false,
@@ -1105,6 +1117,7 @@
         },
         {
           "symbol": "skill.target",
+          "feature": "skills",
           "name": "target",
           "type": "str",
           "positional": false,
@@ -1117,6 +1130,7 @@
         },
         {
           "symbol": "skill.channels",
+          "feature": "skills",
           "name": "channels",
           "type": "list[str]",
           "positional": false,
@@ -1129,6 +1143,7 @@
         },
         {
           "symbol": "skill.interrupt",
+          "feature": "skills",
           "name": "interrupt",
           "type": "dict[str, any]",
           "positional": false,
@@ -1141,6 +1156,7 @@
         },
         {
           "symbol": "skill.attack_while_casting",
+          "feature": "skills",
           "name": "attack_while_casting",
           "type": "bool",
           "positional": false,
@@ -1153,6 +1169,7 @@
         },
         {
           "symbol": "skill.effect",
+          "feature": "skills",
           "name": "effect",
           "type": "effect",
           "positional": false,
@@ -1165,6 +1182,7 @@
         },
         {
           "symbol": "skill.resolve",
+          "feature": "skills",
           "name": "resolve",
           "type": "function",
           "positional": false,
@@ -1223,6 +1241,7 @@
         },
         {
           "symbol": "spawn.at_index",
+          "feature": "track",
           "name": "at_index",
           "type": "int",
           "positional": false,
@@ -1264,6 +1283,28 @@
     }
   ],
   "settings": [
+    {
+      "symbol": "messages",
+      "name": "messages",
+      "doc": "Overrides engine messages in MESSAGES.gups, by message id.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "messages.texts",
+          "name": "texts",
+          "type": "dict[str, str]",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Message text by id. {name} marks a placeholder and {{ a literal brace; see the message catalog in the reference.",
+          "since": 1
+        }
+      ]
+    },
     {
       "symbol": "module",
       "name": "module",
@@ -1426,6 +1467,30 @@
           "default": "{}",
           "allowed_values": [],
           "doc": "Single characters that stand for an engine command, such as {\"'\": \"say\"}.",
+          "since": 1
+        },
+        {
+          "symbol": "module.features",
+          "name": "features",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "['combat', 'track', 'skills', 'leveling']",
+          "allowed_values": [],
+          "doc": "The engine features the world uses: combat, track, skills and leveling. Fixed per database; changing it needs --wipe.",
+          "since": 1
+        },
+        {
+          "symbol": "module.rename",
+          "name": "rename",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Renames engine commands, such as {\"cast\": \"invoke\"}. Aliases, prefixes and docs use the new names.",
           "since": 1
         }
       ]
@@ -1724,6 +1789,7 @@
     },
     {
       "symbol": "CRAMPED",
+      "feature": "track",
       "name": "CRAMPED",
       "type": "str",
       "value": "\"cramped\"",
@@ -1740,6 +1806,7 @@
     },
     {
       "symbol": "LARGE",
+      "feature": "track",
       "name": "LARGE",
       "type": "str",
       "value": "\"large\"",
@@ -1748,6 +1815,7 @@
     },
     {
       "symbol": "NORMAL",
+      "feature": "track",
       "name": "NORMAL",
       "type": "str",
       "value": "\"normal\"",
@@ -1758,6 +1826,7 @@
   "hooks": [
     {
       "symbol": "hook:before_attack",
+      "feature": "combat",
       "name": "before_attack",
       "signature": "fn(ctx)",
       "vetoable": true,
@@ -1768,6 +1837,7 @@
     },
     {
       "symbol": "hook:before_cast",
+      "feature": "skills",
       "name": "before_cast",
       "signature": "fn(ctx)",
       "vetoable": true,
@@ -1828,6 +1898,7 @@
     },
     {
       "symbol": "hook:on_cast",
+      "feature": "skills",
       "name": "on_cast",
       "signature": "fn(ctx)",
       "vetoable": false,
@@ -1838,6 +1909,7 @@
     },
     {
       "symbol": "hook:on_cast_start",
+      "feature": "skills",
       "name": "on_cast_start",
       "signature": "fn(ctx)",
       "vetoable": false,
@@ -1848,6 +1920,7 @@
     },
     {
       "symbol": "hook:on_combat_tick",
+      "feature": "combat",
       "name": "on_combat_tick",
       "signature": "fn(ctx)",
       "vetoable": false,
@@ -2122,6 +2195,7 @@
       },
       {
         "symbol": "ctx.skill",
+        "feature": "skills",
         "name": "skill",
         "doc": "The skill being cast, for before_cast, on_cast_start and on_cast.",
         "since": 1
@@ -2206,6 +2280,7 @@
       },
       {
         "symbol": "ctx.act_advance",
+        "feature": "track",
         "name": "act_advance",
         "doc": "Queues one step along the room track toward target for a mob.",
         "since": 1,
@@ -2234,12 +2309,14 @@
       },
       {
         "symbol": "ctx.act_attack",
+        "feature": "combat",
         "name": "act_attack",
         "doc": "Queues an attack against target for a mob.",
         "since": 1,
         "params": [
           {
             "symbol": "ctx.act_attack.mob",
+            "feature": "combat",
             "name": "mob",
             "positional": true,
             "named": true,
@@ -2250,6 +2327,7 @@
           },
           {
             "symbol": "ctx.act_attack.target",
+            "feature": "combat",
             "name": "target",
             "positional": true,
             "named": true,
@@ -2262,6 +2340,7 @@
       },
       {
         "symbol": "ctx.act_cast",
+        "feature": "skills",
         "name": "act_cast",
         "doc": "Queues casting a skill for a mob.",
         "since": 1,
@@ -2328,6 +2407,7 @@
       },
       {
         "symbol": "ctx.act_retreat",
+        "feature": "track",
         "name": "act_retreat",
         "doc": "Queues one step along the room track away from target (or toward the room back) for a mob.",
         "since": 1,
@@ -2394,12 +2474,14 @@
       },
       {
         "symbol": "ctx.allies_near",
+        "feature": "combat",
         "name": "allies_near",
         "doc": "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.",
         "since": 1,
         "params": [
           {
             "symbol": "ctx.allies_near.actor",
+            "feature": "combat",
             "name": "actor",
             "positional": true,
             "named": true,
@@ -2410,6 +2492,7 @@
           },
           {
             "symbol": "ctx.allies_near.band",
+            "feature": "combat",
             "name": "band",
             "positional": true,
             "named": true,
@@ -2820,12 +2903,14 @@
       },
       {
         "symbol": "ctx.enemies_near",
+        "feature": "combat",
         "name": "enemies_near",
         "doc": "Opponents of actor within a band ('melee', 'near', 'far').",
         "since": 1,
         "params": [
           {
             "symbol": "ctx.enemies_near.actor",
+            "feature": "combat",
             "name": "actor",
             "positional": true,
             "named": true,
@@ -2836,6 +2921,7 @@
           },
           {
             "symbol": "ctx.enemies_near.band",
+            "feature": "combat",
             "name": "band",
             "positional": true,
             "named": true,
@@ -3062,6 +3148,7 @@
           },
           {
             "symbol": "ctx.move_item.index",
+            "feature": "track",
             "name": "index",
             "positional": true,
             "named": true,
@@ -3408,6 +3495,7 @@
           },
           {
             "symbol": "ctx.spawn.index",
+            "feature": "track",
             "name": "index",
             "positional": true,
             "named": true,
@@ -3458,12 +3546,14 @@
       },
       {
         "symbol": "ctx.start_combat",
+        "feature": "combat",
         "name": "start_combat",
         "doc": "Engages two actors in the same room in combat.",
         "since": 1,
         "params": [
           {
             "symbol": "ctx.start_combat.a",
+            "feature": "combat",
             "name": "a",
             "positional": true,
             "named": true,
@@ -3474,6 +3564,7 @@
           },
           {
             "symbol": "ctx.start_combat.b",
+            "feature": "combat",
             "name": "b",
             "positional": true,
             "named": true,
@@ -3486,12 +3577,14 @@
       },
       {
         "symbol": "ctx.stop_combat",
+        "feature": "combat",
         "name": "stop_combat",
         "doc": "Ends combat between a and b, or all of a's fights when b is None.",
         "since": 1,
         "params": [
           {
             "symbol": "ctx.stop_combat.a",
+            "feature": "combat",
             "name": "a",
             "positional": true,
             "named": true,
@@ -3502,6 +3595,7 @@
           },
           {
             "symbol": "ctx.stop_combat.b",
+            "feature": "combat",
             "name": "b",
             "positional": true,
             "named": true,
@@ -3540,6 +3634,7 @@
           },
           {
             "symbol": "ctx.teleport.index",
+            "feature": "track",
             "name": "index",
             "positional": true,
             "named": true,
@@ -3614,6 +3709,7 @@
         },
         {
           "symbol": "view:actor.casting",
+          "feature": "skills",
           "name": "casting",
           "doc": "The skill being cast, or None.",
           "since": 1
@@ -3650,6 +3746,7 @@
         },
         {
           "symbol": "view:actor.is_casting",
+          "feature": "skills",
           "name": "is_casting",
           "doc": "True while the actor is in casting warmup.",
           "since": 1
@@ -3674,6 +3771,7 @@
         },
         {
           "symbol": "view:actor.level",
+          "feature": "leveling",
           "name": "level",
           "doc": "The actor's level.",
           "since": 1
@@ -3704,12 +3802,14 @@
         },
         {
           "symbol": "view:actor.skills",
+          "feature": "skills",
           "name": "skills",
           "doc": "Skill label to proficiency (0-100).",
           "since": 1
         },
         {
           "symbol": "view:actor.track_index",
+          "feature": "track",
           "name": "track_index",
           "doc": "Position along the room's 1D track.",
           "since": 1
@@ -3722,6 +3822,7 @@
         },
         {
           "symbol": "view:actor.xp",
+          "feature": "leveling",
           "name": "xp",
           "doc": "Current experience points.",
           "since": 1
@@ -3730,6 +3831,7 @@
       "methods": [
         {
           "symbol": "view:actor.band_of",
+          "feature": "track",
           "name": "band_of",
           "doc": "'melee', 'near' or 'far' to another actor or item in the same room; None elsewhere.",
           "since": 1,
@@ -3784,6 +3886,7 @@
         },
         {
           "symbol": "view:actor.fighting",
+          "feature": "combat",
           "name": "fighting",
           "doc": "Actors engaged with this one.",
           "since": 1,
@@ -3922,6 +4025,7 @@
         },
         {
           "symbol": "view:exit.entry_index",
+          "feature": "track",
           "name": "entry_index",
           "doc": "Destination track index where travellers arrive, or -1 for the back.",
           "since": 1
@@ -4040,6 +4144,7 @@
         },
         {
           "symbol": "view:item.range",
+          "feature": "track",
           "name": "range",
           "doc": "A weapon's reach: 'melee', 'near' or 'far'.",
           "since": 1
@@ -4094,6 +4199,7 @@
         },
         {
           "symbol": "view:location.index",
+          "feature": "track",
           "name": "index",
           "doc": "Track index, for items on the ground.",
           "since": 1
@@ -4272,12 +4378,14 @@
         },
         {
           "symbol": "view:room.size",
+          "feature": "track",
           "name": "size",
           "doc": "'cramped', 'normal' or 'large'.",
           "since": 1
         },
         {
           "symbol": "view:room.track_size",
+          "feature": "track",
           "name": "track_size",
           "doc": "Number of track slots in this room (1, 3 or 6).",
           "since": 1
@@ -4327,6 +4435,7 @@
     },
     {
       "symbol": "view:skill",
+      "feature": "skills",
       "name": "skill",
       "builtin_type": "skill",
       "doc": "A read-only view of a skill.",
@@ -4334,60 +4443,70 @@
       "fields": [
         {
           "symbol": "view:skill.channels",
+          "feature": "skills",
           "name": "channels",
           "doc": "Channels required and emitted when casting, sorted.",
           "since": 1
         },
         {
           "symbol": "view:skill.cost",
+          "feature": "skills",
           "name": "cost",
           "doc": "The vitals spent, as vitals(...): cost.mana.",
           "since": 1
         },
         {
           "symbol": "view:skill.interrupt",
+          "feature": "skills",
           "name": "interrupt",
           "doc": "{'damage_pct': int or None, 'stun': bool}.",
           "since": 1
         },
         {
           "symbol": "view:skill.kind",
+          "feature": "skills",
           "name": "kind",
           "doc": "Skill category, such as 'spell' or 'skill'.",
           "since": 1
         },
         {
           "symbol": "view:skill.label",
+          "feature": "skills",
           "name": "label",
           "doc": "The skill's prototype label.",
           "since": 1
         },
         {
           "symbol": "view:skill.lag",
+          "feature": "skills",
           "name": "lag",
           "doc": "Post-resolution recovery pulses.",
           "since": 1
         },
         {
           "symbol": "view:skill.name",
+          "feature": "skills",
           "name": "name",
           "doc": "The skill's name.",
           "since": 1
         },
         {
           "symbol": "view:skill.range",
+          "feature": "skills",
           "name": "range",
           "doc": "Maximum target range.",
           "since": 1
         },
         {
           "symbol": "view:skill.target",
+          "feature": "skills",
           "name": "target",
           "doc": "Kind of target the skill accepts.",
           "since": 1
         },
         {
           "symbol": "view:skill.warmup",
+          "feature": "skills",
           "name": "warmup",
           "doc": "Casting warmup pulses.",
           "since": 1
@@ -4399,12 +4518,14 @@
   "effects": [
     {
       "symbol": "apply_affect",
+      "feature": "skills",
       "name": "apply_affect",
       "doc": "Attach a timed buff or debuff.",
       "since": 1,
       "params": [
         {
           "symbol": "apply_affect.name",
+          "feature": "skills",
           "name": "name",
           "positional": true,
           "named": true,
@@ -4415,6 +4536,7 @@
         },
         {
           "symbol": "apply_affect.duration",
+          "feature": "skills",
           "name": "duration",
           "positional": true,
           "named": true,
@@ -4425,6 +4547,7 @@
         },
         {
           "symbol": "apply_affect.stat_deltas",
+          "feature": "skills",
           "name": "stat_deltas",
           "positional": true,
           "named": true,
@@ -4435,6 +4558,7 @@
         },
         {
           "symbol": "apply_affect.flags",
+          "feature": "skills",
           "name": "flags",
           "positional": true,
           "named": true,
@@ -4445,6 +4569,7 @@
         },
         {
           "symbol": "apply_affect.tick_every",
+          "feature": "skills",
           "name": "tick_every",
           "positional": true,
           "named": true,
@@ -4455,6 +4580,7 @@
         },
         {
           "symbol": "apply_affect.on_tick",
+          "feature": "skills",
           "name": "on_tick",
           "positional": true,
           "named": true,
@@ -4465,6 +4591,7 @@
         },
         {
           "symbol": "apply_affect.on_expire",
+          "feature": "skills",
           "name": "on_expire",
           "positional": true,
           "named": true,
@@ -4475,6 +4602,7 @@
         },
         {
           "symbol": "apply_affect.expire_msg",
+          "feature": "skills",
           "name": "expire_msg",
           "positional": true,
           "named": true,
@@ -4485,6 +4613,7 @@
         },
         {
           "symbol": "apply_affect.modifiers",
+          "feature": "skills",
           "name": "modifiers",
           "positional": true,
           "named": true,
@@ -4497,12 +4626,14 @@
     },
     {
       "symbol": "damage",
+      "feature": "skills",
       "name": "damage",
       "doc": "Deal damage.",
       "since": 1,
       "params": [
         {
           "symbol": "damage.dice",
+          "feature": "skills",
           "name": "dice",
           "positional": true,
           "named": true,
@@ -4513,6 +4644,7 @@
         },
         {
           "symbol": "damage.type",
+          "feature": "skills",
           "name": "type",
           "positional": true,
           "named": true,
@@ -4525,12 +4657,14 @@
     },
     {
       "symbol": "dispel",
+      "feature": "skills",
       "name": "dispel",
       "doc": "Remove the target's affects that match every given criterion. Affects flagged 'intrinsic' are never removed.",
       "since": 1,
       "params": [
         {
           "symbol": "dispel.name",
+          "feature": "skills",
           "name": "name",
           "positional": true,
           "named": true,
@@ -4541,6 +4675,7 @@
         },
         {
           "symbol": "dispel.flag",
+          "feature": "skills",
           "name": "flag",
           "positional": true,
           "named": true,
@@ -4551,6 +4686,7 @@
         },
         {
           "symbol": "dispel.all",
+          "feature": "skills",
           "name": "all",
           "positional": true,
           "named": true,
@@ -4561,6 +4697,7 @@
         },
         {
           "symbol": "dispel.count",
+          "feature": "skills",
           "name": "count",
           "positional": true,
           "named": true,
@@ -4573,12 +4710,14 @@
     },
     {
       "symbol": "heal",
+      "feature": "skills",
       "name": "heal",
       "doc": "Restore a vital, up to its maximum.",
       "since": 1,
       "params": [
         {
           "symbol": "heal.dice",
+          "feature": "skills",
           "name": "dice",
           "positional": true,
           "named": true,
@@ -4589,6 +4728,7 @@
         },
         {
           "symbol": "heal.vital",
+          "feature": "skills",
           "name": "vital",
           "positional": true,
           "named": true,
@@ -4601,12 +4741,14 @@
     },
     {
       "symbol": "knockback",
+      "feature": "track",
       "name": "knockback",
       "doc": "Push the target along the track.",
       "since": 1,
       "params": [
         {
           "symbol": "knockback.steps",
+          "feature": "track",
           "name": "steps",
           "positional": true,
           "named": true,
@@ -4619,12 +4761,14 @@
     },
     {
       "symbol": "pull",
+      "feature": "track",
       "name": "pull",
       "doc": "Draw the target along the track.",
       "since": 1,
       "params": [
         {
           "symbol": "pull.steps",
+          "feature": "track",
           "name": "steps",
           "positional": true,
           "named": true,
@@ -4637,12 +4781,14 @@
     },
     {
       "symbol": "sequence",
+      "feature": "skills",
       "name": "sequence",
       "doc": "Combine several effects.",
       "since": 1,
       "params": [
         {
           "symbol": "sequence.effects",
+          "feature": "skills",
           "name": "effects",
           "positional": true,
           "named": false,
@@ -4655,12 +4801,14 @@
     },
     {
       "symbol": "stun",
+      "feature": "skills",
       "name": "stun",
       "doc": "Stun the target.",
       "since": 1,
       "params": [
         {
           "symbol": "stun.pulses",
+          "feature": "skills",
           "name": "pulses",
           "positional": true,
           "named": true,
@@ -4673,12 +4821,14 @@
     },
     {
       "symbol": "summon",
+      "feature": "skills",
       "name": "summon",
       "doc": "Spawn mobs beside the caster.",
       "since": 1,
       "params": [
         {
           "symbol": "summon.label",
+          "feature": "skills",
           "name": "label",
           "positional": true,
           "named": true,
@@ -4689,6 +4839,7 @@
         },
         {
           "symbol": "summon.count",
+          "feature": "skills",
           "name": "count",
           "positional": true,
           "named": true,
@@ -4699,6 +4850,7 @@
         },
         {
           "symbol": "summon.duration",
+          "feature": "skills",
           "name": "duration",
           "positional": true,
           "named": true,
@@ -4713,12 +4865,14 @@
   "behaviors": [
     {
       "symbol": "aggressive",
+      "feature": "combat",
       "name": "aggressive",
       "doc": "Behavior: attacks matching actors on sight. toward is 'players', 'mobs', 'all' or label patterns.",
       "since": 1,
       "params": [
         {
           "symbol": "aggressive.toward",
+          "feature": "combat",
           "name": "toward",
           "positional": true,
           "named": true,
@@ -4729,6 +4883,7 @@
         },
         {
           "symbol": "aggressive.unless_level_above",
+          "feature": "leveling",
           "name": "unless_level_above",
           "positional": true,
           "named": true,
@@ -4741,12 +4896,14 @@
     },
     {
       "symbol": "assist",
+      "feature": "combat",
       "name": "assist",
       "doc": "Behavior: joins fights alongside allies, given as label patterns such as 'goblin_*'.",
       "since": 1,
       "params": [
         {
           "symbol": "assist.allies",
+          "feature": "combat",
           "name": "allies",
           "positional": true,
           "named": true,
@@ -4759,12 +4916,14 @@
     },
     {
       "symbol": "flee",
+      "feature": "combat",
       "name": "flee",
       "doc": "Behavior: flees when any listed vital is at or below its percentage of its maximum.",
       "since": 1,
       "params": [
         {
           "symbol": "flee.below",
+          "feature": "combat",
           "name": "below",
           "positional": true,
           "named": true,
@@ -4904,6 +5063,7 @@
         },
         {
           "symbol": "rules_ctx.band",
+          "feature": "track",
           "name": "band",
           "doc": "'melee', 'near' or 'far' between actor and target, or None.",
           "since": 1
@@ -5008,6 +5168,7 @@
       },
       {
         "symbol": "rules:cast_allowed",
+        "feature": "skills",
         "name": "cast_allowed",
         "signature": "cast_allowed(ctx)",
         "return_type": "None | denial",
@@ -5026,6 +5187,7 @@
       },
       {
         "symbol": "rules:damage",
+        "feature": "combat",
         "name": "damage",
         "signature": "damage(ctx)",
         "return_type": "int",
@@ -5053,6 +5215,7 @@
       },
       {
         "symbol": "rules:flee_chance",
+        "feature": "combat",
         "name": "flee_chance",
         "signature": "flee_chance(ctx)",
         "return_type": "int",
@@ -5062,6 +5225,7 @@
       },
       {
         "symbol": "rules:get_lag",
+        "feature": "track",
         "name": "get_lag",
         "signature": "get_lag(ctx, band)",
         "return_type": "int | None",
@@ -5071,6 +5235,7 @@
       },
       {
         "symbol": "rules:initiative",
+        "feature": "combat",
         "name": "initiative",
         "signature": "initiative(ctx)",
         "return_type": "int",
@@ -5080,6 +5245,7 @@
       },
       {
         "symbol": "rules:interrupt_check",
+        "feature": "skills",
         "name": "interrupt_check",
         "signature": "interrupt_check(ctx, amount)",
         "return_type": "bool",
@@ -5125,6 +5291,7 @@
       },
       {
         "symbol": "rules:retreat_check",
+        "feature": "track",
         "name": "retreat_check",
         "signature": "retreat_check(ctx)",
         "return_type": "int",
@@ -5143,6 +5310,7 @@
       },
       {
         "symbol": "rules:to_hit",
+        "feature": "combat",
         "name": "to_hit",
         "signature": "to_hit(ctx)",
         "return_type": "int",
@@ -5152,6 +5320,7 @@
       },
       {
         "symbol": "rules:xp_for_kill",
+        "feature": "leveling",
         "name": "xp_for_kill",
         "signature": "xp_for_kill(ctx)",
         "return_type": "int",
@@ -5161,6 +5330,7 @@
       },
       {
         "symbol": "rules:xp_to_level",
+        "feature": "leveling",
         "name": "xp_to_level",
         "signature": "xp_to_level(level)",
         "return_type": "int",
@@ -5172,6 +5342,7 @@
     "modifier_points": [
       {
         "symbol": "modifier:cast_allowed",
+        "feature": "skills",
         "name": "cast_allowed",
         "signature": "fn(ctx, base)",
         "value_type": "None | denial",
@@ -5181,6 +5352,7 @@
       },
       {
         "symbol": "modifier:damage",
+        "feature": "combat",
         "name": "damage",
         "signature": "fn(ctx, base)",
         "value_type": "int",
@@ -5190,6 +5362,7 @@
       },
       {
         "symbol": "modifier:initiative",
+        "feature": "combat",
         "name": "initiative",
         "signature": "fn(ctx, base)",
         "value_type": "int",
@@ -5217,6 +5390,7 @@
       },
       {
         "symbol": "modifier:to_hit",
+        "feature": "combat",
         "name": "to_hit",
         "signature": "fn(ctx, base)",
         "value_type": "int",
@@ -6191,6 +6365,2131 @@
           ]
         }
       ]
+    }
+  ],
+  "messages": [
+    {
+      "symbol": "message:affect.fades",
+      "id": "affect.fades",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} fades away.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.at_whom",
+      "feature": "skills",
+      "id": "cast.at_whom",
+      "placeholders": ["skill"],
+      "required": [],
+      "default": "Cast {skill} at whom?",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.begin.known",
+      "feature": "skills",
+      "id": "cast.begin.known",
+      "placeholders": ["actor", "skill"],
+      "required": ["skill"],
+      "default": "{actor} begins casting {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.begin.self",
+      "feature": "skills",
+      "id": "cast.begin.self",
+      "placeholders": ["skill"],
+      "required": ["skill"],
+      "default": "You begin casting {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.begin.unknown",
+      "feature": "skills",
+      "id": "cast.begin.unknown",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} begins casting.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.done.item",
+      "feature": "skills",
+      "id": "cast.done.item",
+      "placeholders": ["skill", "target"],
+      "required": ["skill"],
+      "default": "You cast {skill} on {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.done.self",
+      "feature": "skills",
+      "id": "cast.done.self",
+      "placeholders": ["skill"],
+      "required": ["skill"],
+      "default": "You cast {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.done.target",
+      "feature": "skills",
+      "id": "cast.done.target",
+      "placeholders": ["skill", "target"],
+      "required": ["skill"],
+      "default": "You cast {skill} at {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.done.victim",
+      "feature": "skills",
+      "id": "cast.done.victim",
+      "placeholders": ["actor", "skill"],
+      "required": ["skill"],
+      "default": "{actor} casts {skill} at you!",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.interrupted",
+      "feature": "skills",
+      "id": "cast.interrupted",
+      "placeholders": [],
+      "required": [],
+      "default": "Your concentration is broken!",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.not_enough",
+      "feature": "skills",
+      "id": "cast.not_enough",
+      "placeholders": ["vital"],
+      "required": [],
+      "default": "You don't have enough {vital}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.not_here",
+      "feature": "skills",
+      "id": "cast.not_here",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "{target} isn't here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.on_what",
+      "feature": "skills",
+      "id": "cast.on_what",
+      "placeholders": ["skill"],
+      "required": [],
+      "default": "Cast {skill} on what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.out_of_range",
+      "feature": "skills",
+      "id": "cast.out_of_range",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "{target} is out of range.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.room.item",
+      "feature": "skills",
+      "id": "cast.room.item",
+      "placeholders": ["actor", "skill", "target"],
+      "required": ["skill"],
+      "default": "{actor} casts {skill} on {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.room.self",
+      "feature": "skills",
+      "id": "cast.room.self",
+      "placeholders": ["actor", "skill"],
+      "required": ["skill"],
+      "default": "{actor} casts {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.room.target",
+      "feature": "skills",
+      "id": "cast.room.target",
+      "placeholders": ["actor", "skill", "target"],
+      "required": ["skill"],
+      "default": "{actor} casts {skill} at {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.self_only",
+      "feature": "skills",
+      "id": "cast.self_only",
+      "placeholders": ["skill"],
+      "required": [],
+      "default": "You can only cast {skill} on yourself.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.unknown_skill",
+      "feature": "skills",
+      "id": "cast.unknown_skill",
+      "placeholders": [],
+      "required": [],
+      "default": "You don't know that skill.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.what",
+      "feature": "skills",
+      "id": "cast.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Cast what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.attack",
+      "feature": "combat",
+      "id": "combat.attack",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You attack {target}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.attacked",
+      "feature": "combat",
+      "id": "combat.attacked",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} attacks you!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.fighting",
+      "feature": "combat",
+      "id": "combat.fighting",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} and {target} are fighting!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.flee.failed",
+      "feature": "combat",
+      "id": "combat.flee.failed",
+      "placeholders": [],
+      "required": [],
+      "default": "You fail to escape!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.flee.nowhere",
+      "feature": "combat",
+      "id": "combat.flee.nowhere",
+      "placeholders": [],
+      "required": [],
+      "default": "There's nowhere to flee!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.flee.room",
+      "feature": "combat",
+      "id": "combat.flee.room",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} flees {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.flee.self",
+      "feature": "combat",
+      "id": "combat.flee.self",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "You flee {direction}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.hit.room",
+      "feature": "combat",
+      "id": "combat.hit.room",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} hits {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.hit.self",
+      "feature": "combat",
+      "id": "combat.hit.self",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You hit {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.hit.target",
+      "feature": "combat",
+      "id": "combat.hit.target",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} hits you.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.kill_already",
+      "feature": "combat",
+      "id": "combat.kill_already",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You're already fighting {target}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.kill_self",
+      "feature": "combat",
+      "id": "combat.kill_self",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't attack yourself.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.kill_whom",
+      "feature": "combat",
+      "id": "combat.kill_whom",
+      "placeholders": [],
+      "required": [],
+      "default": "Kill whom?",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.miss.room",
+      "feature": "combat",
+      "id": "combat.miss.room",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} misses {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.miss.self",
+      "feature": "combat",
+      "id": "combat.miss.self",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You miss {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.miss.target",
+      "feature": "combat",
+      "id": "combat.miss.target",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} misses you.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.out_of_reach",
+      "feature": "combat",
+      "id": "combat.out_of_reach",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "{target} is out of reach.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.quit_refused",
+      "feature": "combat",
+      "id": "combat.quit_refused",
+      "placeholders": [],
+      "required": [],
+      "default": "No way! You're fighting for your life!",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.cant_carry",
+      "id": "common.cant_carry",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't carry that much.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.cant_reach",
+      "id": "common.cant_reach",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You can't reach {item} from here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.dont_see",
+      "id": "common.dont_see",
+      "placeholders": [],
+      "required": [],
+      "default": "You don't see that here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.huh",
+      "id": "common.huh",
+      "placeholders": [],
+      "required": [],
+      "default": "Huh?",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.incapacitated",
+      "id": "common.incapacitated",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't do that while incapacitated.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.not_carrying",
+      "id": "common.not_carrying",
+      "placeholders": [],
+      "required": [],
+      "default": "You aren't carrying that.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.not_container",
+      "id": "common.not_container",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "{item} is not a container.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.not_here",
+      "id": "common.not_here",
+      "placeholders": [],
+      "required": [],
+      "default": "They aren't here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.not_using",
+      "id": "common.not_using",
+      "placeholders": [],
+      "required": [],
+      "default": "You aren't using that.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.nothing_happens",
+      "id": "common.nothing_happens",
+      "placeholders": [],
+      "required": [],
+      "default": "Nothing happens.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.queue_full",
+      "id": "common.queue_full",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't plan that far ahead.",
+      "since": 1
+    },
+    {
+      "symbol": "message:common.silenced",
+      "id": "common.silenced",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't get the words out!",
+      "since": 1
+    },
+    {
+      "symbol": "message:condition.down",
+      "id": "condition.down",
+      "placeholders": [],
+      "required": [],
+      "default": "You are incapacitated.",
+      "since": 1
+    },
+    {
+      "symbol": "message:condition.down_room",
+      "id": "condition.down_room",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} collapses.",
+      "since": 1
+    },
+    {
+      "symbol": "message:condition.up",
+      "id": "condition.up",
+      "placeholders": [],
+      "required": [],
+      "default": "You come to.",
+      "since": 1
+    },
+    {
+      "symbol": "message:condition.up_room",
+      "id": "condition.up_room",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} stirs.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.no_lock",
+      "id": "container.no_lock",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "{item} has no lock.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.room.close",
+      "id": "container.room.close",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} closes {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.room.lock",
+      "id": "container.room.lock",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} locks {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.room.open",
+      "id": "container.room.open",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} opens {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.room.unlock",
+      "id": "container.room.unlock",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} unlocks {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.self.close",
+      "id": "container.self.close",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You close {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.self.lock",
+      "id": "container.self.lock",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You lock {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.self.open",
+      "id": "container.self.open",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You open {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.self.unlock",
+      "id": "container.self.unlock",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You unlock {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.state",
+      "id": "container.state",
+      "placeholders": ["item", "state"],
+      "required": [],
+      "default": "{item} is {state}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:death.respawn",
+      "id": "death.respawn",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} appears, looking shaken.",
+      "since": 1
+    },
+    {
+      "symbol": "message:death.room",
+      "id": "death.room",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} is DEAD!",
+      "since": 1
+    },
+    {
+      "symbol": "message:death.self",
+      "id": "death.self",
+      "placeholders": [],
+      "required": [],
+      "default": "You are DEAD!",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.no_key",
+      "id": "door.no_key",
+      "placeholders": [],
+      "required": [],
+      "default": "You don't have the key.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.no_lock",
+      "id": "door.no_lock",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "The door {direction} has no lock.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.none",
+      "id": "door.none",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "There is no door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.other_closes",
+      "id": "door.other_closes",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "The door {direction} closes.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.other_opens",
+      "id": "door.other_opens",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "The door {direction} opens.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.room.close",
+      "id": "door.room.close",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} closes the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.room.lock",
+      "id": "door.room.lock",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} locks the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.room.open",
+      "id": "door.room.open",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} opens the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.room.unlock",
+      "id": "door.room.unlock",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} unlocks the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.self.close",
+      "id": "door.self.close",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "You close the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.self.lock",
+      "id": "door.self.lock",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "You lock the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.self.open",
+      "id": "door.self.open",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "You open the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.self.unlock",
+      "id": "door.self.unlock",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "You unlock the door {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.state",
+      "id": "door.state",
+      "placeholders": ["direction", "state"],
+      "required": [],
+      "default": "The door {direction} is {state}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.what.close",
+      "id": "door.what.close",
+      "placeholders": [],
+      "required": [],
+      "default": "Close what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.what.lock",
+      "id": "door.what.lock",
+      "placeholders": [],
+      "required": [],
+      "default": "Lock what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.what.open",
+      "id": "door.what.open",
+      "placeholders": [],
+      "required": [],
+      "default": "Open what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.what.unlock",
+      "id": "door.what.unlock",
+      "placeholders": [],
+      "required": [],
+      "default": "Unlock what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:drop.room",
+      "id": "drop.room",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} drops {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:drop.self",
+      "id": "drop.self",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You drop {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:emote.room",
+      "id": "emote.room",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "{actor} {text}",
+      "since": 1
+    },
+    {
+      "symbol": "message:encumbrance.off",
+      "id": "encumbrance.off",
+      "placeholders": [],
+      "required": [],
+      "default": "Your load feels manageable again.",
+      "since": 1
+    },
+    {
+      "symbol": "message:encumbrance.on",
+      "id": "encumbrance.on",
+      "placeholders": [],
+      "required": [],
+      "default": "You are carrying more than you can manage.",
+      "since": 1
+    },
+    {
+      "symbol": "message:equipment.empty",
+      "id": "equipment.empty",
+      "placeholders": [],
+      "required": [],
+      "default": "You are using nothing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:equipment.item",
+      "id": "equipment.item",
+      "placeholders": ["slot", "item"],
+      "required": ["item"],
+      "default": "  <{slot}> {item}",
+      "since": 1
+    },
+    {
+      "symbol": "message:equipment.list",
+      "id": "equipment.list",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "You are using:\n{items}",
+      "since": 1
+    },
+    {
+      "symbol": "message:get.room",
+      "id": "get.room",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} gets {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:get.self",
+      "id": "get.self",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You get {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:get.self_from",
+      "id": "get.self_from",
+      "placeholders": ["item", "container"],
+      "required": [],
+      "default": "You get {item} from {container}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:get.what",
+      "id": "get.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Get what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.already",
+      "id": "give.already",
+      "placeholders": [],
+      "required": [],
+      "default": "You already have it.",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.full",
+      "id": "give.full",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "{target} can't carry that much.",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.room",
+      "id": "give.room",
+      "placeholders": ["actor", "item", "target"],
+      "required": [],
+      "default": "{actor} gives {item} to {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.self",
+      "id": "give.self",
+      "placeholders": ["item", "target"],
+      "required": [],
+      "default": "You give {item} to {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.target",
+      "id": "give.target",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} gives you {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:give.usage",
+      "id": "give.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Give what to whom?",
+      "since": 1
+    },
+    {
+      "symbol": "message:gossip.line",
+      "id": "gossip.line",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "[gossip] {actor}: {text}",
+      "since": 1
+    },
+    {
+      "symbol": "message:gossip.what",
+      "id": "gossip.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Gossip what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:guard.blocks",
+      "id": "guard.blocks",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} blocks your way.",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.awful",
+      "id": "health.awful",
+      "placeholders": [],
+      "required": [],
+      "default": "is in awful condition",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.dead",
+      "id": "health.dead",
+      "placeholders": [],
+      "required": [],
+      "default": "is mortally wounded",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.excellent",
+      "id": "health.excellent",
+      "placeholders": [],
+      "required": [],
+      "default": "is in excellent condition",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.hurt",
+      "id": "health.hurt",
+      "placeholders": [],
+      "required": [],
+      "default": "is badly hurt",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.incapacitated",
+      "id": "health.incapacitated",
+      "placeholders": [],
+      "required": [],
+      "default": "is incapacitated",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.scratched",
+      "id": "health.scratched",
+      "placeholders": [],
+      "required": [],
+      "default": "has a few scratches",
+      "since": 1
+    },
+    {
+      "symbol": "message:health.wounded",
+      "id": "health.wounded",
+      "placeholders": [],
+      "required": [],
+      "default": "is wounded",
+      "since": 1
+    },
+    {
+      "symbol": "message:help.list",
+      "id": "help.list",
+      "placeholders": ["instant", "actions"],
+      "required": [],
+      "default": "Instant: {instant}\nActions: {actions}, and any exit name",
+      "since": 1
+    },
+    {
+      "symbol": "message:inventory.empty",
+      "id": "inventory.empty",
+      "placeholders": [],
+      "required": [],
+      "default": "You are carrying nothing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:inventory.item",
+      "id": "inventory.item",
+      "placeholders": ["item"],
+      "required": ["item"],
+      "default": "  {item}",
+      "since": 1
+    },
+    {
+      "symbol": "message:inventory.list",
+      "id": "inventory.list",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "You are carrying:\n{items}",
+      "since": 1
+    },
+    {
+      "symbol": "message:item.decays",
+      "id": "item.decays",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "{item} crumbles to dust.",
+      "since": 1
+    },
+    {
+      "symbol": "message:keyring.empty",
+      "id": "keyring.empty",
+      "placeholders": [],
+      "required": [],
+      "default": "Your keyring is empty.",
+      "since": 1
+    },
+    {
+      "symbol": "message:keyring.list",
+      "id": "keyring.list",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "Your keyring holds:\n{items}",
+      "since": 1
+    },
+    {
+      "symbol": "message:leveling.gain",
+      "feature": "leveling",
+      "id": "leveling.gain",
+      "placeholders": ["amount"],
+      "required": ["amount"],
+      "default": "You gain {amount} experience.",
+      "since": 1
+    },
+    {
+      "symbol": "message:leveling.level_up",
+      "feature": "leveling",
+      "id": "leveling.level_up",
+      "placeholders": ["level"],
+      "required": ["level"],
+      "default": "You have reached level {level}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:leveling.score",
+      "feature": "leveling",
+      "id": "leveling.score",
+      "placeholders": ["level", "xp"],
+      "required": [],
+      "default": "Level {level} ({xp} xp)",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.account_disabled",
+      "id": "login.account_disabled",
+      "placeholders": [],
+      "required": [],
+      "default": "This account is disabled.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.account_gone",
+      "id": "login.account_gone",
+      "placeholders": [],
+      "required": [],
+      "default": "That account no longer exists.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.account_now_disabled",
+      "id": "login.account_now_disabled",
+      "placeholders": [],
+      "required": [],
+      "default": "This account has been disabled.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.account_ready",
+      "id": "login.account_ready",
+      "placeholders": ["login"],
+      "required": [],
+      "default": "Your account '{login}' is ready.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.already_playing",
+      "id": "login.already_playing",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "You're already playing {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.bad_code",
+      "id": "login.bad_code",
+      "placeholders": [],
+      "required": [],
+      "default": "That code isn't valid, or it has expired.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.cant_find",
+      "id": "login.cant_find",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} can't be found.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.character_limit",
+      "id": "login.character_limit",
+      "placeholders": ["count"],
+      "required": [],
+      "default": "You already have {count} characters, the most an account may have.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.characters",
+      "id": "login.characters",
+      "placeholders": ["names"],
+      "required": ["names"],
+      "default": "Your characters: {names}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.choose_password",
+      "id": "login.choose_password",
+      "placeholders": ["min"],
+      "required": [],
+      "default": "Choose a password of at least {min} characters.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.code_prompt",
+      "id": "login.code_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "Invite or setup code: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.code_prompt_open",
+      "id": "login.code_prompt_open",
+      "placeholders": [],
+      "required": [],
+      "default": "Invite code (or press Enter to sign up without one): ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.code_used",
+      "id": "login.code_used",
+      "placeholders": [],
+      "required": [],
+      "default": "That code was used or ran out in the meantime.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.dev.local_only",
+      "id": "login.dev.local_only",
+      "placeholders": [],
+      "required": [],
+      "default": "This development server only accepts connections from this machine.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.dev.prompt",
+      "id": "login.dev.prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "By what name do you wish to be known? ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.dev.welcome",
+      "id": "login.dev.welcome",
+      "placeholders": [],
+      "required": [],
+      "default": "Welcome to GUPS (development server). You are the local instructor.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.error",
+      "id": "login.error",
+      "placeholders": [],
+      "required": [],
+      "default": "Something went wrong on the server. Please try again.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.login_invalid",
+      "id": "login.login_invalid",
+      "placeholders": [],
+      "required": [],
+      "default": "Logins are 3 to 24 characters: lowercase letters, digits, '_', '.' and '-'.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.login_reserved",
+      "id": "login.login_reserved",
+      "placeholders": [],
+      "required": [],
+      "default": "That login is reserved.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.login_taken",
+      "id": "login.login_taken",
+      "placeholders": [],
+      "required": [],
+      "default": "That login is taken.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.login_taken_meanwhile",
+      "id": "login.login_taken_meanwhile",
+      "placeholders": [],
+      "required": [],
+      "default": "Someone took that login in the meantime.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.menu",
+      "id": "login.menu",
+      "placeholders": ["characters"],
+      "required": [],
+      "default": "{characters}  Type a name to play, \"new\" to create, or \"password\" to change yours.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.menu_prompt",
+      "id": "login.menu_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "> ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.mismatch",
+      "id": "login.mismatch",
+      "placeholders": [],
+      "required": [],
+      "default": "The passwords don't match.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.name_invalid",
+      "id": "login.name_invalid",
+      "placeholders": [],
+      "required": [],
+      "default": "Names are 2 to 16 letters.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.name_prompt",
+      "id": "login.name_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "What will your new character be called? ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.name_reserved",
+      "id": "login.name_reserved",
+      "placeholders": [],
+      "required": [],
+      "default": "That name is reserved.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.name_taken",
+      "id": "login.name_taken",
+      "placeholders": [],
+      "required": [],
+      "default": "That name is taken.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.new_login_prompt",
+      "id": "login.new_login_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "Choose a login (3 to 24 characters: a-z, 0-9, _ . -): ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.new_password_again",
+      "id": "login.new_password_again",
+      "placeholders": [],
+      "required": [],
+      "default": "New password again: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.new_password_prompt",
+      "id": "login.new_password_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "New password: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.no_characters",
+      "id": "login.no_characters",
+      "placeholders": [],
+      "required": [],
+      "default": "You have no characters yet.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.no_such_character",
+      "id": "login.no_such_character",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "You have no character called {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.not_current",
+      "id": "login.not_current",
+      "placeholders": [],
+      "required": [],
+      "default": "That isn't your current password.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.old_password_prompt",
+      "id": "login.old_password_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "Current password: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.one_second",
+      "id": "login.one_second",
+      "placeholders": [],
+      "required": [],
+      "default": "1 second",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.password_again",
+      "id": "login.password_again",
+      "placeholders": [],
+      "required": [],
+      "default": "Password again: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.password_changed",
+      "id": "login.password_changed",
+      "placeholders": [],
+      "required": [],
+      "default": "Your password has been changed.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.password_is_login",
+      "id": "login.password_is_login",
+      "placeholders": [],
+      "required": [],
+      "default": "Your password can't be your login.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.password_prompt",
+      "id": "login.password_prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "Password: ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.password_short",
+      "id": "login.password_short",
+      "placeholders": ["min"],
+      "required": [],
+      "default": "Passwords need at least {min} characters.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.prompt",
+      "id": "login.prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "By what name do you wish to be known? (login, or \"new\" with an invite code) ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.seconds",
+      "id": "login.seconds",
+      "placeholders": ["n"],
+      "required": [],
+      "default": "{n} seconds",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.setup_code",
+      "id": "login.setup_code",
+      "placeholders": ["login", "min"],
+      "required": [],
+      "default": "This code sets up the account '{login}'. Choose a password of at least {min} characters.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.too_many_attempts",
+      "id": "login.too_many_attempts",
+      "placeholders": ["wait"],
+      "required": [],
+      "default": "Too many failed attempts. Try again in {wait}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.too_many_logins",
+      "id": "login.too_many_logins",
+      "placeholders": ["wait"],
+      "required": [],
+      "default": "Too many failed logins. Try again in {wait}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.too_many_wrong",
+      "id": "login.too_many_wrong",
+      "placeholders": [],
+      "required": [],
+      "default": "Too many wrong passwords. Goodbye.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.too_slow",
+      "id": "login.too_slow",
+      "placeholders": [],
+      "required": [],
+      "default": "You took too long. Goodbye.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.welcome",
+      "id": "login.welcome",
+      "placeholders": [],
+      "required": [],
+      "default": "Welcome to GUPS.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.wrong",
+      "id": "login.wrong",
+      "placeholders": [],
+      "required": [],
+      "default": "Wrong login or password.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.actors",
+      "id": "look.actors",
+      "placeholders": ["where", "list"],
+      "required": ["list"],
+      "default": "{where}: {list}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.closed",
+      "id": "look.closed",
+      "placeholders": [],
+      "required": [],
+      "default": "It is closed.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.contains",
+      "id": "look.contains",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "It contains: {items}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.empty",
+      "id": "look.empty",
+      "placeholders": [],
+      "required": [],
+      "default": "It is empty.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.exit_door",
+      "id": "look.exit_door",
+      "placeholders": ["direction", "state"],
+      "required": [],
+      "default": "{direction} ({state})",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.exits",
+      "id": "look.exits",
+      "placeholders": ["exits"],
+      "required": ["exits"],
+      "default": "Exits: {exits}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.ground.far",
+      "id": "look.ground.far",
+      "placeholders": [],
+      "required": [],
+      "default": "far off",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.ground.melee",
+      "id": "look.ground.melee",
+      "placeholders": [],
+      "required": [],
+      "default": "beside you",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.ground.near",
+      "id": "look.ground.near",
+      "placeholders": [],
+      "required": [],
+      "default": "nearby",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.health",
+      "id": "look.health",
+      "placeholders": ["name", "health"],
+      "required": ["health"],
+      "default": "{name} {health}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.here.actors",
+      "id": "look.here.actors",
+      "placeholders": ["list"],
+      "required": ["list"],
+      "default": "Also here: {list}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.here.items",
+      "id": "look.here.items",
+      "placeholders": ["list"],
+      "required": ["list"],
+      "default": "On the ground: {list}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.items",
+      "id": "look.items",
+      "placeholders": ["where", "list"],
+      "required": ["list"],
+      "default": "On the ground {where}: {list}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.no_exits",
+      "id": "look.no_exits",
+      "placeholders": [],
+      "required": [],
+      "default": "Exits: none.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.nothing_special",
+      "id": "look.nothing_special",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "You see nothing special about {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.where.far",
+      "id": "look.where.far",
+      "placeholders": [],
+      "required": [],
+      "default": "Far off",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.where.melee",
+      "id": "look.where.melee",
+      "placeholders": [],
+      "required": [],
+      "default": "Beside you",
+      "since": 1
+    },
+    {
+      "symbol": "message:look.where.near",
+      "id": "look.where.near",
+      "placeholders": [],
+      "required": [],
+      "default": "Nearby",
+      "since": 1
+    },
+    {
+      "symbol": "message:move.arrives",
+      "id": "move.arrives",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} arrives.",
+      "since": 1
+    },
+    {
+      "symbol": "message:move.closed",
+      "id": "move.closed",
+      "placeholders": ["direction"],
+      "required": [],
+      "default": "The way {direction} is closed.",
+      "since": 1
+    },
+    {
+      "symbol": "message:move.exhausted",
+      "id": "move.exhausted",
+      "placeholders": [],
+      "required": [],
+      "default": "You are too exhausted.",
+      "since": 1
+    },
+    {
+      "symbol": "message:move.leaves",
+      "id": "move.leaves",
+      "placeholders": ["actor", "direction"],
+      "required": [],
+      "default": "{actor} leaves {direction}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:move.no_exit",
+      "id": "move.no_exit",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't go that way.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.closed",
+      "id": "put.closed",
+      "placeholders": ["container"],
+      "required": [],
+      "default": "{container} is closed.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.full",
+      "id": "put.full",
+      "placeholders": ["container"],
+      "required": [],
+      "default": "{container} is full.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.itself",
+      "id": "put.itself",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't put something inside itself.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.room",
+      "id": "put.room",
+      "placeholders": ["actor", "item", "container"],
+      "required": [],
+      "default": "{actor} puts {item} in {container}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.self",
+      "id": "put.self",
+      "placeholders": ["item", "container"],
+      "required": [],
+      "default": "You put {item} in {container}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.usage",
+      "id": "put.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Put what in what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:put.wont_fit",
+      "id": "put.wont_fit",
+      "placeholders": ["item", "container"],
+      "required": [],
+      "default": "{item} won't fit in {container}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:quit.goodbye",
+      "id": "quit.goodbye",
+      "placeholders": [],
+      "required": [],
+      "default": "Goodbye.",
+      "since": 1
+    },
+    {
+      "symbol": "message:quit.idle",
+      "id": "quit.idle",
+      "placeholders": [],
+      "required": [],
+      "default": "You have been idle too long. Goodbye.",
+      "since": 1
+    },
+    {
+      "symbol": "message:quit.left",
+      "id": "quit.left",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} has left the game.",
+      "since": 1
+    },
+    {
+      "symbol": "message:say.room",
+      "id": "say.room",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "{actor} says, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:say.self",
+      "id": "say.self",
+      "placeholders": ["text"],
+      "required": ["text"],
+      "default": "You say, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:say.what",
+      "id": "say.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Say what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:score.resists",
+      "id": "score.resists",
+      "placeholders": ["resists"],
+      "required": ["resists"],
+      "default": "Resists: {resists}",
+      "since": 1
+    },
+    {
+      "symbol": "message:session.link_lost",
+      "id": "session.link_lost",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} has lost their link.",
+      "since": 1
+    },
+    {
+      "symbol": "message:session.no_character",
+      "id": "session.no_character",
+      "placeholders": [],
+      "required": [],
+      "default": "You are not playing a character.",
+      "since": 1
+    },
+    {
+      "symbol": "message:session.slow_down",
+      "id": "session.slow_down",
+      "placeholders": [],
+      "required": [],
+      "default": "Slow down.",
+      "since": 1
+    },
+    {
+      "symbol": "message:session.taken_over",
+      "id": "session.taken_over",
+      "placeholders": [],
+      "required": [],
+      "default": "Someone else has taken over this character.",
+      "since": 1
+    },
+    {
+      "symbol": "message:session.too_much_input",
+      "id": "session.too_much_input",
+      "placeholders": [],
+      "required": [],
+      "default": "Too much input.",
+      "since": 1
+    },
+    {
+      "symbol": "message:shout.near",
+      "id": "shout.near",
+      "placeholders": ["text"],
+      "required": ["text"],
+      "default": "Someone nearby shouts, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:shout.room",
+      "id": "shout.room",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "{actor} shouts, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:shout.self",
+      "id": "shout.self",
+      "placeholders": ["text"],
+      "required": ["text"],
+      "default": "You shout, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:shout.what",
+      "id": "shout.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Shout what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:stop.cast",
+      "feature": "skills",
+      "id": "stop.cast",
+      "placeholders": [],
+      "required": [],
+      "default": "You stop casting.",
+      "since": 1
+    },
+    {
+      "symbol": "message:stop.nothing",
+      "id": "stop.nothing",
+      "placeholders": [],
+      "required": [],
+      "default": "You have nothing to stop.",
+      "since": 1
+    },
+    {
+      "symbol": "message:stop.plans",
+      "id": "stop.plans",
+      "placeholders": [],
+      "required": [],
+      "default": "You clear your plans.",
+      "since": 1
+    },
+    {
+      "symbol": "message:teleport.appears",
+      "id": "teleport.appears",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} appears.",
+      "since": 1
+    },
+    {
+      "symbol": "message:teleport.vanishes",
+      "id": "teleport.vanishes",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "{actor} vanishes.",
+      "since": 1
+    },
+    {
+      "symbol": "message:tell.nobody",
+      "id": "tell.nobody",
+      "placeholders": [],
+      "required": [],
+      "default": "Nobody by that name is around.",
+      "since": 1
+    },
+    {
+      "symbol": "message:tell.self",
+      "id": "tell.self",
+      "placeholders": ["target", "text"],
+      "required": ["text"],
+      "default": "You tell {target}, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:tell.target",
+      "id": "tell.target",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "{actor} tells you, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:tell.usage",
+      "id": "tell.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Tell whom what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.advance.room",
+      "feature": "track",
+      "id": "track.advance.room",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} advances toward {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.advance.self",
+      "feature": "track",
+      "id": "track.advance.self",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You advance toward {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.advance_whom",
+      "feature": "track",
+      "id": "track.advance_whom",
+      "placeholders": [],
+      "required": [],
+      "default": "Advance toward whom?",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.already_beside",
+      "feature": "track",
+      "id": "track.already_beside",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You're already beside {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.pinned",
+      "feature": "track",
+      "id": "track.pinned",
+      "placeholders": [],
+      "required": [],
+      "default": "You're pinned! Retreat or flee first.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.retreat.room",
+      "feature": "track",
+      "id": "track.retreat.room",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} falls back from {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.retreat.self",
+      "feature": "track",
+      "id": "track.retreat.self",
+      "placeholders": ["target"],
+      "required": [],
+      "default": "You fall back from {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.retreat_failed",
+      "feature": "track",
+      "id": "track.retreat_failed",
+      "placeholders": [],
+      "required": [],
+      "default": "You fail to break away!",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.retreat_limit",
+      "feature": "track",
+      "id": "track.retreat_limit",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't retreat any further.",
+      "since": 1
+    },
+    {
+      "symbol": "message:track.retreat_nothing",
+      "feature": "track",
+      "id": "track.retreat_nothing",
+      "placeholders": [],
+      "required": [],
+      "default": "You have nothing to retreat from.",
+      "since": 1
+    },
+    {
+      "symbol": "message:use.cant",
+      "id": "use.cant",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You can't use {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:use.what",
+      "id": "use.what",
+      "placeholders": [],
+      "required": [],
+      "default": "Use what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.cant_wear",
+      "id": "wear.cant_wear",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You can't wear {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.cant_wield",
+      "id": "wear.cant_wield",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You can't wield {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.room",
+      "id": "wear.room",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} wears {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.self",
+      "id": "wear.self",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You wear {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.stop",
+      "id": "wear.stop",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You stop using {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:welcome.back",
+      "id": "welcome.back",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "Welcome back, {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:welcome.new",
+      "id": "welcome.new",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "Welcome, {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:welcome.reconnected",
+      "id": "welcome.reconnected",
+      "placeholders": [],
+      "required": [],
+      "default": "Reconnected.",
+      "since": 1
+    },
+    {
+      "symbol": "message:welcome.reconnected_room",
+      "id": "welcome.reconnected_room",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} has reconnected.",
+      "since": 1
+    },
+    {
+      "symbol": "message:whisper.room",
+      "id": "whisper.room",
+      "placeholders": ["actor", "target"],
+      "required": [],
+      "default": "{actor} whispers something to {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:whisper.self",
+      "id": "whisper.self",
+      "placeholders": ["target", "text"],
+      "required": ["text"],
+      "default": "You whisper to {target}, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:whisper.target",
+      "id": "whisper.target",
+      "placeholders": ["actor", "text"],
+      "required": ["text"],
+      "default": "{actor} whispers to you, '{text}'",
+      "since": 1
+    },
+    {
+      "symbol": "message:whisper.usage",
+      "id": "whisper.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Whisper what to whom?",
+      "since": 1
+    },
+    {
+      "symbol": "message:who.linkdead",
+      "id": "who.linkdead",
+      "placeholders": ["name"],
+      "required": ["name"],
+      "default": "  {name} (link-dead)",
+      "since": 1
+    },
+    {
+      "symbol": "message:who.list",
+      "id": "who.list",
+      "placeholders": ["players"],
+      "required": ["players"],
+      "default": "Players:\n{players}",
+      "since": 1
+    },
+    {
+      "symbol": "message:who.player",
+      "id": "who.player",
+      "placeholders": ["name"],
+      "required": ["name"],
+      "default": "  {name}",
+      "since": 1
+    },
+    {
+      "symbol": "message:wield.room",
+      "id": "wield.room",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} wields {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wield.self",
+      "id": "wield.self",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You wield {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:world.shifts",
+      "id": "world.shifts",
+      "placeholders": [],
+      "required": [],
+      "default": "The world shifts around you.",
+      "since": 1
     }
   ]
 }

@@ -86,6 +86,13 @@ abstract class EntityView internal constructor(val scope: ViewScope, val entity:
     return block()
   }
 
+  /** Like [read] for a field or method of [view] that a feature owns, such as `actor.level`. */
+  protected fun <T> read(view: String, block: () -> T): T {
+    scope.check()
+    FeatureOwnership.refused("view:$view", view, scope.world.features)?.let { fail(it) }
+    return block()
+  }
+
   @StarlarkMethod(name = "id", structField = true, doc = "The entity's id.")
   fun id(): Any = read { sInt(entity.id.v) }
 
@@ -137,10 +144,10 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   fun keywords(): Any = read { sList(actor.keywords) }
 
   @StarlarkMethod(name = "level", structField = true, doc = "The actor's level.")
-  fun level(): Any = read { sInt(actor.level) }
+  fun level(): Any = read("actor.level") { sInt(actor.level) }
 
   @StarlarkMethod(name = "xp", structField = true, doc = "Current experience points.")
-  fun xp(): Any = read { sInt(actor.xp) }
+  fun xp(): Any = read("actor.xp") { sInt(actor.xp) }
 
   @StarlarkMethod(
     name = "condition",
@@ -224,36 +231,38 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     structField = true,
     doc = "Position along the room's 1D track.",
   )
-  fun trackIndex(): Any = read { sInt(actor.trackIndex) }
+  fun trackIndex(): Any = read("actor.track_index") { sInt(actor.trackIndex) }
 
   @StarlarkMethod(
     name = "band_of",
     doc = "'melee', 'near' or 'far' to another actor or item in the same room; None elsewhere.",
     parameters = [Param(name = "other", named = true, doc = "Actor or item in the same room.")],
   )
-  fun bandOf(other: Any): Any = read {
-    val index =
-      when (other) {
-        is ActorView ->
-          other.actor.trackIndex.takeIf { other.actor.room === actor.room && other.actor.inWorld }
-        is ItemView ->
-          (other.item.location as? ItemLocation.InRoom)
-            ?.takeIf { it.room == actor.room.id }
-            ?.trackIndex
-            ?: other.item
-              .let { scope.world.roomOfEntity(it) }
-              ?.takeIf { it === actor.room }
-              ?.let { actor.trackIndex }
-        else -> fail("band_of(): expected an actor or item, got ${typeName(other)}")
-      }
-    index?.let { Band.between(actor.trackIndex, it).word } ?: Starlark.NONE
-  }
+  fun bandOf(other: Any): Any =
+    read("actor.band_of") {
+      val index =
+        when (other) {
+          is ActorView ->
+            other.actor.trackIndex.takeIf { other.actor.room === actor.room && other.actor.inWorld }
+          is ItemView ->
+            (other.item.location as? ItemLocation.InRoom)
+              ?.takeIf { it.room == actor.room.id }
+              ?.trackIndex
+              ?: other.item
+                .let { scope.world.roomOfEntity(it) }
+                ?.takeIf { it === actor.room }
+                ?.let { actor.trackIndex }
+          else -> fail("band_of(): expected an actor or item, got ${typeName(other)}")
+        }
+      index?.let { Band.between(actor.trackIndex, it).word } ?: Starlark.NONE
+    }
 
   @StarlarkMethod(name = "affects", structField = true, doc = "Active timed affects on this actor.")
   fun affects(): Any = read { sList(actor.affects.map { AffectView(scope, actor, it) }) }
 
   @StarlarkMethod(name = "skills", structField = true, doc = "Skill label to proficiency (0-100).")
-  fun skills(): Any = read { sDict(actor.skills.entries.associate { it.key.v to sInt(it.value) }) }
+  fun skills(): Any =
+    read("actor.skills") { sDict(actor.skills.entries.associate { it.key.v to sInt(it.value) }) }
 
   @StarlarkMethod(
     name = "equipped",
@@ -279,16 +288,17 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   }
 
   @StarlarkMethod(name = "fighting", doc = "Actors engaged with this one.")
-  fun fighting(): Any = read {
-    sList(actor.fighting.mapNotNull { scope.world.actor(it) }.map { ActorView(scope, it) })
-  }
+  fun fighting(): Any =
+    read("actor.fighting") {
+      sList(actor.fighting.mapNotNull { scope.world.actor(it) }.map { ActorView(scope, it) })
+    }
 
   @StarlarkMethod(
     name = "is_casting",
     structField = true,
     doc = "True while the actor is in casting warmup.",
   )
-  fun isCasting(): Any = read { actor.isCasting }
+  fun isCasting(): Any = read("actor.is_casting") { actor.isCasting }
 
   @StarlarkMethod(name = "wait_state", structField = true, doc = "Recovery pulses left.")
   fun waitState(): Any = read { sInt(actor.waitState) }
@@ -333,11 +343,12 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   }
 
   @StarlarkMethod(name = "casting", structField = true, doc = "The skill being cast, or None.")
-  fun casting(): Any = read {
-    (actor.casting?.action as? gups.core.world.Castable)?.skill?.let {
-      SkillView(it, scope.world.schema)
-    } ?: Starlark.NONE
-  }
+  fun casting(): Any =
+    read("actor.casting") {
+      (actor.casting?.action as? gups.core.world.Castable)?.skill?.let {
+        SkillView(it, scope.world.schema)
+      } ?: Starlark.NONE
+    }
 }
 
 @StarlarkBuiltin(name = "room", doc = "A read-only view of a room.")
@@ -346,14 +357,14 @@ class RoomView(scope: ViewScope, val room: Room) : EntityView(scope, room) {
   fun desc(): Any = read { room.proto.desc }
 
   @StarlarkMethod(name = "size", structField = true, doc = "'cramped', 'normal' or 'large'.")
-  fun size(): Any = read { room.proto.size.name.lowercase() }
+  fun size(): Any = read("room.size") { room.proto.size.name.lowercase() }
 
   @StarlarkMethod(
     name = "track_size",
     structField = true,
     doc = "Number of track slots in this room (1, 3 or 6).",
   )
-  fun trackSize(): Any = read { sInt(room.trackSize) }
+  fun trackSize(): Any = read("room.track_size") { sInt(room.trackSize) }
 
   @StarlarkMethod(
     name = "regions",
@@ -394,6 +405,12 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
     return block()
   }
 
+  private fun <T> read(view: String, block: () -> T): T {
+    scope.check()
+    FeatureOwnership.refused("view:$view", view, scope.world.features)?.let { fail(it) }
+    return block()
+  }
+
   @StarlarkMethod(name = "direction", structField = true, doc = "The exit's direction name.")
   fun direction(): Any = read { exit.direction.name }
 
@@ -405,7 +422,7 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
     structField = true,
     doc = "Destination track index where travellers arrive, or -1 for the back.",
   )
-  fun entryIndex(): Any = read { sInt(exit.entryIndex) }
+  fun entryIndex(): Any = read("exit.entry_index") { sInt(exit.entryIndex) }
 
   @StarlarkMethod(
     name = "senses_blocked",
@@ -514,7 +531,7 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
     structField = true,
     doc = "A weapon's reach: 'melee', 'near' or 'far'.",
   )
-  fun range(): Any = read { item.range.word }
+  fun range(): Any = read("item.range") { item.range.word }
 
   @StarlarkMethod(
     name = "wear",
@@ -553,7 +570,12 @@ internal constructor(private val scope: ViewScope, private val loc: ItemLocation
   fun room(): Any = view(scope, (loc as? ItemLocation.InRoom)?.let { scope.world.entity(it.room) })
 
   @StarlarkMethod(name = "index", structField = true, doc = "Track index, for items on the ground.")
-  fun index(): Any = (loc as? ItemLocation.InRoom)?.let { sInt(it.trackIndex) } ?: Starlark.NONE
+  fun index(): Any {
+    FeatureOwnership.refused("view:location.index", "location.index", scope.world.features)?.let {
+      fail(it)
+    }
+    return (loc as? ItemLocation.InRoom)?.let { sInt(it.trackIndex) } ?: Starlark.NONE
+  }
 
   @StarlarkMethod(name = "actor", structField = true, doc = "The carrier or wearer.")
   fun actor(): Any =

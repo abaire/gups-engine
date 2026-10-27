@@ -39,6 +39,7 @@ import gups.script.ScriptLimits
 import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
+import gups.script.WorldMessages
 import gups.script.WorldModule
 import gups.script.WorldWatcher
 import java.nio.file.Path
@@ -163,7 +164,11 @@ class GupsServer(
     prod?.web?.let { w ->
       WebServer(
         loop,
-        WebLogins(AccountService(persistence!!.accounts), limiter),
+        WebLogins(
+          AccountService(persistence!!.accounts),
+          limiter,
+          messages = { world.config.messages },
+        ),
         WebAssets.fromClasspath(),
         w.host,
         w.port,
@@ -204,11 +209,20 @@ class GupsServer(
     module.problems().forEach { log("error: $it") }
     if (module.problems().isNotEmpty()) return false
     module.warnings().forEach { log("warning: $it") }
+    val (messages, messagesError) = WorldMessages.read(dir)
+    if (messagesError != null) {
+      log("error: ${messagesError.render()}")
+      return false
+    }
+    messages.problems().forEach { log("error: $it") }
+    if (messages.problems().isNotEmpty()) return false
+    messages.warnings(module.features).forEach { log("warning: $it") }
     val plugins = loadPlugins(dir, module) { log("warning: $it") }.also { plugins = it }
     docs =
       DocsRenderer.render(
           ScriptApi.model(HarnessApi.specs()),
           plugins = plugins.describe().map(::toDocSpec),
+          world = worldDocSpec(module, messages),
         )
         .mapValues { it.value.toByteArray(Charsets.UTF_8) }
     // Packages that use a skipped plugin fail to load and are left out, as any failed package is.
@@ -249,12 +263,12 @@ class GupsServer(
     if (saved != null) {
       val names = module.schema.names
       if (wipe) {
-        val gone = saved.wipe(names)
+        val gone = saved.wipe(names, module.features)
         log(
-          "Wiped ${gone.characters} characters and ${gone.items} items; the previous database is at ${gone.backup}. Recorded the schema in MODULE.gups."
+          "Wiped ${gone.characters} characters and ${gone.items} items; the previous database is at ${gone.backup}. Recorded the schema and features in MODULE.gups."
         )
       } else {
-        saved.checkSchema(names)?.let {
+        (saved.checkFeatures(module.features) ?: saved.checkSchema(names))?.let {
           log("error: $it")
           saved.close()
           return false
@@ -276,6 +290,9 @@ class GupsServer(
         bubble = true,
         production = prod != null,
         aliases = module.aliases,
+        features = module.features,
+        rename = module.rename,
+        messages = messages.texts,
       )
     world = World(protos, module.schema, host.rules(), host, config, boot)
     plugins.install(world)

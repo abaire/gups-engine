@@ -11,6 +11,7 @@ import gups.core.model.Room
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.world.Diagnostic
+import gups.core.world.Feature
 import gups.core.world.World
 import gups.core.world.applyAffect
 import gups.core.world.damage
@@ -99,7 +100,10 @@ internal class RoomFacade(val room: Room, private val world: World) :
     get() = room.proto.flags.toSortedSet()
 
   override val size: String
-    get() = room.proto.size.name.lowercase()
+    get() {
+      needs(world, Feature.TRACK, "size")
+      return room.proto.size.name.lowercase()
+    }
 
   override val exits: Map<String, String>
     get() = room.exits.values.associate { it.direction.name to it.to.v }
@@ -109,6 +113,11 @@ internal class RoomFacade(val room: Room, private val world: World) :
 
   override val items: List<PluginItem>
     get() = room.items.map(::ItemFacade)
+}
+
+/** Fails with an `IllegalStateException` naming [feature] when [world] has it off. */
+internal fun needs(world: World, feature: Feature, what: String) {
+  check(feature in world.features) { "$what needs the ${feature.id} feature" }
 }
 
 /** [name] if it is one of [known], else an `IllegalArgumentException` with a suggestion. */
@@ -152,7 +161,10 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
     actor.resists[DamageType(declared(type, schema.damageTypes, "damage type"))] ?: 0
 
   override val level: Int
-    get() = actor.level
+    get() {
+      needs(world, Feature.LEVELING, "level")
+      return actor.level
+    }
 
   override val affects: List<String>
     get() = actor.affects.map { it.name }
@@ -206,6 +218,9 @@ internal class WorldFacade(
         (e as? EntityFacade)?.entity
           ?: throw IllegalArgumentException("$what: not an entity of this world")
     }
+
+  override val features: Set<String>
+    get() = world.features.ids.toSet()
 
   override fun send(target: PluginActor, text: String) =
     world.send(actorOf(target, "send(target)"), text)

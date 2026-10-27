@@ -38,6 +38,8 @@ import gups.core.world.ActorFilter
 import gups.core.world.Aggressive
 import gups.core.world.Assist
 import gups.core.world.Behavior
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.Flee
 import gups.core.world.Follow
 import gups.core.world.Guard
@@ -433,7 +435,7 @@ private fun version(d: ParsedDecl): Int {
 private val POINTS = ModifierPoint.entries.map { it.scriptName }
 
 /** A `modifiers` dict: modifier point name to a top-level function `fn(ctx, base)`. */
-internal fun modifiers(v: Any?, what: String): Modifiers {
+internal fun modifiers(v: Any?, what: String, features: Features = Features.ALL): Modifiers {
   if (isNone(v)) return emptyMap()
   return dict(v, what).entries.associate { (k, fn) ->
     val point =
@@ -441,6 +443,7 @@ internal fun modifiers(v: Any?, what: String): Modifiers {
         ?: fail(
           "$what: '$k' is not a modifier point${SpellChecker.didYouMean(k, POINTS)} (one of ${POINTS.joinToString(", ")})"
         )
+    FeatureOwnership.refused("modifier:$k", "$what[\"$k\"]", features)?.let { fail(it) }
     point to hookRef(fn, "$what[\"$k\"]")
   }
 }
@@ -508,7 +511,15 @@ private fun effectValue(v: Any?, what: String): Effect =
  * The declaration builtins, plus the effect primitives and constants. Effect primitives work
  * anywhere; everything else only while a package loads.
  */
-internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema.EMPTY) {
+internal class DeclarationBuiltins(
+  private val schema: WorldSchema = WorldSchema.EMPTY,
+  private val features: Features = Features.ALL,
+) {
+  /** Fails with "<name> needs the <feature> feature" if the world has [symbol]'s feature off. */
+  private fun need(symbol: String, name: String = symbol) {
+    FeatureOwnership.refused(symbol, name, features)?.let { fail(it) }
+  }
+
   @StarlarkMethod(
     name = "package",
     doc = "Declares the package. Must be called exactly once, in package.star.",
@@ -523,6 +534,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     val p = ctx.pkg
     return PACKAGE_SPEC.bind(
       kwargs = kwargs,
+      features = features,
       beforeUnknownCheck = { parsed ->
         p.apiVersion = parsed.int("api_version") ?: fail("package(): api_version is required")
         // Checked first: a package for another version may use arguments this engine doesn't know.
@@ -533,6 +545,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
       p.kind =
         d.choice("kind")?.let(PackageKind::parse)
           ?: fail("package(): kind is required (zone, lib, rules or skills)")
+      if (p.kind == PackageKind.SKILLS && Feature.SKILLS !in features)
+        fail(FeatureOwnership.refusal("package kind 'skills'", Feature.SKILLS))
       p.title = d.str("title") ?: p.path
       // Counted in world ticks so a reset always lands on a world-tick boundary.
       p.resetPulses =
@@ -549,7 +563,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
       }
       for (ns in p.sharedNamespaces) if (!Regex("[a-z0-9_]+").matches(ns))
         fail("package(shared_namespaces): '$ns' is not a valid namespace")
-      p.modifiers = modifiers(d["modifiers"], d.what("modifiers"))
+      p.modifiers = modifiers(d["modifiers"], d.what("modifiers"), features)
       p.expectedTombstones =
         d.strList("expected_tombstones").map { label(it, p.path, d.what("expected_tombstones")) }
       p.migrateNoop = d.strList("migrate_noop").map { label(it, p.path, d.what("migrate_noop")) }
@@ -566,7 +580,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun room(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "room")
-    return ROOM_SPEC.bind(args, kwargs) { d ->
+    return ROOM_SPEC.bind(args, kwargs, features = features) { d ->
       val id = declName("room", d, ctx)
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
@@ -603,7 +617,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
           exits = exits,
           spawns = spawns,
           commands = commands(d["commands"], d.what("commands"), pkg),
-          modifiers = modifiers(d["modifiers"], d.what("modifiers")),
+          modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
           version = version(d),
         )
       for (r in proto.regions) if (!Regex("[a-z0-9_]+").matches(r))
@@ -623,7 +637,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun exit(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "exit")
-    return EXIT_SPEC.bind(args, kwargs) { d ->
+    return EXIT_SPEC.bind(args, kwargs, features = features) { d ->
       val dir = Direction.parse(d.reqStr("direction", "exit() direction"))
       if (!Regex("[a-z][a-z0-9_]*").matches(dir.name))
         fail("exit(): '${dir.name}' is not a valid exit name")
@@ -656,7 +670,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun door(kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "door")
-    return DOOR_SPEC.bind(kwargs = kwargs) { d ->
+    return DOOR_SPEC.bind(kwargs = kwargs, features = features) { d ->
       val def = DoorProto()
       val proto =
         DoorProto(
@@ -684,7 +698,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun spawn(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "spawn")
-    return SPAWN_SPEC.bind(args, kwargs) { d ->
+    return SPAWN_SPEC.bind(args, kwargs, features = features) { d ->
       val def = SpawnRule(Label("//engine:none"))
       val rule =
         SpawnRule(
@@ -708,7 +722,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun loot(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "loot")
-    return LOOT_SPEC.bind(args, kwargs) { d ->
+    return LOOT_SPEC.bind(args, kwargs, features = features) { d ->
       val rule =
         LootRule(
           label = label(d.reqStr("label", "loot() label"), ctx.pkg.path, "loot() label"),
@@ -729,7 +743,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun container(kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "container")
-    return CONTAINER_SPEC.bind(kwargs = kwargs) { d ->
+    return CONTAINER_SPEC.bind(kwargs = kwargs, features = features) { d ->
       val def = ContainerProto()
       val proto =
         ContainerProto(
@@ -751,7 +765,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun mob(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "mob")
-    return MOB_SPEC.bind(args, kwargs) { d ->
+    return MOB_SPEC.bind(args, kwargs, features = features) { d ->
       val id = declName("mob", d, ctx)
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
@@ -827,7 +841,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun item(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "item")
-    return ITEM_SPEC.bind(args, kwargs) { d ->
+    return ITEM_SPEC.bind(args, kwargs, features = features) { d ->
       val id = declName("item", d, ctx)
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
@@ -865,7 +879,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
           container = container,
           commands = commands(d["commands"], d.what("commands"), pkg),
           equipAffects = equipAffects(d["equip_affects"], d.what("equip_affects")),
-          modifiers = modifiers(d["modifiers"], d.what("modifiers")),
+          modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
           version = version(d),
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
@@ -890,7 +904,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun skill(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "skill")
-    return SKILL_SPEC.bind(args, kwargs) { d ->
+    need("skill", "skill()")
+    return SKILL_SPEC.bind(args, kwargs, features = features) { d ->
       val id = declName("skill", d, ctx)
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
@@ -905,6 +920,10 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
           )
         } ?: Interrupt()
       val def = SkillProto(label)
+      d.choice("range")?.let { r ->
+        if (Feature.TRACK !in features && r in setOf("melee", "near", "far"))
+          fail(FeatureOwnership.refusal("skill(range) '$r'", Feature.TRACK))
+      }
       val proto =
         SkillProto(
           label = label,
@@ -945,10 +964,11 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun region(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "region")
-    return REGION_SPEC.bind(args, kwargs) { d ->
+    return REGION_SPEC.bind(args, kwargs, features = features) { d ->
       val id = declName("region", d, ctx)
       if (!Regex("[a-z0-9_]+").matches(id)) fail("region(): '$id' is not a valid region name")
-      val proto = RegionProto(id, ctx.pkg.path, modifiers(d["modifiers"], d.what("modifiers")))
+      val proto =
+        RegionProto(id, ctx.pkg.path, modifiers(d["modifiers"], d.what("modifiers"), features))
       ctx.pkg.regionList += proto
       Starlark.NONE
     }
@@ -1011,6 +1031,9 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun aggressive(toward: Any, unlessLevelAbove: Any, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "aggressive")
+    need("aggressive", "aggressive()")
+    if (!isNone(unlessLevelAbove))
+      need("aggressive.unless_level_above", "aggressive(unless_level_above)")
     return BehaviorDecl(
       Aggressive(
         actorFilter(toward, "aggressive(toward)", ctx.pkg.path),
@@ -1034,6 +1057,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun assist(allies: Any, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "assist")
+    need("assist", "assist()")
     return BehaviorDecl(Assist(actorFilter(allies, "assist(allies)", ctx.pkg.path)))
   }
 
@@ -1052,6 +1076,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun flee(below: Any, thread: StarlarkThread): Any {
     contentCtx(thread, "flee")
+    need("flee", "flee()")
     val pcts = typed(below, TypedKind.VITALS, "flee(below)")
     if (pcts.isEmpty()) fail("flee(below): name at least one vital")
     for ((vital, pct) in pcts) if (pct !in 0..100) fail("flee(below): $vital must be 0..100")
@@ -1150,7 +1175,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun globalCommand(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "global_command")
-    return GLOBAL_COMMAND_SPEC.bind(args, kwargs) { d ->
+    return GLOBAL_COMMAND_SPEC.bind(args, kwargs, features = features) { d ->
       if (!ctx.pkg.kind.privileged)
         fail("global_command(): only lib and rules packages may register global commands")
       val verb = d.reqStr("name", "global_command() name").lowercase()
@@ -1172,7 +1197,9 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     extraKeywords = Param(name = "kwargs"),
   )
   fun struct(kwargs: Dict<String, Any>): Any {
-    return STRUCT_SPEC.bind(kwargs = kwargs) { StructValue(LinkedHashMap(kwargs)) }
+    return STRUCT_SPEC.bind(kwargs = kwargs, features = features) {
+      StructValue(LinkedHashMap(kwargs))
+    }
   }
 
   // ---- Effect primitives ------------------------------------------------------------------------
@@ -1192,7 +1219,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
       ],
   )
   fun damage(dice: Any, type: Any): Any =
-    EffectDecl(
+    effect(
+      "damage",
       Effect.Damage(
         dice(dice, "damage(dice)"),
         DamageType(
@@ -1205,7 +1233,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
               "damage(type)",
             )
         ),
-      )
+      ),
     )
 
   @StarlarkMethod(
@@ -1218,11 +1246,12 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
       ],
   )
   fun heal(dice: Any, vital: Any): Any =
-    EffectDecl(
+    effect(
+      "heal",
       Effect.Heal(
         dice(dice, "heal(dice)"),
         checkName(str(vital, "heal(vital)"), schema.vitalNames, "vital", "heal(vital)"),
-      )
+      ),
     )
 
   @StarlarkMethod(
@@ -1291,7 +1320,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     expireMsg: Any,
     modifiers: Any,
   ): Any =
-    EffectDecl(
+    effect(
+      "apply_affect",
       affectEffect(
         name,
         duration,
@@ -1303,7 +1333,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
         expireMsg,
         modifiers,
         "apply_affect",
-      )
+        features,
+      ),
     )
 
   @StarlarkMethod(
@@ -1345,7 +1376,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     val everything = bool(all, "dispel(all)")
     if (n == null && flags.isEmpty() && !everything) fail("dispel: give name, flag or all = True")
     val most = if (isNone(count)) null else positive(count, "dispel(count)")
-    return EffectDecl(Effect.Dispel(n, flags, everything, most))
+    return effect("dispel", Effect.Dispel(n, flags, everything, most))
   }
 
   @StarlarkMethod(
@@ -1354,7 +1385,8 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     parameters =
       [Param(name = "steps", named = true, doc = "Track positions to push the target, at least 1.")],
   )
-  fun knockback(steps: Any): Any = EffectDecl(Effect.Knockback(positive(steps, "knockback(steps)")))
+  fun knockback(steps: Any): Any =
+    effect("knockback", Effect.Knockback(positive(steps, "knockback(steps)")))
 
   @StarlarkMethod(
     name = "pull",
@@ -1362,7 +1394,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     parameters =
       [Param(name = "steps", named = true, doc = "Track positions to draw the target, at least 1.")],
   )
-  fun pull(steps: Any): Any = EffectDecl(Effect.Pull(positive(steps, "pull(steps)")))
+  fun pull(steps: Any): Any = effect("pull", Effect.Pull(positive(steps, "pull(steps)")))
 
   @StarlarkMethod(
     name = "stun",
@@ -1370,7 +1402,7 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     parameters =
       [Param(name = "pulses", named = true, doc = "Pulses the target is stunned, at least 1.")],
   )
-  fun stun(pulses: Any): Any = EffectDecl(Effect.Stun(positive(pulses, "stun(pulses)")))
+  fun stun(pulses: Any): Any = effect("stun", Effect.Stun(positive(pulses, "stun(pulses)")))
 
   @StarlarkMethod(
     name = "summon",
@@ -1395,14 +1427,15 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
   )
   fun summon(label: Any, count: Any, duration: Any, thread: StarlarkThread): Any {
     val pkg = thread.getThreadLocal(LoadCtx::class.java)?.pkg?.path ?: callerFile(thread)?.pkg
-    return EffectDecl(
+    return effect(
+      "summon",
       Effect.Summon(
         label(str(label, "summon(label)"), pkg, "summon(label)"),
         positive(count, "summon(count)"),
         intOrNull(duration, "summon(duration)")?.also {
           if (it < 1) fail("summon(duration): must be at least 1")
         },
-      )
+      ),
     )
   }
 
@@ -1412,9 +1445,15 @@ internal class DeclarationBuiltins(private val schema: WorldSchema = WorldSchema
     extraPositionals = Param(name = "effects", doc = "Effects applied in order."),
   )
   fun sequence(effects: Tuple): Any =
-    EffectDecl(
-      Effect.Sequence(effects.mapIndexed { i, e -> effectValue(e, "sequence() argument ${i + 1}") })
+    effect(
+      "sequence",
+      Effect.Sequence(effects.mapIndexed { i, e -> effectValue(e, "sequence() argument ${i + 1}") }),
     )
+
+  private fun effect(name: String, effect: Effect): EffectDecl {
+    need(name, "$name()")
+    return EffectDecl(effect)
+  }
 
   private fun positive(v: Any, what: String): Int =
     int(v, what).also { if (it < 1) fail("$what: must be at least 1") }
@@ -2190,6 +2229,7 @@ internal fun affectEffect(
   expireMsg: Any,
   mods: Any,
   fn: String,
+  features: Features = Features.ALL,
 ): Effect.ApplyAffect {
   val d = int(duration, "$fn(duration)")
   if (d < 1) fail("$fn(duration): must be at least 1")
@@ -2204,7 +2244,7 @@ internal fun affectEffect(
     onTick = hookRefOrNull(onTick, "$fn(on_tick)"),
     onExpire = hookRefOrNull(onExpire, "$fn(on_expire)"),
     expireMessage = str(expireMsg, "$fn(expire_msg)"),
-    modifiers = modifiers(mods, "$fn(modifiers)"),
+    modifiers = modifiers(mods, "$fn(modifiers)", features),
   )
 }
 

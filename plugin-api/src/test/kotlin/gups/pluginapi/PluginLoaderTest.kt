@@ -89,3 +89,70 @@ class PluginLoaderTest {
     )
   }
 }
+
+class PluginFeatureTest {
+  private val root = Files.createTempDirectory("gups-plugins")
+  private val plugins = root.resolve("plugins")
+
+  private fun pin(id: String, vararg classes: kotlin.reflect.KClass<out GupsPlugin>) =
+    id to buildPluginJar(plugins.resolve("$id.jar"), *classes)
+
+  private fun load(module: WorldModule, log: (String) -> Unit = {}) =
+    PluginLoader.load(WorldDir(root), module, log = log)
+
+  @Test
+  fun `a plugin whose required feature is off is skipped with the error and the others load`() {
+    val pins =
+      linkedMapOf(
+        pin("weather", WeatherPlugin::class),
+        pin("casty", gups.pluginapi.testplugins.CastyPlugin::class),
+        pin("bogus", gups.pluginapi.testplugins.BogusFeaturePlugin::class),
+      )
+    load(WorldModule(plugins = pins, featureIds = listOf("combat"))).use { host ->
+      assertEquals(listOf("weather"), host.ids)
+      assertEquals(
+        listOf(
+          "plugin 'bogus': needs the 'telepathy' feature",
+          "plugin 'casty': needs the 'skills' feature",
+        ),
+        host.warnings.sorted(),
+      )
+    }
+    load(WorldModule(plugins = pins, featureIds = listOf("skills", "combat"))).use { host ->
+      assertEquals(listOf("casty", "weather"), host.ids.sorted())
+    }
+    load(
+        WorldModule(
+          plugins = linkedMapOf(pin("casty", gups.pluginapi.testplugins.CastyPlugin::class))
+        )
+      )
+      .use { assertEquals(listOf("casty"), it.ids, "every feature is on by default") }
+  }
+
+  @Test
+  fun `a plugin command may take a renamed-away name and can't take the new one`() {
+    val caster = pin("caster", gups.pluginapi.testplugins.CastClashPlugin::class)
+    val invoker = pin("invoker", gups.pluginapi.testplugins.InvokeClashPlugin::class)
+    val plain = WorldModule(plugins = linkedMapOf(caster, invoker))
+    load(plain).use { host ->
+      assertEquals(listOf("invoker"), host.ids)
+      assertTrue(
+        host.warnings.any {
+          "command 'cast': plugin command 'cast' clashes with an engine command" in it
+        }
+      )
+    }
+    val renamed = plain.copy(rename = mapOf("cast" to "invoke"))
+    load(renamed).use { host ->
+      assertEquals(listOf("caster"), host.ids)
+      assertTrue(
+        host.warnings.single().contains("plugin command 'invoke' clashes with an engine command"),
+        host.warnings.toString(),
+      )
+    }
+    // A command of a feature that is off is free too.
+    load(plain.copy(featureIds = listOf("combat"))).use { host ->
+      assertEquals(listOf("caster"), host.ids.take(1))
+    }
+  }
+}

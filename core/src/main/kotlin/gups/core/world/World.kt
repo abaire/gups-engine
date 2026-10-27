@@ -26,7 +26,7 @@ import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
 import java.util.TreeMap
 
-class WorldConfig(
+data class WorldConfig(
   val seed: Long = 0,
   /** Check the invariants after every pulse (`--dev` and the harness). */
   val checkInvariants: Boolean = false,
@@ -46,6 +46,12 @@ class WorldConfig(
   val production: Boolean = false,
   /** Command aliases and prefixes from `MODULE.gups`; a world without them has none. */
   val aliases: CommandAliases = CommandAliases.NONE,
+  /** The feature modules the world has on; tests default to all of them. */
+  val features: Features = Features.ALL,
+  /** Engine command renames from `MODULE.gups`, old name to new. */
+  val rename: Map<String, String> = emptyMap(),
+  /** Message overrides from `MESSAGES.gups`, by message id. */
+  val messages: Map<String, String> = emptyMap(),
 )
 
 /** 30 minutes of pulses. */
@@ -184,7 +190,10 @@ class World(
   internal var slotCache: List<String>? = null
 
   val rng = Rng(config.seed)
-  val commands = CommandRegistry(config.aliases)
+  val features: Features
+    get() = config.features
+
+  val commands = CommandRegistry(config.aliases, config.features, config.rename)
 
   internal var nextEntityId =
     maxOf(boot.nextEntityId, (boot.roomIds.values.maxOfOrNull { it.v } ?: 0) + 1)
@@ -242,7 +251,7 @@ class World(
 
   init {
     for (proto in protos.rooms.values) {
-      val room = Room(boot.roomIds[proto.label] ?: allocateId(), proto)
+      val room = Room(boot.roomIds[proto.label] ?: allocateId(), proto, Feature.TRACK !in features)
       register(room)
       roomsByLabel[proto.label] = room
     }
@@ -500,9 +509,9 @@ class World(
     runTimers()
     flushImmediate()
     // Roll before phase 2 so a round-boundary action pulse uses the new initiative.
-    if (pulse % COMBAT_ROUND_PULSES == 0L) rollInitiative()
+    if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) rollInitiative()
     runTiers(actorIndex.values.filter { isSimulated(it) }, ::actionPulse)
-    if (pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
+    if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
     flushImmediate()
     if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
     deliverPerceptions()

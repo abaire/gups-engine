@@ -17,6 +17,7 @@
 <a href="effects.html">Effects and behaviors</a>
 <a href="rules.html">Rules</a>
 <a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
 <a href="plugins.html">Plugins</a>
 <a href="changelog.html">Changelog</a>
 <a href="api.json">api.json</a>
@@ -34,7 +35,7 @@
 <tbody>
 <tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
 <tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
-<tr id="exit.entry_index"><td><code>entry_index</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
+<tr id="exit.entry_index"><td><code>entry_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
 <tr id="exit.senses_blocked"><td><code>senses_blocked</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Perception and spell channels blocked by this exit.</td></tr>
 <tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
 <tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
@@ -62,6 +63,8 @@
 <tr id="module.plugins"><td><code>plugins</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Plugin jars in plugins/&lt;id&gt;.jar, each pinned by its 'sha256:&lt;hex&gt;' checksum.</td></tr>
 <tr id="module.aliases"><td><code>aliases</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Alias words for engine commands, such as {&quot;l&quot;: &quot;look&quot;}.</td></tr>
 <tr id="module.prefixes"><td><code>prefixes</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Single characters that stand for an engine command, such as {&quot;'&quot;: &quot;say&quot;}.</td></tr>
+<tr id="module.features"><td><code>features</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>['combat', 'track', 'skills', 'leveling']</code></td><td></td><td>The engine features the world uses: combat, track, skills and leveling. Fixed per database; changing it needs --wipe.</td></tr>
+<tr id="module.rename"><td><code>rename</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Renames engine commands, such as {&quot;cast&quot;: &quot;invoke&quot;}. Aliases, prefixes and docs use the new names.</td></tr>
 </tbody>
 </table>
 </section>

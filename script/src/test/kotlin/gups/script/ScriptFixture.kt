@@ -59,7 +59,10 @@ class ScriptFixture(
         loader.schema,
         host.rules(),
         wrap(host),
-        WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble),
+        loader.module.config(
+          WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble),
+          WorldMessages.read(WorldDir(root)).first,
+        ),
       )
       .also {
         host.install(it)

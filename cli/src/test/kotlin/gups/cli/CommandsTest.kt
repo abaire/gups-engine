@@ -64,9 +64,12 @@ class CommandsTest {
     val withWorld =
       gupsCommand().test(listOf("docs", "--world", world, "--out", dir.resolve("world").path))
     assertEquals(0, withWorld.statusCode, withWorld.output)
-    for (file in DocsRenderer.FILES) {
+    // The template world has every feature on, so only world.html differs: it adds the schema.
+    for (file in DocsRenderer.FILES - "world.html") {
       assertEquals(dir.resolve("ref/$file").readText(), dir.resolve("world/$file").readText(), file)
     }
+    assertContains(dir.resolve("world/world.html").readText(), "Hit points")
+    assertFalse("Hit points" in dir.resolve("ref/world.html").readText())
 
     val aFile = dir.resolve("existing.txt").also { it.writeText("x") }
     val onFile = gupsCommand().test(listOf("docs", "--out", aFile.path))

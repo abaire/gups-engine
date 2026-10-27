@@ -17,6 +17,7 @@
 <a href="effects.html">Effects and behaviors</a>
 <a href="rules.html">Rules</a>
 <a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
 <a href="plugins.html">Plugins</a>
 <a href="changelog.html">Changelog</a>
 <a href="api.json">api.json</a>
@@ -47,7 +48,7 @@
 <tr id="ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
 <tr id="ctx.room"><td><code>room</code></td><td>1</td><td>The room the event happens in.</td></tr>
 <tr id="ctx.self"><td><code>self</code></td><td>1</td><td>The hook's owner.</td></tr>
-<tr id="ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
+<tr id="ctx.skill"><td><code>skill</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_nearby: the room the event happened in.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
 <tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents, for on_combat_tick.</td></tr>
@@ -71,7 +72,7 @@
 </table>
 </article>
 <article id="ctx.act_advance" class="entry">
-<h4><code>act_advance(mob, target)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>act_advance(mob, target)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h4>
 <p>Queues one step along the room track toward target for a mob.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -82,18 +83,18 @@
 </table>
 </article>
 <article id="ctx.act_attack" class="entry">
-<h4><code>act_attack(mob, target)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>act_attack(mob, target)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Queues an attack against target for a mob.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.act_attack.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
-<tr id="ctx.act_attack.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to attack.</td></tr>
+<tr id="ctx.act_attack.mob"><td><code>mob</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
+<tr id="ctx.act_attack.target"><td><code>target</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor to attack.</td></tr>
 </tbody>
 </table>
 </article>
 <article id="ctx.act_cast" class="entry">
-<h4><code>act_cast(mob, skill, target = None)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>act_cast(mob, skill, target = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
 <p>Queues casting a skill for a mob.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -116,7 +117,7 @@
 </table>
 </article>
 <article id="ctx.act_retreat" class="entry">
-<h4><code>act_retreat(mob, target = None)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>act_retreat(mob, target = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h4>
 <p>Queues one step along the room track away from target (or toward the room back) for a mob.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -139,13 +140,13 @@
 </table>
 </article>
 <article id="ctx.allies_near" class="entry">
-<h4><code>allies_near(actor, band)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>allies_near(actor, band)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.allies_near.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor whose allies are wanted.</td></tr>
-<tr id="ctx.allies_near.band"><td><code>band</code></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
+<tr id="ctx.allies_near.actor"><td><code>actor</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The actor whose allies are wanted.</td></tr>
+<tr id="ctx.allies_near.band"><td><code>band</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
 </tbody>
 </table>
 </article>
@@ -280,13 +281,13 @@
 </table>
 </article>
 <article id="ctx.enemies_near" class="entry">
-<h4><code>enemies_near(actor, band)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>enemies_near(actor, band)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Opponents of actor within a band ('melee', 'near', 'far').</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.enemies_near.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor whose opponents are wanted.</td></tr>
-<tr id="ctx.enemies_near.band"><td><code>band</code></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
+<tr id="ctx.enemies_near.actor"><td><code>actor</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The actor whose opponents are wanted.</td></tr>
+<tr id="ctx.enemies_near.band"><td><code>band</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
 </tbody>
 </table>
 </article>
@@ -366,7 +367,7 @@
 <tbody>
 <tr id="ctx.move_item.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to move.</td></tr>
 <tr id="ctx.move_item.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
-<tr id="ctx.move_item.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index when moving to a room.</td></tr>
+<tr id="ctx.move_item.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when moving to a room.</td></tr>
 </tbody>
 </table>
 </article>
@@ -499,7 +500,7 @@
 <tbody>
 <tr id="ctx.spawn.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Mob or item prototype label.</td></tr>
 <tr id="ctx.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
-<tr id="ctx.spawn.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
+<tr id="ctx.spawn.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
 <tr id="ctx.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
 </tbody>
 </table>
@@ -516,24 +517,24 @@
 </table>
 </article>
 <article id="ctx.start_combat" class="entry">
-<h4><code>start_combat(a, b)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>start_combat(a, b)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Engages two actors in the same room in combat.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.start_combat.a"><td><code>a</code></td><td>positional or named</td><td></td><td>First actor.</td></tr>
-<tr id="ctx.start_combat.b"><td><code>b</code></td><td>positional or named</td><td></td><td>Second actor, in the same room.</td></tr>
+<tr id="ctx.start_combat.a"><td><code>a</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>First actor.</td></tr>
+<tr id="ctx.start_combat.b"><td><code>b</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Second actor, in the same room.</td></tr>
 </tbody>
 </table>
 </article>
 <article id="ctx.stop_combat" class="entry">
-<h4><code>stop_combat(a, b = None)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>stop_combat(a, b = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Ends combat between a and b, or all of a's fights when b is None.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.stop_combat.a"><td><code>a</code></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
-<tr id="ctx.stop_combat.b"><td><code>b</code></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
+<tr id="ctx.stop_combat.a"><td><code>a</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
+<tr id="ctx.stop_combat.b"><td><code>b</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
 </tbody>
 </table>
 </article>
@@ -545,7 +546,7 @@
 <tbody>
 <tr id="ctx.teleport.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to move.</td></tr>
 <tr id="ctx.teleport.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Destination room or room label.</td></tr>
-<tr id="ctx.teleport.index"><td><code>index</code></td><td>positional or named</td><td><code>None</code></td><td>Track index on arrival, or None for the room's default.</td></tr>
+<tr id="ctx.teleport.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>None</code></td><td>Track index on arrival, or None for the room's default.</td></tr>
 </tbody>
 </table>
 </article>
@@ -572,7 +573,7 @@
 <tbody>
 <tr id="view-exit.direction"><td><code>direction</code></td><td>1</td><td>The exit's direction name.</td></tr>
 <tr id="view-exit.door"><td><code>door</code></td><td>1</td><td>'open', 'closed' or 'locked'; None without a door.</td></tr>
-<tr id="view-exit.entry_index"><td><code>entry_index</code></td><td>1</td><td>Destination track index where travellers arrive, or -1 for the back.</td></tr>
+<tr id="view-exit.entry_index"><td><code>entry_index</code> <span class="badge feature">feature: track</span></td><td>1</td><td>Destination track index where travellers arrive, or -1 for the back.</td></tr>
 <tr id="view-exit.key"><td><code>key</code></td><td>1</td><td>The door's key label, or None.</td></tr>
 <tr id="view-exit.one_way"><td><code>one_way</code></td><td>1</td><td>True if this exit intentionally has no return exit.</td></tr>
 <tr id="view-exit.passable"><td><code>passable</code></td><td>1</td><td>False while a door is closed or locked.</td></tr>

@@ -17,8 +17,12 @@ import gups.core.model.SkillProto
 
 /** The `say` verb: the room hears it and `on_say` fires. */
 fun World.say(speaker: Actor, text: String) {
-  send(speaker, "You say, '$text'")
-  echo(speaker.room, "${speaker.name.cap()} says, '$text'", speaker)
+  tell(speaker, KernelMsg.SAY_SELF, "text" to text)
+  echo(
+    speaker.room,
+    msg(KernelMsg.SAY_ROOM, "actor" to speaker.name.cap(), "text" to text),
+    speaker,
+  )
   channel("say", speaker, text, speaker.room.actors)
   dispatch(HookName.ON_SAY, null, speaker.room, HookContext(actor = speaker, text = text))
   perceive("say", Channel.SOUND, speaker.room, speaker, text)
@@ -26,7 +30,7 @@ fun World.say(speaker: Actor, text: String) {
 
 /** The `emote` verb: everyone in the room, the actor included, sees "Name text". */
 fun World.emote(actor: Actor, text: String) {
-  echo(actor.room, "${actor.name.cap()} $text")
+  echo(actor.room, msg(KernelMsg.EMOTE, "actor" to actor.name.cap(), "text" to text))
   perceive("emote", Channel.SOUND, actor.room, actor, text)
 }
 
@@ -116,7 +120,7 @@ private fun World.searchPath(from: Room, to: Room): List<Direction>? {
 /** Enqueues a ready-made [action] for [actor], subject to the queue cap. */
 fun World.enqueue(actor: Actor, verb: String, action: Action): Boolean {
   if (actor.actionQueue.size >= ACTION_QUEUE_MAX) {
-    send(actor, "You can't plan that far ahead.")
+    tell(actor, KernelMsg.QUEUE_FULL)
     return false
   }
   actor.actionQueue.addLast(QueuedAction(TickCommand(verb) { action }, verb, ""))
@@ -125,15 +129,17 @@ fun World.enqueue(actor: Actor, verb: String, action: Action): Boolean {
 
 fun World.actMove(mob: Mob, dir: Direction): Boolean = enqueue(mob, dir.name, MoveAction(dir))
 
-fun World.actAttack(mob: Mob, target: Actor): Boolean = enqueue(mob, "kill", KillAction(target))
+fun World.actAttack(mob: Mob, target: Actor): Boolean =
+  enqueue(mob, commands.nameOf("kill"), KillAction(target))
 
 /** Casts [skill], which the mob must know, at [target] (or the skill's default target). */
 fun World.actCast(mob: Mob, skill: SkillProto, target: Actor?): Boolean {
   require(skill.label in mob.skills) { "${mob.name} doesn't know ${skill.label}" }
-  return enqueue(mob, "cast", CastAction(skill, null, target))
+  return enqueue(mob, commands.nameOf("cast"), CastAction(skill, null, target))
 }
 
 fun World.actAdvance(mob: Mob, target: Actor): Boolean =
-  enqueue(mob, "advance", AdvanceAction(target))
+  enqueue(mob, commands.nameOf("advance"), AdvanceAction(target))
 
-fun World.actRetreat(mob: Mob, from: Actor?): Boolean = enqueue(mob, "retreat", RetreatAction(from))
+fun World.actRetreat(mob: Mob, from: Actor?): Boolean =
+  enqueue(mob, commands.nameOf("retreat"), RetreatAction(from))

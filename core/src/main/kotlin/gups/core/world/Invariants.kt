@@ -49,6 +49,9 @@ fun World.invariantViolations(): List<Violation> {
       out += "$a: track index ${a.trackIndex} outside ${a.room.label}"
     for ((name, v) in a.vitalMap) if (v.current > v.max)
       out += "$a: $name ${v.current} > max ${v.max}"
+    if (Feature.TRACK !in features && a.trackIndex != 0)
+      out += "$a: track index ${a.trackIndex} without the track"
+    if (Feature.SKILLS !in features && a.casting != null) out += "$a: casting without skills"
     if (a.waitState > 0 && a.casting != null) out += "$a: both in recovery and casting"
     if (a.actionQueue.size > ACTION_QUEUE_MAX) out += "$a: action queue holds ${a.actionQueue.size}"
     for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id))

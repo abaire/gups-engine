@@ -117,6 +117,10 @@ class Deployer(
       throw Refused(
         "MODULE.gups changed between $from and $target: that needs a restart with the matching engine."
       )
+    if ("MESSAGES.gups" in files)
+      throw Refused(
+        "MESSAGES.gups changed between $from and $target: message changes need a restart."
+      )
     if (files.any { it.startsWith("plugins/") })
       throw Refused("plugins/ changed between $from and $target: plugin changes need a restart.")
 

@@ -37,7 +37,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
     if (room != null) rebind(room, p, old.rooms[label])
     else
       created +=
-        Room(allocateId(), p).also {
+        Room(allocateId(), p, Feature.TRACK !in features).also {
           register(it)
           roomsByLabel[label] = it
         }
@@ -51,7 +51,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
           if (a.recallRoom !in next.rooms) a.recallRoom = fallback.label
           disengageAll(a)
           placeActor(a, to, 0)
-          send(a, "The world shifts around you.")
+          tell(a, KernelMsg.RECONCILE_SHIFT)
           send(a, describeRoom(a))
         }
         is Mob -> despawn(a)

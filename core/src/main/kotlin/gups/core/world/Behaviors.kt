@@ -101,13 +101,13 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
 /** `aggressive(toward, unless_level_above)`: attacks the first matching actor in the room. */
 data class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
-    if (mob.isEngaged) return null
+    if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     val target =
       world.others(mob).firstOrNull {
         toward.matches(it) && (unlessLevelAbove == null || it.level <= unlessLevelAbove)
       } ?: return null
     return Proposal(
-      "kill ${target.keywords.first()}",
+      "${world.commands.nameOf("kill")} ${target.keywords.first()}",
       PRIORITY_AGGRESSIVE,
       "aggressive",
       KillAction(target),
@@ -118,12 +118,17 @@ data class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
 data class Assist(val allies: ActorFilter) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
-    if (mob.isEngaged) return null
+    if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     for (ally in world.others(mob)) {
       if (!allies.matches(ally) || !ally.isEngaged) continue
       val foes = world.opponentsOf(ally).filter { it !== mob && !allies.matches(it) }
       val foe = foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.firstOrNull() ?: continue
-      return Proposal("kill ${foe.keywords.first()}", PRIORITY_ASSIST, "assist", KillAction(foe))
+      return Proposal(
+        "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
+        PRIORITY_ASSIST,
+        "assist",
+        KillAction(foe),
+      )
     }
     return null
   }
@@ -135,13 +140,14 @@ data class Assist(val allies: ActorFilter) : Behavior {
  */
 data class Flee(val below: Map<String, Int>) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
+    if (Feature.COMBAT !in world.features) return null
     val low =
       below.any { (vital, pct) ->
         mob.current(vital).toLong() * 100 <= pct.toLong() * mob.max(vital)
       }
     if (!low) return null
     if (mob.room.exits.values.none { it.passable }) return null
-    return Proposal("flee", PRIORITY_FLEE, "flee", FleeAction)
+    return Proposal(world.commands.nameOf("flee"), PRIORITY_FLEE, "flee", FleeAction)
   }
 }
 
@@ -165,7 +171,7 @@ internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String
   for (m in room.actorIndex.values) {
     if (m !is Mob || !m.inWorld || m === actor) continue
     if (m.proto.behaviors.any { it is Guard && it.denies(this, m, actor, dir) })
-      return "${m.name.cap()} blocks your way."
+      return msg(KernelMsg.GUARD_BLOCKS, "actor" to m.name.cap())
   }
   return null
 }
@@ -227,7 +233,7 @@ data object Scavenge : Behavior {
     if (mob.isEngaged) return null
     val item = mob.room.items.firstOrNull { world.canScavenge(mob, it) } ?: return null
     return Proposal(
-      "get ${item.keywords.first()}",
+      "${world.commands.nameOf("get")} ${item.keywords.first()}",
       PRIORITY_SCAVENGE,
       "scavenge",
       GetAction(item.keywords.first(), null, fixed = item),
@@ -237,7 +243,9 @@ data object Scavenge : Behavior {
 
 private fun World.canScavenge(mob: Mob, item: Item): Boolean {
   if (item.kind == "corpse") return false
-  val band = Band.between(mob.trackIndex, item.groundIndex ?: return false)
-  if (rules.getLag(RulesContext(this, mob, item = item, band = band), band) == null) return false
+  if (Feature.TRACK in features) {
+    val band = Band.between(mob.trackIndex, item.groundIndex ?: return false)
+    if (rules.getLag(RulesContext(this, mob, item = item, band = band), band) == null) return false
+  }
   return mob.carriedWeight() + item.weight <= rules.carryLimit(RulesContext(this, mob, item = item))
 }

@@ -30,6 +30,9 @@ sealed class CommandDef(val name: String, val aliases: List<String>, val role: R
 
   /** This command with [extra] appended to its aliases. */
   internal abstract fun withAliases(extra: List<String>): CommandDef
+
+  /** This command under the name [to]. */
+  internal abstract fun renamed(to: String): CommandDef
 }
 
 class FastCommand(
@@ -42,6 +45,8 @@ class FastCommand(
     get() = Lane.FAST
 
   override fun withAliases(extra: List<String>) = FastCommand(name, aliases + extra, role, run)
+
+  override fun renamed(to: String) = FastCommand(to, aliases, role, run)
 }
 
 /**
@@ -58,6 +63,8 @@ class TickCommand(
     get() = Lane.TICK
 
   override fun withAliases(extra: List<String>) = TickCommand(name, aliases + extra, role, plan)
+
+  override fun renamed(to: String) = TickCommand(to, aliases, role, plan)
 }
 
 /**
@@ -69,9 +76,13 @@ data class CommandAliases(
   val words: Map<String, String> = emptyMap(),
   val prefixes: Map<Char, String> = emptyMap(),
 ) {
-  /** Why these aliases can't be used, such as an alias naming a command that doesn't exist. */
-  fun problems(): List<String> = buildList {
-    val engine = EngineCommands.all().map { it.name }.filter { !it.startsWith("@") }.toSet()
+  /**
+   * Why these aliases can't be used, such as an alias naming a command that doesn't exist. [engine]
+   * is the world's command names, renames applied.
+   */
+  fun problems(
+    engine: Set<String> = CommandRegistry.names(Features.ALL, emptyMap())
+  ): List<String> = buildList {
     for ((alias, target) in words.toSortedMap()) {
       when {
         !WORD.matches(alias) -> add("alias '$alias' must match [a-z][a-z0-9_]*")
@@ -95,6 +106,9 @@ data class CommandAliases(
   }
 }
 
+/** An engine command as the docs list it: its [name] in the world, and the built-in one. */
+data class CommandInfo(val name: String, val builtIn: String, val lane: Lane, val feature: Feature?)
+
 /**
  * Verb lookup: engine commands (with the world's aliases, including exits), global commands, then
  * the room's and nearby items' `commands`. Exact names and aliases win over unique prefixes; a
@@ -102,12 +116,17 @@ data class CommandAliases(
  */
 class CommandRegistry(
   /** The world's aliases; [CommandAliases.problems] must be empty. */
-  val aliases: CommandAliases = CommandAliases.NONE
+  val aliases: CommandAliases = CommandAliases.NONE,
+  /** The features the world has on; only their commands exist. */
+  val features: Features = Features.ALL,
+  /** Engine command renames, old name to new; [renameProblems] must be empty. */
+  val rename: Map<String, String> = emptyMap(),
 ) {
   private val engine: List<CommandDef> =
-    EngineCommands.all().map { def ->
-      val extra = aliases.words.filterValues { it == def.name }.keys.sorted()
-      if (extra.isEmpty()) def else def.withAliases(extra)
+    base(features).map { def ->
+      val named = rename[def.name]?.let(def::renamed) ?: def
+      val extra = aliases.words.filterValues { it == named.name }.keys.sorted()
+      if (extra.isEmpty()) named else named.withAliases(extra)
     }
   private val global = mutableListOf<CommandDef>()
   private val tools = mutableListOf<CommandDef>()
@@ -144,6 +163,9 @@ class CommandRegistry(
     }
     plugins += command
   }
+
+  /** The name [builtIn] goes by in this world: its rename, or itself. */
+  fun nameOf(builtIn: String): String = rename[builtIn] ?: builtIn
 
   fun isPluginCommand(name: String): Boolean = plugins.any { it.name == name || name in it.aliases }
 
@@ -185,7 +207,7 @@ class CommandRegistry(
     }
     val dir = Direction.parse(v)
     if (dir in actor.room.exits || dir in Direction.STANDARD)
-      return moves.getOrPut(dir) { EngineCommands.move(dir) }
+      return moves.getOrPut(dir) { KernelCommands.move(dir) }
     exact(global, v)?.let {
       return it
     }
@@ -208,6 +230,66 @@ class CommandRegistry(
     return prefix((engine + global + usable).filter { !it.name.startsWith("@") }, v)
   }
 
+  companion object {
+    /** Each group of engine commands with the feature that owns it, or null for the kernel. */
+    private fun groups(): List<Pair<Feature?, List<CommandDef>>> =
+      listOf(
+        null to KernelCommands.all(),
+        Feature.COMBAT to CombatCommands.all(),
+        Feature.TRACK to TrackCommands.all(),
+        Feature.SKILLS to SkillCommands.all(),
+      )
+
+    /** The command groups of the kernel and the enabled [features]. */
+    private fun enabled(features: Features) =
+      groups().filter { (feature, _) -> feature == null || feature in features }
+
+    /** The commands of the kernel and the enabled [features], under their built-in names. */
+    internal fun base(features: Features): List<CommandDef> =
+      enabled(features).flatMap { it.second }
+
+    /** Names of the non-`@` engine commands of a world with [features], [rename]s applied. */
+    fun names(features: Features, rename: Map<String, String>): Set<String> =
+      base(features)
+        .map { it.name }
+        .filter { !it.startsWith("@") }
+        .mapTo(LinkedHashSet()) { rename[it] ?: it }
+
+    /** The non-`@` engine commands of a world, renames applied, for the docs. */
+    fun describe(features: Features, rename: Map<String, String>): List<CommandInfo> =
+      enabled(features).flatMap { (feature, defs) ->
+        defs
+          .filter { !it.name.startsWith("@") }
+          .map { d -> CommandInfo(rename[d.name] ?: d.name, d.name, d.lane, feature) }
+      }
+
+    /** Names of the non-`@` engine commands before renaming. */
+    fun builtInNames(features: Features): Set<String> = names(features, emptyMap())
+
+    private val WORD = Regex("[a-z][a-z0-9_]*")
+
+    /** Why [rename] can't be applied to a world with [features] and [aliases]. */
+    fun renameProblems(
+      features: Features,
+      rename: Map<String, String>,
+      aliases: CommandAliases = CommandAliases.NONE,
+    ): List<String> = buildList {
+      val builtIn = builtInNames(features)
+      val targets = rename.values.groupingBy { it }.eachCount()
+      for ((old, new) in rename.toSortedMap()) {
+        when {
+          old !in builtIn -> add("rename '$old' is not an engine command of this world")
+          !WORD.matches(new) -> add("rename '$old' to '$new': must match [a-z][a-z0-9_]*")
+          Direction.parse(new) in Direction.STANDARD ->
+            add("rename '$old' to '$new': '$new' is a direction")
+          new in builtIn -> add("rename '$old' to '$new': '$new' is already an engine command")
+          new in aliases.words -> add("rename '$old' to '$new': '$new' is already an alias")
+          targets.getValue(new) > 1 -> add("rename to '$new' is given for more than one command")
+        }
+      }
+    }
+  }
+
   private fun exact(defs: List<CommandDef>, v: String) =
     defs.firstOrNull { it.name == v || v in it.aliases }
 
@@ -227,7 +309,7 @@ class CommandRegistry(
               is Item -> w.isPresent(owner, w.roomOf(actor))
               else -> w.roomOf(actor) === owner
             }
-          return if (here) null else "Nothing happens."
+          return if (here) null else w.msg(KernelMsg.NOTHING_HAPPENS)
         }
 
         override fun resolve(w: World, actor: Actor): Int {
@@ -236,7 +318,7 @@ class CommandRegistry(
           } catch (e: Exception) {
             // Players see only this for a failed zone command.
             w.diagnose("script", "command '$verb' on $owner failed: ${e.message}", e)
-            w.send(actor, "Nothing happens.")
+            w.tell(actor, KernelMsg.NOTHING_HAPPENS)
           }
           return 0
         }
@@ -266,7 +348,7 @@ fun World.submit(actor: Actor, line: String): Boolean {
   val (verb, args) = parseLine(line, commands.aliases.prefixes) ?: return false
   val def = commands.resolve(actor, verb)
   if (def == null) {
-    send(actor, "Huh?")
+    tell(actor, KernelMsg.HUH)
     return false
   }
   // Tick-lane commands and says (never tells) feed repro bundles.
@@ -277,11 +359,11 @@ fun World.submit(actor: Actor, line: String): Boolean {
       guarded("command '$verb' of $actor") { def.run(CommandCall(this, actor, verb, args)) }
     is TickCommand -> {
       if (actor.isIncapacitated) {
-        send(actor, "You can't do that while incapacitated.")
+        tell(actor, KernelMsg.INCAPACITATED)
         return false
       }
       if (actor.actionQueue.size >= ACTION_QUEUE_MAX) {
-        send(actor, "You can't plan that far ahead.")
+        tell(actor, KernelMsg.QUEUE_FULL)
         return false
       }
       actor.actionQueue.addLast(QueuedAction(def, verb, args))

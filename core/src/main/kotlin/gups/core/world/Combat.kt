@@ -23,6 +23,7 @@ const val CORPSE_DECAY_PULSES = 1200 // 5 min
 // ---- Engagement ------------------------------------------------------------------------------
 
 fun World.startCombat(a: Actor, b: Actor) {
+  if (Feature.COMBAT !in features) return
   if (a === b || !a.inWorld || !b.inWorld || a.room !== b.room) return
   val fresh = b.id !in a.fighting
   a.fighting += b.id
@@ -32,7 +33,7 @@ fun World.startCombat(a: Actor, b: Actor) {
   a.dirty = true
   b.dirty = true
   if (fresh) {
-    echo(a.room, "${a.name.cap()} and ${b.name} are fighting!", a, b)
+    echo(a.room, msg(CombatMsg.FIGHTING, "actor" to a.name.cap(), "target" to b.name), a, b)
     perceive("combat_start", Channel.NOISE, a.room, a)
   }
 }
@@ -62,7 +63,8 @@ fun World.opponentsOf(a: Actor): List<Actor> {
 }
 
 /** True if an opponent shares [a]'s track index. */
-fun World.isPinned(a: Actor): Boolean = opponentsOf(a).any { indexOf(it) == indexOf(a) }
+fun World.isPinned(a: Actor): Boolean =
+  Feature.TRACK in features && opponentsOf(a).any { indexOf(it) == indexOf(a) }
 
 // ---- Auto-attacks ----------------------------------------------------------------------------
 
@@ -77,7 +79,7 @@ internal fun World.autoAttack(a: Actor) {
   val reach = weapon?.range ?: Band.MELEE
   val band = Band.between(indexOf(a), indexOf(target))
   if (!reach.reaches(band)) {
-    send(a, "${target.name.cap()} is out of reach.")
+    tell(a, CombatMsg.OUT_OF_REACH, "target" to target.name)
     return
   }
   dispatch(
@@ -95,9 +97,14 @@ internal fun World.autoAttack(a: Actor) {
   val roll = rng.int(1, 100)
   traceRules(a, "${chance.text} → roll $roll ${if (roll > chance.value) "MISS" else "HIT"}")
   if (roll > chance.value) {
-    send(a, "You miss ${target.name}.")
-    send(target, "${a.name.cap()} misses you.")
-    echo(a.room, "${a.name.cap()} misses ${target.name}.", a, target)
+    tell(a, CombatMsg.MISS_SELF, "target" to target.name)
+    tell(target, CombatMsg.MISS_TARGET, "actor" to a.name.cap())
+    echo(
+      a.room,
+      msg(CombatMsg.MISS_ROOM, "actor" to a.name.cap(), "target" to target.name),
+      a,
+      target,
+    )
     return
   }
   val type = weapon?.proto?.damageType ?: schema.unarmed
@@ -107,9 +114,9 @@ internal fun World.autoAttack(a: Actor) {
     a,
     "${raw.text} → mitigate ${losses.entries.joinToString { "${it.key} ${it.value}" }} $type",
   )
-  send(a, "You hit ${target.name}.")
-  send(target, "${a.name.cap()} hits you.")
-  echo(a.room, "${a.name.cap()} hits ${target.name}.", a, target)
+  tell(a, CombatMsg.HIT_SELF, "target" to target.name)
+  tell(target, CombatMsg.HIT_TARGET, "actor" to a.name.cap())
+  echo(a.room, msg(CombatMsg.HIT_ROOM, "actor" to a.name.cap(), "target" to target.name), a, target)
   damage(target, losses, type, a)
 }
 
@@ -164,14 +171,14 @@ internal fun World.processDeath(victim: Actor) {
   victim.heldSince = 0
   disengageAll(victim)
   removedThisPhase += victim.id
-  send(victim, "You are DEAD!")
-  echo(room, "${victim.name.cap()} is DEAD!", victim)
+  tell(victim, KernelMsg.DEATH_SELF)
+  echo(room, msg(KernelMsg.DEATH_ROOM, "actor" to victim.name.cap()), victim)
   perceive("death", Channel.NOISE, room, victim)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
   // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
   // worth nothing either and drops no loot, so it can't be farmed.
   val summoned = victim is Mob && victim.summonedBy != null
-  if (killer != null && !victim.debug && !summoned)
+  if (Feature.LEVELING in features && killer != null && !victim.debug && !summoned)
     awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
 
   val corpse =
@@ -197,12 +204,12 @@ internal fun World.processDeath(victim: Actor) {
     is Player -> {
       for (item in victim.inventory) moveItem(item, into)
       val outcome = rules.onPlayerDeath(RulesContext(this, victim, killer))
-      victim.xp = (victim.xp - outcome.xpLoss).coerceAtLeast(0)
+      if (Feature.LEVELING in features) victim.xp = (victim.xp - outcome.xpLoss).coerceAtLeast(0)
       victim.affects.clear()
       victim.condition = Condition.OK
       respawnVitals(victim, outcome.vitals)
       placeActor(victim, room(outcome.respawn), 0)
-      echo(victim.room, "${victim.name} appears, looking shaken.", victim)
+      echo(victim.room, msg(KernelMsg.DEATH_RESPAWN, "name" to victim.name), victim)
       send(victim, describeRoom(victim))
     }
   }
@@ -227,12 +234,12 @@ private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
 }
 
 fun World.awardXp(a: Actor, amount: Long) {
-  if (amount <= 0) return
+  if (Feature.LEVELING !in features || amount <= 0) return
   a.xp += amount
-  send(a, "You gain $amount experience.")
+  tell(a, LevelingMsg.GAIN, "amount" to amount)
   while (a.xp >= rules.xpToLevel(a.level)) {
     a.level++
-    send(a, "You have reached level ${a.level}!")
+    tell(a, LevelingMsg.LEVEL_UP, "level" to a.level)
     if (a is Player) requestImmediate("level")
   }
   a.dirty = true
@@ -322,7 +329,7 @@ private fun World.endAffect(
     send(a, affect.expireMessage)
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
   if ("summoned" in affect.flags && a is Mob && a.inWorld) {
-    echo(a.room, "${a.name.cap()} fades away.", a)
+    echo(a.room, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
     disengageAll(a)
     removeActor(a)
   }
@@ -430,8 +437,10 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             announce = true,
           )
         }
-        is Effect.Knockback -> shove(t, awayFrom = caster, steps = effect.steps)
-        is Effect.Pull -> pull(t, toward = caster, steps = effect.steps)
+        is Effect.Knockback ->
+          if (Feature.TRACK in features) shove(t, awayFrom = caster, steps = effect.steps)
+        is Effect.Pull ->
+          if (Feature.TRACK in features) pull(t, toward = caster, steps = effect.steps)
         is Effect.Stun ->
           applyAffect(t, "stun", effect.pulses, flags = setOf("stunned"), source = caster)
         is Effect.Sequence,

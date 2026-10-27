@@ -17,6 +17,7 @@
 <a href="effects.html">Effects and behaviors</a>
 <a href="rules.html" class="current">Rules</a>
 <a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
 <a href="plugins.html">Plugins</a>
 <a href="changelog.html">Changelog</a>
 <a href="api.json">api.json</a>
@@ -33,7 +34,7 @@
 <tbody>
 <tr id="rules_ctx.actor"><td><code>actor</code></td><td>1</td><td>Whom the call is about: the attacker, caster, mover or regenerating actor.</td></tr>
 <tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
-<tr id="rules_ctx.band"><td><code>band</code></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
 <tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
@@ -77,7 +78,7 @@
 <h2>Modifier points</h2>
 <p class="intro">Values zones, regions, rooms, affects and worn items can adjust.</p>
 <section id="modifier-cast_allowed" class="entry">
-<h3><code>cast_allowed</code> <span class="since">since api_version 1</span></h3>
+<h3><code>cast_allowed</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
 <p>Returns None to allow casting, or ctx.deny(msg) to refuse.</p>
 <p>Signature <code>fn(ctx, base)</code>, value <code>None | denial</code></p>
 <p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>

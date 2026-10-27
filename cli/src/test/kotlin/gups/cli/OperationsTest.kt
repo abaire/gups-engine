@@ -303,6 +303,19 @@ class OperationsTest {
   }
 
   @Test
+  fun `a deploy that changes MESSAGES gups is refused like one that changes MODULE gups`() {
+    val repo = Repo()
+    val live = git(repo.world, "rev-parse", "HEAD")
+    repo.push("reword the engine") { dev ->
+      dev.resolve("MESSAGES.gups").writeText("messages({\"common.huh\": \"Pardon?\"})\n")
+    }
+    withServer(repo) { r ->
+      assertContains(r.deploy().errors.single(), "MESSAGES.gups changed")
+      assertEquals(live, git(repo.world, "rev-parse", "HEAD"))
+    }
+  }
+
+  @Test
   fun `the server refuses to start off its recorded commit unless forced`() {
     val repo = Repo()
     withServer(repo) {}
