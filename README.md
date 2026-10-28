@@ -8,11 +8,11 @@ folded back in.
 
 GUPS splits the work into three layers, each in its own language:
 
-| Layer | Language | Written by | What it covers |
-|---|---|---|---|
-| The engine (this repository) | Kotlin | engine maintainers | The pulse-driven simulation, combat, the tactical track, the reality bubble, persistence, telnet/TLS/web clients and GMCP, accounts and roles, and the `gups` tools. |
-| Course worlds | Starlark | builders (students and instructors) | Zones with rooms, mobs, items and quests; hooks and `think` AI; shared libraries; the rules module that sets combat and movement formulas. Sandboxed, with resource limits. |
-| Plugins | Kotlin `.jar`s against `plugin-api` | engine developers | New builtins and effect primitives for scripts, commands, GMCP packages and world-start hooks. Trusted code, pinned per world in `MODULE.gups`; see [docs/PLUGINS.md](docs/PLUGINS.md). |
+| Layer                        | Language                            | Written by                          | What it covers                                                                                                                                                                          |
+|------------------------------|-------------------------------------|-------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| The engine (this repository) | Kotlin                              | engine maintainers                  | The pulse-driven simulation, combat, the tactical track, the reality bubble, persistence, telnet/TLS/web clients and GMCP, accounts and roles, and the `gups` tools.                    |
+| Course worlds                | Starlark                            | builders (students and instructors) | Zones with rooms, mobs, items and quests; hooks and `think` AI; shared libraries; the rules module that sets combat and movement formulas. Sandboxed, with resource limits.             |
+| Plugins                      | Kotlin `.jar`s against `plugin-api` | engine developers                   | New builtins and effect primitives for scripts, commands, GMCP packages and world-start hooks. Trusted code, pinned per world in `MODULE.gups`; see [docs/PLUGINS.md](docs/PLUGINS.md). |
 
 Builders are the main audience: they never touch Kotlin, and `gups docs` documents
 everything they can call. Plugins are for mechanics a world needs that Starlark can't
@@ -43,17 +43,33 @@ as the local instructor. It reloads packages when their files change, and serves
 reference at `http://127.0.0.1:4080/docs/`.
 
 ```bash
-gups serve --dev --world template-world      # then, in another terminal:
+gups serve --dev --world template-world
+```
+
+In another terminal, connect with standard telnet:
+
+```bash
 telnet localhost 4000
 ```
 
-`--start //zones/tutorial:gate` picks the room new characters start in, `--port` the telnet
-port, and `--fresh` ignores saved state and boots from the `.star` files. `--wipe` is a server
-wipe: like `--fresh`, and it also deletes every character and item and records the world's
-current schema (after a `prewipe` backup; accounts stay). World state is saved in
-`<world>/.gups/world.db`.
+Or connect with **Mudlet**:
 
-**Features, renames and messages.** `MODULE.gups` can turn off the engine features `combat`, `track`, `skills` and `leveling` (`features = [...]`, fixed per database) and rename engine commands (`rename = {"cast": "invoke"}`); `MESSAGES.gups` overrides engine messages by id. `samples/robot-world` uses all three.
+1. Click **Connect** → **New Profile**.
+2. Set **Server address** to `localhost` (or `127.0.0.1`) and **Port** to `4000` (or your `--port`).
+3. Set the connection type to standard **Telnet** (leave SSL/TLS **unchecked**, as `--dev` serves unencrypted telnet).
+4. Click **Connect**. When prompted `By what name are you known? `, enter any character name (e.g. `Instructor` or
+   `Tess`). No password is required, and your character is granted the instructor role with `@eval` and `@trace`
+   enabled. Mudlet automatically negotiates GMCP (handling room info, vitals, and comm channels out of the box).
+
+`--start //zones/tutorial:gate` picks the room new characters start in, `--port` the telnet
+port (default 4000), `--docs-port` the HTTP docs port (default 4080), and `--fresh` ignores
+saved state and boots from the `.star` files. `--wipe` is a server wipe: like `--fresh`, and it
+also deletes every character and item and records the world's current schema (after a `prewipe`
+backup; accounts stay). World state is saved in `<world>/.gups/world.db`.
+
+**Features, renames and messages.** `MODULE.gups` can turn off the engine features `combat`, `track`, `skills` and
+`leveling` (`features = [...]`, fixed per database) and rename engine commands (`rename = {"cast": "invoke"}`);
+`MESSAGES.gups` overrides engine messages by id. `samples/robot-world` uses all three.
 
 **Test and check packages.** These are the same gates a course world's CI runs on each pull
 request:
@@ -71,30 +87,54 @@ A failing fuzz run prints the exact command to rerun it and writes a repro bundl
 Script API to `build/docs` (`--out DIR` to change it, `--world DIR` to include that world's
 plugins). `gups docs --json` writes `api.json` instead.
 
-**Try the shared-server login.** Import a roster, then start `--prod` with a self-signed
-certificate:
+**Web client and shared-server login.** The bundled browser client runs over HTTPS and a
+WebSocket (`/ws`), rendering formatted text, input history (Up/Down arrows), and GMCP panels (vitals bars, room info,
+active affects, and tactical track bands).
 
-```bash
-printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
-gups import-roster roster.csv --world template-world   # prints ann's setup code
-gups serve --prod --world template-world --telnet-tls 127.0.0.1:4443 --https 127.0.0.1:8443 --self-signed
-```
+- **Testing against a local dev server:** Because the lightweight `--dev` profile only serves
+  raw telnet and `/docs/`, use the `--prod` profile with a throwaway `--self-signed` certificate
+  to test or develop with the web client locally:
+  ```bash
+  # 1. Create an instructor invite code:
+  gups invite --role instructor --world template-world
 
-Then connect Mudlet (or `openssl s_client -connect localhost:4443`) to port 4443 with TLS,
-accept the self-signed certificate, type `new`, enter the setup code and choose a password.
-Or open `https://localhost:8443/` in a browser, choose "Sign up with your code", and do the
-same there. Add `--telnet 127.0.0.1:4000` to serve raw telnet as well.
+  # 2. Start the local server with HTTPS on port 8443:
+  gups serve --prod --world template-world --https 127.0.0.1:8443 --self-signed
+  ```
+  Open `https://localhost:8443/` in a browser, accept the browser's self-signed certificate warning,
+  click **"Sign up with your code"**, enter the invite code, and choose an account name and password.
+
+- **Running in production:** Start `--prod` with production TLS certificates (`--tls-cert` and
+  `--tls-key`), or behind a TLS-terminating reverse proxy:
+  ```bash
+  # Import a roster CSV (login,github_handle,role) to generate setup codes:
+  printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
+  gups import-roster roster.csv --world template-world
+
+  # Start with TLS telnet, HTTPS/WebSocket, and the admin port:
+  gups serve --prod --world template-world \
+    --telnet-tls :4443 \
+    --https :443 \
+    --tls-cert /etc/gups/fullchain.pem \
+    --tls-key /etc/gups/privkey.pem \
+    --admin 127.0.0.1:9090
+  ```
+  Players visit `https://<host>/` in any modern browser to log in or register with their setup
+  or invite code. Mudlet players connect to port 4443 with SSL/TLS enabled, type `new`, and
+  register with their setup code. Add `--telnet :4000` if you want to provide unencrypted telnet
+  access alongside TLS.
 
 **Other commands:**
 
-| Command | What it does |
-|---|---|
-| `gups invite` | Creates an invite code. |
-| `gups backup`, `gups restore` | Back up the database, or restore it with the server stopped. |
-| `gups snapshot --sanitized --out FILE` | A snapshot with personal data stripped, for `migrate-check`. |
-| `gups migrate-check --snapshot FILE` | Checks migrations and reconciliation against a snapshot. |
-| `gups deploy --commit SHA --admin ADDR` | Deploys a course world commit to a running server (CI calls it). |
-| `gups repro <diagnostic-id or bundle.json>` | Replays a diagnostic in the harness. |
+| Command                                     | What it does                                                              |
+|---------------------------------------------|---------------------------------------------------------------------------|
+| `gups invite --role ROLE`                   | Creates an invite code for `player`, `builder`, `instructor`, or `admin`. |
+| `gups import-roster roster.csv`             | Imports accounts from a roster CSV and prints initial setup codes.        |
+| `gups backup`, `gups restore <backup-file>` | Back up the database, or restore it with the server stopped.              |
+| `gups snapshot --sanitized --out FILE`      | A snapshot with personal data stripped, for `migrate-check`.              |
+| `gups migrate-check --snapshot FILE`        | Checks migrations and reconciliation against a snapshot.                  |
+| `gups deploy --commit SHA --admin ADDR`     | Deploys a course world commit to a running server (CI calls it).          |
+| `gups repro <diagnostic-id or bundle.json>` | Replays a diagnostic in the harness.                                      |
 
 ## Creating a course world
 
@@ -116,7 +156,8 @@ image. Build it from a checkout with `./gradlew :cli:courseWorldTemplateArchive`
    damage types and channels (the schema; the rules in `rules/combat.star` give them their
    meaning, and the engine has no built-in rules), sets the checkpoint cadence and
    `start_room`, and pins any plugins. A database is tied to its schema: changing a stat,
-   vital, damage type or channel name later needs `gups serve --wipe`. In `CODEOWNERS`, replace `@CHANGE_ME_INSTRUCTOR` with
+   vital, damage type or channel name later needs `gups serve --wipe`. In `CODEOWNERS`, replace `@CHANGE_ME_INSTRUCTOR`
+   with
    the instructor's GitHub handle, and give each student team its zone:
    ```
    /zones/goblin_caves/ @student1 @student2
@@ -167,28 +208,27 @@ and `ctx` verb.
 
 ## Developing in IntelliJ IDEA
 
-1. Install a JDK 21 or newer (any distribution). IntelliJ can download one under
-   **File → Project Structure → SDKs → + → Download JDK**.
+1. Install a JDK 21 or newer (any distribution). IntelliJ can download one under **File → Project Structure → SDKs → + →
+   Download JDK**.
 2. **File → Open…** and pick the `gups-engine` directory (the one containing
    `settings.gradle.kts`). Trust the project when asked, and let IntelliJ import it as a
    Gradle project. The first import downloads Gradle and the dependencies, which takes a
    few minutes.
-3. Under **Settings → Build, Execution, Deployment → Build Tools → Gradle**, set
-   **Gradle JVM** to your JDK 21, and **Build and run using** and **Run tests using** to
-   **Gradle**, so the IDE builds exactly like CI.
+3. Under **Settings → Build, Execution, Deployment → Build Tools → Gradle**, set **Gradle JVM** to your JDK 21, and
+   **Build and run using** and **Run tests using** to **Gradle**, so the IDE builds exactly like CI.
 4. Under **Settings → Plugins**, make sure the bundled **Kotlin** plugin is enabled.
 
 Shared run configurations live in [`.run/`](.run) and appear in the run-configuration
 dropdown automatically:
 
-| Configuration | What it does |
-|---|---|
-| `gups CLI / gups serve --dev` | Starts the server from source, debuggable. Edit the program arguments to add `--world <dir>` etc. |
-| `gups CLI / gups test`, `gups lint`, `gups docs`, `gups --help` | Runs the other CLI tools from source. |
-| `Gradle / check (all tests)` | Everything CI runs, including the module-graph check. |
-| `Gradle / core tests` | Just the `core` module's tests. |
-| `Gradle / installDist (gups launcher)` | Builds `cli/build/install/gups/bin/gups`, the launcher students get. |
-| `Gradle / gups serve --dev (Gradle)` | Starts the server through Gradle's `run` task, as on the command line. |
+| Configuration                                                   | What it does                                                                                      |
+|-----------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `gups CLI / gups serve --dev`                                   | Starts the server from source, debuggable. Edit the program arguments to add `--world <dir>` etc. |
+| `gups CLI / gups test`, `gups lint`, `gups docs`, `gups --help` | Runs the other CLI tools from source.                                                             |
+| `Gradle / check (all tests)`                                    | Everything CI runs, including the module-graph check.                                             |
+| `Gradle / core tests`                                           | Just the `core` module's tests.                                                                   |
+| `Gradle / installDist (gups launcher)`                          | Builds `cli/build/install/gups/bin/gups`, the launcher students get.                              |
+| `Gradle / gups serve --dev (Gradle)`                            | Starts the server through Gradle's `run` task, as on the command line.                            |
 
 Every configuration can be started with **Debug** as well as **Run**. To debug a single
 test, click the gutter icon next to the test. For a new tool configuration, copy one of
@@ -200,18 +240,18 @@ client, which otherwise runs only on Linux CI.
 
 ## Modules
 
-| Module | Scope | May depend on |
-|---|---|---|
-| `core` | world model, scheduler, commands, combat, rules chain, bubble | nothing |
-| `script` | Starlark host | `core` |
-| `persist` | SQLite/WAL persistence | `core` |
-| `net` | telnet, TLS, WebSocket, GMCP | `core` |
-| `auth` | accounts, roles, invites | `core` |
-| `harness` | headless test world and runners | `core`, `script` |
-| `plugin-api` | `.jar` plugin extension points | `core`, `script` |
-| `webclient` | the browser client: plain JavaScript modules, served as resources | nothing |
-| `cli` | the `gups` binary; wires everything | anything |
-| `samples:weather-plugin` | the sample plugin | `plugin-api` |
+| Module                   | Scope                                                             | May depend on    |
+|--------------------------|-------------------------------------------------------------------|------------------|
+| `core`                   | world model, scheduler, commands, combat, rules chain, bubble     | nothing          |
+| `script`                 | Starlark host                                                     | `core`           |
+| `persist`                | SQLite/WAL persistence                                            | `core`           |
+| `net`                    | telnet, TLS, WebSocket, GMCP                                      | `core`           |
+| `auth`                   | accounts, roles, invites                                          | `core`           |
+| `harness`                | headless test world and runners                                   | `core`, `script` |
+| `plugin-api`             | `.jar` plugin extension points                                    | `core`, `script` |
+| `webclient`              | the browser client: plain JavaScript modules, served as resources | nothing          |
+| `cli`                    | the `gups` binary; wires everything                               | anything         |
+| `samples:weather-plugin` | the sample plugin                                                 | `plugin-api`     |
 
 `./gradlew checkModuleGraph` (part of `check`) fails if a module declares a dependency
 outside these rules. The allowed graph is defined in the root `build.gradle.kts`.
