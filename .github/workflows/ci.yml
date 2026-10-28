@@ -37,7 +37,7 @@ jobs:
           java-version: "21"
 
       # Also validates the Gradle wrapper checksum.
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Determine build properties
         id: props
@@ -150,7 +150,7 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Prepare stamped template
         run: ./gradlew :cli:prepareCourseWorldTemplate -Pversion="${GITHUB_REF_NAME#v}" -PimageOwner="${GITHUB_REPOSITORY_OWNER,,}" --console=plain
@@ -196,7 +196,7 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build the distribution
         run: ./gradlew :cli:installDist -Pversion="${GITHUB_REF_NAME#v}" --console=plain
