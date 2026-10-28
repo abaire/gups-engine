@@ -2,7 +2,9 @@
 
 Plugins are `.jar` files that extend the engine with host builtins, commands, effect primitives,
 GMCP packages and a world-start hook (SPEC.md §4.15). This guide uses the sample plugin in
-`samples/weather-plugin` as its running example: deterministic weather by region.
+`samples/weather-plugin` as its running example: deterministic weather by region. For a step-by-step
+tutorial on building a plugin from scratch, see the
+[Weather Plugin Walkthrough](../samples/weather-plugin/docs/tutorials/README.md).
 
 There are **no compatibility promises**. Any change to the plugin interface or the facade bumps
 `PluginApi.VERSION`, and the engine refuses plugins built for another version: rebuild them
