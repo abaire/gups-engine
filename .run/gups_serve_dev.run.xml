@@ -2,7 +2,7 @@
   <configuration default="false" name="gups serve --dev" type="JetRunConfigurationType" folderName="gups CLI">
     <option name="MAIN_CLASS_NAME" value="gups.cli.MainKt" />
     <module name="gups-engine.cli.main" />
-    <option name="PROGRAM_PARAMETERS" value="serve --dev" />
+    <option name="PROGRAM_PARAMETERS" value="serve --dev --world local-world" />
     <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <shortenClasspath name="NONE" />

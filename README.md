@@ -36,14 +36,42 @@ or write the full path.
 ## Running with the CLI
 
 Every subcommand takes `--world DIR` (default: the current directory) and `--help`.
-`template-world/` is a complete world to try them on.
+
+### Setting up a local development world
+
+`template-world/` is the pristine seed for course worlds and is checked by the engine's test suite on every commit. **Do not modify or run directly against `template-world/`**: doing so triggers warnings about placeholder `@CHANGE_ME_INSTRUCTOR` handles in `CODEOWNERS`, writes local databases into the repository tree, and risks altering the canonical template.
+
+If you are an advanced student or developer exploring the engine locally without a released course world repository:
+
+1. **Clone the template to a local world directory:**
+   ```bash
+   cp -r template-world local-world
+   ```
+   (`local-world/` is ignored by git in `.gitignore`, keeping your working tree clean.)
+
+2. **Remove or clear `local-world/CODEOWNERS`:**
+   In a released course world, `CODEOWNERS` is used on GitHub for PR review routing and in `--prod` to assign package scopes to accounts imported from a class roster. In a local development world, the database's `AccountStore` has no roster accounts, so any handles listed in `CODEOWNERS` will report a warning that they match no account.
+
+   Remove the file (or comment out its rules) so the server starts without warnings:
+   ```bash
+   rm local-world/CODEOWNERS
+   ```
+   (In `--dev` mode, you automatically log in as the local instructor with unrestricted access across all packages, so builder scoping is not needed.)
+
+   *Optional:* If you want to test `CODEOWNERS` package scoping or multi-user accounts locally, import a local roster first so an account with that GitHub handle exists in the database:
+   ```bash
+   printf 'login,github_handle,role\ninstructor,your-handle,instructor\n' > roster.csv
+   gups import-roster roster.csv --world local-world
+   ```
+
+You can then pass `--world local-world` from the engine root, or `cd local-world` and run commands without `--world` (since `--world` defaults to the current directory).
 
 **Play locally.** `--dev` is a single-user server on 127.0.0.1 with no passwords; you log in
 as the local instructor. It reloads packages when their files change, and serves the API
 reference at `http://127.0.0.1:4080/docs/`.
 
 ```bash
-gups serve --dev --world template-world
+gups serve --dev --world local-world
 ```
 
 In another terminal, connect with standard telnet:
@@ -75,9 +103,9 @@ backup; accounts stay). World state is saved in `<world>/.gups/world.db`.
 request:
 
 ```bash
-gups test --world template-world //zones/tutorial/...       # run *_test.star tests
-gups lint --world template-world //...                      # static checks
-gups fuzz --world template-world --pulses 1000 //zones/tutorial/...   # bot players explore
+gups test --world local-world //zones/tutorial/...       # run *_test.star tests
+gups lint --world local-world //...                      # static checks
+gups fuzz --world local-world --pulses 1000 //zones/tutorial/...   # bot players explore
 ```
 
 A failing fuzz run prints the exact command to rerun it and writes a repro bundle for
@@ -96,10 +124,10 @@ active affects, and tactical track bands).
   to test or develop with the web client locally:
   ```bash
   # 1. Create an instructor invite code:
-  gups invite --role instructor --world template-world
+  gups invite --role instructor --world local-world
 
   # 2. Start the local server with HTTPS on port 8443:
-  gups serve --prod --world template-world --https 127.0.0.1:8443 --self-signed
+  gups serve --prod --world local-world --https 127.0.0.1:8443 --self-signed
   ```
   Open `https://localhost:8443/` in a browser, accept the browser's self-signed certificate warning,
   click **"Sign up with your code"**, enter the invite code, and choose an account name and password.
@@ -109,10 +137,10 @@ active affects, and tactical track bands).
   ```bash
   # Import a roster CSV (login,github_handle,role) to generate setup codes:
   printf 'login,github_handle,role\nann,ann-gh,player\n' > roster.csv
-  gups import-roster roster.csv --world template-world
+  gups import-roster roster.csv --world local-world
 
   # Start with TLS telnet, HTTPS/WebSocket, and the admin port:
-  gups serve --prod --world template-world \
+  gups serve --prod --world local-world \
     --telnet-tls :4443 \
     --https :443 \
     --tls-cert /etc/gups/fullchain.pem \
@@ -223,7 +251,7 @@ dropdown automatically:
 
 | Configuration                                                   | What it does                                                                                      |
 |-----------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| `gups CLI / gups serve --dev`                                   | Starts the server from source, debuggable. Edit the program arguments to add `--world <dir>` etc. |
+| `gups CLI / gups serve --dev`                                   | Starts the server from source, debuggable. Edit the program arguments to point to `--world local-world` etc. |
 | `gups CLI / gups test`, `gups lint`, `gups docs`, `gups --help` | Runs the other CLI tools from source.                                                             |
 | `Gradle / check (all tests)`                                    | Everything CI runs, including the module-graph check.                                             |
 | `Gradle / core tests`                                           | Just the `core` module's tests.                                                                   |
@@ -259,10 +287,11 @@ outside these rules. The allowed graph is defined in the root `build.gradle.kts`
 `docs/` holds `SPEC.md` (the design), `DECISIONS.md`, `DESIGN_NEEDED.md` (unbuilt features the spec doesn't
 settle yet), `PLUGINS.md` (the plugin developer guide), and `CHANGELOG.md`.
 
-`template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
+`template-world/` is the pristine seed of the course world template. It holds `MODULE.gups` (world
 metadata and schema), the `rules` package, the shared `lib` package, `zones/tutorial`, the
 heavily commented reference zone whose tests run on every engine commit, and the
-[World Builder's Guide](template-world/docs/tutorials/README.md).
+[World Builder's Guide](template-world/docs/tutorials/README.md). It should remain pristine; for
+local development and experimentation, clone it to `local-world/` as described above.
 
 `samples/robot-world/` is a second, complete course world with a different schema (integrity,
 sanity, power and radiation instead of hit points, mana and movement). It is linted, tested and
