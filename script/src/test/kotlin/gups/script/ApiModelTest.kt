@@ -160,7 +160,7 @@ class ApiModelTest {
       listOf(
         "room",
         "room.size",
-        "ALL",
+        "SENSE",
         "hook:on_wake",
         "ctx.act_move",
         "ctx.apply_affect.name",

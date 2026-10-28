@@ -216,7 +216,7 @@ class DocsRendererTest {
         engineVersion = "<engine>",
         declarations = full.declarations.filter { it.name == "exit" },
         settings = full.settings.filter { it.name == "module" },
-        constants = full.constants.filter { it.name == "ALL" },
+        constants = full.constants.filter { it.name == "SENSE" },
         hooks = full.hooks.filter { it.name == "on_enter" },
         views = full.views.filter { it.name == "exit" },
         effects = full.effects.filter { it.name == "heal" },

@@ -74,8 +74,8 @@ object DocExamples {
                 room("vault",
                     desc = "A cold vault. A heavy door leads west.",
                     flags = ["dead_end_ok"],
-                    exits = [exit("west", to = ":start", one_way = True,
-                                  door = door(state = "locked", key = ":iron_key"))],
+                    exits = [exit(DIR.west, to = ":start", one_way = True,
+                                  door = door(state = DOOR.locked, key = ":iron_key"))],
                 )
             """,
           test =
@@ -93,7 +93,7 @@ object DocExamples {
                 room("porch",
                     desc = "A creaky porch. The start room is south.",
                     flags = ["dead_end_ok"],
-                    exits = [exit("south", to = ":start", one_way = True)],
+                    exits = [exit(DIR.south, to = ":start", one_way = True)],
                 )
             """,
           test =
@@ -232,9 +232,9 @@ object DocExamples {
                 room("library",
                     name = "The Library",
                     desc = "Shelves of dusty books reach the ceiling.",
-                    size = LARGE,
+                    size = SIZE.large,
                     flags = ["dead_end_ok"],
-                    exits = [exit("south", to = ":start", one_way = True)],
+                    exits = [exit(DIR.south, to = ":start", one_way = True)],
                 )
             """,
           test =
@@ -390,15 +390,59 @@ object DocExamples {
         ),
 
       // ---- Constants ----------------------------------------------------------------------
-      "ALL" to
+      "DIR" to
+        ex(
+          pkg =
+            """
+                room("crossroads",
+                    name = "The Crossroads",
+                    desc = "A fork in the path.",
+                    flags = ["dead_end_ok"],
+                    exits = [
+                        exit(DIR.north, to = ":start", one_way = True),
+                    ],
+                )
+            """
+        ),
+      "MODIFIER" to
+        ex(
+          pkg =
+            """
+                def _dampen(ctx, base):
+                    return max(1, base // 2)
+
+                room("padded_room",
+                    flags = ["dead_end_ok"],
+                    modifiers = {MODIFIER.damage: _dampen},
+                )
+            """
+        ),
+      "SIZE" to
+        ex(
+          pkg =
+            """
+                room("crawlway", desc = "You can barely turn around.", size = SIZE.cramped, flags = ["dead_end_ok"])
+            """
+        ),
+      "SENSE" to
         ex(
           pkg =
             """
                 room("closet",
                     desc = "A closet behind a thick curtain.",
                     flags = ["dead_end_ok"],
-                    # Nothing gets through: no sight, sound, noise or spells.
-                    exits = [exit("out", to = ":start", one_way = True, senses_blocked = ALL)],
+                    # Nothing gets through: no sight, sound or noise.
+                    exits = [exit(DIR.north, to = ":start", one_way = True, senses_blocked = SENSE.all)],
+                )
+            """
+        ),
+      "DOOR" to
+        ex(
+          pkg =
+            """
+                room("hall",
+                    flags = ["dead_end_ok"],
+                    exits = [exit(DIR.north, to = ":start", one_way = True, door = door(state = DOOR.closed))],
                 )
             """
         ),
@@ -416,27 +460,6 @@ object DocExamples {
                 sword = w.spawn(":flame_tongue", at = ":start")
                 t.eq(sword.damage_type, "fire")
             """,
-        ),
-      "CRAMPED" to
-        ex(
-          pkg =
-            """
-                room("crawlway", desc = "You can barely turn around.", size = CRAMPED, flags = ["dead_end_ok"])
-            """
-        ),
-      "LARGE" to
-        ex(
-          pkg =
-            """
-                room("courtyard", desc = "A wide, open courtyard.", size = LARGE, flags = ["dead_end_ok"])
-            """
-        ),
-      "NORMAL" to
-        ex(
-          pkg =
-            """
-                room("corridor", desc = "An ordinary corridor.", size = NORMAL, flags = ["dead_end_ok"])
-            """
         ),
 
       // ---- Effect primitives --------------------------------------------------------------

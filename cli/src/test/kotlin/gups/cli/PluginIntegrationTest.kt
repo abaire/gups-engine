@@ -43,7 +43,7 @@ class PluginIntegrationTest {
                 w = weather.now(ctx.room, hot = True)
                 ctx.send(ctx.actor, "Weather here: %s, hot=%s, asked %d." % (w["size"], w["hot"], w["asked"]))
 
-            room("a", name = "Glade", desc = "A glade.", size = LARGE, exits = [exit("north", ":b")])
+            room("a", name = "Glade", desc = "A glade.", size = SIZE.large, exits = [exit(DIR.north, ":b")])
             room("b", name = "Cave", desc = "A cave.", flags = ["dead_end_ok"], exits = [exit("south", ":a")], on_enter = entered)
             skill("drench", kind = "spell", target = "none", effect = weather.soak(pulses = 5))
             skill("deluge", kind = "spell", target = "none", effect = sequence(heal(dice = "1d1", vital = "hp"), weather.soak()))

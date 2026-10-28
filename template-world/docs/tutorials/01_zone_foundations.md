@@ -72,10 +72,10 @@ When referring to a room, mob, or item (in an exit, spawn list, or hook), you us
 
 ```python
 # Relative label: refers to a declaration within the CURRENT package
-exit("north", to=":hall")
+exit(DIR.north, to=":hall")
 
 # Absolute label: refers to a declaration in ANY package
-exit("south", to="//zones/forest:clearing")
+exit(DIR.south, to="//zones/forest:clearing")
 ```
 
 > **Key Insight:** `//zones/forest:clearing` addresses the *declaration* named `clearing` in package `zones/forest`,

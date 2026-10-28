@@ -87,7 +87,7 @@ mob("guide",
 * A mob with `senses = {"hearing": 1}` hears loud sounds (combat, shouting, heavy doors) from rooms 1 step away.
 * Exits can block senses using `senses_blocked`:
   ```python
-  exit("east", to = ":quiet_room", senses_blocked = ["sound", "noise"])
+  exit(DIR.east, to = ":quiet_room", senses_blocked = [SENSE.sound, SENSE.noise])
   ```
 * Closed doors also muffle sound according to their `closed_senses_blocked` properties.
 

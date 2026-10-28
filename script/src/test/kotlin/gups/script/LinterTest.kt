@@ -120,7 +120,7 @@ class LinterTest {
           "zones/z/package.star" to zonePkg(),
           "zones/z/content.star" to
             """
-            room("r", name = "R", size = NORMAL, flags = ["dead_end_ok"], exits = [])
+            room("r", name = "R", size = SIZE.normal, flags = ["dead_end_ok"], exits = [])
             mob("m", name = "Goblin", vitals = vitals(hp = 50), version = 1)
             item("i", name = "Sword", weight = 5, version = 1)
             """

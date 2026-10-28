@@ -877,7 +877,7 @@ out turns all four on, and listing all four is the same as leaving it out.
 |---|---|---|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | — |
 | `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
-| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, the `CRAMPED`, `NORMAL` and `LARGE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
+| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
 | `skills` | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status` | — |
 | `leveling` | `level` and `xp`, `xp_for_kill`, `xp_to_level`, XP loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who` | — |
 
@@ -945,16 +945,16 @@ the `package()` call, because `package.star` can't load anything.
 room("entrance",
     name = "Cave Entrance",
     desc = "...",
-    size = NORMAL,                                     # CRAMPED | NORMAL | LARGE
+    size = SIZE.normal,                                # SIZE.cramped | SIZE.normal | SIZE.large
     regions = ["goblin_territory"],
     flags = [],                                        # "always_active", "dead_end_ok"
     exits = [
-        exit("north", to=":tunnel",
-             door=door(state="closed", key="//zones/goblin_caves:rusty_key",
+        exit(DIR.north, to=":tunnel",
+             door=door(state=DOOR.closed, key="//zones/goblin_caves:rusty_key",
                        open_senses_blocked=[],
-                       closed_senses_blocked=["sight", "sound", "noise"])),
-        exit("east", to=":long_hall", senses_blocked=ALL),  # never carries anything
-        exit("south", to="//zones/forest:clearing", entry_index=-1),  # arrive at back
+                       closed_senses_blocked=[SENSE.sight, SENSE.sound, SENSE.noise])),
+        exit(DIR.east, to=":long_hall", senses_blocked=SENSE.all),  # never carries anything
+        exit(DIR.south, to="//zones/forest:clearing", entry_index=-1),  # arrive at back
     ],
     spawns = [spawn(":goblin_scout", count=2, respawn_pulses=1200, at_index=2)],
     modifiers = {},                                    # §4.6
@@ -1029,9 +1029,10 @@ def migrate(old_version, attrs):                       # optional, per package (
 - **Features:** arguments that belong to a feature that is off (`size`, `entry_index`,
   `at_index` and `range` with `track`; `skills` with `skills`; `level` with `leveling`)
   fail the load, naming the feature (§3.10).
-- **Constants:** `CRAMPED`, `NORMAL` and `LARGE` are the strings `"cramped"`, `"normal"` and
-  `"large"`. `ALL` is the list of every channel name, built-in and declared. `DAMAGE` holds
-  the declared damage types (§3.9).
+- **Constants:** Common engine constants are namespaced into structs (such as `DIR`,
+  `MODIFIER`, `SIZE`, `SENSE`, `DOOR`, and `DAMAGE`) to prevent bare-string typos.
+  The constant namespaces and their values are defined in
+  `script/src/main/kotlin/gups/script/Declarations.kt` (`DeclarationBuiltins.constants`).
 - **`struct(**fields)`** makes an immutable record. Libraries use it to export a namespace of
   functions (`quest.start`).
 - **When builtins work:** declaration builtins work only while a package loads; effect
@@ -2367,7 +2368,7 @@ changelog check and plugin docs, so they can't drift apart.
   `@ApiSince(n)` or `since = n`. Method parameters have no `since`: a parameter added to an
   existing method is recorded in the changelog.
 - **Symbols:** every entry has a unique `symbol`, the path the changelog names it by. Package
-  globals are bare (`room`, `room.size`, `damage.dice`, `ALL`); other kinds are prefixed
+  globals are bare (`room`, `room.size`, `damage.dice`, `SENSE`); other kinds are prefixed
   where a bare name would clash (`hook:on_wake`, `view:room.exits`, `rules:to_hit`,
   `modifier:to_hit`). `ctx`, `rules_ctx` and the harness objects use their own names
   (`ctx.act_move`, `ctx.apply_affect.name`, `rules_ctx.weapon`, `t.eq`), as do settings
@@ -2885,7 +2886,7 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   if the connecting exit's effective `senses_blocked` doesn't contain the event's channel. The exit
   checked is the listener's exit toward the source, so a one-way exit into the source room
   carries events and one out of it doesn't. A closed default door blocks `SIGHT` and `SOUND`
-  but not `NOISE`. `senses_blocked = ALL` blocks everything.
+  but not `NOISE`. `senses_blocked = SENSE.all` blocks everything.
 - **Delivery:**
   - It's **deferred** to phase 5 of the current pulse, and calls `on_nearby` on the mob.
     Events raised while phase 5 delivers wait for the next pulse's phase 5.

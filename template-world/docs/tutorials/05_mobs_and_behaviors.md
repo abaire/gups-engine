@@ -111,7 +111,7 @@ Mobs are placed into rooms through the `spawns` list on a `room()`:
 room("arena",
      name="The Training Arena",
      desc="A wide circular arena with sand on the floor.",
-     size=LARGE,
+     size=SIZE.large,
      spawns=[
          spawn(":training_dummy", count=1, at_index=2),
      ],

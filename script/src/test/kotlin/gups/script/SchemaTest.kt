@@ -155,7 +155,7 @@ class SchemaTest {
   }
 
   @Test
-  fun `declared channels are accepted and ALL lists the built-in and declared ones`() {
+  fun `declared channels are accepted and SENSE all lists the built-in and declared ones`() {
     assertTrue(
       load(
           """
@@ -169,7 +169,7 @@ class SchemaTest {
       fixture(
         """
             def _all(ctx):
-                ctx.send(ctx.actor, ",".join(ALL))
+                ctx.send(ctx.actor, ",".join(SENSE.all))
 
             room("start", commands = {"all": _all})
             """

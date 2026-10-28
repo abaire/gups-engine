@@ -21,13 +21,14 @@ persistence, and linking to official specifications and generated API references
     * Declaring rooms with `room()`
     * Exits, direction matching, and one-way passages
     * Doors, locks, and paired door mechanics
-    * Room spatial tracks (`CRAMPED`, `NORMAL`, `LARGE`)
+    * Room spatial tracks (`SIZE.cramped`, `SIZE.normal`, `SIZE.large`)
     * Custom room commands and zone verbs
+    * Room and region rules modifiers (`modifiers = {...}`)
 
 3. **[03. Items, Equipment, and Containers](03_items_and_equipment.md)**
     * Declaring items with `item()`
     * Keywords and player item matching
-    * Weapons and armor equipment slots
+    * Weapons, armor slots, stat deltas, and item modifiers
     * Interactive items and consumables (`on_use`)
     * Containers, locks, and capacity
 

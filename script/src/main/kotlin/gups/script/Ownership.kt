@@ -23,7 +23,7 @@ object FeatureOwnership {
     owns(Feature.COMBAT, "modifier:to_hit", "modifier:damage", "modifier:initiative")
     owns(Feature.COMBAT, "view:actor.fighting")
     owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
-    owns(Feature.TRACK, "CRAMPED", "NORMAL", "LARGE")
+    owns(Feature.TRACK, "SIZE")
     owns(Feature.TRACK, "ctx.act_advance", "ctx.act_retreat")
     owns(Feature.TRACK, "ctx.teleport.index", "ctx.spawn.index", "ctx.move_item.index")
     owns(Feature.TRACK, "rules:retreat_check", "rules:get_lag", "rules_ctx.band")

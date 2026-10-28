@@ -29,7 +29,7 @@ val ZONE =
     "zones/z/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Z\")",
     "zones/z/rooms.star" to
       """
-        room("a", name = "Glade", desc = "A glade.", size = LARGE, regions = ["forest", "outdoors"], exits = [exit("north", ":b")])
+        room("a", name = "Glade", desc = "A glade.", size = SIZE.large, regions = ["forest", "outdoors"], exits = [exit(DIR.north, ":b")])
         room("b", name = "Cave", desc = "A cave.", regions = ["underground"], flags = ["dead_end_ok"], exits = [exit("south", ":a")])
         mob("wolf", name = "a wolf", desc = "A wolf.", keywords = ["wolf"])
         item("stick", name = "a stick", desc = "A stick.", keywords = ["stick", "wood"])

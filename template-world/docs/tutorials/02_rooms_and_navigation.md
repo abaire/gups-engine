@@ -14,9 +14,9 @@ Rooms are defined using the `room()` builtin. A basic room needs a unique identi
 room("gate",
      name="The Tutorial Gate",
      desc="A wooden gate stands open to the north. A sign is nailed to the post.",
-     size=NORMAL,
+     size=SIZE.normal,
      flags=["dead_end_ok"],
-     exits=[exit("north", to=":hall")],
+     exits=[exit(DIR.north, to=":hall")],
      commands={"read": _read},
      )
 ```
@@ -36,19 +36,19 @@ room("gate",
 
 ## 2. Exits and Navigation
 
-Passages between rooms are defined with `exit()`:
+Passages between rooms are defined with `exit()` using the `DIR` constants:
 
 ```python
 exits = [
-    exit("north", to=":hall"),
-    exit("east", to=":secret_tunnel", one_way=True),
+    exit(DIR.north, to=":hall"),
+    exit(DIR.east, to=":secret_tunnel", one_way=True),
 ]
 ```
 
 ### Two-Way Exit Matching Rule
 
-The engine expects standard world navigation to be reciprocal. If room `:hall` has `exit("south", to = ":gate")`, then
-`:gate` should have `exit("north", to = ":hall")`.
+The engine expects standard world navigation to be reciprocal. If room `:hall` has `exit(DIR.south, to = ":gate")`, then
+`:gate` should have `exit(DIR.north, to = ":hall")`.
 
 * If an exit is intentionally one-way (e.g. falling down a chute, jumping off a cliff), you **must** set
   `one_way = True` to prevent `gups lint` from failing.
@@ -63,11 +63,11 @@ To place a door across a passage, attach `door()` to the exit:
 room("hall",
      name="The Hall of Lessons",
      desc="A long, bright hall. Doors lead east and north; the gate is south.",
-     size=LARGE,
+     size=SIZE.large,
      exits=[
-         exit("south", to=":gate"),
-         exit("north", to=":arena", entry_index=-1),
-         exit("east", to=":armory", door=door(state="locked", key=":brass_key")),
+         exit(DIR.south, to=":gate"),
+         exit(DIR.north, to=":arena", entry_index=-1),
+         exit(DIR.east, to=":armory", door=door(state=DOOR.locked, key=":brass_key")),
      ],
      )
 ```
@@ -76,7 +76,7 @@ room("hall",
 
 1. **Synchronization:** Doors on both sides of a passage share state. When a player runs `unlock east` and `open east`
    in `:hall`, the corresponding door in `:armory` automatically opens as well.
-2. **Door States:** `"open"`, `"closed"`, or `"locked"`.
+2. **Door States:** `DOOR.open`, `DOOR.closed`, or `DOOR.locked`.
 3. **Key Matching:** The `key` parameter takes a target label (e.g. `:brass_key`). The player must have that item in
    their inventory to `unlock` or `lock` the door.
 
@@ -87,11 +87,11 @@ room("hall",
 Unlike classic MUDs where everyone in a room is in immediate melee reach, GUPS features an intra-room track system
 configured by `size`:
 
-| Size      | Track Slots | Description                                                                       |
-|-----------|-------------|-----------------------------------------------------------------------------------|
-| `CRAMPED` | 1 slot      | Tight spaces (closet, elevator, tunnel). Everyone is at distance 0 (melee range). |
-| `NORMAL`  | 3 slots     | Standard rooms (hallway, cottage, cave). Slots: 0 (front), 1 (mid), 2 (back).     |
-| `LARGE`   | 5 slots     | Expansive areas (arena, cathedral, courtyard). Slots: 0 through 4.                |
+| Size           | Track Slots | Description                                                                       |
+|----------------|-------------|-----------------------------------------------------------------------------------|
+| `SIZE.cramped` | 1 slot      | Tight spaces (closet, elevator, tunnel). Everyone is at distance 0 (melee range). |
+| `SIZE.normal`  | 3 slots     | Standard rooms (hallway, cottage, cave). Slots: 0 (front), 1 (mid), 2 (back).     |
+| `SIZE.large`   | 5 slots     | Expansive areas (arena, cathedral, courtyard). Slots: 0 through 4.                |
 
 ### Tactical Entry Positions: `entry_index`
 
@@ -99,7 +99,7 @@ When players traverse an exit, they enter the destination room at a specific tra
 
 ```python
 # Arrive at the far back of the arena (slot 4) instead of the front (slot 0):
-exit("north", to=":arena", entry_index=-1)
+exit(DIR.north, to=":arena", entry_index=-1)
 ```
 
 * `entry_index = 0` (default): Player arrives at the front of the room.
@@ -136,10 +136,84 @@ room("gate",
 
 ---
 
+## 6. Room and Region Rules Modifiers
+
+While hooks respond to events, **modifiers** allow rooms and regions to dynamically intercept and adjust engine rule calculations—such as damage dealt in combat, hit chances, movement costs, or casting permissions.
+
+### Declaring a Modifier Function
+
+A modifier is a top-level function that receives the read-only rules context (`ctx`) and the current accumulated value (`base`):
+
+```python
+def _blunted(ctx, base):
+    # A modifier receives the read-only rules ctx and the accumulated value so far.
+    # It returns the newly adjusted value. This example halves all raw auto-attack damage.
+    return max(1, base // 2)
+```
+
+* **Read-Only Context:** Modifiers adjust numbers; `ctx` is strictly read-only (it has no verbs like `ctx.damage` or `ctx.send`).
+* **Available Modifier Points:**
+  * `MODIFIER.to_hit`: Adjusts attack hit chance in percent (`base`: `int`).
+  * `MODIFIER.damage`: Adjusts raw attack damage before mitigation (`base`: `int`).
+  * `MODIFIER.initiative`: Adjusts combat round turn order (`base`: `int`).
+  * `MODIFIER.cast_allowed`: Vetoes spell casting (`return ctx.deny("...")` to cancel; `base`: `None`).
+  * `MODIFIER.move_cost`: Adjusts vitals cost for leaving the room (`base`: `vitals(...)`).
+  * `MODIFIER.regen`: Adjusts vital recovery per world pulse (`base`: `vitals(...)`).
+
+### Attaching Modifiers to Rooms and Regions
+
+You can attach modifiers either directly to a single room or across multiple rooms using a `region()`:
+
+```python
+# 1. Direct room modifier (applies only in this room)
+room("antimagic_chamber",
+     name="Antimagic Chamber",
+     desc="The air hums with nullifying energies.",
+     flags=["dead_end_ok"],
+     modifiers={
+         MODIFIER.damage: _blunted,
+     },
+     )
+
+# 2. Region-wide modifier (applies to all rooms tagged with the region)
+region("practice_grounds",
+       modifiers={
+           MODIFIER.damage: _blunted,
+       },
+       )
+
+room("arena",
+     name="The Sparring Arena",
+     regions=["practice_grounds"],
+     # ...
+     )
+```
+
+### The Modifier Execution Chain
+
+When a rules calculation runs (e.g., computing attack damage), the engine processes modifiers in a strict deterministic order:
+1. **Base Rule:** Calculated by the world ruleset (e.g. `rules.damage(ctx)` in `rules/combat.star`).
+2. **Zone Package Modifiers:** Set in `package(kind = "zone", modifiers = {...})`.
+3. **Region Modifiers:** From regions tagged on the room, sorted alphabetically by region name.
+4. **Room Modifiers:** From the specific `room(modifiers = {...})`.
+5. **Actor Affect Modifiers:** Active temporary affects on the actor.
+6. **Worn Item Modifiers:** From equipped gear, evaluated in `equipment_slots()` order.
+
+### Inspecting Modifiers in Action
+
+You can see every step of the modifier chain execute in real time using the `@trace rules` command in telnet or `w.trace(True)` in test scripts:
+
+```
+rules.damage base=12 → region:practice_grounds ×0.5 → 6
+```
+
+---
+
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/rooms.star`](../../zones/tutorial/rooms.star)
-* **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L942)
+* **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L942),
+  [§4.6: Rules Module and the Modifier Chain](../../../docs/SPEC.md#L1277),
   and [§5.5: Intra-Room Spatial Model](../../../docs/SPEC.md#L2780)
-* **HTML Documentation:** `declarations.html#room`, `declarations.html#exit`, and `declarations.html#door` in
+* **HTML Documentation:** `declarations.html#room`, `declarations.html#region`, `declarations.html#exit`, and `declarations.html#door` in
   `gups docs`.

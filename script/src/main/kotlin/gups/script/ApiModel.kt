@@ -218,7 +218,10 @@ internal constructor(
 
 // ---- API model entries --------------------------------------------------------------------------
 
-/** A predeclared constant in `PACKAGE_GLOBALS` (`CRAMPED`, `NORMAL`, `LARGE`, `ALL`). */
+/**
+ * A predeclared constant namespace in `PACKAGE_GLOBALS` (`DIR`, `MODIFIER`, `SIZE`, `SENSE`,
+ * `DOOR`, `DAMAGE`).
+ */
 data class ConstantSpec(
   val name: String,
   val type: String,
@@ -724,7 +727,7 @@ object ScriptApi {
 
 /**
  * Writes `api.json`. Each entry carries a `symbol`, its path for the changelog: `room`,
- * `room.size`, `damage.dice`, `ALL`, `hook:on_wake`, `ctx.act_move`, `ctx.apply_affect.name`,
+ * `room.size`, `damage.dice`, `SENSE`, `hook:on_wake`, `ctx.act_move`, `ctx.apply_affect.name`,
  * `view:room.exits`, `rules:to_hit`, `modifier:to_hit`, `rules_ctx.weapon`, `t.eq`.
  */
 private class JsonWriter {

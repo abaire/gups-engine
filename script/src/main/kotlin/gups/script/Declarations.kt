@@ -1468,43 +1468,65 @@ internal class DeclarationBuiltins(
     private val SKILL_RANGES = SkillRange.entries.map { it.name.lowercase() }
     private val TARGET_KINDS = TargetKind.entries.map { it.name.lowercase() }
 
-    /** Constants available to every package file; `ALL` is the world's channels. */
-    fun constants(schema: WorldSchema): Map<String, Any> =
-      mapOf(
-        "CRAMPED" to "cramped",
-        "NORMAL" to "normal",
-        "LARGE" to "large",
-        "ALL" to StarlarkList.immutableCopyOf(schema.allChannels.map { it.name }),
-        "DAMAGE" to StructValue(schema.damageTypes.associateWith { it }),
+    /** Constants available to every package file. */
+    fun constants(schema: WorldSchema): Map<String, Any> {
+      val dirs = StructValue(Direction.STANDARD.associate { it.name to it.name })
+      val modifiers =
+        StructValue(ModifierPoint.entries.associate { it.scriptName to it.scriptName })
+      val sizes =
+        StructValue(TrackSize.entries.associate { it.name.lowercase() to it.name.lowercase() })
+      val senses =
+        StructValue(
+          schema.allChannels.associate { it.name to it.name } +
+            mapOf("all" to StarlarkList.immutableCopyOf(schema.allChannels.map { it.name }))
+        )
+      val doorStates =
+        StructValue(DoorState.entries.associate { it.name.lowercase() to it.name.lowercase() })
+      val damageTypes = StructValue(schema.damageTypes.associateWith { it })
+
+      return mapOf(
+        "DIR" to dirs,
+        "MODIFIER" to modifiers,
+        "SIZE" to sizes,
+        "SENSE" to senses,
+        "DOOR" to doorStates,
+        "DAMAGE" to damageTypes,
       )
+    }
 
     val CONSTANTS: Map<String, Any> = constants(WorldSchema.EMPTY)
 
     val CONSTANT_SPECS: List<ConstantSpec> =
       listOf(
         ConstantSpec(
-          "CRAMPED",
-          "str",
-          Starlark.repr(CONSTANTS.getValue("CRAMPED")),
-          "Track size constant for a 1-slot room.",
+          "DIR",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("DIR")),
+          "Standard exit directions, such as DIR.north and DIR.west.",
         ),
         ConstantSpec(
-          "NORMAL",
-          "str",
-          Starlark.repr(CONSTANTS.getValue("NORMAL")),
-          "Track size constant for a 3-slot room.",
+          "MODIFIER",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("MODIFIER")),
+          "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
         ),
         ConstantSpec(
-          "LARGE",
-          "str",
-          Starlark.repr(CONSTANTS.getValue("LARGE")),
-          "Track size constant for a 6-slot room.",
+          "SIZE",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("SIZE")),
+          "Track size constants for rooms: SIZE.cramped, SIZE.normal, SIZE.large.",
         ),
         ConstantSpec(
-          "ALL",
-          "list[str]",
-          Starlark.repr(CONSTANTS.getValue("ALL")),
-          "Every channel name, built-in and declared by the world.",
+          "SENSE",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("SENSE")),
+          "Perception senses (SENSE.sight, SENSE.sound, SENSE.noise, declared senses) and SENSE.all.",
+        ),
+        ConstantSpec(
+          "DOOR",
+          "struct",
+          Starlark.repr(CONSTANTS.getValue("DOOR")),
+          "Door states: DOOR.open, DOOR.closed, DOOR.locked.",
         ),
         ConstantSpec(
           "DAMAGE",

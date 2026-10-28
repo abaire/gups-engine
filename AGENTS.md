@@ -5,12 +5,16 @@
 The engine is built milestone by milestone from [docs/SPEC.md](docs/SPEC.md) (milestones
 are in §7.4). The spec is the source of truth, but it doesn't settle every detail.
 
-**Whenever you make a decision the spec doesn't specify, log it in
-[docs/DECISIONS.md](docs/DECISIONS.md) in the same change as the code.** That covers
-choices where the spec is silent or ambiguous, interpretations of unclear wording, default
-values and formulas you picked, behavior deferred to a later milestone, and Kotlin seams
-that differ from what the spec shows.
+**`docs/DECISIONS.md` is only added to when an agent makes decisions to fill gaps in the
+spec without asking for approval first.** It is a mechanism to allow humans to review those
+decisions and adjust or ratify them before incorporating them into `SPEC.md`. If the maintainer
+or human has approved updating `SPEC.md` directly, update `SPEC.md` directly as part of the
+change and do not add an entry to `DECISIONS.md`.
 
+When logging unapproved decisions in `docs/DECISIONS.md`:
+- That covers choices where the spec is silent or ambiguous, interpretations of unclear wording,
+  default values and formulas you picked, behavior deferred to a later milestone, and Kotlin seams
+  that differ from what the spec shows.
 - Follow the format at the top of that file: the next free `D-NNN` ID, the spec section,
   what you decided, where the code lives, and status `open`. Don't renumber existing
   entries.

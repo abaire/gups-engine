@@ -59,7 +59,7 @@ class LoaderTest {
           "zones/z/package.star" to zonePkg(", reset_world_ticks = 5"),
           "zones/z/rooms.star" to
             """
-                    room("start", name = "Start", size = LARGE,
+                    room("start", name = "Start", size = SIZE.large,
                         exits = [exit("north", to = ":hall", entry_index = -1,
                                       door = door(state = "locked", key = ":key"))],
                         spawns = [spawn(":rat", count = 2, at_index = 4)])

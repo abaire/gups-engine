@@ -50,9 +50,13 @@ item("practice_sword",
 
 ---
 
-## 3. Armor and Stat Modifiers
+## 3. Armor, Stat Deltas, and Item Modifiers
 
-Armor modifies character stats while worn:
+Items worn by a character can alter their capabilities in two distinct ways:
+
+### A. Static Stat Deltas: `stat_deltas`
+
+`stat_deltas` modifies character base stats (such as `str`, `dex`, `con`, `armor`) while equipped:
 
 ```python
 item("leather_cap",
@@ -68,6 +72,28 @@ item("leather_cap",
   `wear = "finger"`, the engine equips it to the first open finger slot (`finger_1`, `finger_2`).
 * **Stat Deltas:** `stat_deltas = stats(...)` modifies the wearer's stats as long as the item remains equipped. When
   removed, the bonus is automatically subtracted.
+
+### B. Dynamic Rules Modifiers: `modifiers`
+
+Items can also attach dynamic rules modifiers that participate directly in the rules calculation chain (such as boosting damage, hit chance, or initiative) while equipped:
+
+```python
+def _heavy_strike(ctx, base):
+    # Adds +2 raw damage to attacks made by the wearer
+    return base + 2
+
+item("spiked_gauntlets",
+     name="spiked gauntlets",
+     desc="Iron gauntlets lined with wicked studs.",
+     wear="hands",
+     modifiers={
+         MODIFIER.damage: _heavy_strike,
+     },
+     )
+```
+
+* **Execution:** Item modifiers run as the final stage of the modifier chain (after zone, region, room, and affect modifiers), evaluated in `equipment_slots()` order.
+* **Inspecting:** Just like room modifiers, equipped item modifiers can be traced during combat with `@trace rules`.
 
 ---
 

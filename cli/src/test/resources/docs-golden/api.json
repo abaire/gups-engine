@@ -280,11 +280,11 @@
   ],
   "constants": [
     {
-      "symbol": "ALL",
-      "name": "ALL",
-      "type": "list[str]",
-      "value": "[\"sight\", \"sound\", \"noise\"]",
-      "doc": "Every channel name, built-in and declared by the world.",
+      "symbol": "SENSE",
+      "name": "SENSE",
+      "type": "struct",
+      "value": "struct(sight = \"sight\", sound = \"sound\", noise = \"noise\", all = [\"sight\", \"sound\", \"noise\"])",
+      "doc": "Perception senses (SENSE.sight, SENSE.sound, SENSE.noise, declared senses) and SENSE.all.",
       "since": 1
     }
   ],

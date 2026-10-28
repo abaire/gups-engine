@@ -1780,23 +1780,6 @@
   ],
   "constants": [
     {
-      "symbol": "ALL",
-      "name": "ALL",
-      "type": "list[str]",
-      "value": "[\"sight\", \"sound\", \"noise\"]",
-      "doc": "Every channel name, built-in and declared by the world.",
-      "since": 1
-    },
-    {
-      "symbol": "CRAMPED",
-      "feature": "track",
-      "name": "CRAMPED",
-      "type": "str",
-      "value": "\"cramped\"",
-      "doc": "Track size constant for a 1-slot room.",
-      "since": 1
-    },
-    {
       "symbol": "DAMAGE",
       "name": "DAMAGE",
       "type": "struct",
@@ -1805,21 +1788,44 @@
       "since": 1
     },
     {
-      "symbol": "LARGE",
-      "feature": "track",
-      "name": "LARGE",
-      "type": "str",
-      "value": "\"large\"",
-      "doc": "Track size constant for a 6-slot room.",
+      "symbol": "DIR",
+      "name": "DIR",
+      "type": "struct",
+      "value": "struct(north = \"north\", east = \"east\", south = \"south\", west = \"west\", up = \"up\", down = \"down\", northeast = \"northeast\", northwest = \"northwest\", southeast = \"southeast\", southwest = \"southwest\")",
+      "doc": "Standard exit directions, such as DIR.north and DIR.west.",
       "since": 1
     },
     {
-      "symbol": "NORMAL",
+      "symbol": "DOOR",
+      "name": "DOOR",
+      "type": "struct",
+      "value": "struct(open = \"open\", closed = \"closed\", locked = \"locked\")",
+      "doc": "Door states: DOOR.open, DOOR.closed, DOOR.locked.",
+      "since": 1
+    },
+    {
+      "symbol": "MODIFIER",
+      "name": "MODIFIER",
+      "type": "struct",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\")",
+      "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
+      "since": 1
+    },
+    {
+      "symbol": "SENSE",
+      "name": "SENSE",
+      "type": "struct",
+      "value": "struct(sight = \"sight\", sound = \"sound\", noise = \"noise\", all = [\"sight\", \"sound\", \"noise\"])",
+      "doc": "Perception senses (SENSE.sight, SENSE.sound, SENSE.noise, declared senses) and SENSE.all.",
+      "since": 1
+    },
+    {
+      "symbol": "SIZE",
       "feature": "track",
-      "name": "NORMAL",
-      "type": "str",
-      "value": "\"normal\"",
-      "doc": "Track size constant for a 3-slot room.",
+      "name": "SIZE",
+      "type": "struct",
+      "value": "struct(cramped = \"cramped\", normal = \"normal\", large = \"large\")",
+      "doc": "Track size constants for rooms: SIZE.cramped, SIZE.normal, SIZE.large.",
       "since": 1
     }
   ],

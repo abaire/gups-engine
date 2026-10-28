@@ -6,7 +6,7 @@
 #   (locked door)   |
 #                 gate  <- start here
 #
-# Each room's `size` sets its track: CRAMPED (1 position), NORMAL (3) or LARGE (5). Combat
+# Each room's `size` sets its track: SIZE.cramped (1 position), SIZE.normal (3) or SIZE.large (5). Combat
 # range depends on how far apart actors stand on it.
 
 load("//lib:quest.star", "quest")
@@ -23,9 +23,9 @@ def _read(ctx):
 room("gate",
     name = "The Tutorial Gate",
     desc = "A wooden gate stands open to the north. A sign is nailed to the post.",
-    size = NORMAL,
+    size = SIZE.normal,
     flags = ["dead_end_ok"],
-    exits = [exit("north", to = ":hall")],
+    exits = [exit(DIR.north, to = ":hall")],
     commands = {"read": _read},
 )
 
@@ -40,13 +40,13 @@ def _hall_enter(ctx):
 room("hall",
     name = "The Hall of Lessons",
     desc = "A long, bright hall. Doors lead east and north; the gate is south.",
-    size = LARGE,
+    size = SIZE.large,
     exits = [
-        exit("south", to = ":gate"),
+        exit(DIR.south, to = ":gate"),
         # Arrive at the far end of the arena: entry_index -1 means the back of the track.
-        exit("north", to = ":arena", entry_index = -1),
+        exit(DIR.north, to = ":arena", entry_index = -1),
         # A locked door. Doors on both sides of a passage open and close together.
-        exit("east", to = ":armory", door = door(state = "locked", key = ":brass_key")),
+        exit(DIR.east, to = ":armory", door = door(state = DOOR.locked, key = ":brass_key")),
     ],
     # Spawns refill on zone reset, and respawn_pulses after the last one leaves the world.
     spawns = [spawn(":guide", at_index = 2)],
@@ -64,9 +64,9 @@ def _stock_armory(ctx):
 room("armory",
     name = "The Armory",
     desc = "A cramped closet of racks, mostly empty.",
-    size = CRAMPED,
+    size = SIZE.cramped,
     flags = ["dead_end_ok"],
-    exits = [exit("west", to = ":hall", door = door(state = "locked", key = ":brass_key"))],
+    exits = [exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key"))],
     on_load = _stock_armory,
     on_reset = _stock_armory,
 )
@@ -80,7 +80,7 @@ def _blunted(ctx, base):
 # apply in every room that carries it. Points: to_hit, damage, initiative, cast_allowed,
 # move_cost, regen. `@trace rules` shows each modifier at work.
 region("practice_grounds",
-    modifiers = {"damage": _blunted},
+    modifiers = {MODIFIER.damage: _blunted},
 )
 
 def _arena_enter(ctx):
@@ -95,10 +95,10 @@ def _arena_enter(ctx):
 room("arena",
     name = "The Practice Arena",
     desc = "Sand, a few benches, and a battered training dummy at the far end.",
-    size = LARGE,
+    size = SIZE.large,
     flags = ["dead_end_ok"],
     regions = ["practice_grounds"],
-    exits = [exit("south", to = ":hall")],
+    exits = [exit(DIR.south, to = ":hall")],
     spawns = [spawn(":training_dummy", at_index = 0)],
     on_enter = _arena_enter,
 )

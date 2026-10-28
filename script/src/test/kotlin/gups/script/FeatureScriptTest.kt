@@ -69,7 +69,7 @@ class FeatureScriptTest {
 
   @Test
   fun `track declaration arguments need the track`() {
-    refused(Feature.TRACK, "room(\"start\", size = LARGE)", "room(size)")
+    refused(Feature.TRACK, "room(\"start\", size = SIZE.large)", "room(size)")
     refused(
       Feature.TRACK,
       "room(\"a\", exits = [exit(\"north\", \":b\", entry_index = 1)])\nroom(\"b\")",
