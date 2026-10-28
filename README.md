@@ -260,8 +260,9 @@ outside these rules. The allowed graph is defined in the root `build.gradle.kts`
 settle yet), `PLUGINS.md` (the plugin developer guide), and `CHANGELOG.md`.
 
 `template-world/` is the seed of the course world template. It holds `MODULE.gups` (world
-metadata and schema), the `rules` package, the shared `lib` package, and `zones/tutorial`, the
-heavily commented reference zone whose tests run on every engine commit.
+metadata and schema), the `rules` package, the shared `lib` package, `zones/tutorial`, the
+heavily commented reference zone whose tests run on every engine commit, and the
+[World Builder's Guide](template-world/docs/tutorials/README.md).
 
 `samples/robot-world/` is a second, complete course world with a different schema (integrity,
 sanity, power and radiation instead of hit points, mana and movement). It is linted, tested and

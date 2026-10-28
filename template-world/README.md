@@ -70,6 +70,20 @@ Run static checks:
 gups lint //...
 ```
 
+## World Building & Tutorials
+
+To learn how to create zones, rooms, mobs, items, and quests using Starlark, see the **[World Builder's Guide](docs/tutorials/README.md)**:
+
+1. [Zone Foundations & Architecture](docs/tutorials/01_zone_foundations.md)
+2. [Rooms, Exits, and Navigation](docs/tutorials/02_rooms_and_navigation.md)
+3. [Items, Equipment, and Containers](docs/tutorials/03_items_and_equipment.md)
+4. [State, Attributes, and Persistence](docs/tutorials/04_state_and_attributes.md)
+5. [Mobs, Spawns, and Behaviors](docs/tutorials/05_mobs_and_behaviors.md)
+6. [Hooks, Perception, and Interactivity](docs/tutorials/06_hooks_and_interactivity.md)
+7. [Testing and Verifying Your Zone](docs/tutorials/07_testing_your_zone.md)
+
+The canonical, working reference zone is located at [`zones/tutorial/`](zones/tutorial).
+
 ## Production & Deployments
 
 Run the production server with TLS telnet, HTTPS/WebSocket, and the admin port enabled:
