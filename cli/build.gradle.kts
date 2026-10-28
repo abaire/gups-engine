@@ -72,8 +72,8 @@ tasks.test {
 
 val generatedDocsDir = layout.buildDirectory.dir("generated-docs")
 
-val generateDocs by
-  tasks.registering(JavaExec::class) {
+val generateDocs =
+  tasks.register<JavaExec>("generateDocs") {
     group = "documentation"
     description = "Writes the HTML API reference into build/generated-docs."
     classpath = sourceSets.main.get().runtimeClasspath
@@ -88,8 +88,8 @@ val generateDocs by
 
 distributions { main { contents { from(generateDocs) { into("docs") } } } }
 
-val docsArchive by
-  tasks.registering(Zip::class) {
+val docsArchive =
+  tasks.register<Zip>("docsArchive") {
     group = "distribution"
     description = "Packs the API reference as build/distributions/gups-docs-<version>.zip."
     archiveFileName = "gups-docs-${project.version}.zip"
@@ -121,8 +121,8 @@ val imageDir = layout.buildDirectory.dir("image/gups")
  * A self-contained `gups`: a jlink runtime with just the JDK modules jdeps finds the libraries
  * need, the jars, and a launcher that uses that runtime.
  */
-val jlinkImage by
-  tasks.registering {
+val jlinkImage =
+  tasks.register("jlinkImage") {
     group = "distribution"
     description = "Builds build/image/gups: a jlink runtime, the jars and a bin/gups launcher."
     dependsOn(tasks.named("installDist"))
@@ -224,8 +224,8 @@ val jlinkImage by
  * The image as `build/distributions/gups-<version>-<platform>.tar.gz`, as CI attaches it to
  * releases.
  */
-val jlinkArchive by
-  tasks.registering(Tar::class) {
+val jlinkArchive =
+  tasks.register<Tar>("jlinkArchive") {
     group = "distribution"
     description = "Packs the jlink image for one platform."
     dependsOn(jlinkImage)
