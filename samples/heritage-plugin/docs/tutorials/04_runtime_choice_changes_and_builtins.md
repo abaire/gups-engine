@@ -1,8 +1,12 @@
 # 04. Runtime Choice Changes, Builtins & Commands
 
-While character creation choices are established at login, many game worlds feature mechanics that allow characters to change their race or class later in play—such as visiting an ancient rebirth shrine, training with a class mentor, or completing a prestige quest.
+While character creation choices are established at login, many game worlds feature mechanics that allow characters to
+change their race or class later in play—such as visiting an ancient rebirth shrine, training with a class mentor, or
+completing a prestige quest.
 
-This tutorial explores how plugins modify choices and traits at runtime, the cascading state updates triggered by a change (including automatic equipment de-equipping), how to expose builtins to Starlark scripts, and how to implement player commands.
+This tutorial explores how plugins modify choices and traits at runtime, the cascading state updates triggered by a
+change (including automatic equipment de-equipping), how to expose builtins to Starlark scripts, and how to implement
+player commands.
 
 ---
 
@@ -10,14 +14,18 @@ This tutorial explores how plugins modify choices and traits at runtime, the cas
 
 The GUPS engine follows a strict separation of concerns regarding in-game choice modifications:
 
-* **The Engine Provides the Mechanism:** The engine exposes atomic mutation verbs on `PluginWorld` (`setChoices`, `grantTrait`, `removeTrait`) and guarantees all game invariants are maintained.
-* **The Plugin/Content Provides the Story:** The engine provides **no default player command** for respecs (such as `respec` or `change_race`). Worlds decide whether choice changes exist, whether they cost gold, require quests, or happen through specific NPC interactions.
+* **The Engine Provides the Mechanism:** The engine exposes atomic mutation verbs on `PluginWorld` (`setChoices`,
+  `grantTrait`, `removeTrait`) and guarantees all game invariants are maintained.
+* **The Plugin/Content Provides the Story:** The engine provides **no default player command** for respecs (such as
+  `respec` or `change_race`). Worlds decide whether choice changes exist, whether they cost gold, require quests, or
+  happen through specific NPC interactions.
 
 ---
 
 ## 2. What Happens During `world.setChoices()`
 
-When a plugin calls `world.setChoices(actor, choicesMap)`, the engine executes a carefully ordered sequence of validation and state updates:
+When a plugin calls `world.setChoices(actor, choicesMap)`, the engine executes a carefully ordered sequence of
+validation and state updates:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -53,10 +61,16 @@ When a plugin calls `world.setChoices(actor, choicesMap)`, the engine executes a
 
 ### Key Behavioral Details:
 
-1. **Atomic Evaluation:** If `validate()` refuses the combination, **no state changes**. The character keeps their existing choices and traits.
-2. **Current Vital Clamping:** If a player switches from a Warrior (+10 Max HP) to a fragile Mage, their maximum HP drops. If their current HP was 105 out of 110, their current HP is immediately clamped to the new maximum (100).
-3. **Automatic Equipment De-Equipping:** If a Warrior wearing heavy plate armor changes class to a Mage, the engine re-evaluates their worn gear against the `WEAR` restrictions. Because mages cannot wear heavy armor, the plate armor is automatically unequipped into the character's backpack, and the player is notified: `"Your spellcraft can't work through that much metal."`
-4. **Base Stats and Skills Remain:** `rules.starting_stats` is **not** re-run during a change. Base attributes and previously learned skills remain untouched.
+1. **Atomic Evaluation:** If `validate()` refuses the combination, **no state changes**. The character keeps their
+   existing choices and traits.
+2. **Current Vital Clamping:** If a player switches from a Warrior (+10 Max HP) to a fragile Mage, their maximum HP
+   drops. If their current HP was 105 out of 110, their current HP is immediately clamped to the new maximum (100).
+3. **Automatic Equipment De-Equipping:** If a Warrior wearing heavy plate armor changes class to a Mage, the engine
+   re-evaluates their worn gear against the `WEAR` restrictions. Because mages cannot wear heavy armor, the plate armor
+   is automatically unequipped into the character's backpack, and the player is notified: `"Your spellcraft can't work
+   through that much metal."`
+4. **Base Stats and Skills Remain:** `rules.starting_stats` is **not** re-run during a change. Base attributes and
+   previously learned skills remain untouched.
 
 ---
 
@@ -70,13 +84,17 @@ world.setChoices(actor, mapOf("class" to null))
 
 When an option is cleared, that choice becomes **missing**.
 
-The next time that player connects, the engine detects that the character is incomplete and automatically guides them through the creation prompts for that missing choice! This allows course worlds to build respec fountains without writing custom interactive menus—simply clear the choice and prompt the player to reconnect.
+The next time that player connects, the engine detects that the character is incomplete and automatically guides them
+through the creation prompts for that missing choice! This allows course worlds to build respec fountains without
+writing custom interactive menus—simply clear the choice and prompt the player to reconnect.
 
 ---
 
 ## 4. Exposing the Starlark Builtin: `heritage.choose`
 
-To allow Starlark zone scripts and quest NPCs to trigger choice changes, [`HeritagePlugin.kt`](../../src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt) registers a builtin using `r.addBuiltin()`:
+To allow Starlark zone scripts and quest NPCs to trigger choice changes,
+[`HeritagePlugin.kt`](../../src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt) registers a builtin using
+`r.addBuiltin()`:
 
 ```kotlin
 r.addBuiltin(
@@ -122,13 +140,16 @@ def on_talk(ctx):
             ctx.send(ctx.actor, "The archmage initiates you into the arcane mysteries!")
 ```
 
-If a dwarf attempts to become a mage, `heritage.choose` returns `"Dwarves cannot be mages."`, and the script prints the archmage's refusal. If a human warrior attempts it, `heritage.choose` returns `None`, their class switches to Mage, their traits update, and any worn heavy armor drops into their inventory.
+If a dwarf attempts to become a mage, `heritage.choose` returns `"Dwarves cannot be mages."`, and the script prints the
+archmage's refusal. If a human warrior attempts it, `heritage.choose` returns `None`, their class switches to Mage,
+their traits update, and any worn heavy armor drops into their inventory.
 
 ---
 
 ## 5. Adding the `heritage` Player Command
 
-To let players inspect their current race, class, and summaries at any time, `HeritagePlugin` registers a player command:
+To let players inspect their current race, class, and summaries at any time, `HeritagePlugin` registers a player
+command:
 
 ```kotlin
 r.addCommand(
@@ -160,9 +181,11 @@ r.addCommand(
 ```
 
 ### Command Characteristics:
+
 * **`PluginLane.FAST`:** Executes immediately on the world thread without enqueuing on the actor's action queue.
 * **`PluginRole.PLAYER`:** Accessible to all authenticated players.
 * **Output:**
+
   ```text
   Race: Elf - Graceful and attuned to magic.
   Class: Mage - Scholars of arcane destruction.
@@ -175,6 +198,7 @@ r.addCommand(
 Beyond plugin commands, the engine natively displays choices and traits across multiple standard tools:
 
 ### In `score`:
+
 ```text
 Name: Valeros
 Level: 1
@@ -185,7 +209,9 @@ HP: 110/110   Mana: 100/100   Stamina: 100/100
 ```
 
 ### In `@stat` (Administrative Tool):
+
 Staff members inspecting an actor see side-by-side base and effective attributes, followed by choice provenance:
+
 ```text
 Choices:
   race: human
@@ -196,15 +222,20 @@ Traits:
 ```
 
 ### In GMCP Telemetry:
-Whenever `setChoices`, `grantTrait`, or `removeTrait` executes, the engine pushes a fresh `Char.Traits` payload to connected web clients, keeping user interfaces perfectly synchronized with server state.
+
+Whenever `setChoices`, `grantTrait`, or `removeTrait` executes, the engine pushes a fresh `Char.Traits` payload to
+connected web clients, keeping user interfaces perfectly synchronized with server state.
 
 ---
 
 ## Summary
 
-* `world.setChoices()` validates candidate answers, re-derives traits, clamps current vitals, and automatically un-equips invalid gear.
+* `world.setChoices()` validates candidate answers, re-derives traits, clamps current vitals, and automatically
+  un-equips invalid gear.
 * Setting an option to `null` marks that choice as missing, prompting the player to re-answer it on their next login.
 * Builtins like `heritage.choose` allow zone scripts and quest NPCs to trigger choice changes safely.
-* Commands like `heritage` and engine features like `score` and GMCP ensure players always know their character's heritage and traits.
+* Commands like `heritage` and engine features like `score` and GMCP ensure players always know their character's
+  heritage and traits.
 
-In **[Tutorial 05: Testing Character Creation & Traits](05_testing_creation_and_traits.md)**, we will explore unit testing and harness integration testing for character creation plugins.
+In **[Tutorial 05: Testing Character Creation & Traits](05_testing_creation_and_traits.md)**, we will explore unit
+testing and harness integration testing for character creation plugins.

@@ -56,10 +56,10 @@ The engine enforces strict naming rules for GMCP packages to avoid clashing with
 
 * **Format:** Must match `Name(.Name)+` (at least two dot-separated parts, PascalCase recommended).
 * **Reserved Engine Namespaces:** Your package name must not equal, contain, or be contained in any engine GMCP package:
-    * `Char.*` (character vitals, status, inventory)
-    * `Room.*` (room info, exits, map updates)
-    * `Comm.*` (chat channels)
-    * `Gups.Trace` (debugging tools)
+  * `Char.*` (character vitals, status, inventory)
+  * `Room.*` (room info, exits, map updates)
+  * `Comm.*` (chat channels)
+  * `Gups.Trace` (debugging tools)
 * **Other Plugins:** Packages must not conflict with earlier loaded plugins.
 
 ---

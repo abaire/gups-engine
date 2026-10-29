@@ -1,8 +1,11 @@
 # 03. Operational Restrictions & Content Tags
 
-In GUPS, **restrictions** are plugin-registered validation gates that can veto player or mob actions across four critical lifecycle points: wearing equipment, casting spells, moving between rooms, and learning skills.
+In GUPS, **restrictions** are plugin-registered validation gates that can veto player or mob actions across four
+critical lifecycle points: wearing equipment, casting spells, moving between rooms, and learning skills.
 
-Instead of hardcoding rules into engine verbs, plugins declare restrictions that inspect the acting entity's **traits** and the target's **tags**. This tutorial covers how restriction points work, why content tags are essential, how staff roles can bypass restrictions, and how the engine handles vetoes and errors.
+Instead of hardcoding rules into engine verbs, plugins declare restrictions that inspect the acting entity's **traits**
+and the target's **tags**. This tutorial covers how restriction points work, why content tags are essential, how staff
+roles can bypass restrictions, and how the engine handles vetoes and errors.
 
 ---
 
@@ -31,8 +34,10 @@ The handler lambda receives a `PluginRestrictionCall` containing contextual meta
 * **`world: PluginWorld`:** The world facade for diagnostics and state queries.
 
 ### Veto Semantics
+
 * **`null`:** The action is approved.
-* **`String`:** The action is vetoed. The returned string is sent directly to the player as the explanation, and the action is cancelled **with zero lag applied**. For mobs, the action simply fails silently.
+* **`String`:** The action is vetoed. The returned string is sent directly to the player as the explanation, and the
+  action is cancelled **with zero lag applied**. For mobs, the action simply fails silently.
 
 ---
 
@@ -40,18 +45,19 @@ The handler lambda receives a `PluginRestrictionCall` containing contextual meta
 
 The engine defines four lifecycle checkpoints via the `PluginRestrictionPoint` enum:
 
-| Point | Intercepted Operations | Typical Use Cases |
-|---|---|---|
-| **`WEAR`** | `wear` and `wield` commands, before items move. | Armor weight restrictions, weapon class proficiencies, alignment-attuned gear. |
-| **`CAST`** | Pre-warmup spellcasting checks (before casting begins). | Magic school affinities (arcane vs. divine), element specializations. |
-| **`ENTER`** | All room transitions that trigger `before_enter`. | Guild hall access, level-gated zones, class chambers. |
-| **`LEARN`** | Skill acquisition via `world.setSkill()`. | Restricting trainer skill progression to matching classes. |
+|    Point    |                 Intercepted Operations                  |                               Typical Use Cases                                |
+|-------------|---------------------------------------------------------|--------------------------------------------------------------------------------|
+| **`WEAR`**  | `wear` and `wield` commands, before items move.         | Armor weight restrictions, weapon class proficiencies, alignment-attuned gear. |
+| **`CAST`**  | Pre-warmup spellcasting checks (before casting begins). | Magic school affinities (arcane vs. divine), element specializations.          |
+| **`ENTER`** | All room transitions that trigger `before_enter`.       | Guild hall access, level-gated zones, class chambers.                          |
+| **`LEARN`** | Skill acquisition via `world.setSkill()`.               | Restricting trainer skill progression to matching classes.                     |
 
 ---
 
 ## 3. Golden Rule: Check Traits, Not Choices!
 
-When writing restriction logic, **always inspect the actor's traits (`actor.hasTrait()`), never their choices (`actor.choices`)**.
+When writing restriction logic, **always inspect the actor's traits (`actor.hasTrait()`), never their choices
+(`actor.choices`)**.
 
 ```kotlin
 // BAD: Only works for players, ignores NPCs entirely!
@@ -62,15 +68,19 @@ if (actor.hasTrait("mage")) { ... }
 ```
 
 ### Why This Matters:
-1. **Mobs have no choices:** NPCs never participate in the character creation sequence, so `actor.choices` is always empty for mobs.
-2. **Unified NPC Behavior:** If a course world creates an NPC trainer with `mob("archmage", traits = ["mage"])`, that NPC automatically shares the same permissions and restrictions as player mages.
+
+1. **Mobs have no choices:** NPCs never participate in the character creation sequence, so `actor.choices` is always
+   empty for mobs.
+2. **Unified NPC Behavior:** If a course world creates an NPC trainer with `mob("archmage", traits = ["mage"])`, that
+   NPC automatically shares the same permissions and restrictions as player mages.
 3. **Decoupling:** Your restriction rules remain independent of however creation choices happen to be named or grouped.
 
 ---
 
 ## 4. Bridging Content with Tags
 
-The engine core attaches no built-in semantic rules to item types or room names. Instead, **tags** serve as the contract between Starlark world content and Kotlin plugin code:
+The engine core attaches no built-in semantic rules to item types or room names. Instead, **tags** serve as the contract
+between Starlark world content and Kotlin plugin code:
 
 ### Tagging in Starlark:
 
@@ -104,7 +114,8 @@ In your Kotlin plugin, you simply inspect the `tags` property on `PluginItem`, `
 
 ## 5. Walkthrough of Restrictions in `HeritagePlugin.kt`
 
-Let's examine how [`HeritagePlugin.kt`](../../src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt) implements all four points:
+Let's examine how [`HeritagePlugin.kt`](../../src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt) implements all
+four points:
 
 ### 1. Armor Restriction (`WEAR`)
 
@@ -120,7 +131,8 @@ r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") 
 }
 ```
 
-If an actor carrying the `mage` trait attempts to `wear plate_cuirass`, the item remains in their inventory, and they are told: `"Your spellcraft can't work through that much metal."`
+If an actor carrying the `mage` trait attempts to `wear plate_cuirass`, the item remains in their inventory, and they
+are told: `"Your spellcraft can't work through that much metal."`
 
 ### 2. Magic School Restrictions (`CAST`)
 
@@ -143,11 +155,13 @@ r.addRestriction(
 }
 ```
 
-This check runs before the spell warmup starts. If vetoed, the cast does not initiate, no mana is deducted, and no lag is applied.
+This check runs before the spell warmup starts. If vetoed, the cast does not initiate, no mana is deducted, and no lag
+is applied.
 
 ### 3. Guild Room Security & Staff Bypasses (`ENTER`)
 
-Rooms tagged `guild_<class>` admit only characters carrying that class trait. However, world administrators and instructors should not be locked out of rooms:
+Rooms tagged `guild_<class>` admit only characters carrying that class trait. However, world administrators and
+instructors should not be locked out of rooms:
 
 ```kotlin
 r.addRestriction(
@@ -177,9 +191,13 @@ r.addRestriction(
 ```
 
 #### Movement Behavior on Refusal:
-* **Walking (`north`, `east`, etc.):** The player is stopped in their current room, shown the refusal message, and suffers **no lag penalty**.
-* **Fleeing (`flee`):** If a fleeing character rolls an exit into a forbidden room, the flee fails, and normal flee recovery lag applies.
-* **Mob Navigation:** Mobs attempting to wander into a restricted room simply fail their step and remain where they are. A wandering NPC with `traits = ["mage"]` passes through `guild_mage` rooms freely!
+
+* **Walking (`north`, `east`, etc.):** The player is stopped in their current room, shown the refusal message, and
+  suffers **no lag penalty**.
+* **Fleeing (`flee`):** If a fleeing character rolls an exit into a forbidden room, the flee fails, and normal flee
+  recovery lag applies.
+* **Mob Navigation:** Mobs attempting to wander into a restricted room simply fail their step and remain where they are.
+  A wandering NPC with `traits = ["mage"]` passes through `guild_mage` rooms freely!
 * **Teleportation (`teleport` / `@goto`):** The transition is blocked before the entity moves.
 
 ### 4. Skill Training Restrictions (`LEARN`)
@@ -203,7 +221,8 @@ r.addRestriction(
 }
 ```
 
-If a script or plugin calls `world.setSkill(actor, "//skills:magic_missile", 25)` on a warrior, the call is rejected with an `IllegalArgumentException` containing the refusal message.
+If a script or plugin calls `world.setSkill(actor, "//skills:magic_missile", 25)` on a warrior, the call is rejected
+with an `IllegalArgumentException` containing the refusal message.
 
 ---
 
@@ -211,8 +230,12 @@ If a script or plugin calls `world.setSkill(actor, "//skills:magic_missile", 25)
 
 To ensure server stability, the engine wraps every restriction check in an exception guard:
 
-* **Fail-Open Policy:** If your restriction lambda throws an unhandled exception (e.g. `NullPointerException`), the engine catches it, logs a `"plugin"` diagnostic, and **allows the action**. This prevents buggy plugins from permanently trapping characters in rooms or bricking core movement.
-* **Execution Order:** Multiple restrictions registered at the same point execute in plugin-id order, followed by registration order within each plugin. The **first restriction to return a non-null message wins**, and subsequent checks are skipped.
+* **Fail-Open Policy:** If your restriction lambda throws an unhandled exception (e.g. `NullPointerException`), the
+  engine catches it, logs a `"plugin"` diagnostic, and **allows the action**. This prevents buggy plugins from
+  permanently trapping characters in rooms or bricking core movement.
+* **Execution Order:** Multiple restrictions registered at the same point execute in plugin-id order, followed by
+  registration order within each plugin. The **first restriction to return a non-null message wins**, and subsequent
+  checks are skipped.
 
 ---
 
@@ -224,4 +247,5 @@ To ensure server stability, the engine wraps every restriction check in an excep
 * Check `actor.role` to allow builders and instructors to bypass restrictions.
 * Refusals cancel actions without lag; unhandled exceptions fail open and log diagnostics.
 
-In **[Tutorial 04: Runtime Choice Changes, Builtins & Commands](04_runtime_choice_changes_and_builtins.md)**, we will see what happens when choices change in play and how invalid equipment is automatically unequipped.
+In **[Tutorial 04: Runtime Choice Changes, Builtins & Commands](04_runtime_choice_changes_and_builtins.md)**, we will
+see what happens when choices change in play and how invalid equipment is automatically unequipped.

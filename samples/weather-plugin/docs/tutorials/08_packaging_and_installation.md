@@ -99,6 +99,7 @@ flowchart TD
 
 * **Unpinned Jars are Ignored:** Any `.jar` file present in the `plugins/` directory that is not pinned in `MODULE.gups`
   is safely ignored with a warning:
+
   ```text
   warning: plugins/rogue.jar is not pinned in MODULE.gups; ignoring it
   ```

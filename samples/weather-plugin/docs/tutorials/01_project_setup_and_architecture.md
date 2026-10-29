@@ -23,8 +23,8 @@ plugins are compiled against an explicit API boundary—`:plugin-api`—and neve
 
 ## 2. Gradle Build Configuration
 
-In the `samples/weather-plugin` project, the build configuration is defined in [
-`build.gradle.kts`](../../build.gradle.kts):
+In the `samples/weather-plugin` project, the build configuration is defined in
+[`build.gradle.kts`](../../build.gradle.kts):
 
 ```kotlin
 plugins { id("gups.kotlin-module") }
@@ -123,24 +123,24 @@ class WeatherPlugin : GupsPlugin {
 ### Essential Properties
 
 1. **`id`:**
-    * Must match the regex `[a-z][a-z0-9_]*`.
-    * Starlark scripts access your plugin's builtins and effects through a global namespace object with this name (e.g.
-      `weather.now(room)`).
-    * It cannot collide with reserved language keywords or predeclared engine globals (`module`, `server`, `ctx`,
-      `self`, `room`, `rules_ctx`, `t`, `w`, `p`, `diagnostic`).
+   * Must match the regex `[a-z][a-z0-9_]*`.
+   * Starlark scripts access your plugin's builtins and effects through a global namespace object with this name (e.g.
+     `weather.now(room)`).
+   * It cannot collide with reserved language keywords or predeclared engine globals (`module`, `server`, `ctx`, `self`,
+     `room`, `rules_ctx`, `t`, `w`, `p`, `diagnostic`).
 2. **`pluginApiVersion`:**
-    * Must equal `PluginApi.VERSION`.
-    * **Zero Compatibility Promises:** GUPS enforces strict binary compatibility. Any change to the plugin interface or
-      facade bumps `PluginApi.VERSION`. The engine refuses plugins built for another version at startup.
+   * Must equal `PluginApi.VERSION`.
+   * **Zero Compatibility Promises:** GUPS enforces strict binary compatibility. Any change to the plugin interface or
+     facade bumps `PluginApi.VERSION`. The engine refuses plugins built for another version at startup.
 3. **`requiredFeatures`:**
-    * Declares optional engine feature modules (such as `"leveling"`, `"combat"`, `"skills"`, or `"track"`) that the
-      plugin requires (SPEC §3.10).
-    * If a world loads your plugin with one of these features disabled in `MODULE.gups`, the engine cleanly skips the
-      plugin with an informative warning: `plugin '<id>': needs the '<feature>' feature`.
+   * Declares optional engine feature modules (such as `"leveling"`, `"combat"`, `"skills"`, or `"track"`) that the
+     plugin requires (SPEC §3.10).
+   * If a world loads your plugin with one of these features disabled in `MODULE.gups`, the engine cleanly skips the
+     plugin with an informative warning: `plugin '<id>': needs the '<feature>' feature`.
 4. **`register(r: PluginRegistry)`:**
-    * Invoked once at startup to register builtins, commands, effects, GMCP producers, and lifecycle hooks.
-    * **Atomic Registration:** If `register()` throws an exception, or attempts to register a conflicting command or
-      invalid name, the entire registration is rolled back and the plugin is skipped with a warning.
+   * Invoked once at startup to register builtins, commands, effects, GMCP producers, and lifecycle hooks.
+   * **Atomic Registration:** If `register()` throws an exception, or attempts to register a conflicting command or
+     invalid name, the entire registration is rolled back and the plugin is skipped with a warning.
 
 ---
 

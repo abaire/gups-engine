@@ -27,10 +27,10 @@ room("gate",
   From another package, it is addressed as `//zones/tutorial:gate`.
 * **`name` & `desc`:** What players see when entering or typing `look`.
 * **`flags`:**
-    * `"dead_end_ok"`: By default, the `gups lint` CI check rejects any room that has only one exit (a dead end) unless
-      this flag is explicitly set.
-    * `"always_active"`: Keeps the room active in the world simulation even when no players are nearby (disabling the
-      reality bubble sleep; see SPEC §5.9).
+  * `"dead_end_ok"`: By default, the `gups lint` CI check rejects any room that has only one exit (a dead end) unless
+    this flag is explicitly set.
+  * `"always_active"`: Keeps the room active in the world simulation even when no players are nearby (disabling the
+    reality bubble sleep; see SPEC §5.9).
 
 ---
 
@@ -50,8 +50,8 @@ exits = [
 The engine expects standard world navigation to be reciprocal. If room `:hall` has `exit(DIR.south, to = ":gate")`, then
 `:gate` should have `exit(DIR.north, to = ":hall")`.
 
-* If an exit is intentionally one-way (e.g. falling down a chute, jumping off a cliff), you **must** set
-  `one_way = True` to prevent `gups lint` from failing.
+* If an exit is intentionally one-way (e.g. falling down a chute, jumping off a cliff), you **must** set `one_way =
+  True` to prevent `gups lint` from failing.
 
 ---
 
@@ -87,7 +87,7 @@ room("hall",
 Unlike classic MUDs where everyone in a room is in immediate melee reach, GUPS features an intra-room track system
 configured by `size`:
 
-| Size           | Track Slots | Description                                                                       |
+|      Size      | Track Slots |                                    Description                                    |
 |----------------|-------------|-----------------------------------------------------------------------------------|
 | `SIZE.cramped` | 1 slot      | Tight spaces (closet, elevator, tunnel). Everyone is at distance 0 (melee range). |
 | `SIZE.normal`  | 3 slots     | Standard rooms (hallway, cottage, cave). Slots: 0 (front), 1 (mid), 2 (back).     |
@@ -138,11 +138,13 @@ room("gate",
 
 ## 6. Room and Region Rules Modifiers
 
-While hooks respond to events, **modifiers** allow rooms and regions to dynamically intercept and adjust engine rule calculations—such as damage dealt in combat, hit chances, movement costs, or casting permissions.
+While hooks respond to events, **modifiers** allow rooms and regions to dynamically intercept and adjust engine rule
+calculations—such as damage dealt in combat, hit chances, movement costs, or casting permissions.
 
 ### Declaring a Modifier Function
 
-A modifier is a top-level function that receives the read-only rules context (`ctx`) and the current accumulated value (`base`):
+A modifier is a top-level function that receives the read-only rules context (`ctx`) and the current accumulated value
+(`base`):
 
 ```python
 def _blunted(ctx, base):
@@ -151,7 +153,8 @@ def _blunted(ctx, base):
     return max(1, base // 2)
 ```
 
-* **Read-Only Context:** Modifiers adjust numbers; `ctx` is strictly read-only (it has no verbs like `ctx.damage` or `ctx.send`).
+* **Read-Only Context:** Modifiers adjust numbers; `ctx` is strictly read-only (it has no verbs like `ctx.damage` or
+  `ctx.send`).
 * **Available Modifier Points:**
   * `MODIFIER.to_hit`: Adjusts attack hit chance in percent (`base`: `int`).
   * `MODIFIER.damage`: Adjusts raw attack damage before mitigation (`base`: `int`).
@@ -191,17 +194,17 @@ room("arena",
 
 ### The Modifier Execution Chain
 
-When a rules calculation runs (e.g., computing attack damage), the engine processes modifiers in a strict deterministic order:
-1. **Base Rule:** Calculated by the world ruleset (e.g. `rules.damage(ctx)` in `rules/combat.star`).
-2. **Zone Package Modifiers:** Set in `package(kind = "zone", modifiers = {...})`.
-3. **Region Modifiers:** From regions tagged on the room, sorted alphabetically by region name.
-4. **Room Modifiers:** From the specific `room(modifiers = {...})`.
-5. **Actor Affect Modifiers:** Active temporary affects on the actor.
-6. **Worn Item Modifiers:** From equipped gear, evaluated in `equipment_slots()` order.
+When a rules calculation runs (e.g., computing attack damage), the engine processes modifiers in a strict deterministic
+order: 1. **Base Rule:** Calculated by the world ruleset (e.g. `rules.damage(ctx)` in `rules/combat.star`). 2. **Zone
+Package Modifiers:** Set in `package(kind = "zone", modifiers = {...})`. 3. **Region Modifiers:** From regions tagged on
+the room, sorted alphabetically by region name. 4. **Room Modifiers:** From the specific `room(modifiers = {...})`. 5.
+**Actor Affect Modifiers:** Active temporary affects on the actor. 6. **Worn Item Modifiers:** From equipped gear,
+evaluated in `equipment_slots()` order.
 
 ### Inspecting Modifiers in Action
 
-You can see every step of the modifier chain execute in real time using the `@trace rules` command in telnet or `w.trace(True)` in test scripts:
+You can see every step of the modifier chain execute in real time using the `@trace rules` command in telnet or
+`w.trace(True)` in test scripts:
 
 ```
 rules.damage base=12 → region:practice_grounds ×0.5 → 6
@@ -211,8 +214,8 @@ rules.damage base=12 → region:practice_grounds ×0.5 → 6
 
 ## 7. Room Tags and the Rules Module
 
-A room can carry `tags`, plain identifiers the engine gives no meaning. The tutorial's tar pit
-(west of the hall) is tagged `sticky_floor`:
+A room can carry `tags`, plain identifiers the engine gives no meaning. The tutorial's tar pit (west of the hall) is
+tagged `sticky_floor`:
 
 ```python
 room("tar_pit",
@@ -225,8 +228,8 @@ room("tar_pit",
 )
 ```
 
-The tag does something only because `rules/combat.star` reads it. The rules module sets the
-recovery lag of `advance` and `retreat`, and the template doubles it in a tagged room:
+The tag does something only because `rules/combat.star` reads it. The rules module sets the recovery lag of `advance`
+and `retreat`, and the template doubles it in a tagged room:
 
 ```python
 def _footing(ctx):
@@ -238,9 +241,9 @@ def advance_lag(ctx):
     return 2 * _footing(ctx)
 ```
 
-A tag means only what the world's rules or plugins make of it. Since the rules package is
-world-wide, a tag such as `sticky_floor` is a contract between the rules and every zone that
-uses it: tag a room in any zone and the rules apply there.
+A tag means only what the world's rules or plugins make of it. Since the rules package is world-wide, a tag such as
+`sticky_floor` is a contract between the rules and every zone that uses it: tag a room in any zone and the rules apply
+there.
 
 ---
 
@@ -248,7 +251,7 @@ uses it: tag a room in any zone and the rules apply there.
 
 * **Reference Implementation:** [`template-world/zones/tutorial/rooms.star`](../../zones/tutorial/rooms.star)
 * **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L942),
-  [§4.6: Rules Module and the Modifier Chain](../../../docs/SPEC.md#L1277),
-  and [§5.5: Intra-Room Spatial Model](../../../docs/SPEC.md#L2780)
-* **HTML Documentation:** `declarations.html#room`, `declarations.html#region`, `declarations.html#exit`, and `declarations.html#door` in
-  `gups docs`.
+  [§4.6: Rules Module and the Modifier Chain](../../../docs/SPEC.md#L1277), and
+  [§5.5: Intra-Room Spatial Model](../../../docs/SPEC.md#L2780)
+* **HTML Documentation:** `declarations.html#room`, `declarations.html#region`, `declarations.html#exit`, and
+  `declarations.html#door` in `gups docs`.

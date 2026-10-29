@@ -44,7 +44,7 @@ r.addCommand(
 
 The GUPS command dispatcher supports two lanes:
 
-| Lane              | Queue Behavior                                 | Typical Use Cases                                     |
+|       Lane        |                 Queue Behavior                 |                   Typical Use Cases                   |
 |-------------------|------------------------------------------------|-------------------------------------------------------|
 | `PluginLane.FAST` | **Executes immediately** on the current pulse. | Read-only queries: `weather`, `score`, `look`, `help` |
 | `PluginLane.TICK` | **Queued on the actor's action queue**.        | Tactical actions: spells, attacks, opening containers |

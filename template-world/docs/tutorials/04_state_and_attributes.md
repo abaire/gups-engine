@@ -49,8 +49,8 @@ ctx.set_attr(ctx.actor, "greeted", True)
 ```
 
 * **Scope:** This attribute is bound to the player character.
-* **Mobility:** If the player leaves `:hall`, travels to another zone, and returns later,
-  `ctx.get_attr(ctx.actor, "greeted")` will still return `True`. The player is not greeted again.
+* **Mobility:** If the player leaves `:hall`, travels to another zone, and returns later, `ctx.get_attr(ctx.actor,
+  "greeted")` will still return `True`. The player is not greeted again.
 
 ### Room-Attached State (`ctx.self` or room)
 
@@ -93,16 +93,18 @@ flowchart LR
 
 ### The Rules of Namespacing:
 
-1. **Writing is strictly isolated:** A package can **only write its own namespace**. Calling
-   `ctx.set_attr(actor, "other_zone:flag", True)` is a runtime script error.
+1. **Writing is strictly isolated:** A package can **only write its own namespace**. Calling `ctx.set_attr(actor,
+   "other_zone:flag", True)` is a runtime script error.
 2. **Short keys within your package:** Within package `zones/tutorial`, writing or reading `"greeted"` automatically
    resolves to `"tutorial:greeted"`.
 3. **Cross-package reads require qualified keys:** If `zones/forest` wants to check if a player was greeted in the
    tutorial, it can read the fully-qualified key:
+
    ```python
    # Inside zones/forest:
    has_completed_tutorial = ctx.get_attr(ctx.actor, "tutorial:greeted", False)
    ```
+
    However, `zones/forest` can **never** modify or delete `"tutorial:greeted"`.
 
 ---
@@ -124,9 +126,9 @@ SQLite Database (.gups/world.db)
 * **Room and Item Persistence:** Attributes set on rooms and items are serialized during scheduled world checkpoints
   (configured by `checkpoint_minutes` in `MODULE.gups`).
 * **Allowed Data Types:** Attributes support primitive Starlark types:
-    * `bool`, `int`, `float`, `str`
-    * Lists and dictionaries of primitives
-    * *Note:* You cannot store entity objects (e.g. `ctx.actor`), functions, or modules inside an attribute.
+  * `bool`, `int`, `float`, `str`
+  * Lists and dictionaries of primitives
+  * *Note:* You cannot store entity objects (e.g. `ctx.actor`), functions, or modules inside an attribute.
 
 ---
 
@@ -162,8 +164,8 @@ At runtime, relative labels and attribute keys resolve against the package of th
 Attributes are meant for script logic. Core game mechanics are built into the engine and must **not** be stored in
 attributes:
 
-| Game Concept  | How to Read / Modify                           | NOT Attributes                         |
-|---------------|------------------------------------------------|----------------------------------------|
+| Game Concept  |              How to Read / Modify              |            NOT Attributes             |
+|---------------|------------------------------------------------|---------------------------------------|
 | Health / Mana | `ctx.heal()`, `ctx.damage()`, `actor.hp`       | `ctx.set_attr(actor, "hp", ...)` ❌    |
 | Position      | `exit()`, `ctx.teleport()`                     | `ctx.set_attr(actor, "room", ...)` ❌  |
 | Inventory     | `ctx.give()`, `ctx.take()`, `actor.has_item()` | `ctx.set_attr(actor, "items", ...)` ❌ |
@@ -175,6 +177,6 @@ attributes:
 
 * **Reference Implementation:** [`template-world/zones/tutorial/rooms.star`](../../zones/tutorial/rooms.star#L32-L39)
   and [`template-world/lib/quest.star`](../../lib/quest.star)
-* **Specification:** [SPEC.md §3.7: Attribute Namespacing](../../../docs/SPEC.md#L739)
-  and [§3.6: Persistence Schema](../../../docs/SPEC.md#L698)
+* **Specification:** [SPEC.md §3.7: Attribute Namespacing](../../../docs/SPEC.md#L739) and
+  [§3.6: Persistence Schema](../../../docs/SPEC.md#L698)
 * **HTML Documentation:** `ctx.html#get_attr` and `ctx.html#set_attr` in `gups docs`.

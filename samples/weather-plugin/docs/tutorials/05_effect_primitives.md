@@ -24,8 +24,8 @@ skill(
 
 When a character casts `"rain_call"`, the engine's combat resolution system invokes your plugin's effect handler.
 
-Plugin effects work interchangeably with engine effects: they can be composed into sequences
-(`sequence(damage("fire", 10), weather.soak(pulses = 4))`), scheduled over time, or triggered by magic items.
+Plugin effects work interchangeably with engine effects: they can be composed into sequences (`sequence(damage("fire",
+10), weather.soak(pulses = 4))`), scheduled over time, or triggered by magic items.
 
 ---
 
@@ -142,8 +142,8 @@ call.world.applyAffect(
 
 ## 6. Verifying Effect Integration
 
-To see this in action, review the integration test in [
-`WeatherPluginTest.kt`](../../src/test/kotlin/gups/sample/weather/WeatherPluginTest.kt):
+To see this in action, review the integration test in
+[`WeatherPluginTest.kt`](../../src/test/kotlin/gups/sample/weather/WeatherPluginTest.kt):
 
 ```python
 # zones/valley/valley_test.star

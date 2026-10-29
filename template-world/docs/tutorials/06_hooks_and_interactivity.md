@@ -9,7 +9,7 @@ lifecycle notifications and action vetoes, how dialogue works, sensory perceptio
 
 GUPS categorizes hooks into two families:
 
-| Hook Type        | Naming                                    | Purpose                                    | Veto Allowed?            |
+|    Hook Type     |                  Naming                   |                  Purpose                   |      Veto Allowed?       |
 |------------------|-------------------------------------------|--------------------------------------------|--------------------------|
 | **Notification** | `on_*` (`on_enter`, `on_say`, `on_death`) | Respond to events that *already happened*. | No                       |
 | **Interceptor**  | `before_*` (`before_exit`, `before_use`)  | Observe an action before it takes effect.  | **Yes** via `ctx.deny()` |
@@ -86,6 +86,7 @@ mob("guide",
 
 * A mob with `senses = {"hearing": 1}` hears loud sounds (combat, shouting, heavy doors) from rooms 1 step away.
 * Exits can block senses using `senses_blocked`:
+
   ```python
   exit(DIR.east, to = ":quiet_room", senses_blocked = [SENSE.sound, SENSE.noise])
   ```
@@ -128,6 +129,6 @@ mob("training_dummy",
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star)
-* **Specification:** [SPEC.md §4.4: Hook Catalog](../../../docs/SPEC.md#L1102)
-  and [§5.7: Adjacent-Room Perception](../../../docs/SPEC.md#L2863)
+* **Specification:** [SPEC.md §4.4: Hook Catalog](../../../docs/SPEC.md#L1102) and
+  [§5.7: Adjacent-Room Perception](../../../docs/SPEC.md#L2863)
 * **HTML Documentation:** `hooks.html` and `ctx.html#after` in `gups docs`.

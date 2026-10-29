@@ -61,8 +61,8 @@ r.addBuiltin(
 * **`params`:** Ordered list of `PluginParam` definitions.
 * **`returnType`:** Documentation type string (e.g. `"str"`, `"int"`, `"dict"`).
 * **The Execution Lambda:** Receives `(world: PluginWorld, pos: List<Any?>, named: Map<String, Any?>)`.
-    * `pos` contains arguments bound in declared positional order.
-    * `named` contains arguments bound by name.
+  * `pos` contains arguments bound in declared positional order.
+  * `named` contains arguments bound by name.
 
 ---
 
@@ -95,7 +95,7 @@ The engine handles bidirection type conversions between the Starlark runtime and
 
 ### Starlark to Kotlin (Arguments)
 
-| Starlark Type            | Bound Kotlin Type             |
+|      Starlark Type       |       Bound Kotlin Type       |
 |--------------------------|-------------------------------|
 | Integer (`42`)           | `java.lang.Long`              |
 | Float (`3.14`)           | `java.lang.Double`            |
@@ -110,7 +110,7 @@ The engine handles bidirection type conversions between the Starlark runtime and
 
 ### Kotlin to Starlark (Return Values)
 
-| Kotlin Return Value   | Resulting Starlark Value |
+|  Kotlin Return Value  | Resulting Starlark Value |
 |-----------------------|--------------------------|
 | `null` or `Unit`      | `None`                   |
 | `Int` or `Long`       | Starlark Integer         |
@@ -171,6 +171,7 @@ A builtin receives the `PluginWorld` of the hook or command that invoked it. Con
   commands.
 * **Forbidden:** Called in top-level package code during world loading, or in a test function's own body outside a hook.
   Calling a builtin outside world execution throws an explicit error:
+
   ```text
   weather.now() can only be called while the world runs, from a hook or command
   ```

@@ -6,12 +6,15 @@ This repository is the template for a term's GUPS course world.
 
 1. Click **Use this template** on GitHub to create the term's repository (e.g. `world-2027`).
 2. Clone your repository locally:
+
    ```bash
    git clone git@github.com:<org>/<repo>.git
    cd <repo>
    ```
 3. Check `MODULE.gups` to configure the engine version, checkpoint cadence, and default starting room.
-4. Update `CODEOWNERS` to replace `@CHANGE_ME_INSTRUCTOR` with the instructor's GitHub handle (e.g. `@prof-smith`), and assign student teams to their zone packages:
+4. Update `CODEOWNERS` to replace `@CHANGE_ME_INSTRUCTOR` with the instructor's GitHub handle (e.g. `@prof-smith`), and
+   assign student teams to their zone packages:
+
    ```
    /MODULE.gups @prof-smith
    /rules/ @prof-smith
@@ -32,8 +35,8 @@ Create student accounts from your class roster CSV (`login,github_handle,role`):
 gups import-roster roster.csv --world .
 ```
 
-This outputs each student's login and initial 7-day setup code to distribute to students.
-If the course server is already running with an admin port, import directly through the admin port:
+This outputs each student's login and initial 7-day setup code to distribute to students. If the course server is
+already running with an admin port, import directly through the admin port:
 
 ```bash
 gups import-roster roster.csv --admin 127.0.0.1:9090
@@ -41,11 +44,10 @@ gups import-roster roster.csv --admin 127.0.0.1:9090
 
 ## The World Schema
 
-`MODULE.gups` declares the world's stats, vitals, damage types and channels, with a comment per
-argument. `rules/combat.star` gives them meaning: starting values, damage, costs, regeneration
-and when an actor is incapacitated or dies. The engine has no built-in rules, so every function
-in `rules/combat.star` is required. Changing a name in the schema changes what saved
-characters mean, so a server refuses to start on a database made with different names until it
+`MODULE.gups` declares the world's stats, vitals, damage types and channels, with a comment per argument.
+`rules/combat.star` gives them meaning: starting values, damage, costs, regeneration and when an actor is incapacitated
+or dies. The engine has no built-in rules, so every function in `rules/combat.star` is required. Changing a name in the
+schema changes what saved characters mean, so a server refuses to start on a database made with different names until it
 is started once with `gups serve --wipe`, which deletes every character and item.
 
 ## Running Locally
@@ -72,7 +74,8 @@ gups lint //...
 
 ## World Building & Tutorials
 
-To learn how to create zones, rooms, mobs, items, and quests using Starlark, see the **[World Builder's Guide](docs/tutorials/README.md)**:
+To learn how to create zones, rooms, mobs, items, and quests using Starlark, see the
+**[World Builder's Guide](docs/tutorials/README.md)**:
 
 1. [Zone Foundations & Architecture](docs/tutorials/01_zone_foundations.md)
 2. [Rooms, Exits, and Navigation](docs/tutorials/02_rooms_and_navigation.md)
@@ -106,26 +109,30 @@ gups deploy --commit <SHA> --admin 127.0.0.1:9090
 
 ## Production Migration Snapshots
 
-Every pull request runs static and dynamic CI gates, including the **Migration Check** (gate 5),
-which verifies that prototype version bumps have `migrate()` definitions and reconciliation produces
-no unexpected tombstones.
+Every pull request runs static and dynamic CI gates, including the **Migration Check** (gate 5), which verifies that
+prototype version bumps have `migrate()` definitions and reconciliation produces no unexpected tombstones.
 
 To provide the baseline snapshot for the migration check:
 
 1. Generate a sanitized snapshot (personal data such as account passwords and tokens are stripped):
    - Against a running server:
+
      ```bash
      gups snapshot --sanitized --out snapshot.db --admin 127.0.0.1:9090
      ```
    - Offline directly from the database:
+
      ```bash
      gups snapshot --sanitized --out snapshot.db --world .
      ```
 2. Create a GitHub release tagged `migration-snapshot` in this repository:
+
    ```bash
    gh release create migration-snapshot --title "Migration Snapshot" snapshot.db
    ```
-3. To update the snapshot periodically during the term, recreate or upload `snapshot.db` to the `migration-snapshot` release tag:
+3. To update the snapshot periodically during the term, recreate or upload `snapshot.db` to the `migration-snapshot`
+   release tag:
+
    ```bash
    gh release upload migration-snapshot snapshot.db --clobber
    ```

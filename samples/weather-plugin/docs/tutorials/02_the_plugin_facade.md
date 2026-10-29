@@ -12,7 +12,7 @@ attribute namespaces guarantee isolation.
 
 To preserve game invariants and ensure plugins cannot corrupt internal state, the engine enforces strict encapsulation:
 
-| Internal Engine Concept | Facade Exposure to Plugins | Description                                         |
+| Internal Engine Concept | Facade Exposure to Plugins |                     Description                     |
 |-------------------------|----------------------------|-----------------------------------------------------|
 | `World`                 | `PluginWorld`              | Engine facade for verbs, time, RNG, and diagnostics |
 | `Room`                  | `PluginRoom`               | Read-only view of a room and its contents           |
@@ -37,10 +37,10 @@ the engine's single world thread**.
   `PluginWorld` or entities. State reads are always consistent.
 * **Cooperative Multitasking:** Because you share the world thread with the entire game simulation (combat pulses,
   network I/O, script ticks), **you must never perform blocking operations**.
-    * Do not call `Thread.sleep()`.
-    * Do not perform synchronous disk reads or file writes.
-    * Do not execute blocking HTTP or network requests.
-    * Keep algorithms fast and deterministic.
+  * Do not call `Thread.sleep()`.
+  * Do not perform synchronous disk reads or file writes.
+  * Do not execute blocking HTTP or network requests.
+  * Keep algorithms fast and deterministic.
 
 ---
 
@@ -155,8 +155,8 @@ world.delAttr(actor, "chilled_stacks")
    writes `weather:rain_soaked`.
 2. **Write Isolation:** A plugin can only write to its own namespace. Trying to write `quest:stage` from the `weather`
    plugin is forbidden.
-3. **Cross-Namespace Reads:** Plugins can read attributes from other namespaces (such as
-   `world.getAttr(actor, "quest:completed")`), enabling seamless integration with course world scripts.
+3. **Cross-Namespace Reads:** Plugins can read attributes from other namespaces (such as `world.getAttr(actor,
+   "quest:completed")`), enabling seamless integration with course world scripts.
 
 ---
 

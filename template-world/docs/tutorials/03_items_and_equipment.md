@@ -68,14 +68,15 @@ item("leather_cap",
      )
 ```
 
-* **Slot Allocation:** `wear = "head"` places the item in the head slot. If you assign a slot family like
-  `wear = "finger"`, the engine equips it to the first open finger slot (`finger_1`, `finger_2`).
+* **Slot Allocation:** `wear = "head"` places the item in the head slot. If you assign a slot family like `wear =
+  "finger"`, the engine equips it to the first open finger slot (`finger_1`, `finger_2`).
 * **Stat Deltas:** `stat_deltas = stats(...)` modifies the wearer's stats as long as the item remains equipped. When
   removed, the bonus is automatically subtracted.
 
 ### B. Dynamic Rules Modifiers: `modifiers`
 
-Items can also attach dynamic rules modifiers that participate directly in the rules calculation chain (such as boosting damage, hit chance, or initiative) while equipped:
+Items can also attach dynamic rules modifiers that participate directly in the rules calculation chain (such as boosting
+damage, hit chance, or initiative) while equipped:
 
 ```python
 def _heavy_strike(ctx, base):
@@ -92,7 +93,8 @@ item("spiked_gauntlets",
      )
 ```
 
-* **Execution:** Item modifiers run as the final stage of the modifier chain (after zone, region, room, and affect modifiers), evaluated in `equipment_slots()` order.
+* **Execution:** Item modifiers run as the final stage of the modifier chain (after zone, region, room, and affect
+  modifiers), evaluated in `equipment_slots()` order.
 * **Inspecting:** Just like room modifiers, equipped item modifiers can be traced during combat with `@trace rules`.
 
 ---
@@ -155,15 +157,18 @@ Players can `open satchel`, `put sword in satchel`, and `look in satchel`.
 Items are created and transferred through several mechanisms:
 
 * **Giving directly to an actor:**
+
   ```python
   ctx.give(ctx.actor, ":brass_key")
   ```
+
   Spawns a new instance of `:brass_key` straight into the player's inventory (used in quests and NPC rewards).
-* **Placing in a room at reset:**
-  Rooms can restock items during their `on_reset` hook:
+
+* **Placing in a room at reset:** Rooms can restock items during their `on_reset` hook:
+
   ```python
   def _restock_armory(ctx):
-      if not ctx.room_has_item(":practice_sword"):
+    if not ctx.room_has_item(":practice_sword"):
           ctx.spawn(":practice_sword", at = ctx.self)
   ```
 * **Custody Logging:** Every item transfer between rooms, containers, and players is recorded in SQLite (`item_events`)
@@ -174,6 +179,6 @@ Items are created and transferred through several mechanisms:
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/items.star`](../../zones/tutorial/items.star)
-* **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L979)
-  and [§3.6: Persistence Schema](../../../docs/SPEC.md#L713)
+* **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L979) and
+  [§3.6: Persistence Schema](../../../docs/SPEC.md#L713)
 * **HTML Documentation:** `declarations.html#item` and `declarations.html#container` in `gups docs`.

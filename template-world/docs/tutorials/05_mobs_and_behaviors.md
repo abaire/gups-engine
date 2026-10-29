@@ -32,8 +32,8 @@ mob("guide",
   correspond to your world's `MODULE.gups` schema, not hardcoded engine terms.
 * **`stats`:** Base attributes (e.g. `stats(str = 14, dex = 12, con = 15)`).
 * **`senses`:** Configures sensory perception:
-    * `"sight": 0` — sees in the same room.
-    * `"hearing": 1` — hears noise from adjacent rooms connected by exits.
+  * `"sight": 0` — sees in the same room.
+  * `"hearing": 1` — hears noise from adjacent rooms connected by exits.
 * **`dormant_recovery`:** Sets what happens when a mob wakes from the reality bubble sleep (`"full"`, `"regen"`, or
   `"none"`).
 
@@ -145,9 +145,8 @@ When a zone reset triggers:
 
 ## Reference Links
 
-* **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star)
-*
-**Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L965), [§4.7: Behaviors](../../../docs/SPEC.md#L1433),
-and [§4.8: Mob Think](../../../docs/SPEC.md#L1460)
-* **HTML Documentation:** `declarations.html#mob`, `declarations.html#spawn`, and `effects.html#behaviors` in
-  `gups docs`.
+* **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star) *
+  **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L965),
+  [§4.7: Behaviors](../../../docs/SPEC.md#L1433), and [§4.8: Mob Think](../../../docs/SPEC.md#L1460)
+* **HTML Documentation:** `declarations.html#mob`, `declarations.html#spawn`, and `effects.html#behaviors` in `gups
+  docs`.

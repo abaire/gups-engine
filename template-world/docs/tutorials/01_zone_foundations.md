@@ -38,10 +38,10 @@ package(
 ```
 
 * **Package kinds:**
-    * `zone`: Student packages holding rooms, mobs, and items.
-    * `lib`: Shared utility code (e.g. `//lib:quest.star`).
-    * `rules`: Global game mechanics (e.g. `//rules:combat.star`).
-    * `skills`: Global spell and skill declarations.
+  * `zone`: Student packages holding rooms, mobs, and items.
+  * `lib`: Shared utility code (e.g. `//lib:quest.star`).
+  * `rules`: Global game mechanics (e.g. `//rules:combat.star`).
+  * `skills`: Global spell and skill declarations.
 * **Evaluation order:** The engine evaluates all non-test `.star` content files in alphabetical order. Files ending in
   `_test.star` are ignored during normal world loading and run only under `gups test`.
 
@@ -88,26 +88,27 @@ exit(DIR.south, to="//zones/forest:clearing")
 GUPS scripts are written in **Starlark** (a dialect of Python originally designed for Bazel). While syntax resembles
 Python, Starlark enforces strict safety and determinism constraints:
 
-1. **Top-Level Code is Frozen After Loading:**  
-   Module-level variables are completely immutable once the file finishes evaluating.
+1. **Top-Level Code is Frozen After Loading:** Module-level variables are completely immutable once the file finishes
+   evaluating.
+
    ```python
    # ALLOWED: Read-only constants
    MAX_GOLD = 100
 
    # FORBIDDEN: Mutating a global in a hook
    def _on_enter(ctx):
-       # ERROR! Global variables cannot be reassigned or mutated.
-       # Store dynamic state in attributes instead (see Tutorial 04).
+    # ERROR! Global variables cannot be reassigned or mutated.
+    # Store dynamic state in attributes instead (see Tutorial 04).
    ```
-2. **String Iteration:**  
-   Starlark strings cannot be iterated over directly (`for char in text:` fails). Use `text.elems()` instead:
+2. **String Iteration:** Starlark strings cannot be iterated over directly (`for char in text:` fails). Use
+   `text.elems()` instead:
+
    ```python
    for mark in ",.!?;:'\"".elems():
-       text = text.replace(mark, " ")
+    text = text.replace(mark, " ")
    ```
-3. **No Non-Deterministic Behavior:**  
-   There is no system clock or generic random module in Starlark. Randomness must come through seeded engine primitives
-   or `ctx.random()`.
+3. **No Non-Deterministic Behavior:** There is no system clock or generic random module in Starlark. Randomness must
+   come through seeded engine primitives or `ctx.random()`.
 
 ---
 
@@ -154,6 +155,6 @@ without having to start the server.
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/package.star`](../../zones/tutorial/package.star)
-* **Specification:** [SPEC.md §2.3: Course World Repository](../../../docs/SPEC.md#L213)
-  and [§4.1: Package Declaration](../../../docs/SPEC.md#L923)
+* **Specification:** [SPEC.md §2.3: Course World Repository](../../../docs/SPEC.md#L213) and
+  [§4.1: Package Declaration](../../../docs/SPEC.md#L923)
 * **HTML Documentation:** `declarations.html#package` in generated `gups docs`.

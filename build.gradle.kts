@@ -1,4 +1,7 @@
-plugins { id("gups.ktfmt") }
+plugins {
+  id("gups.ktfmt")
+  id("gups.markdown")
+}
 
 // Module dependency rules. The `checkModuleGraph` task fails the build if any
 // module declares a project dependency that is not listed here. `cli` is the only module
@@ -77,11 +80,22 @@ tasks.named("ktfmtFormat") {
   dependsOn(gradle.includedBuild("build-logic").task(":ktfmtFormat"))
 }
 
-tasks.register("check") {
+tasks.register("markdownCheck") {
   group = "verification"
-  description = "Runs all checks, including the module graph check."
+  description = "Verifies that all markdown files comply with formatting rules."
+  dependsOn("spotlessCheck")
+}
+
+tasks.register("markdownFormat") {
+  group = "formatting"
+  description = "Auto-formats all markdown files using Spotless Flexmark."
+  dependsOn("spotlessApply")
+}
+
+tasks.named("check") {
   dependsOn(checkModuleGraph)
   dependsOn(tasks.named("ktfmtCheck"))
+  dependsOn(tasks.named("markdownCheck"))
   dependsOn(gradle.includedBuild("build-logic").task(":check"))
   dependsOn(codeProjects.map { "${it.path}:check" })
 }

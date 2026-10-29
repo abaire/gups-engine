@@ -1,22 +1,20 @@
 # Changelog
 
-Script-facing changes are listed per `api_version`, with before/after snippets for
-breaking ones.
+Script-facing changes are listed per `api_version`, with before/after snippets for breaking ones.
 
 ## api_version 1 (unreleased)
 
 ### Added `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag`
 
-The recovery lags of `advance`, a successful `retreat`, a failed `retreat_check` and a failed
-`flee` are rules exports instead of fixed engine values. `advance_lag`, `retreat_lag` and
-`retreat_fail_lag` are required with the `track` feature and forbidden without it;
-`flee_fail_lag` goes with `combat`. Each returns the recovery in pulses (an int of at least 0;
-0 means none) and replaces the action's recovery. `ctx.target` is the actor approached,
-retreated from or the pinner, and `ctx.band` the band after the step (`"melee"` for a failed
-retreat); `flee_fail_lag` has neither. A rules error gives 0.
+The recovery lags of `advance`, a successful `retreat`, a failed `retreat_check` and a failed `flee` are rules exports
+instead of fixed engine values. `advance_lag`, `retreat_lag` and `retreat_fail_lag` are required with the `track`
+feature and forbidden without it; `flee_fail_lag` goes with `combat`. Each returns the recovery in pulses (an int of at
+least 0; 0 means none) and replaces the action's recovery. `ctx.target` is the actor approached, retreated from or the
+pinner, and `ctx.band` the band after the step (`"melee"` for a failed retreat); `flee_fail_lag` has neither. A rules
+error gives 0.
 
-`get_lag` now rejects negative values like the new exports do (neutral result 0, with a
-`script_error`); `None` still means out of reach.
+`get_lag` now rejects negative values like the new exports do (neutral result 0, with a `script_error`); `None` still
+means out of reach.
 
 ```python
 # before: nothing in rules/combat.star; the engine used 2, 2, 4 and 4
@@ -37,8 +35,8 @@ def flee_fail_lag(ctx):
 
 ### Added `tags` to `room`, `item` and `skill`
 
-Rooms, items and skills take an optional `tags` list of identifiers (`[a-z][a-z0-9_]*`). Tags are stored
-sorted and deduplicated on the prototype, read via `.tags` on their respective views, and survive package reload.
+Rooms, items and skills take an optional `tags` list of identifiers (`[a-z][a-z0-9_]*`). Tags are stored sorted and
+deduplicated on the prototype, read via `.tags` on their respective views, and survive package reload.
 
 ```python
 room("vault", name = "The Vault", tags = ["treasury", "secure"])
@@ -48,9 +46,9 @@ skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"])
 
 ### Added `traits` to mob prototypes
 
-Mob prototypes can declare plugin-defined traits via `traits = [...]`. The traits are validated against
-loaded plugins and apply their stat, vital and resist deltas to the spawned mob. Prototype traits follow
-package reloads and cannot be removed in play.
+Mob prototypes can declare plugin-defined traits via `traits = [...]`. The traits are validated against loaded plugins
+and apply their stat, vital and resist deltas to the spawned mob. Prototype traits follow package reloads and cannot be
+removed in play.
 
 ```python
 mob("mage_trainer", name = "Mage Trainer", traits = ["mage"])
@@ -58,20 +56,18 @@ mob("mage_trainer", name = "Mage Trainer", traits = ["mage"])
 
 ### Actor views show choices, traits, effective maxima and resists
 
-Actor views (`ctx.actor`, `ctx.self`, `ctx.target`, etc.) provide read-only access to character creation choices
-and traits:
-- `choices`: dictionary mapping choice ids to selected option ids.
-- `traits`: sorted list of effective trait names.
-- `has_trait(name)`: checks if the actor carries the given trait.
-- `max_<vital>` and `resists.<type>`: reflect effective values (base plus trait deltas).
-- `base.max_<vital>` and `base.resists.<type>`: reflect the underlying base values without trait deltas.
+Actor views (`ctx.actor`, `ctx.self`, `ctx.target`, etc.) provide read-only access to character creation choices and
+traits: - `choices`: dictionary mapping choice ids to selected option ids. - `traits`: sorted list of effective trait
+names. - `has_trait(name)`: checks if the actor carries the given trait. - `max_<vital>` and `resists.<type>`: reflect
+effective values (base plus trait deltas). - `base.max_<vital>` and `base.resists.<type>`: reflect the underlying base
+values without trait deltas.
 
 ### `rules.starting_stats` runs after choices and traits
 
-When spawning players or mobs, `rules.starting_stats` now executes with the actor's choices and traits
-already set. The return values configure the base stats and vitals, with trait deltas layered on top.
-A mob's `ctx.actor.max_<vital>` now includes its prototype traits' deltas, so a ruleset that returns
-the prototype's maxima should read `ctx.actor.base.max_<vital>` instead, as the template does:
+When spawning players or mobs, `rules.starting_stats` now executes with the actor's choices and traits already set. The
+return values configure the base stats and vitals, with trait deltas layered on top. A mob's `ctx.actor.max_<vital>` now
+includes its prototype traits' deltas, so a ruleset that returns the prototype's maxima should read
+`ctx.actor.base.max_<vital>` instead, as the template does:
 
 ```python
 max = vitals(hp = _or(a.base.max_hp, 10), mana = a.base.max_mana)
@@ -79,18 +75,15 @@ max = vitals(hp = _or(a.base.max_hp, 10), mana = a.base.max_mana)
 
 ### Harness additions: `spawn_player(choices)`, `set_choices`, `grant_trait`, `remove_trait`
 
-Tests can configure character creation choices and modify traits directly:
-- `w.spawn_player("Name", choices = {"race": "elf", "class": "mage"})`
-- `w.set_choices(player, {"class": "cleric"})`
-- `w.grant_trait(actor, "dwarf")`
-- `w.remove_trait(actor, "dwarf")`
-- `player.choices`, `player.traits`, `player.has_trait("elf")`
+Tests can configure character creation choices and modify traits directly: - `w.spawn_player("Name", choices = {"race":
+"elf", "class": "mage"})` - `w.set_choices(player, {"class": "cleric"})` - `w.grant_trait(actor, "dwarf")` -
+`w.remove_trait(actor, "dwarf")` - `player.choices`, `player.traits`, `player.has_trait("elf")`
 
 ### Added the world schema: `module.stats`, `module.vitals`, `module.damage_types`, `module.unarmed_damage_type`, `module.channels` and `module.prompt`
 
-`MODULE.gups` is now required, and declares the names a world's actors are measured by. The
-engine names no stat, vital or damage type itself. `stat(name, label)` and `vital(name, label)`
-add a label; a plain string is the same with the default label.
+`MODULE.gups` is now required, and declares the names a world's actors are measured by. The engine names no stat, vital
+or damage type itself. `stat(name, label)` and `vital(name, label)` add a label; a plain string is the same with the
+default label.
 
 ```python
 module(
@@ -104,17 +97,15 @@ module(
 )
 ```
 
-The channel `spell` is no longer built in: a world that blocks or lists it declares it in
-`channels`. `ALL` lists the built-in channels and the declared ones. The schema is fixed per
-database; a start with different names refuses to run, and `gups serve --wipe` is the way
-forward (see below).
+The channel `spell` is no longer built in: a world that blocks or lists it declares it in `channels`. `ALL` lists the
+built-in channels and the declared ones. The schema is fixed per database; a start with different names refuses to run,
+and `gups serve --wipe` is the way forward (see below).
 
 ### Added `vitals(...)`, `stats(...)`, `resists(...)` and `DAMAGE`
 
-Wherever numbers are keyed by schema names, a constructor checks its keywords against the
-schema, with a suggestion for a misspelling. A plain dict is an error that names the
-constructor. `DAMAGE` is a struct of the declared damage types, so `DAMAGE.fier` fails at that
-line.
+Wherever numbers are keyed by schema names, a constructor checks its keywords against the schema, with a suggestion for
+a misspelling. A plain dict is an error that names the constructor. `DAMAGE` is a struct of the declared damage types,
+so `DAMAGE.fier` fails at that line.
 
 Before:
 
@@ -132,8 +123,8 @@ item("cap", wear = "head", stat_deltas = stats(con = 1))
 
 ### `mob(hp, mana, move, armor)` are now `mob(vitals)` and a stat; `mob(stats)` and `mob(resists)` use constructors
 
-A mob declares the maxima of its vitals, its stats and its resists, all keyed by schema names.
-They are the input of `rules.starting_stats` at each spawn.
+A mob declares the maxima of its vitals, its stats and its resists, all keyed by schema names. They are the input of
+`rules.starting_stats` at each spawn.
 
 Before:
 
@@ -170,8 +161,8 @@ ctx.heal(target, 5, "hp")
 
 ### `damage(dice, type)` goes through `rules.mitigate` to any vitals
 
-The `damage` effect primitive and auto-attacks use the vital losses `rules.mitigate` returns.
-The raw `ctx.damage` verb makes one loss and skips `mitigate`.
+The `damage` effect primitive and auto-attacks use the vital losses `rules.mitigate` returns. The raw `ctx.damage` verb
+makes one loss and skips `mitigate`.
 
 ### `flee(at_hp_pct)` is now `flee(below)`
 
@@ -191,10 +182,9 @@ mob("hare", behaviors = [flee(below = vitals(hp = 50))])
 
 ### The actor view's fields come from the schema
 
-Each stat (effective), each vital and `max_<vital>`, `base.<stat>`, `resists.<type>`,
-`below_zero_since(vital)` and `condition` replace the fixed `hp`, `max_hp`, `mana`, `move`,
-`stats`, `armor` and `resists` fields. An undeclared name is an error with a suggestion, so
-`ctx.actor.lfe` suggests `life`.
+Each stat (effective), each vital and `max_<vital>`, `base.<stat>`, `resists.<type>`, `below_zero_since(vital)` and
+`condition` replace the fixed `hp`, `max_hp`, `mana`, `move`, `stats`, `armor` and `resists` fields. An undeclared name
+is an error with a suggestion, so `ctx.actor.lfe` suggests `life`.
 
 Before:
 
@@ -218,17 +208,16 @@ ctx.actor.resists.fire
 
 ### The rules package is required, with `starting_stats` and `condition`
 
-The engine has no built-in ruleset and nothing to fall back to. `//rules:combat.star` must
-define every export, and loading it runs a dry run of each against synthetic actors. A rules
-function that fails at run time gives a neutral result, records a `script_error` and raises a
-`rules_error` alert (this replaces the `rules_fallback` alert); the rules package is never
-quarantined.
+The engine has no built-in ruleset and nothing to fall back to. `//rules:combat.star` must define every export, and
+loading it runs a dry run of each against synthetic actors. A rules function that fails at run time gives a neutral
+result, records a `script_error` and raises a `rules_error` alert (this replaces the `rules_fallback` alert); the rules
+package is never quarantined.
 
-- `starting_stats(ctx)` returns `struct(stats = stats(...), max = vitals(...), current = vitals(...))`,
-  every field optional.
+- `starting_stats(ctx)` returns `struct(stats = stats(...), max = vitals(...), current = vitals(...))`, every field
+  optional.
 - `condition(ctx)` returns `"ok"`, `"incapacitated"` or `"dead"`.
-- `mitigate`, `move_cost` and `regen` return `vitals(...)`, `encumbrance` returns `stats(...)`,
-  and `on_player_death` may return `"vitals": vitals(...)`.
+- `mitigate`, `move_cost` and `regen` return `vitals(...)`, `encumbrance` returns `stats(...)`, and `on_player_death`
+  may return `"vitals": vitals(...)`.
 - `interrupt_check(ctx, amount)` gets the total of the damage event's losses.
 
 Before:
@@ -253,10 +242,9 @@ def regen(ctx):
 
 ### Conditions: incapacitation and death from any vital
 
-An actor's condition is decided by `rules.condition` after any change to one of its vitals and
-at every world tick. An incapacitated actor takes no actions or auto-attacks and its tick-lane
-commands are refused with "You can't do that while incapacitated."; a `dead` condition kills,
-in or out of combat.
+An actor's condition is decided by `rules.condition` after any change to one of its vitals and at every world tick. An
+incapacitated actor takes no actions or auto-attacks and its tick-lane commands are refused with "You can't do that
+while incapacitated."; a `dead` condition kills, in or out of combat.
 
 ### `spawn_player` and `w.damage` in tests name vitals
 
@@ -276,27 +264,26 @@ w.damage(rat, "hp", pct = 100)
 
 ### Added `Char.Schema`, and `Char.Vitals` keys follow the schema
 
-`Char.Schema` carries the stats and vitals with their labels, the damage types and the enabled
-features. `Char.Vitals` has `<vital>` and `max<vital>` for each declared vital. The telnet prompt
-is generated from `module.prompt`, and the web client draws one bar per vital.
+`Char.Schema` carries the stats and vitals with their labels, the damage types and the enabled features. `Char.Vitals`
+has `<vital>` and `max<vital>` for each declared vital. The telnet prompt is generated from `module.prompt`, and the web
+client draws one bar per vital.
 
 ### Added `gups serve --wipe`
 
-A server wipe takes a `prewipe` backup, deletes every character and item, ignores saved world
-state like `--fresh`, and records the world's current schema. Accounts, restrictions and
-tokens stay. `gups migrate-check` fails when the snapshot's schema differs from the pull
-request's.
+A server wipe takes a `prewipe` backup, deletes every character and item, ignores saved world state like `--fresh`, and
+records the world's current schema. Accounts, restrictions and tokens stay. `gups migrate-check` fails when the
+snapshot's schema differs from the pull request's.
 
 ### Added `module.aliases`
 
-`MODULE.gups` sets the alias words for engine commands, such as `l` for `look`. The engine no
-longer has built-in aliases, so a world keeps `l`, `i`, `inv`, `eq`, `k`, `attack`, `c` and
-`take` only by listing them, as the template world does.
+`MODULE.gups` sets the alias words for engine commands, such as `l` for `look`. The engine no longer has built-in
+aliases, so a world keeps `l`, `i`, `inv`, `eq`, `k`, `attack`, `c` and `take` only by listing them, as the template
+world does.
 
 ### Added `module.prefixes`
 
-`MODULE.gups` sets the single characters that stand for an engine command at the start of a
-line, such as `'` for `say`. A world keeps `'` only by listing it, as the template world does.
+`MODULE.gups` sets the single characters that stand for an engine command at the start of a line, such as `'` for `say`.
+A world keeps `'` only by listing it, as the template world does.
 
 ### Added `server.shutdown_timeout`
 
@@ -304,8 +291,7 @@ line, such as `'` for `say`. A world keeps `'` only by listing it, as the templa
 
 ### `package(reset_pulses)` is now `package(reset_world_ticks)`
 
-A zone's reset interval is given in world ticks (30 seconds each), so a reset always lands on
-a world tick.
+A zone's reset interval is given in world ticks (30 seconds each), so a reset always lands on a world tick.
 
 Before:
 
@@ -321,10 +307,9 @@ package(api_version = 1, kind = "zone", reset_world_ticks = 60)
 
 ### `dispel(filter)` is now `dispel(name, flag, all, count)`
 
-`dispel` takes keyword criteria instead of a filter string: `name` (a trailing `*` matches a
-prefix), `flag` (a string or a list), `all = True`, and an optional `count`. At least one of
-`name`, `flag` or `all` is required. Affects flagged `intrinsic` are never dispelled, and a
-dispelled affect now sends its `expire_msg`.
+`dispel` takes keyword criteria instead of a filter string: `name` (a trailing `*` matches a prefix), `flag` (a string
+or a list), `all = True`, and an optional `count`. At least one of `name`, `flag` or `all` is required. Affects flagged
+`intrinsic` are never dispelled, and a dispelled affect now sends its `expire_msg`.
 
 Before:
 
@@ -340,9 +325,9 @@ skill("cure", kind = "spell", target = "ally", effect = dispel(name = "poison*")
 
 ### `item(equip_affects)` entries can be timed, and a stun must be
 
-An `equip_affects` entry is now a flag name, held while the item is worn, or
-`{"flag": ..., "pulses": n}`, applied for `n` pulses when the item is equipped. Worn items'
-affects are real affects on the wearer (SPEC §4.6). A bare `"stunned"` no longer loads.
+An `equip_affects` entry is now a flag name, held while the item is worn, or `{"flag": ..., "pulses": n}`, applied for
+`n` pulses when the item is equipped. Worn items' affects are real affects on the wearer (SPEC §4.6). A bare `"stunned"`
+no longer loads.
 
 Before:
 
@@ -390,12 +375,11 @@ Renamed to match `exit(senses_blocked)`.
 
 ### Added `module.features`: `combat`, `track`, `skills` and `leveling`
 
-A world lists the engine features it uses; leaving the line out turns all four on, so existing
-worlds are unchanged. `track` needs `combat`. A feature that is off doesn't exist for the world:
-its commands give "Huh?" and are left out of `help` and `gups docs --world`, and its declarations,
-declaration arguments, hooks, behaviors, package kinds, effect primitives, modifier points and
-rules exports are refused (see the next entries). The set is recorded in `meta.world_features`
-with the schema: a start with different features refuses to run, and `gups serve --wipe` is the
+A world lists the engine features it uses; leaving the line out turns all four on, so existing worlds are unchanged.
+`track` needs `combat`. A feature that is off doesn't exist for the world: its commands give "Huh?" and are left out of
+`help` and `gups docs --world`, and its declarations, declaration arguments, hooks, behaviors, package kinds, effect
+primitives, modifier points and rules exports are refused (see the next entries). The set is recorded in
+`meta.world_features` with the schema: a start with different features refuses to run, and `gups serve --wipe` is the
 way forward. `gups migrate-check` fails on a changed set.
 
 ```python
@@ -407,49 +391,44 @@ module(
 
 ### Features that are off refuse their declarations, hooks, behaviors and rules
 
-With a feature off, a package that uses one of its entries fails to load with "`<name>` needs the
-`<feature>` feature":
+With a feature off, a package that uses one of its entries fails to load with "`<name>` needs the `<feature>` feature":
 
-- `skills`: `skill(...)`, the `skills` package kind, `mob(skills)`, the hooks `before_cast`,
-  `on_cast_start` and `on_cast`, the modifier point `cast_allowed`, the effect primitives
-  `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`.
-- `combat`: the hooks `before_attack` and `on_combat_tick`, the behaviors `aggressive`, `assist`
-  and `flee`, the modifier points `to_hit`, `damage` and `initiative`.
-- `track`: `room(size)`, `exit(entry_index)`, `spawn(at_index)`, `item(range)`, the effect
-  primitives `knockback` and `pull`, and, for a skill, the ranges `melee`, `near` and `far` (a
-  skill may omit `range`, or use `self` or `room`).
+- `skills`: `skill(...)`, the `skills` package kind, `mob(skills)`, the hooks `before_cast`, `on_cast_start` and
+  `on_cast`, the modifier point `cast_allowed`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`,
+  `stun`, `summon` and `sequence`.
+- `combat`: the hooks `before_attack` and `on_combat_tick`, the behaviors `aggressive`, `assist` and `flee`, the
+  modifier points `to_hit`, `damage` and `initiative`.
+- `track`: `room(size)`, `exit(entry_index)`, `spawn(at_index)`, `item(range)`, the effect primitives `knockback` and
+  `pull`, and, for a skill, the ranges `melee`, `near` and `far` (a skill may omit `range`, or use `self` or `room`).
 - `leveling`: `mob(level)` and `aggressive(unless_level_above)`.
 
-The rules package may not define the exports of a feature that is off, and must define those of
-one that is on: `to_hit`, `damage`, `initiative` and `flee_chance` (`combat`), `cast_allowed` and
-`interrupt_check` (`skills`), `retreat_check` and `get_lag` (`track`), `xp_for_kill` and
-`xp_to_level` (`leveling`). `on_player_death`'s `xp_loss` is an error without `leveling`.
+The rules package may not define the exports of a feature that is off, and must define those of one that is on:
+`to_hit`, `damage`, `initiative` and `flee_chance` (`combat`), `cast_allowed` and `interrupt_check` (`skills`),
+`retreat_check` and `get_lag` (`track`), `xp_for_kill` and `xp_to_level` (`leveling`). `on_player_death`'s `xp_loss` is
+an error without `leveling`.
 
 ### `ctx` verbs and view fields of a feature that is off raise "`<name>` needs the `<feature>` feature"
 
-`ctx.start_combat`, `ctx.stop_combat`, `ctx.enemies_near`, `ctx.allies_near`, `ctx.act_attack`
-and the `fighting` method (`combat`); `ctx.act_advance`, `ctx.act_retreat`, a non-zero `index` of
-`ctx.teleport`, `ctx.spawn` and `ctx.move_item`, the actor's `track_index` and `band_of`, the
-room's `size` and `track_size`, an exit's `entry_index`, an item's `range` and an item location's
-`index` (`track`); `ctx.act_cast`, and an actor's `skills`, `casting` and `is_casting` (`skills`);
-an actor's `level` and `xp` (`leveling`). Without `track` the rules `ctx.band` is `None`.
+`ctx.start_combat`, `ctx.stop_combat`, `ctx.enemies_near`, `ctx.allies_near`, `ctx.act_attack` and the `fighting` method
+(`combat`); `ctx.act_advance`, `ctx.act_retreat`, a non-zero `index` of `ctx.teleport`, `ctx.spawn` and `ctx.move_item`,
+the actor's `track_index` and `band_of`, the room's `size` and `track_size`, an exit's `entry_index`, an item's `range`
+and an item location's `index` (`track`); `ctx.act_cast`, and an actor's `skills`, `casting` and `is_casting`
+(`skills`); an actor's `level` and `xp` (`leveling`). Without `track` the rules `ctx.band` is `None`.
 
 ### Added `module.rename`
 
-`rename = {"cast": "invoke"}` renames engine commands that aren't `@` tools. Aliases, prefixes,
-reserved exit and character names, `help` and the docs use the new names; the old name is free for
-`global_command` and plugin commands. A rename of a command that doesn't exist (or whose feature
-is off), to a name that isn't `[a-z][a-z0-9_]*` or is a direction, another command or an alias
-stops the server. `rename` needs only a restart.
+`rename = {"cast": "invoke"}` renames engine commands that aren't `@` tools. Aliases, prefixes, reserved exit and
+character names, `help` and the docs use the new names; the old name is free for `global_command` and plugin commands. A
+rename of a command that doesn't exist (or whose feature is off), to a name that isn't `[a-z][a-z0-9_]*` or is a
+direction, another command or an alias stops the server. `rename` needs only a restart.
 
 ### Added `MESSAGES.gups` and the engine message catalog
 
-Every player-facing engine message is an entry of a catalog with a stable id (`cast.begin.known`),
-named placeholders and default text. A world overrides entries with one `messages({...})` call
-in `MESSAGES.gups`; an unknown id, an unknown placeholder or a missing required one stops the
-server, and an id of a feature that is off warns. The file is read at startup only, and a deploy
-that changes it is refused. `api.json` lists the catalog under `messages`, and `gups docs` shows it
-on `world.html`.
+Every player-facing engine message is an entry of a catalog with a stable id (`cast.begin.known`), named placeholders
+and default text. A world overrides entries with one `messages({...})` call in `MESSAGES.gups`; an unknown id, an
+unknown placeholder or a missing required one stops the server, and an id of a feature that is off warns. The file is
+read at startup only, and a deploy that changes it is refused. `api.json` lists the catalog under `messages`, and `gups
+docs` shows it on `world.html`.
 
 ```python
 messages({
@@ -460,14 +439,14 @@ messages({
 
 ### Added `feature` to `api.json` entries, and `world.html`
 
-Entries owned by a feature carry `feature`, and `gups docs --world` leaves out the entries of
-features the world has off.
+Entries owned by a feature carry `feature`, and `gups docs --world` leaves out the entries of features the world has
+off.
 
 ### Added plugin `requiredFeatures` and `PluginWorld.features`
 
-A plugin that needs features lists their ids in `GupsPlugin.requiredFeatures`; it is skipped with
-"needs the '<feature>' feature" when one is off. `PluginActor.level` and `PluginRoom.size` throw
-`IllegalStateException` naming the feature when `leveling` or `track` is off.
+A plugin that needs features lists their ids in `GupsPlugin.requiredFeatures`; it is skipped with "needs the '<feature>'
+feature" when one is off. `PluginActor.level` and `PluginRoom.size` throw `IllegalStateException` naming the feature
+when `leveling` or `track` is off.
 
 ## api_version 1
 

@@ -104,7 +104,7 @@ def test_the_dummy_mends_itself(t):
 
 The `t` object provides standard assertions:
 
-| Assertion                          | Description                                       |
+|             Assertion              |                    Description                    |
 |------------------------------------|---------------------------------------------------|
 | `t.eq(a, b)`                       | Asserts `a == b`                                  |
 | `t.ne(a, b)`                       | Asserts `a != b`                                  |
@@ -141,8 +141,8 @@ gups fuzz --pulses 1000 //zones/tutorial/...
 
 ## Reference Links
 
-* **Reference Implementation:** [
-  `template-world/zones/tutorial/tutorial_test.star`](../../zones/tutorial/tutorial_test.star)
-* **Specification:** [SPEC.md §4.12: Test Harness API](../../../docs/SPEC.md#L1932)
-  and [§7.2: Script Tests](../../../docs/SPEC.md#L3516)
+* **Reference Implementation:**
+  [`template-world/zones/tutorial/tutorial_test.star`](../../zones/tutorial/tutorial_test.star)
+* **Specification:** [SPEC.md §4.12: Test Harness API](../../../docs/SPEC.md#L1932) and
+  [§7.2: Script Tests](../../../docs/SPEC.md#L3516)
 * **HTML Documentation:** `harness.html` in `gups docs`.
