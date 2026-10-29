@@ -401,6 +401,18 @@
           "since": 1
         },
         {
+          "symbol": "item.tags",
+          "name": "tags",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Tags for plugin restrictions and scripts.",
+          "since": 1
+        },
+        {
           "symbol": "item.stackable",
           "name": "stackable",
           "type": "bool",
@@ -723,6 +735,18 @@
           "since": 1
         },
         {
+          "symbol": "mob.traits",
+          "name": "traits",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Traits defined by the world's plugins.",
+          "since": 1
+        },
+        {
           "symbol": "mob.version",
           "name": "version",
           "type": "int",
@@ -952,6 +976,18 @@
           "default": "[]",
           "allowed_values": [],
           "doc": "Region tags that apply their modifiers in this room.",
+          "since": 1
+        },
+        {
+          "symbol": "room.tags",
+          "name": "tags",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Tags for plugin restrictions and scripts.",
           "since": 1
         },
         {
@@ -1191,6 +1227,19 @@
           "default": "None",
           "allowed_values": [],
           "doc": "Custom function fn(ctx) run when the skill resolves.",
+          "since": 1
+        },
+        {
+          "symbol": "skill.tags",
+          "feature": "skills",
+          "name": "tags",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Tags for plugin restrictions and scripts.",
           "since": 1
         }
       ]
@@ -3721,6 +3770,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.choices",
+          "name": "choices",
+          "doc": "Chosen character creation options by choice id: a dict, empty for mobs.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.condition",
           "name": "condition",
           "doc": "'ok', 'incapacitated' or 'dead', as the rules last decided.",
@@ -3729,7 +3784,7 @@
         {
           "symbol": "view:actor.flags",
           "name": "flags",
-          "doc": "Flags from affects, including those worn items apply, sorted.",
+          "doc": "Flags from affects and traits, including those worn items apply, sorted.",
           "since": 1
         },
         {
@@ -3821,6 +3876,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.traits",
+          "name": "traits",
+          "doc": "Sorted names of the known traits the actor carries.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.wait_state",
           "name": "wait_state",
           "doc": "Recovery pulses left.",
@@ -3901,7 +3962,7 @@
         {
           "symbol": "view:actor.has_flag",
           "name": "has_flag",
-          "doc": "True if an affect or a worn item gives this flag, such as 'no_regen'.",
+          "doc": "True if an affect, trait or a worn item gives this flag, such as 'no_regen'.",
           "since": 1,
           "params": [
             {
@@ -3931,6 +3992,24 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Item prototype label."
+            }
+          ]
+        },
+        {
+          "symbol": "view:actor.has_trait",
+          "name": "has_trait",
+          "doc": "True if the actor carries this trait.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "view:actor.has_trait.name",
+              "name": "name",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Trait name."
             }
           ]
         },
@@ -4162,6 +4241,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.tags",
+          "name": "tags",
+          "doc": "Tags carried by this item, sorted.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.wear",
           "name": "wear",
           "doc": "The equipment slot it goes in, or None.",
@@ -4390,6 +4475,12 @@
           "since": 1
         },
         {
+          "symbol": "view:room.tags",
+          "name": "tags",
+          "doc": "Tags carried by this room, sorted.",
+          "since": 1
+        },
+        {
           "symbol": "view:room.track_size",
           "feature": "track",
           "name": "track_size",
@@ -4501,6 +4592,13 @@
           "feature": "skills",
           "name": "range",
           "doc": "Maximum target range.",
+          "since": 1
+        },
+        {
+          "symbol": "view:skill.tags",
+          "feature": "skills",
+          "name": "tags",
+          "doc": "Tags carried by this skill, sorted.",
           "since": 1
         },
         {
@@ -5503,6 +5601,12 @@
           "since": 1
         },
         {
+          "symbol": "p.choices",
+          "name": "choices",
+          "doc": "Chosen character creation options by choice id: a dict, empty for mobs.",
+          "since": 1
+        },
+        {
           "symbol": "p.condition",
           "name": "condition",
           "doc": "'ok', 'incapacitated' or 'dead', as the rules last decided.",
@@ -5511,7 +5615,7 @@
         {
           "symbol": "p.flags",
           "name": "flags",
-          "doc": "Flags from affects, including those worn items apply, sorted.",
+          "doc": "Flags from affects and traits, including those worn items apply, sorted.",
           "since": 1
         },
         {
@@ -5596,6 +5700,12 @@
           "symbol": "p.track_index",
           "name": "track_index",
           "doc": "Position along the room's 1D track.",
+          "since": 1
+        },
+        {
+          "symbol": "p.traits",
+          "name": "traits",
+          "doc": "Sorted names of the known traits the actor carries.",
           "since": 1
         },
         {
@@ -5694,7 +5804,7 @@
         {
           "symbol": "p.has_flag",
           "name": "has_flag",
-          "doc": "True if an affect or a worn item gives this flag, such as 'no_regen'.",
+          "doc": "True if an affect, trait or a worn item gives this flag, such as 'no_regen'.",
           "since": 1,
           "params": [
             {
@@ -5724,6 +5834,24 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Item prototype label."
+            }
+          ]
+        },
+        {
+          "symbol": "p.has_trait",
+          "name": "has_trait",
+          "doc": "True if the actor carries this trait.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "p.has_trait.name",
+              "name": "name",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Trait name."
             }
           ]
         },
@@ -6146,11 +6274,67 @@
           ]
         },
         {
+          "symbol": "w.grant_trait",
+          "name": "grant_trait",
+          "doc": "Grants a trait to an actor, returning the refusal message or None.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.grant_trait.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The actor to grant the trait to."
+            },
+            {
+              "symbol": "w.grant_trait.name",
+              "name": "name",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The trait name."
+            }
+          ]
+        },
+        {
           "symbol": "w.quarantined",
           "name": "quarantined",
           "doc": "Packages currently quarantined.",
           "since": 1,
           "params": []
+        },
+        {
+          "symbol": "w.remove_trait",
+          "name": "remove_trait",
+          "doc": "Removes a granted trait from an actor, returning the refusal message or None.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.remove_trait.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The actor to remove the trait from."
+            },
+            {
+              "symbol": "w.remove_trait.name",
+              "name": "name",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The trait name."
+            }
+          ]
         },
         {
           "symbol": "w.room",
@@ -6223,6 +6407,34 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Value to store, or None to delete the key."
+            }
+          ]
+        },
+        {
+          "symbol": "w.set_choices",
+          "name": "set_choices",
+          "doc": "Changes or removes answers for a player, exactly as a plugin's setChoices does.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.set_choices.player",
+              "name": "player",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The player to modify."
+            },
+            {
+              "symbol": "w.set_choices.changes",
+              "name": "changes",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Map of choice id to option id, with None removing an answer."
             }
           ]
         },
@@ -6349,6 +6561,16 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Track index in the starting room."
+            },
+            {
+              "symbol": "w.spawn_player.choices",
+              "name": "choices",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Character creation answers, or None."
             }
           ]
         },
@@ -7503,6 +7725,54 @@
       "since": 1
     },
     {
+      "symbol": "message:login.creation.confirm",
+      "id": "login.creation.confirm",
+      "placeholders": ["name", "answers"],
+      "required": [],
+      "default": "{name}: {answers}. Create this character? (yes, back or cancel)",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.has_choices",
+      "id": "login.creation.has_choices",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} has choices to make before playing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.hint",
+      "id": "login.creation.hint",
+      "placeholders": [],
+      "required": [],
+      "default": "Type a number or a name, \"help <name>\" to learn more, \"back\" or \"cancel\".",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.no_such_option",
+      "id": "login.creation.no_such_option",
+      "placeholders": ["answer"],
+      "required": [],
+      "default": "There's no {answer} to choose here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.prompt",
+      "id": "login.creation.prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "> ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.provider_failed",
+      "id": "login.creation.provider_failed",
+      "placeholders": [],
+      "required": [],
+      "default": "Character creation isn't working right now; please tell an instructor.",
+      "since": 1
+    },
+    {
       "symbol": "message:login.dev.local_only",
       "id": "login.dev.local_only",
       "placeholders": [],
@@ -8087,11 +8357,27 @@
       "since": 1
     },
     {
+      "symbol": "message:score.choice",
+      "id": "score.choice",
+      "placeholders": ["title", "label"],
+      "required": [],
+      "default": "{title}: {label}",
+      "since": 1
+    },
+    {
       "symbol": "message:score.resists",
       "id": "score.resists",
       "placeholders": ["resists"],
       "required": ["resists"],
       "default": "Resists: {resists}",
+      "since": 1
+    },
+    {
+      "symbol": "message:score.traits",
+      "id": "score.traits",
+      "placeholders": ["traits"],
+      "required": [],
+      "default": "Traits: {traits}",
       "since": 1
     },
     {

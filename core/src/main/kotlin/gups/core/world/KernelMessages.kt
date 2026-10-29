@@ -67,6 +67,8 @@ object KernelMsg : MsgGroup(null) {
   val WHISPER_ROOM = msg("whisper.room", "{actor} whispers something to {target}.", "actor,target")
 
   val SCORE_RESISTS = msg("score.resists", "Resists: {resists}", "resists", "resists")
+  val SCORE_CHOICE = msg("score.choice", "{title}: {label}", "title,label")
+  val SCORE_TRAITS = msg("score.traits", "Traits: {traits}", "traits")
   val INVENTORY_EMPTY = msg("inventory.empty", "You are carrying nothing.")
   val INVENTORY_LIST = msg("inventory.list", "You are carrying:\n{items}", "items", "items")
   val INVENTORY_ITEM = msg("inventory.item", "  {item}", "item", "item")

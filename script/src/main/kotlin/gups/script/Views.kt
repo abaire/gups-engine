@@ -5,13 +5,13 @@ import com.google.common.collect.ImmutableList
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
-import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
@@ -161,10 +161,7 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     structField = true,
     doc = "Base stat values, without affects, equipment or encumbrance: base.dex.",
   )
-  fun base(): Any = read {
-    val stats = scope.world.schema.statNames
-    TypedMap(TypedKind.STATS, stats.associateWith { actor.baseStats[it] ?: 0 }, stats)
-  }
+  fun base(): Any = read { BaseView(actor, scope.world.schema) }
 
   @StarlarkMethod(
     name = "resists",
@@ -173,7 +170,7 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   )
   fun resists(): Any = read {
     val types = scope.world.schema.damageTypes
-    TypedMap(TypedKind.RESISTS, types.associateWith { actor.resists[DamageType(it)] ?: 0 }, types)
+    TypedMap(TypedKind.RESISTS, types.associateWith { actor.effectiveResist(it) }, types)
   }
 
   @StarlarkMethod(
@@ -322,16 +319,44 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(
     name = "flags",
     structField = true,
-    doc = "Flags from affects, including those worn items apply, sorted.",
+    doc = "Flags from affects and traits, including those worn items apply, sorted.",
   )
-  fun flags(): Any = read { sList(actor.affects.flatMap { it.flags }.distinct().sorted()) }
+  fun flags(): Any = read {
+    sList((actor.traitFlags + actor.affects.flatMap { it.flags }).distinct().sorted())
+  }
 
   @StarlarkMethod(
     name = "has_flag",
-    doc = "True if an affect or a worn item gives this flag, such as 'no_regen'.",
+    doc = "True if an affect, trait or a worn item gives this flag, such as 'no_regen'.",
     parameters = [Param(name = "flag", named = true, doc = "Flag name, such as 'no_regen'.")],
   )
   fun hasFlag(flag: Any): Any = read { actor.hasFlag(str(flag, "has_flag(flag)")) }
+
+  @StarlarkMethod(
+    name = "choices",
+    structField = true,
+    doc = "Chosen character creation options by choice id: a dict, empty for mobs.",
+  )
+  fun choices(): Any = read {
+    if (actor is Player) sDict(actor.choices.toMap()) else sDict(emptyMap<String, String>())
+  }
+
+  @StarlarkMethod(
+    name = "traits",
+    structField = true,
+    doc = "Sorted names of the known traits the actor carries.",
+  )
+  fun traits(): Any = read { sList(actor.traits.map { it.name }) }
+
+  @StarlarkMethod(
+    name = "has_trait",
+    doc = "True if the actor carries this trait.",
+    parameters = [Param(name = "name", named = true, doc = "Trait name.")],
+  )
+  fun hasTrait(name: Any): Any = read {
+    val tName = str(name, "has_trait(name)")
+    actor.traits.any { it.name == tName }
+  }
 
   @StarlarkMethod(
     name = "carried_weight",
@@ -358,6 +383,9 @@ class RoomView(scope: ViewScope, val room: Room) : EntityView(scope, room) {
 
   @StarlarkMethod(name = "size", structField = true, doc = "'cramped', 'normal' or 'large'.")
   fun size(): Any = read("room.size") { room.proto.size.name.lowercase() }
+
+  @StarlarkMethod(name = "tags", structField = true, doc = "Tags carried by this room, sorted.")
+  fun tags(): Any = read { sList(room.tags.sorted()) }
 
   @StarlarkMethod(
     name = "track_size",
@@ -503,6 +531,9 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
 
   @StarlarkMethod(name = "location", structField = true, doc = "Where the item currently is.")
   fun location(): Any = read { LocationView(scope, item.location) }
+
+  @StarlarkMethod(name = "tags", structField = true, doc = "Tags carried by this item, sorted.")
+  fun tags(): Any = read { sList(item.tags.sorted()) }
 
   @StarlarkMethod(
     name = "container_state",
@@ -650,6 +681,9 @@ class SkillView internal constructor(val skill: SkillProto, private val schema: 
   @StarlarkMethod(name = "name", structField = true, doc = "The skill's name.")
   fun name(): Any = skill.name
 
+  @StarlarkMethod(name = "tags", structField = true, doc = "Tags carried by this skill, sorted.")
+  fun tags(): Any = sList(skill.tags.sorted())
+
   @StarlarkMethod(
     name = "kind",
     structField = true,
@@ -768,4 +802,33 @@ class RngView internal constructor(private val scope: ViewScope) : StarlarkValue
   }
 
   override fun isImmutable(): Boolean = true
+}
+
+class BaseView internal constructor(private val actor: Actor, private val schema: WorldSchema) :
+  Structure {
+  override fun getValue(name: String): Any? =
+    when {
+      name in schema.statNames -> sInt(actor.baseStat(name))
+      name.startsWith("max_") && name.removePrefix("max_") in schema.vitalNames ->
+        sInt(actor.baseMax(name.removePrefix("max_")))
+      name == "resists" ->
+        TypedMap(
+          TypedKind.RESISTS,
+          schema.damageTypes.associateWith { actor.baseResist(it) },
+          schema.damageTypes,
+        )
+      else -> null
+    }
+
+  override fun getFieldNames(): ImmutableCollection<String> =
+    ImmutableList.copyOf(schema.statNames + schema.vitalNames.map { "max_$it" } + listOf("resists"))
+
+  override fun getErrorMessageForUnknownField(field: String): String =
+    "'base' value has no field '$field'${didYouMean(field, getFieldNames())}"
+
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append("<base of ${actor.name}>")
+  }
 }

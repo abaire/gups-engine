@@ -7,10 +7,14 @@ interface WorldPluginWiring {
   /** Plugin namespaces by id, predeclared in every package and test file. */
   val globals: Map<String, Any>
 
+  /** Known trait names registered by plugins. */
+  val traits: Set<String>
+    get() = emptySet()
+
   /** Registers plugin commands, effects and GMCP producers. Call before StarlarkHost.install. */
   fun install(world: World)
 
-  /** Runs the onWorldStarted callbacks. Call after World.fireOnLoad. */
+  /** Runs the onWorldStarted callbacks. Call after World.start. */
   fun started(world: World)
 
   companion object {

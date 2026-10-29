@@ -46,6 +46,19 @@ interface PluginWorld {
 
   fun delAttr(entity: PluginEntity, key: String)
 
+  // Choices (players only) and traits (players and mobs).
+  // Each returns a refusal message, or null.
+  fun setChoices(actor: PluginActor, changes: Map<String, String?>): String?
+
+  fun grantTrait(actor: PluginActor, trait: String): String?
+
+  fun removeTrait(actor: PluginActor, trait: String): String?
+
+  // Skills (`skills` feature). setSkill runs the LEARN restrictions first.
+  fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String?
+
+  fun removeSkill(actor: PluginActor, skill: String): Boolean
+
   // ---- Reads ----
 
   /** The names the world declares, in declaration order. */
@@ -102,6 +115,7 @@ interface PluginEntity {
 interface PluginRoom : PluginEntity {
   val regions: List<String>
   val flags: Set<String>
+  val tags: List<String>
   val size: String
 
   /** Direction → destination room label. */
@@ -112,6 +126,7 @@ interface PluginRoom : PluginEntity {
 
 interface PluginActor : PluginEntity {
   val isPlayer: Boolean
+  val role: PluginRole?
   val room: PluginRoom
   val level: Int
 
@@ -124,18 +139,51 @@ interface PluginActor : PluginEntity {
   /** The current value of a declared vital. */
   fun vital(name: String): Int
 
-  /** The maximum of a declared vital. */
+  /** The effective maximum of a declared vital. */
   fun maxVital(name: String): Int
 
-  /** The resistance percentage to a declared damage type. */
+  /** The base maximum of a declared vital. */
+  fun baseMaxVital(name: String): Int
+
+  /** The effective resistance percentage to a declared damage type. */
   fun resist(type: String): Int
+
+  /** The base resistance percentage to a declared damage type. */
+  fun baseResist(type: String): Int
 
   /** Affect names. */
   val affects: List<String>
 
   fun hasAffect(name: String): Boolean
+
+  val flags: Set<String>
+
+  /** Known choices only. */
+  val choices: Map<String, String>
+
+  /** Known traits only, sorted. */
+  val traits: List<String>
+
+  /** Granted traits as saved, sorted. */
+  val grantedTraits: Set<String>
+
+  fun hasTrait(name: String): Boolean
+
+  /** Skill label to proficiency (needs the skills feature). */
+  val skills: Map<String, Int>
 }
 
 interface PluginItem : PluginEntity {
   val keywords: List<String>
+  val kind: String
+  val wear: String?
+  val weight: Int
+  val tags: List<String>
+}
+
+interface PluginSkill {
+  val label: String
+  val name: String
+  val kind: String
+  val tags: List<String>
 }

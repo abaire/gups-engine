@@ -4,6 +4,7 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.Actor
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
@@ -15,7 +16,10 @@ import gups.core.world.World
 import gups.core.world.attach
 import gups.core.world.damage
 import gups.core.world.flushOutput
+import gups.core.world.grantTrait
 import gups.core.world.handle
+import gups.core.world.removeTrait
+import gups.core.world.setChoices
 import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.script.ActorView
@@ -104,6 +108,13 @@ internal constructor(
   private fun entityArg(v: Any?, what: String): Entity =
     (v as? EntityView)?.entity ?: evalFail("$what: expected an entity, got ${typeName(v)}")
 
+  private fun actorArg(v: Any?, what: String): Actor =
+    (v as? ActorView)?.actor ?: evalFail("$what: expected an actor, got ${typeName(v)}")
+
+  private fun playerArg(v: Any?, what: String): Player =
+    ((v as? ActorView)?.actor as? Player)
+      ?: evalFail("$what: expected a player, got ${typeName(v)}")
+
   @StarlarkMethod(
     name = "spawn_player",
     doc =
@@ -137,6 +148,12 @@ internal constructor(
           defaultValue = "0",
           doc = "Track index in the starting room.",
         ),
+        Param(
+          name = "choices",
+          named = true,
+          defaultValue = "None",
+          doc = "Character creation answers, or None.",
+        ),
       ],
     useStarlarkThread = true,
   )
@@ -148,11 +165,52 @@ internal constructor(
     stats: Any,
     skills: Any,
     index: Any,
+    choices: Any,
     thread: StarlarkThread,
   ): Any {
     val room = roomArg(at, "spawn_player(at)", thread)
     val overrideVitals = vitalsValue(vitals, "spawn_player(vitals)")
     val overrideStats = statsValue(stats, "spawn_player(stats)")
+    val choicesMap = LinkedHashMap<String, String>()
+    if (!isNone(choices)) {
+      val dict = choices as? Dict<*, *> ?: evalFail("spawn_player(choices): expected a dict")
+      for ((k, v) in dict.entries) {
+        choicesMap[str(k, "spawn_player(choices)")] = str(v, "spawn_player(choices)")
+      }
+      val creation = world.creation
+      if (creation != null) {
+        val answersSoFar = LinkedHashMap<String, String>()
+        for (c in creation.choices) {
+          val chosen = choicesMap[c.id] ?: continue
+          if (c.options.none { it.id == chosen }) {
+            evalFail("spawn_player(choices): '$chosen' is not an option for choice '${c.id}'")
+          }
+          val avail =
+            try {
+              creation.available(world, c.id, answersSoFar)
+            } catch (e: Exception) {
+              evalFail("spawn_player(choices): creation provider failed: ${e.message}")
+            }
+          if (chosen !in avail) {
+            evalFail(
+              "spawn_player(choices): option '$chosen' is not available for choice '${c.id}'"
+            )
+          }
+          answersSoFar[c.id] = chosen
+        }
+        val err =
+          try {
+            creation.validate(world, choicesMap)
+          } catch (e: Exception) {
+            evalFail("spawn_player(choices): creation provider failed: ${e.message}")
+          }
+        if (err != null) {
+          evalFail("spawn_player(choices): $err")
+        }
+      } else if (choicesMap.isNotEmpty()) {
+        evalFail("spawn_player(choices): world has no character creation provider")
+      }
+    }
     val p =
       guard("spawn_player") {
         world.spawnPlayer(
@@ -161,6 +219,7 @@ internal constructor(
           int(level, "spawn_player(level)"),
           StartingStats(overrideStats, overrideVitals, overrideVitals),
           int(index, "spawn_player(index)"),
+          choices = choicesMap,
         )
       }
     // The harness has no idle clock; tests may run for hours of game time.
@@ -178,6 +237,7 @@ internal constructor(
     val id = SessionId(nextSession++)
     world.handle(WorldControlEvent.Connect(id, sink))
     world.attach(id, p)
+    world.creation?.created(world, p, newCharacter = true)
     return PlayerHandle(this, p, sink)
   }
 
@@ -378,6 +438,64 @@ internal constructor(
 
   @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
   fun pulse(): Any = StarlarkInt.of(world.pulse)
+
+  @StarlarkMethod(
+    name = "set_choices",
+    doc = "Changes or removes answers for a player, exactly as a plugin's setChoices does.",
+    parameters =
+      [
+        Param(name = "player", named = true, doc = "The player to modify."),
+        Param(
+          name = "changes",
+          named = true,
+          doc = "Map of choice id to option id, with None removing an answer.",
+        ),
+      ],
+  )
+  fun setChoices(player: Any, changes: Any): Any {
+    val p = playerArg(player, "set_choices(player)")
+    val dict = changes as? Dict<*, *> ?: evalFail("set_choices(changes): expected a dict")
+    val map = mutableMapOf<String, String?>()
+    for ((k, v) in dict.entries) {
+      val key = str(k, "set_choices(changes)")
+      val value = if (isNone(v)) null else str(v, "set_choices(changes)")
+      map[key] = value
+    }
+    val refusal = world.setChoices(p, map)
+    return refusal ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "grant_trait",
+    doc = "Grants a trait to an actor, returning the refusal message or None.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "The actor to grant the trait to."),
+        Param(name = "name", named = true, doc = "The trait name."),
+      ],
+  )
+  fun grantTrait(actor: Any, name: Any): Any {
+    val a = actorArg(actor, "grant_trait(actor)")
+    val t = str(name, "grant_trait(name)")
+    val refusal = world.grantTrait(a, t)
+    return refusal ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "remove_trait",
+    doc = "Removes a granted trait from an actor, returning the refusal message or None.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "The actor to remove the trait from."),
+        Param(name = "name", named = true, doc = "The trait name."),
+      ],
+  )
+  fun removeTrait(actor: Any, name: Any): Any {
+    val a = actorArg(actor, "remove_trait(actor)")
+    val t = str(name, "remove_trait(name)")
+    val refusal = world.removeTrait(a, t)
+    return refusal ?: Starlark.NONE
+  }
 
   private fun <T> guard(what: String, block: () -> T): T =
     try {

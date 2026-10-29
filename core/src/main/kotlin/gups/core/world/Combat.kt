@@ -221,7 +221,8 @@ internal fun World.processDeath(victim: Actor) {
  */
 private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
   for ((name, v) in victim.vitalMap) {
-    val next = given?.get(name)?.coerceAtMost(v.max) ?: v.max
+    val effMax = victim.max(name)
+    val next = given?.get(name)?.coerceAtMost(effMax) ?: effMax
     v.belowZeroSince = if (next < 0) pulse else null
     v.current = next
   }

@@ -58,7 +58,7 @@ fun world(
     )
   plugins.install(world)
   host.install(world)
-  world.fireOnLoad()
+  world.start()
   plugins.started(world)
   return world
 }

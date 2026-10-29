@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.ACTION_QUEUE_MAX
+import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Channel
 import gups.core.model.Direction
@@ -8,7 +9,10 @@ import gups.core.model.DoorState
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.QueuedAction
+import gups.core.model.RestrictionPoint
+import gups.core.model.RestrictionRequest
 import gups.core.model.Room
 import gups.core.model.SkillProto
 
@@ -143,3 +147,154 @@ fun World.actAdvance(mob: Mob, target: Actor): Boolean =
 
 fun World.actRetreat(mob: Mob, from: Actor?): Boolean =
   enqueue(mob, commands.nameOf("retreat"), RetreatAction(from))
+
+fun World.restrictionRefusal(point: RestrictionPoint, r: RestrictionRequest): String? {
+  val list = restrictions[point] ?: return null
+  for (check in list) {
+    val refusal =
+      try {
+        check.check(this, r)
+      } catch (e: Exception) {
+        diagnose("plugin", "restriction check failed: ${e.message}", e)
+        null
+      }
+    if (refusal != null) return refusal
+  }
+  return null
+}
+
+/**
+ * Why [changes] can't be applied to [player]'s answers, checked as creation checks them, or null.
+ * Unknown choice or option ids are a programming error and throw.
+ */
+fun World.choicesRefusal(player: Player, changes: Map<String, String?>): String? {
+  val provider =
+    creation
+      ?: if (changes.isEmpty()) return null
+      else throw IllegalArgumentException("World has no creation provider")
+  for ((choiceId, optId) in changes) {
+    val choice =
+      provider.choices.firstOrNull { it.id == choiceId }
+        ?: throw IllegalArgumentException("Unknown choice '$choiceId'")
+    if (optId != null && choice.options.none { it.id == optId }) {
+      throw IllegalArgumentException("Unknown option '$optId' for choice '$choiceId'")
+    }
+  }
+  val newAnswers = LinkedHashMap(player.choices)
+  for ((cId, optId) in changes) {
+    if (optId == null) newAnswers.remove(cId) else newAnswers[cId] = optId
+  }
+  val answersSoFar = LinkedHashMap<String, String>()
+  for (c in provider.choices) {
+    val ans = newAnswers[c.id] ?: continue
+    val avail =
+      try {
+        provider.available(this, c.id, answersSoFar)
+      } catch (e: Exception) {
+        diagnose("plugin", "creation provider available() failed: ${e.message}", e)
+        return msg(LoginMsg.CREATION_PROVIDER_FAILED)
+      }
+    if (ans !in avail) {
+      return "Option '$ans' is not available for choice '${c.id}'"
+    }
+    answersSoFar[c.id] = ans
+  }
+  val valRefusal =
+    try {
+      provider.validate(this, newAnswers)
+    } catch (e: Exception) {
+      diagnose("plugin", "creation provider validate() failed: ${e.message}", e)
+      return msg(LoginMsg.CREATION_PROVIDER_FAILED)
+    }
+  return valRefusal
+}
+
+/**
+ * The change function: applies [changes] (an option id, or null to remove the answer) to [player]'s
+ * answers as one change, or returns why it can't. Never reruns `starting_stats`.
+ */
+fun World.setChoices(player: Player, changes: Map<String, String?>): String? {
+  choicesRefusal(player, changes)?.let {
+    return it
+  }
+  if (changes.isEmpty()) return null
+  val newAnswers = LinkedHashMap(player.choices)
+  for ((cId, optId) in changes) {
+    if (optId == null) newAnswers.remove(cId) else newAnswers[cId] = optId
+  }
+
+  player.choices.clear()
+  player.choices.putAll(newAnswers)
+  player.recomputeTraits(this)
+
+  recheckWornItems(player)
+  requestImmediate("choices")
+  return null
+}
+
+private fun World.recheckWornItems(player: Player) {
+  for ((slot, item) in player.equipmentIndex.toList()) {
+    val req =
+      RestrictionRequest(point = RestrictionPoint.WEAR, actor = player, item = item, slot = slot)
+    val refused = restrictionRefusal(RestrictionPoint.WEAR, req)
+    if (refused != null) {
+      moveItem(item, ItemLocation.Carried(player.id))
+      send(player, refused)
+    }
+  }
+}
+
+fun World.grantTrait(actor: Actor, traitName: String): String? {
+  if (traitName !in traits) throw IllegalArgumentException("Unknown trait '$traitName'")
+  if (traitName in actor.grantedTraits) return "Trait '$traitName' already granted"
+  actor.grantedTraits = actor.grantedTraits + traitName
+  actor.recomputeTraits(this)
+  if (actor is Player) {
+    recheckWornItems(actor)
+    requestImmediate("choices")
+  } else {
+    actor.dirty = true
+  }
+  return null
+}
+
+fun World.removeTrait(actor: Actor, traitName: String): String? {
+  if (traitName !in traits) throw IllegalArgumentException("Unknown trait '$traitName'")
+  if (traitName !in actor.grantedTraits) return "Trait '$traitName' was not granted directly"
+  actor.grantedTraits = actor.grantedTraits - traitName
+  actor.recomputeTraits(this)
+  if (actor is Player) {
+    recheckWornItems(actor)
+    requestImmediate("choices")
+  } else {
+    actor.dirty = true
+  }
+  return null
+}
+
+fun World.setSkill(actor: Actor, skillLabel: Label, proficiency: Int): String? {
+  check(Feature.SKILLS in features) { "Skills feature is disabled" }
+  val proto =
+    protos.skills[skillLabel] ?: throw IllegalArgumentException("Unknown skill '$skillLabel'")
+  require(proficiency in 0..100) { "Proficiency must be 0-100, got $proficiency" }
+  val req =
+    RestrictionRequest(
+      point = RestrictionPoint.LEARN,
+      actor = actor,
+      skill = proto,
+      proficiency = proficiency,
+    )
+  val refused = restrictionRefusal(RestrictionPoint.LEARN, req)
+  if (refused != null) return refused
+  actor.skills[skillLabel] = proficiency
+  actor.dirty = true
+  return null
+}
+
+fun World.removeSkill(actor: Actor, skillLabel: Label): Boolean {
+  check(Feature.SKILLS in features) { "Skills feature is disabled" }
+  require(skillLabel in protos.skills) { "Unknown skill '$skillLabel'" }
+  val removed = actor.skills.remove(skillLabel) != null
+  if (removed) actor.dirty = true
+  return removed
+}

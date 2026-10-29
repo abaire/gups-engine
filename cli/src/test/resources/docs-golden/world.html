@@ -170,6 +170,12 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-login.code_prompt"><td><code>login.code_prompt</code></td><td></td><td><code>Invite or setup code: </code></td></tr>
 <tr id="message-login.code_prompt_open"><td><code>login.code_prompt_open</code></td><td></td><td><code>Invite code (or press Enter to sign up without one): </code></td></tr>
 <tr id="message-login.code_used"><td><code>login.code_used</code></td><td></td><td><code>That code was used or ran out in the meantime.</code></td></tr>
+<tr id="message-login.creation.confirm"><td><code>login.creation.confirm</code></td><td><code>{name}</code>, <code>{answers}</code></td><td><code>{name}: {answers}. Create this character? (yes, back or cancel)</code></td></tr>
+<tr id="message-login.creation.has_choices"><td><code>login.creation.has_choices</code></td><td><code>{name}</code></td><td><code>{name} has choices to make before playing.</code></td></tr>
+<tr id="message-login.creation.hint"><td><code>login.creation.hint</code></td><td></td><td><code>Type a number or a name, &quot;help &lt;name&gt;&quot; to learn more, &quot;back&quot; or &quot;cancel&quot;.</code></td></tr>
+<tr id="message-login.creation.no_such_option"><td><code>login.creation.no_such_option</code></td><td><code>{answer}</code></td><td><code>There's no {answer} to choose here.</code></td></tr>
+<tr id="message-login.creation.prompt"><td><code>login.creation.prompt</code></td><td></td><td><code>&gt; </code></td></tr>
+<tr id="message-login.creation.provider_failed"><td><code>login.creation.provider_failed</code></td><td></td><td><code>Character creation isn't working right now; please tell an instructor.</code></td></tr>
 <tr id="message-login.dev.local_only"><td><code>login.dev.local_only</code></td><td></td><td><code>This development server only accepts connections from this machine.</code></td></tr>
 <tr id="message-login.dev.prompt"><td><code>login.dev.prompt</code></td><td></td><td><code>By what name do you wish to be known? </code></td></tr>
 <tr id="message-login.dev.welcome"><td><code>login.dev.welcome</code></td><td></td><td><code>Welcome to GUPS (development server). You are the local instructor.</code></td></tr>
@@ -243,7 +249,9 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-say.room"><td><code>say.room</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} says, '{text}'</code></td></tr>
 <tr id="message-say.self"><td><code>say.self</code></td><td><code>{text}</code> (required)</td><td><code>You say, '{text}'</code></td></tr>
 <tr id="message-say.what"><td><code>say.what</code></td><td></td><td><code>Say what?</code></td></tr>
+<tr id="message-score.choice"><td><code>score.choice</code></td><td><code>{title}</code>, <code>{label}</code></td><td><code>{title}: {label}</code></td></tr>
 <tr id="message-score.resists"><td><code>score.resists</code></td><td><code>{resists}</code> (required)</td><td><code>Resists: {resists}</code></td></tr>
+<tr id="message-score.traits"><td><code>score.traits</code></td><td><code>{traits}</code></td><td><code>Traits: {traits}</code></td></tr>
 <tr id="message-session.link_lost"><td><code>session.link_lost</code></td><td><code>{name}</code></td><td><code>{name} has lost their link.</code></td></tr>
 <tr id="message-session.no_character"><td><code>session.no_character</code></td><td></td><td><code>You are not playing a character.</code></td></tr>
 <tr id="message-session.slow_down"><td><code>session.slow_down</code></td><td></td><td><code>Slow down.</code></td></tr>

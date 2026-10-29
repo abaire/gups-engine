@@ -2,6 +2,8 @@ package gups.pluginapi.host
 
 import gups.core.Role
 import gups.core.model.Actor
+import gups.core.model.WorldSchema
+import gups.core.model.didYouMean
 import gups.core.world.Action
 import gups.core.world.CategoryDef
 import gups.core.world.CommandCategory
@@ -19,12 +21,17 @@ import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
 import gups.pluginapi.PluginCommandCall
+import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginLane
+import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
+import gups.pluginapi.PluginRestrictionCall
+import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRole
+import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import gups.script.WorldDir
 import gups.script.WorldModule
@@ -48,6 +55,37 @@ data class PluginInfo(
   val effects: List<PluginMemberInfo>,
   val commands: List<PluginCommandInfo>,
   val gmcp: List<PluginGmcpInfo>,
+  val traits: List<PluginTraitInfo> = emptyList(),
+  val restrictions: List<PluginRestrictionInfo> = emptyList(),
+  val choices: List<PluginChoiceInfo> = emptyList(),
+)
+
+data class PluginTraitInfo(
+  val name: String,
+  val label: String,
+  val doc: String,
+  val statDeltas: Map<String, Int> = emptyMap(),
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  val resistDeltas: Map<String, Int> = emptyMap(),
+  val flags: Set<String> = emptySet(),
+  val modifiers: Set<String> = emptySet(),
+)
+
+data class PluginRestrictionInfo(val point: String, val doc: String)
+
+data class PluginOptionInfo(
+  val id: String,
+  val label: String,
+  val summary: String,
+  val help: String,
+  val traits: List<String>,
+)
+
+data class PluginChoiceInfo(
+  val id: String,
+  val title: String,
+  val prompt: String,
+  val options: List<PluginOptionInfo>,
 )
 
 data class PluginMemberInfo(
@@ -99,6 +137,10 @@ internal class PluginRegistryImpl(
   private val pluginId: String,
   private val takenCommands: List<CommandDef>,
   private val takenGmcp: Set<String>,
+  private val takenTraits: Set<String> = emptySet(),
+  private val hasCreation: Boolean = false,
+  private val schema: WorldSchema = WorldSchema.EMPTY,
+  private val features: Features = Features.ALL,
   /** The world's engine commands, renames applied, which a plugin command may not shadow. */
   commandCheck: CommandRegistry = CommandRegistry(),
   private val log: (World) -> (String) -> Unit,
@@ -110,6 +152,16 @@ internal class PluginRegistryImpl(
   val commands = mutableListOf<CommandReg>()
   val gmcp = mutableListOf<GmcpReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
+  val traits = mutableMapOf<String, PluginTrait>()
+  private var _creation: PluginCreation? = null
+  val creation: PluginCreation?
+    get() = _creation
+
+  val restrictions =
+    mutableMapOf<
+      PluginRestrictionPoint,
+      MutableList<Pair<String, (PluginRestrictionCall) -> String?>>,
+    >()
   private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
 
   private fun member(name: String, value: Any) {
@@ -224,6 +276,57 @@ internal class PluginRegistryImpl(
     started += fn
   }
 
+  override fun addTrait(trait: PluginTrait) {
+    require(MEMBER.matches(trait.name)) { "trait name '${trait.name}' must match [a-z][a-z0-9_]*" }
+    require(trait.name !in traits && trait.name !in takenTraits) {
+      "trait '${trait.name}' is already registered"
+    }
+    for (s in trait.statDeltas.keys) {
+      require(s in schema.statNames) { "unknown stat '$s'${didYouMean(s, schema.statNames)}" }
+    }
+    for (v in trait.maxVitalDeltas.keys) {
+      require(v in schema.vitalNames) { "unknown vital '$v'${didYouMean(v, schema.vitalNames)}" }
+    }
+    for (d in trait.resistDeltas.keys) {
+      require(d in schema.damageTypes) {
+        "unknown damage type '$d'${didYouMean(d, schema.damageTypes)}"
+      }
+    }
+    require("stunned" !in trait.flags) { "trait '${trait.name}': flags cannot contain 'stunned'" }
+    for (p in trait.modifiers.keys) {
+      if (
+        p in
+          setOf(
+            PluginModifierPoint.TO_HIT,
+            PluginModifierPoint.DAMAGE,
+            PluginModifierPoint.INITIATIVE,
+          )
+      ) {
+        require(Feature.COMBAT in features) {
+          "trait '${trait.name}': modifier point $p needs the combat feature"
+        }
+      }
+    }
+    traits[trait.name] = trait
+  }
+
+  override fun setCreation(creation: PluginCreation) {
+    require(this.creation == null) { "setCreation can only be called once" }
+    require(!hasCreation) { "a creation provider is already registered" }
+    this._creation = creation
+  }
+
+  override fun addRestriction(
+    point: PluginRestrictionPoint,
+    doc: String,
+    check: (PluginRestrictionCall) -> String?,
+  ) {
+    if (point in setOf(PluginRestrictionPoint.CAST, PluginRestrictionPoint.LEARN)) {
+      require(Feature.SKILLS in features) { "restriction point $point needs the skills feature" }
+    }
+    restrictions.getOrPut(point) { mutableListOf() }.add(doc to check)
+  }
+
   private fun checkParams(name: String, params: List<PluginParam>) {
     val names = params.map { it.name }
     require(names.distinct().size == names.size) { "'$name' has duplicate parameter names" }
@@ -260,6 +363,9 @@ internal constructor(
   override val globals: Map<String, Any> =
     plugins.associate { it.id to PluginNamespace(it.id, it.reg.members) }
 
+  override val traits: Set<String>
+    get() = plugins.flatMap { it.reg.traits.keys }.toSet()
+
   /** The ids that loaded, sorted. */
   val ids: List<String>
     get() = plugins.map { it.id }
@@ -276,6 +382,29 @@ internal constructor(
 
   override fun install(world: World) {
     Facades.registerLog(world, log)
+
+    val creationPlugin = plugins.firstOrNull { it.reg.creation != null }
+    world.creation =
+      creationPlugin?.let { CreationProviderAdapter(world, it.id, it.reg.creation!!) }
+
+    world.traits =
+      plugins.flatMap { p -> p.reg.traits.values.map { it.name to traitAdapter(p.id, it) } }.toMap()
+
+    val allRestrictions =
+      mutableMapOf<gups.core.model.RestrictionPoint, MutableList<gups.core.model.Restriction>>()
+    for (point in gups.core.model.RestrictionPoint.entries) {
+      allRestrictions[point] = mutableListOf()
+    }
+    for (p in plugins) {
+      for ((point, list) in p.reg.restrictions) {
+        val corePoint = gups.core.model.RestrictionPoint.valueOf(point.name)
+        for ((_, check) in list) {
+          allRestrictions[corePoint]!!.add(restrictionAdapter(world, p.id, corePoint, check))
+        }
+      }
+    }
+    world.restrictions = allRestrictions
+
     for (p in plugins) {
       for (cat in p.reg.categories) {
         world.commands.registerCategory(
@@ -367,6 +496,35 @@ internal constructor(
             .map { PluginCommandInfo(it.name, it.lane, it.role, it.doc, it.category) }
             .sortedBy { it.name },
         gmcp = p.reg.gmcp.map { PluginGmcpInfo(it.pkg, it.doc) }.sortedBy { it.pkg },
+        traits =
+          p.reg.traits.values
+            .map {
+              PluginTraitInfo(
+                name = it.name,
+                label = it.label,
+                doc = it.doc,
+                statDeltas = it.statDeltas,
+                maxVitalDeltas = it.maxVitalDeltas,
+                resistDeltas = it.resistDeltas,
+                flags = it.flags,
+                modifiers = it.modifiers.keys.map { m -> m.name }.toSet(),
+              )
+            }
+            .sortedBy { it.name },
+        restrictions =
+          p.reg.restrictions.flatMap { (point, list) ->
+            list.map { (doc, _) -> PluginRestrictionInfo(point.name.lowercase(), doc) }
+          },
+        choices =
+          p.reg.creation?.choices?.map { c ->
+            PluginChoiceInfo(
+              id = c.id,
+              title = c.title,
+              prompt = c.prompt,
+              options =
+                c.options.map { o -> PluginOptionInfo(o.id, o.label, o.summary, o.help, o.traits) },
+            )
+          } ?: emptyList(),
       )
     }
 
@@ -376,8 +534,13 @@ internal constructor(
 
   companion object {
     /** A host with these plugins, already constructed, for tests (no jars, no class loaders). */
-    fun of(vararg plugins: GupsPlugin, log: (String) -> Unit = {}): PluginHost =
-      PluginLoader.register(plugins.map { it to null }, log)
+    fun of(
+      vararg plugins: GupsPlugin,
+      schema: WorldSchema = WorldSchema.EMPTY,
+      features: Features = Features.ALL,
+      log: (String) -> Unit = {},
+    ): PluginHost =
+      PluginLoader.register(plugins.map { it to null }, log, schema = schema, features = features)
   }
 }
 
@@ -455,7 +618,7 @@ object PluginLoader {
       }
       loader.close()
     }
-    val host = register(found, log, warnings, module.features, module.rename)
+    val host = register(found, log, warnings, module.features, module.rename, module.schema)
     return host
   }
 
@@ -472,6 +635,7 @@ object PluginLoader {
     warnings: MutableList<String> = mutableListOf(),
     features: Features = Features.ALL,
     rename: Map<String, String> = emptyMap(),
+    schema: WorldSchema = WorldSchema.EMPTY,
   ): PluginHost {
     val loaded = mutableListOf<LoadedPlugin>()
     val logOf: (World) -> (String) -> Unit = { w -> Facades.logOf(w) }
@@ -481,11 +645,46 @@ object PluginLoader {
           plugin.id,
           takenCommands = loaded.flatMap { p -> p.reg.commands.map { FastCommand(it.name) {} } },
           takenGmcp = loaded.flatMap { p -> p.reg.gmcp.map { it.pkg } }.toSet(),
+          takenTraits = loaded.flatMap { p -> p.reg.traits.keys }.toSet(),
+          hasCreation = loaded.any { it.reg.creation != null },
+          schema = schema,
+          features = features,
           log = logOf,
           commandCheck = CommandRegistry(features = features, rename = rename),
         )
       try {
         plugin.register(reg)
+        reg.creation?.let { c ->
+          require(c.choices.isNotEmpty()) { "creation provider must declare at least one choice" }
+          val choiceIds = mutableSetOf<String>()
+          val reserved = setOf("back", "cancel", "help", "yes", "no")
+          for (choice in c.choices) {
+            require(PluginRegistryImpl.MEMBER.matches(choice.id)) {
+              "choice id '${choice.id}' must match [a-z][a-z0-9_]*"
+            }
+            require(choiceIds.add(choice.id)) { "duplicate choice id '${choice.id}'" }
+            require(choice.options.isNotEmpty()) {
+              "choice '${choice.id}' must declare at least one option"
+            }
+            val optionIds = mutableSetOf<String>()
+            for (opt in choice.options) {
+              require(PluginRegistryImpl.MEMBER.matches(opt.id)) {
+                "option id '${opt.id}' in choice '${choice.id}' must match [a-z][a-z0-9_]*"
+              }
+              require(opt.id !in reserved) {
+                "option id '${opt.id}' in choice '${choice.id}' is reserved"
+              }
+              require(optionIds.add(opt.id)) {
+                "duplicate option id '${opt.id}' in choice '${choice.id}'"
+              }
+              for (t in opt.traits) {
+                require(t in reg.traits) {
+                  "option '${opt.id}' in choice '${choice.id}' names trait '$t', which is not registered by this plugin"
+                }
+              }
+            }
+          }
+        }
         loaded += LoadedPlugin(plugin.id, plugin.doc, reg, loader)
       } catch (e: Throwable) {
         val text = "plugin '${plugin.id}': register failed: ${e.message ?: e}"

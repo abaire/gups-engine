@@ -178,12 +178,30 @@ internal object Tools {
     if (w.refuseRestricted(p, "stat")) return
     val arg = c.args.trim()
     if (arg.isEmpty()) return w.send(p, "Usage: @stat <keyword>, here, or #id")
-    val e: Entity =
+    val e: Entity? =
       when {
         arg == "here" -> p.room
         arg.startsWith("#") -> arg.drop(1).toLongOrNull()?.let { w.entity(EntityId(it)) }
         else -> w.findActor(p, arg) ?: w.findItem(p, arg, inventory = true, ground = true)
-      } ?: return w.send(p, "You don't see that here.")
+      }
+    if (e == null) {
+      val skill =
+        if (Feature.SKILLS in w.features) {
+          val lbl = labelArg(if (arg.startsWith(":") || arg.startsWith("//")) arg else ":$arg", p)
+          (if (lbl != null) w.protos.skills[lbl] else null)
+            ?: w.protos.skills.values.firstOrNull { it.name.equals(arg, ignoreCase = true) }
+        } else null
+      if (skill != null) {
+        if (!p.owns(skill.label.pkg)) return w.send(p, NOT_YOURS)
+        val lines = buildList {
+          add("${skill.label} \"${skill.name}\" (skill)")
+          add("Kind: ${skill.kind}")
+          if (skill.tags.isNotEmpty()) add("Tags: " + skill.tags.sorted().joinToString(", "))
+        }
+        return w.send(p, lines.joinToString("\n"))
+      }
+      return w.send(p, "You don't see that here.")
+    }
     val pkg = w.packageOf(e) ?: return w.send(p, "${e.name} is nowhere.")
     if (!p.owns(pkg)) return w.send(p, NOT_YOURS)
     w.send(p, w.statLines(e).joinToString("\n"))
@@ -519,7 +537,9 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
       add(
         "Vitals: " +
           e.vitalMap.entries.joinToString(", ") { (name, v) ->
-            "$name ${v.current}/${v.max}" +
+            val effMax = e.max(name)
+            "$name ${v.current}/$effMax" +
+              (if (effMax != v.max) " (base ${v.max})" else "") +
               (v.belowZeroSince?.let { " (below 0 since pulse $it)" } ?: "")
           } +
           (if (Feature.LEVELING in features) "; level ${e.level}, xp ${e.xp}" else "") +
@@ -531,11 +551,54 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
             "$s ${e.stat(s)}" + if (e.stat(s) != e.baseStats[s]) " (base ${e.baseStats[s]})" else ""
           }
       )
-      if (e.resists.isNotEmpty())
+      if (schema.damageTypes.isNotEmpty())
         add(
           "Resists: " +
-            e.resists.entries.joinToString(", ") { "${it.key.name.lowercase()} ${it.value}" }
+            schema.damageTypes.joinToString(", ") { type ->
+              val eff = e.effectiveResist(type)
+              val base = e.baseResist(type)
+              "$type $eff" + if (eff != base) " (base $base)" else ""
+            }
         )
+      if (e is Player && e.choices.isNotEmpty()) {
+        add(
+          "Answers: " +
+            e.choices.entries.joinToString(", ") { (c, opt) ->
+              val known =
+                creation?.choices?.firstOrNull { it.id == c }?.options?.any { it.id == opt } == true
+              "$c=$opt" + if (known) "" else " (unknown)"
+            }
+        )
+      }
+      if (e.grantedTraits.isNotEmpty()) {
+        add(
+          "Granted traits: " +
+            e.grantedTraits.sorted().joinToString(", ") { t ->
+              t + if (t in traits) "" else " (unknown)"
+            }
+        )
+      }
+      if (e.traits.isNotEmpty()) {
+        add(
+          "Traits: " +
+            e.traits.joinToString(", ") { t ->
+              val sources = mutableListOf<String>()
+              if (e is Player) {
+                creation?.choices?.forEach { choice ->
+                  val optId = e.choices[choice.id]
+                  val opt = choice.options.firstOrNull { it.id == optId }
+                  if (opt?.traits?.contains(t.name) == true) {
+                    sources += "${choice.id}=${opt.id}"
+                  }
+                }
+              } else if (e is Mob) {
+                if (t.name in e.proto.traits) sources += "prototype"
+              }
+              if (t.name in e.grantedTraits) sources += "granted"
+              "${t.name} (${sources.joinToString()})"
+            }
+        )
+      }
       if (e.skills.isNotEmpty())
         add("Skills: " + e.skills.entries.joinToString(", ") { "${it.key} ${it.value}" })
       add(
@@ -585,6 +648,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
       add(
         "Count ${e.count}, weight ${e.weight}" + (e.decayAt?.let { ", decays at pulse $it" } ?: "")
       )
+      if (e.tags.isNotEmpty()) add("Tags: " + e.tags.sorted().joinToString(", "))
       if (e.contents.isNotEmpty())
         add("Contains: " + e.contents.joinToString(", ") { "${it.name} #${it.id.v}" })
     }
@@ -599,6 +663,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
             }
             .ifEmpty { "none" }
       )
+      if (e.tags.isNotEmpty()) add("Tags: " + e.tags.sorted().joinToString(", "))
       add("Here: ${e.actors.size} actors, ${e.items.size} items on the ground")
     }
   }

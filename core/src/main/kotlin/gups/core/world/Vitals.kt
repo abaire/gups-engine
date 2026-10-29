@@ -29,7 +29,9 @@ internal fun World.applyVitalDeltas(actor: Actor, deltas: Map<String, Int>, sour
     val v =
       actor.vitalMap[name] ?: throw IllegalArgumentException("${actor.name} has no vital $name")
     if (delta == 0) continue
-    val next = (v.current.toLong() + delta).coerceIn(Int.MIN_VALUE.toLong(), v.max.toLong()).toInt()
+    val effMax = actor.max(name)
+    val next =
+      (v.current.toLong() + delta).coerceIn(Int.MIN_VALUE.toLong(), effMax.toLong()).toInt()
     if (next == v.current) continue
     if (next < VITAL_SANITY_FLOOR && v.current >= VITAL_SANITY_FLOOR)
       diagnose(
@@ -55,7 +57,10 @@ private fun World.setVital(v: Vital, next: Int) {
 
 /** Sets every vital of [actor] to its maximum, as dormant recovery does. */
 internal fun World.fillVitals(actor: Actor) {
-  for (v in actor.vitalMap.values) if (v.current < v.max) setVital(v, v.max)
+  for ((name, v) in actor.vitalMap) {
+    val effMax = actor.max(name)
+    if (v.current < effMax) setVital(v, effMax)
+  }
   actor.dirty = true
 }
 
@@ -116,5 +121,5 @@ internal fun World.settleNewCondition(actor: Actor, what: String) {
 
 /** Sets every vital of [actor] to its maximum through [changeVitals], as full healing does. */
 fun World.restoreVitals(actor: Actor) {
-  changeVitals(actor, actor.vitalMap.mapValues { (_, v) -> v.max - v.current })
+  changeVitals(actor, actor.vitalMap.mapValues { (name, v) -> actor.max(name) - v.current })
 }

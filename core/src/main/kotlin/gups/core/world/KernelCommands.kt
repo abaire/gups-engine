@@ -5,7 +5,6 @@ import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.Condition
-import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Exit
@@ -348,11 +347,20 @@ internal object KernelCommands {
       lines +=
         w.msg(
           KernelMsg.SCORE_RESISTS,
-          "resists" to
-            schema.damageTypes.joinToString("  ") { "$it ${a.resists[DamageType(it)] ?: 0}" },
+          "resists" to schema.damageTypes.joinToString("  ") { "$it ${a.effectiveResist(it)}" },
         )
     if (Feature.LEVELING in w.features)
       lines += w.msg(LevelingMsg.SCORE_LEVEL, "level" to a.level, "xp" to a.xp)
+    if (a is Player && w.creation != null) {
+      for (choice in w.creation!!.choices) {
+        val optId = a.choices[choice.id] ?: continue
+        val opt = choice.options.firstOrNull { it.id == optId } ?: continue
+        lines += w.msg(KernelMsg.SCORE_CHOICE, "title" to choice.title, "label" to opt.label)
+      }
+    }
+    if (a.traits.isNotEmpty()) {
+      lines += w.msg(KernelMsg.SCORE_TRAITS, "traits" to a.traits.joinToString(", ") { it.label })
+    }
     w.send(a, lines.joinToString("\n"))
   }
 
@@ -716,8 +724,17 @@ internal object KernelCommands {
     return object : Action {
       override fun validate(w: World, actor: Actor): String? {
         if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
-        if (w.slotFor(actor, wanted) == null)
-          return w.msg(KernelMsg.WEAR_CANT_WEAR, "item" to item.name)
+        val slot =
+          w.slotFor(actor, wanted) ?: return w.msg(KernelMsg.WEAR_CANT_WEAR, "item" to item.name)
+        val req =
+          gups.core.model.RestrictionRequest(
+            point = gups.core.model.RestrictionPoint.WEAR,
+            actor = actor,
+            item = item,
+            slot = slot,
+          )
+        val refusal = w.restrictionRefusal(gups.core.model.RestrictionPoint.WEAR, req)
+        if (refusal != null) return refusal
         return null
       }
 
@@ -932,7 +949,10 @@ internal fun World.healthWord(a: Actor): String {
     Condition.INCAPACITATED -> return msg(KernelMsg.HEALTH_INCAPACITATED)
     Condition.OK -> Unit
   }
-  val pct = a.vitalMap.values.filter { it.max > 0 }.minOfOrNull { it.current * 100 / it.max } ?: 100
+  val pct =
+    a.vitalMap.entries
+      .filter { a.max(it.key) > 0 }
+      .minOfOrNull { it.value.current * 100 / a.max(it.key) } ?: 100
   return msg(
     when {
       pct >= 100 -> KernelMsg.HEALTH_EXCELLENT

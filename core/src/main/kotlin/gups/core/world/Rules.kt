@@ -3,31 +3,63 @@ package gups.core.world
 import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.ModifierPoint
+import gups.core.model.Trait
+import gups.core.model.TraitModifier
 import gups.core.rules.RulesContext
 
 // The modifier chain. Each modifiable rules result is the base value from the rules
 // module, then the zone's package modifiers, the region modifiers sorted by region name, the
-// room's, then the actor's affects (by id) and equipped items (in slot order).
+// room's, then the actor's traits (in name order), affects (by id) and equipped items (in slot
+// order).
 
 /** One computed rules value and its chain, as `@trace rules` shows it. */
 class ChainResult<T>(val value: T, val text: String)
 
-/** The modifiers that apply to [actor] at [point], in chain order, with where each comes from. */
-fun World.modifierChain(point: ModifierPoint, actor: Actor): List<Pair<String, HookRef>> {
-  val room = actor.room
-  val out = mutableListOf<Pair<String, HookRef>>()
-  protos.zones[room.label.pkg]?.modifiers?.get(point)?.let { out += "zone:${room.label.pkg}" to it }
-  for (name in room.regions.sorted()) protos.regions[name]?.modifiers?.get(point)?.let {
-    out += "region:$name" to it
+private sealed interface ChainStep {
+  val source: String
+
+  fun apply(world: World, point: ModifierPoint, c: RulesContext, v: Any?): Any?
+
+  class Script(override val source: String, val ref: HookRef) : ChainStep {
+    override fun apply(world: World, point: ModifierPoint, c: RulesContext, v: Any?): Any? =
+      world.scripts.modify(world, point, ref, source, c, v)
   }
-  room.proto.modifiers[point]?.let { out += "room:${room.label.name}" to it }
+
+  class TraitStep(val trait: Trait, val mod: TraitModifier) : ChainStep {
+    override val source: String = "trait:${trait.name}"
+
+    override fun apply(world: World, point: ModifierPoint, c: RulesContext, v: Any?): Any? =
+      try {
+        mod.modify(c, v ?: "")
+      } catch (e: Exception) {
+        world.diagnose("plugin", "trait ${trait.name} modifier failed: ${e.message}", e)
+        v
+      }
+  }
+}
+
+/** The modifiers that apply to [actor] at [point], in chain order, with where each comes from. */
+private fun World.chainSteps(point: ModifierPoint, actor: Actor): List<ChainStep> {
+  val room = actor.room
+  val out = mutableListOf<ChainStep>()
+  protos.zones[room.label.pkg]?.modifiers?.get(point)?.let {
+    out += ChainStep.Script("zone:${room.label.pkg}", it)
+  }
+  for (name in room.regions.sorted()) protos.regions[name]?.modifiers?.get(point)?.let {
+    out += ChainStep.Script("region:$name", it)
+  }
+  room.proto.modifiers[point]?.let { out += ChainStep.Script("room:${room.label.name}", it) }
+  for (t in actor.traits) {
+    val mod = t.modifiers[point] ?: continue
+    out += ChainStep.TraitStep(t, mod)
+  }
   for (a in actor.affects.sortedBy { it.id }) a.modifiers[point]?.let {
-    out += "affect:${a.name}" to it
+    out += ChainStep.Script("affect:${a.name}", it)
   }
   val slots = equipmentSlots()
   for (slot in slots + (actor.equipmentIndex.keys - slots.toSet()).sorted()) {
     val item = actor.equipmentIndex[slot] ?: continue
-    item.proto.modifiers[point]?.let { out += "item:${item.protoLabel.name}" to it }
+    item.proto.modifiers[point]?.let { out += ChainStep.Script("item:${item.protoLabel.name}", it) }
   }
   return out
 }
@@ -52,13 +84,13 @@ private fun <T> World.chain(
   base: T,
   show: (T) -> String,
 ): ChainResult<T> {
-  val links = modifierChain(point, c.actor)
+  val steps = chainSteps(point, c.actor)
   val text = StringBuilder("rules.${point.scriptName} base=${show(base)}")
   var v = base
-  for ((source, ref) in links) {
+  for (step in steps) {
     @Suppress("UNCHECKED_CAST")
-    v = scripts.modify(this, point, ref, source, c, v) as T
-    text.append(" → ").append(source).append(' ').append(show(v))
+    v = step.apply(this, point, c, v) as T
+    text.append(" → ").append(step.source).append(' ').append(show(v))
     if (point == ModifierPoint.CAST_ALLOWED && v != null) break
   }
   return ChainResult(v, text.toString())
@@ -84,13 +116,23 @@ fun World.initiativeOf(c: RulesContext): Int =
   traced(c, chain(ModifierPoint.INITIATIVE, c, rules.initiative(c)) { "$it" })
 
 /** Null to allow, or the denial message. */
-fun World.castAllowed(c: RulesContext): String? =
-  traced(
+fun World.castAllowed(c: RulesContext): String? {
+  val req =
+    gups.core.model.RestrictionRequest(
+      point = gups.core.model.RestrictionPoint.CAST,
+      actor = c.actor,
+      skill = c.skill,
+      target = c.target,
+    )
+  val refused = restrictionRefusal(gups.core.model.RestrictionPoint.CAST, req)
+  if (refused != null) return refused
+  return traced(
     c,
     chain<String?>(ModifierPoint.CAST_ALLOWED, c, rules.castAllowed(c)) {
       it?.let { m -> "deny('$m')" } ?: "allow"
     },
   )
+}
 
 fun World.moveCost(c: RulesContext): Map<String, Int> =
   chain(ModifierPoint.MOVE_COST, c, rules.moveCost(c)) { it.show() }.value

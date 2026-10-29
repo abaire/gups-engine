@@ -455,6 +455,26 @@ private fun flags(v: Any?, what: String): Set<String> =
 private fun flag(f: String, what: String): String =
   f.also { if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag") }
 
+private val TAG_REGEX = Regex("[a-z][a-z0-9_]*")
+
+private fun parseTags(d: ParsedDecl): Set<String> {
+  val tags = d.strList("tags")
+  for (t in tags) {
+    if (!TAG_REGEX.matches(t)) fail("${d.what("tags")}: '$t' is not a valid tag")
+  }
+  return tags.toSortedSet()
+}
+
+private fun parseMobTraits(d: ParsedDecl, known: Set<String>): Set<String> {
+  val traits = d.strList("traits")
+  for (t in traits) {
+    if (t !in known) {
+      fail("${d.what("traits")}: unknown trait '$t'${didYouMean(t, known)}")
+    }
+  }
+  return traits.toSortedSet()
+}
+
 /**
  * `equip_affects` entries: a flag name, held while worn, or `{"flag": ..., "pulses": n}`, applied
  * for `n` pulses on equip. A stun must be timed so an item can't stun its wearer for good.
@@ -514,6 +534,7 @@ private fun effectValue(v: Any?, what: String): Effect =
 internal class DeclarationBuiltins(
   private val schema: WorldSchema = WorldSchema.EMPTY,
   private val features: Features = Features.ALL,
+  private val knownTraits: () -> Set<String> = { emptySet() },
 ) {
   /** Fails with "<name> needs the <feature> feature" if the world has [symbol]'s feature off. */
   private fun need(symbol: String, name: String = symbol) {
@@ -613,6 +634,7 @@ internal class DeclarationBuiltins(
           desc = d.str("desc") ?: "",
           size = size,
           regions = d.strList("regions").toSet(),
+          tags = parseTags(d),
           flags = flags,
           exits = exits,
           spawns = spawns,
@@ -822,6 +844,7 @@ internal class DeclarationBuiltins(
             d.choice("dormant_recovery")?.let { DormantRecovery.valueOf(it.uppercase()) }
               ?: def.dormantRecovery,
           loot = loot,
+          traits = parseMobTraits(d, knownTraits()),
           version = version(d),
         )
       if (proto.thinkEvery < 1) fail("mob(think_every): must be at least 1")
@@ -874,6 +897,7 @@ internal class DeclarationBuiltins(
               )
             },
           statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas")),
+          tags = parseTags(d),
           stackable = d.bool("stackable") ?: false,
           decayPulses = d.int("decay_pulses"),
           container = container,
@@ -938,6 +962,7 @@ internal class DeclarationBuiltins(
           attackWhileCasting = d.bool("attack_while_casting") ?: false,
           effect = d["effect"]?.let { effectValue(it, d.what("effect")) },
           resolve = d["resolve"]?.let { ScriptResolve(hookRef(it, d.what("resolve")), pkg) },
+          tags = parseTags(d),
         )
       if (proto.warmup < 0 || proto.lag < 0) fail("skill(): warmup and lag can't be negative")
       proto.effect?.let { effectRefs(it, ctx, thread) }
@@ -1653,6 +1678,12 @@ internal class DeclarationBuiltins(
               default = "[]",
             ),
             DeclParam(
+              "tags",
+              "list[str]",
+              "Tags for plugin restrictions and scripts.",
+              default = "[]",
+            ),
+            DeclParam(
               "flags",
               "list[str]",
               "Room flags such as 'always_active' or 'dead_end_ok'.",
@@ -1955,6 +1986,12 @@ internal class DeclarationBuiltins(
               default = "[]",
             ),
             DeclParam(
+              "traits",
+              "list[str]",
+              "Traits defined by the world's plugins.",
+              default = "[]",
+            ),
+            DeclParam(
               "version",
               "int",
               "Prototype schema version for persisted state migration.",
@@ -2015,6 +2052,12 @@ internal class DeclarationBuiltins(
               "stats",
               "Stat adjustments applied while the item is worn, built with stats(...).",
               default = "stats()",
+            ),
+            DeclParam(
+              "tags",
+              "list[str]",
+              "Tags for plugin restrictions and scripts.",
+              default = "[]",
             ),
             DeclParam(
               "stackable",
@@ -2146,6 +2189,12 @@ internal class DeclarationBuiltins(
               "function",
               "Custom function fn(ctx) run when the skill resolves.",
               default = "None",
+            ),
+            DeclParam(
+              "tags",
+              "list[str]",
+              "Tags for plugin restrictions and scripts.",
+              default = "[]",
             ),
           ),
       )

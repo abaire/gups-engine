@@ -533,7 +533,10 @@ current state.
   0–100.
 - **Traits** (§4.19): `grantedTraits: Set<String>`, as saved, unknown ones included, and
   `traits`, the effective set of known traits: for a player, from its choices and granted
-  traits; for a mob, from its prototype's `traits` and granted traits.
+  traits; for a mob, from its prototype's `traits` and granted traits. `traits` and the sums
+  of their stat, max-vital and resist deltas and flags are worked out again, and kept on the
+  actor, whenever an input changes: at spawn, at load, on a change (§4.19) and on reload. They
+  are never derived on the fly, so effective reads stay cheap on hot paths.
 - **Affects:** `affects: List<Affect>`.
 - **Action state:**
   - `actionQueue: ArrayDeque<QueuedAction>`, capacity 10.
@@ -756,6 +759,10 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
   - Players store everything, role included. Vital maxima and resists are the base values;
     `choices` is an object and `grantedTraits` a sorted array, both empty when there are
     none. A payload written before they existed reads as empty.
+  - A restored actor's traits are worked out before its vitals are restored, and `current`
+    is capped at the effective maximum, so a value that only a trait allows (a mage's extra
+    mana) survives a restart. A mob delta without a vital `max` takes the prototype's base
+    maximum.
   - Every entity and player stores its active and anchor reasons (§5.9).
 - **SQLite settings:** WAL with `synchronous = NORMAL`, which survives process kills but may
   lose the last commits on power loss. `busy_timeout` is 5 s.
@@ -1189,8 +1196,8 @@ damage event, after the losses are applied.
 
 **Timing:**
 - `on_load` fires once on every entity, ascending id, after the world is built (or
-  restored from the database) and global commands are installed. Spawns filled while the
-  world is built fire `on_spawn` first. A reload fires `on_load` only on rooms it creates.
+  restored from the database) and global commands are installed. A fresh world's spawns,
+  filled as it starts (§4.11), fire `on_spawn` first. A reload fires `on_load` only on rooms it creates.
   Characters restored at login don't get it.
 - `before_enter` dispatches in the destination room. On arrival the player's `look` is sent
   before `on_exit` and `on_enter` fire.
@@ -1379,6 +1386,10 @@ modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and
     effective one.
   - Players created without choices (no provider, the harness without `choices`, the dry
     run's plain player) see `ctx.actor.choices == {}`.
+  - A mob runs with its prototype's traits set, so `ctx.actor.max_<vital>` already includes
+    their deltas. A ruleset that keeps the prototype's maxima returns
+    `ctx.actor.base.max_<vital>`, as the template does; returning the effective value would
+    count the traits twice.
 - `condition(ctx)` decides `ctx.actor`'s life state (§5.4): after any change to one of the
   actor's vitals, and for every simulated actor at each world tick, so a rule such as "dead
   after 60 pulses with `oxygen` below zero" can use `below_zero_since`.
@@ -1400,7 +1411,7 @@ per band, and `cast_allowed` and `interrupt_check` get a synthetic skill with
 `interrupt = {"damage_pct": 10}`. With a creation provider (§4.19), `starting_stats` also
 runs for one synthetic player per option of each choice. Its answers are built in choice
 order: that option for its own choice, and the first available option for every other. An
-option that isn't available on that path is skipped. A mob whose own package failed to load
+option that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose own package failed to load
 isn't checked.
 Only the package named `rules` is dry-run; a test world that names another rules package
 (§4.12) isn't. An error, a wrong return type or an undeclared name in a result
@@ -1644,7 +1655,7 @@ prefix only matches other `@` commands.
 | Command | Purpose |
 |---|---|
 | `@goto <label\|player>` | Move to a room of the builder's packages (index 0), or to any player (their track index), through `teleport`, so hooks fire. A player's name wins over a label. Going to a player can be taken away per account (Restrictions, below). |
-| `@stat <target>` | Show an entity's full state. The target is a keyword (actors first, then carried and ground items), `here` or `#id`. For a player this includes base and effective stats, maxima and resists, every saved answer and granted trait (unknown ones marked `(unknown)`), and the effective traits with where each comes from (`<choice>=<option>`, `prototype` or `granted`); mobs show their traits the same way. Rooms, items and skills show their `tags`. |
+| `@stat <target>` | Show an entity's full state. The target is a keyword (actors first, then carried and ground items), `here` or `#id`; with the `skills` feature, a target no entity matches may name a skill by label or name, which shows its kind and `tags`. For a player this includes base and effective stats, maxima and resists, every saved answer and granted trait (unknown ones marked `(unknown)`), and the effective traits with where each comes from (`<choice>=<option>`, `prototype` or `granted`); mobs show their traits the same way. Rooms, items and skills show their `tags`. |
 | `@spawn <label> [n]` | Spawn 1 to 10 mobs or items (flagged `debug`). |
 | `@trace [all\|zone [pkg]\|entity <target>\|hook <name>\|rules\|off]` | Stream hook execution (§5.13). |
 | `@errors [package]` | Show the last 10 diagnostics. |
@@ -2036,6 +2047,7 @@ enum class RestrictionPoint { WEAR, ENTER, CAST, LEARN }
 fun interface Restriction { fun check(world: World, r: RestrictionRequest): String? }
 // World.creation: CreationProvider?, World.traits: Map<String, Trait>,
 // World.restrictions: Map<RestrictionPoint, List<Restriction>>; empty by default.
+// The per-account moderation restrictions of §4.9 are World.accountRestrictions.
 ```
 
 - **The creation flow** is one class in `core` (a step machine over a session) that both
@@ -2047,6 +2059,19 @@ fun interface Restriction { fun check(world: World, r: RestrictionRequest): Stri
 - **Loading:** `loadPackages` is not on `ScriptHost`. The script loader returns a
   `LoadResult`, and the script host is built from it before the `World`. Reloads go through
   `ScriptHost.reload`.
+- **Starting:** building a `World` registers its rooms and spawn rules but places no mobs.
+  `World.start()` brings it to life once everything that shapes its actors is in place, in
+  this order: construct, install the plugins (`WorldPluginWiring.install`, so traits,
+  restrictions and the creation provider exist), install the script host (global commands
+  and the rules' world), restore any saved state, then `start()`. A fresh world fills its
+  rooms' spawns there, so every initial mob is built exactly as a later respawn is: its
+  prototype traits are set before `rules.starting_stats` runs, and `on_spawn` runs with the
+  scripts installed. Then `on_load` fires on every entity, ascending id (§4.4), and the bubble
+  settles. Every place that builds a world (the server, the harness, the fuzz walker, tests)
+  follows this order; anything a later plugin feature adds that shapes spawned actors is
+  installed before `start()`, never patched onto them afterwards. A world rebuilt only to
+  inspect or replay saved state (the migration check, a repro) has already started and
+  doesn't call it.
 - **The world:** `World.login: LoginHandler?` handles sessions without a character. With
   no handler, input from such a session gets "You are not playing a character." and the
   world closes and disconnects the session (§5.2).
@@ -2545,7 +2570,7 @@ implementations live in `gups.pluginapi.host`, which may use `core` and `script`
   global commands.
 - `WorldPluginWiring` (in `script`): `globals` (plugin namespaces by id, predeclared in every
   package, test file and `@eval`), `install(world)` (before the script host installs), and
-  `started(world)` (after `on_load`). Every place that builds a world takes one, `NONE` by
+  `started(world)` (after `World.start()`, §4.11). Every place that builds a world takes one, `NONE` by
   default. `scriptWorld(thread)` finds the running world from a Starlark thread.
 - `install(world)` also fills `World.creation`, `World.traits` and `World.restrictions`
   (§4.11) with adapters over the plugins' objects. The adapters turn facade types into
@@ -2920,6 +2945,9 @@ what it is about to do, and either allows it or refuses with a message.
 
 - Checks apply to every actor, players and mobs alike; a check that only cares about players
   allows mobs.
+- An `enter` refusal stops the move as a `before_enter` veto does: walking costs no lag; a
+  `flee` through that exit is a failed flee (the refusal and the failed-flee lag); a mob's `wander` or
+  `pursue` step just fails. `teleport`, and so `@goto`, is refused before anything moves.
 - All checks at a point run in plugin id order, and in registration order within a plugin.
   The first refusal wins. A player sees its message, and a refused action costs no lag, as a
   veto (§5.3). For a mob the action just fails.
@@ -3172,7 +3200,7 @@ respawns, which are the kernel and work with or without it (§3.10).
   for them.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves
   the world. The rule refills to `count` at the first world tick at or after the deadline.
-  Rooms fill their spawns when the world is constructed.
+  A fresh world's rooms fill their spawns when the world starts (§4.11).
 - **Dormancy:** Combat never continues in a dormant room. When a room goes dormant, its
   NPCs disengage. How their vitals recover is set per mob by `dormant_recovery` (§5.9).
 
@@ -3694,8 +3722,10 @@ reload is refused for both.
     it, since what is available may change.
   - `cancel` returns to the character menu and creates nothing.
   - The confirmation lists every answer as `<title> <label>`, in choice order, separated by
-    ", ". `yes` (or `y`) creates the character, `back` returns to the last choice, and
-    `cancel` returns to the menu. Anything else asks again.
+    ", ". `yes` (or `y`) creates the character, `back` returns to the last choice asked (for
+    a new character whose answers were all kept, the last one answered), and `cancel`
+    returns to the menu. Anything else asks again. Kept answers last only until that
+    attempt ends: the next `new` starts with none.
   - On `yes` the provider validates the answers. A refusal is shown and the player goes back
     to the last choice. The name is then checked again; if it was taken meanwhile the player
     is told and asked for another name, keeping the answers. Then come the character limit and
@@ -3706,13 +3736,19 @@ reload is refused for both.
     `created` callback runs (§4.15).
   - Every step is a prompt for the 60-second idle rule. A line typed while the account step
     before it is still pending is held and replayed, as for the other prompts.
-  - The engine texts are message catalog entries (§4.18), in the `login.creation.*` group.
-    Choice titles, prompts, labels, summaries and help come from the provider.
+  - The engine texts are message catalog entries (§4.18), in the `login.creation.*` group:
+    `hint`, `prompt` (`> `), `no_such_option` (`{answer}`), `confirm` (`{name}`,
+    `{answers}`), `provider_failed` and `has_choices` (`{name}`). `score` adds
+    `score.choice` (`{title}`, `{label}`) and `score.traits` (`{traits}`). Choice titles,
+    prompts, labels, summaries and help come from the provider.
 - **Missing choices:** a saved character with a missing choice (§4.19) is taken through just
   those steps, then the confirmation, when the player chooses it at the menu: "Ann has
-  choices to make before playing." On `yes` the answers are validated and set as a change
-  (§4.19 steps 2 to 5), the character enters the world as usual, and `created` runs with
-  `newCharacter = false`. `cancel` goes back to the menu without entering. A character taken
+  choices to make before playing." On `yes` the answers are checked as a change (§4.19 step
+  1); a refusal is shown and the player returns to the menu. Otherwise the character enters
+  the world as usual, the answers are set as a change (steps 2 to 5, so a worn item the new
+  answers refuse is moved to the inventory with its message), and `created` runs with
+  `newCharacter = false`. An earlier answer to a choice the steps skipped is removed;
+  answers to choices the provider no longer defines are kept (§4.19). `cancel` goes back to the menu without entering. A character taken
   over while already in the world isn't asked.
   - **One character at a time:** an account plays one character at a time, across every
     transport. Choosing a different character while one is in the world (link-dead
@@ -3739,7 +3775,8 @@ reload is refused for both.
     that is already playing takes it over and closes the old connection. Otherwise a saved
     character is restored, or a new one is created and saved at once. With a creation
     provider, a new character, or a saved one with a missing choice, goes through the
-    creation steps first, as above; `cancel` asks for a name again.
+    creation steps first, as above; `cancel`, a refusal or a provider failure asks for a
+    name again.
   - The one-character-at-a-time rule doesn't apply: several characters at once help testing.
   - While the database can't be written, new logins are refused with a maintenance message;
     taking over a character still works.

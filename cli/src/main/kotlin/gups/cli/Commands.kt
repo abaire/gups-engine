@@ -801,6 +801,29 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
         PluginCommandDocSpec(it.name, it.lane.name.lowercase(), it.role.name.lowercase(), it.doc)
       },
     gmcp = p.gmcp.map { PluginGmcpDocSpec(it.pkg, it.doc) },
+    traits =
+      p.traits.map {
+        PluginTraitDocSpec(
+          it.name,
+          it.label,
+          it.doc,
+          it.statDeltas,
+          it.maxVitalDeltas,
+          it.resistDeltas,
+          it.flags,
+          it.modifiers,
+        )
+      },
+    restrictions = p.restrictions.map { PluginRestrictionDocSpec(it.point, it.doc) },
+    choices =
+      p.choices.map { c ->
+        PluginChoiceDocSpec(
+          c.id,
+          c.title,
+          c.prompt,
+          c.options.map { o -> PluginOptionDocSpec(o.id, o.label, o.summary, o.help, o.traits) },
+        )
+      },
   )
 }
 

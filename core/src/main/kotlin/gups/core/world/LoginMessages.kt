@@ -89,6 +89,28 @@ object LoginMsg : MsgGroup(null) {
     msg("login.dev.welcome", "Welcome to GUPS (development server). You are the local instructor.")
   val DEV_PROMPT = msg("login.dev.prompt", "By what name do you wish to be known? ")
   val TOO_MUCH_INPUT = msg("session.too_much_input", "Too much input.")
+
+  val CREATION_HINT =
+    msg(
+      "login.creation.hint",
+      "Type a number or a name, \"help <name>\" to learn more, \"back\" or \"cancel\".",
+    )
+  val CREATION_PROMPT = msg("login.creation.prompt", "> ")
+  val CREATION_NO_SUCH_OPTION =
+    msg("login.creation.no_such_option", "There's no {answer} to choose here.", "answer")
+  val CREATION_CONFIRM =
+    msg(
+      "login.creation.confirm",
+      "{name}: {answers}. Create this character? (yes, back or cancel)",
+      "name,answers",
+    )
+  val CREATION_PROVIDER_FAILED =
+    msg(
+      "login.creation.provider_failed",
+      "Character creation isn't working right now; please tell an instructor.",
+    )
+  val CREATION_HAS_CHOICES =
+    msg("login.creation.has_choices", "{name} has choices to make before playing.", "name")
 }
 
 /** The text of [this] in [world]'s words, or its default when there is no world. */

@@ -3564,6 +3564,54 @@
       "since": 1
     },
     {
+      "symbol": "message:login.creation.confirm",
+      "id": "login.creation.confirm",
+      "placeholders": ["name", "answers"],
+      "required": [],
+      "default": "{name}: {answers}. Create this character? (yes, back or cancel)",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.has_choices",
+      "id": "login.creation.has_choices",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "{name} has choices to make before playing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.hint",
+      "id": "login.creation.hint",
+      "placeholders": [],
+      "required": [],
+      "default": "Type a number or a name, \"help <name>\" to learn more, \"back\" or \"cancel\".",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.no_such_option",
+      "id": "login.creation.no_such_option",
+      "placeholders": ["answer"],
+      "required": [],
+      "default": "There's no {answer} to choose here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.prompt",
+      "id": "login.creation.prompt",
+      "placeholders": [],
+      "required": [],
+      "default": "> ",
+      "since": 1
+    },
+    {
+      "symbol": "message:login.creation.provider_failed",
+      "id": "login.creation.provider_failed",
+      "placeholders": [],
+      "required": [],
+      "default": "Character creation isn't working right now; please tell an instructor.",
+      "since": 1
+    },
+    {
       "symbol": "message:login.dev.local_only",
       "id": "login.dev.local_only",
       "placeholders": [],
@@ -4148,11 +4196,27 @@
       "since": 1
     },
     {
+      "symbol": "message:score.choice",
+      "id": "score.choice",
+      "placeholders": ["title", "label"],
+      "required": [],
+      "default": "{title}: {label}",
+      "since": 1
+    },
+    {
       "symbol": "message:score.resists",
       "id": "score.resists",
       "placeholders": ["resists"],
       "required": ["resists"],
       "default": "Resists: {resists}",
+      "since": 1
+    },
+    {
+      "symbol": "message:score.traits",
+      "id": "score.traits",
+      "placeholders": ["traits"],
+      "required": [],
+      "default": "Traits: {traits}",
       "since": 1
     },
     {

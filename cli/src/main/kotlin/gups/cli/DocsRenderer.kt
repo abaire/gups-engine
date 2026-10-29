@@ -35,6 +35,38 @@ data class PluginCommandDocSpec(
 /** A GMCP package a plugin adds, for `plugins.html`. */
 data class PluginGmcpDocSpec(val pkg: String, val doc: String)
 
+/** A trait a plugin adds, for `plugins.html`. */
+data class PluginTraitDocSpec(
+  val name: String,
+  val label: String,
+  val doc: String,
+  val statDeltas: Map<String, Int> = emptyMap(),
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  val resistDeltas: Map<String, Int> = emptyMap(),
+  val flags: Set<String> = emptySet(),
+  val modifiers: Set<String> = emptySet(),
+)
+
+/** An option a plugin choice declares, for `plugins.html`. */
+data class PluginOptionDocSpec(
+  val id: String,
+  val label: String,
+  val summary: String,
+  val help: String,
+  val traits: List<String>,
+)
+
+/** A choice a plugin creation provider declares, for `plugins.html`. */
+data class PluginChoiceDocSpec(
+  val id: String,
+  val title: String,
+  val prompt: String,
+  val options: List<PluginOptionDocSpec>,
+)
+
+/** A restriction a plugin registers, for `plugins.html`. */
+data class PluginRestrictionDocSpec(val point: String, val doc: String)
+
 /** What `plugins.html` shows about one plugin. */
 data class PluginDocSpec(
   val id: String,
@@ -43,6 +75,9 @@ data class PluginDocSpec(
   val effects: List<MethodSpec> = emptyList(),
   val commands: List<PluginCommandDocSpec> = emptyList(),
   val gmcp: List<PluginGmcpDocSpec> = emptyList(),
+  val traits: List<PluginTraitDocSpec> = emptyList(),
+  val restrictions: List<PluginRestrictionDocSpec> = emptyList(),
+  val choices: List<PluginChoiceDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -539,6 +574,108 @@ object DocsRenderer {
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")
+        }
+        if (p.traits.isNotEmpty()) {
+          append("<h3>Traits</h3>\n")
+          for (t in p.traits.sortedBy { it.name }) {
+            append("<article id=\"plugin-")
+              .append(esc(p.id))
+              .append(".trait-")
+              .append(esc(t.name))
+              .append("\">\n")
+            append("<h4><code>")
+              .append(esc(t.name))
+              .append("</code> ")
+              .append(badge)
+              .append("</h4>\n")
+            append("<p><strong>").append(esc(t.label)).append("</strong></p>\n")
+            if (t.doc.isNotEmpty()) doc(t.doc)
+            val effects = mutableListOf<String>()
+            for ((k, v) in t.statDeltas.toSortedMap()) effects +=
+              "$k: ${if (v >= 0) "+$v" else "$v"}"
+            for ((k, v) in t.maxVitalDeltas.toSortedMap()) effects +=
+              "max $k: ${if (v >= 0) "+$v" else "$v"}"
+            for ((k, v) in t.resistDeltas.toSortedMap()) effects +=
+              "resist $k: ${if (v >= 0) "+$v" else "$v"}"
+            for (f in t.flags.sorted()) effects += "flag: $f"
+            for (m in t.modifiers.sorted()) effects += "modifier: $m"
+            if (effects.isNotEmpty()) {
+              append("<p>Effects: ").append(esc(effects.joinToString(", "))).append("</p>\n")
+            }
+            append("</article>\n")
+          }
+        }
+        if (p.restrictions.isNotEmpty()) {
+          append(
+            "<h3>Restrictions</h3>\n<table>\n<thead><tr><th>Point</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          val pointCounts = mutableMapOf<String, Int>()
+          for (r in p.restrictions) {
+            val pointLower = r.point.lowercase()
+            val n = pointCounts.compute(pointLower) { _, c -> (c ?: 0) + 1 }!!
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".restrict-")
+              .append(esc(pointLower))
+              .append('-')
+              .append(n)
+              .append("\"><td><code>")
+              .append(esc(pointLower))
+              .append("</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(r.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.choices.isNotEmpty()) {
+          append("<h3>Character creation choices</h3>\n")
+          for (c in p.choices) {
+            append("<article id=\"plugin-")
+              .append(esc(p.id))
+              .append(".choice-")
+              .append(esc(c.id))
+              .append("\">\n")
+            append("<h4><code>")
+              .append(esc(c.id))
+              .append("</code> ")
+              .append(badge)
+              .append("</h4>\n")
+            append("<p><strong>").append(esc(c.title)).append("</strong>")
+            if (c.prompt.isNotEmpty()) {
+              append(" &mdash; <em>").append(esc(c.prompt)).append("</em>")
+            }
+            append("</p>\n")
+            if (c.options.isNotEmpty()) {
+              append(
+                "<table>\n<thead><tr><th>Option</th><th>Label</th><th>Summary</th><th>Help</th><th>Granted traits</th></tr></thead>\n<tbody>\n"
+              )
+              for (opt in c.options) {
+                append("<tr id=\"plugin-")
+                  .append(esc(p.id))
+                  .append(".choice-")
+                  .append(esc(c.id))
+                  .append('.')
+                  .append(esc(opt.id))
+                  .append("\"><td><code>")
+                  .append(esc(opt.id))
+                  .append("</code> ")
+                  .append(badge)
+                  .append("</td><td>")
+                  .append(esc(opt.label))
+                  .append("</td><td>")
+                  .append(esc(opt.summary))
+                  .append("</td><td>")
+                  .append(esc(opt.help))
+                  .append("</td><td>")
+                  .append(esc(opt.traits.joinToString(", ")))
+                  .append("</td></tr>\n")
+              }
+              append("</tbody>\n</table>\n")
+            }
+            append("</article>\n")
+          }
         }
         append("</section>\n")
       }

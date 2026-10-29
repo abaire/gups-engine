@@ -285,21 +285,22 @@ class Fixture(
 ) {
   val w =
     World(
-      protos,
-      fs.schema,
-      rules,
-      scripts,
-      WorldConfig(
-        seed = seed,
-        checkInvariants = true,
-        strict = strict,
-        bubble = bubble,
-        aliases = aliases,
-        features = features,
-        rename = rename,
-        messages = messages,
-      ),
-    )
+        protos,
+        fs.schema,
+        rules,
+        scripts,
+        WorldConfig(
+          seed = seed,
+          checkInvariants = true,
+          strict = strict,
+          bubble = bubble,
+          aliases = aliases,
+          features = features,
+          rename = rename,
+          messages = messages,
+        ),
+      )
+      .also { it.start() }
   private var nextSession = 1L
   private val sinks = mutableMapOf<Player, CapturingSink>()
 

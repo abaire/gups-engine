@@ -4,12 +4,14 @@ import gups.core.AttrValue
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Trait
 import gups.core.world.Diagnostic
 import gups.core.world.ScriptHost
 import gups.core.world.TOMBSTONE
@@ -18,9 +20,11 @@ import gups.core.world.World
 import gups.core.world.applyAffect
 import gups.core.world.checkInvariants
 import gups.core.world.damage
+import gups.core.world.grantTrait
 import gups.core.world.moveItem
 import gups.core.world.quit
 import gups.core.world.restoreActorNumbers
+import gups.core.world.restoreVitals
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
@@ -430,5 +434,33 @@ class PersistenceTest {
     assertEquals(EntityId(42), (second.w.actor(rat.id) as Mob).summonedBy)
     assertNull((second.w.actor(other.id) as Mob).summonedBy)
     second.close()
+  }
+
+  @Test
+  fun `trait-raised maxima and current values survive a restart without double counting`() {
+    val hp = FixtureSchemas.current.health
+    val traits = mapOf("tough" to Trait("tough", maxVitalDeltas = mapOf(hp to 5)))
+    val protos = P.protos(ratTraits = setOf("tough"))
+    val file = tempDb()
+    val a = PersistWorld(file, protos, traits = traits)
+    val rat = a.w.actors.filterIsInstance<Mob>().first()
+    assertEquals(listOf(10, 15, 15), listOf(rat.baseMax(hp), rat.max(hp), rat.current(hp)))
+    val ann = a.login("Ann")
+    assertNull(a.w.grantTrait(ann, "tough"))
+    a.w.restoreVitals(ann)
+    val annMax = ann.max(hp)
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    val b = PersistWorld(file, protos, traits = traits)
+    val rat2 = b.w.actor(rat.id) as Mob
+    assertEquals(listOf(10, 15, 15), listOf(rat2.baseMax(hp), rat2.max(hp), rat2.current(hp)))
+    val ann2 = b.login("Ann")
+    assertEquals(setOf("tough"), ann2.grantedTraits)
+    assertEquals(annMax, ann2.max(hp))
+    assertEquals(annMax, ann2.current(hp), "the trait's extra points aren't clipped on load")
+    assertTrue(b.w.checkInvariants().isEmpty())
+    b.close()
   }
 }

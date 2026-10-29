@@ -4,6 +4,7 @@ import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginCommandCall
+import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
@@ -11,10 +12,13 @@ import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
+import gups.pluginapi.PluginRestrictionCall
+import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
+import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import gups.pluginapi.host.PluginLoader
 import gups.script.WorldDir
@@ -77,6 +81,16 @@ class WeatherPluginTest {
       gmcp[pkg] = produce
     }
 
+    override fun addTrait(trait: PluginTrait) = TODO()
+
+    override fun setCreation(creation: PluginCreation) = TODO()
+
+    override fun addRestriction(
+      point: PluginRestrictionPoint,
+      doc: String,
+      check: (PluginRestrictionCall) -> String?,
+    ) = TODO()
+
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) {
       started += fn
     }
@@ -100,6 +114,9 @@ class WeatherPluginTest {
 
     override val items: List<PluginItem>
       get() = TODO()
+
+    override val tags: List<String>
+      get() = emptyList()
   }
 
   private class FakeActor(override val room: PluginRoom) : PluginActor {
@@ -116,7 +133,11 @@ class WeatherPluginTest {
 
     override fun maxVital(name: String): Int = TODO()
 
+    override fun baseMaxVital(name: String): Int = TODO()
+
     override fun resist(type: String): Int = TODO()
+
+    override fun baseResist(type: String): Int = TODO()
 
     override val level
       get() = TODO()
@@ -125,6 +146,26 @@ class WeatherPluginTest {
       get() = TODO()
 
     override fun hasAffect(name: String): Boolean = TODO()
+
+    override fun hasTrait(name: String): Boolean = false
+
+    override val role: PluginRole?
+      get() = PluginRole.PLAYER
+
+    override val flags: Set<String>
+      get() = emptySet()
+
+    override val choices: Map<String, String>
+      get() = emptyMap()
+
+    override val traits: List<String>
+      get() = emptyList()
+
+    override val grantedTraits: Set<String>
+      get() = emptySet()
+
+    override val skills: Map<String, Int>
+      get() = emptyMap()
   }
 
   private class FakeWorld(
@@ -189,6 +230,16 @@ class WeatherPluginTest {
     override fun room(label: String): PluginRoom? = TODO()
 
     override fun diagnose(message: String) = TODO()
+
+    override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? = TODO()
+
+    override fun grantTrait(actor: PluginActor, trait: String): String? = TODO()
+
+    override fun removeTrait(actor: PluginActor, trait: String): String? = TODO()
+
+    override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? = TODO()
+
+    override fun removeSkill(actor: PluginActor, skill: String): Boolean = TODO()
   }
 
   private val registry = FakeRegistry().also { WeatherPlugin().register(it) }

@@ -31,10 +31,10 @@ def starting_stats(ctx):
             plating = a.base.plating,
         ),
         max = vitals(
-            integrity = a.max_integrity or 15,
-            sanity = a.max_sanity or 10,
-            power = a.max_power or 50,
-            rads = a.max_rads or 100,
+            integrity = a.base.max_integrity or 15,
+            sanity = a.base.max_sanity or 10,
+            power = a.base.max_power or 50,
+            rads = a.base.max_rads or 100,
         ),
     )
 

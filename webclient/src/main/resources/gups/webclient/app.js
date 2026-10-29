@@ -5,7 +5,7 @@
 //   client: {"t":"auth","d":token} {"t":"input","d":"..."} {"t":"gmcp","p":"Core.Supports.Set","d":[...]}
 
 import { render } from "./markup.js";
-import { drawAffects, drawBands, drawRoom, drawVitals } from "./panels.js";
+import { drawAffects, drawBands, drawCreation, drawRoom, drawTraits, drawVitals } from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
 const output = $("output");
@@ -72,6 +72,15 @@ function onGmcp(pkg, data) {
     case "Room.Info": drawRoom($("room-name"), data); break;
     case "Comm.Channel.Text": break; // The text arrives as a text frame too.
     case "Gups.Trace": print(data.line, "trace"); break;
+    case "Char.Creation":
+      drawCreation($("creation"), data, (line) => {
+        sendFrame({ t: "input", d: line });
+        print(line, "notice");
+      });
+      break;
+    case "Char.Traits":
+      drawTraits($("traits-panel"), $("choices-list"), $("traits-list"), data);
+      break;
   }
 }
 
@@ -105,6 +114,7 @@ function connect() {
   ws.addEventListener("close", () => {
     if (socket !== ws) return;
     socket = null;
+    drawCreation($("creation"), null, () => {});
     if (playing) print("Disconnected. Reload the page to connect again.", "notice");
     else showLogin($("login-error").textContent);
   });
@@ -227,6 +237,7 @@ $("logout").addEventListener("click", async () => {
   const ws = socket;
   socket = null;
   ws?.close();
+  drawCreation($("creation"), null, () => {});
   output.replaceChildren();
   showLogin("You have logged out.");
 });

@@ -42,9 +42,10 @@ internal val FILE_OPTIONS: FileOptions =
 internal fun packageGlobals(
   schema: WorldSchema,
   features: Features = Features.ALL,
+  knownTraits: () -> Set<String> = { emptySet() },
 ): Map<String, Any> {
   val b = ImmutableMap.builder<String, Any>()
-  Starlark.addMethods(b, DeclarationBuiltins(schema, features))
+  Starlark.addMethods(b, DeclarationBuiltins(schema, features, knownTraits))
   b.putAll(DeclarationBuiltins.constants(schema))
   b.putAll(schemaGlobals(schema))
   return b.build()
@@ -109,8 +110,11 @@ class ScriptLoader(
   private val limits: ScriptLimits = ScriptLimits(),
   /** Receives `print()` output from top-level code. */
   private val printSink: (String) -> Unit = {},
+  /** Plugins providing globals, traits, creation, and restrictions. */
+  val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
   /** Plugin namespaces by id, predeclared in every package and test file. */
-  val pluginGlobals: Map<String, Any> = emptyMap(),
+  val pluginGlobals: Map<String, Any> = plugins.globals,
+  val knownTraits: () -> Set<String> = { plugins.traits },
 ) {
   /** The world's `MODULE.gups`; a world without a valid one has an empty schema. */
   val module: WorldModule by lazy { WorldModule.read(dir).first }
@@ -120,7 +124,7 @@ class ScriptLoader(
 
   /** The builtins of every package, test and `@eval` file of this world. */
   internal val globals: Map<String, Any> by lazy {
-    packageGlobals(schema, features) + pluginGlobals
+    packageGlobals(schema, features, knownTraits) + pluginGlobals
   }
 
   val features: Features
@@ -450,7 +454,7 @@ class ScriptLoader(
     /** Runs the rules dry run; a rules package that fails it fails, and so do its dependents. */
     fun dryRun() {
       val rules = states[RULES_PACKAGE]?.takeIf { it.contentDone && !it.failed } ?: return
-      val problems = dryRunRules(result(), schema, limits, features = features)
+      val problems = dryRunRules(result(), schema, limits, features = features, wiring = plugins)
       if (problems.isEmpty()) return
       rules.errors +=
         problems.map {

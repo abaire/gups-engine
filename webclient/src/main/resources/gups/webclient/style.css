@@ -52,7 +52,38 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .error { color: var(--hp); min-height: 1.2em; margin: 0; }
 
 .game { display: flex; height: 100vh; }
-.play { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.play { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+.creation-panel {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1rem;
+  background: var(--panel);
+  border: 1px solid #333b45;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 10;
+}
+
+.creation-panel h3 { margin: 0; font-size: 1rem; color: var(--accent); }
+.creation-options { display: flex; flex-direction: column; gap: 0.5rem; max-height: 50vh; overflow-y: auto; }
+.creation-option { text-align: left; display: flex; flex-direction: column; gap: 0.2rem; }
+.creation-option .opt-label { font-weight: bold; }
+.creation-option .opt-summary { font-size: 0.85rem; color: var(--muted); }
+.creation-help { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+.creation-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+
+.traits-panel { margin-top: 1rem; }
+.traits-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.choices-list { font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.choices-list .title { color: var(--muted); }
 
 .output {
   flex: 1;

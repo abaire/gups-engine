@@ -5,6 +5,57 @@ breaking ones.
 
 ## api_version 1 (unreleased)
 
+### Added `tags` to `room`, `item` and `skill`
+
+Rooms, items and skills take an optional `tags` list of identifiers (`[a-z][a-z0-9_]*`). Tags are stored
+sorted and deduplicated on the prototype, read via `.tags` on their respective views, and survive package reload.
+
+```python
+room("vault", name = "The Vault", tags = ["treasury", "secure"])
+item("heavy_plate", name = "Heavy Plate", wear = "body", tags = ["heavy_armor"])
+skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"])
+```
+
+### Added `traits` to mob prototypes
+
+Mob prototypes can declare plugin-defined traits via `traits = [...]`. The traits are validated against
+loaded plugins and apply their stat, vital and resist deltas to the spawned mob. Prototype traits follow
+package reloads and cannot be removed in play.
+
+```python
+mob("mage_trainer", name = "Mage Trainer", traits = ["mage"])
+```
+
+### Actor views show choices, traits, effective maxima and resists
+
+Actor views (`ctx.actor`, `ctx.self`, `ctx.target`, etc.) provide read-only access to character creation choices
+and traits:
+- `choices`: dictionary mapping choice ids to selected option ids.
+- `traits`: sorted list of effective trait names.
+- `has_trait(name)`: checks if the actor carries the given trait.
+- `max_<vital>` and `resists.<type>`: reflect effective values (base plus trait deltas).
+- `base.max_<vital>` and `base.resists.<type>`: reflect the underlying base values without trait deltas.
+
+### `rules.starting_stats` runs after choices and traits
+
+When spawning players or mobs, `rules.starting_stats` now executes with the actor's choices and traits
+already set. The return values configure the base stats and vitals, with trait deltas layered on top.
+A mob's `ctx.actor.max_<vital>` now includes its prototype traits' deltas, so a ruleset that returns
+the prototype's maxima should read `ctx.actor.base.max_<vital>` instead, as the template does:
+
+```python
+max = vitals(hp = _or(a.base.max_hp, 10), mana = a.base.max_mana)
+```
+
+### Harness additions: `spawn_player(choices)`, `set_choices`, `grant_trait`, `remove_trait`
+
+Tests can configure character creation choices and modify traits directly:
+- `w.spawn_player("Name", choices = {"race": "elf", "class": "mage"})`
+- `w.set_choices(player, {"class": "cleric"})`
+- `w.grant_trait(actor, "dwarf")`
+- `w.remove_trait(actor, "dwarf")`
+- `player.choices`, `player.traits`, `player.has_trait("elf")`
+
 ### Added the world schema: `module.stats`, `module.vitals`, `module.damage_types`, `module.unarmed_damage_type`, `module.channels` and `module.prompt`
 
 `MODULE.gups` is now required, and declares the names a world's actors are measured by. The

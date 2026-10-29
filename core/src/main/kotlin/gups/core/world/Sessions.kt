@@ -171,6 +171,14 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   echo(room, msg(KernelMsg.QUIT_LEFT, "name" to player.name))
 }
 
+/**
+ * Takes [player], loaded for a login that hasn't entered it, back out of the world without saving
+ * it, so its saved row stays as it was.
+ */
+fun World.unload(player: Player) {
+  if (player.inWorld && player.session == null) removeActor(player)
+}
+
 /** Link-dead and idle auto-quit. */
 internal fun World.expireSessions() {
   login?.let { guarded("login timeouts") { it.pulse(this) } }

@@ -47,8 +47,10 @@ fun World.invariantViolations(): List<Violation> {
     if (a.room.actorIndex[a.id] !== a) out += "$a: missing from ${a.room.label}"
     if (a.trackIndex !in 0 until a.room.trackSize)
       out += "$a: track index ${a.trackIndex} outside ${a.room.label}"
-    for ((name, v) in a.vitalMap) if (v.current > v.max)
-      out += "$a: $name ${v.current} > max ${v.max}"
+    for ((name, v) in a.vitalMap) {
+      val effMax = a.max(name)
+      if (v.current > effMax) out += "$a: $name ${v.current} > max $effMax"
+    }
     if (Feature.TRACK !in features && a.trackIndex != 0)
       out += "$a: track index ${a.trackIndex} without the track"
     if (Feature.SKILLS !in features && a.casting != null) out += "$a: casting without skills"

@@ -209,7 +209,9 @@ class AccountToolsTest {
       i.send("@restrict ann goto_player spamming"),
       "ann can't use goto_player until 1970-01-13 13:46 UTC (restriction 1: 1d): spamming.",
     )
-    assertTrue(f.w.restrictions.single().let { it.until == f.now + day && it.reason == "spamming" })
+    assertTrue(
+      f.w.accountRestrictions.single().let { it.until == f.now + day && it.reason == "spamming" }
+    )
     f.now += 2 * day
     assertContains(i.send("@restrict ann goto_player"), "(restriction 2: 7d)")
     assertContains(i.send("@unrestrict ann goto_player"), "ann may use goto_player again.")
@@ -238,7 +240,7 @@ class AccountToolsTest {
     assertContains(history, "lifted by ida")
     assertContains(history, "set by ida")
     assertEquals(5, f.store.restrictions(a.id).size)
-    assertEquals(5, f.w.restrictions.size)
+    assertEquals(5, f.w.accountRestrictions.size)
   }
 
   @Test

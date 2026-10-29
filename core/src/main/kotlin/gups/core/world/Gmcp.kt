@@ -11,11 +11,19 @@ import gups.core.model.Player
 
 /** Packages recomputed every phase 7 and sent only when they changed. */
 private val STATE_PACKAGES =
-  listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects", "Room.Info", "Room.Bands")
+  listOf(
+    "Char.Schema",
+    "Char.Vitals",
+    "Char.Status",
+    "Char.Affects",
+    "Char.Traits",
+    "Room.Info",
+    "Room.Bands",
+  )
 
 /** Every package the engine sends; plugin packages may not overlap them. */
 val ENGINE_GMCP_PACKAGES: Set<String> =
-  (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace")).toSortedSet()
+  (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace", "Char.Creation")).toSortedSet()
 
 /**
  * Queues the GMCP event [pkg] for [p], to go out with the session's next flush after its text.
@@ -47,6 +55,7 @@ internal fun World.gmcpDeltas(s: Session) {
   val p = s.player ?: return
   for (pkg in STATE_PACKAGES) {
     if (pkg == "Room.Bands" && Feature.TRACK !in features) continue
+    if (pkg == "Char.Traits" && creation == null && traits.isEmpty()) continue
     if (!s.sink.wantsGmcp(pkg)) continue
     val data = gmcpPayload(p, pkg)
     if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
@@ -117,6 +126,24 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
           "flags" to a.flags.sorted(),
         )
       }
+    "Char.Traits" -> {
+      val choicesList =
+        if (creation == null) emptyList()
+        else
+          creation!!.choices.mapNotNull { choice ->
+            val optId = p.choices[choice.id] ?: return@mapNotNull null
+            val opt = choice.options.firstOrNull { it.id == optId } ?: return@mapNotNull null
+            mapOf(
+              "choice" to choice.id,
+              "title" to choice.title,
+              "option" to opt.id,
+              "label" to opt.label,
+            )
+          }
+      val traitsList =
+        p.traits.map { t -> mapOf("name" to t.name, "label" to t.label, "doc" to t.doc) }
+      mapOf("choices" to choicesList, "traits" to traitsList)
+    }
     "Room.Info" -> {
       val room = p.room
       mapOf(

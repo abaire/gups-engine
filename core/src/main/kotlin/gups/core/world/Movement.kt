@@ -45,6 +45,20 @@ internal fun World.transition(actor: Actor, exit: Exit, leave: Msg = KernelMsg.M
 
 /** The `teleport` verb: engine-validated, fires the exit and enter hooks. */
 fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
+  val from = actor.room
+  val req =
+    gups.core.model.RestrictionRequest(
+      point = gups.core.model.RestrictionPoint.ENTER,
+      actor = actor,
+      room = to,
+      from = from,
+      direction = null,
+    )
+  val refused = restrictionRefusal(gups.core.model.RestrictionPoint.ENTER, req)
+  if (refused != null) {
+    if (actor is Player) send(actor, refused)
+    return
+  }
   deferRemoval(actor, Deferred.Kind.TRANSITION) {
     if (!actor.inWorld) return@deferRemoval
     val from = actor.room
@@ -67,6 +81,14 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
 internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
   val from = roomOf(actor)
   val to = room(from.exits.getValue(dir).to)
+  val req =
+    gups.core.model.RestrictionRequest(
+      point = gups.core.model.RestrictionPoint.ENTER,
+      actor = actor,
+      room = to,
+      from = from,
+      direction = dir,
+    )
   // Guards are built-in before_exit observers.
   return guardDenial(actor, from, dir)
     ?: dispatch(
@@ -75,6 +97,7 @@ internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
       from,
       HookContext(actor = actor, direction = dir, toRoom = to),
     )
+    ?: restrictionRefusal(gups.core.model.RestrictionPoint.ENTER, req)
     ?: dispatch(
       HookName.BEFORE_ENTER,
       null,

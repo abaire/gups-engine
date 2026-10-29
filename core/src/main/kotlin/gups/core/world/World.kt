@@ -106,7 +106,10 @@ class Boot(
   val nextEntityId: Long = 1,
   val nextHandle: Long = 1,
   val roomIds: Map<Label, EntityId> = emptyMap(),
-  /** False when restoring, so saved mobs come back instead of fresh spawns. */
+  /**
+   * Whether [World.start] fills the rooms' spawns: false when restoring, so saved mobs come back
+   * instead of fresh spawns.
+   */
   val fillSpawns: Boolean = true,
 )
 
@@ -157,7 +160,17 @@ class World(
   var post: ((gups.core.WorldControlEvent) -> Unit)? = null
 
   /** Restrictions of every account, as loaded from the account store and kept by `@restrict`. */
-  var restrictions: List<gups.core.Restriction> = emptyList()
+  var accountRestrictions: List<gups.core.Restriction> = emptyList()
+
+  /** Character creation provider, if a plugin registered one. */
+  var creation: gups.core.model.CreationProvider? = null
+
+  /** Known traits registered by plugins, by trait name. */
+  var traits: Map<String, gups.core.model.Trait> = emptyMap()
+
+  /** Restriction checks registered by plugins, by restriction point. */
+  var restrictions: Map<gups.core.model.RestrictionPoint, List<gups.core.model.Restriction>> =
+    emptyMap()
 
   /** Receives every instructor alert, for the server log. */
   var onAlert: ((String) -> Unit)? = null
@@ -263,7 +276,7 @@ class World(
       }
       for (rule in room.proto.spawns) {
         protos.mob(rule.label)
-        spawnStates += SpawnState(room, rule).also { if (boot.fillSpawns) fillSpawn(it) }
+        spawnStates += SpawnState(room, rule)
       }
     }
     for (zone in protos.zones.values) zone.resetPulses?.let { zoneResets[zone.pkg] = pulse + it }
@@ -326,7 +339,7 @@ class World(
     entities[e.id] = e
   }
 
-  internal fun diagnose(kind: String, message: String, cause: Throwable? = null) {
+  fun diagnose(kind: String, message: String, cause: Throwable? = null) {
     record(Diagnostic(pulse, kind, message, cause))
   }
 
@@ -363,6 +376,7 @@ class World(
     overrides: StartingStats = StartingStats(),
     index: Int = 0,
     accountId: Long? = null,
+    choices: Map<String, String> = emptyMap(),
   ): Player {
     require(players.none { it.name.equals(name, ignoreCase = true) }) {
       "A player named $name is already in the world"
@@ -378,7 +392,9 @@ class World(
         accountId = accountId,
       )
     p.level = level
+    p.choices.putAll(choices)
     initVitals(p)
+    p.recomputeTraits(this)
     applyStartingStats(p, startingStatsOf(p))
     applyStartingStats(p, overrides, keepCurrent = true)
     settleNewCondition(p, "starting_stats")
@@ -410,6 +426,10 @@ class World(
     }
     m.resists.putAll(proto.resists)
     m.skills.putAll(proto.skills)
+    m.recomputeTraits(this)
+    for ((name, v) in m.vitalMap) {
+      v.current = m.max(name)
+    }
   }
 
   private fun startingStatsOf(a: Actor): StartingStats = rules.startingStats(RulesContext(this, a))
@@ -424,10 +444,11 @@ class World(
     for ((name, v) in a.vitalMap) {
       val max = r.max[name]
       if (max != null) v.max = max
+      val effMax = a.max(name)
       val cur = r.current[name]
       when {
-        cur != null -> v.current = cur.coerceAtMost(v.max)
-        max != null || !keepCurrent -> v.current = v.max
+        cur != null -> v.current = cur.coerceAtMost(effMax)
+        max != null || !keepCurrent -> v.current = effMax
       }
       v.belowZeroSince = if (v.current < 0) pulse else null
     }
@@ -687,8 +708,20 @@ class World(
     }
   }
 
-  /** Fires `on_load` on every entity, ascending id, once the world is built. */
-  fun fireOnLoad() {
+  private val fillSpawnsAtStart = boot.fillSpawns
+  private var started = false
+
+  /**
+   * Brings the built world to life, once everything that shapes its actors is in place: plugins
+   * installed, scripts installed and any saved state restored. A fresh world fills its rooms'
+   * spawns first, so each mob spawns as it would later (traits, rules, `on_spawn`); then every
+   * entity gets `on_load`, ascending id. Call it once; a world rebuilt only to inspect or replay
+   * saved state (a migration check, a repro) has already started and skips it.
+   */
+  fun start() {
+    check(!started) { "The world has already started" }
+    started = true
+    if (fillSpawnsAtStart) for (s in spawnStates) fillSpawn(s)
     for (e in entities.values.sortedBy { it.id }) {
       if (e.id in entities) invokeOn(e, HookName.ON_LOAD, HookContext(room = e as? Room))
     }

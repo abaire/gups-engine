@@ -117,7 +117,7 @@ internal constructor(
       )
     plugins.install(world)
     host.install(world)
-    world.fireOnLoad()
+    world.start()
     plugins.started(world)
     return WorldHandle(world, host, from).also { worlds += it }
   }

@@ -15,6 +15,7 @@ val allowedModuleDeps: Map<String, Set<String>?> =
     ":webclient" to emptySet(),
     // Samples prove the plugin facade is enough.
     ":samples:weather-plugin" to setOf(":plugin-api"),
+    ":samples:heritage-plugin" to setOf(":plugin-api"),
     ":cli" to null,
   )
 

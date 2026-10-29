@@ -66,7 +66,7 @@ class ScriptFixture(
       )
       .also {
         host.install(it)
-        it.fireOnLoad()
+        it.start()
       }
   }
   private val sinks = mutableMapOf<Player, CapturingSink>()

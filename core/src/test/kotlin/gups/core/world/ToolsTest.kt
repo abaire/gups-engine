@@ -150,7 +150,7 @@ class ToolsTest {
     f.w.wallClock = { now }
     val b = f.builder()
     f.player("Ann", at = T.YARD)
-    f.w.restrictions =
+    f.w.accountRestrictions =
       listOf(
         Restriction(1, 1, Capabilities.GOTO_PLAYER, now + 60_000, "stalking", 9, now),
         Restriction(2, 1, "gossip", null, null, 9, now),

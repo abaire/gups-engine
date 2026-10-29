@@ -90,6 +90,9 @@ class Room(id: EntityId, proto: RoomProto, private val singleSlot: Boolean = fal
   val regions: Set<String>
     get() = proto.regions
 
+  val tags: Set<String>
+    get() = proto.tags
+
   var exits: Map<Direction, Exit> =
     proto.exits.associateTo(LinkedHashMap()) { it.direction to Exit(it) }
     internal set
@@ -173,6 +176,58 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   val skills: MutableMap<Label, Int> = linkedMapOf()
   val affects: MutableList<Affect> = mutableListOf()
 
+  var grantedTraits: Set<String> = emptySet()
+  var traits: List<Trait> = emptyList()
+
+  var traitStatDeltas: Map<String, Int> = emptyMap()
+    internal set
+
+  var traitMaxVitalDeltas: Map<String, Int> = emptyMap()
+    internal set
+
+  var traitResistDeltas: Map<String, Int> = emptyMap()
+    internal set
+
+  var traitFlags: Set<String> = emptySet()
+    internal set
+
+  fun recomputeTraits(world: gups.core.world.World) {
+    val traitList = mutableListOf<Trait>()
+    if (this is Player) {
+      world.creation?.choices?.forEach { choice ->
+        val optId = choices[choice.id]
+        val opt = choice.options.firstOrNull { it.id == optId }
+        opt?.traits?.forEach { tName -> world.traits[tName]?.let { traitList.add(it) } }
+      }
+    } else if (this is Mob) {
+      proto.traits.forEach { tName -> world.traits[tName]?.let { traitList.add(it) } }
+    }
+    grantedTraits.forEach { tName -> world.traits[tName]?.let { traitList.add(it) } }
+    traits = traitList.distinctBy { it.name }.sortedBy { it.name }
+
+    val statDeltas = mutableMapOf<String, Int>()
+    val maxVitalDeltas = mutableMapOf<String, Int>()
+    val resistDeltas = mutableMapOf<String, Int>()
+    val flags = mutableSetOf<String>()
+
+    for (t in traits) {
+      for ((s, d) in t.statDeltas) statDeltas[s] = (statDeltas[s] ?: 0) + d
+      for ((v, d) in t.maxVitalDeltas) maxVitalDeltas[v] = (maxVitalDeltas[v] ?: 0) + d
+      for ((r, d) in t.resistDeltas) resistDeltas[r] = (resistDeltas[r] ?: 0) + d
+      flags.addAll(t.flags)
+    }
+
+    traitStatDeltas = statDeltas
+    traitMaxVitalDeltas = maxVitalDeltas
+    traitResistDeltas = resistDeltas
+    traitFlags = flags
+
+    for ((name, v) in vitalMap) {
+      val effMax = max(name)
+      if (v.current > effMax) v.current = effMax
+    }
+  }
+
   val actionQueue: ArrayDeque<QueuedAction> = ArrayDeque()
   var waitState: Int = 0
 
@@ -216,19 +271,45 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var encumbrance: Map<String, Int> = emptyMap()
     internal set
 
-  /** Effective attribute: base plus affect, equipment and encumbrance deltas. */
+  /** Effective attribute: base plus trait, affect, equipment and encumbrance deltas. */
   fun stat(name: String): Int =
     (baseStats[name] ?: 0) +
+      (traitStatDeltas[name] ?: 0) +
       affects.sumOf { it.statDeltas[name] ?: 0 } +
       equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
       (encumbrance[name] ?: 0)
 
+  fun baseStat(name: String): Int = baseStats[name] ?: 0
+
   fun current(vital: String): Int = vitalMap[vital]?.current ?: 0
 
-  fun max(vital: String): Int = vitalMap[vital]?.max ?: 0
+  fun max(vital: String): Int =
+    maxOf(0, (vitalMap[vital]?.max ?: 0) + (traitMaxVitalDeltas[vital] ?: 0))
 
-  /** True if an affect carries [flag], including those applied by worn items. */
-  fun hasFlag(flag: String): Boolean = affects.any { flag in it.flags }
+  fun baseMax(vital: String): Int = vitalMap[vital]?.max ?: 0
+
+  fun effectiveResist(type: String): Int =
+    (resists[DamageType(type)] ?: 0) + (traitResistDeltas[type] ?: 0)
+
+  fun effectiveResist(type: DamageType): Int =
+    (resists[type] ?: 0) + (traitResistDeltas[type.name] ?: 0)
+
+  fun resist(type: String): Int = effectiveResist(type)
+
+  fun resist(type: DamageType): Int = effectiveResist(type)
+
+  fun baseResist(type: String): Int = resists[DamageType(type)] ?: 0
+
+  fun baseResist(type: DamageType): Int = resists[type] ?: 0
+
+  fun hasTrait(name: String): Boolean = traits.any { it.name == name }
+
+  /** All active flags on this actor from traits and affects. */
+  val flags: Set<String>
+    get() = traitFlags + affects.flatMap { it.flags }
+
+  /** True if a trait or an affect carries [flag], including those applied by worn items. */
+  fun hasFlag(flag: String): Boolean = flag in traitFlags || affects.any { flag in it.flags }
 
   val isStunned: Boolean
     get() = hasFlag("stunned")
@@ -280,6 +361,9 @@ class Player(
 
   /** Instructors are exempt from the idle auto-quit. */
   var idleExempt: Boolean = false
+
+  /** Player's character creation choices: choice name -> option id. */
+  val choices: MutableMap<String, String> = LinkedHashMap()
 
   /** The account's role, which gates builder and instructor commands. */
   var role: Role = Role.PLAYER
@@ -371,6 +455,9 @@ class Item(id: EntityId, var proto: ItemProto, location: ItemLocation, var count
 
   val kind: String
     get() = proto.kind
+
+  val tags: Set<String>
+    get() = proto.tags
 
   val range: Band
     get() = proto.range

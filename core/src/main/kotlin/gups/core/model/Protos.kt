@@ -58,6 +58,7 @@ data class RoomProto(
   val desc: String = "",
   val size: TrackSize = TrackSize.NORMAL,
   val regions: Set<String> = emptySet(),
+  val tags: Set<String> = emptySet(),
   /** `always_active`, `dead_end_ok`. */
   val flags: Set<String> = emptySet(),
   val exits: List<ExitProto> = emptyList(),
@@ -91,6 +92,7 @@ data class MobProto(
   val thinkEvery: Int = THINK_DEFAULT_PULSES,
   val dormantRecovery: DormantRecovery = DormantRecovery.FULL,
   val loot: List<LootRule> = emptyList(),
+  val traits: Set<String> = emptySet(),
   val version: Int = 1,
 )
 
@@ -117,6 +119,7 @@ data class ItemProto(
   /** Null means the world's unarmed damage type. */
   val damageType: DamageType? = null,
   val statDeltas: Map<String, Int> = emptyMap(),
+  val tags: Set<String> = emptySet(),
   val stackable: Boolean = false,
   val decayPulses: Int? = null,
   val container: ContainerProto? = null,
@@ -171,6 +174,7 @@ data class SkillProto(
   val attackWhileCasting: Boolean = false,
   val effect: Effect? = null,
   val resolve: SkillResolver? = null,
+  val tags: Set<String> = emptySet(),
 ) {
   val name: String
     get() = label.name

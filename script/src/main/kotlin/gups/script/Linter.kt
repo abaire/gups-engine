@@ -122,7 +122,7 @@ class Linter(
     val findings = mutableListOf<Finding>()
 
     // 1. Load the packages to inspect prototypes and catch load errors.
-    val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
+    val loader = ScriptLoader(dir, ScriptLimits(), plugins = plugins)
     WorldModule.read(dir).second?.let {
       findings += Finding(Finding.Severity.ERROR, it.message, file = WorldModule.FILE)
     }

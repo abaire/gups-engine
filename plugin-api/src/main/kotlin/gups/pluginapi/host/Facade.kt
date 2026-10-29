@@ -16,17 +16,24 @@ import gups.core.world.World
 import gups.core.world.applyAffect
 import gups.core.world.damage
 import gups.core.world.echo
+import gups.core.world.grantTrait
 import gups.core.world.heal
 import gups.core.world.removeAffect
+import gups.core.world.removeSkill
+import gups.core.world.removeTrait
 import gups.core.world.send
+import gups.core.world.setChoices
+import gups.core.world.setSkill
 import gups.core.world.teleport
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
+import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
+import gups.pluginapi.PluginSkill
 import gups.pluginapi.PluginWorld
 import gups.script.ActorView
 import gups.script.ItemView
@@ -99,6 +106,9 @@ internal class RoomFacade(val room: Room, private val world: World) :
   override val flags: Set<String>
     get() = room.proto.flags.toSortedSet()
 
+  override val tags: List<String>
+    get() = room.proto.tags.sorted()
+
   override val size: String
     get() {
       needs(world, Feature.TRACK, "size")
@@ -141,6 +151,9 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
   override val isPlayer: Boolean
     get() = actor.isPlayer
 
+  override val role: PluginRole?
+    get() = (actor as? Player)?.let { PluginRole.valueOf(it.role.name) }
+
   override val room: PluginRoom
     get() = RoomFacade(actor.room, world)
 
@@ -157,8 +170,14 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
 
   override fun maxVital(name: String): Int = actor.max(declared(name, schema.vitalNames, "vital"))
 
+  override fun baseMaxVital(name: String): Int =
+    actor.baseMax(declared(name, schema.vitalNames, "vital"))
+
   override fun resist(type: String): Int =
-    actor.resists[DamageType(declared(type, schema.damageTypes, "damage type"))] ?: 0
+    actor.resist(declared(type, schema.damageTypes, "damage type"))
+
+  override fun baseResist(type: String): Int =
+    actor.baseResist(declared(type, schema.damageTypes, "damage type"))
 
   override val level: Int
     get() {
@@ -170,6 +189,34 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
     get() = actor.affects.map { it.name }
 
   override fun hasAffect(name: String): Boolean = actor.affects.any { it.name == name }
+
+  override val flags: Set<String>
+    get() = actor.flags.toSortedSet()
+
+  override val choices: Map<String, String>
+    get() =
+      if (actor is Player) {
+        val provider = world.creation
+        if (provider == null) emptyMap()
+        else
+          actor.choices.filter { (cid, oid) ->
+            provider.choices.any { c -> c.id == cid && c.options.any { o -> o.id == oid } }
+          }
+      } else emptyMap()
+
+  override val traits: List<String>
+    get() = actor.traits.map { it.name }.sorted()
+
+  override val grantedTraits: Set<String>
+    get() = actor.grantedTraits.toSortedSet()
+
+  override fun hasTrait(name: String): Boolean = actor.hasTrait(name)
+
+  override val skills: Map<String, Int>
+    get() {
+      needs(world, Feature.SKILLS, "skills")
+      return actor.skills.mapKeys { it.key.v }
+    }
 }
 
 internal class ItemFacade(val item: Item) : EntityFacade(item), PluginItem {
@@ -178,6 +225,32 @@ internal class ItemFacade(val item: Item) : EntityFacade(item), PluginItem {
 
   override val keywords: List<String>
     get() = item.keywords
+
+  override val kind: String
+    get() = item.proto.kind
+
+  override val wear: String?
+    get() = item.proto.wear
+
+  override val weight: Int
+    get() = item.proto.weight
+
+  override val tags: List<String>
+    get() = item.proto.tags.sorted()
+}
+
+internal class SkillFacade(val skill: gups.core.model.SkillProto) : PluginSkill {
+  override val label: String
+    get() = skill.label.v
+
+  override val name: String
+    get() = skill.name
+
+  override val kind: String
+    get() = skill.kind
+
+  override val tags: List<String>
+    get() = skill.tags.sorted()
 }
 
 internal class RngFacade(private val world: World) : PluginRng {
@@ -280,6 +353,47 @@ internal class WorldFacade(
 
   override fun teleport(actor: PluginActor, room: PluginRoom) =
     world.teleport(actorOf(actor, "teleport(actor)"), roomOf(room, "teleport(room)"))
+
+  override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
+    val a = actorOf(actor, "setChoices(actor)")
+    require(a is Player) { "setChoices(actor): mob has no choices" }
+    requireNotNull(world.creation) { "setChoices: no creation provider is registered" }
+    return world.setChoices(a, changes)
+  }
+
+  override fun grantTrait(actor: PluginActor, trait: String): String? {
+    require(trait in world.traits) { "grantTrait(trait): unknown trait '$trait'" }
+    val a = actorOf(actor, "grantTrait(actor)")
+    return world.grantTrait(a, trait)
+  }
+
+  override fun removeTrait(actor: PluginActor, trait: String): String? {
+    require(trait in world.traits) { "removeTrait(trait): unknown trait '$trait'" }
+    val a = actorOf(actor, "removeTrait(actor)")
+    return world.removeTrait(a, trait)
+  }
+
+  override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? {
+    needs(world, Feature.SKILLS, "setSkill")
+    val label =
+      runCatching { Label(skill) }.getOrNull()
+        ?: throw IllegalArgumentException("setSkill(skill): invalid skill label '$skill'")
+    require(world.protos.skills.containsKey(label)) { "setSkill(skill): unknown skill '$skill'" }
+    require(proficiency in 0..100) {
+      "setSkill(proficiency): proficiency must be 0..100, got $proficiency"
+    }
+    val a = actorOf(actor, "setSkill(actor)")
+    return world.setSkill(a, label, proficiency)
+  }
+
+  override fun removeSkill(actor: PluginActor, skill: String): Boolean {
+    needs(world, Feature.SKILLS, "removeSkill")
+    val label =
+      runCatching { Label(skill) }.getOrNull()
+        ?: throw IllegalArgumentException("removeSkill(skill): invalid skill label '$skill'")
+    val a = actorOf(actor, "removeSkill(actor)")
+    return world.removeSkill(a, label)
+  }
 
   private fun key(key: String, write: Boolean, what: String): String {
     val (ns, short) =

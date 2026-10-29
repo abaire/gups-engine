@@ -314,7 +314,7 @@ private constructor(
             "."
       },
     ) { (r, message) ->
-      if (r != null) restrictions = restrictions + r
+      if (r != null) accountRestrictions = accountRestrictions + r
       reply(this, p, message)
     }
   }
@@ -338,7 +338,7 @@ private constructor(
       },
     ) { result ->
       val (a, lifted, fresh) = result ?: return@run reply(this, p, "There is no account '$login'.")
-      restrictions = restrictions.filter { it.accountId != a.id } + fresh
+      accountRestrictions = accountRestrictions.filter { it.accountId != a.id } + fresh
       reply(
         this,
         p,

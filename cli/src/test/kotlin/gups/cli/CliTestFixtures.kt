@@ -120,7 +120,7 @@ class PersistWorld(
       ),
       boot,
     )
-  val report = persistence.restore(w, fresh)
+  val report = persistence.restore(w, fresh).also { w.start() }
   private var nextSession = 1L
   val sinks = mutableMapOf<String, CapturingSink>()
 

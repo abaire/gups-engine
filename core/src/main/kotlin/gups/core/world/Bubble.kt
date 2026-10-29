@@ -294,7 +294,7 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
   val bounds = listOf(since + 1) + cuts + listOf(pulse + 1)
   try {
     for (i in 0 until bounds.size - 1) {
-      if (m.vitalMap.values.all { it.current >= it.max }) break
+      if (m.vitalMap.entries.all { (name, v) -> v.current >= m.max(name) }) break
       val lo = bounds[i]
       val hi = bounds[i + 1]
       val n = ticksIn(lo, hi)

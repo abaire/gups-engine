@@ -6,9 +6,11 @@ GMCP packages and a world-start hook (SPEC.md §4.15). This guide uses the sampl
 tutorial on building a plugin from scratch, see the
 [Weather Plugin Walkthrough](../samples/weather-plugin/docs/tutorials/README.md).
 
-There are **no compatibility promises**. Any change to the plugin interface or the facade bumps
-`PluginApi.VERSION`, and the engine refuses plugins built for another version: rebuild them
-against the new `plugin-api` with each engine upgrade.
+There are **no compatibility promises**. After the engine's first release, `PluginApi.VERSION`
+changes whenever the plugin interface or the facade changes. Until then, the interface is still
+being designed and changes stay at version 1 (as unreleased `api_version` 1 does for scripts);
+plugins are rebuilt against each engine build anyway. Plugins built for another version are
+refused at load, and must be rebuilt.
 
 ## Building a plugin
 
@@ -182,6 +184,127 @@ not overlap an engine package (`Char.*`, `Room.*`, `Comm.Channel.Text`, `Gups.Tr
 ```kotlin
 r.addGmcp("Gups.Weather", "The weather where the player stands.") { world, actor ->
     mapOf("state" to stateFor(world, actor.room), "region" to actor.room.regions.minOrNull())
+}
+```
+
+### Character creation, traits and restrictions
+
+Plugins can define traits, character creation choices and operational restrictions (`samples/heritage-plugin`):
+
+#### Traits
+
+Traits carry stat, max-vital and resist deltas, flags, and modifiers. They are registered on the plugin registry:
+
+```kotlin
+r.addTrait(
+    PluginTrait(
+        name = "elf",
+        label = "Elf",
+        doc = "Nimble and magical, but fragile.",
+        statDeltas = mapOf("dex" to 2, "con" to -1),
+        maxVitalDeltas = mapOf("mana" to 10),
+    )
+)
+```
+
+#### Creation provider
+
+A plugin registers at most one creation provider that presents choices (such as race and class) at login:
+
+```kotlin
+r.setCreation(
+    object : PluginCreation {
+        override val choices =
+            listOf(
+                PluginChoice("race", "Race", RACE_OPTIONS),
+                PluginChoice("class", "Class", CLASS_OPTIONS),
+            )
+
+        override fun available(
+            world: PluginWorld,
+            choice: String,
+            answers: Map<String, String>,
+        ): List<String> =
+            when (choice) {
+                "race" -> listOf("human", "elf", "dwarf")
+                "class" ->
+                    if (answers["race"] == "dwarf") listOf("warrior", "cleric")
+                    else listOf("warrior", "mage", "cleric")
+                else -> emptyList()
+            }
+
+        override fun validate(world: PluginWorld, answers: Map<String, String>): String? =
+            if (answers["race"] == "dwarf" && answers["class"] == "mage") {
+                "Dwarves cannot be mages."
+            } else null
+
+        override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
+
+        override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
+            if (newCharacter) {
+                val skill =
+                    when (actor.choices["class"]) {
+                        "mage" -> "//skills:magic_missile"
+                        "cleric" -> "//skills:minor_heal"
+                        else -> null
+                    }
+                if (skill != null) {
+                    try {
+                        world.setSkill(actor, skill, 25)
+                    } catch (_: IllegalArgumentException) {
+                        // Skill not defined in world
+                    }
+                }
+            }
+        }
+    }
+)
+```
+
+#### Restrictions
+
+Restrictions intercept operations (`WEAR`, `ENTER`, `CAST`, `LEARN`) and can refuse them:
+
+```kotlin
+r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") { call ->
+    val actor = call.actor
+    val item = call.item
+    if (actor.hasTrait("mage") && item != null && "heavy_armor" in item.tags) {
+        "Your spellcraft can't work through that much metal."
+    } else null
+}
+```
+
+#### Modifying choices in play
+
+A plugin can let players change choices through builtins or commands using `PluginWorld.setChoices`:
+
+```kotlin
+r.addBuiltin(
+    name = "choose",
+    doc = "Sets or changes a character's choice. Returns the refusal message or None.",
+    params =
+        listOf(
+            PluginParam("actor", "actor", "The actor to modify."),
+            PluginParam("choice", "str", "The choice id to set."),
+            PluginParam(
+                "option",
+                "str",
+                "The option id, or None to clear.",
+                required = false,
+                defaultValue = null,
+            ),
+        ),
+    returnType = "str",
+) { world, pos, _ ->
+    val actor =
+        pos[0] as? PluginActor
+            ?: throw IllegalArgumentException("heritage.choose(actor): expected an actor")
+    val choice =
+        pos[1] as? String
+            ?: throw IllegalArgumentException("heritage.choose(choice): expected a string")
+    val option = if (pos.size > 2) pos[2] as? String else null
+    world.setChoices(actor, mapOf(choice to option))
 }
 ```
 

@@ -319,7 +319,7 @@ class GupsServer(
       world.record(Diagnostic(world.pulse, "plugin", w))
       world.alert("plugin_load", w)
     }
-    world.fireOnLoad()
+    world.start()
     plugins.started(world)
     if (saved != null) world.checkpointNow("boot")
     loop = WorldLoop(world)
@@ -349,7 +349,7 @@ class GupsServer(
     }
     saved?.accounts?.let { accounts ->
       syncCodeOwners(accounts, packages)
-      world.restrictions = accounts.restrictions()
+      world.accountRestrictions = accounts.restrictions()
       AccountTools.install(world, AccountService(accounts), prod?.ladder ?: DEFAULT_LADDER) {
         codeOwners
       }

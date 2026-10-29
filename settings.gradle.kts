@@ -17,4 +17,5 @@ include(
   "cli",
   "webclient",
   "samples:weather-plugin",
+  "samples:heritage-plugin",
 )

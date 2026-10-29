@@ -80,7 +80,10 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
       rebind(m, p, old.mobs[m.protoLabel] ?: m.proto)
     }
   }
-  for (a in actorIndex.values) a.skills.keys.retainAll { it in next.skills }
+  for (a in actorIndex.values) {
+    a.skills.keys.retainAll { it in next.skills }
+    a.recomputeTraits(this)
+  }
 
   for (item in entities.values.filterIsInstance<Item>().sortedBy { it.id }) {
     if (item.id !in entities) continue
@@ -179,11 +182,11 @@ private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
   m.proto = p
   upgrade(m, p.version)
   m.level = follow(m.level, was.level, p.level)
-  for ((name, v) in m.vitalMap) {
-    val full = v.current == v.max
-    v.max = follow(v.max, was.vitals[name] ?: 0, p.vitals[name] ?: 0)
-    if (full || v.current > v.max) v.current = v.max
-  }
+  // Fullness is judged against the old traits, and the new maxima include the new prototype's.
+  val full = m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.keys
+  for ((name, v) in m.vitalMap) v.max = follow(v.max, was.vitals[name] ?: 0, p.vitals[name] ?: 0)
+  m.recomputeTraits(this)
+  for (name in full) m.vitalMap.getValue(name).current = m.max(name)
   for (stat in p.stats.keys + was.stats.keys) {
     m.baseStats[stat] = follow(m.baseStats[stat], was.stats[stat], p.stats[stat]) ?: 0
   }

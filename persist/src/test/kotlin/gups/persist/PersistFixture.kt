@@ -58,6 +58,7 @@ object P {
     ratVersion: Int = 1,
     withGem: Boolean = true,
     withRat: Boolean = true,
+    ratTraits: Set<String> = emptySet(),
   ) =
     Prototypes(
       rooms = if (withRat) rooms(ratHp) else rooms(ratHp).map { it.copy(spawns = emptyList()) },
@@ -69,6 +70,7 @@ object P {
               "a rat",
               listOf("rat"),
               vitals = mapOf(FixtureSchemas.current.health to ratHp),
+              traits = ratTraits,
               version = ratVersion,
             )
           )
@@ -98,28 +100,31 @@ class PersistWorld(
   scripts: ScriptHost = ScriptHost.NONE,
   checkpointPulses: Long = gups.core.world.DEFAULT_CHECKPOINT_PULSES,
   val fs: gups.core.fixtures.FixtureSchema = FixtureSchemas.current,
+  traits: Map<String, gups.core.model.Trait> = emptyMap(),
 ) {
   val persistence = SqlitePersistence.open(file)
   val boot = persistence.boot(protos, fresh)
   val w =
     World(
-      protos,
-      fs.schema,
-      FixtureRules(fs),
-      scripts,
-      WorldConfig(
-        seed = 1,
-        checkInvariants = true,
-        strict = true,
-        checkpointPulses = checkpointPulses,
-      ),
-      boot,
-    )
+        protos,
+        fs.schema,
+        FixtureRules(fs),
+        scripts,
+        WorldConfig(
+          seed = 1,
+          checkInvariants = true,
+          strict = true,
+          checkpointPulses = checkpointPulses,
+        ),
+        boot,
+      )
+      .also { it.traits = traits }
   val report = persistence.restore(w, fresh)
   private var nextSession = 1L
   val sinks = mutableMapOf<String, CapturingSink>()
 
   init {
+    w.start()
     w.login = DevLogin(P.HALL)
   }
 

@@ -43,7 +43,7 @@ import kotlinx.serialization.json.longOrNull
 // what differs from the prototype; players have no prototype and store everything. Every
 // payload carries a format_version for engine-side schema evolution.
 
-const val FORMAT_VERSION = 2
+const val FORMAT_VERSION = 3
 
 internal val JSON = Json {
   ignoreUnknownKeys = true
@@ -156,6 +156,7 @@ data class MobPayload(
   val skills: Map<String, Int>? = null,
   val thinkEvery: Int? = null,
   val dormantRecovery: String? = null,
+  val grantedTraits: List<String>? = null,
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   val affects: List<AffectJson> = emptyList(),
@@ -194,6 +195,8 @@ data class PlayerPayload(
   val stats: Map<String, Int>,
   val resists: Map<String, Int> = emptyMap(),
   val skills: Map<String, Int> = emptyMap(),
+  val choices: Map<String, String> = emptyMap(),
+  val grantedTraits: List<String> = emptyList(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   val affects: List<AffectJson> = emptyList(),
@@ -378,6 +381,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           skills = delta(e.skills.mapKeys { it.key.v }, p.skills.mapKeys { it.key.v }),
           thinkEvery = delta(e.thinkEvery, p.thinkEvery),
           dormantRecovery = delta(e.dormantRecovery, p.dormantRecovery)?.name?.lowercase(),
+          grantedTraits = e.grantedTraits.toList().sorted().takeIf { it.isNotEmpty() },
           attrs = attrsJson(e.customAttributes),
           timers = timersJson(e),
           affects = affectsJson(e),
@@ -440,6 +444,8 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
       stats = p.baseStats.toMap(),
       resists = p.resists.mapKeys { it.key.name },
       skills = p.skills.mapKeys { it.key.v },
+      choices = p.choices.toMap(),
+      grantedTraits = p.grantedTraits.toList().sorted(),
       attrs = attrsJson(p.customAttributes),
       timers = timersJson(p),
       affects = affectsJson(p),
@@ -483,11 +489,15 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   p.dormantRecovery?.let { m.dormantRecovery = DormantRecovery.valueOf(it.uppercase()) }
   p.home?.let { m.homeRoom = Label(it) }
   m.summonedBy = p.summonedBy?.let(::EntityId)
+  m.grantedTraits = p.grantedTraits?.toSet() ?: emptySet()
+  m.recomputeTraits(world)
   world.restoreActorNumbers(
     m,
     stats = p.stats ?: m.baseStats.toMap(),
     vitals =
-      p.vitals.mapValues { (name, v) -> VitalState(v.cur, v.max ?: m.max(name), v.belowZeroSince) },
+      p.vitals.mapValues { (name, v) ->
+        VitalState(v.cur, v.max ?: m.baseMax(name), v.belowZeroSince)
+      },
     resists = p.resists?.mapKeys { DamageType(it.key) } ?: m.resists.toMap(),
     condition = Condition.parse(p.condition) ?: Condition.OK,
   )
@@ -513,6 +523,10 @@ internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {
   pl.role = Role.valueOf(p.role)
   pl.level = p.level
   pl.xp = p.xp
+  pl.choices.clear()
+  pl.choices.putAll(p.choices)
+  pl.grantedTraits = p.grantedTraits.toSet()
+  pl.recomputeTraits(world)
   world.restoreActorNumbers(
     pl,
     stats = p.stats,

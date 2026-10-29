@@ -33,6 +33,7 @@
   <main id="game" class="game" hidden>
     <section class="play">
       <div id="output" class="output" role="log" aria-live="polite"></div>
+      <div id="creation" class="creation-panel" hidden></div>
       <form id="command" class="command">
         <span id="prompt" class="prompt"></span>
         <input id="input" autocomplete="off" spellcheck="false" aria-label="Command">
@@ -40,6 +41,11 @@
     </section>
     <aside class="side">
       <div id="vitals" class="vitals"></div>
+      <div id="traits-panel" class="traits-panel" hidden>
+        <h2>Traits</h2>
+        <div id="choices-list" class="choices-list"></div>
+        <ul id="traits-list" class="traits-list"></ul>
+      </div>
       <h2>Affects</h2>
       <ul id="affects" class="affects"></ul>
       <h2 id="room-name">Room</h2>

@@ -39,7 +39,11 @@ def starting_stats(ctx):
             wis = _or(a.base.wis, 10),
             armor = a.base.armor,
         ),
-        max = vitals(hp = _or(a.max_hp, 10), mana = a.max_mana, move = _or(a.max_move, 100)),
+        max = vitals(
+            hp = _or(a.base.max_hp, 10),
+            mana = a.base.max_mana,
+            move = _or(a.base.max_move, 100),
+        ),
     )
 
 def condition(ctx):

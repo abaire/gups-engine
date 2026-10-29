@@ -65,7 +65,7 @@ fun World.restriction(player: Player, capability: String): Restriction? {
   if (player.role.atLeast(Role.INSTRUCTOR)) return null
   val account = player.accountId ?: return null
   val now = wallClock()
-  return restrictions.firstOrNull {
+  return accountRestrictions.firstOrNull {
     it.accountId == account && it.capability == capability && it.activeAt(now)
   }
 }

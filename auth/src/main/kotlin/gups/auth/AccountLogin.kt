@@ -8,20 +8,29 @@ import gups.core.Role
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Player
+import gups.core.world.CreationFlow
+import gups.core.world.CreationOutcome
 import gups.core.world.Diagnostic
 import gups.core.world.KernelMsg
 import gups.core.world.LoginHandler
 import gups.core.world.LoginMsg
 import gups.core.world.Session
 import gups.core.world.World
+import gups.core.world.choiceChanges
+import gups.core.world.choicesRefusal
 import gups.core.world.closeSession
+import gups.core.world.creationStartRoom
 import gups.core.world.enterGame
 import gups.core.world.flush
 import gups.core.world.handle
+import gups.core.world.hasMissingChoices
 import gups.core.world.msg
+import gups.core.world.send
 import gups.core.world.sendSession
 import gups.core.world.session
+import gups.core.world.setChoices
 import gups.core.world.takeOver
+import gups.core.world.unload
 import java.util.concurrent.Executor
 import java.util.concurrent.RejectedExecutionException
 
@@ -70,6 +79,7 @@ class AccountLogin(
     NEW_PASSWORD_AGAIN(hidden = true),
     MENU,
     NAME,
+    CREATION,
     OLD_PASSWORD(hidden = true),
     CHANGE_PASSWORD(hidden = true),
     CHANGE_PASSWORD_AGAIN(hidden = true),
@@ -89,6 +99,9 @@ class AccountLogin(
     var strikes = 0
     var pending = false
     val held = ArrayDeque<String>()
+    var flow: CreationFlow? = null
+    /** Answers kept while a new character goes back to the name prompt. */
+    var answers: Map<String, String> = emptyMap()
   }
 
   /** What [post] carries back: the work's continuation, for the connection that started it. */
@@ -183,6 +196,7 @@ class AccountLogin(
       Step.NEW_PASSWORD_AGAIN -> redeem(world, session, c, line)
       Step.MENU -> menuChoice(world, session, c, text)
       Step.NAME -> createCharacter(world, session, c, text)
+      Step.CREATION -> c.flow?.input(line)
       Step.OLD_PASSWORD -> {
         c.oldPassword = line
         ask(world, session, c, Step.CHANGE_PASSWORD, world.msg(LoginMsg.NEW_PASSWORD_PROMPT))
@@ -466,7 +480,53 @@ class AccountLogin(
     val p =
       world.persistence.loadCharacter(world, name)
         ?: return again(world, s, c, world.msg(LoginMsg.CANT_FIND, "name" to name))
-    enter(world, s, c, p, world.msg(KernelMsg.WELCOME_BACK, "name" to p.name))
+    if (!world.hasMissingChoices(p))
+      return enter(world, s, c, p, world.msg(KernelMsg.WELCOME_BACK, "name" to p.name))
+    // The character stays out of the world while its choices are made, so nothing can reach it
+    // and a cancel leaves no trace; it is loaded again once they are confirmed.
+    world.unload(p)
+    world.sendSession(s, world.msg(LoginMsg.CREATION_HAS_CHOICES, "name" to p.name))
+    startFlow(world, s, c, p.name, newCharacter = false, p.choices.toMap()) { outcome ->
+      if (outcome !is CreationOutcome.Completed) return@startFlow menu(world, s, c)
+      playing(world, a)?.let {
+        return@startFlow again(world, s, c, world.msg(LoginMsg.ALREADY_PLAYING, "name" to it.name))
+      }
+      world.persistence.maintenance?.let { why ->
+        world.sendSession(s, why)
+        return@startFlow world.closeSession(s, "maintenance")
+      }
+      val q =
+        world.persistence.loadCharacter(world, name)
+          ?: return@startFlow again(world, s, c, world.msg(LoginMsg.CANT_FIND, "name" to name))
+      val changes = world.choiceChanges(q, outcome.answers)
+      world.choicesRefusal(q, changes)?.let {
+        world.unload(q)
+        return@startFlow again(world, s, c, it)
+      }
+      enter(world, s, c, q, world.msg(KernelMsg.WELCOME_BACK, "name" to q.name))
+      world.setChoices(q, changes)?.let { world.send(q, it) }
+      world.creation?.created(world, q, newCharacter = false)
+    }
+  }
+
+  /** Runs the creation flow on [c]; [onOutcome] sees how it ended, with the flow already gone. */
+  private fun startFlow(
+    world: World,
+    s: Session,
+    c: Conn,
+    name: String,
+    newCharacter: Boolean,
+    answers: Map<String, String>,
+    onOutcome: (CreationOutcome) -> Unit,
+  ) {
+    c.step = Step.CREATION
+    val flow =
+      CreationFlow(world, s, name, newCharacter, answers) { outcome ->
+        c.flow = null
+        onOutcome(outcome)
+      }
+    c.flow = flow
+    flow.start()
   }
 
   private fun cantCreate(world: World, a: Account): String? {
@@ -503,9 +563,60 @@ class AccountLogin(
       world.sendSession(s, why)
       return world.closeSession(s, "maintenance")
     }
-    val p = world.spawnPlayer(name, start, accountId = a.id)
+    if (world.creation == null) {
+      val p = world.spawnPlayer(name, start, accountId = a.id)
+      world.requestImmediate("create")
+      return enter(world, s, c, p, world.msg(KernelMsg.WELCOME_NEW, "name" to name))
+    }
+    val kept = c.answers
+    c.answers = emptyMap()
+    startFlow(world, s, c, name, newCharacter = true, kept) { outcome ->
+      when (outcome) {
+        is CreationOutcome.Created -> created(world, s, c, a, name, outcome.answers)
+        is CreationOutcome.BackToName -> {
+          c.answers = outcome.answers
+          ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
+        }
+        else -> menu(world, s, c)
+      }
+    }
+  }
+
+  /** A confirmed new character: the checks of [createCharacter] again, as time has passed. */
+  private fun created(
+    world: World,
+    s: Session,
+    c: Conn,
+    a: Account,
+    name: String,
+    answers: Map<String, String>,
+  ) {
+    if (
+      world.players.any { it.name.equals(name, ignoreCase = true) } ||
+        world.persistence.savedCharacter(name) != null
+    ) {
+      c.answers = answers
+      world.sendSession(s, world.msg(LoginMsg.NAME_TAKEN))
+      return ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
+    }
+    cantCreate(world, a)?.let {
+      return again(world, s, c, it)
+    }
+    world.persistence.maintenance?.let { why ->
+      world.sendSession(s, why)
+      return world.closeSession(s, "maintenance")
+    }
+    val room =
+      try {
+        world.creationStartRoom(answers, start)
+      } catch (e: Exception) {
+        world.diagnose("plugin", "creation provider startRoom() failed: ${e.message}", e)
+        return again(world, s, c, world.msg(LoginMsg.CREATION_PROVIDER_FAILED))
+      }
+    val p = world.spawnPlayer(name, room, accountId = a.id, choices = answers)
     world.requestImmediate("create")
     enter(world, s, c, p, world.msg(KernelMsg.WELCOME_NEW, "name" to name))
+    world.creation?.created(world, p, newCharacter = true)
   }
 
   private fun enter(world: World, s: Session, c: Conn, p: Player, welcome: String?) {

@@ -114,4 +114,44 @@ class LoginTest {
     assertEquals("[0] script_error //t:rooms.star:3: on_enter: boom\n", f.out(p))
     assertTrue(CapturingSink().closedReason == null)
   }
+
+  private class OneChoice : gups.core.model.CreationProvider {
+    override val choices =
+      listOf(
+        gups.core.model.CreationChoice(
+          "race",
+          "Race",
+          options = listOf(gups.core.model.CreationOption("elf", "Elf", "Quick.")),
+        )
+      )
+
+    override fun available(world: World, choice: String, answers: Map<String, String>) =
+      listOf("elf")
+
+    override fun validate(world: World, answers: Map<String, String>): String? = null
+
+    override fun startRoom(world: World, answers: Map<String, String>): gups.core.Label? = null
+
+    override fun created(world: World, player: gups.core.model.Player, newCharacter: Boolean) = Unit
+  }
+
+  @Test
+  fun `a dev name taken while choosing returns to the name prompt`() {
+    val w = world().also { it.creation = OneChoice() }
+    val first = PromptSink()
+    val second = PromptSink()
+    w.handle(WorldControlEvent.Connect(SessionId(1), first, "127.0.0.1", "telnet"))
+    w.handle(WorldControlEvent.Connect(SessionId(2), second, "127.0.0.1", "telnet"))
+    for (id in listOf(1L, 2L)) {
+      w.handle(ClientInputEvent(SessionId(id), "Bob", 0))
+      w.handle(ClientInputEvent(SessionId(id), "elf", 0))
+    }
+    assertContains(second.all, "Create this character?")
+    w.handle(ClientInputEvent(SessionId(1), "yes", 0))
+    w.handle(ClientInputEvent(SessionId(2), "yes", 0))
+    assertEquals(listOf("Bob"), w.players.map { it.name })
+    assertEquals(SessionId(1), w.players.single().session)
+    assertContains(second.all, "That name is taken.\n[By what name do you wish to be known? ]")
+    assertEquals(mapOf("race" to "elf"), w.players.single().choices.toMap())
+  }
 }

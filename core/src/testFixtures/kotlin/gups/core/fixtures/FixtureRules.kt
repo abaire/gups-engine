@@ -52,7 +52,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     } else {
       StartingStats(
         stats = stats.mapValues { (name, v) -> a.baseStats[name]?.takeIf { it != 0 } ?: v },
-        max = fs.mobMax.mapValues { (name, v) -> a.max(name).takeIf { it != 0 } ?: v },
+        max = fs.mobMax.mapValues { (name, v) -> a.baseMax(name).takeIf { it != 0 } ?: v },
         current = fs.startsEmpty.mapValues { 0 },
       )
     }

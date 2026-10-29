@@ -37,6 +37,12 @@ interface LoginHandler {
  * `instructor`, and [accountId] is its id.
  */
 class DevLogin(private val start: Label, private val accountId: Long? = null) : LoginHandler {
+  private val flows = HashMap<SessionId, CreationFlow>()
+
+  override fun disconnected(world: World, session: SessionId) {
+    flows.remove(session)
+  }
+
   override fun connected(world: World, session: Session) {
     if (!isLoopback(session.remote)) {
       world.sendSession(session, world.msg(LoginMsg.DEV_LOCAL_ONLY))
@@ -49,12 +55,15 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
   }
 
   override fun input(world: World, session: Session, line: String) {
+    val activeFlow = flows[session.id]
+    if (activeFlow != null) {
+      activeFlow.input(line)
+      return
+    }
     val name = line.trim().lowercase().replaceFirstChar { it.uppercase() }
     if (!NAME.matches(name)) {
       world.sendSession(session, world.msg(LoginMsg.NAME_INVALID))
-      world.flush(session)
-      session.sink.prompt(world.msg(LoginMsg.DEV_PROMPT))
-      return
+      return askName(world, session)
     }
     val existing = world.players.firstOrNull { it.name.equals(name, ignoreCase = true) }
     if (existing == null) {
@@ -63,28 +72,124 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
         return world.closeSession(session, "maintenance")
       }
     }
-    existing?.let { world.takeOver(it) }
-    val saved = if (existing == null) world.persistence.loadCharacter(world, name) else null
-    val p: Player =
-      existing
-        ?: saved
-        ?: world.spawnPlayer(name, start, accountId = accountId).also {
-          world.requestImmediate("create")
+    if (existing != null) {
+      world.takeOver(existing)
+      claim(existing)
+      return world.enterGame(session, existing, null)
+    }
+
+    val saved = world.persistence.loadCharacter(world, name)
+    if (saved != null) {
+      claim(saved)
+      if (!world.hasMissingChoices(saved))
+        return world.enterGame(
+          session,
+          saved,
+          world.msg(KernelMsg.WELCOME_BACK, "name" to saved.name),
+        )
+      world.unload(saved)
+      world.sendSession(session, world.msg(LoginMsg.CREATION_HAS_CHOICES, "name" to saved.name))
+      startFlow(world, session, saved.name, newCharacter = false, saved.choices.toMap()) { outcome
+        ->
+        if (outcome !is CreationOutcome.Completed) return@startFlow askName(world, session)
+        if (world.players.any { it.name.equals(name, ignoreCase = true) }) {
+          world.sendSession(session, world.msg(LoginMsg.NAME_TAKEN))
+          return@startFlow askName(world, session)
         }
+        world.persistence.maintenance?.let { why ->
+          world.sendSession(session, why)
+          return@startFlow world.closeSession(session, "maintenance")
+        }
+        val p =
+          world.persistence.loadCharacter(world, name) ?: return@startFlow askName(world, session)
+        claim(p)
+        val changes = world.choiceChanges(p, outcome.answers)
+        world.choicesRefusal(p, changes)?.let {
+          world.unload(p)
+          world.sendSession(session, it)
+          return@startFlow askName(world, session)
+        }
+        world.enterGame(session, p, world.msg(KernelMsg.WELCOME_BACK, "name" to p.name))
+        world.setChoices(p, changes)?.let { world.send(p, it) }
+        world.creation?.created(world, p, newCharacter = false)
+      }
+      return
+    }
+
+    if (world.creation == null) {
+      create(world, session, name, start, emptyMap())
+      return
+    }
+    startFlow(world, session, name, newCharacter = true, emptyMap()) { outcome ->
+      if (outcome !is CreationOutcome.Created) return@startFlow askName(world, session)
+      if (
+        world.players.any { it.name.equals(name, ignoreCase = true) } ||
+          world.persistence.savedCharacter(name) != null
+      ) {
+        world.sendSession(session, world.msg(LoginMsg.NAME_TAKEN))
+        return@startFlow askName(world, session)
+      }
+      world.persistence.maintenance?.let { why ->
+        world.sendSession(session, why)
+        return@startFlow world.closeSession(session, "maintenance")
+      }
+      val room =
+        try {
+          world.creationStartRoom(outcome.answers, start)
+        } catch (e: Exception) {
+          world.diagnose("plugin", "creation provider startRoom() failed: ${e.message}", e)
+          world.sendSession(session, world.msg(LoginMsg.CREATION_PROVIDER_FAILED))
+          return@startFlow askName(world, session)
+        }
+      val p = create(world, session, name, room, outcome.answers)
+      world.creation?.created(world, p, newCharacter = true)
+    }
+  }
+
+  private fun startFlow(
+    world: World,
+    session: Session,
+    name: String,
+    newCharacter: Boolean,
+    answers: Map<String, String>,
+    onOutcome: (CreationOutcome) -> Unit,
+  ) {
+    val flow =
+      CreationFlow(world, session, name, newCharacter, answers) { outcome ->
+        flows.remove(session.id)
+        onOutcome(outcome)
+      }
+    flows[session.id] = flow
+    flow.start()
+  }
+
+  private fun create(
+    world: World,
+    session: Session,
+    name: String,
+    room: Label,
+    answers: Map<String, String>,
+  ): Player {
+    val p = world.spawnPlayer(name, room, accountId = accountId, choices = answers)
+    world.requestImmediate("create")
+    claim(p)
+    world.enterGame(session, p, world.msg(KernelMsg.WELCOME_NEW, "name" to p.name))
+    return p
+  }
+
+  /** The local instructor plays every character; one saved before the account existed joins it. */
+  private fun claim(p: Player) {
     if (p.accountId == null && accountId != null) {
-      // A character saved before the instructor account existed joins it.
       p.accountId = accountId
       p.dirty = true
     }
     p.role = Role.INSTRUCTOR
     p.idleExempt = true
-    world.enterGame(
-      session,
-      p,
-      if (existing != null) null
-      else if (saved != null) world.msg(KernelMsg.WELCOME_BACK, "name" to p.name)
-      else world.msg(KernelMsg.WELCOME_NEW, "name" to p.name),
-    )
+  }
+
+  private fun askName(world: World, session: Session) {
+    world.flush(session)
+    session.sink.prompt(world.msg(LoginMsg.DEV_PROMPT))
   }
 
   companion object {

@@ -82,6 +82,16 @@ interface PluginRegistry {
   fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?)
 
   fun onWorldStarted(fn: (PluginWorld) -> Unit)
+
+  fun addTrait(trait: PluginTrait)
+
+  fun setCreation(creation: PluginCreation)
+
+  fun addRestriction(
+    point: PluginRestrictionPoint,
+    doc: String,
+    check: (PluginRestrictionCall) -> String?,
+  )
 }
 
 /** Mirrors core's command lanes. */
@@ -120,3 +130,85 @@ data class PluginEffectCall(
 fun interface PluginEffect {
   fun apply(call: PluginEffectCall)
 }
+
+// Character creation, traits and restrictions.
+data class PluginOption(
+  val id: String,
+  val label: String,
+  val summary: String,
+  val help: String = "",
+  val traits: List<String> = emptyList(),
+)
+
+data class PluginChoice(
+  val id: String,
+  val title: String,
+  val options: List<PluginOption>,
+  val prompt: String = "Choose your ${title.lowercase()}:",
+)
+
+interface PluginCreation {
+  val choices: List<PluginChoice>
+
+  fun available(world: PluginWorld, choice: String, answers: Map<String, String>): List<String> =
+    choices.first { it.id == choice }.options.map { it.id }
+
+  fun validate(world: PluginWorld, answers: Map<String, String>): String? = null
+
+  fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
+
+  fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {}
+}
+
+data class PluginTrait(
+  val name: String,
+  val label: String = name.replaceFirstChar { it.uppercase() },
+  val doc: String = "",
+  val statDeltas: Map<String, Int> = emptyMap(),
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  val resistDeltas: Map<String, Int> = emptyMap(),
+  val flags: Set<String> = emptySet(),
+  val modifiers: Map<PluginModifierPoint, PluginModifier> = emptyMap(),
+)
+
+enum class PluginModifierPoint {
+  TO_HIT,
+  DAMAGE,
+  INITIATIVE,
+  MOVE_COST,
+  REGEN,
+}
+
+data class PluginModifierCall(
+  val world: PluginWorld,
+  val point: PluginModifierPoint,
+  val actor: PluginActor,
+  val other: PluginActor?,
+  val weapon: PluginItem?,
+  val room: PluginRoom,
+)
+
+fun interface PluginModifier {
+  fun modify(call: PluginModifierCall, base: Any): Any
+}
+
+enum class PluginRestrictionPoint {
+  WEAR,
+  ENTER,
+  CAST,
+  LEARN,
+}
+
+data class PluginRestrictionCall(
+  val world: PluginWorld,
+  val point: PluginRestrictionPoint,
+  val actor: PluginActor,
+  val item: PluginItem? = null,
+  val slot: String? = null,
+  val room: PluginRoom? = null,
+  val from: PluginRoom? = null,
+  val direction: String? = null,
+  val skill: PluginSkill? = null,
+  val target: PluginEntity? = null,
+  val proficiency: Int? = null,
+)

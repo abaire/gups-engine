@@ -72,7 +72,7 @@ class FuzzWalker(
     seed: Long = DEFAULT_SEED,
     onProgress: ((Int) -> Unit)? = null,
   ): Outcome {
-    val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+    val loader = ScriptLoader(dir, ScriptLimits.HARNESS, plugins = plugins)
     val moduleProblems = moduleProblems(dir)
     if (moduleProblems.isNotEmpty()) {
       return Outcome(
@@ -128,6 +128,7 @@ class FuzzWalker(
       )
     plugins.install(world)
     host.install(world)
+    world.start()
     plugins.started(world)
 
     val rng = Random(seed)
@@ -140,7 +141,8 @@ class FuzzWalker(
       if (zoneRooms.isEmpty()) continue
       val startRoom = zoneRooms[rng.nextInt(zoneRooms.size)]
       val botName = "Bot_${zone.replace('/', '_').replace('-', '_')}"
-      val bot = world.spawnPlayer(botName, startRoom.label, level = 1)
+      val botChoices = drawBotChoices(world, rng)
+      val bot = world.spawnPlayer(botName, startRoom.label, level = 1, choices = botChoices)
       bot.idleExempt = true
 
       val sessId = SessionId(nextSession++)
@@ -170,7 +172,7 @@ class FuzzWalker(
           val zoneRooms = world.rooms.filter { it.label.pkg == zone }.toList()
           if (zoneRooms.isNotEmpty()) {
             val room = zoneRooms[rng.nextInt(zoneRooms.size)]
-            val newBot = world.spawnPlayer(bot.name, room.label, level = 1)
+            val newBot = world.spawnPlayer(bot.name, room.label, level = 1, choices = bot.choices)
             newBot.idleExempt = true
             val sessId = bot.session ?: SessionId(nextSession++)
             if (world.session(sessId) == null) {
@@ -330,6 +332,35 @@ class FuzzWalker(
         world.submit(bot, "${world.commands.nameOf("say")} exploring at pulse $pulse")
       }
     }
+  }
+
+  private fun drawBotChoices(world: World, rng: Random): Map<String, String> {
+    val creation = world.creation ?: return emptyMap()
+    for (attempt in 1..10) {
+      val answers = LinkedHashMap<String, String>()
+      for (choice in creation.choices) {
+        val avail =
+          try {
+            creation.available(world, choice.id, answers)
+          } catch (e: Exception) {
+            world.diagnose("plugin", "creation provider available() failed: ${e.message}", e)
+            emptyList()
+          }
+        val options = choice.options.filter { it.id in avail }
+        if (options.isEmpty()) continue
+        val picked = options[rng.nextInt(options.size)]
+        answers[choice.id] = picked.id
+      }
+      val refusal =
+        try {
+          creation.validate(world, answers)
+        } catch (e: Exception) {
+          world.diagnose("plugin", "creation provider validate() failed: ${e.message}", e)
+          "error"
+        }
+      if (refusal == null) return answers
+    }
+    return emptyMap()
   }
 }
 

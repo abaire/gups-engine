@@ -715,6 +715,7 @@ internal fun dryRunRules(
   limits: ScriptLimits,
   pkg: String = "rules",
   features: Features = Features.ALL,
+  wiring: WorldPluginWiring = WorldPluginWiring.NONE,
 ): List<String> {
   val host = StarlarkHost(result, limits)
   val rules = host.rules(pkg)
@@ -729,13 +730,49 @@ internal fun dryRunRules(
         rules,
         config = WorldConfig(seed = 0, strict = false, features = features),
       )
-      .also { rules.world = it }
+      .also {
+        rules.world = it
+        wiring.install(it)
+      }
   val skill = SkillProto(Label("//engine:dry_run_skill"), interrupt = Interrupt(damagePct = 10))
   try {
     val at = room.label
     val player = world.spawnPlayer("Dryrunner", at)
     val foe = world.spawnPlayer("Dryrunfoe", at)
     val mobs = protos.mobs.keys.map { world.spawnMob(it, world.room(at)) }
+    world.creation?.let { provider ->
+      for (c in provider.choices) {
+        for (opt in c.options) {
+          val answers = mutableMapOf<String, String>()
+          var ok = true
+          for (choice in provider.choices) {
+            // The provider is the plugin's to fix; a path it can't answer is skipped.
+            val avail =
+              runCatching { provider.available(world, choice.id, answers) }
+                .getOrDefault(emptyList())
+            if (choice.id == c.id) {
+              if (opt.id !in avail) {
+                ok = false
+                break
+              }
+              answers[choice.id] = opt.id
+            } else {
+              val first = avail.firstOrNull()
+              if (first != null) {
+                answers[choice.id] = first
+              }
+            }
+          }
+          if (ok) {
+            world.spawnPlayer(
+              "Dryrun_${c.id}_${opt.id}_${world.players.size}",
+              at,
+              choices = answers,
+            )
+          }
+        }
+      }
+    }
     val actors = listOf(player, foe) + mobs
     rules.equipmentSlots()
     if (Feature.LEVELING in features) rules.xpToLevel(1)

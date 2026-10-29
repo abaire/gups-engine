@@ -128,9 +128,15 @@ class DocsRendererTest {
       "<a href=\"plugins.html#guide\">Writing plugins</a>",
     )
     val docsDir = File(System.getProperty("gups.docsDir"))
-    val source =
+    val weatherSource =
       docsDir
         .resolve("../samples/weather-plugin/src/main/kotlin/gups/sample/weather/WeatherPlugin.kt")
+        .readText()
+    val heritageSource =
+      docsDir
+        .resolve(
+          "../samples/heritage-plugin/src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt"
+        )
         .readText()
     val guide = docsDir.resolve("PLUGINS.md").readText()
     val blocks =
@@ -139,15 +145,65 @@ class DocsRendererTest {
         .map { it.groupValues[1] }
         .toList()
     val fromSample = blocks.filter { "tasks.jar" !in it && "dependencies {" !in it }
-    assertTrue(fromSample.size >= 6, "${fromSample.size} sample blocks")
-    val dedented = source.lines().joinToString("\n") { it.trimStart() }
+    assertTrue(fromSample.size >= 10, "${fromSample.size} sample blocks")
+    val weatherDedented = weatherSource.lines().joinToString("\n") { it.trimStart() }
+    val heritageDedented = heritageSource.lines().joinToString("\n") { it.trimStart() }
     for (b in fromSample) {
-      assertContains(
-        dedented,
-        b.lines().joinToString("\n") { it.trimStart() },
-        message = "PLUGINS.md block isn't in WeatherPlugin.kt:\n$b",
+      val target = b.lines().joinToString("\n") { it.trimStart() }
+      assertTrue(
+        target in weatherDedented || target in heritageDedented,
+        "PLUGINS.md block isn't in WeatherPlugin.kt or HeritagePlugin.kt:\n$b",
       )
     }
+  }
+
+  @Test
+  fun `plugins html renders traits choices and restrictions with anchors`() {
+    val heritage =
+      PluginDocSpec(
+        id = "heritage",
+        doc = "Fantasy race and class choices, traits and restrictions.",
+        traits =
+          listOf(
+            PluginTraitDocSpec(
+              name = "elf",
+              label = "Elf",
+              doc = "Nimble and magical.",
+              statDeltas = mapOf("dex" to 2),
+              maxVitalDeltas = mapOf("mana" to 10),
+            )
+          ),
+        restrictions =
+          listOf(
+            PluginRestrictionDocSpec("wear", "Mages cannot wear heavy armor."),
+            PluginRestrictionDocSpec("wear", "Only monks may wear cloth."),
+          ),
+        choices =
+          listOf(
+            PluginChoiceDocSpec(
+              id = "race",
+              title = "Race",
+              prompt = "Choose your race:",
+              options =
+                listOf(
+                  PluginOptionDocSpec(
+                    id = "elf",
+                    label = "Elf",
+                    summary = "Graceful.",
+                    help = "Elves receive +2 dex.",
+                    traits = listOf("elf"),
+                  )
+                ),
+            )
+          ),
+      )
+    val pages = DocsRenderer.render(full, "", listOf(heritage), emptyMap(), "# Guide\n")
+    val html = pages.getValue("plugins.html")
+    assertContains(html, "<article id=\"plugin-heritage.trait-elf\">")
+    assertContains(html, "<tr id=\"plugin-heritage.restrict-wear-1\">")
+    assertContains(html, "<tr id=\"plugin-heritage.restrict-wear-2\">")
+    assertContains(html, "<article id=\"plugin-heritage.choice-race\">")
+    assertContains(html, "<tr id=\"plugin-heritage.choice-race.elf\">")
   }
 
   @Test

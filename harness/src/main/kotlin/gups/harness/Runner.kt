@@ -95,7 +95,7 @@ class TestRunner(
   private val dir: WorldDir,
   private val plugins: WorldPluginWiring = WorldPluginWiring.NONE,
 ) {
-  private val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+  private val loader = ScriptLoader(dir, ScriptLimits.HARNESS, plugins = plugins)
   private val cache = HashMap<List<String>, LoadResult>()
 
   /** The rules package is always loaded implicitly when the world has one. */
