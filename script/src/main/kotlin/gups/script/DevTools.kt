@@ -5,6 +5,7 @@ import gups.core.Role
 import gups.core.SessionId
 import gups.core.model.Player
 import gups.core.world.CommandCall
+import gups.core.world.CommandCategory
 import gups.core.world.FastCommand
 import gups.core.world.World
 import gups.core.world.findActor
@@ -184,9 +185,29 @@ class DevTools private constructor(private val world: World, private val host: S
     /** Registers `@trace`, and `@eval` when [eval] is true (`--dev` only). */
     fun install(world: World, host: StarlarkHost, eval: Boolean): DevTools {
       val tools = DevTools(world, host)
-      world.commands.registerTool(FastCommand("@trace", role = Role.BUILDER) { tools.trace(it) })
-      if (eval)
-        world.commands.registerTool(FastCommand("@eval", role = Role.BUILDER) { tools.eval(it) })
+      world.commands.registerTool(
+        FastCommand(
+          "@trace",
+          role = Role.BUILDER,
+          category = CommandCategory.SPECIAL,
+          help =
+            "Trace hook and script execution.\nUsage: @trace [all|zone [pkg]|entity <target>|hook <name>|rules|off]",
+        ) {
+          tools.trace(it)
+        }
+      )
+      if (eval) {
+        world.commands.registerTool(
+          FastCommand(
+            "@eval",
+            role = Role.BUILDER,
+            category = CommandCategory.SPECIAL,
+            help = "Evaluate a Starlark expression (--dev only).\nUsage: @eval <expr>",
+          ) {
+            tools.eval(it)
+          }
+        )
+      }
       return tools
     }
   }

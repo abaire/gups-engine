@@ -66,9 +66,8 @@ class PluginSeamsTest {
     f.out(ann)
     f.input(ann, "help")
     val out = f.out(ann)
-    val (fast, tick) = out.lines()
-    assertTrue(" forecast" in fast, out)
-    assertTrue(" rake" in tick, out)
+    assertTrue("forecast" in out, out)
+    assertTrue("rake" in out, out)
     assertTrue("storm" !in out, out)
   }
 }

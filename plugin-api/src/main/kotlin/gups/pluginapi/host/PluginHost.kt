@@ -3,6 +3,8 @@ package gups.pluginapi.host
 import gups.core.Role
 import gups.core.model.Actor
 import gups.core.world.Action
+import gups.core.world.CategoryDef
+import gups.core.world.CommandCategory
 import gups.core.world.CommandDef
 import gups.core.world.CommandRegistry
 import gups.core.world.Diagnostic
@@ -60,15 +62,19 @@ data class PluginCommandInfo(
   val lane: PluginLane,
   val role: PluginRole,
   val doc: String,
+  val category: String? = null,
 )
 
 data class PluginGmcpInfo(val pkg: String, val doc: String)
+
+internal class CategoryReg(val name: String, val title: String, val order: Int?, val help: String?)
 
 internal class CommandReg(
   val name: String,
   val lane: PluginLane,
   val role: PluginRole,
   val doc: String,
+  val category: String? = null,
   val run: (PluginCommandCall) -> Unit,
 )
 
@@ -100,6 +106,7 @@ internal class PluginRegistryImpl(
   val members = LinkedHashMap<String, Any>()
   val builtinInfo = mutableListOf<PluginMemberInfo>()
   val effects = mutableListOf<EffectReg>()
+  val categories = mutableListOf<CategoryReg>()
   val commands = mutableListOf<CommandReg>()
   val gmcp = mutableListOf<GmcpReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
@@ -128,11 +135,40 @@ internal class PluginRegistryImpl(
     builtinInfo += PluginMemberInfo(name, doc, params, returnType)
   }
 
+  override fun addCategory(name: String, title: String, order: Int?, help: String?) {
+    require(name.isNotBlank() && name.none { it.isWhitespace() }) {
+      "category name '$name' must not contain whitespace"
+    }
+    categories += CategoryReg(name, title, order, help)
+  }
+
   override fun addCommand(
     name: String,
     lane: PluginLane,
     role: PluginRole,
     doc: String,
+    run: (PluginCommandCall) -> Unit,
+  ) {
+    registerCommand(name, lane, role, doc, category = null, run)
+  }
+
+  override fun addCommand(
+    name: String,
+    lane: PluginLane,
+    role: PluginRole,
+    doc: String,
+    category: String,
+    run: (PluginCommandCall) -> Unit,
+  ) {
+    registerCommand(name, lane, role, doc, category = category, run)
+  }
+
+  private fun registerCommand(
+    name: String,
+    lane: PluginLane,
+    role: PluginRole,
+    doc: String,
+    category: String?,
     run: (PluginCommandCall) -> Unit,
   ) {
     require(name.isNotBlank() && name.none { it.isWhitespace() }) {
@@ -148,7 +184,7 @@ internal class PluginRegistryImpl(
     } catch (e: IllegalArgumentException) {
       throw IllegalArgumentException("command '$name': ${e.message}")
     }
-    commands += CommandReg(name, lane, role, doc, run)
+    commands += CommandReg(name, lane, role, doc, category, run)
   }
 
   override fun addEffectPrimitive(
@@ -241,8 +277,16 @@ internal constructor(
   override fun install(world: World) {
     Facades.registerLog(world, log)
     for (p in plugins) {
+      for (cat in p.reg.categories) {
+        world.commands.registerCategory(
+          CategoryDef(id = cat.name, title = cat.title, order = cat.order, help = cat.help)
+        )
+      }
       for (c in p.reg.commands) {
         val role = Role.valueOf(c.role.name)
+        val cat =
+          if (role != Role.PLAYER || c.name.startsWith("@")) CommandCategory.SPECIAL
+          else c.category ?: CommandCategory.GENERAL
         fun run(w: World, actor: Actor, args: String) =
           guard(w, p.id, "command '${c.name}'") {
             c.run(PluginCommandCall(facade(w, p.id), ActorFacade(actor, w), args))
@@ -250,9 +294,11 @@ internal constructor(
         world.commands.registerPlugin(
           when (c.lane) {
             PluginLane.FAST ->
-              FastCommand(c.name, role = role) { call -> run(call.world, call.actor, call.args) }
+              FastCommand(c.name, role = role, category = cat, help = c.doc) { call ->
+                run(call.world, call.actor, call.args)
+              }
             PluginLane.TICK ->
-              TickCommand(c.name, role = role) { call ->
+              TickCommand(c.name, role = role, category = cat, help = c.doc) { call ->
                 object : Action {
                   override fun validate(w: World, actor: Actor): String? = null
 
@@ -318,7 +364,7 @@ internal constructor(
             .sortedBy { it.name },
         commands =
           p.reg.commands
-            .map { PluginCommandInfo(it.name, it.lane, it.role, it.doc) }
+            .map { PluginCommandInfo(it.name, it.lane, it.role, it.doc, it.category) }
             .sortedBy { it.name },
         gmcp = p.reg.gmcp.map { PluginGmcpInfo(it.pkg, it.doc) }.sortedBy { it.pkg },
       )

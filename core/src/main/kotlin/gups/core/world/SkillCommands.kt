@@ -37,7 +37,16 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
 
 /** The commands of the `skills` feature. */
 internal object SkillCommands {
-  fun all(): List<CommandDef> = listOf(TickCommand("cast") { planCast(it) })
+  fun all(): List<CommandDef> =
+    listOf(
+      TickCommand(
+        "cast",
+        category = CommandCategory.SKILLS,
+        help = "Cast a skill or spell at an optional target.\nUsage: cast <skill> [target]",
+      ) {
+        planCast(it)
+      }
+    )
 
   private fun planCast(c: CommandCall): Action? {
     val w = c.world

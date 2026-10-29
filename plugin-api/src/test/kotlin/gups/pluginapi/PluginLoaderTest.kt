@@ -155,4 +155,29 @@ class PluginFeatureTest {
       assertEquals(listOf("caster"), host.ids.take(1))
     }
   }
+
+  @Test
+  fun `plugins can register custom categories and commands with categories`() {
+    val plugin =
+      object : GupsPlugin {
+        override val id = "crafting"
+        override val pluginApiVersion = PluginApi.VERSION
+
+        override fun register(r: PluginRegistry) {
+          r.addCategory("trades", title = "Tradeskills", order = 550, help = "Crafting help.")
+          r.addCommand("smith", PluginLane.FAST, PluginRole.PLAYER, "Smithing.", "trades") {}
+        }
+      }
+    val host = gups.pluginapi.host.PluginHost.of(plugin)
+    val w = world(plugins = host)
+
+    val cat = w.commands.category("trades")
+    assertTrue(cat != null)
+    assertEquals("Tradeskills", cat.title)
+    assertEquals(550, cat.order)
+    assertEquals("Crafting help.", cat.help)
+
+    val cmd = w.commands.pluginCommands.first { it.name == "smith" }
+    assertEquals("trades", cmd.category)
+  }
 }

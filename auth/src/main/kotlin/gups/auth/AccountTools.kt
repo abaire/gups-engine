@@ -6,6 +6,7 @@ import gups.core.Restriction
 import gups.core.Role
 import gups.core.model.Player
 import gups.core.world.CommandCall
+import gups.core.world.CommandCategory
 import gups.core.world.FastCommand
 import gups.core.world.World
 import gups.core.world.flush
@@ -403,11 +404,57 @@ private constructor(
       }
       val t = AccountTools(accounts, ladder, codeOwners)
       val r = world.commands
-      r.registerTool(FastCommand("@role", role = Role.INSTRUCTOR) { t.role(it) })
-      r.registerTool(FastCommand("@invite", role = Role.INSTRUCTOR) { t.invite(it) })
-      r.registerTool(FastCommand("@restrict", role = Role.INSTRUCTOR) { t.restrict(it) })
-      r.registerTool(FastCommand("@unrestrict", role = Role.INSTRUCTOR) { t.unrestrict(it) })
-      r.registerTool(FastCommand("@restrictions", role = Role.INSTRUCTOR) { t.list(it) })
+      r.registerTool(
+        FastCommand(
+          "@role",
+          role = Role.INSTRUCTOR,
+          category = CommandCategory.SPECIAL,
+          help = "Assign an account's role.\nUsage: @role <account> <player|builder|instructor>",
+        ) {
+          t.role(it)
+        }
+      )
+      r.registerTool(
+        FastCommand(
+          "@invite",
+          role = Role.INSTRUCTOR,
+          category = CommandCategory.SPECIAL,
+          help = "Create or inspect invite codes.\nUsage: @invite [code]",
+        ) {
+          t.invite(it)
+        }
+      )
+      r.registerTool(
+        FastCommand(
+          "@restrict",
+          role = Role.INSTRUCTOR,
+          category = CommandCategory.SPECIAL,
+          help = "Restrict a capability on an account.\nUsage: @restrict <account> <capability>",
+        ) {
+          t.restrict(it)
+        }
+      )
+      r.registerTool(
+        FastCommand(
+          "@unrestrict",
+          role = Role.INSTRUCTOR,
+          category = CommandCategory.SPECIAL,
+          help =
+            "Remove a capability restriction from an account.\nUsage: @unrestrict <account> <capability>",
+        ) {
+          t.unrestrict(it)
+        }
+      )
+      r.registerTool(
+        FastCommand(
+          "@restrictions",
+          role = Role.INSTRUCTOR,
+          category = CommandCategory.SPECIAL,
+          help = "Show account restrictions.\nUsage: @restrictions <account>",
+        ) {
+          t.list(it)
+        }
+      )
       return t
     }
   }

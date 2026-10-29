@@ -18,15 +18,64 @@ enum class Lane {
 
 data class CommandCall(val world: World, val actor: Actor, val verb: String, val args: String)
 
+/** Descriptor for a command category. */
+data class CategoryDef(
+  val id: String,
+  val title: String =
+    id.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
+  val order: Int? = null,
+  val help: String? = null,
+)
+
+/** Standard command category constants for grouping in help output. */
+object CommandCategory {
+  const val COMMUNICATION = "Communication"
+  const val MOVEMENT = "Movement"
+  const val INFORMATION = "Information"
+  const val ITEMS = "Items"
+  const val COMBAT = "Combat"
+  const val SKILLS = "Skills"
+  const val GAME = "Game"
+  const val GENERAL = "General"
+  const val SPECIAL = "Special"
+
+  const val DEFAULT_ORDER = 800
+
+  val STANDARD =
+    listOf(
+      CategoryDef("communication", COMMUNICATION, order = 100),
+      CategoryDef("movement", MOVEMENT, order = 200),
+      CategoryDef("information", INFORMATION, order = 300),
+      CategoryDef("items", ITEMS, order = 400),
+      CategoryDef("combat", COMBAT, order = 500),
+      CategoryDef("skills", SKILLS, order = 600),
+      CategoryDef("game", GAME, order = 700),
+      CategoryDef("general", GENERAL, order = DEFAULT_ORDER),
+      CategoryDef("special", SPECIAL, order = Int.MAX_VALUE),
+    )
+
+  val STANDARD_ORDER = listOf(COMMUNICATION, MOVEMENT, INFORMATION, ITEMS, COMBAT, SKILLS, GAME)
+}
+
 /**
  * A command. Only players whose role is at least [role] can use it; to everyone else it doesn't
  * exist.
  */
-sealed class CommandDef(val name: String, val aliases: List<String>, val role: Role) {
+sealed class CommandDef(
+  val name: String,
+  val aliases: List<String> = emptyList(),
+  val role: Role = Role.PLAYER,
+  val category: String =
+    if (role != Role.PLAYER || name.startsWith("@")) CommandCategory.SPECIAL
+    else CommandCategory.GENERAL,
+  val help: String = "",
+) {
   abstract val lane: Lane
 
   fun allows(actor: Actor): Boolean =
     role == Role.PLAYER || (actor is Player && actor.role.atLeast(role))
+
+  open fun detailedHelp(): String = help
 
   /** This command with [extra] appended to its aliases. */
   internal abstract fun withAliases(extra: List<String>): CommandDef
@@ -39,14 +88,19 @@ class FastCommand(
   name: String,
   aliases: List<String> = emptyList(),
   role: Role = Role.PLAYER,
+  category: String =
+    if (role != Role.PLAYER || name.startsWith("@")) CommandCategory.SPECIAL
+    else CommandCategory.GENERAL,
+  help: String = "",
   val run: (CommandCall) -> Unit,
-) : CommandDef(name, aliases, role) {
+) : CommandDef(name, aliases, role, category, help) {
   override val lane: Lane
     get() = Lane.FAST
 
-  override fun withAliases(extra: List<String>) = FastCommand(name, aliases + extra, role, run)
+  override fun withAliases(extra: List<String>) =
+    FastCommand(name, aliases + extra, role, category, help, run)
 
-  override fun renamed(to: String) = FastCommand(to, aliases, role, run)
+  override fun renamed(to: String) = FastCommand(to, aliases, role, category, help, run)
 }
 
 /**
@@ -57,14 +111,19 @@ class TickCommand(
   name: String,
   aliases: List<String> = emptyList(),
   role: Role = Role.PLAYER,
+  category: String =
+    if (role != Role.PLAYER || name.startsWith("@")) CommandCategory.SPECIAL
+    else CommandCategory.GENERAL,
+  help: String = "",
   val plan: (CommandCall) -> Action?,
-) : CommandDef(name, aliases, role) {
+) : CommandDef(name, aliases, role, category, help) {
   override val lane: Lane
     get() = Lane.TICK
 
-  override fun withAliases(extra: List<String>) = TickCommand(name, aliases + extra, role, plan)
+  override fun withAliases(extra: List<String>) =
+    TickCommand(name, aliases + extra, role, category, help, plan)
 
-  override fun renamed(to: String) = TickCommand(to, aliases, role, plan)
+  override fun renamed(to: String) = TickCommand(to, aliases, role, category, help, plan)
 }
 
 /**
@@ -132,6 +191,35 @@ class CommandRegistry(
   private val tools = mutableListOf<CommandDef>()
   private val plugins = mutableListOf<CommandDef>()
   private val moves = HashMap<Direction, TickCommand>()
+  private val categories = mutableMapOf<String, CategoryDef>()
+
+  init {
+    for (cat in CommandCategory.STANDARD) {
+      categories[cat.id.lowercase()] = cat
+      categories[cat.title.lowercase()] = cat
+    }
+  }
+
+  /** Registers a category descriptor with its display title, sort weight, and optional help. */
+  fun registerCategory(category: CategoryDef) {
+    categories[category.id.lowercase()] = category
+    categories[category.title.lowercase()] = category
+  }
+
+  /** Looks up a category descriptor by its identifier or display title. */
+  fun category(nameOrId: String): CategoryDef? = categories[nameOrId.lowercase()]
+
+  /**
+   * Looks up a category descriptor, or creates an unweighted default descriptor if unregistered.
+   */
+  fun categoryOrImplicit(nameOrId: String): CategoryDef =
+    categories.getOrPut(nameOrId.lowercase()) {
+      CategoryDef(
+        id = nameOrId.lowercase(),
+        title =
+          nameOrId.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
+      )
+    }
 
   /** Registers a global command, as privileged packages do with `global_command`. */
   fun registerGlobal(command: CommandDef) {

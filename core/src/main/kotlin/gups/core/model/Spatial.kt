@@ -87,7 +87,7 @@ value class Direction(val name: String) {
     val STANDARD: List<Direction> =
       listOf(NORTH, EAST, SOUTH, WEST, UP, DOWN, NORTHEAST, NORTHWEST, SOUTHEAST, SOUTHWEST)
 
-    private val ALIASES =
+    internal val ALIASES =
       mapOf(
         "n" to "north",
         "e" to "east",

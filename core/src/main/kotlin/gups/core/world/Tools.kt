@@ -32,21 +32,119 @@ internal object Tools {
   fun all(): List<CommandDef> =
     listOf(
       // Builders.
-      FastCommand("@goto", role = Role.BUILDER) { goto(it) },
-      FastCommand("@stat", role = Role.BUILDER) { stat(it) },
-      FastCommand("@spawn", role = Role.BUILDER) { spawn(it) },
-      FastCommand("@errors", role = Role.BUILDER) { errors(it) },
+      FastCommand(
+        "@goto",
+        role = Role.BUILDER,
+        category = CommandCategory.SPECIAL,
+        help = "Move to a room in your packages or to a player.\nUsage: @goto <label|player>",
+      ) {
+        goto(it)
+      },
+      FastCommand(
+        "@stat",
+        role = Role.BUILDER,
+        category = CommandCategory.SPECIAL,
+        help = "Show an entity's full state.\nUsage: @stat <target|here|#id>",
+      ) {
+        stat(it)
+      },
+      FastCommand(
+        "@spawn",
+        role = Role.BUILDER,
+        category = CommandCategory.SPECIAL,
+        help = "Spawn debug mobs or items from a prototype.\nUsage: @spawn <label> [n]",
+      ) {
+        spawn(it)
+      },
+      FastCommand(
+        "@errors",
+        role = Role.BUILDER,
+        category = CommandCategory.SPECIAL,
+        help = "Show the last 10 diagnostics for a package.\nUsage: @errors [package]",
+      ) {
+        errors(it)
+      },
       // Instructors.
-      FastCommand("@reload", role = Role.INSTRUCTOR) { reload(it) },
-      FastCommand("@deploy", role = Role.INSTRUCTOR) { deploy(it) },
-      FastCommand("@quarantine", role = Role.INSTRUCTOR) { quarantine(it, on = true) },
-      FastCommand("@unquarantine", role = Role.INSTRUCTOR) { quarantine(it, on = false) },
-      FastCommand("@bubble", role = Role.INSTRUCTOR) { bubble(it) },
-      FastCommand("@stats", role = Role.INSTRUCTOR) { stats(it) },
-      FastCommand("@who", role = Role.INSTRUCTOR) { who(it) },
-      FastCommand("@snapshot", role = Role.INSTRUCTOR) { snapshot(it) },
-      FastCommand("@shutdown", role = Role.INSTRUCTOR) { shutdown(it) },
-      FastCommand("@audit", role = Role.INSTRUCTOR) { audit(it) },
+      FastCommand(
+        "@reload",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Reload world scripts and definitions from disk.\nUsage: @reload",
+      ) {
+        reload(it)
+      },
+      FastCommand(
+        "@deploy",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Fetch and checkout latest world commits.\nUsage: @deploy",
+      ) {
+        deploy(it)
+      },
+      FastCommand(
+        "@quarantine",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Quarantine a package to disable its execution.\nUsage: @quarantine <package>",
+      ) {
+        quarantine(it, on = true)
+      },
+      FastCommand(
+        "@unquarantine",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Lift quarantine from a package.\nUsage: @unquarantine <package>",
+      ) {
+        quarantine(it, on = false)
+      },
+      FastCommand(
+        "@bubble",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Toggle simulation bubble on or off.\nUsage: @bubble",
+      ) {
+        bubble(it)
+      },
+      FastCommand(
+        "@stats",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Show engine performance and scheduler stats.\nUsage: @stats",
+      ) {
+        stats(it)
+      },
+      FastCommand(
+        "@who",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Show staff view of connected players.\nUsage: @who",
+      ) {
+        who(it)
+      },
+      FastCommand(
+        "@snapshot",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Trigger an immediate persistence checkpoint.\nUsage: @snapshot",
+      ) {
+        snapshot(it)
+      },
+      FastCommand(
+        "@shutdown",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Gracefully shut down the server.\nUsage: @shutdown [delay]",
+      ) {
+        shutdown(it)
+      },
+      FastCommand(
+        "@audit",
+        role = Role.INSTRUCTOR,
+        category = CommandCategory.SPECIAL,
+        help = "Show recent security audit records.\nUsage: @audit [n]",
+      ) {
+        audit(it)
+      },
     )
 
   // ---- Builders ----------------------------------------------------------------------------

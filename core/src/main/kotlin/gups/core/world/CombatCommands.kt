@@ -27,7 +27,22 @@ object CombatMsg : MsgGroup(Feature.COMBAT) {
 /** The commands of the `combat` feature. */
 internal object CombatCommands {
   fun all(): List<CommandDef> =
-    listOf(TickCommand("kill") { planKill(it) }, TickCommand("flee") { FleeAction })
+    listOf(
+      TickCommand(
+        "kill",
+        category = CommandCategory.COMBAT,
+        help = "Attack a target in the room.\nUsage: kill <target>",
+      ) {
+        planKill(it)
+      },
+      TickCommand(
+        "flee",
+        category = CommandCategory.COMBAT,
+        help = "Flee from combat to an adjacent room.\nUsage: flee",
+      ) {
+        FleeAction
+      },
+    )
 
   private fun planKill(c: CommandCall): Action? {
     val w = c.world

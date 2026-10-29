@@ -1557,6 +1557,29 @@ doesn't exist: they get "Huh?", and `help` leaves it out. This applies to engine
 and plugin commands alike. `@` commands registered from outside `core` are tools, and an `@`
 prefix only matches other `@` commands.
 
+**Help and categories:**
+- **Help index (`help`):** Lists all commands usable by the actor, grouped by category and
+  sorted alphabetically within each category. Built-in categories appear in standard order:
+  `Communication`, `Movement`, `Information`, `Items`, `Combat`, `Skills`, and `Game`.
+  Custom categories defined by packages or plugins appear between `Game` and `Special`,
+  sorted by explicit sort weight if supplied or alphabetically by title by default. `Special`
+  contains all commands requiring a role above `Role.PLAYER` or whose name starts with `@`
+  (regardless of execution lane), and is pinned at the end. Empty categories and categories
+  with no commands allowed for the actor are omitted. Movement lists direction commands and
+  notes `", and any exit name"`.
+- **Detailed command help (`help <command>`):** Resolving a command by its canonical name, an
+  alias, or a prefix shorthand character displays the command's canonical name, all
+  configured aliases, and its detailed help text (declared on the command definition itself).
+- **Category help (`help <category>`):** If `<target>` does not resolve to a command, it is
+  matched against category names and titles. If the category defines category-level help
+  text and has at least one command usable by the player, it displays the category title,
+  its usable commands, and its category help text. A category without category-level help
+  does not match.
+- **Category descriptors:** Categories may be explicitly declared with an identifier,
+  display title, optional sort weight, and optional category-level help. A command may also
+  reference an undeclared category name, which defaults to an unweighted category titled by
+  its identifier.
+
 **Builder commands** (scoped to the builder's own packages; `debug` entities only):
 
 | Command | Purpose |
@@ -2196,9 +2219,12 @@ fun interface PluginEffect {
   an earlier plugin's commands. A name freed by `rename`, or of a feature that is off, is
   free. A
   script `global_command` with a plugin command's name is skipped with a `load` diagnostic,
-  since plugins are installed first. Reloads and deploys keep plugin commands. Plugin
-  commands with a role don't exist for other players; `help` lists the allowed ones after the
-  global commands.
+  since plugins are installed first. Reloads and deploys keep plugin commands. Plugin commands may specify a category. Plugin
+  commands with a role don't exist for other players; `help` places them into their declared or
+  default category (omitting commands and categories the player cannot use).
+- **Categories:** a plugin may declare categories via `addCategory(name, title = name, order = null, help = null)`.
+  Category help is displayed when players query `help <category>` if the category defines help text
+  and the player can access commands in it.
 - **GMCP:** a producer is called in phase 7 for each session whose client supports the
   package, and only changed payloads are sent (§4.10). It returns plain values, as `core`'s
   own payloads do. A package name must match `Name(.Name)+`. It must not equal, contain, or

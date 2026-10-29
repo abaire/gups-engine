@@ -20,37 +20,212 @@ internal object KernelCommands {
   fun all(): List<CommandDef> =
     listOf(
       // Fast lane.
-      FastCommand("look") { look(it) },
-      FastCommand("say") { spoken(it, ::say) },
-      FastCommand("tell") { spoken(it, ::tell) },
-      FastCommand("gossip") { spoken(it, ::gossip) },
-      FastCommand("shout") { spoken(it, ::shout) },
-      FastCommand("whisper") { spoken(it, ::whisper) },
-      FastCommand("score") { score(it) },
-      FastCommand("inventory") { inventory(it) },
-      FastCommand("equipment") { equipment(it) },
-      FastCommand("keyring") { keyring(it) },
-      FastCommand("who") { who(it) },
-      FastCommand("help") { help(it) },
-      FastCommand("stop") { stop(it) },
-      FastCommand("clear") { stop(it) },
-      FastCommand("quit") { quit(it) },
+      FastCommand(
+        "look",
+        category = CommandCategory.INFORMATION,
+        help = "Look at your surroundings, an actor, or an item.\nUsage: look [target]",
+      ) {
+        look(it)
+      },
+      FastCommand(
+        "say",
+        category = CommandCategory.COMMUNICATION,
+        help = "Say something to everyone in the room.\nUsage: say <message> (or '<message>)",
+      ) {
+        spoken(it, ::say)
+      },
+      FastCommand(
+        "tell",
+        category = CommandCategory.COMMUNICATION,
+        help = "Send a private message to a player or mob.\nUsage: tell <target> <message>",
+      ) {
+        spoken(it, ::tell)
+      },
+      FastCommand(
+        "gossip",
+        category = CommandCategory.COMMUNICATION,
+        help = "Send a message over the world-wide gossip channel.\nUsage: gossip <message>",
+      ) {
+        spoken(it, ::gossip)
+      },
+      FastCommand(
+        "shout",
+        category = CommandCategory.COMMUNICATION,
+        help = "Shout a message heard in this room and nearby rooms.\nUsage: shout <message>",
+      ) {
+        spoken(it, ::shout)
+      },
+      FastCommand(
+        "whisper",
+        category = CommandCategory.COMMUNICATION,
+        help =
+          "Whisper a message privately to someone in the room.\nUsage: whisper <target> <message>",
+      ) {
+        spoken(it, ::whisper)
+      },
+      FastCommand(
+        "score",
+        category = CommandCategory.INFORMATION,
+        help = "View your character status, vitals, stats, and resistances.\nUsage: score",
+      ) {
+        score(it)
+      },
+      FastCommand(
+        "inventory",
+        category = CommandCategory.INFORMATION,
+        help = "List items in your inventory.\nUsage: inventory",
+      ) {
+        inventory(it)
+      },
+      FastCommand(
+        "equipment",
+        category = CommandCategory.INFORMATION,
+        help = "List items you are currently wearing or wielding.\nUsage: equipment",
+      ) {
+        equipment(it)
+      },
+      FastCommand(
+        "keyring",
+        category = CommandCategory.INFORMATION,
+        help = "List keys on your keyring.\nUsage: keyring",
+      ) {
+        keyring(it)
+      },
+      FastCommand(
+        "who",
+        category = CommandCategory.INFORMATION,
+        help = "List players currently online.\nUsage: who",
+      ) {
+        who(it)
+      },
+      FastCommand(
+        "help",
+        category = CommandCategory.INFORMATION,
+        help =
+          "Show available commands grouped by category, or detailed help on a specific command.\nUsage: help [command]",
+      ) {
+        help(it)
+      },
+      FastCommand(
+        "stop",
+        category = CommandCategory.GAME,
+        help = "Clear planned actions and stop casting.\nUsage: stop",
+      ) {
+        stop(it)
+      },
+      FastCommand(
+        "clear",
+        category = CommandCategory.GAME,
+        help = "Clear planned actions and stop casting.\nUsage: clear",
+      ) {
+        stop(it)
+      },
+      FastCommand(
+        "quit",
+        category = CommandCategory.GAME,
+        help = "Leave the game and save character progress.\nUsage: quit",
+      ) {
+        quit(it)
+      },
       // Tick lane.
-      TickCommand("get") { planGet(it) },
-      TickCommand("drop") { planDrop(it) },
-      TickCommand("give") { planGive(it) },
-      TickCommand("put") { planPut(it) },
-      TickCommand("wear") { planWear(it, wield = false) },
-      TickCommand("wield") { planWear(it, wield = true) },
-      TickCommand("remove") { planRemove(it) },
-      TickCommand("use") { planUse(it) },
-      TickCommand("open") { planDoor(it, DoorVerb.OPEN) },
-      TickCommand("close") { planDoor(it, DoorVerb.CLOSE) },
-      TickCommand("lock") { planDoor(it, DoorVerb.LOCK) },
-      TickCommand("unlock") { planDoor(it, DoorVerb.UNLOCK) },
+      TickCommand(
+        "get",
+        category = CommandCategory.ITEMS,
+        help = "Pick up an item from the room or a container.\nUsage: get <item> [from <container>]",
+      ) {
+        planGet(it)
+      },
+      TickCommand(
+        "drop",
+        category = CommandCategory.ITEMS,
+        help = "Drop an item from your inventory to the room.\nUsage: drop <item>",
+      ) {
+        planDrop(it)
+      },
+      TickCommand(
+        "give",
+        category = CommandCategory.ITEMS,
+        help =
+          "Give an item from your inventory to someone in the room.\nUsage: give <item> to <target>",
+      ) {
+        planGive(it)
+      },
+      TickCommand(
+        "put",
+        category = CommandCategory.ITEMS,
+        help = "Put an item into a container.\nUsage: put <item> in <container>",
+      ) {
+        planPut(it)
+      },
+      TickCommand(
+        "wear",
+        category = CommandCategory.ITEMS,
+        help = "Wear an item of equipment.\nUsage: wear <item>",
+      ) {
+        planWear(it, wield = false)
+      },
+      TickCommand(
+        "wield",
+        category = CommandCategory.ITEMS,
+        help = "Wield a weapon in hand.\nUsage: wield <item>",
+      ) {
+        planWear(it, wield = true)
+      },
+      TickCommand(
+        "remove",
+        category = CommandCategory.ITEMS,
+        help = "Remove worn equipment or unwield a weapon.\nUsage: remove <item>",
+      ) {
+        planRemove(it)
+      },
+      TickCommand(
+        "use",
+        category = CommandCategory.ITEMS,
+        help = "Use an item in your inventory or in the room.\nUsage: use <item>",
+      ) {
+        planUse(it)
+      },
+      TickCommand(
+        "open",
+        category = CommandCategory.ITEMS,
+        help = "Open a door or container.\nUsage: open <direction|item>",
+      ) {
+        planDoor(it, DoorVerb.OPEN)
+      },
+      TickCommand(
+        "close",
+        category = CommandCategory.ITEMS,
+        help = "Close a door or container.\nUsage: close <direction|item>",
+      ) {
+        planDoor(it, DoorVerb.CLOSE)
+      },
+      TickCommand(
+        "lock",
+        category = CommandCategory.ITEMS,
+        help = "Lock a door or container.\nUsage: lock <direction|item>",
+      ) {
+        planDoor(it, DoorVerb.LOCK)
+      },
+      TickCommand(
+        "unlock",
+        category = CommandCategory.ITEMS,
+        help = "Unlock a door or container.\nUsage: unlock <direction|item>",
+      ) {
+        planDoor(it, DoorVerb.UNLOCK)
+      },
     ) + Tools.all()
 
-  fun move(dir: Direction): TickCommand = TickCommand(dir.name) { MoveAction(dir) }
+  fun move(dir: Direction): TickCommand {
+    val dirAliases = Direction.ALIASES.filterValues { it == dir.name }.keys.sorted()
+    return TickCommand(
+      dir.name,
+      aliases = dirAliases,
+      category = CommandCategory.MOVEMENT,
+      help = "Move ${dir.name} through an exit.\nUsage: ${dir.name}",
+    ) {
+      MoveAction(dir)
+    }
+  }
 
   // ---- Fast lane ---------------------------------------------------------------------------
 
@@ -240,6 +415,15 @@ internal object KernelCommands {
   }
 
   private fun help(c: CommandCall) {
+    val target = c.args.trim()
+    if (target.isNotEmpty()) {
+      showDetailedHelp(c, target)
+      return
+    }
+    showHelpIndex(c)
+  }
+
+  private fun showHelpIndex(c: CommandCall) {
     val defs =
       (c.world.commands.engineCommands +
           c.world.commands.globalCommands +
@@ -247,9 +431,97 @@ internal object KernelCommands {
           c.world.commands.toolCommands)
         .distinct()
         .filter { it.allows(c.actor) }
-    val fast = defs.filter { it.lane == Lane.FAST }.joinToString(" ") { it.name }
-    val tick = defs.filter { it.lane == Lane.TICK }.joinToString(" ") { it.name }
-    c.world.tell(c.actor, KernelMsg.HELP_LIST, "instant" to fast, "actions" to tick)
+
+    val byCategory = defs.groupBy { c.world.commands.categoryOrImplicit(it.category) }
+    val movementCat = c.world.commands.categoryOrImplicit(CommandCategory.MOVEMENT)
+    val presentCategories =
+      (byCategory.keys + (if (c.actor is Player) setOf(movementCat) else emptySet())).distinct()
+
+    val categoryComparator =
+      compareBy<CategoryDef>(
+        { if (it.id.equals(CommandCategory.SPECIAL, ignoreCase = true)) 1 else 0 },
+        { it.order ?: CommandCategory.DEFAULT_ORDER },
+        { it.title.lowercase() },
+      )
+
+    val allCategories = presentCategories.sortedWith(categoryComparator)
+
+    val lines = mutableListOf<String>()
+    for (cat in allCategories) {
+      val cmds = byCategory[cat] ?: emptyList()
+      val names = cmds.map { it.name }.sorted()
+      if (cat.id.equals(CommandCategory.MOVEMENT, ignoreCase = true)) {
+        if (names.isNotEmpty()) {
+          lines += "${cat.title}: ${names.joinToString(" ")}, and any exit name"
+        } else {
+          lines += "${cat.title}: and any exit name"
+        }
+      } else if (names.isNotEmpty()) {
+        lines += "${cat.title}: ${names.joinToString(" ")}"
+      }
+    }
+    c.world.send(c.actor, lines.joinToString("\n"))
+  }
+
+  private fun showDetailedHelp(c: CommandCall, target: String) {
+    val word = target.substringBefore(' ').lowercase()
+    val prefixCommand = if (word.length == 1) c.world.commands.aliases.prefixes[word[0]] else null
+    val def =
+      prefixCommand?.let { c.world.commands.resolve(c.actor, it) }
+        ?: c.world.commands.resolve(c.actor, word)
+        ?: (if (!word.startsWith("@")) c.world.commands.resolve(c.actor, "@$word") else null)
+
+    if (def != null) {
+      val worldAliases = c.world.commands.aliases.words.filterValues { it == def.name }.keys
+      val worldPrefixes =
+        c.world.commands.aliases.prefixes.filterValues { it == def.name }.keys.map { it.toString() }
+      val allAliases = (def.aliases + worldAliases + worldPrefixes).distinct().sorted()
+      val aliasStr = if (allAliases.isEmpty()) "none" else allAliases.joinToString(", ")
+
+      val details = def.detailedHelp().trim()
+      val text = buildString {
+        appendLine("Command: ${def.name}")
+        appendLine("Aliases: $aliasStr")
+        if (details.isNotEmpty()) {
+          appendLine()
+          append(details)
+        }
+      }
+      c.world.send(c.actor, text)
+      return
+    }
+
+    val cat = c.world.commands.category(target) ?: c.world.commands.category(word)
+    if (cat != null && !cat.help.isNullOrBlank()) {
+      val allDefs =
+        (c.world.commands.engineCommands +
+            c.world.commands.globalCommands +
+            c.world.commands.pluginCommands +
+            c.world.commands.toolCommands)
+          .distinct()
+      val inCategory =
+        allDefs.filter {
+          it.category.equals(cat.id, ignoreCase = true) ||
+            it.category.equals(cat.title, ignoreCase = true)
+        }
+      val allowed = inCategory.filter { it.allows(c.actor) }
+      if (inCategory.isEmpty() || allowed.isNotEmpty()) {
+        val names = allowed.map { it.name }.sorted()
+        val text = buildString {
+          appendLine("Category: ${cat.title}")
+          if (names.isNotEmpty()) {
+            appendLine("Commands: ${names.joinToString(" ")}")
+          }
+          appendLine()
+          append(cat.help.trim())
+        }
+        c.world.send(c.actor, text)
+        return
+      }
+    }
+
+    val message = "No help available for '$target'."
+    c.world.send(c.actor, message)
   }
 
   /** `stop`/`clear`: flush the queue and cancel a cast; combat and recovery stay. */

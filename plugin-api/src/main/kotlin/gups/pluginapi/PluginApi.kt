@@ -61,6 +61,20 @@ interface PluginRegistry {
     run: (PluginCommandCall) -> Unit,
   )
 
+  fun addCommand(
+    name: String,
+    lane: PluginLane,
+    role: PluginRole = PluginRole.PLAYER,
+    doc: String,
+    category: String,
+    run: (PluginCommandCall) -> Unit,
+  ) {
+    addCommand(name, lane, role, doc, run)
+  }
+
+  /** Declares a custom command category with optional display title, sort weight, and help. */
+  fun addCategory(name: String, title: String = name, order: Int? = null, help: String? = null) {}
+
   /** An effect primitive `<id>.<name>(...)` for `skill(effect = …)` and `sequence([...])`. */
   fun addEffectPrimitive(name: String, doc: String, params: List<PluginParam>, apply: PluginEffect)
 

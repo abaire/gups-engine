@@ -21,9 +21,28 @@ object TrackMsg : MsgGroup(Feature.TRACK) {
 internal object TrackCommands {
   fun all(): List<CommandDef> =
     listOf(
-      TickCommand("advance") { planAdvance(it) },
-      TickCommand("retreat") { planRetreat(it) },
-      FastCommand("@where", role = Role.BUILDER) { Tools.where(it) },
+      TickCommand(
+        "advance",
+        category = CommandCategory.MOVEMENT,
+        help = "Advance toward your opponent on the combat track.\nUsage: advance",
+      ) {
+        planAdvance(it)
+      },
+      TickCommand(
+        "retreat",
+        category = CommandCategory.MOVEMENT,
+        help = "Retreat away from your opponent on the combat track.\nUsage: retreat",
+      ) {
+        planRetreat(it)
+      },
+      FastCommand(
+        "@where",
+        role = Role.BUILDER,
+        category = CommandCategory.SPECIAL,
+        help = "Show your track index and bands numerically.\nUsage: @where",
+      ) {
+        Tools.where(it)
+      },
     )
 
   private fun planAdvance(c: CommandCall): Action? {
