@@ -908,8 +908,8 @@ out turns all four on, and listing all four is the same as leaving it out.
 | Feature | Owns | Requires |
 |---|---|---|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | — |
-| `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
-| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
+| `combat` | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status` | — |
+| `track` | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat` | `combat` |
 | `skills` | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status` | — |
 | `leveling` | `level` and `xp`, `xp_for_kill`, `xp_to_level`, XP loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who` | — |
 
@@ -1335,10 +1335,11 @@ whose name doesn't start with `_`) is a load error for the rules package. A miss
 export can't be silently ignored; helpers take a `_` prefix.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the
-other actor, if any: the defender, the pinner, the killed or the killer), `weapon`, `item`,
-`band` (a word, or `None` without the `track` feature), `skill`, `room` (the actor's),
-`pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its
-modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`,
+other actor, if any: the defender, the pinner, the killed or the killer, or the actor
+advanced on or retreated from), `weapon`, `item`, `band` (a word in the calls that set one,
+such as `get_lag` and the track lag exports; otherwise `None`, and always `None` without the
+`track` feature), `skill`, `room` (the actor's), `pulse`, `rng`, `roll(dice)`, and
+`deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`,
 `traits` and `has_trait` (§4.19).
 
 | Function | Feature | Returns |
@@ -1358,6 +1359,10 @@ modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and
 | `flee_chance(ctx)` | `combat` | Percent. |
 | `retreat_check(ctx)` | `track` | Success chance in percent, used when pinned. |
 | `get_lag(ctx, band)` | `track` | Extra lag for picking up an item at a band. `None` means not allowed. |
+| `advance_lag(ctx)` | `track` | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step. |
+| `retreat_lag(ctx)` | `track` | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step. |
+| `retreat_fail_lag(ctx)` | `track` | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`. |
+| `flee_fail_lag(ctx)` | `combat` | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`. |
 | `cast_allowed(ctx)` | `skills` | `None` or `deny(msg)`. |
 | `interrupt_check(ctx, amount)` | `skills` | Whether a casting actor is interrupted, a bool. |
 | `xp_for_kill(ctx)`, `xp_to_level(level)` | `leveling` | Ints. |
@@ -1397,6 +1402,9 @@ modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and
   `vitals` sets the respawned character's current vitals (capped at their maxima);
   `xp_loss` is allowed only with the `leveling` feature.
 - `get_lag` returns `None` for out of reach.
+- `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` and `get_lag` return
+  pulses, an int of at least 0; a negative value is a bad return value. The lag exports
+  set the action's recovery lag, and 0 means none.
 - `equipment_slots` returns lowercase slot names. It is asked once, and again after each
   reload.
 
@@ -1407,8 +1415,9 @@ defines against synthetic actors built from the schema: a fresh actor after
 declared damage type. The actors live in a throwaway world with one room: two players and
 one mob per loaded mob prototype. Each actor is called against another (the first player
 against the second, everyone else against the first player), unarmed. `get_lag` runs once
-per band, and `cast_allowed` and `interrupt_check` get a synthetic skill with
-`interrupt = {"damage_pct": 10}`. With a creation provider (§4.19), `starting_stats` also
+per band, the three track lag exports see the pair's other actor as `ctx.target` at band
+`melee`, `flee_fail_lag` sees no target, and `cast_allowed` and `interrupt_check` get a
+synthetic skill with `interrupt = {"damage_pct": 10}`. With a creation provider (§4.19), `starting_stats` also
 runs for one synthetic player per option of each choice. Its answers are built in choice
 order: that option for its own choice, and the first available option for every other. An
 option that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose own package failed to load
@@ -1417,10 +1426,6 @@ Only the package named `rules` is dry-run; a test world that names another rules
 (§4.12) isn't. An error, a wrong return type or an undeclared name in a result
 fails the rules package's load with the usual diagnostic. A branch the dry run doesn't
 reach is checked when it first runs.
-
-**Engine-only rules:** The track-movement lags are fixed values of the `track` feature, not
-Starlark exports in `api_version` 1: advance 2, retreat (success) 2, failed retreat 4. A
-failed flee (`combat`) costs 4.
 
 **Template ruleset.** The template world's `rules/combat.star` implements these, for its
 schema (§3.9). They are the formulas an instructor starts from:
@@ -1442,6 +1447,10 @@ schema (§3.9). They are the formulas an instructor starts from:
 | `carry_limit` | `str × 10` |
 | `encumbrance` | `dex` −2 |
 | `get_lag` | 0 for `MELEE`, 2 for `NEAR`, not allowed at `FAR` |
+| `advance_lag` | 2, doubled in a room tagged `sticky_floor` |
+| `retreat_lag` | 2, doubled in a room tagged `sticky_floor` |
+| `retreat_fail_lag` | 4 |
+| `flee_fail_lag` | 4 |
 | `xp_for_kill` | `50 × victim level` |
 | `xp_to_level` | `1000 × level` |
 | `on_player_death` | respawn at the recall room with `hp` 1, lose 10% of XP |
@@ -1987,7 +1996,7 @@ interface ScriptHost {
 interface RulesEngine {                                              // Starlark-backed; engine tests use a Kotlin fixture
     fun toHit(c: AttackContext): Int
     fun damage(c: AttackContext): Int
-    /* ... one method per §4.6 function, plus the engine-only track lags ... */
+    /* ... one method per §4.6 function ... */
 }
 interface Persistence {                                              // never blocks the world thread
     fun checkpoint(world: World, cause: String, immediate: Boolean)  // capture happens here, on the world thread
@@ -3274,18 +3283,18 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   `Room.Bands` group actors and items by band: `|X−Y| = 0` is `MELEE`, `1` is `NEAR`,
   `≥ 2` is `FAR`.
 - **`advance <target>`:** Steps 1 index toward the target. It's a normal tick-lane action,
-  with lag set by rules (default 2). It's a no-op with a message if the actor is already
+  with lag from `rules.advance_lag`. It's a no-op with a message if the actor is already
   at the target's index. With no target, only hostiles are considered.
 - **`retreat [from <target>]`:**
-  - Steps 1 index away from the target, with lag set by rules (default 2). With no target,
+  - Steps 1 index away from the target, with lag from `rules.retreat_lag`. With no target,
     the threat is the nearest hostile by track distance, then lowest id; with none, "You
     have nothing to retreat from." and no lag.
   - On a shared index the actor steps toward the side with more room; a tie goes toward the
     back (higher index).
   - It's impossible at a track edge, and the actor is told so with no lag.
   - **When pinned** (a hostile shares the actor's index), it requires a `retreat_check`
-    roll against the first opponent at the actor's index. Failure applies extra lag
-    (default 4) and no movement.
+    roll against the first opponent at the actor's index. Failure applies
+    `rules.retreat_fail_lag` lag and no movement.
 - **Room transitions:**
   - Non-combat movement costs one action plus the vitals `rules.move_cost` returns (§4.6).
     The action is the action pulse itself: walking leaves no recovery lag.
@@ -3302,7 +3311,7 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
     `before_enter`. If they allow it, the actor leaves through it and engagement ends; a
     denial shows its message and counts as a failure, so combat can't be used to slip past
     them.
-  - **On failure:** lag (default 4).
+  - **On failure:** lag from `rules.flee_fail_lag`.
 - **Items on the ground:**
   - Items sit at the dropper's index.
   - `get` uses `rules.get_lag(band)`. The default is 0 for `MELEE`, 2 for `NEAR`, and not
@@ -3930,7 +3939,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     | `interrupt_check` | false |
     | `move_cost`, `regen`, `encumbrance`, `starting_stats` | nothing spent, gained, changed or overridden |
     | `carry_limit` | no limit (`Int.MAX_VALUE`) |
-    | `get_lag` | 0 |
+    | `get_lag`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` | 0 |
     | `condition` | the actor's previous condition |
     | `xp_for_kill` | 0 |
     | `xp_to_level` | no level-up (`Long.MAX_VALUE`) |
@@ -4167,3 +4176,4 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
 | **M9** | Configurable actor schema: stats, vitals, damage types and channels declared in `MODULE.gups`; typed constructors and schema view fields; no built-in ruleset, with `starting_stats`, `condition`, vital-keyed `mitigate`/`move_cost`/`regen`, the dry run and neutral results; incapacitation; `Char.Schema`; the plugin facade by name; `--wipe`; `samples/robot-world` (§3.9, §4.6, §6.3). |
 | **M10** | Feature modules: `combat`, `track`, `skills` and `leveling` turned on per world, command renames, the engine message catalog and `MESSAGES.gups`, plugin feature requirements (§3.10, §4.18). Ships in the same release as M9. |
 | **M11** | Character creation: plugin-declared choices asked at creation over telnet, the web client and `--dev`; traits with effective stats, maxima, resists, flags and modifiers; restrictions on wearing, entering, casting and learning; `tags`; the choice, trait and skill verbs; `Char.Creation` and `Char.Traits`; `samples/heritage-plugin` (§4.19, §4.15, §5.12). |
+| **M12** | Track-movement lags as rules exports: `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`; the template's `sticky_floor` tar pit (§4.6, §5.5, §6.3). |

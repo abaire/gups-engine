@@ -41,7 +41,7 @@
 <tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
 <tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room.</td></tr>
 <tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
-<tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer.</td></tr>
+<tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.</td></tr>
 <tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
 </tbody>
 </table>
@@ -69,11 +69,11 @@
 </section>
 <h2>Exports</h2>
 <p class="intro">Functions of //rules:combat.star the engine calls.</p>
-<section id="rules-carry_limit" class="entry">
-<h3><code>carry_limit</code> <span class="since">since api_version 1</span></h3>
-<p>Maximum weight the actor can carry without encumbrance.</p>
-<p>Signature <code>carry_limit(ctx)</code>, returns <code>int</code></p>
-<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+<section id="rules-advance_lag" class="entry">
+<h3><code>advance_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.</p>
+<p>Signature <code>advance_lag(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
 </section>
 <h2>Modifier points</h2>
 <p class="intro">Values zones, regions, rooms, affects and worn items can adjust.</p>

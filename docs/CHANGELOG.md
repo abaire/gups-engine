@@ -5,6 +5,36 @@ breaking ones.
 
 ## api_version 1 (unreleased)
 
+### Added `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag`
+
+The recovery lags of `advance`, a successful `retreat`, a failed `retreat_check` and a failed
+`flee` are rules exports instead of fixed engine values. `advance_lag`, `retreat_lag` and
+`retreat_fail_lag` are required with the `track` feature and forbidden without it;
+`flee_fail_lag` goes with `combat`. Each returns the recovery in pulses (an int of at least 0;
+0 means none) and replaces the action's recovery. `ctx.target` is the actor approached,
+retreated from or the pinner, and `ctx.band` the band after the step (`"melee"` for a failed
+retreat); `flee_fail_lag` has neither. A rules error gives 0.
+
+`get_lag` now rejects negative values like the new exports do (neutral result 0, with a
+`script_error`); `None` still means out of reach.
+
+```python
+# before: nothing in rules/combat.star; the engine used 2, 2, 4 and 4
+
+# after
+def advance_lag(ctx):
+    return 2
+
+def retreat_lag(ctx):
+    return 2
+
+def retreat_fail_lag(ctx):
+    return 4
+
+def flee_fail_lag(ctx):
+    return 4
+```
+
 ### Added `tags` to `room`, `item` and `skill`
 
 Rooms, items and skills take an optional `tags` list of identifiers (`[a-z][a-z0-9_]*`). Tags are stored

@@ -2075,7 +2075,7 @@
         {
           "symbol": "rules_ctx.target",
           "name": "target",
-          "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer.",
+          "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.",
           "since": 1
         },
         {
@@ -2126,12 +2126,13 @@
     },
     "exports": [
       {
-        "symbol": "rules:carry_limit",
-        "name": "carry_limit",
-        "signature": "carry_limit(ctx)",
+        "symbol": "rules:advance_lag",
+        "feature": "track",
+        "name": "advance_lag",
+        "signature": "advance_lag(ctx)",
         "return_type": "int",
-        "ctx_fields": ["actor", "item", "room", "pulse", "rng"],
-        "doc": "Maximum weight the actor can carry without encumbrance.",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.",
         "since": 1
       }
     ],

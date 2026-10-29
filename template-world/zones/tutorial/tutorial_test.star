@@ -125,3 +125,21 @@ def test_the_arena_only_wakes_with_someone_near(t):
     w.spawn_player("Tess", at = ":hall")
     w.run(pulses = 10)
     t.eq(dummy.hp, dummy.max_hp)
+
+def _footwork(t, room):
+    # Returns the recovery lags of one step toward another player and one step back.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = room, index = 0)
+    w.spawn_player("Gus", at = room, index = 2)
+    p.do("advance Gus")
+    advance = p.wait_state
+    w.run(pulses = 10)
+    p.do("retreat from Gus")
+    retreat = p.wait_state
+    return advance, retreat
+
+def test_the_tar_pit_slows_footwork(t):
+    # The tar_pit's sticky_floor tag doubles the advance and retreat lag in rules/combat.star.
+    # do() returns while the lag is still pending, so wait_state reads the full lag.
+    t.eq(_footwork(t, ":tar_pit"), (4, 4))
+    t.eq(_footwork(t, ":hall"), (2, 2))

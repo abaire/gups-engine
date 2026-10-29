@@ -134,6 +134,14 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
       Band.FAR -> null
     }
 
+  override fun advanceLag(c: RulesContext): Int = 2
+
+  override fun retreatLag(c: RulesContext): Int = 2
+
+  override fun retreatFailLag(c: RulesContext): Int = 4
+
+  override fun fleeFailLag(c: RulesContext): Int = 4
+
   override fun xpForKill(c: RulesContext): Long = 50L * c.defender.level
 
   override fun xpToLevel(level: Int): Long = 1000L * level

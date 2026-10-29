@@ -72,7 +72,8 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   @StarlarkMethod(
     name = "target",
     structField = true,
-    doc = "The other actor of the call, if any: the defender, the pinner, the victim, the killer.",
+    doc =
+      "The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.",
   )
   fun target(): Any = field { v(c.target) }
 
@@ -304,6 +305,15 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     int(v, "rules.${export.scriptName} return value")
   }
 
+  private fun nonNegative(export: RulesExport, pulses: Int): Int {
+    if (pulses < 0) fail("rules.${export.scriptName} must be at least 0, got $pulses")
+    return pulses
+  }
+
+  private fun lagOf(export: RulesExport): (Any?) -> Int = { v ->
+    nonNegative(export, int(v, "rules.${export.scriptName} return value"))
+  }
+
   private fun vitalsOf(export: RulesExport): (Any?) -> Map<String, Int> = { v ->
     typed(v, TypedKind.VITALS, "rules.${export.scriptName} return value")
   }
@@ -396,12 +406,27 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   override fun getLag(c: RulesContext, band: Band): Int? {
     val answer =
       run(RulesExport.GET_LAG, c, ctxArgs(c, band.word)) { v ->
-        Lag(intOrNull(v, "rules.get_lag return value"))
+        Lag(
+          intOrNull(v, "rules.get_lag return value")?.let { nonNegative(RulesExport.GET_LAG, it) }
+        )
       }
     return if (answer == null) 0 else answer.pulses
   }
 
   private class Lag(val pulses: Int?)
+
+  override fun advanceLag(c: RulesContext): Int =
+    run(RulesExport.ADVANCE_LAG, c, ctxArgs(c), convert = lagOf(RulesExport.ADVANCE_LAG)) ?: 0
+
+  override fun retreatLag(c: RulesContext): Int =
+    run(RulesExport.RETREAT_LAG, c, ctxArgs(c), convert = lagOf(RulesExport.RETREAT_LAG)) ?: 0
+
+  override fun retreatFailLag(c: RulesContext): Int =
+    run(RulesExport.RETREAT_FAIL_LAG, c, ctxArgs(c), convert = lagOf(RulesExport.RETREAT_FAIL_LAG))
+      ?: 0
+
+  override fun fleeFailLag(c: RulesContext): Int =
+    run(RulesExport.FLEE_FAIL_LAG, c, ctxArgs(c), convert = lagOf(RulesExport.FLEE_FAIL_LAG)) ?: 0
 
   override fun xpForKill(c: RulesContext): Long =
     run(RulesExport.XP_FOR_KILL, c, ctxArgs(c)) { v ->
@@ -461,6 +486,10 @@ enum class RulesExport(val scriptName: String) {
   CARRY_LIMIT("carry_limit"),
   ENCUMBRANCE("encumbrance"),
   GET_LAG("get_lag"),
+  ADVANCE_LAG("advance_lag"),
+  RETREAT_LAG("retreat_lag"),
+  RETREAT_FAIL_LAG("retreat_fail_lag"),
+  FLEE_FAIL_LAG("flee_fail_lag"),
   XP_FOR_KILL("xp_for_kill"),
   XP_TO_LEVEL("xp_to_level"),
   ON_PLAYER_DEATH("on_player_death"),
@@ -607,6 +636,38 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "int | None",
       ctxFields = listOf("actor", "item", "room", "pulse", "rng"),
       doc = "Wait-state pulses for picking up an item at band, or None if out of reach.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.ADVANCE_LAG,
+      signature = "advance_lag(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.RETREAT_LAG,
+      signature = "retreat_lag(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.RETREAT_FAIL_LAG,
+      signature = "retreat_fail_lag(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is \"melee\".",
+    ),
+    RulesExportSpec(
+      export = RulesExport.FLEE_FAIL_LAG,
+      signature = "flee_fail_lag(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "room", "pulse", "rng"),
+      doc =
+        "Recovery lag after a failed flee, whether the roll failed or the exit refused. ctx.target is None.",
     ),
     RulesExportSpec(
       export = RulesExport.XP_FOR_KILL,
@@ -786,12 +847,19 @@ internal fun dryRunRules(
         rules.damage(c)
         rules.initiative(c)
         rules.fleeChance(c)
+        rules.fleeFailLag(RulesContext(world, a))
       }
       rules.carryLimit(c)
       rules.encumbrance(c)
       rules.regen(c)
       rules.moveCost(c)
-      if (Feature.TRACK in features) rules.retreatCheck(c)
+      if (Feature.TRACK in features) {
+        rules.retreatCheck(c)
+        val melee = RulesContext(world, a, other, band = Band.MELEE)
+        rules.advanceLag(melee)
+        rules.retreatLag(melee)
+        rules.retreatFailLag(melee)
+      }
       if (Feature.SKILLS in features) {
         rules.castAllowed(withSkill)
         rules.interruptCheck(withSkill, 1)

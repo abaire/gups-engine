@@ -86,6 +86,9 @@ def interrupt_check(ctx, amount):
 def flee_chance(ctx):
     return _clamp(40 + (ctx.actor.agility - 10) * 2, 5, 95)
 
+def flee_fail_lag(ctx):
+    return 4
+
 def move_cost(ctx):
     return vitals(power = 1)
 

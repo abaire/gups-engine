@@ -1,10 +1,10 @@
 # Rooms and exits. Map:
 #
-#                 arena (LARGE)
-#                   |
-#    armory ==== hall (LARGE) ---- (the guide waits here)
-#   (locked door)   |
-#                 gate  <- start here
+#                      arena (LARGE)
+#                        |
+#    tar_pit ---- hall (LARGE) ==== armory     (the guide waits in the hall)
+#  (sticky floor)        |   (locked door)
+#                      gate  <- start here
 #
 # Each room's `size` sets its track: SIZE.cramped (1 position), SIZE.normal (3) or SIZE.large (5). Combat
 # range depends on how far apart actors stand on it.
@@ -39,10 +39,11 @@ def _hall_enter(ctx):
 
 room("hall",
     name = "The Hall of Lessons",
-    desc = "A long, bright hall. Doors lead east and north; the gate is south.",
+    desc = "A long, bright hall. Doors lead east and north, a dark passage west; the gate is south.",
     size = SIZE.large,
     exits = [
         exit(DIR.south, to = ":gate"),
+        exit(DIR.west, to = ":tar_pit"),
         # Arrive at the far end of the arena: entry_index -1 means the back of the track.
         exit(DIR.north, to = ":arena", entry_index = -1),
         # A locked door. Doors on both sides of a passage open and close together.
@@ -51,6 +52,17 @@ room("hall",
     # Spawns refill on zone reset, and respawn_pulses after the last one leaves the world.
     spawns = [spawn(":guide", at_index = 2)],
     on_enter = _hall_enter,
+)
+
+# The engine gives tags no meaning. The `sticky_floor` tag does something here only because
+# rules/combat.star (`_footing`) doubles the advance and retreat lag in rooms that carry it.
+room("tar_pit",
+    name = "The Tar Pit",
+    desc = "Black tar clings to your boots; every step is an effort.",
+    size = SIZE.normal,
+    flags = ["dead_end_ok"],
+    tags = ["sticky_floor"],
+    exits = [exit(DIR.east, to = ":hall")],
 )
 
 def _stock_armory(ctx):

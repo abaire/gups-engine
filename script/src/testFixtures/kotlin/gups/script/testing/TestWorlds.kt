@@ -58,6 +58,10 @@ object TestWorlds {
       "interrupt_check" to "skills",
       "retreat_check" to "track",
       "get_lag" to "track",
+      "advance_lag" to "track",
+      "retreat_lag" to "track",
+      "retreat_fail_lag" to "track",
+      "flee_fail_lag" to "combat",
       "xp_for_kill" to "leveling",
       "xp_to_level" to "leveling",
     )

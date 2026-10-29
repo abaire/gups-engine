@@ -124,6 +124,26 @@ def get_lag(ctx, band):
         return 2
     return None
 
+def _footing(ctx):
+    # Rooms tagged "sticky_floor" make every step take twice as long.
+    return 2 if "sticky_floor" in ctx.room.tags else 1
+
+def advance_lag(ctx):
+    # Recovery pulses after stepping toward ctx.target.
+    return 2 * _footing(ctx)
+
+def retreat_lag(ctx):
+    # Recovery pulses after stepping away from ctx.target.
+    return 2 * _footing(ctx)
+
+def retreat_fail_lag(ctx):
+    # Recovery pulses after ctx.target, the pinner, holds you in place.
+    return 4
+
+def flee_fail_lag(ctx):
+    # Recovery pulses after a flee that fails, by the roll or at the exit.
+    return 4
+
 def xp_for_kill(ctx):
     # XP ctx.actor earns for killing ctx.target.
     return 50 * ctx.target.level

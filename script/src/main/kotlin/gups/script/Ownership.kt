@@ -19,7 +19,14 @@ object FeatureOwnership {
     owns(Feature.LEVELING, "view:actor.level", "view:actor.xp")
     owns(Feature.LEVELING, "rules:xp_for_kill", "rules:xp_to_level")
     owns(Feature.COMBAT, "hook:before_attack", "hook:on_combat_tick")
-    owns(Feature.COMBAT, "rules:to_hit", "rules:damage", "rules:initiative", "rules:flee_chance")
+    owns(
+      Feature.COMBAT,
+      "rules:to_hit",
+      "rules:damage",
+      "rules:initiative",
+      "rules:flee_chance",
+      "rules:flee_fail_lag",
+    )
     owns(Feature.COMBAT, "modifier:to_hit", "modifier:damage", "modifier:initiative")
     owns(Feature.COMBAT, "view:actor.fighting")
     owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
@@ -27,6 +34,7 @@ object FeatureOwnership {
     owns(Feature.TRACK, "ctx.act_advance", "ctx.act_retreat")
     owns(Feature.TRACK, "ctx.teleport.index", "ctx.spawn.index", "ctx.move_item.index")
     owns(Feature.TRACK, "rules:retreat_check", "rules:get_lag", "rules_ctx.band")
+    owns(Feature.TRACK, "rules:advance_lag", "rules:retreat_lag", "rules:retreat_fail_lag")
     owns(Feature.TRACK, "view:actor.track_index", "view:actor.band_of")
     owns(Feature.TRACK, "view:room.size", "view:room.track_size", "view:exit.entry_index")
     owns(Feature.TRACK, "view:item.range", "view:location.index")

@@ -82,13 +82,6 @@ never sees them before confirming or gets to change them.
 - Do off-hand weapons swing? Do shields add to `armor` or to a block chance?
 - Do two-handed weapons fill or block the `offhand` slot?
 
-### Track-movement lags in the rules module
-**Spec:** §5.5 gives the default lags for advance and failed retreat or flee. §4.6 lists no
-exports for them.
-**Today:** they are fixed values of the `track` feature (§4.6), and a successful retreat
-costs 2.
-**Question:** should these become Starlark exports in the next `api_version`?
-
 ### Defender-side modifiers in combat
 **Spec:** §4.6 (Rules Module and the Modifier Chain: `to_hit`, `damage`, chain order).
 **Today:** the modifier chain for `to_hit` and `damage` evaluates only the attacker's chain:
@@ -113,6 +106,18 @@ damage (e.g. elemental sanctums or spellpower bonuses).
   point or the existing `damage` modifier point with `ctx.skill` populated)?
 - If using the existing `damage` modifier point, how do we distinguish general damage buffs
   from weapon-only physical damage bonuses?
+
+### Track-lag modifier points
+**Spec:** §4.6 (modifier points, chain order), §5.5.
+**Today:** `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag` are
+plain rules exports. Rooms, gear and affects change them only through the rules module
+reading the ctx (for example `ctx.room.tags`).
+**Questions:**
+- Should they become modifier points, so `room(modifiers=)`, `item(modifiers=)` and
+  affects can change them directly?
+- One `track_lag` point with an action word, or one point per export?
+- Does `flee_fail_lag` get a point without `track`?
+- How does this relate to encumbrance changing lag ("Encumbrance beyond stats")?
 
 ## Mobs and AI
 

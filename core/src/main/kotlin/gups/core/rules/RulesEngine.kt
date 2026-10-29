@@ -107,13 +107,22 @@ interface RulesEngine {
   /** For the dead player [RulesContext.actor], killed by [RulesContext.target] if any. */
   fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome
 
-  // Track-movement lag. Engine-side settings, not Starlark exports in api_version 1.
+  /**
+   * Recovery lag after [RulesContext.actor] steps toward [RulesContext.target], at the new band.
+   */
+  fun advanceLag(c: RulesContext): Int
 
-  fun advanceLag(c: RulesContext): Int = 2
+  /**
+   * Recovery lag after [RulesContext.actor] steps away from [RulesContext.target], at the new band.
+   */
+  fun retreatLag(c: RulesContext): Int
 
-  fun retreatLag(c: RulesContext): Int = 2
+  /**
+   * Recovery lag after [RulesContext.actor] fails to break free of the pinner,
+   * [RulesContext.target].
+   */
+  fun retreatFailLag(c: RulesContext): Int
 
-  fun retreatFailLag(c: RulesContext): Int = 4
-
-  fun fleeFailLag(c: RulesContext): Int = 4
+  /** Recovery lag after [RulesContext.actor] fails to flee; there is no target. */
+  fun fleeFailLag(c: RulesContext): Int
 }

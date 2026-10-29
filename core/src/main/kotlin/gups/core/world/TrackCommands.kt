@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.Role
 import gups.core.model.Actor
+import gups.core.model.Band
 import gups.core.rules.RulesContext
 
 object TrackMsg : MsgGroup(Feature.TRACK) {
@@ -80,7 +81,9 @@ internal class AdvanceAction(private val target: Actor) : Action {
       w.msg(TrackMsg.ADVANCE_ROOM, "actor" to actor.name.cap(), "target" to target.name),
       actor,
     )
-    return w.rules.advanceLag(RulesContext(w, actor, target))
+    // The live positions: indexOf would still report where the step began.
+    val band = Band.between(actor.trackIndex, target.trackIndex)
+    return w.rules.advanceLag(RulesContext(w, actor, target, band = band))
   }
 }
 
@@ -103,7 +106,7 @@ internal class RetreatAction(private val from: Actor?) : Action {
       pinner != null && w.rng.int(1, 100) > w.rules.retreatCheck(RulesContext(w, actor, pinner))
     ) {
       w.tell(actor, TrackMsg.RETREAT_FAILED)
-      return w.rules.retreatFailLag(RulesContext(w, actor, pinner))
+      return w.rules.retreatFailLag(RulesContext(w, actor, pinner, band = Band.MELEE))
     }
     val dir = step(actor.trackIndex, t.trackIndex, actor.room.trackSize) ?: return 0
     w.placeActor(actor, actor.room, actor.trackIndex + dir)
@@ -113,7 +116,8 @@ internal class RetreatAction(private val from: Actor?) : Action {
       w.msg(TrackMsg.RETREAT_ROOM, "actor" to actor.name.cap(), "target" to t.name),
       actor,
     )
-    return w.rules.retreatLag(RulesContext(w, actor, t))
+    val band = Band.between(actor.trackIndex, t.trackIndex)
+    return w.rules.retreatLag(RulesContext(w, actor, t, band = band))
   }
 
   companion object {

@@ -71,6 +71,11 @@ class DocsWorldTest {
     assertFalse("id=\"rules-xp_for_kill\"" in robotDocs.getValue("rules.html"))
     assertContains(all.getValue("rules.html"), "id=\"rules-xp_for_kill\"")
     assertContains(robotDocs.getValue("rules.html"), "id=\"rules-to_hit\"")
+    for (lag in listOf("advance_lag", "retreat_lag", "retreat_fail_lag")) {
+      assertFalse("id=\"rules-$lag\"" in robotDocs.getValue("rules.html"), lag)
+      assertContains(all.getValue("rules.html"), "id=\"rules-$lag\"")
+    }
+    assertContains(robotDocs.getValue("rules.html"), "id=\"rules-flee_fail_lag\"")
     assertFalse("hook-on_combat_tick" !in robotDocs.getValue("hooks.html"))
     assertFalse("id=\"knockback\"" in robotDocs.getValue("effects.html"))
     assertContains(all.getValue("effects.html"), "id=\"knockback\"")

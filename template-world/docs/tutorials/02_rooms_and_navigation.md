@@ -62,7 +62,7 @@ To place a door across a passage, attach `door()` to the exit:
 ```python
 room("hall",
      name="The Hall of Lessons",
-     desc="A long, bright hall. Doors lead east and north; the gate is south.",
+     desc="A long, bright hall. Doors lead east and north, a dark passage west; the gate is south.",
      size=SIZE.large,
      exits=[
          exit(DIR.south, to=":gate"),
@@ -206,6 +206,41 @@ You can see every step of the modifier chain execute in real time using the `@tr
 ```
 rules.damage base=12 → region:practice_grounds ×0.5 → 6
 ```
+
+---
+
+## 7. Room Tags and the Rules Module
+
+A room can carry `tags`, plain identifiers the engine gives no meaning. The tutorial's tar pit
+(west of the hall) is tagged `sticky_floor`:
+
+```python
+room("tar_pit",
+    name = "The Tar Pit",
+    desc = "Black tar clings to your boots; every step is an effort.",
+    size = SIZE.normal,
+    flags = ["dead_end_ok"],
+    tags = ["sticky_floor"],
+    exits = [exit(DIR.east, to = ":hall")],
+)
+```
+
+The tag does something only because `rules/combat.star` reads it. The rules module sets the
+recovery lag of `advance` and `retreat`, and the template doubles it in a tagged room:
+
+```python
+def _footing(ctx):
+    # Rooms tagged "sticky_floor" make every step take twice as long.
+    return 2 if "sticky_floor" in ctx.room.tags else 1
+
+def advance_lag(ctx):
+    # Recovery pulses after stepping toward ctx.target.
+    return 2 * _footing(ctx)
+```
+
+A tag means only what the world's rules or plugins make of it. Since the rules package is
+world-wide, a tag such as `sticky_floor` is a contract between the rules and every zone that
+uses it: tag a room in any zone and the rules apply there.
 
 ---
 

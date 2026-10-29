@@ -5211,7 +5211,7 @@
         {
           "symbol": "rules_ctx.target",
           "name": "target",
-          "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer.",
+          "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.",
           "since": 1
         },
         {
@@ -5261,6 +5261,16 @@
       ]
     },
     "exports": [
+      {
+        "symbol": "rules:advance_lag",
+        "feature": "track",
+        "name": "advance_lag",
+        "signature": "advance_lag(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.",
+        "since": 1
+      },
       {
         "symbol": "rules:carry_limit",
         "name": "carry_limit",
@@ -5325,6 +5335,16 @@
         "return_type": "int",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
         "doc": "Chance in percent for a fleeing actor to escape through an exit.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:flee_fail_lag",
+        "feature": "combat",
+        "name": "flee_fail_lag",
+        "signature": "flee_fail_lag(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "Recovery lag after a failed flee, whether the roll failed or the exit refused. ctx.target is None.",
         "since": 1
       },
       {
@@ -5401,6 +5421,26 @@
         "return_type": "int",
         "ctx_fields": ["actor", "target", "room", "pulse", "rng"],
         "doc": "Chance in percent to retreat along the track when pinned in melee.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:retreat_fail_lag",
+        "feature": "track",
+        "name": "retreat_fail_lag",
+        "signature": "retreat_fail_lag(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is \"melee\".",
+        "since": 1
+      },
+      {
+        "symbol": "rules:retreat_lag",
+        "feature": "track",
+        "name": "retreat_lag",
+        "signature": "retreat_lag(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step.",
         "since": 1
       },
       {
