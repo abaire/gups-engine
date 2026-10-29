@@ -32,8 +32,9 @@ skill and can act on it.
 
 ### Acquiring skills
 **Spec:** §3.3, §4.3, §5.12.
-**Today:** players get skills only from the harness (`spawn_player(skills=...)`) or Kotlin
-code. Mobs get them from their prototype. No command, verb or rules hook teaches a skill.
+**Today:** players get skills only from the harness (`spawn_player(skills=...)`), Kotlin
+code, or (after M11) a plugin's `setSkill`, which runs the `learn` restrictions (§4.19). Mobs
+get them from their prototype. No command, script verb or rules hook teaches a skill.
 **Questions:** is there a `learn`/`practice` flow, a `ctx.teach(actor, skill, pct)` verb, or
 skills granted by level through the rules?
 
@@ -41,6 +42,21 @@ skills granted by level through the rules?
 **Spec:** §4.6 (`xp_for_kill`, `xp_to_level`).
 **Today:** a level-up raises `level` and nothing else (D-039).
 **Question:** should a rules export such as `on_level_up(ctx)` return stat and max-vital gains?
+
+### Rerolls and point-buy at character creation
+**Spec:** §4.6 (`starting_stats`), §4.19, §5.12.
+**Today (after M11):** creation offers only discrete choices from the world's creation
+provider. `rules.starting_stats` sets the numbers once, possibly randomized, and the player
+never sees them before confirming or gets to change them.
+**Questions:**
+- Should the confirmation show the rolled stats and offer `reroll`? Is the number of rerolls
+  limited, and who sets the limit (the rules module or the provider)? How do rerolls stay
+  deterministic for replays and the fuzz walker?
+- Should point-buy exist, as a new kind of creation step that takes free-form input (`str
+  +2`, `done`) instead of picking an option? Would the provider handle that input, or the
+  rules module through a new export such as `point_buy(ctx, spend)`?
+- How would a point-buy or rerolled result reach `starting_stats`: as input in `ctx`, or as
+  replacing its result?
 
 ### Experience subsystem and scaling
 **Spec:** §4.6 (`xp_for_kill`, `xp_to_level`), §5.4.
@@ -52,19 +68,13 @@ skills granted by level through the rules?
 - What are the boundaries for death XP penalties (e.g. can a player de-level, or is there a floor at the start of the current level)?
 
 
-### Choosing starting stats at character creation
-**Spec:** §4.6 (`starting_stats`), §5.12.
-**Today (after M9):** `rules.starting_stats` gives every new character its stats and vitals,
-possibly randomized, and the player makes no choice.
-**Question:** should character creation offer the player choices (rerolls, point buy, race or
-class picks), and how would `starting_stats` receive them?
-
 ### Armor from equipment, shields and off-hand weapons
 **Spec:** §3.3 (Item `kind = "armor"`, `statDeltas`), §3.9, §4.6 slots (`offhand`, `held`),
 §5.4.
 **Today (after M9):**
 - `armor` is an ordinary declared stat, so worn items and affects change it through
-  `stat_deltas`. Resists are a per-actor map that nothing worn can change.
+  `stat_deltas`. Resists are a per-actor map that nothing worn can change; after M11 only a
+  player's traits add to it (§4.19).
 - Only the `wield` slot attacks. `offhand` and `held` are inert.
 - Nothing models two-handed weapons.
 **Questions:**

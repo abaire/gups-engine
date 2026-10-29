@@ -92,6 +92,10 @@ documented but carries no compatibility promises.
 | Schema | The world's declared stats, vitals, damage types and extra perception channels (§3.9). Fixed for the life of a database. |
 | Feature | An engine mechanic a world can turn off: `combat`, `track`, `skills` or `leveling` (§3.10). Everything else is the kernel. |
 | Condition | An actor's life state, `ok`, `incapacitated` or `dead`, decided by the rules (§4.6). |
+| Choice | A question a new character answers at creation, such as race or class, with a fixed set of options. Declared by a plugin, the world's creation provider (§4.19). |
+| Trait | A named, permanent bundle of stat, max-vital and resist deltas, flags and modifiers that an actor carries: a player from its choices, a mob from its prototype, and either when granted by a plugin (§4.19). |
+| Restriction | A plugin check that can refuse wearing, entering, casting or learning (§4.19). |
+| Tag | A free-form word on a room, item or skill that plugins and scripts read; the engine gives it no meaning (§4.2). |
 
 ### 1.7 Out of Scope for v0 (Deferred)
 
@@ -117,8 +121,12 @@ documented but carries no compatibility promises.
 - A plugin marketplace, plugin hot reload, and plugin sandboxing (§4.15).
 - Automating the `api_version` bump in the release job (§4.17 explains why it is a pre-tag
   step).
-- Everything in [DESIGN_NEEDED.md](DESIGN_NEEDED.md), including a player's choice of
-  starting stats at character creation.
+- Everything in [DESIGN_NEEDED.md](DESIGN_NEEDED.md), including rerolls and point-buy at
+  character creation.
+- Choices, traits and restrictions defined in Starlark rather than in a plugin. Content can
+  name a plugin's traits on mobs (§4.2), but not define them.
+- In-game ways to change a character's choices (a shrine, a trainer). The engine provides
+  the mechanism (§4.19); the features themselves belong to plugins.
 - Changing a world's schema (§3.9) or features (§3.10) without a server wipe.
 
 ---
@@ -158,8 +166,9 @@ gups-engine/
   cli/         the `gups` binary, the docs renderer (§4.16)
   webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
                as resources
-  samples/     sample plugins: weather-plugin (§4.15); robot-world, a small non-fantasy
-               course world with its own schema and features (§3.9, §3.10)
+  samples/     sample plugins: weather-plugin and heritage-plugin, race and class (§4.15);
+               robot-world, a small non-fantasy course world with its own schema and
+               features (§3.9, §3.10)
   template-world/  the course world template, including the canonical tutorial zone,
                //lib and //rules (§2.3)
   docs/        SPEC.md, CHANGELOG.md, PLUGINS.md (the
@@ -183,7 +192,8 @@ gups-engine/
   directory via a `URLClassLoader` (§4.15).
 - `samples/*` may depend only on `:plugin-api` in their main configurations (their tests may
   use the harness), so the sample proves the facade is enough to write a real plugin.
-- Nested projects (such as `:samples:weather-plugin`) are evaluated explicitly by the root
+- Nested projects (such as `:samples:weather-plugin` and `:samples:heritage-plugin`) are
+  evaluated explicitly by the root
   build, so the module-graph check sees their dependencies too.
 
 **Release artifacts:**
@@ -481,6 +491,7 @@ stored on prototypes: the host looks them up by prototype label.
   feature (§3.10).
 - `exits: Map<Direction, Exit>`.
 - `regions: Set<String>`.
+- `tags: Set<String>`, as items and skills have (§4.2).
 - `modifiers: Map<ModifierPoint, StarlarkCallable>`, frozen with the prototype.
 - `flags`: `always_active`, `dead_end_ok`.
 - `spawns: List<SpawnRule>`.
@@ -509,15 +520,20 @@ current state.
   feature, §3.10).
 - **Stats and vitals,** keyed by the names the world's schema declares (§3.9):
   - `baseStats: Map<String, Int>`, one entry per declared stat. The effective value adds
-    affect, equipment and encumbrance deltas.
+    affect, equipment, encumbrance and trait deltas (§4.19).
   - `vitals: Map<String, Vital>`, one per declared vital. A `Vital` has `current` and `max`
-    (`current ≤ max`; `current` may be negative) and `belowZeroSince: Long?`, the pulse
-    `current` last dropped below 0, cleared when it is 0 or more again.
-  - `resists: Map<DamageType, Int>`, keyed by declared damage types.
+    (the base maximum; `current` may be negative) and `belowZeroSince: Long?`, the pulse
+    `current` last dropped below 0, cleared when it is 0 or more again. The effective
+    maximum adds trait deltas, at least 0, and `current ≤` the effective maximum.
+  - `resists: Map<DamageType, Int>`, keyed by declared damage types: the base resists. The
+    effective value adds trait deltas.
   - `condition`: `OK`, `INCAPACITATED` or `DEAD`, as `rules.condition` last decided (§4.6).
   - Leveling (the `leveling` feature): `level`, `xp`.
 - **Skills** (the `skills` feature): `Map<Label, Int>`, the skill label and a proficiency of
   0–100.
+- **Traits** (§4.19): `grantedTraits: Set<String>`, as saved, unknown ones included, and
+  `traits`, the effective set of known traits: for a player, from its choices and granted
+  traits; for a mob, from its prototype's `traits` and granted traits.
 - **Affects:** `affects: List<Affect>`.
 - **Action state:**
   - `actionQueue: ArrayDeque<QueuedAction>`, capacity 10.
@@ -539,6 +555,8 @@ current state.
   - `session: SessionRef?`. `null` while link-dead; the player is removed from the
     world after quitting.
   - `recallRoom`.
+  - `choices: Map<String, String>` (choice id → option id), as saved, unknown ones included
+    (§4.19).
 
 **Item**
 - `location: ItemLocation`.
@@ -549,6 +567,7 @@ current state.
 - `range: Band`, for weapons (the `track` feature).
 - `kind`, for example `melee`, `ranged`, `armor`, or `consumable`.
 - `statDeltas`, keyed by declared stats.
+- `tags`, from the prototype.
 - `decayAt: Long?`.
 - `modifiers` and `equipAffects`, which apply when the item is worn (§4.6, §4.2).
 - `wear`: the item's slot or slot family (§4.2).
@@ -620,6 +639,8 @@ platforms. Changing the algorithm changes every replay.
     `dormant_recovery` follow that rule, compared with the prototype's declared values (so
     values `rules.starting_stats` changed at spawn are kept). Current vitals stay, capped at
     the new maximum, except that a vital that was at its maximum moves to the new one.
+    Prototype traits always follow the new prototype (granted ones stay), and the maxima
+    compared are base values; the effective maximum then follows from the traits.
   - Rooms: door states and exit `senses_blocked` sets follow the same rule.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
@@ -704,7 +725,7 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 | `session_tokens` | `token_hash`, `account_id`, `expires_at` | web client; revocable |
 | `invites` | `code_hash`, `role`, `expires_at`, `used_by`, `account_id` | `account_id` binds a setup code to its account (migration 2) |
 | `restrictions` | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at` | migration 3 (§4.9) |
-| `players` | `id`, `account_id`, `name`, `payload_json`, `updated_pulse` | character stats, skills, affects, attrs, position |
+| `players` | `id`, `account_id`, `name`, `payload_json`, `updated_pulse` | character stats, skills, affects, attrs, position, `choices` and `grantedTraits` (§4.19) |
 | `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse` | rooms, mobs, and **all items**, including carried ones |
 | `zone_states` | `package`, `payload_json` | reset and respawn deadlines, quarantine state; a quarantined non-zone package gets a row with only its quarantine flag |
 | `item_events` | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause` | custody audit of changes involving a player; locations as JSON; cause `spawn`, `move` or `destroy` |
@@ -726,12 +747,15 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
     attributes and timers.
   - Mobs always store position, current vitals, xp, home room and spawn binding. Level,
     vital maxima, stats, resists, skills, `think_every` and `dormant_recovery` are stored
-    only when they differ from the prototype, each as a whole value.
+    only when they differ from the prototype, each as a whole value. `grantedTraits` is
+    stored when not empty; prototype traits never are.
   - Stats, vitals and resists are stored as objects keyed by their schema names; a vital is
     `{"cur", "max"}`, plus `"belowZeroSince"` when set.
   - Items store count, decay, name override, container state, attributes, timers and their
     prototype name.
-  - Players store everything, role included.
+  - Players store everything, role included. Vital maxima and resists are the base values;
+    `choices` is an object and `grantedTraits` a sorted array, both empty when there are
+    none. A payload written before they existed reads as empty.
   - Every entity and player stores its active and anchor reasons (§5.9).
 - **SQLite settings:** WAL with `synchronous = NORMAL`, which survives process kills but may
   lose the last commits on power loss. `busy_timeout` is 5 s.
@@ -763,7 +787,8 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 1. Every item has exactly one `ItemLocation`. The containment graph is a forest: no
    cycles.
 2. Every actor's `trackIndex` satisfies `0 ≤ trackIndex < room.trackSize`.
-3. Every vital's `current ≤ max`. Death is processed exactly once per life.
+3. Every vital's `current ≤` its effective maximum (§3.3). Death is processed exactly once
+   per life.
 4. An actor is either idle, in recovery (`waitState > 0`), or casting
    (`casting != null`). It is never both in recovery and casting. Without the `skills`
    feature, `casting` is always null.
@@ -948,6 +973,7 @@ room("entrance",
     size = SIZE.normal,                                # SIZE.cramped | SIZE.normal | SIZE.large
     regions = ["goblin_territory"],
     flags = [],                                        # "always_active", "dead_end_ok"
+    tags = [],                                         # free-form, for plugins (§4.19)
     exits = [
         exit(DIR.north, to=":tunnel",
              door=door(state=DOOR.closed, key="//zones/goblin_caves:rusty_key",
@@ -971,6 +997,7 @@ mob("goblin_scout",
     behaviors = [wander(radius=4, chance=0.1), aggressive(toward="players"),
                  assist(allies=["goblin_*"]), flee(below=vitals(hp = 20))],
     think = _scout_think, think_every = 4,
+    traits = [],                     # plugin-defined traits, e.g. ["mage"] (§4.19)
     dormant_recovery = "full",       # full | regen | none (§5.9)
     loot = [loot(":rusty_key", chance=0.25)],
     version = 2,
@@ -980,6 +1007,7 @@ item("short_bow",
     name = "a short bow", kind = "ranged", range = "far", weight = 2,
     wear = "wield", dice = "1d6", damage_type = "pierce",
     stat_deltas = stats(dex = 1),
+    tags = ["light_weapon"],                          # free-form, for plugins (§4.19)
     modifiers = {}, equip_affects = [],               # apply while worn (§4.6)
     stackable = False, decay_pulses = None,
     commands = {}, on_use = None,
@@ -1016,6 +1044,15 @@ def migrate(old_version, attrs):                       # optional, per package (
   equipped and runs out even if the item stays on. Equipping applies each entry to the wearer
   as an affect, through `apply_affect` like a spell's, and removing the item removes the
   untimed ones. `stunned` must be timed, so an item can't stun its wearer for good (§5.4.1).
+- **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching
+  `[a-z][a-z0-9_]*`, checked at load, stored sorted without repeats. The engine gives them
+  no meaning; plugin restrictions and scripts read them (§4.19). They are part of the
+  prototype, so a reload changes them for every instance.
+- **Mob traits:** `mob(traits = [...])` names traits the world's plugins define (§4.19),
+  stored sorted without repeats. A name no loaded plugin defines fails the package's load
+  with a "did you mean" suggestion, as a skipped plugin's builtins do; every tool that loads
+  packages registers the plugins first, so `gups lint` checks it too. The traits' deltas
+  apply on top of the mob's declared `stats`, `vitals` and `resists`, which stay base values.
 - **Containers:** `container(capacity, max_weight, state, key)` makes an item a container.
   `capacity` counts items; `max_weight` weighs the contents.
 - **Regions:** `region(name, modifiers = {...})` declares a region's modifiers. Region names
@@ -1057,6 +1094,7 @@ skill("fireball",
     attack_while_casting = False,     # default; True lets auto-attacks continue during warmup
     effect    = damage(dice="4d6", type=DAMAGE.fire),
     resolve   = None,                 # optional custom Starlark effect: def f(ctx)
+    tags      = ["arcane"],           # free-form, for plugins (§4.19)
 )
 ```
 
@@ -1188,11 +1226,14 @@ expired), `targets`
 - Schema fields (§3.9), generated from the world's schema:
   - `<stat>`, the effective value, for each declared stat (`ctx.actor.dex`), and
     `base.<stat>` for the base value.
-  - `<vital>` and `max_<vital>` for each declared vital (`ctx.actor.hp`,
-    `ctx.actor.max_hp`), and `below_zero_since(vital)`, the pulse the vital last dropped
-    below 0, or `None`.
-  - `resists.<type>` for each declared damage type.
+  - `<vital>` and `max_<vital>` (the effective maximum, traits included, §4.19) for each
+    declared vital (`ctx.actor.hp`, `ctx.actor.max_hp`), `base.max_<vital>` for the base
+    maximum, and `below_zero_since(vital)`, the pulse the vital last dropped below 0, or
+    `None`.
+  - `resists.<type>` (effective) and `base.resists.<type>` for each declared damage type.
   - An undeclared name is an error with a suggestion.
+- Creation (§4.19): `choices`, a dict of choice id → option id (known answers only; empty for
+  mobs), `traits`, the sorted names of the traits the actor carries, and `has_trait(name)`.
 - Life: `condition`, one of `"ok"`, `"incapacitated"` and `"dead"`.
 - Leveling (`leveling` feature): `level`, `xp`.
 - Position: `room`, `track_index` and `band_of(other)` (`track` feature), `home_room`,
@@ -1202,15 +1243,15 @@ expired), `targets`
   `has_item(label)`, `fighting()` (`combat` feature), `wait_state`.
 
 **Room view:**
-- Identity: `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`.
+- Identity: `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`, `tags`.
 - Contents: `exits()`, `actors()`, `items()`, `contents()`.
 - `exit(dir)`, an exit view that includes its effective `senses_blocked` and door state.
 
 **Item view:** `id`, `label`, `name`, `keywords`, `desc`, `kind`, `count`, `weight`,
 `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`,
-`stat_deltas`, `in_world`.
+`stat_deltas`, `tags`, `in_world`.
 
-**Skill view:** includes `cost`, `channels` and `interrupt`.
+**Skill view:** includes `cost`, `channels`, `interrupt` and `tags`.
 
 **Verbs (v0):**
 
@@ -1290,12 +1331,13 @@ export can't be silently ignored; helpers take a `_` prefix.
 other actor, if any: the defender, the pinner, the killed or the killer), `weapon`, `item`,
 `band` (a word, or `None` without the `track` feature), `skill`, `room` (the actor's),
 `pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its
-modifiers. It has no verbs. Its actor views have the schema fields of §4.5.
+modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`,
+`traits` and `has_trait` (§4.19).
 
 | Function | Feature | Returns |
 |---|---|---|
 | `equipment_slots()` | kernel | `list[str]`, the equipment slots. |
-| `starting_stats(ctx)` | kernel | `struct(stats = stats(...), max = vitals(...), current = vitals(...))`, every field optional. Numbers for a new character or a spawned mob. |
+| `starting_stats(ctx)` | kernel | `struct(stats = stats(...), max = vitals(...), current = vitals(...))`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob. |
 | `condition(ctx)` | kernel | `"ok"`, `"incapacitated"` or `"dead"`. |
 | `mitigate(ctx, amount, type)` | kernel | `vitals(...)`, the vital losses that `amount` damage of `type` causes. |
 | `move_cost(ctx)` | kernel | `vitals(...)`, what a room transition spends. |
@@ -1331,6 +1373,12 @@ modifiers. It has no verbs. Its actor views have the schema fields of §4.5.
   The result overrides those values. A `current` it doesn't give equals the maximum, so a
   vital that starts empty gives both: `max = vitals(rads = 100), current = vitals(rads = 0)`.
   It runs before the actor enters the world, so it can randomize with `ctx.rng`.
+  - For a player, the answers and traits are already set (§4.19): `ctx.actor.choices` is
+    readable, and effective values already include trait deltas. The result's `stats` and
+    `max` are base values; the trait deltas apply on top, and "the maximum" above is the
+    effective one.
+  - Players created without choices (no provider, the harness without `choices`, the dry
+    run's plain player) see `ctx.actor.choices == {}`.
 - `condition(ctx)` decides `ctx.actor`'s life state (§5.4): after any change to one of the
   actor's vitals, and for every simulated actor at each world tick, so a rule such as "dead
   after 60 pulses with `oxygen` below zero" can use `below_zero_since`.
@@ -1349,7 +1397,11 @@ declared damage type. The actors live in a throwaway world with one room: two pl
 one mob per loaded mob prototype. Each actor is called against another (the first player
 against the second, everyone else against the first player), unarmed. `get_lag` runs once
 per band, and `cast_allowed` and `interrupt_check` get a synthetic skill with
-`interrupt = {"damage_pct": 10}`. A mob whose own package failed to load isn't checked.
+`interrupt = {"damage_pct": 10}`. With a creation provider (§4.19), `starting_stats` also
+runs for one synthetic player per option of each choice. Its answers are built in choice
+order: that option for its own choice, and the first available option for every other. An
+option that isn't available on that path is skipped. A mob whose own package failed to load
+isn't checked.
 Only the package named `rules` is dry-run; a test world that names another rules package
 (§4.12) isn't. An error, a wrong return type or an undeclared name in a result
 fails the rules package's load with the usual diagnostic. A branch the dry run doesn't
@@ -1394,10 +1446,12 @@ the mover's for `move_cost` (from the room being left), and the actor's own for 
 those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region
-modifiers (sorted by region name), then room modifiers, then the actor's affects (sorted by
-affect id), then its worn items (in `equipment_slots()` order, then any other slots by
-name). Worn items contribute their `item(modifiers=)`; affects contribute the `modifiers`
-given to `apply_affect`.
+modifiers (sorted by region name), then room modifiers, then the actor's traits (in name
+order, §4.19), then its affects (sorted by affect id), then its worn items (in
+`equipment_slots()` order, then any other slots by name). Worn items contribute their
+`item(modifiers=)`; affects contribute the `modifiers` given to `apply_affect`; traits
+contribute the Kotlin modifiers of their plugin. Traits have no `cast_allowed` modifiers:
+the `cast` restriction refuses casts (§4.19).
 
 Each modifier is a top-level function with the signature `fn(ctx, base) -> value`, or
 returns `ctx.deny(msg)` (only for `cast_allowed`).
@@ -1429,7 +1483,9 @@ check counts a container's contents.
 **Equipment:** Slots come from `rules.equipment_slots()`. Wearing into an occupied slot
 moves the old item back to the inventory; a slot family whose slots are all full swaps out
 the first. `wield` only takes items whose slot is `wield`; `wear` takes any slotted item; `remove`
-(`unwield` in the template world) takes off an item in any slot, worn or wielded.
+(`unwield` in the template world) takes off an item in any slot, worn or wielded. The `wear`
+restriction (§4.19) runs once the slot is known and before anything moves, so a refused item
+swaps nothing out.
 
 ### 4.7 Behaviors (built in, implemented in Kotlin)
 
@@ -1499,7 +1555,10 @@ the default text of an engine message (§4.18).
 - **`score`** lists the character's stats and vitals by label in schema order, its resists
   by damage type, and its level and XP with the `leveling` feature. It prints the name,
   the stats as `<label> <value>`, the vitals as `<label> cur/max`, `Resists: <type> <n>`
-  for every declared damage type, and `Level N (X xp)`.
+  for every declared damage type, and `Level N (X xp)`. Stats, maxima and resists are
+  effective values. With choices or traits (§4.19), it then prints each known answer as
+  `<title>: <label>` in choice order, and `Traits: <labels>` (comma-separated, in name
+  order) when the character carries any. A character with neither sees no such lines.
 - **`look`** describes another actor's health by its condition first: "is incapacitated" or
   "is mortally wounded", and otherwise by its lowest vital as a share of its maximum
   (among vitals with a positive maximum): 100% or more "is in excellent condition", 75%
@@ -1585,7 +1644,7 @@ prefix only matches other `@` commands.
 | Command | Purpose |
 |---|---|
 | `@goto <label\|player>` | Move to a room of the builder's packages (index 0), or to any player (their track index), through `teleport`, so hooks fire. A player's name wins over a label. Going to a player can be taken away per account (Restrictions, below). |
-| `@stat <target>` | Show an entity's full state. The target is a keyword (actors first, then carried and ground items), `here` or `#id`. |
+| `@stat <target>` | Show an entity's full state. The target is a keyword (actors first, then carried and ground items), `here` or `#id`. For a player this includes base and effective stats, maxima and resists, every saved answer and granted trait (unknown ones marked `(unknown)`), and the effective traits with where each comes from (`<choice>=<option>`, `prototype` or `granted`); mobs show their traits the same way. Rooms, items and skills show their `tags`. |
 | `@spawn <label> [n]` | Spawn 1 to 10 mobs or items (flagged `debug`). |
 | `@trace [all\|zone [pkg]\|entity <target>\|hook <name>\|rules\|off]` | Stream hook execution (§5.13). |
 | `@errors [package]` | Show the last 10 diagnostics. |
@@ -1760,6 +1819,8 @@ for good, without changing its role.
   | `Room.Bands` | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only | When anything in the room moves, arrives or leaves |
   | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}` | With each message |
   | `Gups.Trace` | `{"line"}` | Builders with `@trace` on, instead of the `[trace]` text lines |
+  | `Char.Creation` | `{"name", "step": "choice"/"confirm", "choice": {"id", "title", "prompt", "options": [{"id", "label", "summary", "help"}]} or null, "answers": [{"choice", "title", "option", "label"}]}`, or `null` | With each creation prompt (§5.12), before the session has a character; `null` when the steps end |
+  | `Char.Traits` | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}` | When changed; only in worlds with a creation provider or a trait |
 
   `Room.Bands` entries carry entity ids, only ever for the viewer's own room, so clients can
   key their band view and tell identical mobs apart. Plugins may add packages (§4.15).
@@ -1776,9 +1837,10 @@ for good, without changing its role.
   - GMCP waits in the session with its text and goes out after the text and before the
     prompt. A flush with only GMCP sends no prompt.
   - Every phase-7 flush recomputes the state packages (`Char.Vitals`, `Char.Status`,
-    `Char.Affects`, `Room.Info`, `Room.Bands`) and sends those whose whole payload changed.
-    The cache resets when a session takes a character, so a reconnect gets everything again.
-    Events (`Comm.Channel.Text`, `Gups.Trace`) are never cached.
+    `Char.Affects`, `Char.Traits`, `Room.Info`, `Room.Bands`) and sends those whose whole
+    payload changed. The cache resets when a session takes a character, so a reconnect gets
+    everything again. Events (`Comm.Channel.Text`, `Gups.Trace`, `Char.Creation`) are never
+    cached. `Char.Creation` is the one package sent to a session without a character.
   - IAC bytes in a payload are doubled.
 - **GMCP payloads:**
   - `Char.Schema` is static for the life of the server (§3.9), in declaration order. Its
@@ -1799,6 +1861,16 @@ for good, without changing its role.
     and `gossip` to every player. `text` is what was said, without the framing.
   - `Gups.Trace`: `{"line"}` replaces the `[trace]` line, the per-pulse overflow summary
     included.
+  - `Char.Creation` is an event, never cached. `name` is the character's name; `options`
+    are the available ones, in order; `help` is `""` when the option has none; `answers` are
+    those given so far (all of them at `confirm`, where `choice` is null). It is sent right
+    after the prompt's text, so a client that ignores it still has the text. `null` is sent
+    once when the steps end, whether the character entered the world or the player
+    cancelled. Clients answer with ordinary input lines (an option id, `back`, `cancel`,
+    `yes`), so nothing new is read from them.
+  - `Char.Traits` is a state package: `choices` lists the known answers in choice order,
+    `traits` the effective traits in name order. It is recomputed in every phase-7 flush,
+    like `Char.Status`.
 - **WebSocket framing:** One JSON message per frame:
   `{"t":"text","d":"..."}` | `{"t":"gmcp","p":"Char.Vitals","d":{...}}` | `{"t":"input","d":"..."}`.
   - Also from the server: `prompt`, `hide` (true or false, for password prompts), and
@@ -1865,6 +1937,15 @@ for good, without changing its role.
   - It asks for the GMCP packages `Char`, `Room`, `Comm.Channel` and `Gups`.
   - A sign-up form takes a one-time code, checks it, then asks for a login (unless the code
     names one) and a password twice, compared in the browser before anything is sent.
+  - **Creation panel:** while `Char.Creation` isn't `null`, a panel over the output pane
+    shows the step: the prompt and one button per option (label, summary, and the `help`
+    text expandable under it), with Back and Cancel; at `confirm`, the answers with Create,
+    Back and Cancel. A button sends the same line a player would type (the option id,
+    `back`, `cancel` or `yes`), so the text flow stays the one source of truth and typing
+    still works. `null` closes the panel. The client asks for `Char` already, so it gets the
+    package.
+  - It shows the character's choices and traits from `Char.Traits` in a small panel, with
+    each trait's `doc` as its tooltip.
 - **Limits:**
   - Input line ≤ 512 bytes (UTF-8); the rest is dropped and the client is told "Your line
     was longer than 512 bytes and was cut short."
@@ -1931,6 +2012,38 @@ interface WebAccounts {                                              // implemen
 The plugin seams (`GupsPlugin`, `PluginRegistry`, the `PluginWorld` facade, and the
 plugin-agnostic hooks in `core` and `script` they fill in) are in §4.15.
 
+Character creation (§4.19) has its own seams in `core`, so `auth`, the `--dev` login and
+`plugin-api` meet there without depending on each other:
+
+```kotlin
+data class CreationOption(val id: String, val label: String, val summary: String,
+                          val help: String, val traits: List<String>)
+data class CreationChoice(val id: String, val title: String, val prompt: String,
+                          val options: List<CreationOption>)
+interface CreationProvider {                                         // at most one per world
+    val choices: List<CreationChoice>
+    fun available(world: World, choice: String, answers: Map<String, String>): List<String>
+    fun validate(world: World, answers: Map<String, String>): String?   // a refusal, or null
+    fun startRoom(world: World, answers: Map<String, String>): Label?
+    fun created(world: World, player: Player, newCharacter: Boolean)
+}
+class Trait(val name: String, val label: String, val doc: String,
+            val statDeltas: Map<String, Int>, val maxVitalDeltas: Map<String, Int>,
+            val resistDeltas: Map<String, Int>, val flags: Set<String>,
+            val modifiers: Map<ModifierPoint, TraitModifier>)
+fun interface TraitModifier { fun modify(c: RulesContext, base: Any): Any }
+enum class RestrictionPoint { WEAR, ENTER, CAST, LEARN }
+fun interface Restriction { fun check(world: World, r: RestrictionRequest): String? }
+// World.creation: CreationProvider?, World.traits: Map<String, Trait>,
+// World.restrictions: Map<RestrictionPoint, List<Restriction>>; empty by default.
+```
+
+- **The creation flow** is one class in `core` (a step machine over a session) that both
+  `AccountLogin` and the `--dev` login drive, so the two can't drift apart. It owns the
+  steps, the answer matching, `back`/`cancel`, the confirmation and `Char.Creation`.
+- **Changes** go through one `World` function that checks, sets, recomputes and re-checks
+  worn items (§4.19), used by the facade, the harness and the missing-choice flow.
+
 - **Loading:** `loadPackages` is not on `ScriptHost`. The script loader returns a
   `LoadResult`, and the script host is built from it before the `World`. Reloads go through
   `ScriptHost.reload`.
@@ -1975,13 +2088,26 @@ def test_scout_flees_when_hurt(t):
 
 `spawn_player` takes its numbers from `rules.starting_stats` and lets `vitals` and `stats`
 (the constructors) override them: a named vital's maximum and current are both set to the
-given value, and a named stat is replaced. `w.damage` lowers the named vital by `amount`
-or by `pct` of its maximum, with `type` defaulting to the unarmed damage type.
+given value, and a named stat is replaced. The overrides are base values; trait deltas still
+apply on top. `w.damage` lowers the named vital by `amount` or by `pct` of its maximum, with
+`type` defaulting to the unarmed damage type.
+
+**Choices and traits in tests** (§4.19), with the world's plugins loaded as for `gups test`:
+- `spawn_player(..., choices = {"race": "elf", "class": "mage"})` sets the answers before
+  `starting_stats` runs. They are checked as at creation (known ids, availability in order,
+  the provider's validation), and a refusal fails the test with its message. Missing
+  choices are allowed, so a test can make an incomplete character; leaving `choices` out
+  makes a player with none.
+- `w.set_choices(player, {"class": "warrior"})` makes a change exactly as a plugin's
+  `setChoices` does (`None` removes an answer) and returns the refusal message or `None`.
+- `w.grant_trait(actor, name)` and `w.remove_trait(actor, name)` do the same for granted
+  traits, on players and mobs. A mob from `w.spawn` carries its prototype's traits.
+- Player handles have `choices`, `traits` and `has_trait` as view fields.
 
 | Object | API |
 |---|---|
 | `t` | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail` |
-| `w` | `spawn_player(name, at, level, vitals, stats, skills, index)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| `w` | `spawn_player(name, at, level, vitals, stats, skills, index, choices)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
 | player handle `p` | `do(line) -> output`, `output()`, plus view fields |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use
@@ -2116,7 +2242,8 @@ bearer token.
 ### 4.15 Plugins
 
 The engine-developer path of §1.2: `.jar` plugins found through `ServiceLoader` that add host
-builtins, commands, effect primitives and GMCP packages. There are no compatibility promises.
+builtins, commands, effect primitives, GMCP packages, traits, restrictions and the character
+creation steps (§4.19). There are no compatibility promises.
 The engine-developer guide is `docs/PLUGINS.md`, and `samples/weather-plugin` is the worked
 example.
 
@@ -2154,7 +2281,83 @@ interface PluginRegistry {
     fun addEffectPrimitive(name: String, doc: String, params: List<PluginParam>, apply: PluginEffect)
     fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?)
     fun onWorldStarted(fn: (PluginWorld) -> Unit)
+    fun addTrait(trait: PluginTrait)
+    fun setCreation(creation: PluginCreation)
+    fun addRestriction(
+        point: PluginRestrictionPoint,
+        doc: String,
+        check: (PluginRestrictionCall) -> String?,     // a refusal message, or null to allow
+    )
 }
+
+// Character creation, traits and restrictions (§4.19).
+data class PluginOption(
+    val id: String,
+    val label: String,
+    val summary: String,
+    val help: String = "",
+    val traits: List<String> = emptyList(),
+)
+
+data class PluginChoice(
+    val id: String,
+    val title: String,
+    val options: List<PluginOption>,
+    val prompt: String = "Choose your ${title.lowercase()}:",
+)
+
+interface PluginCreation {
+    val choices: List<PluginChoice>
+    fun available(world: PluginWorld, choice: String, answers: Map<String, String>): List<String> =
+        choices.first { it.id == choice }.options.map { it.id }
+    fun validate(world: PluginWorld, answers: Map<String, String>): String? = null
+    fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null  // a label
+    fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {}
+}
+
+data class PluginTrait(
+    val name: String,
+    val label: String = name.replaceFirstChar { it.uppercase() },
+    val doc: String = "",
+    val statDeltas: Map<String, Int> = emptyMap(),
+    val maxVitalDeltas: Map<String, Int> = emptyMap(),
+    val resistDeltas: Map<String, Int> = emptyMap(),
+    val flags: Set<String> = emptySet(),
+    val modifiers: Map<PluginModifierPoint, PluginModifier> = emptyMap(),
+)
+
+enum class PluginModifierPoint { TO_HIT, DAMAGE, INITIATIVE, MOVE_COST, REGEN }
+
+data class PluginModifierCall(
+    val world: PluginWorld,
+    val point: PluginModifierPoint,
+    val actor: PluginActor,          // whose chain it is
+    val other: PluginActor?,         // the defender for TO_HIT and DAMAGE
+    val weapon: PluginItem?,
+    val room: PluginRoom,
+)
+
+fun interface PluginModifier {
+    // base and result: Long for TO_HIT, DAMAGE and INITIATIVE;
+    // Map<String, Long> (vital name to amount) for MOVE_COST and REGEN.
+    fun modify(call: PluginModifierCall, base: Any): Any
+}
+
+enum class PluginRestrictionPoint { WEAR, ENTER, CAST, LEARN }
+
+data class PluginRestrictionCall(
+    val world: PluginWorld,
+    val point: PluginRestrictionPoint,
+    val actor: PluginActor,
+    val item: PluginItem? = null,        // WEAR
+    val slot: String? = null,            // WEAR
+    val room: PluginRoom? = null,        // ENTER: the destination
+    val from: PluginRoom? = null,        // ENTER
+    val direction: String? = null,       // ENTER; null for teleport
+    val skill: PluginSkill? = null,      // CAST, LEARN
+    val target: PluginEntity? = null,    // CAST
+    val proficiency: Int? = null,        // LEARN
+)
 
 enum class PluginLane { FAST, TICK }                          // core Lane
 enum class PluginRole { PLAYER, BUILDER, INSTRUCTOR, ADMIN }  // core Role
@@ -2184,8 +2387,11 @@ fun interface PluginEffect {
 - **Types:** every type in these signatures and in the facade belongs to `gups.pluginapi`, to
   Kotlin/Java, or to the Starlark library (`StarlarkValue`, `StarlarkThread` and the
   annotations, which `plugin-api` exports). None comes from `core` or `script`.
-- **Version:** `PluginApi.VERSION` changes whenever this interface or the facade changes.
-  Plugins built for another version are refused at load, and must be rebuilt.
+- **Version:** after the engine's first release, `PluginApi.VERSION` changes whenever this
+  interface or the facade changes. Until then the interface is still being designed and
+  changes stay at version 1, as unreleased `api_version` 1 does for scripts; plugins are
+  rebuilt against each engine build anyway. Plugins built for another version are refused
+  at load, and must be rebuilt.
 - **Builtins** appear to scripts under the plugin's id, as fields of one immutable namespace
   value: a plugin `weather` with builtin `now` is used as `weather.now(room)`. A package or
   test file that defines a top-level global with a plugin's id fails to load.
@@ -2233,7 +2439,21 @@ fun interface PluginEffect {
   `plugin` diagnostic and its package is skipped for that pulse.
 - **Failures at run time:** an exception from a command, effect, GMCP producer or
   `onWorldStarted` callback is caught and recorded as a `plugin` diagnostic, and the pulse
-  goes on.
+  goes on. Creation, trait modifier and restriction failures are handled as §4.19 says.
+- **Traits** (`addTrait`): the name matches `[a-z][a-z0-9_]*` and is unique across every
+  plugin's traits. Every key of `statDeltas`, `maxVitalDeltas` and `resistDeltas` must be a
+  declared stat, vital or damage type, and `flags` may not contain `stunned`. A modifier
+  point of a feature that is off (`TO_HIT`, `DAMAGE` and `INITIATIVE` need `combat`) is
+  refused. Any of these fails `register`.
+- **Creation** (`setCreation`): at most once per plugin, and only one plugin per world; a
+  second plugin's call is a clash that skips it. Its choices follow §4.19, and every trait an
+  option names must be one the same plugin registers. Both are checked when `register`
+  returns. The definitions are read once; `available`, `validate`, `startRoom` and `created`
+  are called on the world thread whenever they're needed. `created` runs after the
+  character has entered the world, for starting items, skills and attributes.
+- **Restrictions** (`addRestriction`): `CAST` and `LEARN` need the `skills` feature; with it
+  off, registering them fails `register`. The check runs on the world thread, often (every
+  move), so it should be cheap and must not change the world.
 
 **The facade.** Plugins never get the raw `World` or entities. `PluginWorld` exposes:
 - **Verbs**, with the meaning and argument names of the `ctx` verbs, each calling the same
@@ -2252,7 +2472,26 @@ fun interface PluginEffect {
   fun getAttr(entity: PluginEntity, key: String, default: Any? = null): Any?
   fun setAttr(entity: PluginEntity, key: String, value: Any?)
   fun delAttr(entity: PluginEntity, key: String)
+  // Choices (players only) and traits (players and mobs), §4.19.
+  // Each returns a refusal message, or null.
+  fun setChoices(actor: PluginActor, changes: Map<String, String?>): String?   // null removes
+  fun grantTrait(actor: PluginActor, trait: String): String?
+  fun removeTrait(actor: PluginActor, trait: String): String?
+  // Skills (`skills` feature). setSkill runs the LEARN restrictions first.
+  fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String?
+  fun removeSkill(actor: PluginActor, skill: String): Boolean
   ```
+
+  - `setChoices` applies all its changes as one change (§4.19), or none. An unknown choice
+    or option id, or a mob, is an `IllegalArgumentException`; an unavailable option or the
+    provider's validation is a refusal.
+  - `grantTrait` and `removeTrait` take any plugin's trait and any actor. Granting a trait the
+    actor already has granted, or removing one it wasn't granted (option and prototype traits
+    can't be removed this way), is a refusal. An unknown name is an
+    `IllegalArgumentException`.
+  - `setSkill` takes a skill label and a proficiency of 0–100, and adds or replaces the
+    skill; `removeSkill` reports whether the actor had it. An unknown label or an
+    out-of-range proficiency is an `IllegalArgumentException`.
 
   A verb given an actor or item that has left the world (a dead mob, a player who quit, a
   destroyed item) fails with `<verb>(<param>): <name> is no longer in the world` rather than
@@ -2275,19 +2514,26 @@ fun interface PluginEffect {
   wrap the same entity:
   - `PluginEntity`: `id`, `label` (the room label, or the prototype label of a mob or item;
     null for players), `name`;
-  - `PluginRoom`: `regions` (sorted), `flags` (sorted), `size` (lowercase track size), `exits`
-    (direction → room label), `actors`, `items`;
-  - `PluginActor`: `isPlayer`, `room`, `stat(name)` (effective), `baseStat(name)`,
-    `vital(name)`, `maxVital(name)`, `resist(type)`, `level`, `affects` (names),
-    `hasAffect(name)`. An undeclared name throws as above; `level` throws
-    `IllegalStateException` naming the feature without `leveling`;
-  - `PluginItem`: `keywords`.
+  - `PluginRoom`: `regions` (sorted), `flags` (sorted), `tags` (sorted), `size` (lowercase
+    track size), `exits` (direction → room label), `actors`, `items`;
+  - `PluginActor`: `isPlayer`, `role` (a `PluginRole`, null for mobs), `room`, `stat(name)`
+    (effective), `baseStat(name)`, `vital(name)`, `maxVital(name)` (effective),
+    `baseMaxVital(name)`, `resist(type)` (effective), `baseResist(type)`, `level`, `affects`
+    (names), `hasAffect(name)`, `flags` (sorted), `choices` (choice id → option id, known
+    answers only), `traits` (sorted, known traits only), `grantedTraits` (sorted, as saved),
+    `hasTrait(name)`, `skills` (skill label → proficiency). An undeclared name throws as
+    above; `level` throws `IllegalStateException` naming the feature without `leveling`, and
+    `skills` without `skills`;
+  - `PluginItem`: `keywords`, `kind`, `wear` (slot or slot family, or null), `weight`,
+    `tags` (sorted);
+  - `PluginSkill` (not an entity): `label`, `name`, `kind`, `tags` (sorted).
 - **`PluginViews`:** `world(thread)`, and `room/actor/item(value)`, which accept a facade value
   or a script view (typed `Any?`, so no `script` type leaks). The world reached through
   `world(thread)` can't know which plugin is calling, so it has no namespace: unqualified keys
   and all writes fail, and its `diagnose`/`log` carry no prefix. It is also set for `@eval`.
 
-Extending the facade is a `PluginApi.VERSION` bump. The engine-side loader, host and facade
+Extending the facade is a `PluginApi.VERSION` bump once the engine is released (see
+**Version** above). The engine-side loader, host and facade
 implementations live in `gups.pluginapi.host`, which may use `core` and `script` types; only
 `cli` and tests call it.
 
@@ -2301,6 +2547,9 @@ implementations live in `gups.pluginapi.host`, which may use `core` and `script`
   package, test file and `@eval`), `install(world)` (before the script host installs), and
   `started(world)` (after `on_load`). Every place that builds a world takes one, `NONE` by
   default. `scriptWorld(thread)` finds the running world from a Starlark thread.
+- `install(world)` also fills `World.creation`, `World.traits` and `World.restrictions`
+  (§4.11) with adapters over the plugins' objects. The adapters turn facade types into
+  `core` types, catch plugin exceptions as §4.19 says, and check modifier results.
 
 **Loading:**
 - **Where jars come from:** `plugins/<id>.jar` in the course world repository, each pinned by
@@ -2365,12 +2614,38 @@ no tag are indoors.
   test that pins the built `weather.jar` in a fixture world and runs a `*_test.star` through
   the harness test runner. `template-world` doesn't use it.
 
+**The creation sample** (`samples/heritage-plugin`, `:samples:heritage-plugin`, id
+`heritage`, jar `heritage.jar`) is a fantasy race and class plugin for the template world's
+schema (§3.9), and the worked example for §4.19. It depends only on `:plugin-api` and
+requires `combat` and `skills`.
+
+| Part | What the sample adds |
+|---|---|
+| Choices | `race` (Race): `human`, `elf`, `dwarf`. `class` (Class): `warrior`, `mage`, `cleric`. |
+| Availability | `dwarf` can't be a `mage`. |
+| Traits | `human`: every stat +1 except `armor`. `elf`: `dex` +2, `con` −1, `mana` max +10. `dwarf`: `con` +2, `hp` max +5, `fire` resist +10. `warrior`: `str` +2, `hp` max +10. `mage`: `int` +2, `mana` max +20. `cleric`: `wis` +2, `mana` max +10, and a `regen` modifier adding 1 `mana`. |
+| Restrictions | Every check reads traits, never choices, so mobs declared with a class trait are held to the same rules as players. `WEAR`: actors with `mage` refuse items tagged `heavy_armor` ("Your spellcraft can't work through that much metal."). `CAST`: skills tagged `arcane` need `mage`, skills tagged `divine` need `cleric` ("You don't know how to call on that power."). `ENTER`: a room tagged `guild_<class>` admits only actors with that class's trait, and builders and above ("Only <class label>s may enter."), so a `traits = ["mage"]` guild trainer can walk in and out. `LEARN`: `arcane` and `divine` skills as for `CAST`. |
+| Start room | Every combination starts at the world's start room; the sample shows the default. |
+| `created` | A new character gets one class skill when the world defines it (`//skills:magic_missile` for mages, `//skills:minor_heal` for clerics) at proficiency 25, through `setSkill`. |
+| Builtin | `heritage.choose(actor, choice, option)` calls `setChoices` and returns the refusal or `None`, so a world's own scripts can offer re-picks in play. |
+| Command | `heritage` (`FAST`, `PLAYER`): the player's race and class with their summaries. |
+
+- Its tests are unit tests against fakes, plus an end-to-end test in a fixture world with a
+  `heavy_armor` item, `arcane` and `divine` skills, a `guild_mage` room, and a wandering mob
+  with `traits = ["mage"]`, run through the harness: each restriction, the mage mob entering
+  and leaving the guild while a warrior mob can't, the combination rule, the trait effects
+  in `score` and on the mob's stats, and a re-pick through `heritage.choose`. Another test drives the telnet creation flow against a
+  headless world with the jar pinned. `template-world` doesn't use it.
+
 **The guide** (`docs/PLUGINS.md`) covers building a plugin against `plugin-api` (the Gradle
 setup, `GupsPlugin`, `PluginApi.VERSION`, `META-INF/services/gups.pluginapi.GupsPlugin`), the
 facade, each extension point with `WeatherPlugin` as the running example, putting a jar in
 `plugins/<id>.jar` and pinning it (`shasum -a 256`), the trust model with a review checklist,
-and the lack of compatibility promises. Its Kotlin samples are copied from `WeatherPlugin.kt`,
-and a test checks that every Kotlin block (except Gradle snippets) appears there.
+and the lack of compatibility promises. A "Character creation" part covers choices, traits,
+restrictions and the choice and skill verbs, with `HeritagePlugin` as its running example,
+including how content tags items, skills and rooms for restrictions. Its Kotlin samples are
+copied from `WeatherPlugin.kt` and `HeritagePlugin.kt`, and a test checks that every Kotlin
+block (except Gradle snippets) appears in one of them.
 
 ### 4.16 The API Model and Reference Docs
 
@@ -2412,7 +2687,8 @@ changelog check and plugin docs, so they can't drift apart.
 
 - **Schema fields:** the view fields generated from a world's schema (§3.9) are pattern
   entries, `view:actor.<stat>`, `view:actor.<vital>`, `view:actor.max_<vital>`,
-  `view:actor.base.<stat>` and `view:actor.resists.<type>`, never a world's own names, so
+  `view:actor.base.<stat>`, `view:actor.base.max_<vital>`, `view:actor.resists.<type>` and
+  `view:actor.base.resists.<type>`, never a world's own names, so
   the model doesn't depend on a world. The constructors `vitals`, `stats` and `resists`, and
   `DAMAGE`, are ordinary entries.
 - **Features:** every entry that belongs to a feature (§3.10) carries `feature`, its
@@ -2449,7 +2725,7 @@ their renamed names. The files, in order:
 | `rules.html` | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields. |
 | `harness.html` | `t`, `w`, `p`, `diagnostic`. |
 | `world.html` | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override. |
-| `plugins.html` | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands and GMCP packages, badged `plugin: <id>`, or "No plugins are loaded." |
+| `plugins.html` | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages, traits (label, doc and effects), restrictions (point and doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
 | `changelog.html` | `docs/CHANGELOG.md` rendered as Markdown (§4.17). |
 | `api.json` | Byte for byte what `gups docs --json` writes. |
 
@@ -2465,8 +2741,9 @@ their renamed names. The files, in order:
   HTML-escaped. Output is deterministic, in model order, with `\n` line endings.
 - **Anchors:** every symbol has an element with `id` equal to the symbol with `:` replaced by
   `-` (`hook:on_enter` → `hook-on_enter`). The page a symbol lives on comes from the model
-  list that contains it. Plugin entries are anchored `plugin-<id>.<name>` and are never part
-  of `api.json`.
+  list that contains it. Plugin entries are anchored `plugin-<id>.<name>` (traits
+  `plugin-<id>.trait-<name>`, choices `plugin-<id>.choice-<choice>`, restrictions
+  `plugin-<id>.restrict-<point>-<n>` counting from 1) and are never part of `api.json`.
 - **Examples:** an entry may carry a short example, kept in one table keyed by symbol (not in
   `api.json`, so editing one never changes the API or needs a changelog entry). An example
   has package code, a harness test body, or both. Every declaration, constant, effect
@@ -2546,6 +2823,151 @@ implant spins up").
   world has off is a warning. The file is read only at startup (§2.3).
 - **Docs:** `gups docs` lists the catalog on `world.html`, with the world's overrides when
   given `--world` (§4.16).
+
+### 4.19 Character Creation, Traits and Restrictions
+
+A world can have new characters make **choices** (a fantasy term's race and class), give
+them permanent **traits** that follow from those choices, and **restrict** what a character
+may wear, cast, learn or enter. The engine names no choice, option or trait: they all come
+from plugins (§4.15). A world without them creates characters as before, with no choices, no
+traits and no restrictions, and players see nothing new.
+
+**Choices:**
+- A **creation provider** is the one plugin that declares the world's choices, in the order
+  they are asked. A world has at most one.
+- A choice has an id, a `title` ("Race"), a `prompt` ("Choose your race:", by default
+  "Choose your <title in lowercase>:") and its options. An option has an id, a `label`
+  ("Elf"), a one-line `summary`, an optional longer `help`, and the names of the traits it
+  grants.
+- Ids match `[a-z][a-z0-9_]*`. Choice ids are unique. Option ids are unique within their
+  choice and may not be `back`, `cancel`, `help`, `yes` or `no`. Every choice has at least one
+  option. The definitions are fixed for the life of the server.
+- **Availability:** given the answers to earlier choices (in declaration order), the provider
+  says which of a choice's options are available, in declaration order; by default, all of
+  them. This is how combinations are restricted: no dwarf mages means `class` doesn't offer
+  `mage` once `race` is `dwarf`. A choice with no available option is skipped and gets no
+  answer, so a `deity` choice can apply to clerics only. An id the provider returns that the
+  choice doesn't define is dropped with a `plugin` diagnostic.
+- **Validation:** before a character is created, and before its choices change, the provider
+  may refuse the whole set of answers with a message, for limits that availability can't
+  express.
+- **Start room:** the provider may name the room a new character starts in, given its
+  answers. By default it is the world's start room. A label that doesn't resolve records a
+  `plugin` diagnostic and uses the default.
+- **Completeness:** a character's answers are complete when every choice with an available
+  option (given the answers to the choices before it) has an answer that is one of them. Any
+  other choice with an available option is **missing**.
+- **Failures:** an exception from the provider records a `plugin` diagnostic. During creation
+  the player is told "Character creation isn't working right now; please tell an instructor."
+  and returned to the character menu. In a change (below) the change is refused with the same
+  message.
+
+**Answers on the character:**
+- A player stores its answers as `choices` (choice id → option id), saved with the character
+  (§3.6). Mobs have no choices.
+- An answer whose choice or option the provider no longer defines is kept but has no effect,
+  isn't shown to the player, and leaves its choice missing. A world that removes the plugin,
+  or one option, loses nothing for good, and the player picks again at their next login
+  (§5.12).
+
+**Traits:**
+- A trait is a named bundle of permanent effects: stat deltas, max-vital deltas, resist
+  deltas, flags, and modifiers for the modifier chain (§4.6). Names match `[a-z][a-z0-9_]*`
+  and are unique across all plugins. Each has a `label` for players and a `doc`.
+- A player's traits are those its chosen options grant, plus traits **granted** to it
+  directly (a curse, a blessing), in name order without repeats. Granted traits are saved
+  with the character. Option traits are worked out from the answers whenever they change and
+  when the character loads, so a plugin update that changes what an option grants reaches
+  every character.
+- A mob's traits are its prototype's `traits` (§4.2), plus traits granted to that mob, in
+  name order without repeats. A guild trainer declared with `traits = ["mage"]` passes the
+  same restrictions a mage player does, and has the same bonuses. Prototype traits follow
+  the prototype on reload; granted ones are saved with the mob (§3.6). Mobs have no choices.
+- A saved granted trait that no plugin defines is kept and has no effect. `@stat` lists it as
+  unknown. A mob prototype naming an undefined trait fails its package's load instead
+  (§4.2).
+- Traits aren't affects: they never expire, `dispel` never touches them, and `affects` and
+  `Char.Affects` don't list them.
+- **Effects** of the traits an actor carries, the same for players and mobs:
+  - **Stats:** trait deltas join affect, equipment and encumbrance deltas in the effective
+    value. Base stats don't change.
+  - **Vitals:** a vital's effective maximum is its saved (base) maximum plus the trait
+    deltas, at least 0. Everything that reads a maximum reads the effective one: views, the
+    rules, `regen` and `heal` caps, `look`, the prompt, GMCP and invariant 3 (§3.8). Gaining a
+    trait leaves `current` as it is; losing one caps `current` at the new effective maximum.
+  - **Resists:** the effective resist is the base resist plus the trait deltas. `mitigate`
+    and the views see the effective value.
+  - **Flags:** a trait's flags are the actor's flags while it carries the trait, as an
+    untimed affect's would be (`has_flag`, `silenced`, `no_regen`). `stunned` can't be a trait
+    flag.
+  - **Modifiers:** at the `to_hit`, `damage` and `initiative` points (`combat` feature) and
+    `move_cost` and `regen`. They join the chain after the room's modifiers and before the
+    actor's affects (§4.6), and `@trace` shows them as `trait:<name>`. Like a script modifier,
+    one that fails or returns the wrong type leaves the value as it was; the failure is a
+    `plugin` diagnostic.
+- Schema names in a trait (stats, vitals, damage types) are checked when the plugin
+  registers it (§4.15).
+
+**Restrictions** are checks that plugins register at four points. Each gets the actor and
+what it is about to do, and either allows it or refuses with a message.
+
+| Point | Checked | Subject | Feature |
+|---|---|---|---|
+| `wear` | `wear` and `wield` (and their renames), before the item moves | the item and the slot it would fill | kernel |
+| `enter` | every room transition that runs `before_enter`, just before it | the destination room, the room being left, the direction (`None` for `teleport`) | kernel |
+| `cast` | wherever `rules.cast_allowed` is asked, just before it | the skill and its target | `skills` |
+| `learn` | a plugin setting a skill on an actor (§4.15) | the skill and the proficiency | `skills` |
+
+- Checks apply to every actor, players and mobs alike; a check that only cares about players
+  allows mobs.
+- All checks at a point run in plugin id order, and in registration order within a plugin.
+  The first refusal wins. A player sees its message, and a refused action costs no lag, as a
+  veto (§5.3). For a mob the action just fails.
+- A check that throws records a `plugin` diagnostic and allows, so a broken plugin can't lock
+  everyone out of a room.
+- Being staff doesn't exempt anyone. A check may read the actor's role (§4.15) and allow
+  builders through, for example.
+- Restrictions only see what an item, skill or room declares. **Tags** (§4.2) are how
+  content opts in: `item("plate_mail", tags = ["heavy_armor"])` and a `wear` check that
+  refuses `heavy_armor` to mages. The engine gives tags no meaning.
+- Script content restricts with the vetoes it already has: `before_enter`, `before_cast` and
+  `cast_allowed` can read `ctx.actor.choices` and `ctx.actor.has_trait(...)`. There is no
+  script hook for `wear`.
+
+**Changing choices later.** Choices are permanent unless a plugin changes them. The engine
+provides the mechanism (`setChoices`, `grantTrait` and `removeTrait`, §4.15) and no player
+command for it. Ways to change in play (a shrine that changes your race, a trainer who lets
+you change class) are plugin features. A change:
+1. is checked as creation is: every answer must be available given the answers before it,
+   and then the provider validates the whole set. A refusal changes nothing.
+2. sets the answers and works out the traits again. Effective values follow at once;
+   `current` vitals are capped at the new maxima.
+3. checks every worn item against `wear` again. Each refused item is moved to the
+   inventory, and a player is sent the refusal message.
+4. doesn't run `rules.starting_stats` again: base stats, base maxima and skills stay.
+5. triggers an immediate capture (§5.11).
+
+Removing an answer leaves that choice missing, so the player chooses it again at their next
+login (§5.12). That is how a plugin lets a player re-pick without building its own prompts.
+Granting or removing a trait follows steps 2 to 5, for players and mobs alike; for a mob,
+step 5 only marks it dirty, as any mob change does. A prototype trait can't be removed from
+one mob.
+
+**Script access** is read-only:
+- The actor view has `choices` (a dict, empty for mobs and when nothing is chosen), `traits`
+  (sorted names of the known traits it carries, for players and mobs) and `has_trait(name)`
+  (§4.5). `base` gains
+  `base.max_<vital>` and `base.resists.<type>`. The rules ctx's actor views have the same
+  fields.
+- `rules.starting_stats` runs with the new character's answers and traits already set, so it
+  can read `ctx.actor.choices` (class hit dice, say). For a mob it runs with the prototype's
+  traits set. Its stats and maxima are base values; the traits' deltas apply on top.
+- Content names traits only on mob prototypes (`traits = [...]`). Scripts can't change
+  choices or traits; a `//lib` that needs to can call builtins its plugin exposes.
+
+**Players see** their choices and traits in `score` (§4.9) and through GMCP: `Char.Creation`
+during the creation steps and `Char.Traits` in play (§4.10). `gups docs --world` lists the
+choices, options, traits and restrictions on `plugins.html` (§4.16).
 
 ---
 
@@ -3101,8 +3523,8 @@ reload is refused for both.
   - A cascade ends after each input line, after each actor's action in a tier, after the
     timer phase, and after the action phase.
   - Triggers: an item moving from one player's custody to another's, a shop purchase, a
-    bank deposit, a level-up, character creation or deletion, and logout or quit. (Shops and
-    banks don't exist yet.)
+    bank deposit, a level-up, character creation or deletion, a change of choices or
+    granted traits (§4.19), and logout or quit. (Shops and banks don't exist yet.)
   - The receive and the give are always captured at the same moment and land in the same
     transaction, which closes the classic give-then-crash duplication exploit.
 - **The writer:**
@@ -3230,13 +3652,68 @@ reload is refused for both.
     background pool (§2.5). Lines typed while it is pending are held (at most 20) and
     replayed in order when it finishes: to the login, or as game commands once a character
     is playing.
-- **Characters:** After login, the player chooses a character, or creates one with the
-  stats `rules.starting_stats` gives it (§4.6); the player makes no choices. The menu
-  lists saved characters plus any of the account's characters in the world not saved yet.
-  Creating a character triggers an immediate checkpoint. The character is placed in its
-  saved room, which becomes an anchor; new characters start in the start room (§2.3). The
-  role and idle exemption come from the account each time a character is entered. Loading a
-  saved character is refused in maintenance mode.
+- **Characters:** After login, the player chooses a character, or creates one with `new`:
+  a name, then the creation steps if the world has a creation provider (§4.19), then the
+  stats `rules.starting_stats` gives it (§4.6). Without a provider there are no steps. The
+  menu lists saved characters plus any of the account's characters in the world not saved
+  yet. Creating a character triggers an immediate checkpoint. The character is placed in its
+  saved room, which becomes an anchor; new characters start in the provider's start room for
+  their answers, or else the world's start room (§2.3). The role and idle exemption come from
+  the account each time a character is entered. Loading a saved character is refused in
+  maintenance mode.
+- **Creation steps:** one prompt per choice that has an available option, in order, then a
+  confirmation:
+
+  ```
+  > new
+  What will your new character be called? Ann
+  Choose your race:
+    1. Human   Adaptable and ambitious.
+    2. Elf     Quick, keen-eyed and long-lived.
+    3. Dwarf   Stout, stubborn and hard to kill.
+  Type a number or a name, "help <name>" to learn more, "back" or "cancel".
+  > elf
+  Choose your class:
+    1. Warrior  Steel and stamina.
+    2. Mage     Spells, and little armor.
+  Type a number or a name, "help <name>" to learn more, "back" or "cancel".
+  > 2
+  Ann: Race Elf, Class Mage. Create this character? (yes, back or cancel)
+  > yes
+  Welcome, Ann.
+  ```
+
+  - **Options** are listed available ones only, numbered from 1, with the label padded to
+    the longest one's width and then the summary. An answer is a number, an option id or a
+    label, compared case-insensitively, or a prefix of exactly one id or label. Anything else
+    gets "There's no <answer> to choose here." and the list again.
+  - `help <name>` shows that option's label and its `help` (or its summary when it has none),
+    then asks again. `help` alone shows the hint line.
+  - `back` goes to the previous step that was asked; from the first choice it goes back to
+    the name prompt, keeping the answers. Answering a choice again clears the answers after
+    it, since what is available may change.
+  - `cancel` returns to the character menu and creates nothing.
+  - The confirmation lists every answer as `<title> <label>`, in choice order, separated by
+    ", ". `yes` (or `y`) creates the character, `back` returns to the last choice, and
+    `cancel` returns to the menu. Anything else asks again.
+  - On `yes` the provider validates the answers. A refusal is shown and the player goes back
+    to the last choice. The name is then checked again; if it was taken meanwhile the player
+    is told and asked for another name, keeping the answers. Then come the character limit and
+    maintenance checks, as for any creation.
+  - The character is built with its answers set, so its traits apply; then
+    `rules.starting_stats` runs (§4.6). A vital `starting_stats` gives no `current` for starts
+    at its effective maximum. The character enters the world, and then the provider's
+    `created` callback runs (§4.15).
+  - Every step is a prompt for the 60-second idle rule. A line typed while the account step
+    before it is still pending is held and replayed, as for the other prompts.
+  - The engine texts are message catalog entries (§4.18), in the `login.creation.*` group.
+    Choice titles, prompts, labels, summaries and help come from the provider.
+- **Missing choices:** a saved character with a missing choice (§4.19) is taken through just
+  those steps, then the confirmation, when the player chooses it at the menu: "Ann has
+  choices to make before playing." On `yes` the answers are validated and set as a change
+  (§4.19 steps 2 to 5), the character enters the world as usual, and `created` runs with
+  `newCharacter = false`. `cancel` goes back to the menu without entering. A character taken
+  over while already in the world isn't asked.
   - **One character at a time:** an account plays one character at a time, across every
     transport. Choosing a different character while one is in the world (link-dead
     included) is refused with "You're already playing Ann." Instructors are bound by this
@@ -3260,7 +3737,9 @@ reload is refused for both.
     closed.
   - The server asks for a character name: 2 to 16 letters, capitalized. Naming a character
     that is already playing takes it over and closes the old connection. Otherwise a saved
-    character is restored, or a new one is created and saved at once.
+    character is restored, or a new one is created and saved at once. With a creation
+    provider, a new character, or a saved one with a missing choice, goes through the
+    creation steps first, as above; `cancel` asks for a name again.
   - The one-character-at-a-time rule doesn't apply: several characters at once help testing.
   - While the database can't be written, new logins are refused with a maintenance message;
     taking over a character still works.
@@ -3516,7 +3995,21 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
   - **Plugins:** every extension point end to end in the server and in `gups test`; each
     loading failure skipping only its plugin; every name clash refused; deploys touching
     `plugins/` refused while other deploys keep plugins working; no `core` or `script` type
-    in the public `gups.pluginapi` surface; the sample plugin's unit and end-to-end tests.
+    in the public `gups.pluginapi` surface; the sample plugins' unit and end-to-end tests.
+  - **Creation, traits and restrictions:** the creation flow over telnet, WebSocket and
+    `--dev` (numbers, ids, labels and prefixes; `help`; `back` and `cancel` from every step;
+    skipped choices; availability changing after an earlier answer is changed; a validation
+    refusal; a name taken during the steps; the idle timeout); missing choices at login
+    after an option or the plugin is removed; `Char.Creation` payloads and `null`; trait
+    effects on effective stats, maxima, resists and flags, with `current` capped on loss and
+    invariant 3 checked; mob prototype traits (load errors for unknown names, effects,
+    restrictions, following a reload) and traits granted to a mob surviving a restart;
+    trait modifiers in chain order with `@trace`; each restriction
+    point refusing with no lag, allowing mobs and staff when the check says so, and
+    allowing on an exception; a change re-checking worn items; saved answers and granted
+    traits surviving a restart and an unknown trait being kept; every registration rule
+    refused; a world without a provider behaving byte-identically to one built before this
+    feature.
 - **Property-based tests:**
   - Random sequences of item verbs never violate the single-location or forest invariant.
   - Random checkpoint, kill, and restore sequences never duplicate or lose an item that
@@ -3580,7 +4073,10 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
    - The whole world loads together in the harness, with the bubble off and a default seed
      of 42.
    - The fuzz walker runs 10,000 pulses through the changed zones with one bot player per
-     changed zone. Each pulse, dead or absent bots respawn in a zone room, bots whose
+     changed zone. With a creation provider (§4.19), each bot gets complete answers drawn
+     with the seeded RNG from the available options, in choice order, redrawn when the
+     provider refuses (up to 10 tries, then the bot has no choices), and a respawned bot
+     keeps them. Each pulse, dead or absent bots respawn in a zone room, bots whose
      condition isn't `ok` or who have a vital below a quarter of its maximum get every
      vital set to its maximum, and a bot whose `wait_state` exceeds 50 pulses has it cleared. Idle bots
      pick randomly among exits, zone and item commands with empty arguments,
@@ -3633,3 +4129,4 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is
 | **M8** | Disabling accounts: `@role disable`/`enable`, the disabled record (migration 4), and the roster's `disabled` column (§3.5, §4.9, §4.13). |
 | **M9** | Configurable actor schema: stats, vitals, damage types and channels declared in `MODULE.gups`; typed constructors and schema view fields; no built-in ruleset, with `starting_stats`, `condition`, vital-keyed `mitigate`/`move_cost`/`regen`, the dry run and neutral results; incapacitation; `Char.Schema`; the plugin facade by name; `--wipe`; `samples/robot-world` (§3.9, §4.6, §6.3). |
 | **M10** | Feature modules: `combat`, `track`, `skills` and `leveling` turned on per world, command renames, the engine message catalog and `MESSAGES.gups`, plugin feature requirements (§3.10, §4.18). Ships in the same release as M9. |
+| **M11** | Character creation: plugin-declared choices asked at creation over telnet, the web client and `--dev`; traits with effective stats, maxima, resists, flags and modifiers; restrictions on wearing, entering, casting and learning; `tags`; the choice, trait and skill verbs; `Char.Creation` and `Char.Traits`; `samples/heritage-plugin` (§4.19, §4.15, §5.12). |
