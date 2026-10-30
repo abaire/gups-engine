@@ -64,6 +64,23 @@ internal fun World.fillVitals(actor: Actor) {
   actor.dirty = true
 }
 
+/**
+ * Lowers every vital of [actor] that is above its effective maximum to that maximum, as after a
+ * maximum falls. Returns whether any vital changed; the condition is left to the caller.
+ */
+internal fun World.capVitals(actor: Actor): Boolean {
+  var changed = false
+  for ((name, v) in actor.vitalMap) {
+    val effMax = actor.max(name)
+    if (v.current > effMax) {
+      setVital(v, effMax)
+      changed = true
+    }
+  }
+  if (changed) actor.dirty = true
+  return changed
+}
+
 /** Gives [actor] one [Vital] per declared vital, all at 0, for a new actor. */
 internal fun World.initVitals(actor: Actor) {
   actor.vitalMap.clear()

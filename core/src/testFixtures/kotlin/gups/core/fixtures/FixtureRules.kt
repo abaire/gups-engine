@@ -44,6 +44,9 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   /** Replaces `on_level_up` when set. */
   var levelUpOf: ((RulesContext) -> LevelUpResult?)? = null
 
+  /** Replaces `xp_to_level` when set. */
+  var xpToLevelOf: ((Int) -> Long)? = null
+
   /** Replaces `sense_cost` when set. */
   var senseCostOf: ((RulesContext) -> Int)? = null
 
@@ -203,7 +206,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   override fun xpForKill(c: RulesContext): Long = 50L * c.defender.level
 
-  override fun xpToLevel(level: Int): Long = 1000L * level
+  override fun xpToLevel(level: Int): Long = xpToLevelOf?.invoke(level) ?: (1000L * level)
 
   override fun onLevelUp(c: RulesContext): LevelUpResult? = levelUpOf?.invoke(c)
 
