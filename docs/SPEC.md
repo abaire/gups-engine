@@ -735,7 +735,7 @@ as leaving it out.
 | `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                              | —        |
 | `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                        | `combat` |
 | `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status`                                                                                                  | —        |
-| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                          | —        |
+| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                | —        |
 
 - **A feature that is off doesn't exist** for the world:
   - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
@@ -3290,7 +3290,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     fallback result. Under the **safe-neutral-fallback principle**, rules errors never hurt, kill, reward, or trap
     actors: attacks miss (`to_hit = 0`), no damage or vital loss occurs, movement and lag penalties are zeroed,
     perception hops are blocked, casts fail harmlessly, and player deaths fall back to safe respawns at effective vital
-    maxima without XP loss. Complete neutral fallback mappings and host integration are documented in
+    maxima without XP or level loss. Complete neutral fallback mappings and host integration are documented in
     [Rules.kt](../script/src/main/kotlin/gups/script/Rules.kt) and
     [Host.kt](../script/src/main/kotlin/gups/script/Host.kt).
 

@@ -6,42 +6,77 @@ and vital gains through the rules, the engine remembers what every level gave, a
 once or wait for an event such as a trainer. Kill XP and the XP curve move into the rules where they belong, and scripts
 get verbs to award, steal and drain experience and levels.
 
-This milestone resolves two gaps in [DESIGN_NEEDED.md](DESIGN_NEEDED.md): `### Level-up gains` and `### Experience
-subsystem and scaling`. It opens two new entries there, which are already in that file.
+This milestone resolves two gaps that used to be in [DESIGN_NEEDED.md](DESIGN_NEEDED.md), `Level-up gains` and
+`Experience subsystem and scaling`. Both were deleted when this design was approved. It leaves two new entries there:
+`Group, party and pet XP sharing` and `Skill-based advancement (worlds without character levels)`.
 
-It builds on [M13](MILESTONE_13.md), which must be merged first. It bumps neither `api_version` nor `PluginApi.VERSION`:
-the engine is unreleased, so the new export, hook, verbs and fields join `api_version` 1 (§1.3). Nothing here needs a
-schema migration or a compatibility shim for old saves: the engine is unreleased.
+It builds on [M13](MILESTONE_13.md) and on the [M15](MILESTONE_15.md) spec refactor, both already merged. It bumps
+neither `api_version` nor `PluginApi.VERSION`: the engine is unreleased, so the new export, hook, verbs and fields join
+`api_version` 1 (§1.3). Nothing here needs a schema migration or a compatibility shim for old saves.
 
-Read [AGENTS.md](../AGENTS.md) before starting. The source of truth is [SPEC.md](SPEC.md); step 1 applies the wording
-below to it. After that, where this file and the spec differ, the spec wins.
+## How to use this document
 
-|                 Section                  |                                                       What it says about this milestone                                                        |
-|------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| **§4.6 Rules Module and Modifier Chain** | The exports table, signatures, the dry run, the template ruleset: `on_level_up`, `on_player_death` `level_loss`, the XP curve and kill scaling |
-| **§5.4 Combat Rounds**                   | Death and the "Levelling" bullet                                                                                                               |
-| **§3.10 Feature Modules**                | What `leveling` owns                                                                                                                           |
-| **§3.9 World Schema**                    | The `level_mode` key                                                                                                                           |
-| **§4.4 Hook Catalog**, §4.5 The ctx      | `on_level_change`, `old_level`, `new_level`, the four verbs, `pending_levels`                                                                  |
-| §3.3, §3.6                               | `levelGains` on actors and in the payloads                                                                                                     |
-| §4.12, §4.15, §4.18                      | Harness verbs, the plugin facade, the engine messages                                                                                          |
-| §5.11                                    | Level-down as an immediate-checkpoint trigger                                                                                                  |
-| §6.3                                     | The neutral result of `on_level_up`                                                                                                            |
-| §4.16, §4.17                             | The API model, `since`, the changelog and the API-change check                                                                                 |
-| §7.1, §7.4                               | The tests and the milestone row                                                                                                                |
+Read [AGENTS.md](../AGENTS.md) before starting.
+
+- **The spec is already updated.** The M14 wording was applied to [SPEC.md](SPEC.md) before M15 refactored it. Phases 1
+  and 2 only check that the wording survived and make one small fix. If this document and the spec disagree, the spec
+  wins. The **Design** section below supplies the detail the spec now leaves to KDoc.
+- **KDoc carries the detail.** Since M15, SPEC.md describes behavior at a high level and the exact contracts live in
+  KDoc on the Kotlin source that implements them. Every phase that adds a class, function, constant or rules export also
+  writes its KDoc. The exit condition lists which KDoc that phase must add.
+- **No spec citations in code.** KDoc and comments in `.kt` files must never contain `§`, `SPEC` or a decision ID such
+  as `D-005`. State the behavior directly.
+- **Run the phases in order, one at a time.** Each phase has one task. Do not start a phase until the previous phase's
+  exit condition holds. Where a phase lists the files it **Touches**, that list is the scope of its one task, not a
+  series of separate steps: the task only ends green once all of them are done.
+- **Every phase ends green.** Every exit condition includes the **standing checks** below, even when it does not repeat
+  them. A phase that changes an interface also updates every implementer in that same phase. A phase that adds a public
+  script or plugin symbol also updates the API files (see **API files** below) in that same phase.
+- **Write tests from this document, before or with the code.** Each phase lists the tests that must exist and pass when
+  it ends. Name tests by behavior, as the existing ones do. Each bullet is at least one test.
+- **Stages.** The §7.4 milestone row names three stages. **M14.1** is phases 3 to 12, **M14.2** is phases 13 to 19, and
+  **M14.3** is phases 20 to 25. Phases 1 and 2 check the spec, and phase 26 verifies the whole milestone.
+
+### Standing checks
+
+Run every Gradle command with `BypassSandbox: true`, so that the Gradle client can reach the local daemon.
+
+1. `./gradlew check` exits 0, with no Kotlin warnings and with the template world's tests passing.
+2. `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns 0 matches.
+3. If you edited any Markdown file, `./gradlew markdownFormat` has been run.
+
+### API files
+
+When a phase adds or changes a script-facing or plugin-facing symbol (a rules export, a ctx verb or field, a view field,
+a hook, a harness verb or a facade member), it also does all of the following:
+
+1. Describe the symbol where the API model reads it: its `@StarlarkMethod` doc, its `RulesExportSpec`, or its entry in
+   `script/.../ApiModel.kt`. A new symbol needs no `@ApiSince`, because it joins `api_version` 1, the current version.
+2. Regenerate the golden copies with `./gradlew :cli:test -Dgups.updateGolden=true` and review the diff.
+3. Regenerate the baseline `docs/api/api-1.json`: run `./gradlew :cli:installDist`, then
+   `cli/build/install/gups/bin/gups docs --update-baseline` from the engine checkout (README, **Releasing**).
+   `ApiDiffTest` must then pass.
+4. Add a line to `docs/CHANGELOG.md` under `## api_version 1 (unreleased)`. Use one `### Experience and levels` heading
+   for the whole milestone and keep adding to it.
 
 ## Design (settled)
 
-These were decided with the maintainer and are not open.
+These points were decided with the maintainer and are not open. If something here is not covered and you have to make a
+choice, log it in `DECISIONS.md` as usual and propose the wording in your summary.
 
 ### Scope
 
-1. **In:** level-up gains; a stepped, reversible level change with a stored gain record; deferred level application;
-   script verbs for XP and levels; the `on_level_change` hook; level-difference kill XP, a quadratic curve and
-   within-level death XP loss, all in the template rules; rules-driven level loss at death.
-2. **Out, tracked in `DESIGN_NEEDED.md`:** group, party, pet and assist XP sharing (step 9 opens the entry), and
-   skill-based advancement for worlds without character levels (step 9 opens the entry). A world without character
-   levels turns `leveling` off and nothing in the kernel may then assume a `level`.
+1. **In:**
+   - Level-up gains.
+   - A stepped, reversible level change with a stored gain record.
+   - Deferred level application.
+   - Script verbs for XP and levels.
+   - The `on_level_change` hook.
+   - Level-difference kill XP, a quadratic curve and within-level death XP loss, all in the template rules.
+   - Rules-driven level loss at death.
+2. **Out, tracked in `DESIGN_NEEDED.md`:** group, party, pet and assist XP sharing, and skill-based advancement for
+   worlds without character levels. A world without character levels turns `leveling` off, and nothing in the kernel may
+   then assume a `level`.
 3. **Not engine concerns.** Level-difference scaling, the curve and who is penalised at death are rules. The engine adds
    no `xp_scale` modifier point, no level cap and no diminishing-returns state.
 
@@ -55,7 +90,7 @@ These were decided with the maintainer and are not open.
    `deferred` mode only a script does.
 
 `xp_to_level` must be strictly increasing: `xp_to_level(L) > xp_to_level(L - 1)` for every `L >= 2`. A value that isn't
-is a bad return value (a rules error, §6.3) and stops the loop that found it. A single call never applies more than
+is a bad return value (a rules error) and stops the loop that found it. A single call never applies more than
 `MAX_LEVEL_STEPS = 100` steps, and `pending_levels` never counts past it.
 
 ### The level mode
@@ -72,15 +107,15 @@ changing it needs only a restart.
 
 ### The level step up
 
-`World.levelUp(a): Boolean`, the only code that raises a level. It first checks that the actor is eligible (it has
-`pending_levels > 0`); if not it returns `False` and changes nothing. Otherwise:
+`World.levelUp(a): Boolean` is the only code that raises a level. It first checks that the actor is eligible (it has
+`pending_levels > 0`). If not, it returns `false` and changes nothing. Otherwise:
 
 1. `a.level += 1`.
 2. Call `rules.on_level_up(ctx)` with `ctx.actor = a` (the new level already set) and `ctx.rng`. There is no `old_level`
    on this ctx; it is `ctx.actor.level - 1`.
 3. Validate the result. It is `None` or a struct with optional `stats` (a `stats(...)`), `max` (a `vitals(...)`) and
    `current` (a `vitals(...)`). Names are checked against the schema. All three are **deltas** and may be negative. A
-   rules error counts as an empty result (§6.3): the level is still raised.
+   rules error counts as an empty result: the level is still raised.
 4. Add `stats` to the actor's base stats and `max` to its base vital maxima. Add `current` to its current vitals. Cap
    every current vital at its new effective maximum.
 5. If `stats` or `max` is not empty, store them as `a.levelGains[a.level]`, replacing any older entry. `current` is not
@@ -88,13 +123,13 @@ changing it needs only a restart.
 6. Tell the actor `LevelingMsg.LEVEL_UP`.
 7. Ask `condition` once for the vitals that changed (§5.4). A `current` delta that kills is the rules' business.
 8. Dispatch `on_level_change` (below) with `old_level = a.level - 1` and `new_level = a.level`.
-9. Mark the actor dirty and return `True`.
+9. Mark the actor dirty and return `true`.
 
 In `deferred` mode the caller then tells the actor `LevelingMsg.READY` if levels are still pending.
 
 ### The level step down
 
-`World.levelDownStep(a)`, the only code that lowers a level; the caller guarantees `a.level >= 2`:
+`World.levelDownStep(a)` is the only code that lowers a level. The caller guarantees `a.level >= 2`.
 
 1. Take `a.levelGains.remove(a.level)`, if any. A level with no entry unwinds nothing.
 2. Subtract its `stats` from the base stats and its `max` from the base vital maxima.
@@ -106,24 +141,26 @@ In `deferred` mode the caller then tells the actor `LevelingMsg.READY` if levels
 7. Dispatch `on_level_change` with `old_level = a.level + 1` and `new_level = a.level`.
 8. Mark the actor dirty.
 
-`World.levelDown(a, count): Int` repeats the step `count` times, stops at level 1, tells the actor
-`LevelingMsg.LEVEL_DOWN` once if at least one step ran, asks for an immediate checkpoint for a player, and returns the
+`World.levelDown(a, count): Int` repeats the step `count` times and stops at level 1. If at least one step ran, it tells
+the actor `LevelingMsg.LEVEL_DOWN` once and asks for an immediate checkpoint for a player. It returns the number of
 steps taken. The rules are never called: the engine subtracts exactly what it stored, so gains that used `ctx.rng`
 unwind exactly, and so do gains from a rules package that has since changed.
 
 ### Awarding and taking XP
 
-- `World.awardXp(a, amount)` (existing): ignored unless `leveling` is on and `amount > 0`. Adds the XP, tells
-  `LevelingMsg.GAIN`. In `auto` mode it then calls `levelUp(a)` until that returns `False`, at most `MAX_LEVEL_STEPS`
-  times; levels still pending after the cap wait for the next award. In `deferred` mode it sends `LevelingMsg.READY`
-  when `pending_levels` went from 0 to above 0. For a player whose level changed it requests an immediate GMCP
-  `Char.Status` once, at the end. The kill path calls it exactly as today (debug mobs and summons award nothing).
+- `World.awardXp(a, amount)` (it exists today): ignored unless `leveling` is on and `amount > 0`. It adds the XP and
+  tells `LevelingMsg.GAIN`.
+  - In `auto` mode it then calls `levelUp(a)` until that returns `false`, at most `MAX_LEVEL_STEPS` times. Levels still
+    pending after the cap wait for the next award.
+  - In `deferred` mode it sends `LevelingMsg.READY` when `pending_levels` went from 0 to above 0.
+  - For a player whose level changed it requests an immediate GMCP `Char.Status` once, at the end.
+  - The kill path calls it exactly as today (debug mobs and summons award nothing).
 - `World.takeXp(a, amount): Long` removes `min(amount, a.xp)`, returns the amount removed, and sends nothing. It never
   changes `level`.
-- **Pending levels:** `pending_levels(a)` counts the consecutive `k >= 0` with `a.xp >= xp_to_level(a.level + k)`, up to
+- **Pending levels:** `pendingLevels(a)` counts the consecutive `k >= 0` with `a.xp >= xp_to_level(a.level + k)`, up to
   `MAX_LEVEL_STEPS`. It stops at the first `k` for which the threshold is not strictly increasing.
 - **READY is stateless and only for `deferred` worlds:** it is sent when an award takes `pending_levels` from 0 to above
-  0, and after a `ctx.level_up` that leaves levels pending. It is not repeated by later gains.
+  0, and after a `ctx.level_up` that leaves levels pending. Later gains do not repeat it.
 
 ### Script verbs and fields
 
@@ -141,18 +178,40 @@ included). Each takes the same arguments in the plugin facade.
 Not added: `set_xp`, `set_level`, a `drain_level` effect primitive, a script hook for XP changes. Halving is `take_xp(a,
 a.xp // 2)` and zeroing is `take_xp(a, a.xp)`.
 
+The plugin facade gets exactly these members on `PluginWorld`, and `val pendingLevels: Int` on `PluginActor`:
+
+```kotlin
+fun awardXp(actor: PluginActor, amount: Long)
+fun takeXp(actor: PluginActor, amount: Long): Long
+fun levelUp(actor: PluginActor): Boolean
+fun levelDown(actor: PluginActor, count: Int = 1): Int
+```
+
+They throw `IllegalStateException` naming the feature when `leveling` is off, as `level` does, and
+`IllegalArgumentException` when `amount` or `count` is below 1.
+
+The harness `w` handle gets `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)` and
+`level_down(actor, count=1)`, with the verbs' arguments and return values.
+
 ### The `on_level_change` hook
 
 - Catalog row: `on_level_change`, no veto, attaches to `Mob`, `Room` and `Item` (carried or equipped), needs `leveling`.
 - Key ctx fields: `actor` (the one whose level changed), `old_level`, `new_level`. `old_level` and `new_level` are two
-  new ctx fields, added to the list in §4.5 and to the exact-fields rule; they differ by exactly one.
-- Fires only from `levelUp` and `levelDownStep`, once per step, after the gains or the unwinding, the record update and
-  the message, so the hook sees the new state. Every cause of a level change (a kill, `award_xp`, `level_up`,
+  new ctx fields; they differ by exactly one, and are `None` for every other hook.
+- It fires only from `levelUp` and `levelDownStep`, once per step, after the gains or the unwinding, the record update
+  and the message, so the hook sees the new state. Every cause of a level change (a kill, `award_xp`, `level_up`,
   `level_down`, `level_loss`) therefore fires it exactly once per level, in order (1→2, 2→3 or 4→3, 3→2). `take_xp`
   never fires it.
-- Dispatch is the `on_death` shape and the §5.6 order: the actor's own hook if it is a mob, then the room, the other
-  actors in the room, the items in the room, then the actor's carried and equipped items (its direct inventory, not the
-  contents of containers it carries), then the observers' items. An item or mob without the hook costs a lookup.
+- Dispatch has the `on_death` shape and the §5.6 order:
+  1. The actor's own hook, if it is a mob.
+  2. The room.
+  3. The other actors in the room.
+  4. The items in the room.
+  5. The actor's carried and equipped items (its direct inventory, not the contents of containers it carries).
+  6. The observers' items.
+
+  An item or mob without the hook costs only a lookup.
+
 - Cascades follow §5.6: depth 8 and a shared step budget.
 
 ### Death
@@ -170,9 +229,39 @@ a.xp // 2)` and zeroing is `take_xp(a, a.xp)`.
 The engine enforces no XP floor: it keeps `xp >= 0` and `level >= 1` and nothing else. A level loss applies the "never
 owed the level just lost" rule of the step down.
 
+### Failure handling
+
+- `on_level_up` and `xp_to_level` errors are rules errors: reported to the instructors, with the neutral result used for
+  that call.
+  - A failing `on_level_up` gives **no gains**, and the level is still raised.
+  - A failing `xp_to_level` gives `Long.MAX_VALUE` (it already does), so no level-up happens.
+  - A failing `on_player_death` gives **no level loss**, as well as no XP loss.
+- The dry run calls `on_level_up` once for each synthetic actor with its level set to 2, after `starting_stats`. The
+  result is validated but not applied. The dry run also calls `xp_to_level` for levels 1 through 50 and fails the rules
+  package's load if the values are not strictly increasing.
+
+### Persistence
+
+`levelGains` is a map from the level reached to `{stats, max}` (each omitted when empty). It is stored in the player
+payload and, when not empty, in the mob delta (like `grantedTraits`). A lost level asks for a player's checkpoint at
+once, as a level-up does (§5.11). No migration: the payload types change directly.
+
+### Messages
+
+New `LevelingMsg` entries, rewordable in `MESSAGES.gups` (§4.18):
+
+|           Id           |            Default text             |   Placeholders   |
+|------------------------|-------------------------------------|------------------|
+| `leveling.level_down`  | `You have fallen to level {level}.` | `level`, `count` |
+| `leveling.ready`       | `You feel ready to advance.`        | none             |
+| `leveling.score_ready` | `You are ready to advance.`         | none             |
+
+`score` prints `Level N (X xp)` and, when `pending_levels > 0`, `LevelingMsg.SCORE_READY` on the next line.
+`Char.Status` and `who` do not change; clients compare `xp` to `xp_next`.
+
 ### The template rules
 
-Everything here is the template ruleset (`template-world/rules/combat.star`) and the Kotlin fixture rulesets, not the
+These belong in the template ruleset (`template-world/rules/combat.star`) and the Kotlin fixture rulesets, not the
 engine:
 
 ```python
@@ -206,326 +295,498 @@ def on_player_death(ctx):
 ```
 
 A comment in `on_player_death` shows the punishing variant: when `xp - xp_loss` falls below the floor, return the
-`level_loss` that `xp_to_level` implies. The comment on `xp_to_level` is corrected to say "total". The template world
-stays in `auto` mode; the deferred-mode trainer is a doc example and a test world (step 8). Worlds that turn `leveling`
-off (`samples/robot-world`) define none of these.
+`level_loss` that `xp_to_level` implies. The template world stays in `auto` mode. The deferred-mode trainer is a doc
+example and a test world (phase 24). Worlds that turn `leveling` off (`samples/robot-world`) define none of these.
 
-### Failure handling
-
-- `on_level_up` and `xp_to_level` errors are rules errors (§6.3): reported to the instructors and quarantined. A failing
-  `on_level_up` is an empty result and the level is still raised. A failing `xp_to_level` returns the neutral value
-  `Long.MAX_VALUE`, so no level-up happens.
-- `on_level_up` is called by the dry run once for each synthetic actor with its level set to 2, after `starting_stats`;
-  the result is validated but not applied. The dry run also calls `xp_to_level` for levels 1 through 50 and fails the
-  rules package's load if the values are not strictly increasing.
-- Neutral result of `on_level_up`: no gains.
-
-### Persistence
-
-`levelGains` is a map from the level reached to `{stats, max}` (each omitted when empty). It is stored in the player
-payload and, when not empty, in the mob delta (like `grantedTraits`). Level-down asks a player's checkpoint to run at
-once, as level-up does (§5.11). No migration: the engine is unreleased, so the payload types change directly.
-
-### Messages
-
-New `LevelingMsg` entries, rewordable in `MESSAGES.gups` (§4.18):
-
-|           Id           |            Default text             |   Placeholders   |
-|------------------------|-------------------------------------|------------------|
-| `leveling.level_down`  | `You have fallen to level {level}.` | `level`, `count` |
-| `leveling.ready`       | `You feel ready to advance.`        | none             |
-| `leveling.score_ready` | `You are ready to advance.`         | none             |
-
-`score` prints `Level N (X xp)` and, when `pending_levels > 0`, `LevelingMsg.SCORE_READY` on the next line.
-`Char.Status` and `who` do not change; clients compare `xp` to `xp_next`.
-
-### Harness
-
-The `w` handle gets `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)` and `level_down(actor,
-count=1)`, with the verbs' arguments and return values.
-
-## Where things are today (after M13)
+## Where things are today
 
 Line numbers drift; search for the names.
 
-- `core/.../world/Combat.kt`: the XP award on a kill (about 216), the player death branch with `xp_loss` and the respawn
-  (about 242), and `awardXp` (about 274).
+- `core/.../world/Combat.kt`: the XP award on a kill (about line 216), the player death branch with `xp_loss` and the
+  respawn (about 240), and `World.awardXp` (about 273).
 - `core/.../world/Leveling.kt`: only `LevelingMsg` (`SCORE_LEVEL`, `GAIN`, `LEVEL_UP`).
-- `core/.../rules/RulesEngine.kt`: `xpForKill`, `xpToLevel`, `onPlayerDeath` and `PlayerDeathOutcome(xpLoss, ...)`.
-- `core/.../model/Entities.kt`: `Actor.level`, `xp` and `grantedTraits` (about 166 to 172).
-- `core/.../world/Hooks.kt`: `HookName.ON_DEATH`; `Combat.kt` dispatches it with `dispatch(HookName.ON_DEATH, ...)`.
-- `core/.../world/Gmcp.kt` (about 99): `Char.Status` with `xp_next = rules.xpToLevel(level)`; `KernelCommands.kt` (about
-  351): the `score` level line.
-- `script/.../Rules.kt`: `run(RulesExport.XP_FOR_KILL ...)` and its siblings (about 556 to 573), the `RulesExport` enum
-  (about 601), the export descriptions (about 806 to 820), and the dry run (about 1035 and 1063).
-- `script/.../Ownership.kt` (about 18 to 20): the `leveling` keys. `script/.../Declarations.kt` (about 260): the hook
-  catalog. `script/.../Ctx.kt` (about 714 to 818): verbs such as `damage`, `heal` and `apply_affect`.
-  `script/.../Views.kt` (about 147): the actor view `level`.
-- `persist/.../Codec.kt` (about 140 to 185, 363 and 434): the player payload and the mob delta.
-- `plugin-api/.../Facade.kt` and `host/Facade.kt` (about 29 to 58 and 333 to 376): the facade, with `applyAffect`,
-  `grantTrait` and `setSkill`.
-- `harness/.../Handles.kt` (about 119 to 173): `spawn_player(level=...)` and the other `w` verbs.
-- Tests that call `awardXp` today: `CombatTest`, `FeaturesOffTest`, `FeatureMatrixTest`. Rulesets to update:
-  `core/src/testFixtures/.../FixtureRules.kt`, `script/src/testFixtures/.../TestWorlds.kt`,
-  `template-world/rules/combat.star`.
+- `core/.../rules/RulesEngine.kt`: `xpForKill`, `xpToLevel` and `onPlayerDeath` on the `RulesEngine` interface (about
+  173 to 181), and `PlayerDeathOutcome(respawn, vitals, xpLoss)` (about 92). The KDoc on `xpToLevel` says "required to
+  reach [level]", which is wrong: it is the total XP at which `level` ends.
+- `core/.../model/Entities.kt`: `Actor.level`, `xp` and `grantedTraits` (about 271 to 287).
+- `core/.../world/Hooks.kt`: `HookName.ON_DEATH` (about 89); `Combat.kt` dispatches it with `dispatch(HookName.ON_DEATH,
+  ...)` (about 211).
+- `core/.../world/Gmcp.kt` (about 102): `Char.Status` with `xp_next = rules.xpToLevel(level)`.
+  `core/.../world/KernelCommands.kt` (about 352): the `score` level line.
+- `script/.../Rules.kt`:
+  - The `StarlarkRules` KDoc with the `## Neutral Fallback Return Values` list (about 307).
+  - `run(RulesExport.XP_FOR_KILL ...)` and its siblings (about 588).
+  - The `RulesExport` enum (about 633) and the `RulesExportSpec` descriptions (about 838).
+  - `dryRunRules` and its KDoc (about 995 to 1100). The KDoc already claims the `xp_to_level` 1 to 50 check, but the
+    code only calls `rules.xpToLevel(1)` (about 1094). Phase 11 brings the code up to the KDoc.
+- `script/.../Ownership.kt` (about 18 to 20): the `leveling` keys, such as `mob.level`, `view:actor.level` and
+  `rules:xp_for_kill`.
+- `script/.../Declarations.kt` (about 260): the hook catalog entry for `ON_DEATH`.
+- `script/.../Ctx.kt` (about 755 to 910): verbs such as `heal` and `apply_affect`. `script/.../Views.kt` (about 147):
+  the actor view `level`.
+- `script/.../WorldModule.kt`: `MODULE.gups` parsing; `channel_priority` (about 187, 315 and 463) is the model for a
+  module argument.
+- `persist/.../Codec.kt`: the `## Entity Delta Rules` KDoc (about 60), and `grantedTraits` in the mob delta and the
+  player payload (about 191, 233, 417, 482, 526 and 562).
+- `plugin-api/.../Facade.kt`: `PluginWorld` (`applyAffect` about 45, `grantTrait` about 69, `setSkill` about 74) and
+  `PluginActor` (about 143). `plugin-api/.../host/Facade.kt`: their implementations (about 182 and 333 to 376).
+- `harness/.../Handles.kt` (about 125 to 180): `spawn_player(level=...)` and the other `w` verbs.
+- Tests that call `awardXp` today: `CombatTest`, `FeaturesOffTest`, `FeatureMatrixTest`.
+- Rulesets to update: `core/src/testFixtures/.../FixtureRules.kt`, `FixedRules` in `core/src/test/.../Fixture.kt`, the
+  rulesets in `script/src/testFixtures/.../TestWorlds.kt`, and `template-world/rules/combat.star`.
+- Doc examples: `script/.../DocExamples.kt`. The tutorial zone: `template-world/zones/tutorial/`.
 
-## Work plan
+## Phases
 
-Work in this order, and write each step's tests from the spec before or with the code. M14.1 is steps 2 to 4, M14.2 is
-steps 5 to 6, M14.3 is steps 7 to 9. Every step ends with `./gradlew check` green and with the template world working.
+Each phase has one **Task**. A **Touches** list names the files that one task has to change to end green. It is scope,
+not a sequence of separate steps.
 
-### 1. Apply the spec changes
+### Phase 1: Verify the spec
 
-The maintainer approved this design, so these edits go straight into `SPEC.md` with no `DECISIONS.md` entry. Anything
-else you find unsettled is logged in `DECISIONS.md` as usual, with proposed wording in your summary.
+**Task:** Confirm that SPEC.md still carries the M14 wording after the M15 refactor, and restore any item that is
+missing.
 
-- **§3.3, Leveling bullet:** after "`level`, `xp`." add: "A player or mob also has `levelGains`, a map from a level to
-  the stat and maximum-vital deltas that level applied, kept so a lost level can be unwound exactly (§5.4)."
-- **§3.6, the `players` row and the Deltas bullet:** add `levelGains` to the player payload; mobs store it when not
-  empty, like `grantedTraits`.
-- **§3.9:** add the `level_mode` argument and its paragraph: "`level_mode = "auto"` (the default) applies a level as
-  soon as the actor has the XP; `"deferred"` only adds XP and waits for `ctx.level_up` (§5.4). It needs the `leveling`
-  feature, and isn't recorded per database."
-- **§3.10, the `leveling` row:** add `levelGains`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`,
-  `level_up` and `level_down` verbs and `pending_levels`.
-- **§4.4, the hook table**, after `on_death`: `| on_level_change | — | Mob, Room, Item (carried or equipped) | actor,
-  old_level, new_level |`. Add after the table: "**`on_level_change`** needs `leveling`. It fires once per level step,
-  after the gains or their unwinding, the message and the gain record, so it sees the new state; a loss of three levels
-  fires it three times."
-- **§4.5, context fields:** add `old_level`, `new_level`. After the existing verbs add exactly:
+**Checklist** (search SPEC.md for the quoted names):
 
-  ```
-  - `award_xp(actor, amount)`: gives `actor` `amount` experience (an int of at least 1) as a kill does: the gain
-    message, then level steps as the world's `level_mode` says (§5.4). Returns `None`.
-  - `take_xp(actor, amount)`: removes up to `amount` experience (at least 1), never below 0, and never changes the
-    level. Sends nothing. Returns the amount removed.
-  - `level_up(actor)`: applies one pending level (§5.4). Returns `True`, or `False` with no change if none is
-    pending. In `auto` mode the engine calls it for each owed level.
-  - `level_down(actor, count=1)`: takes up to `count` levels (at least 1) from `actor`, unwinding the gains they
-    gave, and stops at level 1. Returns the number of levels taken.
-  All four need `leveling`, and `actor` may be a player or a mob.
-  ```
+- §3.3, Actor, **Progression**: `levelGains`.
+- §3.6, the `players` row: `levelGains`.
+- §3.9: the `level_mode` bullet.
+- §3.10, the `leveling` row: `levelGains`, `on_level_up`, `on_level_change`, the four verbs and `pending_levels`.
+- §4.4: the `on_level_change` row, and the `on_level_change` paragraph after the table.
+- §4.5: `old_level` and `new_level` in the context fields; `pending_levels` in the **Leveling** bullet of the actor
+  view; the **Leveling** row of the verb table; the `award_xp`, `take_xp`, `level_up` and `level_down` bullets.
+- §4.6: the `on_level_up` export row; `level_loss` in the `on_player_death` row; the `level_loss`, `on_level_up` and
+  `xp_to_level` bullets under **Signatures and results**; the `on_level_up` and `xp_to_level` sentence in **The dry
+  run**.
+- §4.12: the four verbs in the `w` row.
+- §4.15: `awardXp`, `takeXp`, `levelUp` and `levelDown` in the facade verb list and in **Skills and leveling**.
+- §4.18: `leveling.level_down`, `leveling.ready` and `leveling.score_ready`.
+- §5.4: `level_loss` in the player death bullet, and the **Levelling** bullet.
+- §5.11: "a level lost" among the immediate-capture triggers.
+- §7.1: "reversible leveling steps" and the **Levels** bullet.
+- §7.4: the **M14** row.
 
-  In the actor view list add exactly: "`pending_levels`: how many levels the actor has the XP for and has not been given
-  (§5.4). Reading it without `leveling` is an error, like `level`."
+A missing item is restored from the **Design** section, kept as short as the surrounding refactored text. Do not re-add
+anything M15 moved to KDoc: the template formula table, the §6.3 neutral table, the §4.15 Kotlin code blocks or the
+per-milestone §7.1 lists. Later phases put those details in KDoc. The maintainer approved this design, so these edits go
+straight into SPEC.md with no `DECISIONS.md` entry.
 
-- **§4.6, the exports table**, after `xp_for_kill, xp_to_level`, add exactly: `| on_level_up(ctx) | leveling | None or
-  struct(stats, max, current): deltas. |`. Change the `on_player_death` result to `{"respawn": label, "vitals":
-  vitals(...), "xp_loss": int, "level_loss": int}`.
+**Exit condition:** every checklist item is present in SPEC.md, and `./gradlew markdownCheck` exits 0.
 
-- **§4.6, signatures and results:** add exactly:
+### Phase 2: Add level loss to the §6.3 fallback sentence
 
-  ```
-  - `on_level_up(ctx)`: `ctx.actor` is the actor, with its new `level` already set. The result is `None` or a
-    `struct` with any of `stats`, `max` and `current`, built with `stats(...)` and `vitals(...)`. All are deltas and
-    may be negative. `stats` and `max` change the base values and are remembered for that level so that losing it
-    takes them back (§5.4); `current` is added to the current vitals, which are then capped at the new maxima, and
-    is not remembered.
-  - `xp_to_level(level)` is the total XP at which `level` ends. `xp_to_level(level + 1)` must be greater than
-    `xp_to_level(level)`; a value that is not is a bad return value.
-  - `on_player_death`: `level_loss` (default 0) is the number of levels the player loses after the respawn. It is
-    allowed only with the `leveling` feature, like `xp_loss`. The engine keeps `xp` at 0 or more and `level` at 1 or
-    more and enforces no other floor.
-  ```
+**Task:** In SPEC.md §6.3, **Run time**, change "player deaths fall back to safe respawns at effective vital maxima
+without XP loss" to "player deaths fall back to safe respawns at effective vital maxima without XP or level loss".
 
-  Replace the existing `xp_loss` clause of the `on_player_death` bullet with "`xp_loss` is taken from `xp` before the
-  respawn".
+**Exit condition:** §6.3 has the new wording, and `./gradlew markdownFormat` then `./gradlew markdownCheck` exits 0.
 
-- **§4.6, the dry run:** after "`mitigate` once per declared damage type." add exactly: "`on_level_up` runs once for
-  each synthetic actor as if it had just reached level 2, and its result is checked but not applied; `xp_to_level` runs
-  for levels 1 to 50 and must strictly increase."
+### Phase 3: Add the gain record to the actor
 
-- **§4.6, the template table:** replace the `xp_for_kill`, `xp_to_level` and `on_player_death` rows with exactly:
+**Task:** Add `LevelGain(stats: Map<String, Int>, max: Map<String, Int>)` and `Actor.levelGains: MutableMap<Int,
+LevelGain>` (empty by default) in `core/.../model/Entities.kt`. Nothing writes to it yet.
 
-  ```
-  | `xp_for_kill`     | `50 × victim level`, times `clamp(100 + 20 × (victim level − killer level), 0, 150)` percent |
-  | `xp_to_level`     | `500 × level × (level + 1)`                                                                  |
-  | `on_level_up`     | `max` and `current` `hp` +`5 + con/4`, `mana` +`2 + wis/8`, `move` +5; no stat gains         |
-  | `on_player_death` | respawn at the recall room with `hp` 1, lose 10% of the XP earned within the level; no level loss |
-  ```
-- **§4.12, the `w` row:** add `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor,
-  count=1)`.
-- **§4.15, the facade:** add exactly these members to `PluginWorld`, and `val pendingLevels: Int` to `PluginActor`:
+**KDoc:**
 
-  ```kotlin
-  fun awardXp(actor: PluginActor, amount: Long)
-  fun takeXp(actor: PluginActor, amount: Long): Long
-  fun levelUp(actor: PluginActor): Boolean
-  fun levelDown(actor: PluginActor, count: Int = 1): Int
-  ```
+- `LevelGain`: the base stat and base vital maximum deltas that one level applied, both possibly negative.
+- `Actor.levelGains`: keyed by the level reached; kept so that losing a level subtracts exactly what it added; a level
+  with no entry unwinds nothing; `current` vital changes are never recorded.
 
-  and, in the prose: "These throw `IllegalStateException` naming the feature when `leveling` is off, as `level` does,
-  and `IllegalArgumentException` when `amount` or `count` is below 1."
+**Exit condition:** the standing checks pass.
 
-- **§4.18:** add the three messages in "Messages" above to the catalog, with the same ids, texts and placeholders.
+### Phase 4: Persist the gain record
 
-- **§5.4, Death, the player bullet:** after "applies `rules.on_player_death`" insert ", takes its `xp_loss` from `xp`
-  (never below 0)"; at the end of the bullet add "After the respawn the player loses `level_loss` levels."
+**Task:** Store `levelGains` in the player payload and, when not empty, in the mob delta in `persist/.../Codec.kt`,
+following the pattern `grantedTraits` uses. Each `LevelGain` stores `stats` and `max`, each omitted when empty.
 
-- **§5.4, Levelling:** replace the bullet with exactly:
+**KDoc:** in the `## Entity Delta Rules` KDoc of `Codec.kt`, add `levelGains` to the mob delta fields ("omitted when
+empty") and to what the player payload stores.
 
-  ```
-  - **Levelling** (the `leveling` feature): XP is gained from kills and `award_xp` and lost to `take_xp` and
-    `on_player_death`. An actor is owed level `L + 1` once `xp >= xp_to_level(L)`. In `auto` mode (`level_mode`, §3.9)
-    the engine calls `level_up` for each owed level at once. In `deferred` mode it tells the player "You feel ready to advance." and
-    applies a level only when `level_up` is called. Applying a level raises `level` by one, calls `on_level_up`, adds its
-    `stats` and `max` to the base values and remembers them in `levelGains`, adds its `current` to the vitals, tells the
-    actor, and fires `on_level_change`. Losing a level (`level_down`, or `level_loss` at death) subtracts the remembered
-    gains of that level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most one below
-    `xp_to_level(level)`, and fires `on_level_change`; the rules are not called. A level with nothing remembered
-    unwinds nothing. One call applies at most 100 levels.
-  ```
-- **§5.11:** add "a level lost" to the list of immediate-checkpoint triggers.
-- **§6.3:** add the row `| on_level_up | no gains |` to the neutral-result table.
-- **§7.1:** add exactly: "- **Levels:** the level steps and their gain records, including unwinding random gains;
-  deferred mode and the ready notice; the four verbs and their feature gate; `on_level_change` ordering and cascade
-  depth; `level_loss` at death; the dry-run checks; persistence of `levelGains`; the template's kill scaling, curve and
-  death loss."
-- **§7.4:** add the row `| **M14** | Experience and levels, built in three stages: **M14.1** the reversible level step,
-  `on_level_up`, the gain record, `level_loss` and the template's curve, kill scaling and death loss; **M14.2**
-  `level_mode`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels` and the harness verbs;
-  **M14.3** the `on_level_change` hook, the `score` line and the template examples (§3.9, §4.4, §4.6, §5.4). |`
+**Tests:**
 
-### 2. M14.1 `core`: the level steps
+- `levelGains` round-trips for a player.
+- `levelGains` round-trips for a mob, and an empty map writes nothing to the mob delta.
 
-1. `Actor` gets `levelGains: MutableMap<Int, LevelGain>`; `LevelGain(stats: Map<String, Int>, max: Map<String, Int>)`
-   (`Entities.kt`).
-2. `Leveling.kt` (it exists and holds `LevelingMsg`) also holds `levelUp`, `levelDownStep`, `levelDown`, `takeXp`,
-   `pendingLevels` and `MAX_LEVEL_STEPS`. Move `awardXp` out of `Combat.kt` and rewrite it as above.
-3. `RulesEngine.kt`: add `onLevelUp(c): LevelGain?` (abstract, like the other methods) and `levelLoss: Int` to
-   `PlayerDeathOutcome`. Update every Kotlin ruleset: `FixtureRules.kt` and the rulesets in `TestWorlds.kt`.
-4. `Combat.kt`: the death order above. Delete the stale "no hook for them" wording.
-5. `LevelingMsg`: `LEVEL_DOWN`, `READY`, `SCORE_READY`.
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
 
-**Exit condition:** `./gradlew :core:test` passes with zero warnings.
+### Phase 5: Add the `on_level_up` rules export
 
-### 3. M14.1 `script`: the export and the dry run
+**Task:** Add `on_level_up` to the rules seam and define it in every ruleset that has `leveling` on. Nothing calls it
+yet. This is one change because a rules package with `leveling` on that lacks the export fails to load.
 
-1. `Rules.kt`: `RulesExport.ON_LEVEL_UP("on_level_up")`, parsed into `LevelGain` with schema-checked `stats`, `max` and
-   `current`; `on_player_death` parses `level_loss` (int `>= 0`, refused without `leveling`, like `xp_loss`).
-2. `Ownership.kt`: `owns(Feature.LEVELING, "rules:on_level_up")`.
-3. The dry run (`Rules.kt` near the `xpToLevel(1)` call): the `on_level_up` and `xp_to_level` checks; the neutral result
-   for `on_level_up`.
-4. `persist`: `levelGains` in the player payload and the mob delta (`Codec.kt`).
+The seam is `fun onLevelUp(c: RulesContext): LevelUpResult?` on `RulesEngine`, abstract like the other methods.
+`LevelUpResult(stats, max, current)` holds three name-to-delta maps and sits next to `PlayerDeathOutcome`. Its `stats`
+and `max` become the `LevelGain` that `levelUp` records; `current` is never recorded. `StarlarkRules` parses `None` or a
+`struct` with optional `stats` (`stats(...)`), `max` and `current` (`vitals(...)`), with schema-checked names; a rules
+error gives `null`.
 
-**Exit condition:** `./gradlew :script:test :persist:test` passes.
+**Touches:**
 
-### 4. M14.1 shipped rulesets and docs
+- `core/.../rules/RulesEngine.kt`: the method and `LevelUpResult`. Also fix the KDoc of `xpToLevel` to "the total XP at
+  which [level] ends".
+- `core/src/testFixtures/.../FixtureRules.kt` and `FixedRules` in `core/src/test/.../Fixture.kt`: return `null` unless a
+  test needs gains. Delegating rulesets (`RulesEngine by base`, as in `PerceptionTest`) need no change.
+- `script/.../Rules.kt`: `RulesExport.ON_LEVEL_UP("on_level_up")`, its `RulesExportSpec` and the `StarlarkRules`
+  implementation.
+- `script/.../Ownership.kt`: `owns(Feature.LEVELING, "rules:on_level_up")`.
+- `script/src/test/.../FeatureScriptTest.kt`: add `on_level_up` to the `Feature.LEVELING` export list.
+- `script/src/testFixtures/.../TestWorlds.kt`: the default rules gain an `on_level_up` that returns `None`, so worlds
+  built with `TestWorlds.rules(...)` (as in `RunnerTest`) keep loading.
+- `template-world/rules/combat.star`: `on_level_up` from **The template rules**.
+- Any other rules package with `leveling` on. Find them with `grep -rln xp_to_level --include='*.star' --include='*.kt'
+  .` (skipping `local-world/`). `samples/robot-world` and the other worlds with `leveling` off stay unchanged.
+- The **API files**.
 
-1. `template-world/rules/combat.star`: the four functions above, with the corrected `xp_to_level` comment and the
-   commented punishing variant.
-2. `samples/robot-world` and every test world with `leveling` off: unchanged. Test worlds with it on define
-   `on_level_up`.
-3. API docs: the model, the golden `api.json`, `docs/api/api-1.json` (`gups docs --update-baseline`), and a
-   `CHANGELOG.md` entry under `api_version 1 (unreleased)`. New symbols get `since = 1`.
+**KDoc:**
 
-**Exit condition:** `./gradlew check` passes and the template world's tests are unchanged apart from the new XP numbers.
+- `RulesEngine.onLevelUp` and `LevelUpResult`: `ctx.actor` already has its new level; all three fields are deltas;
+  `stats` and `max` are recorded in `levelGains` and `current` is not; null means no gains.
+- `StarlarkRules`, `## Neutral Fallback Return Values`: add "`on_level_up`: no gains (the level is still raised)."
 
-### 5. M14.2 `core` and `script`: the mode and the verbs
+**Tests:**
 
-1. `WorldModule.kt`/`Schema.kt`: parse `level_mode` (`"auto"` or `"deferred"`), the load error without `leveling`, and
-   pass the mode to the world.
-2. `awardXp`: the deferred branch and `READY`.
-3. `Ctx.kt`: the four verbs, next to `heal` and `damage`; `Views.kt`: `pending_levels` on the actor view; both with the
-   feature refusal.
-4. `Ownership.kt`: register the four verbs, `pending_levels`, `level_mode` and `on_level_change` with
-   `Feature.LEVELING`, using the key syntax already there (`mob.level`, `view:actor.level`, `rules:xp_for_kill`); read
-   the file for how verbs, module arguments and hooks are keyed.
-5. `KernelCommands.kt`: the `score` ready line.
+- `on_level_up` returning a struct with an undeclared name is a rules error that gives no gains.
+- A world with `leveling` off that defines `on_level_up` fails to load naming the feature.
 
-**Exit condition:** `./gradlew :core:test :script:test` passes.
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
 
-### 6. M14.2 plugins and harness
+### Phase 6: The level step up
 
-1. `plugin-api`: `PluginWorld.awardXp`, `takeXp`, `levelUp`, `levelDown`, `PluginActor.pendingLevels`, implemented in
-   `host/Facade.kt` over the same `World` functions. No `PluginApi.VERSION` bump.
-2. `harness/Handles.kt`: the four `w` verbs.
-3. Update the API model, golden and baseline again.
+**Task:** Add `MAX_LEVEL_STEPS = 100`, `World.pendingLevels(a): Int` and `World.levelUp(a): Boolean` to
+`core/.../world/Leveling.kt`, as in **The level step up**, leaving out step 8 (the hook does not exist yet). Nothing
+calls them outside tests yet.
 
-**Exit condition:** `./gradlew :plugin-api:test :harness:test` passes.
+**KDoc:**
 
-### 7. M14.3 the hook
+- `MAX_LEVEL_STEPS`: the most level steps one call applies, and the most `pendingLevels` counts.
+- `pendingLevels`: the counting rule, including the stop at a threshold that does not strictly increase.
+- `levelUp`: the order from **The level step up**, as prose; it is the only code that raises a level.
 
-1. `Hooks.kt`: `HookName.ON_LEVEL_CHANGE`, and `oldLevel` and `newLevel` on `HookContext`.
-2. `Declarations.kt` (near `ON_DEATH`): the catalog entry, attachable to `Mob`, `Room` and `Item`, needing `leveling`.
-   Check how `dispatch` treats an item's owner: the hook must reach carried items as well as equipped ones. If
-   `dispatch` limits some hooks to equipped items, add a per-hook flag and leave the others alone.
-3. `Ctx.kt`: the `old_level` and `new_level` fields, `None` for every other hook.
-4. Call `dispatch(ON_LEVEL_CHANGE, ...)` from `levelUp` and `levelDownStep` only.
+**Tests** (a new `LevelingTest`, with a fixture ruleset):
 
-**Exit condition:** `./gradlew :core:test :script:test` passes.
+- `on_level_up`'s `stats`, `max` and `current` deltas apply, `current` is capped at the new maximum, and the record
+  holds `stats` and `max` only.
+- A rules error in `on_level_up` still raises the level, applies nothing and records nothing.
+- `levelUp` with nothing pending returns `false` and changes nothing.
+- `pendingLevels` stops at a non-increasing `xp_to_level` with one `rules_error` alert, and is 0 when the threshold is
+  never reached.
 
-### 8. M14.3 template and tutorial
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
 
-1. One observer hook in the tutorial zone: a mob that reacts when a player in its room reaches a new level, with a test.
-2. A deferred-mode example in `DocExamples.kt`: a trainer command in a room that reads `ctx.actor.pending_levels` and
-   calls `ctx.level_up(ctx.actor)`, shown with `level_mode = "deferred"`. A test world in
-   `script/src/testFixtures/.../TestWorlds.kt` uses it for the tests below.
-3. A vampire example in `DocExamples.kt`: a skill `resolve` using `take_xp` and `level_down`.
+### Phase 7: Route XP awards through the step up
 
-**Exit condition:** `./gradlew :cli:test` (including `DocsWorldTest`) passes.
+**Task:** Move `World.awardXp` from `Combat.kt` to `Leveling.kt` and rewrite it as in **Awarding and taking XP**, `auto`
+branch only (every world behaves as `auto` until phase 15). It loops `levelUp` up to `MAX_LEVEL_STEPS` times and sends
+one GMCP `Char.Status` refresh at the end. Update the existing tests that relied on the old `level += 1`.
 
-### 9. Wrap-up
+**KDoc:** `awardXp`: what it ignores, and that it applies owed levels up to `MAX_LEVEL_STEPS`.
 
-- **`docs/DESIGN_NEEDED.md`:** "Level-up gains" and "Experience subsystem and scaling" were already deleted when this
-  design was approved. Confirm they are gone. The entries "Group, party and pet XP sharing" and "Skill-based advancement
-  (worlds without character levels)" stay.
-- Update `README.md` or the tutorial pages only if they mention levels.
-- Run `./gradlew markdownFormat`, then `./gradlew check`.
-- Make sure no code comment cites spec sections or decision IDs.
+**Tests:**
 
-## Tests
+- A kill that crosses two thresholds applies two steps in order and sends two `LEVEL_UP` messages and one GMCP refresh.
+- An award that owes more than 100 levels applies 100, and the next award applies more.
 
-Name tests by behavior, as the existing ones do. Each item is at least one test.
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
 
-**The step up** (`CombatTest`/new `LevelingTest`, with a fixture ruleset): - `on_level_up`'s `stats`, `max` and
-`current` deltas apply, `current` is capped at the new maximum, and the record holds `stats` and `max` only. - A kill
-that crosses two thresholds applies two steps in order and sends two `LEVEL_UP` messages and one GMCP refresh. - A rules
-error in `on_level_up` still raises the level, applies nothing and records nothing. - A non-increasing `xp_to_level`
-stops the loop with one `rules_error` alert, and a value that never reaches the threshold applies nothing.
+### Phase 8: The level step down and taking XP
 
-**The step down:** - Gains that used `ctx.rng` unwind exactly (stats and maxima equal their values before the level-up).
-- A level with no record unwinds nothing and still drops. - `xp` is clamped to `xp_to_level(level) - 1` and any other
-pending levels disappear. - `level_down(count=3)` from level 2 stops at 1 and returns 1. - A mob unwinds like a player.
+**Task:** Add `World.levelDownStep`, `World.levelDown`, `World.takeXp` and `LevelingMsg.LEVEL_DOWN` to `Leveling.kt`, as
+in **The level step down** and **Awarding and taking XP**, leaving out the hook dispatch. `levelDown` asks for an
+immediate checkpoint for a player, as a level-up does.
 
-**Death:** - `level_loss` lowers the level after the respawn, in the respawn room, and the respawn vitals are capped at
-the lowered maxima. - `xp_loss` larger than `xp` leaves 0. - `level_loss` without `leveling` is refused at load. - The
-template: dying with 1500 XP at level 2 loses 50, and dying at level 1 with 100 XP loses 10.
+**KDoc:**
 
-**Template rules:** - Kill XP: 5 levels below pays 0, equal pays `50 * level`, 2 levels above pays 140%, 4 above pays
-150%. - `xp_to_level` gives 1000, 3000, 6000 and is strictly increasing to level 50. - `gups lint` is clean for the
-template world and `samples/robot-world`.
+- `levelDownStep`: the order from **The level step down**, as prose, including "never owed the level just lost"; it is
+  the only code that lowers a level.
+- `levelDown`: it stops at level 1, sends `LEVEL_DOWN` once, checkpoints a player and never calls the rules.
+- `takeXp`: it never goes below 0, never changes the level and sends nothing.
 
-**Auto mode:** - A kill, `award_xp` and a script's `level_up` all raise levels through `World.levelUp`: each level fires
-`on_level_change` exactly once. - An award that owes more than 100 levels applies 100, and the next award applies more.
+**Tests:**
 
-**Deferred mode** (the test world): - XP crossing a threshold sends `READY` once; a second award does not repeat it; the
-level does not change. - `ctx.level_up` returns `True`, applies one level, and sends `READY` again only if another is
-pending. - `level_up` with nothing pending returns `False` and changes nothing. - `score` shows the ready line only
-while a level is pending. - `level_mode` without `leveling` fails to load naming the feature.
+- Gains that used `ctx.rng` unwind exactly: stats and maxima equal their values before the level-up.
+- A level with no record unwinds nothing and still drops.
+- `xp` is clamped to `xp_to_level(level) - 1`, and any other pending levels disappear.
+- `levelDown(count = 3)` from level 2 stops at 1 and returns 1.
+- `levelDown` sends `LEVEL_DOWN` once for several steps.
+- A mob unwinds like a player.
+- `takeXp` returns the amount actually removed, never goes below 0 and never changes the level.
+- A lost level is saved by an immediate checkpoint.
 
-**Verbs:** - `award_xp` rejects 0 and negatives; `take_xp` returns the amount actually removed and never goes below 0 or
-changes the level; `level_down` fires `LEVEL_DOWN` once for several steps. - Every verb and `pending_levels` fail with
-the feature refusal when `leveling` is off (`FeaturesOffTest`, `FeatureMatrixTest`). - The plugin facade methods match,
-and throw like `level` without `leveling`.
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
 
-**The hook:** - Fires once per step, in order, for a kill, `award_xp`, `level_up`, `level_down` and `level_loss`; never
-for `take_xp` or a plain XP gain. - Reaches the actor's own mob hook, the room, observers and the actor's carried and
-equipped items, in the §5.6 order. - A hook that calls `award_xp` is cut off at depth 8 without a hang.
+### Phase 9: Parse `level_loss`
 
-**Persistence:** - `levelGains` round-trips for a player and a mob. - A level lost is saved by an immediate checkpoint.
+**Task:** Add `PlayerDeathOutcome.levelLoss: Int = 0` in `RulesEngine.kt` and parse `level_loss` (an int `>= 0`) from
+`on_player_death` in `script/.../Rules.kt`, refused without `leveling` like `xp_loss`. Update the `on_player_death`
+`RulesExportSpec` and, since its description changes, the **API files**. Nothing applies it yet.
 
-**Dry run:** - `on_level_up` that fails for a level-2 actor fails the rules package's load. - A `xp_to_level` that is
-not strictly increasing in 1..50 fails it.
+**KDoc:**
 
-**API:** - The golden model; `ApiDiffTest` passes against the regenerated `api-1.json`; `since = 1` on the new symbols.
+- `PlayerDeathOutcome.levelLoss`: the number of levels lost after the respawn.
+- `StarlarkRules`, `## Neutral Fallback Return Values`: the `on_player_death` entry gains "and no level loss".
+
+**Tests:**
+
+- `level_loss` without `leveling` is refused at load.
+- A negative `level_loss` is a bad return value.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 10: Apply level loss at death
+
+**Task:** In `Combat.kt`, follow the player death order in **Death**: call `levelDown(player, outcome.levelLoss)` after
+the respawn. Delete the stale "no hook for them" wording.
+
+**Tests:**
+
+- `level_loss` lowers the level after the respawn, in the respawn room, and the respawn vitals are capped at the lowered
+  maxima.
+- `xp_loss` larger than `xp` leaves 0.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 11: Dry-run checks for leveling
+
+**Task:** In `dryRunRules` (`Rules.kt`), replace the single `rules.xpToLevel(1)` call with the two checks in **Failure
+handling**: `xp_to_level` for levels 1 to 50 must strictly increase, and `on_level_up` runs once per synthetic actor
+with its level set to 2, validated but not applied.
+
+**KDoc:** the `## Export Verification` list of `dryRunRules` adds the `on_level_up` call. Its `xp_to_level` bullet is
+already correct.
+
+**Tests:**
+
+- An `on_level_up` that fails for a level-2 actor fails the rules package's load.
+- An `xp_to_level` that is not strictly increasing in 1 to 50 fails it.
+- The dry run applies nothing: the synthetic actors' stats are unchanged after it.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 12: The template's XP rules
+
+**Task:** In `template-world/rules/combat.star`, replace `xp_for_kill`, `xp_to_level` and `on_player_death` with the
+versions in **The template rules**, including the corrected "Total XP" comment on `xp_to_level`, the commented punishing
+variant in `on_player_death`, and a `_clamp` helper if the file has none. Update the template world's tests for the new
+XP numbers.
+
+**Tests:**
+
+- Kill XP: 5 levels below pays 0, equal pays `50 * level`, 2 levels above pays 140%, 4 above pays 150%.
+- `xp_to_level` gives 1000, 3000 and 6000, and is strictly increasing to level 50.
+- Dying with 1500 XP at level 2 loses 50, and dying at level 1 with 100 XP loses 10.
+- `gups lint` is clean for the template world and `samples/robot-world`.
+
+**Exit condition:** the tests above exist and pass, the template world's other tests change only in their XP numbers,
+and the standing checks pass. This ends **M14.1**.
+
+### Phase 13: Add the level mode to the world
+
+**Task:** Add `enum class LevelMode { AUTO, DEFERRED }` in `core` and a `levelMode` on the world, defaulting to `AUTO`,
+so that tests can set it. Nothing reads it yet.
+
+**KDoc:** `LevelMode` and its two values, as in **The level mode**.
+
+**Exit condition:** the standing checks pass.
+
+### Phase 14: Parse `level_mode`
+
+**Task:** Parse `module(level_mode = "auto" | "deferred")` in `script/.../WorldModule.kt` and pass it to the world. An
+unknown value is a load error, and setting it with `leveling` off is a load error naming the feature. It is not recorded
+per database. Register `level_mode` with `Feature.LEVELING` in `Ownership.kt`, using the key syntax the file uses for
+module arguments.
+
+**KDoc:** add `level_mode` to the `WorldModule.kt` KDoc that lists the `MODULE.gups` settings.
+
+**Tests:**
+
+- `level_mode = "deferred"` and `"auto"` load, and a missing `level_mode` is `auto`.
+- An unknown value fails to load.
+- `level_mode` without `leveling` fails to load naming the feature.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 15: Deferred awards and the ready notice
+
+**Task:** Add the `deferred` branch to `awardXp` and `LevelingMsg.READY`, as in **Awarding and taking XP**, together
+with `World.levelUpAndNotify(a): Boolean`, which calls `levelUp` and then, in `deferred` mode, sends `READY` if levels
+are still pending. The verbs and the facade call this function.
+
+**KDoc:** `awardXp` describes both modes; `levelUpAndNotify` says when it sends `READY`, and that `READY` is stateless.
+
+**Tests** (Kotlin, calling `World` functions directly):
+
+- XP crossing a threshold sends `READY` once, a second award does not repeat it, and the level does not change.
+- `levelUpAndNotify` applies one level and sends `READY` again only if another is pending.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 16: The `pending_levels` view field
+
+**Task:** Add the read-only `pending_levels` field to the actor view in `script/.../Views.kt`, returning
+`World.pendingLevels`. Register it in `Ownership.kt` (`view:actor.pending_levels`) and update the **API files**.
+
+**KDoc:** the field's `@StarlarkMethod` doc: how many levels the actor has the XP for and has not been given.
+
+**Tests:**
+
+- `pending_levels` counts the owed levels in `deferred` mode, and is 0 after an `auto` award.
+- Reading it without `leveling` fails with the feature refusal (`FeaturesOffTest`, `FeatureMatrixTest`).
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 17: The four ctx verbs
+
+**Task:** Add `award_xp`, `take_xp`, `level_up` and `level_down` to `script/.../Ctx.kt`, next to `heal` and `damage`, as
+in **Script verbs and fields**. Each refuses without `leveling`, checks that `amount` or `count` is at least 1, and
+calls the matching `World` function; `level_up` calls `levelUpAndNotify`. Register the four verbs in `Ownership.kt` and
+update the **API files**.
+
+**KDoc:** each verb's `@StarlarkMethod` doc, with its arguments, return value and the feature it needs.
+
+**Tests:**
+
+- `award_xp` rejects 0 and negatives.
+- `take_xp` returns the amount actually removed.
+- `level_down` returns the levels actually lost.
+- In `deferred` mode, `ctx.level_up` returns `True`, applies one level, and sends `READY` only if another is pending.
+- A kill, `award_xp` and a script's `level_up` all raise levels through `World.levelUp`.
+- Every verb fails with the feature refusal when `leveling` is off (`FeaturesOffTest`, `FeatureMatrixTest`).
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 18: The plugin facade
+
+**Task:** Add the four members to `PluginWorld` and `val pendingLevels: Int` to `PluginActor` in
+`plugin-api/.../Facade.kt`, exactly as in **Script verbs and fields**, and implement them in
+`plugin-api/.../host/Facade.kt` over the same `World` functions the verbs use. Do not bump `PluginApi.VERSION`. Update
+the **API files** if the API model covers the facade.
+
+**KDoc:** each member: what it does, its return value, `IllegalStateException` naming the feature when `leveling` is
+off, and `IllegalArgumentException` when `amount` or `count` is below 1. `pendingLevels` throws like `level`.
+
+**Tests:**
+
+- The facade methods give the same results as the verbs.
+- They throw like `level` without `leveling`, and reject `amount` or `count` below 1.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 19: The harness verbs
+
+**Task:** Add `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)` and `level_down(actor, count=1)` to
+the `w` handle in `harness/.../Handles.kt`, with the verbs' arguments and return values, and update the **API files**.
+
+**KDoc:** each method's `@StarlarkMethod` doc.
+
+**Tests:**
+
+- A harness test drives each of the four `w` verbs and checks the level and XP.
+
+**Exit condition:** the test above exists and passes, and the standing checks pass. This ends **M14.2**.
+
+### Phase 20: Declare the `on_level_change` hook
+
+**Task:** Declare the `on_level_change` hook and its ctx fields without firing it.
+
+**Touches:**
+
+- `core/.../world/Hooks.kt`: `HookName.ON_LEVEL_CHANGE("on_level_change")`, and `oldLevel` and `newLevel` on
+  `HookContext`.
+- `script/.../Declarations.kt`, near `ON_DEATH`: the catalog entry, attachable to `Mob`, `Room` and `Item`, needing
+  `leveling`.
+- `script/.../Ctx.kt`: the `old_level` and `new_level` ctx fields, `None` for every other hook.
+- `script/.../Ownership.kt`: the hook, with `Feature.LEVELING`.
+- The **API files**.
+
+**KDoc:** `HookName.ON_LEVEL_CHANGE`: when it fires and what `oldLevel` and `newLevel` hold.
+
+**Tests:**
+
+- A mob, a room and an item can declare `on_level_change`, and another kind of entity can't.
+- Declaring it without `leveling` fails to load naming the feature.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 21: Fire `on_level_change`
+
+**Task:** Call `dispatch(HookName.ON_LEVEL_CHANGE, ...)` from `levelUp` (step 8) and `levelDownStep` (step 7) only, so
+that it reaches carried as well as equipped items. Check first how `dispatch` treats an item's owner. If it limits some
+hooks to equipped items, add a per-hook flag and leave the other hooks alone.
+
+**KDoc:** update `levelUp` and `levelDownStep` to include the dispatch.
+
+**Tests:**
+
+- It fires once per step, in order, for a kill, `award_xp`, `level_up`, `level_down` and `level_loss`, and never for
+  `take_xp` or a plain XP gain.
+- It reaches the actor's own mob hook, the room, observers and the actor's carried and equipped items, in the order of
+  **The `on_level_change` hook**.
+- A hook that calls `award_xp` is cut off at depth 8 without a hang.
+
+**Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 22: The `score` ready line
+
+**Task:** Add `LevelingMsg.SCORE_READY` and have `score` (`KernelCommands.kt`) print it on the line after the level line
+when `pendingLevels > 0`.
+
+**Tests:**
+
+- `score` shows the ready line only while a level is pending.
+
+**Exit condition:** the test above exists and passes, and the standing checks pass.
+
+### Phase 23: A tutorial observer hook
+
+**Task:** In `template-world/zones/tutorial/`, give one mob an `on_level_change` hook that reacts when a player in its
+room reaches a new level, with a test in `tutorial_test.star`.
+
+**Exit condition:** the new tutorial test passes, `gups lint` is clean for the template world, and the standing checks
+pass.
+
+### Phase 24: The deferred-mode trainer example
+
+**Task:** Add a deferred-mode example to `script/.../DocExamples.kt` (a world with `level_mode = "deferred"` and a
+trainer command in a room that reads `ctx.actor.pending_levels` and calls `ctx.level_up(ctx.actor)`), and a test world
+built from it in `script/src/testFixtures/.../TestWorlds.kt`.
+
+**Tests** (with that test world):
+
+- A player who earns a level is told `READY`, uses the trainer, gains the level, and sees the `score` ready line go
+  away.
+- The trainer with nothing pending changes nothing.
+
+**Exit condition:** the tests above exist and pass, `./gradlew :cli:test` (including `DocsWorldTest`) passes, and the
+standing checks pass.
+
+### Phase 25: The vampire example
+
+**Task:** Add a vampire example to `script/.../DocExamples.kt`: a skill `resolve` that uses `take_xp` to steal XP and
+`level_down` to drain a level.
+
+**Exit condition:** `./gradlew :cli:test` (including `DocsWorldTest`) passes, and the standing checks pass. This ends
+**M14.3**.
+
+### Phase 26: Verify the milestone
+
+**Task:** Confirm that the milestone is complete, fixing anything that is not.
+
+**Exit condition:**
+
+- `docs/DESIGN_NEEDED.md` has no `Level-up gains` or `Experience subsystem and scaling` entry, and still has `Group,
+  party and pet XP sharing` and `Skill-based advancement (worlds without character levels)`.
+- `README.md` and the tutorial pages say nothing about levels or XP that this milestone made untrue.
+- `docs/CHANGELOG.md` has one `### Experience and levels` section covering the export, `level_loss`, `level_mode`, the
+  verbs, `pending_levels`, the hook, the facade and the template's new formulas.
+- `./gradlew markdownFormat` has been run, and the standing checks pass.
+- Every item in **Success criteria** holds.
 
 ## Success criteria
 
-- [] Every test above exists and passes.
+- [] Every test named in phases 4 to 24 exists and passes.
 - [] `./gradlew check` passes, including the module-graph check, with no Kotlin warnings.
-- [] `SPEC.md` carries exactly the wording from step 1, `CHANGELOG.md`, `docs/api/api-1.json` and the golden `api.json`
-  are updated, and neither `api_version` nor `PluginApi.VERSION` is bumped.
-- [] `DESIGN_NEEDED.md` no longer has the two resolved entries and keeps the two new ones.
+- [] SPEC.md has every item in the phase 1 checklist, and §6.3 says "without XP or level loss".
+- [] The KDoc named in each phase is written, and no `.kt` file under `src/main` cites a spec section or decision ID.
+- [] `CHANGELOG.md`, `docs/api/api-1.json` and the golden `api.json` are updated, and neither `api_version` nor
+  `PluginApi.VERSION` is bumped.
+- [] `DESIGN_NEEDED.md` has neither resolved entry and keeps the two new ones.
 - [] A world with `leveling` off behaves as before and defines none of the new exports.
-- [] No code comment cites spec sections or decision IDs.
