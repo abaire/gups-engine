@@ -305,10 +305,42 @@ internal fun StarlarkHost.runModifier(
 }
 
 /**
- * The Starlark rules module: calls the functions the files of `//<pkg>` export. There is no
- * built-in ruleset to fall back to: a call that fails, returns the wrong type or names an
- * undeclared name records a diagnostic, raises a `rules_error` alert and gives a neutral result
- * that never hurts, kills, rewards or traps anyone. Bound to its world by [StarlarkHost.install].
+ * The Starlark rules module: calls the functions the files of `//<pkg>` export.
+ *
+ * There is no built-in fallback ruleset. A rules export that fails, exceeds resource budgets,
+ * throws an evaluation exception, returns an invalid type, or references an undeclared schema name
+ * records a `script_error` diagnostic against the rules package, triggers a `rules_error` alert,
+ * and substitutes a neutral fallback result. Neutral fallbacks ensure errors never hurt, kill,
+ * reward, or trap actors:
+ *
+ * ## Neutral Fallback Return Values
+ * - `to_hit`: `0` (attack misses).
+ * - `retreat_check`: `0` (retreat attempt fails).
+ * - `flee_chance`: `0` (flee attempt fails).
+ * - `damage`: `0` (deals no damage).
+ * - `mitigate`: empty vitals map (the hit causes no vital losses).
+ * - `initiative`: `0` (baseline initiative roll).
+ * - `cast_allowed`: denied with the engine's `nothing_happens` message.
+ * - `interrupt_check`: `false` (spell or action is not interrupted).
+ * - `move_cost`: empty map (no movement vital cost deducted).
+ * - `regen`: empty map (no vitals regenerated or lost).
+ * - `encumbrance`: empty map (no encumbrance stat penalties applied).
+ * - `starting_stats`: empty result (base stats and vitals unmodified from prototypes).
+ * - `carry_limit`: `Int.MAX_VALUE` (no weight/carrying cap applied).
+ * - `get_lag`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`: `0` recovery
+ *   pulses (no action delay).
+ * - `sense_cost`: `-1` (blocks sensory perception propagation past the exit/hop).
+ * - `can_perceive`: `false` (event is not perceived).
+ * - `perceive_message`: `null` (no sensory notification text rendered).
+ * - `door_intensity`: `0` (door manipulation produces no sensory event).
+ * - `condition`: the actor's current condition, unchanged.
+ * - `xp_for_kill`: `0` XP awarded.
+ * - `xp_to_level`: `Long.MAX_VALUE` (no level up possible).
+ * - `on_player_death`: respawns at the player's recall room (or the current room when none is
+ *   set), restores vitals to effective maxima, with `0` XP lost.
+ * - `equipment_slots`: the last valid slot list it returned, or an empty list before any.
+ *
+ * Bound to its world by [StarlarkHost.install].
  */
 class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") : RulesEngine {
   internal var world: World? = null
@@ -960,10 +992,37 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
   )
 
 /**
- * The load-time dry run of the rules package [pkg] in [result]: every export it defines is called
- * against synthetic actors built from [schema], a fresh player and a fresh mob of each loaded
- * prototype, all after `starting_stats`, and `mitigate` once per declared damage type. Returns what
- * went wrong, one line per failed call; empty when the package is sound.
+ * The load-time dry run of the rules package [pkg] in [result].
+ *
+ * Every export the rules package defines is exercised against synthetic actors to verify that its
+ * return types match declarations and do not throw runtime exceptions.
+ *
+ * ## Synthetic World and Actors Setup
+ * - Sets up a throwaway single-room world (`//engine:dry_run`) containing one north exit with a
+ *   door (`DoorProto`) leading to itself.
+ * - Spawns two synthetic player actors (`Dryrunner` and `Dryrunfoe`) and one synthetic mob per
+ *   loaded mob prototype, each initialized through `starting_stats`.
+ * - If a character creation provider is configured, exercises `starting_stats` across player
+ *   permutations for every declared option of each creation choice.
+ *
+ * ## Export Verification
+ * - Calls `equipment_slots` to ensure slot names are valid lowercase identifiers.
+ * - If the `leveling` feature is enabled, verifies that `xp_to_level(level)` strictly increases for
+ *   all levels from 1 to 50, and checks `xp_for_kill`.
+ * - If the `combat` feature is enabled, tests `to_hit`, `damage`, `initiative`, `flee_chance`, and
+ *   `flee_fail_lag`.
+ * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
+ *   `retreat_fail_lag`, and `get_lag` across all range bands.
+ * - If the `skills` feature is enabled, tests `cast_allowed` and `interrupt_check`.
+ * - Tests `carry_limit`, `encumbrance`, `regen`, and `move_cost`.
+ * - Tests `mitigate` for each damage type declared in the world [schema].
+ * - For player actors, tests `on_player_death`.
+ * - Tests sensory perception exports (`sense_cost`, `can_perceive`, `perceive_message`) for each
+ *   channel declared in [schema], testing both same-room events and multi-hop exit events.
+ * - Tests `door_intensity` for `"open"`, `"close"`, `"lock"`, and `"unlock"` actions, both with and
+ *   without tags.
+ *
+ * Returns what went wrong, one line per failed call; empty when the package is sound.
  */
 internal fun dryRunRules(
   result: LoadResult,

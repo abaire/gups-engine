@@ -1,18 +1,33 @@
 package gups.auth
 
-/** Failures that start a lockout. */
+/** Number of consecutive failed attempts required to trigger a login lockout (5 failures). */
 const val LOCKOUT_FAILURES = 5
 
-/** Quiet time after which a key's failures are forgotten. */
+/** Inactivity window after which recorded failures are discarded: 15 minutes (900,000 ms). */
 const val FAILURE_WINDOW_MS = 15 * 60_000L
 
+/** Initial lockout duration upon reaching [LOCKOUT_FAILURES]: 1 minute (60,000 ms). */
 const val FIRST_LOCKOUT_MS = 60_000L
+
+/** Maximum lockout duration ceiling: 15 minutes (900,000 ms). */
 const val MAX_LOCKOUT_MS = 15 * 60_000L
 
 /**
- * Failed-login counting per account and per IP. Five failures start a 1-minute lockout, and each
- * further failure doubles it, up to 15 minutes. A key's count resets after 15 minutes without a
- * failure. Counts live in memory only, so a restart clears them. Thread-safe.
+ * Thread-safe rate limiter tracking failed authentication attempts per account login and per client
+ * IP.
+ *
+ * ## Lockout Rules & Backoff Ladder
+ * - Failures are tracked independently for account keys (`account:<login>`) and client IP keys
+ *   (`ip:<remote>`).
+ * - Reaching 5 failures ([LOCKOUT_FAILURES]) initiates a 1-minute lockout ([FIRST_LOCKOUT_MS]).
+ * - Each additional failure after 5 doubles the lockout period (2 min, 4 min, 8 min), capping at a
+ *   15-minute maximum lockout ([MAX_LOCKOUT_MS]).
+ * - Quiet period: A key's failure count and lockout expire after 15 minutes without any failed
+ *   attempts ([FAILURE_WINDOW_MS]).
+ * - Successful authentication: An authenticated login clears the failure record for that account;
+ *   the client IP's failure count remains unaffected to deter multi-account credential stuffing
+ *   from a single host.
+ * - Volatility: Failure records reside strictly in memory and are discarded upon server restart.
  */
 class LoginLimiter(private val clock: () -> Long = System::currentTimeMillis) {
   private class Record(var failures: Int, var lastFailure: Long, var lockedUntil: Long)

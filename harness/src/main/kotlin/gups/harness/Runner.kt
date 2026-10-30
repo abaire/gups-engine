@@ -17,7 +17,13 @@ import net.starlark.java.eval.StarlarkSemantics
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.syntax.Location
 
-/** Steps one test function may spend in its own code; pulses it runs don't count. */
+/**
+ * Maximum Starlark bytecode steps a test function is permitted to execute: 10,000,000 steps.
+ *
+ * This deterministic budget applies strictly to the test function's own instructions; simulation
+ * pulses advanced by test calls (such as `w.pulse()` or `p.do(...)`) run under their own distinct
+ * engine limits and do not deplete this step budget.
+ */
 const val TEST_STEPS = 10_000_000L
 
 /**

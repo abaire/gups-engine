@@ -47,9 +47,32 @@ data class RestoreReport(
 )
 
 /**
- * SQLite persistence for one world. Capture runs on the world thread and only serializes; the
- * [CheckpointWriter] commits. The last captured row of every entity and player is mirrored in
- * memory, so logins and repro bundles never wait on the database.
+ * SQLite persistence engine and state coordinator for a live game world.
+ *
+ * ## Architecture & Concurrency
+ * - **World thread capture:** Entity serialization occurs strictly on the world thread, ensuring
+ *   state snapshots are consistent and non-blocking. Serialized batches are dispatched to
+ *   [CheckpointWriter] for asynchronous commit.
+ * - **In-memory mirror:** An in-memory cache mirrors the last captured row of every world entity
+ *   ([entityRows]), player ([playerRows]), and zone state ([zoneRows]). Logins and repro bundles
+ *   read exclusively from this mirror, guaranteeing they never block the world thread on disk
+ *   operations or miss uncommitted in-flight batches.
+ *
+ * ## Checkpoint Cadence
+ * - **Periodic checkpoints:** Captured at world tick intervals (configured via
+ *   `checkpoint_minutes`, default 30). Executes invariant checks before serialization, then
+ *   captures all non-debug dirty entities, zone states, metadata pulse, and diagnostics into a
+ *   [Batch].
+ * - **Immediate captures:** Captured at the end of triggering cascades (player-to-player item
+ *   custody changes, level changes, character creation/deletion/choices/traits, and logout). Held
+ *   in memory ([held]) until merged into the next periodic or shutdown checkpoint, ensuring both
+ *   sides of an exchange commit atomically.
+ *
+ * ## Startup & Recovery
+ * On startup, validates engine schema migrations, loads packages, restores non-player entities from
+ * `world_entities`, reconstructs container and inventory hierarchies, drops orphaned instances
+ * whose prototypes vanished, and reconciles live entities. Player characters are restored on-demand
+ * upon login.
  */
 class SqlitePersistence private constructor(val db: Database, private val log: (String) -> Unit) :
   Persistence {

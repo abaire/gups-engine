@@ -1,9 +1,25 @@
 package gups.pluginapi
 
-// What plugins can touch: a facade over the running world. Every verb
-// calls what the `ctx` verb of the same name calls, so the engine's invariants hold. Views read
-// current state on every access.
-
+/**
+ * Safe facade interface exposing the running simulation world to plugins.
+ *
+ * ## Facade Verb Guarantees & Invariant Preservation
+ * - Every verb (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`,
+ *   `setChoices`, `grantTrait`, `setSkill`) directly delegates to the engine's internal
+ *   implementation of the corresponding Starlark `ctx` verb.
+ * - This guarantees that all game invariants, state checks, entity dirty flags, immediate
+ *   checkpoint triggers, event cascades, and perception broadcasts behave identically whether
+ *   invoked from Starlark scripts or Kotlin plugins.
+ *
+ * ## Live State Views
+ * - Entity handles ([PluginRoom], [PluginActor], [PluginItem]) are lightweight views that re-read
+ *   current live state on every property access, preventing stale reads across pulse boundaries.
+ *
+ * ## Attribute Namespacing
+ * - Attribute operations ([getAttr], [setAttr], [delAttr]) automatically default to the plugin's
+ *   own namespace prefix (`<pluginId>:<key>`), isolating plugin-specific state from core engine
+ *   attributes and other plugins.
+ */
 interface PluginWorld {
   /** The engine features this world has on: `combat`, `track`, `skills`, `leveling`. */
   val features: Set<String>

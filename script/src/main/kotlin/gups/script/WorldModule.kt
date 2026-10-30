@@ -28,9 +28,39 @@ import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.SyntaxError
 
 /**
- * The world's metadata from `MODULE.gups` at the world root: the engine and `api_version` it pins,
- * and server settings such as the checkpoint interval. Changing it needs a restart; hot reload
- * never reads it.
+ * The world's metadata and configuration declared by `module(...)` in `MODULE.gups` at the world
+ * root.
+ *
+ * This configuration is parsed only at startup; hot reload and deployment swaps never re-read
+ * `MODULE.gups`, so any changes require a full server restart.
+ *
+ * ## Settings
+ * - `engine`: Optional engine version string the world was written for.
+ * - `api_version`: Pinned script API version (defaults to [EngineInfo.API_VERSION]). Must match the
+ *   running engine's supported API version; mismatched versions prevent startup.
+ * - `checkpoint_minutes`: Minutes between routine periodic database checkpoints (default 30
+ *   minutes).
+ * - `start_room`: Target room label where newly created characters spawn (or `null` to use the
+ *   tutorial gate or first room).
+ * - `plugins`: Map of plugin IDs to `sha256:<hex>` checksums of `plugins/<id>.jar`.
+ * - `features`: List of engine feature module IDs to enable (`combat`, `track`, `skills`,
+ *   `leveling`). If omitted, all features are enabled by default.
+ * - `schema`: Declares the world's stats, vitals, resists, damage types, and sensory channels. The
+ *   declared schema names are permanently recorded in the database on first run and cannot be
+ *   altered without a `--wipe`.
+ * - `aliases`: Shorthand command aliases and prefix triggers for commands.
+ * - `rename`: Engine command renames, mapping canonical names to custom alternatives.
+ *
+ * ## Validation Rules
+ * - **API version:** Pinned `api_version` must equal [EngineInfo.API_VERSION].
+ * - **Plugin IDs:** Must match `[a-z][a-z0-9_]*`, must not collide with reserved built-in keywords,
+ *   and must have a checksum formatted as `sha256:` followed by 64 lowercase hexadecimal digits.
+ * - **Features:** Every ID must be a known feature, and each feature's requirements must also be
+ *   on: `track` requires `combat`; `combat`, `skills` and `leveling` require nothing.
+ * - **Commands and aliases:** Command renames must not form cycles or collide with other command
+ *   names. Aliases and prefix triggers must not clash with existing commands or reserved keywords.
+ * - **Schema integrity:** Stat, vital, damage type, and sensory channel names must be valid
+ *   identifiers, distinct across categories, and meet minimum required declarations.
  */
 data class WorldModule(
   /** The engine version the world was written for, if pinned. */

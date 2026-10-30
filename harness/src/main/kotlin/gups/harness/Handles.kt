@@ -74,7 +74,13 @@ internal fun label(text: String, pkg: String?, what: String): Label =
     evalFail("$what: ${e.message}")
   }
 
-/** Commands run by `p.do()` must finish within this many pulses. */
+/**
+ * Maximum simulation pulses allowed for actions queued by `p.do()`: 1,000 pulses (250 seconds of
+ * game time).
+ *
+ * If the actor's action queue is non-empty or spell casting remains active after 1,000 pulses,
+ * `do(...)` fails with an evaluation error to prevent infinite busy loops during test execution.
+ */
 const val DO_MAX_PULSES = 1000
 
 /** Keeps at most this many trace lines per world. */

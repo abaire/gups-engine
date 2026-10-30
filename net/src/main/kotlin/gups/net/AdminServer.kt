@@ -57,9 +57,26 @@ interface Admin {
 }
 
 /**
- * The admin port: plain HTTP on a private address, on Ktor's Netty engine. Every endpoint but `GET
- * /healthz` needs `Authorization: Bearer <token>`, compared in constant time. With no [token]
- * configured, they all answer 403.
+ * Administration HTTP listener on a private local network interface using Ktor's Netty engine.
+ *
+ * ## Endpoints
+ * - `GET /healthz`: Unauthenticated service health probe. Returns HTTP 200 if the world loop and
+ *   database writer are operating normally, or HTTP 503 if unhealthy, accompanied by a JSON health
+ *   report.
+ * - `GET /metrics`: Serves Prometheus metrics in standard exposition text format.
+ * - `POST /deploy`: Initiates git-based hot deploy pipeline for a specified commit, streaming
+ *   progress JSON lines.
+ * - `POST /roster`: Imports a student CSV roster, creating accounts and generating one-time setup
+ *   codes.
+ * - `GET /snapshot`: Streams a sanitized SQLite database snapshot with personal data and
+ *   credentials expunged.
+ *
+ * ## Authentication & Security
+ * - Every endpoint except `GET /healthz` mandates an `Authorization: Bearer <token>` header.
+ * - When no [token] is configured, all secured endpoints reject requests with HTTP 403 Forbidden.
+ * - Token validation transforms both the expected and provided tokens into SHA-256 byte digests and
+ *   executes a constant-time comparison ([MessageDigest.isEqual]) to eliminate timing side-channel
+ *   vulnerabilities.
  */
 class AdminServer(
   private val admin: Admin,

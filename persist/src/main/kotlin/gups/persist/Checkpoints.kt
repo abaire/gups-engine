@@ -9,8 +9,26 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * One checkpoint: JSON rows captured on the world thread. `null` in [entities] deletes that row.
- * Periodic batches merge, last write wins per entity; immediate ones never merge past one another.
+ * One checkpoint batch containing serialized database rows captured on the world thread.
+ *
+ * ## Capture Cadence: Periodic vs. Immediate
+ * - **Periodic checkpoints:** Captured on world tick intervals (governed by `checkpoint_minutes` in
+ *   `MODULE.gups`, defaulting to 30 minutes). Verifies engine invariants before serialization, then
+ *   sweeps all dirty entities, zone states, pending diagnostics, and engine metadata.
+ * - **Immediate captures:** Triggered at the completion of high-value or state-critical action
+ *   cascades: player-to-player item custody transfers, character level gains or losses, creation
+ *   and deletion, choice and trait modifications, and player logout or quit. Immediate captures are
+ *   buffered in memory and committed in the same atomic transaction as the next periodic or
+ *   shutdown checkpoint. Capturing both sides of an item transfer simultaneously prevents
+ *   duplication across server crashes.
+ *
+ * ## Batch Merging
+ * Queued periodic batches merge in the writer's FIFO queue: subsequent writes overwrite earlier
+ * entity rows (last write wins per entity ID). Immediate captures merge into subsequent captures
+ * unless the target batch is actively committing. Account operations ([AccountOp]) are committed
+ * strictly in order and never merge.
+ *
+ * Setting `null` in [entities] signifies entity deletion (tombstone).
  */
 class Batch(
   val immediate: Boolean,
@@ -90,9 +108,25 @@ sealed interface AccountOp {
 private const val MAX_BACKOFF_MS = 5_000L
 
 /**
- * The only SQLite writer: commits batches in FIFO order, each in one transaction, on its own thread
- * so the world thread never waits. A failed write stays at the head of the queue and is retried
- * with backoff; while it waits, later periodic captures merge into it.
+ * The dedicated SQLite checkpoint writer.
+ *
+ * Runs on its own background thread to ensure disk I/O and SQLite locking never stall the world
+ * loop.
+ *
+ * ## Commit & Merging Behavior
+ * - Commits queued batches in strict FIFO order, each within a single atomic database transaction.
+ * - Periodic batches merge into the last queued batch (last write wins per entity) as long as it is
+ *   not actively being committed by the worker thread.
+ *
+ * ## Retry Backoff & Unhealthy State
+ * - A failed transaction remains at the head of the queue and retries with exponential backoff
+ *   starting at 50 ms, doubling on successive errors up to 5,000 ms ([MAX_BACKOFF_MS]).
+ * - Subsequent periodic captures continue merging into the retrying batch while backoff delays
+ *   elapse.
+ * - Any commit failure marks [healthy] as `false`, causing the engine to refuse new logins until
+ *   writes resume.
+ * - [SqlitePersistence] logs and alerts a `checkpoint` diagnostic when a batch stays uncommitted for
+ *   more than three world ticks.
  */
 class CheckpointWriter(
   /** Commits one batch in one transaction; [Database.write] in production. */

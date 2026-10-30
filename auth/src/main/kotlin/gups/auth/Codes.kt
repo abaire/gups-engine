@@ -4,12 +4,24 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 
 /**
- * Invite and setup codes: 10 characters from an alphabet without look-alikes (no 0/O, 1/I/L, U/V),
- * shown as `XXXXX-XXXXX`. Typing them is forgiving: case, spaces and dashes don't matter. Only a
- * code's SHA-256 is stored.
+ * Generation, normalization, and hashing of one-time registration invite and account setup codes.
+ *
+ * ## Code Format & Alphabet
+ * - Generated as 10 characters grouped into two 5-character blocks separated by a dash:
+ *   `XXXXX-XXXXX`.
+ * - Characters are selected from a 29-character alphabet without look-alikes:
+ *   `23456789ABCDEFGHJKMNPQRSTWXYZ`. It leaves out 0, 1, I, L, O, U and V.
+ *
+ * ## Normalization & Storage
+ * - Normalization is forgiving: lowercase letters are converted to uppercase, and all whitespace
+ *   and dashes are stripped before length and character verification.
+ * - Stored in the database (`invites.code_hash`) strictly as the lowercase hexadecimal SHA-256
+ *   digest of the canonical 10-character string; raw codes are never persisted.
  */
 object Codes {
+  /** The 29 characters codes are drawn from. */
   const val ALPHABET = "23456789ABCDEFGHJKMNPQRSTWXYZ"
+  /** Canonical length of an unformatted code (10 characters). */
   const val LENGTH = 10
 
   private val random = SecureRandom()

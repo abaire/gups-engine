@@ -91,8 +91,16 @@ data class WorldDocSpec(
 )
 
 /**
- * Renders the HTML API reference from the script API model. Pages are static and offline: no
- * scripts, only relative links between the files in [FILES].
+ * HTML documentation generator producing offline-capable API reference documentation from the
+ * script API model.
+ *
+ * Renders static HTML pages and `api.json` for consumption by the in-game web client, `gups docs`,
+ * and docs servers:
+ * - Offline navigation: Generated documentation requires no client-side JavaScript or external
+ *   CDNs; pages use relative hyperlinks between documents in [FILES].
+ * - Sections covered: Declarations, hooks, `ctx` and views, effect primitives and behaviors, rules
+ *   module exports, test harness utilities, world configuration, plugin SPI interfaces, and
+ *   changelog history.
  */
 object DocsRenderer {
   val FILES: List<String> =

@@ -26,12 +26,24 @@ import gups.script.WorldPluginWiring
 import java.util.Random
 
 /**
- * Fuzz walker for the course world (gate 4).
+ * Automated fuzz walker bot harness for course world verification (gate 4).
  *
- * Loads the world in the harness with bubble off and a fixed seed. Spawns one bot player per
- * changed zone, repeatedly picking random actions (movement, zone/item commands, get/drop/wear/use,
- * attack, say), and asserts no script errors, step limits, wall-clock hits, quarantines or
- * invariant violations.
+ * ## Execution & Simulation Model
+ * - Loads the full world in a headless harness environment with reality bubble disabled (`bubble =
+ *   false`), ensuring every room, mob, and item is continuously simulated regardless of player
+ *   proximity.
+ * - Seeds the world's random number generator with a deterministic seed for reproducible
+ *   trajectories.
+ * - Spawns one automated bot player per changed zone package, placed in each zone's initial entry
+ *   room.
+ *
+ * ## Bot Behavior & Invariant Verification
+ * - At each simulation pulse, each bot selects and submits random actions: directional movement,
+ *   opening/closing doors, picking up/dropping/wearing/removing items, attacking visible targets,
+ *   exercising skills, talking (`say`), or invoking discovered zone commands.
+ * - After each pulse, verifies that engine invariants hold across all world entities and that no
+ *   forbidden diagnostic events ([FORBIDDEN_KINDS]: `"script_error"`, `"step_limit"`,
+ *   `"wall_clock"`, `"quarantine"`, or `"alloc_limit"`) are emitted.
  */
 class FuzzWalker(
   private val dir: WorldDir,

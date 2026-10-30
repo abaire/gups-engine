@@ -7,11 +7,14 @@ import org.bouncycastle.crypto.generators.Argon2BytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
 
 /**
- * Hashes and checks passwords. Both calls are slow by design, so they never run on the world
- * thread.
+ * Password hashing and verification contract.
+ *
+ * Both hashing and verification operations are computationally intensive by design to resist
+ * brute-force attacks; these operations must never execute on the single world simulation thread
+ * and should run on background worker threads.
  */
 interface PasswordHasher {
-  /** A self-describing hash of [password], such as a PHC string. */
+  /** A self-describing hash of [password], formatted as an Argon2id PHC string. */
   fun hash(password: String): String
 
   /** True if [password] matches [hash]. A malformed hash never matches. */
@@ -19,10 +22,23 @@ interface PasswordHasher {
 }
 
 /**
- * Argon2id with Bouncy Castle's pure-Java generator: by default m = 64 MiB, t = 3, p = 1, a 16-byte
- * salt and a 32-byte hash, stored as the PHC string `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>`
- * (unpadded base64). [verify] reads the parameters from the hash, so changing the defaults never
- * locks anyone out.
+ * Argon2id password hasher utilizing Bouncy Castle's pure-Java cryptographic implementation.
+ *
+ * Default configuration follows OWASP password storage recommendations:
+ * - **Memory:** 64 MiB (65,536 KiB, [memoryKiB]).
+ * - **Iterations:** 3 passes ([iterations], t = 3).
+ * - **Parallelism:** 1 thread lane ([parallelism], p = 1).
+ * - **Salt:** 16 cryptographically secure random bytes ([SALT_BYTES]).
+ * - **Output length:** 32-byte derived key ([HASH_BYTES]).
+ * - **Encoding:** PHC string format: `$argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>` using unpadded
+ *   Base64.
+ *
+ * [verify] extracts parameters directly from the PHC string header, enabling the engine to adjust
+ * future default cost parameters without invalidating existing stored hashes.
+ *
+ * To defend against timing attacks and username enumeration, login handlers verify against a
+ * precomputed dummy hash when an account does not exist or has no password set, ensuring constant
+ * verification latency.
  */
 class Argon2Hasher(
   val memoryKiB: Int = 65536,

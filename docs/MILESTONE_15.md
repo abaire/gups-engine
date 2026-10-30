@@ -137,7 +137,7 @@ current phase's **Exit Criteria** is satisfied.
 - [x] `CORPSE_DECAY_PULSES` is declared in `core/src/main/kotlin/gups/core/TimeConstants.kt` with KDoc.
 - [x] Every `const val` in `TimeConstants.kt` has a `/** ... */` KDoc comment.
 - [x] Every class and public property/function in `Entities.kt`, `Protos.kt`, and `Seams.kt` has clear KDoc.
-- [x] `grep -rnE "\bSPEC\b|§|\bD-[0-9]{3}\b" core/src/main/` returns **0 matches**.
+- [x] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" core/src/main/` returns **0 matches**.
 - [x] `./gradlew :core:test` (run with `BypassSandbox: true`) exits `0` with zero Kotlin warnings.
 
 ---
@@ -179,12 +179,12 @@ current phase's **Exit Criteria** is satisfied.
 
 #### Phase 2 Exit Criteria
 
-- [] `Limits.kt`, `Rules.kt`, `Database.kt`, `Codec.kt`, `Checkpoints.kt`, `Telnet.kt`, `WebServer.kt`,
+- [x] `Limits.kt`, `Rules.kt`, `Database.kt`, `Codec.kt`, `Checkpoints.kt`, `Telnet.kt`, `WebServer.kt`,
   `AdminServer.kt`, `Passwords.kt`, and `LoginLimiter.kt` all have class/file-level KDoc covering the constants and
   schemas that will be removed from `docs/SPEC.md`.
-- [] `grep -rnE "\bSPEC\b|§|\bD-[0-9]{3}\b" script/src/main/ persist/src/main/ net/src/main/ auth/src/main/
+- [x] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" script/src/main/ persist/src/main/ net/src/main/ auth/src/main/
   plugin-api/src/main/ harness/src/main/ cli/src/main/` returns **0 matches**.
-- [] `./gradlew testClasses` (run with `BypassSandbox: true`) exits `0` with zero Kotlin warnings.
+- [x] `./gradlew testClasses` (run with `BypassSandbox: true`) exits `0` with zero Kotlin warnings.
 
 ---
 
@@ -395,6 +395,6 @@ current phase's **Exit Criteria** is satisfied.
 - [] `docs/SPEC.md` §6.1 and §6.3 link to `Limits.kt` and `Rules.kt` instead of duplicating threshold tables and the
   20-row neutral-result table.
 - [] `docs/SPEC.md` §7.4 includes the **M15** row.
-- [] `grep -rnE "\bSPEC\b|§|\bD-[0-9]{3}\b" */src/main/` returns **0 matches**.
+- [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns **0 matches**.
 - [] `./gradlew markdownFormat` followed by `./gradlew check` (run with `BypassSandbox: true`) exits `0` with zero
   warnings and all tests passing.

@@ -85,8 +85,57 @@ data class ItemEventRow(
 )
 
 /**
- * The SQLite database in WAL mode. One instance owns one connection; the checkpoint writer is the
- * only thing that writes through it once the world runs.
+ * SQLite database wrapper configured for Write-Ahead Logging (WAL) and atomic checkpoint
+ * persistence.
+ *
+ * One [Database] instance encapsulates a single JDBC connection. Once the engine is running, the
+ * background checkpoint writer thread is the sole writer through this connection; reader threads
+ * and CLI tools access the database concurrently using separate read-only connections.
+ *
+ * ## SQLite PRAGMAs & Concurrency
+ * - `PRAGMA journal_mode = WAL`: Write-Ahead Logging mode enables non-blocking concurrent reads
+ *   while transactions are written.
+ * - `PRAGMA synchronous = NORMAL`: Syncs WAL on checkpoints rather than every commit, ensuring
+ *   durability against process crashes while reducing disk I/O overhead.
+ * - `PRAGMA busy_timeout = 5000`: Blocks for up to 5,000 ms on lock contention before throwing
+ *   SQLite busy errors.
+ *
+ * ## Relational Schema (10 Tables)
+ * 1. `meta`: Global key-value properties (`key TEXT PRIMARY KEY, value TEXT NOT NULL`). Stores
+ *    engine metadata including `schema_version`, current monotonic game `pulse`, `next_entity_id`,
+ *    `next_handle` (for timer and affect IDs), `world_commit`, `world_schema`, `world_features`,
+ *    and `snapshot_taken_at` (sanitized copies).
+ * 2. `accounts`: User accounts (`id, login, pw_hash, roles_json, github_handle, disabled,
+ *    disabled_by, disabled_at, disabled_reason, created_at`). Maintains Argon2id password hashes,
+ *    assigned role and scopes (CODEOWNERS and manual builder scopes), and disable tracking.
+ * 3. `session_tokens`: Web client session tokens (`token_hash TEXT PRIMARY KEY, account_id,
+ *    expires_at`). Stores SHA-256 digests of active session tokens for the web client.
+ * 4. `invites`: Registration invites and account setup codes (`code_hash TEXT PRIMARY KEY, role,
+ *    expires_at, used_by, account_id`). Stores SHA-256 hashes of 10-character codes.
+ * 5. `restrictions`: Disciplinary capability restrictions (`id, account_id, capability, until,
+ *    reason, set_by, created_at, lifted_by, lifted_at`). Applies restriction ladders (such as chat,
+ *    tell, or build suspensions) per account.
+ * 6. `players`: Persisted player character state (`id, account_id, name, payload_json,
+ *    updated_pulse`). Contains JSON payload with stats, vitals, affects, custom attributes,
+ *    choices, granted traits, and level gains. Does NOT store inventory items; items reference
+ *    players.
+ * 7. `world_entities`: Live in-game entities (`id, kind, proto_label, proto_version, location_json,
+ *    payload_json, updated_pulse`). Stores rooms, mobs, and all items (whether in a room, carried
+ *    by an actor, or inside a container).
+ * 8. `zone_states`: Per-package state (`package TEXT PRIMARY KEY, payload_json`). Maintains zone
+ *    reset deadlines, mob respawn deadlines, and package quarantine status.
+ * 9. `item_events`: Item custody audit log (`id, item_id, pulse, wall_time, from_json, to_json,
+ *    cause`). Immutable log capturing transfers involving players (`spawn`, `move`, `destroy`).
+ * 10. `diagnostics`: Script and engine failure diagnostics (`id, pulse, wall_time, package, label,
+ *     hook, file, line, kind, message, stack, ctx_json, seed, repro_json`). Records failure traces,
+ *     execution context, and repro bundles for offline replay.
+ *
+ * ## Migrations
+ * - **Migration 1:** Initial database schema creating the original 10 tables and indexes.
+ * - **Migration 2:** Adds `account_id` to `invites` to support account-bound setup codes.
+ * - **Migration 3:** Creates `restrictions` table and index for per-account capability suspensions.
+ * - **Migration 4:** Adds `disabled_by`, `disabled_at`, and `disabled_reason` columns to `accounts`
+ *   for disable auditing.
  */
 class Database private constructor(val file: Path, private val conn: Connection) : AutoCloseable {
   val schemaVersion: Int

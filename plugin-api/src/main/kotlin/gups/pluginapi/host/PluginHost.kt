@@ -355,8 +355,15 @@ internal class LoadedPlugin(
 )
 
 /**
- * The world's loaded plugins: their script globals, and the commands, effects, GMCP producers and
- * start callbacks [install] and [started] wire into a world.
+ * Host coordinator managing loaded plugins and wiring them into the live engine simulation.
+ *
+ * ## Responsibilities
+ * - Manages plugin lifecycle and classloader isolation for loaded plugin jars.
+ * - Exposes plugin members as top-level Starlark package globals under `<pluginId>.<name>`.
+ * - Wires plugin commands into engine fast or tick command registries.
+ * - Registers GMCP package providers, skill effect primitives, traits, character creation flows,
+ *   and restriction hooks.
+ * - Dispatches world start lifecycle notifications to registered plugin callbacks.
  */
 class PluginHost
 internal constructor(

@@ -38,10 +38,48 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.longOrNull
 
-// Row payloads. An instance stores its prototype label and version plus only
-// what differs from the prototype; players have no prototype and store everything. Every
-// payload carries a format_version for engine-side schema evolution.
-
+/**
+ * Engine entity serialization, JSON delta encoding, and schema versioning.
+ *
+ * Persisted entities use delta serialization against their prototypes to minimize database row
+ * size: instances store only properties that differ from their prototype definitions. Players have
+ * no prototype and persist complete state.
+ *
+ * ## Versioning & Format
+ * - `FORMAT_VERSION`: Included in every payload JSON (`format_version`) to manage engine-side
+ *   schema evolution. Field names use camelCase except for `format_version`.
+ *
+ * ## Item Custody & Location Invariant
+ * - Item location is recorded exclusively on the item's own row in `world_entities` via
+ *   [LocationJson].
+ * - Player payloads and container entity payloads never list carried or contained item IDs;
+ *   inventories and container contents are reconstructed dynamically on world load. This invariant
+ *   guarantees that no partial checkpoint or uncommitted transfer can duplicate an item across
+ *   multiple locations.
+ *
+ * ## Entity Delta Rules
+ * - **Rooms ([RoomPayload]):** Persists only door states that differ from prototype defaults (by
+ *   direction name), custom attributes, script timers, and active/anchor simulation reasons.
+ * - **Mobs ([MobPayload]):** Always persists position (room label, track index), current vitals
+ *   (`cur`, and `max` only when overridden, plus `belowZeroSince`), life condition, xp, home room,
+ *   spawn binding, and summonedBy. Delta fields (level, stats, senses, resists, skills,
+ *   `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if they equal prototype
+ *   defaults. Prototype traits are never stored; only runtime `grantedTraits` are. Active/anchor
+ *   reasons, custom attributes, timers, and active affects are also stored.
+ * - **Items ([ItemPayload]):** Persists count, decay deadline pulse, display name override,
+ *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons, and
+ *   prototype name.
+ * - **Tombstones:** When an item's prototype is deleted or modified in course scripts, the item
+ *   becomes a tombstone. The `tombstone` field retains the raw JSON payload the item held when its
+ *   prototype vanished, preserving its state for inspection.
+ * - **Players ([PlayerPayload]):** Persists full state: room label, track index, recall room label,
+ *   assigned role, level, xp, vitals, condition, base stats, base senses, base resists, skill
+ *   proficiencies, creation choices, granted traits, level gains, custom attributes, timers,
+ *   affects, and active/anchor reasons. During restore, traits are evaluated before vitals so
+ *   effective vital maximums correctly accommodate trait modifiers.
+ * - **Zones ([ZonePayload]):** Persists zone reset deadlines, pending spawn respawn rules with
+ *   deadlines, and package quarantine status.
+ */
 const val FORMAT_VERSION = 3
 
 internal val JSON = Json {

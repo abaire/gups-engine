@@ -4,15 +4,36 @@ import net.starlark.java.eval.StarlarkValue
 
 // The plugin interface. Unstable: no compatibility promises.
 
+/**
+ * The plugin interface version.
+ *
+ * Incremented whenever breaking changes are introduced to the plugin API or facade interfaces.
+ * Plugins built against a mismatched version are refused at server startup.
+ */
 object PluginApi {
-  /**
-   * Changes whenever this interface or the facade changes; plugins built for another version are
-   * refused.
-   */
+  /** The current plugin API version. */
   const val VERSION: Int = 1
 }
 
-/** A plugin, found through `ServiceLoader` in `plugins/<id>.jar`. */
+/**
+ * Service provider interface for engine plugins loaded from `plugins/<id>.jar`.
+ *
+ * Discovered at startup via [java.util.ServiceLoader]. Plugins can register built-in Starlark
+ * functions, custom engine commands, GMCP state providers, traits, character creation steps, and
+ * action restrictions.
+ *
+ * ## Lifecycle & Validation Rules
+ * - **Identifier format:** [id] must match `[a-z][a-z0-9_]*`, must be unique across all installed
+ *   plugins, must not collide with reserved engine builtins, and must match the key declared in
+ *   `MODULE.gups`.
+ * - **API version:** [pluginApiVersion] must strictly match [PluginApi.VERSION].
+ * - **Required features:** [requiredFeatures] specifies engine features (`combat`, `track`,
+ *   `skills`, `leveling`) that must be active in the world. If any required feature is disabled,
+ *   the plugin is skipped with a warning.
+ * - **Atomic registration:** [register] is executed atomically against [PluginRegistry]. If
+ *   registration throws an exception or violates a constraint, all contributions from the plugin
+ *   are discarded.
+ */
 interface GupsPlugin {
   /** `[a-z][a-z0-9_]*`, unique, and the id `MODULE.gups` pins the jar under. */
   val id: String
@@ -37,6 +58,21 @@ interface GupsPlugin {
   fun register(r: PluginRegistry)
 }
 
+/**
+ * Registration coordinator passed to [GupsPlugin.register].
+ *
+ * Provides builder methods to attach plugin capabilities to the engine:
+ * - Built-in functions with automatic Starlark-to-Kotlin argument binding and type validation.
+ * - Player and staff commands on either fast or tick lanes.
+ * - Custom command categories.
+ * - Skill effect primitives for scripting sequences.
+ * - GMCP out-of-band JSON packages.
+ * - Character creation choices and permanent traits.
+ * - Action restrictions.
+ *
+ * Registrations are validated incrementally: any conflict (such as duplicate command names or
+ * shadowing engine commands) immediately aborts registration.
+ */
 interface PluginRegistry {
   /** Installs [value] as `<id>.<name>` as is. */
   fun addBuiltin(name: String, value: StarlarkValue, doc: String)

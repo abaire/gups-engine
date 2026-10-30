@@ -45,9 +45,9 @@ internal constructor(
     name = "world",
     doc =
       "A fresh headless world with the given packages (default: this test's package) and the rules package. " +
-        "The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072). " +
+        "The `load` argument is spelled `packages`, since load is a Starlark keyword. " +
         "rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, " +
-        "so only rooms near players are simulated; by default every room is (D-116).",
+        "so only rooms near players are simulated; by default every room is.",
     parameters =
       [
         Param(name = "seed", named = true, defaultValue = "0", doc = "Random seed for the world."),

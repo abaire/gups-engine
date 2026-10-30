@@ -1,20 +1,29 @@
 package gups.net
 
-/** How many colors a client can show, taken from MTTS. */
+/** Client terminal color capability level negotiated via MTTS or client configuration. */
 enum class ColorDepth {
+  /** Monochrome display: all ANSI escape codes and markup tags are stripped. */
   NONE,
+  /**
+   * Standard 16-color ANSI display: 256-color markup is downgraded to the closest base ANSI color.
+   */
   ANSI16,
+  /** Extended 256-color xterm display: full 256-color palette supported natively. */
   XTERM256,
 }
 
 /**
- * Color markup in game text, rendered per client:
- * - `{red}` … `{white}` and `{bright_red}` … `{bright_white}` for the 16 ANSI colors,
- * - `{bold}`, `{underline}`, and `{/}` to reset,
- * - `{x0}` … `{x255}` for xterm-256 colors, downgraded to the nearest of the 16 when needed,
- * - `{{` for a literal brace.
+ * ANSI terminal formatting and color rendering engine.
  *
- * Unknown tags are left as they are. Clients without color get the text with tags removed.
+ * Translates in-game markup tags into ANSI escape sequences tailored to each client's [ColorDepth]:
+ * - **Base ANSI colors:** `{red}` … `{white}` and `{bright_red}` … `{bright_white}` (16 colors).
+ * - **Styles:** `{bold}`, `{underline}`, and `{/}` (reset to terminal default).
+ * - **256-color palette:** `{x0}` … `{x255}`. When rendering for [ColorDepth.XTERM256], outputs
+ *   `\u001b[38;5;<n>m`. When rendering for [ColorDepth.ANSI16], dynamically downgrades the
+ *   256-color index to the nearest Euclidean match among the 16 base ANSI RGB definitions.
+ * - **Monochrome:** For [ColorDepth.NONE], all styling and color tags are removed completely.
+ * - **Escaping:** `{{` produces a literal `{`. Unrecognized tags are preserved without
+ *   modification.
  */
 object Ansi {
   private val NAMES = listOf("black", "red", "green", "yellow", "blue", "magenta", "cyan", "white")

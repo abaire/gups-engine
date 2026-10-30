@@ -9,10 +9,50 @@ import net.starlark.java.eval.Dict
 import net.starlark.java.eval.Starlark
 
 /**
- * The server configuration of `gups serve --prod --config FILE`: Starlark with one `server(...)`
- * call, like `MODULE.gups`. It holds this machine's paths and settings, so it lives outside the
- * course world. Secrets never go in it, only the paths of files holding them. Addresses are
- * `host:port` or `:port`. A CLI flag overrides each setting.
+ * The server configuration loaded from `server.gups` when starting production services (`gups serve
+ * --prod --config FILE`).
+ *
+ * Configured in Starlark syntax via a single top-level `server(...)` call. It encapsulates
+ * machine-specific paths, listener network addresses, and security settings, and should reside
+ * outside the world course directory. Secrets are never placed directly in this configuration file;
+ * only file paths pointing to secrets are specified. Listen addresses are specified as `host:port`
+ * or `:port`. Command-line arguments override settings specified here.
+ *
+ * ## Settings
+ * - `world`: Filesystem path to the course world directory.
+ * - `db`: Filesystem path to the SQLite persistence file (`world.db`).
+ * - `telnet`: Raw unencrypted telnet listen address (`host:port` or `:port`), or `null` to disable.
+ * - `telnet_tls`: Encrypted telnet over TLS listen address (`host:port` or `:port`), or `null` to
+ *   disable.
+ * - `https`: HTTPS and WebSocket listen address (`host:port` or `:port`), or `null` to disable.
+ * - `admin`: Internal administration HTTP listen address (`host:port` or `:port`), or `null` to
+ *   disable.
+ * - `tls_cert`: Filesystem path to PEM certificate chain file (required if TLS telnet or HTTPS is
+ *   enabled).
+ * - `tls_key`: Filesystem path to PEM PKCS#8 private key file.
+ * - `admin_token_file`: Path to file containing the bearer token for authenticating admin
+ *   endpoints.
+ * - `repository`: Git remote repository URL to fetch deploy branches from (or `null` to use local
+ *   `origin`).
+ * - `deploy_branch`: Git branch to pull production deploys from (defaults to `"main"`).
+ * - `deploy_key_file`: Filesystem path to SSH private key used for git authentication during
+ *   deploys.
+ * - `open_signup`: Boolean flag allowing self-service account registration without an invite code
+ *   (defaults to `false`).
+ * - `max_characters`: Maximum characters allowed per account (defaults to 5, must be at least 1).
+ * - `restriction_ladder`: Durations for successive disciplinary account restrictions (defaults to
+ *   `["1d", "7d", "permanent"]`).
+ * - `reserved_names`: Extra reserved character and account names disallowed during creation.
+ * - `shutdown_timeout`: Maximum seconds to wait for final checkpoint commit during graceful
+ *   shutdown (defaults to 30 s).
+ *
+ * ## Validation Rules
+ * - Only one `server(...)` declaration is permitted per config file.
+ * - `max_characters` must be at least 1.
+ * - `shutdown_timeout` must be at least 1 second.
+ * - If TLS telnet or HTTPS is enabled, certificate and key file paths must be provided and resolve
+ *   to readable files.
+ * - If admin port is enabled, an admin token file must be specified and exist.
  */
 data class ServerConfig(
   val world: String? = null,

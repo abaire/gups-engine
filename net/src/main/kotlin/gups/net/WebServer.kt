@@ -182,10 +182,36 @@ class DocsServer(
 }
 
 /**
- * The HTTPS and WebSocket listener on Ktor's Netty engine. With [tls] it serves HTTPS through the
- * same hot-reloading certificate as telnet over TLS; without, plain HTTP, which only tests use.
- * Each socket is one world session whose frames are one JSON message each: `text`, `prompt`,
- * `hide`, `gmcp` and `error` from the server; `auth`, `input` and `gmcp` from the client.
+ * HTTPS and WebSocket web client server running on Ktor's Netty engine.
+ *
+ * ## WebSocket Protocol & Framing
+ * - **Session mapping:** Each WebSocket connection corresponds to a single world session.
+ * - **Frame format:** Text frames containing exactly one JSON message object.
+ *     - Server-to-client frames: `text` (game output text), `prompt` (current prompt line), `hide`
+ *       (masking input for passwords), `gmcp` (out-of-band GMCP payload), and `error` (fatal or
+ *       validation error message).
+ *     - Client-to-server frames: `auth` (bearer session token), `input` (raw player command line),
+ *       and `gmcp` (client package data).
+ * - **Frame size cap:** 64 KB maximum frame size.
+ * - **Ping & keepalive:** 30-second ping interval ([WebSockets] `pingPeriod`) and 60-second
+ *   connection timeout (`timeout`). Unauthenticated sockets must deliver an `auth` frame within 30
+ *   seconds ([AUTH_WAIT]).
+ * - **Token verification:** Active sockets are audited against session token revocations every 60
+ *   seconds ([TOKEN_CHECK_INTERVAL]).
+ *
+ * ## HTTP Endpoints
+ * - `GET /`: Serves the single-page web client `index.html` (`Cache-Control: no-cache`).
+ * - `GET /assets/{hash}/{name...}`: Serves hashed static client assets with immutable caching
+ *   (`max-age=31536000, immutable`).
+ * - `POST /api/login`: Authenticates login credentials, returning JSON authentication status and
+ *   setting the `gups_session` cookie.
+ * - `POST /api/code`: Validates invite or setup code validity before registration.
+ * - `POST /api/signup`: Registers a new account using a valid invite code and establishes the
+ *   initial password.
+ * - `POST /api/logout`: Revokes the current session token in the database and clears the session
+ *   cookie.
+ * - `GET /ws`: WebSocket endpoint upgrading connections to interactive game sessions.
+ * - `GET /docs/`: Serves offline HTML API reference documentation when configured.
  */
 class WebServer(
   private val inbox: WorldInbox,

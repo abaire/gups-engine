@@ -5,10 +5,31 @@ import gups.core.AccountStore
 import gups.core.Role
 
 /**
- * A `CODEOWNERS` file in GitHub's syntax: each line is a path pattern and its owners. A pattern
- * owns every package whose directory, or a directory above it, it matches; for each package the
- * last matching line wins, as on GitHub, and a line without owners leaves the package unowned. Only
- * `@user` owners count: team owners and email addresses are reported as [warnings].
+ * Parser and package ownership resolver for `CODEOWNERS` files adhering to GitHub specification
+ * rules.
+ *
+ * ## Discovery & Precedence
+ * - Evaluates file locations in GitHub precedence order: `.github/CODEOWNERS`, `CODEOWNERS`, and
+ *   `docs/CODEOWNERS`.
+ * - The first file found on disk is parsed; subsequent files are ignored.
+ *
+ * ## Rule Evaluation Semantics
+ * - Lines specify a gitignore-style path pattern followed by zero or more owner tokens.
+ * - A rule matches a package if its pattern matches the package's relative directory path or any
+ *   ancestor directory.
+ * - **Last-match-wins:** When multiple rules match a package, the last matching rule in the file
+ *   determines ownership.
+ * - **Unowned packages:** A rule line specifying a pattern with no owners explicitly clears
+ *   ownership for matching paths.
+ * - **Owner formats:** Only `@username` individual GitHub handles (normalized to lowercase without
+ *   the leading `@`) confer ownership. Team owners (`@org/team`) and email addresses produce
+ *   warnings and confer no package ownership.
+ *
+ * ## Builder Scopes
+ * - Packages owned via `CODEOWNERS` automatically grant builder edit scope to matching GitHub
+ *   account holders.
+ * - Packages covered by `CODEOWNERS` cannot have builder scopes reassigned manually via the in-game
+ *   `@role` command.
  */
 class CodeOwners private constructor(private val rules: List<Rule>, val warnings: List<String>) {
   private class Rule(val line: Int, val pattern: String, val regex: Regex, val owners: List<String>)

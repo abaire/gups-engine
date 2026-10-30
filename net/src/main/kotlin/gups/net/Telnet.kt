@@ -35,21 +35,42 @@ object Telnet {
   const val CHARSET_REJECTED = 3
 }
 
-/** Input lines longer than this many bytes are truncated. */
+/**
+ * Maximum allowable length of an inbound client input line in bytes (512 bytes); longer lines are
+ * truncated.
+ */
 const val MAX_LINE_BYTES = 512
 
-/** A connection is dropped after this many malformed sequences. */
+/** The connection is closed when its count of malformed sequences reaches this (5). */
 const val MAX_PROTOCOL_ERRORS = 5
 
 private const val MAX_SUBNEGOTIATION = 8192
 
 /**
- * One telnet connection's protocol state: line framing and option negotiation for NAWS, TTYPE/MTTS,
- * EOR (falling back to GA), GMCP and CHARSET (UTF-8 only). Pure: bytes to send go to [write], so it
- * can be tested against recorded client transcripts.
+ * Protocol framing and RFC option negotiation state machine for a single telnet connection.
  *
- * [receive] runs on the connection's reader; the encoders run on the world thread and only read
- * state, which is volatile.
+ * ## Negotiated Protocols & Standards
+ * - **NAWS (RFC 1073):** Negotiates terminal width and height.
+ * - **TTYPE / MTTS (RFC 1091):** Queries terminal identification strings and parses MTTS bitmasks
+ *   for color depth (downgrading to ANSI-16 or monochrome if 256 colors are unsupported) and UTF-8
+ *   capability.
+ * - **EOR (RFC 885):** Negotiates prompt boundary termination, falling back to GA (Go Ahead,
+ *   RFC 854) when unsupported.
+ * - **GMCP:** Generic MUD Communication Protocol subnegotiation for out-of-band JSON messages
+ *   (Core, Char, Room).
+ * - **CHARSET (RFC 2066):** Requests UTF-8 encoding; rejects non-UTF-8 encodings.
+ * - **ECHO (RFC 857):** Suppresses local echo during password entry.
+ *
+ * ## Constraints & Boundaries
+ * - Input lines are capped at 512 bytes ([MAX_LINE_BYTES]); longer lines are truncated.
+ * - Connections are closed on the 5th malformed telnet byte sequence
+ *   ([MAX_PROTOCOL_ERRORS]).
+ * - Output buffers are bounded at 256 KB (defined in `TelnetServer`); slow clients exceeding this
+ *   buffer limit are disconnected and marked link-dead.
+ *
+ * Byte handling is isolated from I/O: raw outbound bytes pass to [write], enabling replay testing
+ * against captured client sessions. Inbound parsing runs on Netty I/O threads; state is read safely
+ * via volatile fields on the world thread.
  */
 class TelnetConnection(private val write: (ByteArray) -> Unit) {
   @Volatile

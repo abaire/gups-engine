@@ -11,8 +11,24 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.Tuple
 
 /**
- * The world's overrides of the engine message catalog, from `MESSAGES.gups` at the world root.
- * Optional, and read only at startup: changing it needs a restart.
+ * Overrides of the engine message catalog declared by `messages(...)` in `MESSAGES.gups` at the
+ * world root.
+ *
+ * `MESSAGES.gups` is optional and read exclusively during server startup; changing it requires a
+ * full restart.
+ *
+ * ## Settings
+ * - `texts`: A dictionary mapping engine message IDs (strings) to customized message templates.
+ *   Templates use `{name}` syntax for variables and `{{` for literal open braces.
+ *
+ * ## Validation Rules
+ * - **Message IDs:** Every key in `texts` must correspond to a known engine message ID declared in
+ *   the engine catalog. Unknown IDs stop the server from starting.
+ * - **Placeholders:** Every replacement placeholder `{var}` in the replacement text must be defined
+ *   by the engine message's declaration. Missing required placeholders or referencing undeclared
+ *   placeholders prevents startup.
+ * - **Feature warnings:** Overriding messages that belong to feature modules currently disabled in
+ *   the world generates startup warnings indicating the message will never be sent.
  */
 data class WorldMessages(val texts: Map<String, String> = emptyMap()) {
   /** Problems that should stop the server: unknown ids, unknown or missing placeholders. */

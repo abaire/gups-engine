@@ -32,9 +32,18 @@ val TLS_PROTOCOLS = listOf("TLSv1.3", "TLSv1.2")
 val CERT_CHECK_INTERVAL: Duration = Duration.ofHours(1)
 
 /**
- * The server certificate: a PEM certificate chain and a PEM PKCS#8 private key, as certbot writes
- * them. TLS 1.2 and 1.3 only, with the JDK's default cipher suites. [reloadIfChanged] picks up
- * renewed files without a restart; connections already open keep the certificate they started with.
+ * TLS security configuration for Netty and Ktor listeners.
+ *
+ * Enforces modern cryptography standards and manages zero-downtime certificate rotation:
+ * - **Protocols:** Restricts handshakes strictly to TLS 1.2 and TLS 1.3 ([TLS_PROTOCOLS]); legacy
+ *   SSL/TLS versions are rejected.
+ * - **Key formats:** Expects PEM-encoded X.509 certificate chains and PEM-encoded PKCS#8 private
+ *   keys (compatible with Certbot).
+ * - **Hot reloading:** Evaluated periodically ([CERT_CHECK_INTERVAL] = 1 hour). [reloadIfChanged]
+ *   inspects file modification timestamps and swaps the Netty `SslContext` without interrupting the
+ *   server process or closing active sockets.
+ * - **Self-signed generation:** [ServerTls.selfSigned] constructs an ephemeral EC P-256 (secp256r1)
+ *   keypair and X.509 certificate valid for 30 days, signed with SHA-256 for local testing.
  */
 class ServerTls(val cert: Path, val key: Path) {
   @Volatile private var current: SslContext = build()

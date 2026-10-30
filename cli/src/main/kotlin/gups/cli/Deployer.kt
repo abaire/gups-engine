@@ -31,11 +31,30 @@ class DeploySettings(
 private class Refused(message: String) : Exception(message)
 
 /**
- * The production deploy pipeline. One deploy at a time, on a thread of its own: fetch, pick and
- * check the commit, find the changed packages, take a `predeploy` snapshot, check out and load the
- * commit in a staging tree, then swap it in on the world thread. Only after the swap does the live
- * working tree move to the commit; then `meta.world_commit` is set, CODEOWNERS synced and a
- * checkpoint taken.
+ * Production hot code deployment pipeline using isolated git worktrees.
+ *
+ * Deploys run one at a time on an asynchronous background thread:
+ *
+ * ## Staged Deployment Steps
+ * 1. **Concurrency lock:** Ensures only one deployment executes at a time via atomic CAS
+ *    ([running]).
+ * 2. **Fetch & resolve:** Fetches the deploy branch from the remote repository into a dedicated ref
+ *    (`refs/remotes/gups-deploy/<branch>`) and resolves the target commit SHA.
+ * 3. **Manifest check:** Verifies `MODULE.gups` and `MESSAGES.gups` remain unchanged; changes to
+ *    engine configuration or message catalogs require a server restart and cannot be hot-deployed.
+ * 4. **Diff analysis:** Analyzes modified files between the current `worldCommit` and the target
+ *    commit, mapping each change to its owning package.
+ * 5. **Pre-deploy snapshot:** Takes an automated non-pruned `predeploy` database backup snapshot
+ *    before applying changes.
+ * 6. **Staging verification:** Checks out the target commit in an isolated temporary git worktree
+ *    (`git worktree add --detach`). Loads and dry-runs all packages off-thread; any load or
+ *    validation failure aborts the deployment and cleans up the temporary worktree without
+ *    modifying the live server.
+ * 7. **Atomic world thread swap:** Dispatches a world task to swap script prototypes, reconcile
+ *    live in-game entities, and clear quarantine status for reloaded packages.
+ * 8. **Live checkout & finalization:** Updates the main working tree (`git checkout --detach
+ *    <commit>`), updates `meta.world_commit`, re-reads `CODEOWNERS` into active builder scopes,
+ *    triggers a database checkpoint, and notifies online instructors.
  */
 class Deployer(
   private val worldDir: Path,
