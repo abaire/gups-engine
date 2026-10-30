@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.CORPSE_DECAY_PULSES
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.model.Actor
@@ -17,8 +18,6 @@ import gups.core.model.Modifiers
 import gups.core.model.Player
 import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
-
-const val CORPSE_DECAY_PULSES = 1200 // 5 min
 
 // ---- Engagement ------------------------------------------------------------------------------
 

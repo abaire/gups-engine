@@ -15,158 +15,202 @@ import gups.core.model.SkillProto
 import gups.core.world.World
 
 /**
- * The read-only context handed to every rules call. Fields that do not apply to a call are null;
- * [attacker] and [defender] are the attack-call names for [actor] and [target].
+ * Immutable contextual snapshot passed to every rules calculation call. Fields not applicable to a
+ * specific calculation are null.
  */
 class RulesContext(
+  /** Authoritative world simulation reference. */
   val world: World,
-  /** Null for calls about a room rather than an actor, such as `sense_cost`. */
+  /** Primary actor involved in the rules call, or null for room-level queries. */
   val actor: Actor? = null,
+  /** Secondary target actor involved in the rules call, or null. */
   val target: Actor? = null,
+  /** Weapon item used in the attack or action, or null for unarmed combat. */
   val weapon: Item? = null,
+  /** Spatial distance band where the action occurs. */
   val band: Band? = null,
+  /** Skill or spell prototype being cast or resolved, or null. */
   val skill: SkillProto? = null,
+  /** Item being manipulated, picked up, or used, or null. */
   val item: Item? = null,
-  /** For the perception calls, the room the call is about when no [actor] is. */
+  /** Room where the action occurs or perception is evaluated. */
   val room: Room? = null,
+  /** Exit being inspected, traversed, or crossed by sensory perception. */
   val exit: Exit? = null,
+  /** Sensory channel evaluated for perception (e.g. sound, sight). */
   val channel: Channel? = null,
+  /** Sensory event type (e.g. `say`, `combat`, `open`). */
   val event: String? = null,
+  /** Initial sensory signal intensity at the source. */
   val intensity: Int? = null,
+  /** Accumulated path attenuation cost through room exits. */
   val cost: Int? = null,
+  /** Room where the sensory event originated. */
   val sourceRoom: Room? = null,
+  /** Direction from which the perceived signal arrived. */
   val viaExit: Direction? = null,
+  /** Textual narrative payload associated with the event. */
   val text: String? = null,
+  /** Action verb identifier (e.g. `open`, `close`). */
   val action: String? = null,
+  /** Semantic tags associated with the context. */
   val tags: Set<String> = emptySet(),
-  /** The actor who caused a perceived event, if any. */
+  /** The actor who originated the perceived event, or null if environmental. */
   val source: Actor? = null,
 ) {
-  /** [actor] for the calls that always have one. */
+  /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
 
+  /** Attacking actor in a combat rules call (alias for [requireActor]). */
   val attacker: Actor
     get() = requireActor()
 
+  /** Defending actor in a combat rules call (alias for [target]). */
   val defender: Actor
     get() = checkNotNull(target) { "This rules call has no defender" }
 
+  /** Deterministic pseudo-random number generator provided by the world simulation. */
   val rng: Rng
     get() = world.rng
 }
 
 /**
- * The numbers `rules.starting_stats` gives a new actor. A [current] it omits equals the maximum in
- * [max].
+ * Initial attribute and vital values assigned to a newly created character or freshly spawned mob.
  */
 data class StartingStats(
+  /** Base attribute values keyed by declared stat name. */
   val stats: Map<String, Int> = emptyMap(),
+  /** Base maximum vital values keyed by declared vital name. */
   val max: Map<String, Int> = emptyMap(),
+  /** Starting current vital values; unlisted vitals start at their maximum. */
   val current: Map<String, Int> = emptyMap(),
-  /** Base senses by channel, merged over the built-in defaults. */
+  /** Base perception sense scores merged over engine defaults. */
   val senses: Map<Channel, Int> = emptyMap(),
 )
 
-/** What `rules.on_player_death` decides: where the player respawns and with which vitals. */
+/** Outcome of resolving a player character's death. */
 data class PlayerDeathOutcome(
+  /** Destination room label where the player character respawns. */
   val respawn: Label,
-  /** Current vitals of the respawned player; the rest go to their maximum. */
+  /** Vital values restored upon respawning; unlisted vitals recover to maximum. */
   val vitals: Map<String, Int>?,
+  /** Experience points deducted as a death penalty. */
   val xpLoss: Long,
 )
 
 /**
- * One method per export of the `//rules` package's files; the Starlark-backed implementation is the
- * only one.
+ * Authoritative game mechanics rules engine seam.
+ *
+ * Implemented by Starlark scripts under `//rules` in production, or test doubles during unit
+ * testing. Every method corresponds to an exported function in the world's rules scripts.
  */
 interface RulesEngine {
+  /** Returns the list of declared equipment slot names valid in this world. */
   fun equipmentSlots(): List<String>
 
-  /** Numbers for [RulesContext.actor], a new character or a mob about to spawn. */
+  /**
+   * Calculates initial stats, maximum vitals, and base senses for a new character or spawning mob.
+   */
   fun startingStats(c: RulesContext): StartingStats
 
-  /** The life state of [RulesContext.actor]. */
+  /**
+   * Evaluates and returns the current life condition (`OK`, `INCAPACITATED`, or `DEAD`) of an
+   * actor.
+   */
   fun condition(c: RulesContext): Condition
 
-  /** Hit chance in percent. */
+  /** Calculates the hit probability percentage (1..99) for an attack. */
   fun toHit(c: RulesContext): Int
 
-  /** Raw auto-attack damage. */
+  /** Rolls raw auto-attack damage before damage mitigation. */
   fun damage(c: RulesContext): Int
 
-  /** The vital losses [amount] damage of [type] causes [RulesContext.target]. */
+  /**
+   * Calculates vital damage reductions after armor and resistances, returning net losses per vital.
+   */
   fun mitigate(c: RulesContext, amount: Int, type: DamageType): Map<String, Int>
 
-  /** Higher acts first within a combat round. */
+  /** Rolls round initiative determining action order within a combat round. */
   fun initiative(c: RulesContext): Int
 
-  /** Null to allow, or the denial message. */
+  /**
+   * Validates whether an actor may begin casting a skill; returns null to permit or a refusal
+   * message.
+   */
   fun castAllowed(c: RulesContext): String?
 
-  /** Whether [RulesContext.actor], who is casting, is interrupted by [amount] total loss. */
+  /** Determines whether suffering [amount] total vital damage interrupts an in-progress cast. */
   fun interruptCheck(c: RulesContext, amount: Int): Boolean
 
-  /** Success chance in percent for retreating while pinned by [RulesContext.target]. */
+  /**
+   * Calculates success probability percentage when attempting to retreat while pinned by an
+   * adversary.
+   */
   fun retreatCheck(c: RulesContext): Int
 
+  /** Calculates success probability percentage when attempting to flee from combat. */
   fun fleeChance(c: RulesContext): Int
 
-  /** What a room transition spends, per vital. */
+  /** Calculates vital costs deducted when traversing an exit between rooms. */
   fun moveCost(c: RulesContext): Map<String, Int>
 
-  /** What each vital gains per world tick; negative to lose. */
+  /** Calculates periodic vital recovery or loss applied on each world tick. */
   fun regen(c: RulesContext): Map<String, Int>
 
+  /** Calculates maximum carrying weight capacity before encumbrance penalties apply. */
   fun carryLimit(c: RulesContext): Int
 
+  /** Calculates stat penalties incurred when carrying weight in excess of the carry limit. */
   fun encumbrance(c: RulesContext): Map<String, Int>
 
-  /** Extra lag for picking up [RulesContext.item] at [band]; null means out of reach. */
+  /**
+   * Calculates extra recovery lag when retrieving an item at distance [band], or null if out of
+   * reach.
+   */
   fun getLag(c: RulesContext, band: Band): Int?
 
-  /** XP that [RulesContext.actor] earns for killing [RulesContext.target]. */
+  /** Calculates experience points awarded to an actor for defeating a target. */
   fun xpForKill(c: RulesContext): Long
 
+  /** Calculates the cumulative experience points required to reach [level]. */
   fun xpToLevel(level: Int): Long
 
-  /** For the dead player [RulesContext.actor], killed by [RulesContext.target] if any. */
+  /**
+   * Resolves player death consequences, returning respawn destination, vital recovery, and XP loss.
+   */
   fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome
 
-  /**
-   * Recovery lag after [RulesContext.actor] steps toward [RulesContext.target], at the new band.
-   */
+  /** Calculates action recovery lag after stepping toward a target at a new band. */
   fun advanceLag(c: RulesContext): Int
 
-  /**
-   * Recovery lag after [RulesContext.actor] steps away from [RulesContext.target], at the new band.
-   */
+  /** Calculates action recovery lag after stepping away from a target at a new band. */
   fun retreatLag(c: RulesContext): Int
 
-  /**
-   * Recovery lag after [RulesContext.actor] fails to break free of the pinner,
-   * [RulesContext.target].
-   */
+  /** Calculates action recovery lag after failing to retreat while pinned. */
   fun retreatFailLag(c: RulesContext): Int
 
-  /** Recovery lag after [RulesContext.actor] fails to flee; there is no target. */
+  /** Calculates action recovery lag after failing to flee from combat. */
   fun fleeFailLag(c: RulesContext): Int
 
   /**
-   * What the signal of [RulesContext.channel] loses crossing [RulesContext.exit] into
-   * [RulesContext.room]; a negative price blocks it.
+   * Calculates signal attenuation cost when crossing an exit into a room (negative blocks
+   * propagation).
    */
   fun senseCost(c: RulesContext): Int = 1
 
-  /** Whether [RulesContext.actor] notices the perceived event. */
+  /**
+   * Evaluates whether an actor notices a sensory event based on sense, intensity, and path
+   * attenuation.
+   */
   fun canPerceive(c: RulesContext): Boolean {
     val sense = c.actor?.sense(c.channel ?: Channel.SOUND) ?: 0
     return sense > 0 &&
       (c.sourceRoom === (c.room ?: c.actor?.room) || (c.intensity ?: 1) + sense > (c.cost ?: 0))
   }
 
-  /** What a player in another room is told about the perceived event, or null for nothing. */
+  /** Formats a narrative description of an event perceived across rooms, or null for silence. */
   fun perceiveMessage(c: RulesContext): String? = null
 
-  /** The sound intensity of a door or container [RulesContext.action]; 0 is silent. */
+  /** Calculates sound intensity generated by manipulating a door or container (0 is silent). */
   fun doorIntensity(c: RulesContext): Int = if (c.action == "open" || c.action == "close") 1 else 0
 }

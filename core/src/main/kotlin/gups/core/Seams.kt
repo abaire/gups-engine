@@ -1,84 +1,129 @@
 package gups.core
 
-/** One line of player input, as it reaches the world. */
-data class ClientInputEvent(val session: SessionId, val line: String, val receivedNanos: Long)
+/** A line of raw text input received from a connected client session. */
+data class ClientInputEvent(
+  /** Identifier of the sending client session. */
+  val session: SessionId,
+  /** Raw text line submitted by the client (UTF-8, capped at 512 bytes). */
+  val line: String,
+  /** Monotonic nanosecond timestamp when the input was received by the network listener. */
+  val receivedNanos: Long,
+)
 
-/** Non-input events posted to the world. */
+/**
+ * Non-input control events posted from listeners or background tasks to the world simulation loop.
+ */
 sealed interface WorldControlEvent {
-  /**
-   * [remote] is the peer address, for example `127.0.0.1`; [transport] is `telnet`, `tls` or `ws`.
-   * A web socket that authenticated with a session token carries its [account], so the login starts
-   * at character selection.
-   */
+  /** Signals a newly connected client session. */
   data class Connect(
+    /** Identifier assigned to the new session. */
     val session: SessionId,
+    /** Output sink used to deliver messages back to this client. */
     val sink: OutputSink,
+    /** Peer network address (e.g. `127.0.0.1` or `local`). */
     val remote: String = "local",
+    /** Network protocol transport name (`telnet`, `tls`, or `ws`). */
     val transport: String = "local",
+    /** Account ID if pre-authenticated via session token (e.g. WebSocket), or null. */
     val account: Long? = null,
   ) : WorldControlEvent
 
-  data class Disconnect(val session: SessionId) : WorldControlEvent
+  /** Signals that a client session has disconnected. */
+  data class Disconnect(
+    /** Identifier of the disconnected session. */
+    val session: SessionId
+  ) : WorldControlEvent
 
-  /** Re-evaluates and swaps in these packages, by path such as `zones/forest`. */
-  data class Reload(val packages: List<String>) : WorldControlEvent
+  /** Requests hot-reloading and re-evaluation of content packages. */
+  data class Reload(
+    /** Content package paths to reload (e.g. `zones/forest`). */
+    val packages: List<String>
+  ) : WorldControlEvent
 
-  data class Deploy(val commit: String) : WorldControlEvent
+  /** Triggers a live deployment by checking out and applying a git commit. */
+  data class Deploy(
+    /** Git commit SHA or ref to deploy. */
+    val commit: String
+  ) : WorldControlEvent
 
-  data class Shutdown(val delayPulses: Long, val reason: String) : WorldControlEvent
+  /** Schedules a graceful server shutdown. */
+  data class Shutdown(
+    /** Pulses remaining until the simulation stops. */
+    val delayPulses: Long,
+    /** Narrative reason displayed to players and logged. */
+    val reason: String,
+  ) : WorldControlEvent
+
+  /** Asynchronous authentication or background task result delivered to the world loop. */
+  data class AuthResult(
+    /** Identifier of the session for which authentication was performed. */
+    val session: SessionId,
+    /** Outcome payload returned to the active login handler. */
+    val outcome: Any,
+  ) : WorldControlEvent
 
   /**
-   * Slow login work for [session], such as a password hash, finished off the world thread. The
-   * world hands [outcome] back to the `LoginHandler` that started it.
+   * Arbitrary deferred continuation task to run safely on the authoritative world simulation
+   * thread.
    */
-  data class AuthResult(val session: SessionId, val outcome: Any) : WorldControlEvent
-
-  /** The rest of some slow work, such as an account change, to run on the world thread. */
-  class Task(val run: (gups.core.world.World) -> Unit) : WorldControlEvent
+  class Task(
+    /** Work unit to execute against the live world instance. */
+    val run: (gups.core.world.World) -> Unit
+  ) : WorldControlEvent
 }
 
-/** Where listeners deliver input and connection events; thread-safe. In practice a `WorldLoop`. */
+/**
+ * Thread-safe incoming event queue interface connecting external listeners to the world simulation
+ * loop.
+ */
 interface WorldInbox {
+  /** Submits a client command line into the simulation event queue. */
   fun submit(event: ClientInputEvent)
 
+  /** Submits a lifecycle or control event into the simulation event queue. */
   fun submit(event: WorldControlEvent)
 }
 
-/** Per-session output. Implementations must never block the world thread. */
+/**
+ * Output sink abstraction for delivering text, GMCP packets, and session control commands to a
+ * client. Implementations must buffer asynchronously and never block the world simulation thread.
+ */
 interface OutputSink {
+  /** Transmits text output to the client. */
   fun send(text: String)
 
   /**
-   * Sends one GMCP message. [data] is a plain value: `String`, a number, `Boolean`, `List`,
-   * `Map<String, *>` or null; the listener encodes it.
+   * Transmits a structured GMCP message packet. [data] is a plain primitive, list, map, or null;
+   * encoded by the listener.
    */
   fun gmcp(pkg: String, data: Any?) = Unit
 
-  /** True if the client asked for GMCP package [pkg] with `Core.Supports`. */
+  /** True if the client negotiated support for GMCP package [pkg] via `Core.Supports`. */
   fun wantsGmcp(pkg: String): Boolean = false
 
   /**
-   * Sends a prompt after a burst of output. Telnet ends it with EOR or GA so clients can tell it
-   * apart from text; headless sinks ignore prompts.
+   * Sends a prompt after a burst of output. Telnet listeners terminate prompts with IAC EOR or GA;
+   * headless sinks ignore prompts.
    */
   fun prompt(text: String) = Unit
 
   /**
-   * Asks the client to stop echoing typed input, or to start again, around a password prompt.
-   * Telnet sends `IAC WILL ECHO` / `IAC WONT ECHO`; headless sinks ignore it.
+   * Instructs the client terminal to hide or show typed input echo (e.g. around password prompts).
    */
   fun hideInput(hidden: Boolean) = Unit
 
-  /** Ends the session, for example after `quit` or a rate-limit disconnect. */
+  /** Terminates the client connection with a diagnostic [reason]. */
   fun close(reason: String)
 }
 
-/** An [OutputSink] that records everything, for headless worlds and tests. */
+/**
+ * An [OutputSink] that records all delivered output in memory, used for tests and headless worlds.
+ */
 class CapturingSink : OutputSink {
   private val buffer = StringBuilder()
   private val all = StringBuilder()
 
-  /** Why the world closed this session, or null while it is open. */
+  /** Reason provided when the session was closed, or null while still open. */
   var closedReason: String? = null
     private set
 
@@ -91,10 +136,10 @@ class CapturingSink : OutputSink {
     closedReason = reason
   }
 
-  /** Returns the output received since the last drain. */
+  /** Drains and returns all buffered output captured since the previous drain call. */
   fun drain(): String = buffer.toString().also { buffer.setLength(0) }
 
-  /** Everything ever received. */
+  /** Complete historical transcript of all text sent to this sink. */
   val transcript: String
     get() = all.toString()
 }

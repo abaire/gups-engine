@@ -6,35 +6,42 @@ import gups.core.SessionId
 import gups.core.model.Player
 
 /**
- * Handles a session until it plays a character. Runs on the world thread. The account login of
- * `auth` serves `--prod`; [DevLogin] serves `--dev`.
+ * Handles incoming client sessions before they enter the game playing an active character.
+ *
+ * Runs strictly on the world simulation thread. In production, `auth` provides account login; in
+ * local developer mode, [DevLogin] provides passwordless login.
  */
 interface LoginHandler {
+  /** Invoked when a new client session connects to the world. */
   fun connected(world: World, session: Session)
 
+  /** Invoked when a client session in the pre-game login phase submits an input line. */
   fun input(world: World, session: Session, line: String)
 
-  /** Work this handler started off the world thread finished (`WorldControlEvent.AuthResult`). */
+  /**
+   * Invoked when background authentication work completed off the world thread delivers its outcome
+   * back via a control event.
+   */
   fun completed(world: World, session: Session, outcome: Any) = Unit
 
-  /** [session] closed, from either side; any login state it had can go. */
+  /** Invoked when a client session disconnects or closes during login. */
   fun disconnected(world: World, session: SessionId) = Unit
 
-  /** Called once per pulse, for example to time out idle login prompts. */
+  /** Invoked once per simulation pulse to advance login prompt timeouts or session cleanup. */
   fun pulse(world: World) = Unit
 
-  /** An account was disabled; pre-game sessions for it are closed. */
+  /** Invoked when an account is disabled, allowing active login flows to terminate. */
   fun accountDisabled(world: World, accountId: Long) = Unit
 
-  /** An account was re-enabled. */
+  /** Invoked when an account is re-enabled. */
   fun accountEnabled(world: World, accountId: Long) = Unit
 }
 
 /**
- * The `--dev` login: a passwordless local instructor account that only accepts connections from
- * this machine. Each name is a character of that account: one already in the world is taken over, a
- * saved one is restored, any other is created. With a database, the account is a real one,
- * `instructor`, and [accountId] is its id.
+ * Developer mode login handler for local connections (`--dev`).
+ *
+ * Automatically assigns instructor privileges to local loopback connections. Players take over
+ * existing characters, restore saved characters, or create new ones without passwords.
  */
 class DevLogin(private val start: Label, private val accountId: Long? = null) : LoginHandler {
   private val flows = HashMap<SessionId, CreationFlow>()
@@ -195,22 +202,23 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
   companion object {
     private val NAME = Regex("[A-Z][a-z]{1,15}")
 
+    /** True if [remote] represents a local loopback IP address. */
     fun isLoopback(remote: String): Boolean =
       remote in setOf("local", "localhost", "::1", "0:0:0:0:0:0:0:1") || remote.startsWith("127.")
   }
 }
 
 /**
- * Closes the connection playing [p], if any, telling it why: another login is taking the character
- * over.
+ * Disconnects any prior session playing [p] with a message indicating another login took over the
+ * character.
  */
 fun World.takeOver(p: Player) {
   p.session?.let { old -> session(old)?.let { closeSession(it, msg(KernelMsg.TAKEN_OVER)) } }
 }
 
 /**
- * Binds [session] to [p] and greets it with [welcome], or with "Reconnected." when [welcome] is
- * null because [p] was already in the world. Saves a newly created character at once.
+ * Binds [session] to player [p], displays [welcome] message, echoes reconnection to the room, and
+ * describes the room to the player.
  */
 fun World.enterGame(session: Session, p: Player, welcome: String?) {
   attach(session.id, p)

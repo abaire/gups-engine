@@ -6,15 +6,36 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Room
 
-/** One broken state contract, and the entity it is about if there is one. */
-data class Violation(val entity: EntityId?, val message: String) {
+/** Representation of an invariant violation in the simulation state. */
+data class Violation(
+  /** Identifier of the entity associated with this violation, or null if room- or world-wide. */
+  val entity: EntityId?,
+  /** Narrative description of the broken state contract. */
+  val message: String,
+) {
   override fun toString(): String = message
 }
 
-/** Checks the state contracts. Returns one line per violation. */
+/**
+ * Validates the core simulation state contracts and returns a list of human-readable violation
+ * descriptions.
+ */
 fun World.checkInvariants(): List<String> = invariantViolations().map { it.message }
 
-/** Like [checkInvariants], keeping which entity each violation is about. */
+/**
+ * Validates authoritative simulation invariants across entities, rooms, and actors:
+ * 1. Every item has exactly one [ItemLocation], and the item containment graph is a forest with no
+ *    cycles.
+ * 2. Every actor's spatial track position satisfies `0 <= trackIndex < room.trackSize`.
+ * 3. Every vital's current value does not exceed its effective maximum.
+ * 4. An actor is either idle, in recovery lag (`waitState > 0`), or casting (`casting != null`),
+ *    never both in recovery and casting.
+ * 5. An actor's action queue size never exceeds [ACTION_QUEUE_MAX] (10 actions).
+ * 6. Dormant rooms contain no running timers, autonomous mob AI, or active combat encounters.
+ * 7. Room and actor spatial indices are bidirectional and contain no stray unindexed entities.
+ *
+ * Returns a list of all detected [Violation] records.
+ */
 fun World.invariantViolations(): List<Violation> {
   val out = ViolationList()
   for (e in entities.values) {
@@ -59,7 +80,7 @@ fun World.invariantViolations(): List<Violation> {
     for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id))
       out += "$a lists stray $item"
   }
-  // A dormant room has no running timers, AI or combat (inv. 7). Active entities carry on.
+  // A dormant room has no running timers, AI or combat. Active entities carry on.
   for (room in rooms) {
     if (!room.isDormant) continue
     for (e in entitiesIn(room)) {
