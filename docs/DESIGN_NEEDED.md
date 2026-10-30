@@ -33,10 +33,17 @@ code, or (after M11) a plugin's `setSkill`, which runs the `learn` restrictions 
 prototype. No command, script verb or rules hook teaches a skill. **Questions:** is there a `learn`/`practice` flow, a
 `ctx.teach(actor, skill, pct)` verb, or skills granted by level through the rules?
 
-### Level-up gains
+### Skill-based advancement (worlds without character levels)
 
-**Spec:** §4.6 (`xp_for_kill`, `xp_to_level`). **Today:** a level-up raises `level` and nothing else (D-039).
-**Question:** should a rules export such as `on_level_up(ctx)` return stat and max-vital gains?
+**Spec:** §3.3 (`skills: Map<Label, Int>`), §3.10 (`leveling` feature), §4.6. **Today:** a world with `leveling` off has
+no `level` or `xp`, and skills change only through the harness, Kotlin code or a plugin's `setSkill` (§4.19). Nothing
+tracks experience toward a skill, and no hook reports that a skill was used. Depends on "Skill proficiency" and
+"Acquiring skills". **Questions:** - Do skills earn XP of their own (for example `skill_xp: Map<Label, Long>`), and is
+the proficiency a function of it? - Is the advancement mechanism a rules export called after each use (for example
+`skill_gain(ctx)`), a plugin timer or hook, or both? - What counts as a use: a cast, a hit with a weapon skill, a failed
+attempt? Is there a cap per use or per time to stop farming? - Can a world mix character levels and skill levels, and
+can a skill's level gate on the character's? - Which engine code may still read `level` when `leveling` is off? The
+template rules read it in `to_hit` and `regen`; those are template choices, but the kernel must not assume it.
 
 ### Rerolls and point-buy at character creation
 
@@ -49,16 +56,18 @@ free-form input (`str +2`, `done`) instead of picking an option? Would the provi
 module through a new export such as `point_buy(ctx, spend)`? - How would a point-buy or rerolled result reach
 `starting_stats`: as input in `ctx`, or as replacing its result?
 
-### Experience subsystem and scaling
+### Group, party and pet XP sharing
 
-**Spec:** §4.6 (`xp_for_kill`, `xp_to_level`), §5.4. **Today:** `xp_for_kill(ctx)` awards a flat `50 * victim.level` and
-`xp_to_level(level)` scales linearly `1000 * level` (D-045). There is no level-difference scaling (killing trivial mobs
-yields full XP), no group/party XP sharing, no diminishing returns, and death XP loss (`xp / 10`) does not consider
-level loss or de-leveling floors. **Questions:** - Should kill XP factor in the level difference between killer and
-victim (e.g. reduced/zero XP for grey/trivial mobs, bonus XP for challenging mobs)? - How should XP be distributed among
-group members or multi-attacker assists? - Should the default curve support non-linear / polynomial scaling to prevent
-linear grinding? - What are the boundaries for death XP penalties (e.g. can a player de-level, or is there a floor at
-the start of the current level)?
+**Spec:** §4.6 (`xp_for_kill`), §5.4 (Death: the killer is the last actor who damaged the victim), §5.9 (`bond:`
+reasons), §4.7 (`assist`, `follow`). **Today:** only the killer is awarded XP, and nothing records who else fought the
+victim. The engine has no group or party concept, so a party member who didn't land the final blow, a pet's owner, and
+an assisting ally all earn nothing. Related designs: "Pets and followers bonded to a player" and "Hostility and
+factions". **Questions:** - Is there an engine-level group or party (a command to form it, membership that persists
+across logout), or is it only a `//lib` convention on shared attributes? - Should death track every actor that damaged
+the victim, so XP can go to all contributors rather than the last hitter? - Does a pet's kill credit its owner, and does
+an owner's kill credit the pet? - How is the award split: equal shares, or weighted by level or by damage dealt? Who
+sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
+below the victim's level, excluded from the split?
 
 ### Armor from equipment, shields and off-hand weapons
 
