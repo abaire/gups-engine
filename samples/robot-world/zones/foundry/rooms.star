@@ -23,14 +23,12 @@ room("scrapyard",
     desc = "Heaps of twisted chassis. Something metallic rattles inside.",
     exits = [exit(DIR.east, to = ":gate")],
     spawns = [spawn(":rust_hound", count = 1)],
-    flags = ["dead_end_ok"],
 )
 
 room("furnace",
     name = "The Dead Furnace",
     desc = "A cold furnace. Warning glyphs flicker on the wall.",
     exits = [exit(DIR.north, to = ":gate")],
-    flags = ["dead_end_ok"],
 )
 
 room("assembly",
@@ -48,7 +46,6 @@ room("control",
     name = "The Control Room",
     desc = "Dark screens and a single working terminal.",
     exits = [exit(DIR.west, to = ":assembly")],
-    flags = ["dead_end_ok"],
 )
 
 room("vault",
@@ -74,5 +71,4 @@ room("reactor",
     name = "The Reactor Core",
     desc = "A cracked reactor ticks quietly. Your sensors scream.",
     exits = [exit(DIR.north, to = ":whisper_hall")],
-    flags = ["dead_end_ok"],
 )

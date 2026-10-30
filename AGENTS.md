@@ -35,6 +35,7 @@ errors.
   `./gradlew check`) and verified in GitHub CI.
 
 - **Java environment:** The build requires JDK 21.
+
 - **Sandbox execution:** Gradle commands (including `./gradlew check`, `./gradlew markdownCheck`, and `./gradlew
   markdownFormat`) must be run outside standard sandbox isolation (`BypassSandbox: true`) so the Gradle client process
   can connect to the Gradle daemon over the local loopback socket (`127.0.0.1`).

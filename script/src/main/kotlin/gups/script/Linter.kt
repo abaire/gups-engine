@@ -149,12 +149,12 @@ class Linter(
     for (room in protos.rooms.values) {
       if (!matches(room.label)) continue
 
-      // Dead-end rooms (one exit or fewer) without dead_end_ok
-      if (room.exits.size <= 1 && "dead_end_ok" !in room.flags) {
+      // Dead-end rooms (0 exits) without dead_end_ok
+      if (room.exits.isEmpty() && "dead_end_ok" !in room.flags) {
         findings +=
           Finding(
             Finding.Severity.ERROR,
-            "dead-end room (${room.exits.size} exit${if (room.exits.size == 1) "" else "s"}) without 'dead_end_ok' flag",
+            "dead-end room (0 exits) without 'dead_end_ok' flag",
             label = room.label,
           )
       }

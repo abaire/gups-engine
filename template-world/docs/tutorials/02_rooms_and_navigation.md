@@ -15,7 +15,6 @@ room("gate",
      name="The Tutorial Gate",
      desc="A wooden gate stands open to the north. A sign is nailed to the post.",
      size=SIZE.normal,
-     flags=["dead_end_ok"],
      exits=[exit(DIR.north, to=":hall")],
      commands={"read": _read},
      )
@@ -27,8 +26,8 @@ room("gate",
   From another package, it is addressed as `//zones/tutorial:gate`.
 * **`name` & `desc`:** What players see when entering or typing `look`.
 * **`flags`:**
-  * `"dead_end_ok"`: By default, the `gups lint` CI check rejects any room that has only one exit (a dead end) unless
-    this flag is explicitly set.
+  * `"dead_end_ok"`: By default, the `gups lint` CI check rejects any room that has no exits at all unless this flag is
+    explicitly set (preventing players from being permanently trapped).
   * `"always_active"`: Keeps the room active in the world simulation even when no players are nearby (disabling the
     reality bubble sleep; see SPEC §5.9).
 
@@ -227,7 +226,6 @@ room("tar_pit",
     name = "The Tar Pit",
     desc = "Black tar clings to your boots; every step is an effort.",
     size = SIZE.normal,
-    flags = ["dead_end_ok"],
     tags = ["sticky_floor"],
     exits = [exit(DIR.east, to = ":hall"), exit(DIR.west, to = ":gravel")],
 )

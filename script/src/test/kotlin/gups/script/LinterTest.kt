@@ -21,6 +21,25 @@ class LinterTest {
           "zones/z/package.star" to zonePkg(),
           "zones/z/rooms.star" to
             """
+            room("trap", name = "Trap", exits = [])
+            """
+              .trimIndent(),
+        )
+      )
+    val report = Linter(WorldDir(root)).lint()
+    assertFalse(report.ok)
+    assertEquals(1, report.errors.size)
+    assertContains(report.errors[0].message, "dead-end room (0 exits) without 'dead_end_ok' flag")
+  }
+
+  @Test
+  fun `room with one exit without dead_end_ok passes`() {
+    val root =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
             room("start", name = "Start", exits = [exit("north", to = ":tunnel")])
             room("tunnel", name = "Tunnel", exits = [exit("south", to = ":start")])
             """
@@ -28,9 +47,7 @@ class LinterTest {
         )
       )
     val report = Linter(WorldDir(root)).lint()
-    assertFalse(report.ok)
-    assertEquals(2, report.errors.size)
-    assertContains(report.errors[0].message, "dead-end room (1 exit) without 'dead_end_ok' flag")
+    assertTrue(report.ok, report.findings.joinToString { it.message })
   }
 
   @Test
@@ -41,8 +58,7 @@ class LinterTest {
           "zones/z/package.star" to zonePkg(),
           "zones/z/rooms.star" to
             """
-            room("start", name = "Start", flags = ["dead_end_ok"], exits = [exit("north", to = ":tunnel")])
-            room("tunnel", name = "Tunnel", flags = ["dead_end_ok"], exits = [exit("south", to = ":start")])
+            room("trap", name = "Trap", flags = ["dead_end_ok"], exits = [])
             """
               .trimIndent(),
         )

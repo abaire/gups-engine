@@ -214,14 +214,12 @@ lands in `cli/build/distributions/`).
    room("gate",
     name = "Meadow Gate",
     desc = "A stile leads over the wall into a meadow to the north.",
-    flags = ["dead_end_ok"],
     exits = [exit("north", to = ":field")],
    )
 
    room("field",
     name = "Open Field",
     desc = "Tall grass sways in the wind. The stile is south.",
-    flags = ["dead_end_ok"],
     exits = [exit("south", to = ":gate")],
    )
    ```
@@ -241,7 +239,7 @@ lands in `cli/build/distributions/`).
 
    ```bash
    gups test //...
-   gups lint //...        # without dead_end_ok, it would flag both rooms as dead ends
+   gups lint //...
    gups serve --dev --start //zones/meadow:gate
    ```
 

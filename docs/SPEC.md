@@ -217,7 +217,7 @@ gups-engine/
     pins it. The instructor is the placeholder `@CHANGE_ME_INSTRUCTOR`, to be replaced.
   - Its `README.md` tells instructors how to start a term, import the roster, deploy, and upload the migration snapshot
     (§7.3).
-  - Its dead-end rooms carry `dead_end_ok`. It uses no plugins.
+  - It uses no plugins.
 - **Package kinds:** `zone`, `lib`, `rules`, `skills`. Only `lib` and `rules` packages are *privileged*. They may
   declare shared attribute namespaces and global commands (§4.9).
 - **Load labels vs target labels:** `load("//lib:quest.star", "quest")` addresses a *file*. `//zones/forest:clearing`
@@ -3645,7 +3645,7 @@ template's `.github/workflows/gates.yml`.
    namespaces are unique. Hook catalog errors and duplicate namespaces are errors.
 2. **Lint:**
 
-- No dead-end rooms (1 exit or fewer) unless flagged `dead_end_ok` (error).
+- No dead-end rooms (0 exits) unless flagged `dead_end_ok` (error).
 - Every exit has a reverse unless `one_way`, and doors match on both sides (error).
 - A prototype whose declaration changed since `--base` needs a `version` bump (error). Presentation and code don't
   count: `name`, `desc`, `keywords`, hooks, `commands`, `think` and `resolve`. The comparison clears those fields by
