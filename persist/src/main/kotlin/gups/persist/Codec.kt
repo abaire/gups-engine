@@ -17,6 +17,7 @@ import gups.core.model.DormantRecovery
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.LevelGain
 import gups.core.model.Mob
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
@@ -65,8 +66,8 @@ import kotlinx.serialization.json.longOrNull
  *   spawn binding, and summonedBy. Delta fields (level, stats, senses, resists, skills,
  *   `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if they equal prototype
  *   defaults, each stored as a whole value rather than per key. Prototype traits are never stored;
- *   only runtime `grantedTraits` are. Active/anchor reasons, custom attributes, timers, and active
- *   affects are also stored.
+ *   only runtime `grantedTraits` are. `levelGains` is stored only when not empty. Active/anchor
+ *   reasons, custom attributes, timers, and active affects are also stored.
  * - **Items ([ItemPayload]):** Persists count, decay deadline pulse, display name override,
  *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons, and
  *   prototype name.
@@ -75,7 +76,7 @@ import kotlinx.serialization.json.longOrNull
  *   prototype vanished, preserving its state for inspection.
  * - **Players ([PlayerPayload]):** Persists full state: room label, track index, recall room label,
  *   assigned role, level, xp, vitals, condition, base stats, base senses, base resists, skill
- *   proficiencies, creation choices, granted traits, level gains, custom attributes, timers,
+ *   proficiencies, creation choices, granted traits, `levelGains`, custom attributes, timers,
  *   affects, and active/anchor reasons. During restore, traits are evaluated before vitals so
  *   effective vital maximums correctly accommodate trait modifiers.
  * - **Zones ([ZonePayload]):** Persists zone reset deadlines, pending spawn respawn rules with
@@ -157,6 +158,13 @@ data class LocationJson(
 @Serializable
 data class VitalJson(val cur: Int, val max: Int? = null, val belowZeroSince: Long? = null)
 
+/**
+ * Stat and vital maximum deltas recorded for a single level step. [stats] and [max] are omitted
+ * when empty.
+ */
+@Serializable
+data class LevelGainJson(val stats: Map<String, Int>? = null, val max: Map<String, Int>? = null)
+
 @Serializable
 data class RoomPayload(
   @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
@@ -189,6 +197,7 @@ data class MobPayload(
   val thinkEvery: Int? = null,
   val dormantRecovery: String? = null,
   val grantedTraits: List<String>? = null,
+  val levelGains: Map<Int, LevelGainJson>? = null,
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   val affects: List<AffectJson> = emptyList(),
@@ -231,6 +240,7 @@ data class PlayerPayload(
   val skills: Map<String, Int> = emptyMap(),
   val choices: Map<String, String> = emptyMap(),
   val grantedTraits: List<String> = emptyList(),
+  val levelGains: Map<Int, LevelGainJson> = emptyMap(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   val affects: List<AffectJson> = emptyList(),
@@ -285,6 +295,12 @@ internal fun JsonObject.toAttrs(): Map<String, AttrValue> = mapValues { it.value
 private fun HookRef.json() = RefJson(file.v, name)
 
 private fun RefJson.ref() = HookRef(Label(file), name)
+
+private fun LevelGain.toJson(): LevelGainJson =
+  LevelGainJson(stats = stats.takeIf { it.isNotEmpty() }, max = max.takeIf { it.isNotEmpty() })
+
+private fun LevelGainJson.toLevelGain(): LevelGain =
+  LevelGain(stats = stats ?: emptyMap(), max = max ?: emptyMap())
 
 internal fun timersJson(e: Entity) =
   e.timers.map { TimerJson(it.id, it.fn.json(), attrsJson(it.args), it.due, it.remaining) }
@@ -415,6 +431,8 @@ internal fun World.encode(e: Entity): EntityRow? =
           thinkEvery = delta(e.thinkEvery, p.thinkEvery),
           dormantRecovery = delta(e.dormantRecovery, p.dormantRecovery)?.name?.lowercase(),
           grantedTraits = e.grantedTraits.toList().sorted().takeIf { it.isNotEmpty() },
+          levelGains =
+            e.levelGains.toSortedMap().mapValues { it.value.toJson() }.takeIf { it.isNotEmpty() },
           attrs = attrsJson(e.customAttributes),
           timers = timersJson(e),
           affects = affectsJson(e),
@@ -480,6 +498,7 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
       skills = p.skills.mapKeys { it.key.v },
       choices = p.choices.toMap(),
       grantedTraits = p.grantedTraits.toList().sorted(),
+      levelGains = p.levelGains.toSortedMap().mapValues { it.value.toJson() },
       attrs = attrsJson(p.customAttributes),
       timers = timersJson(p),
       affects = affectsJson(p),
@@ -525,6 +544,8 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   m.summonedBy = p.summonedBy?.let(::EntityId)
   m.grantedTraits = p.grantedTraits?.toSet() ?: emptySet()
   m.recomputeTraits(world)
+  m.levelGains.clear()
+  p.levelGains?.let { gains -> m.levelGains.putAll(gains.mapValues { it.value.toLevelGain() }) }
   world.restoreActorNumbers(
     m,
     stats = p.stats ?: m.baseStats.toMap(),
@@ -571,6 +592,8 @@ internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {
   )
   pl.skills.clear()
   pl.skills.putAll(p.skills.mapKeys { Label(it.key) })
+  pl.levelGains.clear()
+  pl.levelGains.putAll(p.levelGains.mapValues { it.value.toLevelGain() })
   pl.customAttributes.clear()
   pl.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(pl, p.timers)
