@@ -236,6 +236,14 @@ class QueuedAction(
   override fun toString(): String = "$verb $args".trim()
 }
 
+/** Base stat and base vital maximum deltas that one level applied, both possibly negative. */
+data class LevelGain(
+  /** Base stat deltas applied by this level. */
+  val stats: Map<String, Int> = emptyMap(),
+  /** Base vital maximum deltas applied by this level. */
+  val max: Map<String, Int> = emptyMap(),
+)
+
 /** Base class for autonomous animated entities (players and mobs). */
 sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int) :
   Entity(id, protoLabel) {
@@ -273,6 +281,12 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   /** Accumulated experience points. */
   var xp: Long = 0
+
+  /**
+   * Gains recorded per level reached, so losing a level subtracts exactly what it added. A level
+   * with no entry unwinds nothing. Changes to current vitals are never recorded.
+   */
+  val levelGains: MutableMap<Int, LevelGain> = linkedMapOf()
 
   /** Damage resistance map indexed by damage type. */
   val resists: MutableMap<DamageType, Int> = linkedMapOf()
