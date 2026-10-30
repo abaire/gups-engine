@@ -285,6 +285,9 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   /**
    * Gains recorded per level reached, so losing a level subtracts exactly what it added. A level
    * with no entry unwinds nothing. Changes to current vitals are never recorded.
+   *
+   * Each entry belongs to its own level: raising the actor to a level replaces that level's entry,
+   * or removes it if the level gave no stat or maximum gains, and never touches another level's.
    */
   val levelGains: MutableMap<Int, LevelGain> = linkedMapOf()
 

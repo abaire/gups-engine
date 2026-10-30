@@ -270,18 +270,6 @@ private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
   settleNewCondition(victim, "on_player_death")
 }
 
-fun World.awardXp(a: Actor, amount: Long) {
-  if (Feature.LEVELING !in features || amount <= 0) return
-  a.xp += amount
-  tell(a, LevelingMsg.GAIN, "amount" to amount)
-  while (a.xp >= rules.xpToLevel(a.level)) {
-    a.level++
-    tell(a, LevelingMsg.LEVEL_UP, "level" to a.level)
-    if (a is Player) requestImmediate("level")
-  }
-  a.dirty = true
-}
-
 // ---- Affects ---------------------------------------------------------------------------------
 
 /**

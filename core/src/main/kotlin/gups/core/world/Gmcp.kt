@@ -36,6 +36,24 @@ fun World.gmcp(p: Player, pkg: String, data: Any?): Boolean {
   return true
 }
 
+/**
+ * Queues an immediate [pkg] delta for [p], updating the session cache so phase 7 skips it. Returns
+ * false when the client does not support [pkg] or the payload has not changed.
+ */
+internal fun World.refreshGmcp(p: Player, pkg: String): Boolean {
+  val s = p.session?.let(sessions::get) ?: return false
+  if (!s.sink.wantsGmcp(pkg)) return false
+  return s.queueIfChanged(pkg, gmcpPayload(p, pkg))
+}
+
+/** Queues [data] as [pkg] unless it equals the last payload this session was sent for [pkg]. */
+private fun Session.queueIfChanged(pkg: String, data: Any?): Boolean {
+  if (gmcpLast.containsKey(pkg) && gmcpLast[pkg] == data) return false
+  gmcpLast[pkg] = data
+  gmcpOut += pkg to data
+  return true
+}
+
 /** `Comm.Channel.Text` to each of [to] that is a player. */
 internal fun World.channel(
   channel: String,
@@ -57,10 +75,7 @@ internal fun World.gmcpDeltas(s: Session) {
     if (pkg == "Room.Bands" && Feature.TRACK !in features) continue
     if (pkg == "Char.Traits" && creation == null && traits.isEmpty()) continue
     if (!s.sink.wantsGmcp(pkg)) continue
-    val data = gmcpPayload(p, pkg)
-    if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
-    s.gmcpLast[pkg] = data
-    s.gmcpOut += pkg to data
+    s.queueIfChanged(pkg, gmcpPayload(p, pkg))
   }
   for ((pkg, produce) in pluginGmcp) {
     if (!s.sink.wantsGmcp(pkg)) continue
@@ -70,9 +85,7 @@ internal fun World.gmcpDeltas(s: Session) {
           record(Diagnostic(pulse, "plugin", "GMCP producer $pkg failed: $e", e))
           continue
         }
-    if (s.gmcpLast.containsKey(pkg) && s.gmcpLast[pkg] == data) continue
-    s.gmcpLast[pkg] = data
-    s.gmcpOut += pkg to data
+    s.queueIfChanged(pkg, data)
   }
 }
 

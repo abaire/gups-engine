@@ -4,6 +4,7 @@ import gups.core.CapturingSink
 import gups.core.ClientInputEvent
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.OutputSink
 import gups.core.PULSE_MS
 import gups.core.SessionId
 import gups.core.WorldControlEvent
@@ -335,6 +336,25 @@ class Fixture(
     return sink
   }
 
+  fun gmcpPlayer(
+    name: String,
+    index: Int = 0,
+    sink: GmcpSink = GmcpSink(),
+    at: Label = T.HALL,
+  ): Pair<Player, GmcpSink> {
+    val p =
+      w.spawnPlayer(
+        name,
+        at,
+        overrides = StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 50)),
+        index = index,
+      )
+    val id = SessionId(nextSession++)
+    w.handle(WorldControlEvent.Connect(id, sink), nanos)
+    w.attach(id, p)
+    return p to sink
+  }
+
   fun mob(label: Label = T.GOBLIN, at: Label = T.HALL, index: Int = 0): Mob =
     w.spawnMob(label, w.room(at), index)
 
@@ -360,6 +380,33 @@ class Fixture(
 /** Sets [vital] of [a] to [value] through the world, as play would. */
 fun Fixture.setVital(a: Actor, vital: String, value: Int) {
   w.changeVital(a, vital, value - a.current(vital))
+}
+
+/** A client that supports the modules in [supports] and records what it gets. */
+class GmcpSink(var supports: Set<String> = setOf("Char", "Room", "Comm.Channel")) : OutputSink {
+  val messages = mutableListOf<Pair<String, Any?>>()
+  val order = mutableListOf<String>()
+  private val buffer = StringBuilder()
+
+  override fun send(text: String) {
+    buffer.append(text)
+    order += "text"
+  }
+
+  override fun gmcp(pkg: String, data: Any?) {
+    messages += pkg to data
+    order += pkg
+  }
+
+  override fun wantsGmcp(pkg: String) = supports.any { pkg == it || pkg.startsWith("$it.") }
+
+  override fun close(reason: String) = Unit
+
+  fun drain(): String = buffer.toString().also { buffer.setLength(0) }
+
+  fun take(): List<Pair<String, Any?>> = messages.toList().also { messages.clear() }
+
+  fun packages() = take().map { it.first }
 }
 
 /** The schemas that parameterized engine tests run under. */

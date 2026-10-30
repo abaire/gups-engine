@@ -1242,7 +1242,7 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
   negative. `stats` and `max` change the base values and are remembered for that level so that losing it takes them back
   (§5.4); `current` is added to the current vitals, which are then capped at the new maxima, and is not remembered.
 - `xp_to_level(level)` is the total XP at which `level` ends. `xp_to_level(level + 1)` must be greater than
-  `xp_to_level(level)`; a value that is not is a bad return value.
+  `xp_to_level(level)`; a value that is not is a bad return value, and no level is owed past it (§5.4).
 - `get_lag` returns `None` for out of reach.
 - `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` and `get_lag` return pulses, an int of at least 0; a
   negative value is a bad return value. The lag exports set the action's recovery lag, and 0 means none.
@@ -2572,14 +2572,17 @@ and work with or without it (§3.10). Combat resolution is implemented in
   - Death clears `casting`, the queue, and engagement. It's processed exactly once. During phases 2 and 3 it's deferred
     to the end of the current initiative tier (§5.4.1).
 - **Levelling** (the `leveling` feature): XP is gained from kills and `award_xp` and lost to `take_xp` and
-  `on_player_death`. An actor is owed level `L + 1` once `xp >= xp_to_level(L)`. In `auto` mode (`level_mode`, §3.9) the
-  engine calls `level_up` for each owed level at once. In `deferred` mode it tells the player "You feel ready to
-  advance." and applies a level only when `level_up` is called. Applying a level raises `level` by one, calls
-  `on_level_up`, adds its `stats` and `max` to the base values and remembers them in `levelGains`, adds its `current` to
-  the vitals, tells the actor, and fires `on_level_change`. Losing a level (`level_down`, or `level_loss` at death)
-  subtracts the remembered gains of that level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most
-  one below `xp_to_level(level)`, and fires `on_level_change`; the rules are not called. A level with nothing remembered
-  unwinds nothing. One call applies at most 100 levels.
+  `on_player_death`. An actor is owed level `L + 1` once `xp >= xp_to_level(L)`, unless `xp_to_level(L)` is not greater
+  than `xp_to_level(L - 1)`. In `auto` mode (`level_mode`, §3.9) the engine calls `level_up` for each owed level at
+  once. In `deferred` mode it tells the player "You feel ready to advance." and applies a level only when `level_up` is
+  called. Applying a level raises `level` by one, calls `on_level_up`, adds its `stats` and `max` to the base values and
+  remembers them in `levelGains` under the new level, adds its `current` to the vitals, tells the actor, and fires
+  `on_level_change`. Losing a level (`level_down`, or `level_loss` at death) subtracts the remembered gains of that
+  level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most one below `xp_to_level(level)`, and
+  fires `on_level_change`; the rules are not called. A level with nothing remembered unwinds nothing. Each level's entry
+  belongs to that level alone: applying a level replaces whatever was remembered for it, and a level that gives no
+  `stats` or `max` remembers nothing, so a later loss of it never subtracts gains it did not give. Entries for other
+  levels are never touched. One call applies at most 100 levels.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves the world. The rule refills
   to `count` at the first world tick at or after the deadline. A fresh world's rooms fill their spawns when the world
   starts (§4.11).

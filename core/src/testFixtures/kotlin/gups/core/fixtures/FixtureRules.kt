@@ -47,6 +47,9 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   /** Replaces `xp_to_level` when set. */
   var xpToLevelOf: ((Int) -> Long)? = null
 
+  /** Replaces `xp_for_kill` when set. */
+  var xpForKillOf: ((RulesContext) -> Long)? = null
+
   /** Replaces `sense_cost` when set. */
   var senseCostOf: ((RulesContext) -> Int)? = null
 
@@ -204,7 +207,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   override fun fleeFailLag(c: RulesContext): Int = 4
 
-  override fun xpForKill(c: RulesContext): Long = 50L * c.defender.level
+  override fun xpForKill(c: RulesContext): Long = xpForKillOf?.invoke(c) ?: (50L * c.defender.level)
 
   override fun xpToLevel(level: Int): Long = xpToLevelOf?.invoke(level) ?: (1000L * level)
 

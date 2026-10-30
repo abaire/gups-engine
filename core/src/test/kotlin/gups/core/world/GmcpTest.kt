@@ -1,14 +1,11 @@
 package gups.core.world
 
-import gups.core.Label
-import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Channel
 import gups.core.model.Player
-import gups.core.rules.StartingStats
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,50 +31,7 @@ class GmcpTest(private val fs: FixtureSchema) {
     FixtureSchemas.current = FixtureSchemas.FANTASY
   }
 
-  /** A client that supports the modules in [supports] and records what it gets. */
-  private class GmcpSink(var supports: Set<String> = setOf("Char", "Room", "Comm.Channel")) :
-    OutputSink {
-    val messages = mutableListOf<Pair<String, Any?>>()
-    val order = mutableListOf<String>()
-
-    override fun send(text: String) {
-      order += "text"
-    }
-
-    override fun gmcp(pkg: String, data: Any?) {
-      messages += pkg to data
-      order += pkg
-    }
-
-    override fun wantsGmcp(pkg: String) = supports.any { pkg == it || pkg.startsWith("$it.") }
-
-    override fun close(reason: String) = Unit
-
-    fun take(): List<Pair<String, Any?>> = messages.toList().also { messages.clear() }
-
-    fun packages() = take().map { it.first }
-  }
-
   private var nextSession = 100L
-
-  private fun Fixture.gmcpPlayer(
-    name: String,
-    index: Int = 0,
-    sink: GmcpSink = GmcpSink(),
-    at: Label = T.HALL,
-  ): Pair<Player, GmcpSink> {
-    val p =
-      w.spawnPlayer(
-        name,
-        at,
-        overrides = StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 50)),
-        index = index,
-      )
-    val id = SessionId(nextSession++)
-    w.handle(WorldControlEvent.Connect(id, sink))
-    w.attach(id, p)
-    return p to sink
-  }
 
   @Test
   fun `state packages are sent once, then only when they change`() {
