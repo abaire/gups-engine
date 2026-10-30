@@ -41,14 +41,26 @@ object TestWorlds {
   }
 
   /**
-   * The template's `combat.star` with each function that [overrides] define replaced by the
-   * override; an override whose name the template lacks is added.
+   * Replaces template functions in every test world, so that tests see no level-up gains unless
+   * they override `on_level_up` themselves.
    */
-  fun rules(vararg overrides: String): String {
-    val over = overrides.flatMap { blocks(it.trimIndent() + "\n") }
-    val names = over.map { it.first }.toSet()
-    return (blocks(base).filter { it.first !in names } + over).joinToString("\n") { it.second }
+  private const val DEFAULTS: String = "def on_level_up(ctx):\n    return None\n"
+
+  /** The template's blocks with [DEFAULTS] and then [overrides] replacing or adding functions. */
+  private fun merged(overrides: Array<out String>): List<Pair<String, String>> {
+    val over = LinkedHashMap<String, String>()
+    for (src in listOf(DEFAULTS) + overrides) {
+      for ((name, text) in blocks(src.trimIndent() + "\n")) over[name] = text
+    }
+    return blocks(base).filter { it.first !in over } + over.toList()
   }
+
+  /**
+   * The template's `combat.star` with each function that [overrides] define replaced by the
+   * override; an override whose name the template lacks is added. `on_level_up` returns `None`
+   * unless overridden.
+   */
+  fun rules(vararg overrides: String): String = merged(overrides).joinToString("\n") { it.second }
 
   /** The rules exports each feature owns; the others belong to the kernel. */
   private val OWNED: Map<String, String> =
@@ -67,13 +79,12 @@ object TestWorlds {
       "flee_fail_lag" to "combat",
       "xp_for_kill" to "leveling",
       "xp_to_level" to "leveling",
+      "on_level_up" to "leveling",
     )
 
   /** The template's rules without the exports of the features not in [enabled] (feature ids). */
   fun rulesFor(enabled: Collection<String>, vararg overrides: String): String {
-    val over = overrides.flatMap { blocks(it.trimIndent() + "\n") }
-    val names = over.map { it.first }.toSet()
-    return (blocks(base).filter { it.first !in names } + over)
+    return merged(overrides)
       .filter { (name, _) -> OWNED[name].let { it == null || it in enabled } }
       .joinToString("\n") { it.second }
       .let { text ->

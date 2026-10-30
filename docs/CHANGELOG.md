@@ -4,6 +4,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Experience and levels
+
+- Added the `on_level_up(ctx)` rules export: called when an actor advances a level, returning `None` or a `struct` with
+  optional `stats`, `max` and `current` deltas. It is required when the `leveling` feature is enabled and forbidden when
+  it is off.
+
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 
 Every actor, player or mob, has a sense score per channel. `sight` and `sound` default to 1 and declared channels to 0;

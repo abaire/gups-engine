@@ -99,6 +99,22 @@ data class PlayerDeathOutcome(
 )
 
 /**
+ * Stat and vital deltas awarded when an actor advances a level.
+ *
+ * Returned by [RulesEngine.onLevelUp], whose `ctx.actor` already has its new level. All three
+ * fields are deltas and may be negative. [stats] and [max] are recorded in `levelGains` and
+ * [current] is not. A null result means no gains.
+ */
+data class LevelUpResult(
+  /** Base stat deltas awarded by this level. */
+  val stats: Map<String, Int> = emptyMap(),
+  /** Base vital maximum deltas awarded by this level. */
+  val max: Map<String, Int> = emptyMap(),
+  /** Current vital deltas awarded by this level (e.g. healing). */
+  val current: Map<String, Int> = emptyMap(),
+)
+
+/**
  * Authoritative game mechanics rules engine seam.
  *
  * Implemented by Starlark scripts under `//rules` in production, or test doubles during unit
@@ -172,8 +188,18 @@ interface RulesEngine {
   /** Calculates experience points awarded to an actor for defeating a target. */
   fun xpForKill(c: RulesContext): Long
 
-  /** Calculates the cumulative experience points required to reach [level]. */
+  /** Calculates the total XP at which [level] ends. */
   fun xpToLevel(level: Int): Long
+
+  /**
+   * Calculates stat and vital deltas awarded when an actor reaches a new level, or null for no
+   * gains.
+   *
+   * `ctx.actor` already has its new level. All three fields are deltas; [LevelUpResult.stats] and
+   * [LevelUpResult.max] are recorded in `levelGains` and [LevelUpResult.current] is not. A null
+   * result or rules error means no gains.
+   */
+  fun onLevelUp(c: RulesContext): LevelUpResult?
 
   /**
    * Resolves player death consequences, returning respawn destination, vital recovery, and XP loss.

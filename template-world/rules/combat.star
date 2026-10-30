@@ -154,6 +154,12 @@ def xp_to_level(level):
     # XP needed to go from `level` to the next one.
     return 1000 * level
 
+def on_level_up(ctx):
+    # Deterministic gains; heal by the same amount so the new points are usable.
+    a = ctx.actor
+    gain = vitals(hp = 5 + a.con // 4, mana = 2 + a.wis // 8, move = 5)
+    return struct(max = gain, current = gain)
+
 def on_player_death(ctx):
     # Where a dead player (ctx.actor) wakes up, with which vitals, and the XP it costs them.
     return {

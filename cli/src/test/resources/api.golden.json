@@ -5687,6 +5687,16 @@
         "since": 1
       },
       {
+        "symbol": "rules:on_level_up",
+        "feature": "leveling",
+        "name": "on_level_up",
+        "signature": "on_level_up(ctx)",
+        "return_type": "struct | None",
+        "ctx_fields": ["actor", "pulse", "rng"],
+        "doc": "Stat and vital deltas awarded when an actor reaches a new level, as a struct(stats = stats(...), max = vitals(...), current = vitals(...)) or None.",
+        "since": 1
+      },
+      {
         "symbol": "rules:on_player_death",
         "name": "on_player_death",
         "signature": "on_player_death(ctx)",
@@ -5788,7 +5798,7 @@
         "signature": "xp_to_level(level)",
         "return_type": "int",
         "ctx_fields": [],
-        "doc": "Total experience points required to reach the given level.",
+        "doc": "The total XP at which the given level ends.",
         "since": 1
       }
     ],

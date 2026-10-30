@@ -183,7 +183,7 @@ class FeatureScriptTest {
         Feature.SKILLS to listOf("cast_allowed", "interrupt_check"),
         Feature.TRACK to
           listOf("retreat_check", "get_lag", "advance_lag", "retreat_lag", "retreat_fail_lag"),
-        Feature.LEVELING to listOf("xp_for_kill", "xp_to_level"),
+        Feature.LEVELING to listOf("xp_for_kill", "xp_to_level", "on_level_up"),
       )) {
       val off = without(feature)
       // Defining the export with the feature off is a load error naming the feature.
@@ -236,6 +236,23 @@ class FeatureScriptTest {
       )
     assertTrue(
       r.errors.any { "xp_loss" in it.message && "needs the leveling feature" in it.message },
+      r.report(),
+    )
+  }
+
+  @Test
+  fun `a world with leveling off that defines on_level_up fails to load naming the feature`() {
+    val r =
+      load(
+        world(without(Feature.LEVELING), "zones/z/a.star" to "room(\"start\")") +
+          ("rules/combat.star" to
+            TestWorlds.rulesFor(without(Feature.LEVELING).ids) +
+              "\ndef on_level_up(ctx):\n    return None\n")
+      )
+    assertTrue(
+      r.errors.any {
+        "defines on_level_up(...)" in it.message && "needs the leveling feature" in it.message
+      },
       r.report(),
     )
   }

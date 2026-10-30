@@ -7,6 +7,7 @@ import gups.core.model.Band
 import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.ItemLocation
+import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
@@ -23,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RulesTest {
@@ -182,6 +184,7 @@ class RulesTest {
           assertEquals(c.requireActor().condition, w.rules.condition(c))
         },
         Case("xp_for_kill", "ctx", "10") { w, c -> assertEquals(0L, w.rules.xpForKill(c)) },
+        Case("on_level_up", "ctx", "None") { w, c -> assertNull(w.rules.onLevelUp(c)) },
         Case("on_player_death", "ctx", "{'respawn': ctx.actor.recall_room}") { w, c ->
           assertEquals(
             PlayerDeathOutcome(Label("//zones/z:start"), null, 0),
@@ -229,6 +232,70 @@ class RulesTest {
       )
     assertEquals(Long.MAX_VALUE, f.w.rules.xpToLevel(99))
     assertEquals(2000L, f.w.rules.xpToLevel(2))
+  }
+
+  @Test
+  fun `on_level_up returning a struct with an undeclared name is a rules error that gives no gains`() {
+    val f =
+      world(
+        """
+        def on_level_up(ctx):
+            return struct(stats = stats(bogus = 1), max = vitals(hp = 5))
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val result = f.w.rules.onLevelUp(RulesContext(f.w, f.player()))
+    assertNull(result)
+    val errors = f.diagnostics("script_error").map { it.message }
+    assertTrue(errors.any { "unknown stat 'bogus'" in it }, errors.toString())
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
+  fun `on_level_up returning a struct with an unknown field is a rules error that gives no gains`() {
+    val f =
+      world(
+        """
+        def on_level_up(ctx):
+            return struct(unknown_field = 123)
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val p = f.player()
+    val ctx = RulesContext(f.w, p)
+    val result = f.w.rules.onLevelUp(ctx)
+    assertNull(result)
+    assertTrue(f.diagnostics("script_error").isNotEmpty())
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
+  fun `on_level_up parses valid struct and None`() {
+    val f =
+      world(
+        """
+        def on_level_up(ctx):
+            if ctx.actor.level == 2:
+                return struct(
+                    stats = stats(str = 1),
+                    max = vitals(hp = 5),
+                    current = vitals(hp = 5),
+                )
+            return None
+        """
+      )
+    val p = f.player()
+    p.level = 2
+    val res2 = f.w.rules.onLevelUp(RulesContext(f.w, p))
+    assertEquals(
+      LevelUpResult(stats = mapOf("str" to 1), max = mapOf("hp" to 5), current = mapOf("hp" to 5)),
+      res2,
+    )
+    p.level = 3
+    val res3 = f.w.rules.onLevelUp(RulesContext(f.w, p))
+    assertNull(res3)
   }
 
   @Test

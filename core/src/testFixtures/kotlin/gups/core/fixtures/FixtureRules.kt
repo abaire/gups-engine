@@ -9,6 +9,7 @@ import gups.core.model.Dice
 import gups.core.model.DoorState
 import gups.core.model.Player
 import gups.core.model.TrackSize
+import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
@@ -39,6 +40,9 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   /** Replaces `on_player_death` when set. */
   var deathOf: ((RulesContext) -> PlayerDeathOutcome)? = null
+
+  /** Replaces `on_level_up` when set. */
+  var levelUpOf: ((RulesContext) -> LevelUpResult?)? = null
 
   /** Replaces `sense_cost` when set. */
   var senseCostOf: ((RulesContext) -> Int)? = null
@@ -200,6 +204,8 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   override fun xpForKill(c: RulesContext): Long = 50L * c.defender.level
 
   override fun xpToLevel(level: Int): Long = 1000L * level
+
+  override fun onLevelUp(c: RulesContext): LevelUpResult? = levelUpOf?.invoke(c)
 
   override fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome {
     deathOf?.let {

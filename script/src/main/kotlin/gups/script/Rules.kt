@@ -15,6 +15,7 @@ import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
+import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
@@ -336,6 +337,7 @@ internal fun StarlarkHost.runModifier(
  * - `condition`: the actor's current condition, unchanged.
  * - `xp_for_kill`: `0` XP awarded.
  * - `xp_to_level`: `Long.MAX_VALUE` (no level up possible).
+ * - `on_level_up`: no gains (the level is still raised).
  * - `on_player_death`: respawns at the player's recall room (or the current room when none is set),
  *   restores vitals to effective maxima, with `0` XP lost.
  * - `equipment_slots`: the last valid slot list it returned, or an empty list before any.
@@ -596,6 +598,27 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       }
     } ?: Long.MAX_VALUE
 
+  override fun onLevelUp(c: RulesContext): LevelUpResult? =
+    run(RulesExport.ON_LEVEL_UP, c, ctxArgs(c)) { v ->
+        if (isNone(v)) return@run LevelUp(null)
+        val what = "rules.on_level_up return value"
+        val fields =
+          (v as? StructValue)?.fields
+            ?: fail("$what: expected None or a struct, got ${typeName(v)}")
+        for (k in fields.keys) if (k !in LEVEL_UP_FIELDS)
+          fail("$what: unknown field '$k'${SpellChecker.didYouMean(k, LEVEL_UP_FIELDS)}")
+        LevelUp(
+          LevelUpResult(
+            stats = typed(fields["stats"], TypedKind.STATS, "$what.stats"),
+            max = typed(fields["max"], TypedKind.VITALS, "$what.max"),
+            current = typed(fields["current"], TypedKind.VITALS, "$what.current"),
+          )
+        )
+      }
+      ?.result
+
+  private class LevelUp(val result: LevelUpResult?)
+
   override fun onPlayerDeath(c: RulesContext): PlayerDeathOutcome =
     run(RulesExport.ON_PLAYER_DEATH, c, ctxArgs(c)) { v ->
       val what = "rules.on_player_death return value"
@@ -626,6 +649,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   companion object {
     private val STARTING_FIELDS = listOf("stats", "max", "current", "senses")
     private val DEATH_FIELDS = listOf("respawn", "vitals", "xp_loss")
+    private val LEVEL_UP_FIELDS = listOf("stats", "max", "current")
   }
 }
 
@@ -653,6 +677,7 @@ enum class RulesExport(val scriptName: String) {
   FLEE_FAIL_LAG("flee_fail_lag"),
   XP_FOR_KILL("xp_for_kill"),
   XP_TO_LEVEL("xp_to_level"),
+  ON_LEVEL_UP("on_level_up"),
   ON_PLAYER_DEATH("on_player_death"),
   SENSE_COST("sense_cost"),
   CAN_PERCEIVE("can_perceive"),
@@ -846,7 +871,15 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       signature = "xp_to_level(level)",
       returnType = "int",
       ctxFields = emptyList(),
-      doc = "Total experience points required to reach the given level.",
+      doc = "The total XP at which the given level ends.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.ON_LEVEL_UP,
+      signature = "on_level_up(ctx)",
+      returnType = "struct | None",
+      ctxFields = listOf("actor", "pulse", "rng"),
+      doc =
+        "Stat and vital deltas awarded when an actor reaches a new level, as a struct(stats = stats(...), max = vitals(...), current = vitals(...)) or None.",
     ),
     RulesExportSpec(
       export = RulesExport.ON_PLAYER_DEATH,

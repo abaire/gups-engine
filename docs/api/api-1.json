@@ -1471,6 +1471,18 @@
           "since": 1
         },
         {
+          "symbol": "module.channel_priority",
+          "name": "channel_priority",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Channels from strongest to weakest: a player is told the text of the first one they perceive. Channels left out follow, built-in ones first.",
+          "since": 1
+        },
+        {
           "symbol": "module.prompt",
           "name": "prompt",
           "type": "str",
@@ -5675,6 +5687,16 @@
         "since": 1
       },
       {
+        "symbol": "rules:on_level_up",
+        "feature": "leveling",
+        "name": "on_level_up",
+        "signature": "on_level_up(ctx)",
+        "return_type": "struct | None",
+        "ctx_fields": ["actor", "pulse", "rng"],
+        "doc": "Stat and vital deltas awarded when an actor reaches a new level, as a struct(stats = stats(...), max = vitals(...), current = vitals(...)) or None.",
+        "since": 1
+      },
+      {
         "symbol": "rules:on_player_death",
         "name": "on_player_death",
         "signature": "on_player_death(ctx)",
@@ -5776,7 +5798,7 @@
         "signature": "xp_to_level(level)",
         "return_type": "int",
         "ctx_fields": [],
-        "doc": "Total experience points required to reach the given level.",
+        "doc": "The total XP at which the given level ends.",
         "since": 1
       }
     ],
@@ -6451,7 +6473,7 @@
         {
           "symbol": "t.world",
           "name": "world",
-          "doc": "A fresh headless world with the given packages (default: this test's package) and the rules package. The spec's `load` argument is spelled `packages`, since load is a Starlark keyword (D-072). rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, so only rooms near players are simulated; by default every room is (D-116).",
+          "doc": "A fresh headless world with the given packages (default: this test's package) and the rules package. The `load` argument is spelled `packages`, since load is a Starlark keyword. rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, so only rooms near players are simulated; by default every room is.",
           "since": 1,
           "params": [
             {
@@ -7146,6 +7168,15 @@
       "since": 1
     },
     {
+      "symbol": "message:combat.fighting.heard",
+      "feature": "combat",
+      "id": "combat.fighting.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a fight break out.",
+      "since": 1
+    },
+    {
       "symbol": "message:combat.flee.failed",
       "feature": "combat",
       "id": "combat.flee.failed",
@@ -7179,6 +7210,15 @@
       "placeholders": ["direction"],
       "required": [],
       "default": "You flee {direction}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.heard",
+      "feature": "combat",
+      "id": "combat.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear the sounds of combat.",
       "since": 1
     },
     {
@@ -7409,6 +7449,38 @@
       "since": 1
     },
     {
+      "symbol": "message:container.heard.close",
+      "id": "container.heard.close",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something closing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.lock",
+      "id": "container.heard.lock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something locking.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.open",
+      "id": "container.heard.open",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something opening.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.unlock",
+      "id": "container.heard.unlock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something unlocking.",
+      "since": 1
+    },
+    {
       "symbol": "message:container.no_lock",
       "id": "container.no_lock",
       "placeholders": ["item"],
@@ -7489,6 +7561,14 @@
       "since": 1
     },
     {
+      "symbol": "message:death.heard",
+      "id": "death.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a death cry.",
+      "since": 1
+    },
+    {
       "symbol": "message:death.respawn",
       "id": "death.respawn",
       "placeholders": ["name"],
@@ -7510,6 +7590,38 @@
       "placeholders": [],
       "required": [],
       "default": "You are DEAD!",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.close",
+      "id": "door.heard.close",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door closing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.lock",
+      "id": "door.heard.lock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door locking.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.open",
+      "id": "door.heard.open",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door opening.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.unlock",
+      "id": "door.heard.unlock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door unlocking.",
       "since": 1
     },
     {
