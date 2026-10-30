@@ -208,8 +208,10 @@ internal class CastAction(
       w.tell(t, SkillMsg.DONE_VICTIM, "actor" to actor.name.cap(), "skill" to skill.name)
     // Bystanders see every completed cast, so instant spells aren't invisible to the room.
     val who = actor.name.cap()
-    w.echo(
+    w.tellSight(
       actor.room,
+      "cast",
+      actor,
       when {
         onItem != null ->
           w.msg(SkillMsg.ROOM_ITEM, "actor" to who, "skill" to skill.name, "target" to onItem.name)

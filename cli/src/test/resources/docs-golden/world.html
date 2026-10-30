@@ -53,10 +53,12 @@
 <tr id="message-combat.attack"><td><code>combat.attack</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You attack {target}!</code></td></tr>
 <tr id="message-combat.attacked"><td><code>combat.attacked</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code></td><td><code>{actor} attacks you!</code></td></tr>
 <tr id="message-combat.fighting"><td><code>combat.fighting</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} and {target} are fighting!</code></td></tr>
+<tr id="message-combat.fighting.heard"><td><code>combat.fighting.heard</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>You hear a fight break out.</code></td></tr>
 <tr id="message-combat.flee.failed"><td><code>combat.flee.failed</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>You fail to escape!</code></td></tr>
 <tr id="message-combat.flee.nowhere"><td><code>combat.flee.nowhere</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>There's nowhere to flee!</code></td></tr>
 <tr id="message-combat.flee.room"><td><code>combat.flee.room</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{direction}</code></td><td><code>{actor} flees {direction}.</code></td></tr>
 <tr id="message-combat.flee.self"><td><code>combat.flee.self</code> <span class="badge feature">feature: combat</span></td><td><code>{direction}</code></td><td><code>You flee {direction}!</code></td></tr>
+<tr id="message-combat.heard"><td><code>combat.heard</code> <span class="badge feature">feature: combat</span></td><td></td><td><code>You hear the sounds of combat.</code></td></tr>
 <tr id="message-combat.hit.room"><td><code>combat.hit.room</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code>, <code>{target}</code></td><td><code>{actor} hits {target}.</code></td></tr>
 <tr id="message-combat.hit.self"><td><code>combat.hit.self</code> <span class="badge feature">feature: combat</span></td><td><code>{target}</code></td><td><code>You hit {target}.</code></td></tr>
 <tr id="message-combat.hit.target"><td><code>combat.hit.target</code> <span class="badge feature">feature: combat</span></td><td><code>{actor}</code></td><td><code>{actor} hits you.</code></td></tr>
@@ -84,6 +86,10 @@
 <tr id="message-condition.down_room"><td><code>condition.down_room</code></td><td><code>{actor}</code></td><td><code>{actor} collapses.</code></td></tr>
 <tr id="message-condition.up"><td><code>condition.up</code></td><td></td><td><code>You come to.</code></td></tr>
 <tr id="message-condition.up_room"><td><code>condition.up_room</code></td><td><code>{actor}</code></td><td><code>{actor} stirs.</code></td></tr>
+<tr id="message-container.heard.close"><td><code>container.heard.close</code></td><td></td><td><code>You hear something closing.</code></td></tr>
+<tr id="message-container.heard.lock"><td><code>container.heard.lock</code></td><td></td><td><code>You hear something locking.</code></td></tr>
+<tr id="message-container.heard.open"><td><code>container.heard.open</code></td><td></td><td><code>You hear something opening.</code></td></tr>
+<tr id="message-container.heard.unlock"><td><code>container.heard.unlock</code></td><td></td><td><code>You hear something unlocking.</code></td></tr>
 <tr id="message-container.no_lock"><td><code>container.no_lock</code></td><td><code>{item}</code></td><td><code>{item} has no lock.</code></td></tr>
 <tr id="message-container.room.close"><td><code>container.room.close</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} closes {item}.</code></td></tr>
 <tr id="message-container.room.lock"><td><code>container.room.lock</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} locks {item}.</code></td></tr>
@@ -94,9 +100,14 @@
 <tr id="message-container.self.open"><td><code>container.self.open</code></td><td><code>{item}</code></td><td><code>You open {item}.</code></td></tr>
 <tr id="message-container.self.unlock"><td><code>container.self.unlock</code></td><td><code>{item}</code></td><td><code>You unlock {item}.</code></td></tr>
 <tr id="message-container.state"><td><code>container.state</code></td><td><code>{item}</code>, <code>{state}</code></td><td><code>{item} is {state}.</code></td></tr>
+<tr id="message-death.heard"><td><code>death.heard</code></td><td></td><td><code>You hear a death cry.</code></td></tr>
 <tr id="message-death.respawn"><td><code>death.respawn</code></td><td><code>{name}</code></td><td><code>{name} appears, looking shaken.</code></td></tr>
 <tr id="message-death.room"><td><code>death.room</code></td><td><code>{actor}</code></td><td><code>{actor} is DEAD!</code></td></tr>
 <tr id="message-death.self"><td><code>death.self</code></td><td></td><td><code>You are DEAD!</code></td></tr>
+<tr id="message-door.heard.close"><td><code>door.heard.close</code></td><td></td><td><code>You hear a door closing.</code></td></tr>
+<tr id="message-door.heard.lock"><td><code>door.heard.lock</code></td><td></td><td><code>You hear a door locking.</code></td></tr>
+<tr id="message-door.heard.open"><td><code>door.heard.open</code></td><td></td><td><code>You hear a door opening.</code></td></tr>
+<tr id="message-door.heard.unlock"><td><code>door.heard.unlock</code></td><td></td><td><code>You hear a door unlocking.</code></td></tr>
 <tr id="message-door.no_key"><td><code>door.no_key</code></td><td></td><td><code>You don't have the key.</code></td></tr>
 <tr id="message-door.no_lock"><td><code>door.no_lock</code></td><td><code>{direction}</code></td><td><code>The door {direction} has no lock.</code></td></tr>
 <tr id="message-door.none"><td><code>door.none</code></td><td><code>{direction}</code></td><td><code>There is no door {direction}.</code></td></tr>
@@ -257,8 +268,6 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-session.slow_down"><td><code>session.slow_down</code></td><td></td><td><code>Slow down.</code></td></tr>
 <tr id="message-session.taken_over"><td><code>session.taken_over</code></td><td></td><td><code>Someone else has taken over this character.</code></td></tr>
 <tr id="message-session.too_much_input"><td><code>session.too_much_input</code></td><td></td><td><code>Too much input.</code></td></tr>
-<tr id="message-shout.near"><td><code>shout.near</code></td><td><code>{text}</code> (required)</td><td><code>Someone nearby shouts, '{text}'</code></td></tr>
-<tr id="message-shout.room"><td><code>shout.room</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} shouts, '{text}'</code></td></tr>
 <tr id="message-shout.self"><td><code>shout.self</code></td><td><code>{text}</code> (required)</td><td><code>You shout, '{text}'</code></td></tr>
 <tr id="message-shout.what"><td><code>shout.what</code></td><td></td><td><code>Shout what?</code></td></tr>
 <tr id="message-stop.cast"><td><code>stop.cast</code> <span class="badge feature">feature: skills</span></td><td></td><td><code>You stop casting.</code></td></tr>

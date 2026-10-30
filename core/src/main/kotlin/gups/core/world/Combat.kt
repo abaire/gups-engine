@@ -33,8 +33,18 @@ fun World.startCombat(a: Actor, b: Actor) {
   a.dirty = true
   b.dirty = true
   if (fresh) {
-    echo(a.room, msg(CombatMsg.FIGHTING, "actor" to a.name.cap(), "target" to b.name), a, b)
-    perceive("combat_start", Channel.NOISE, a.room, a)
+    tellPerceivers(
+      a.room,
+      "combat_start",
+      a,
+      mapOf(
+        Channel.SIGHT to msg(CombatMsg.FIGHTING, "actor" to a.name.cap(), "target" to b.name),
+        Channel.SOUND to msg(CombatMsg.FIGHTING_HEARD),
+      ),
+      COMBAT_INTENSITY,
+      exclude = arrayOf(a, b),
+    )
+    perceive("combat_start", Channel.SOUND, a.room, a, intensity = COMBAT_INTENSITY)
   }
 }
 
@@ -99,11 +109,16 @@ internal fun World.autoAttack(a: Actor) {
   if (roll > chance.value) {
     tell(a, CombatMsg.MISS_SELF, "target" to target.name)
     tell(target, CombatMsg.MISS_TARGET, "actor" to a.name.cap())
-    echo(
+    tellPerceivers(
       a.room,
-      msg(CombatMsg.MISS_ROOM, "actor" to a.name.cap(), "target" to target.name),
+      "combat",
       a,
-      target,
+      mapOf(
+        Channel.SIGHT to msg(CombatMsg.MISS_ROOM, "actor" to a.name.cap(), "target" to target.name),
+        Channel.SOUND to msg(CombatMsg.COMBAT_HEARD),
+      ),
+      COMBAT_INTENSITY,
+      exclude = arrayOf(a, target),
     )
     return
   }
@@ -116,7 +131,17 @@ internal fun World.autoAttack(a: Actor) {
   )
   tell(a, CombatMsg.HIT_SELF, "target" to target.name)
   tell(target, CombatMsg.HIT_TARGET, "actor" to a.name.cap())
-  echo(a.room, msg(CombatMsg.HIT_ROOM, "actor" to a.name.cap(), "target" to target.name), a, target)
+  tellPerceivers(
+    a.room,
+    "combat",
+    a,
+    mapOf(
+      Channel.SIGHT to msg(CombatMsg.HIT_ROOM, "actor" to a.name.cap(), "target" to target.name),
+      Channel.SOUND to msg(CombatMsg.COMBAT_HEARD),
+    ),
+    COMBAT_INTENSITY,
+    exclude = arrayOf(a, target),
+  )
   damage(target, losses, type, a)
 }
 
@@ -172,8 +197,18 @@ internal fun World.processDeath(victim: Actor) {
   disengageAll(victim)
   removedThisPhase += victim.id
   tell(victim, KernelMsg.DEATH_SELF)
-  echo(room, msg(KernelMsg.DEATH_ROOM, "actor" to victim.name.cap()), victim)
-  perceive("death", Channel.NOISE, room, victim)
+  tellPerceivers(
+    room,
+    "death",
+    victim,
+    mapOf(
+      Channel.SIGHT to msg(KernelMsg.DEATH_ROOM, "actor" to victim.name.cap()),
+      Channel.SOUND to msg(KernelMsg.DEATH_HEARD),
+    ),
+    COMBAT_INTENSITY,
+    exclude = arrayOf(victim),
+  )
+  perceive("death", Channel.SOUND, room, victim, intensity = COMBAT_INTENSITY)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
   // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
   // worth nothing either and drops no loot, so it can't be farmed.
@@ -209,7 +244,13 @@ internal fun World.processDeath(victim: Actor) {
       victim.condition = Condition.OK
       respawnVitals(victim, outcome.vitals)
       placeActor(victim, room(outcome.respawn), 0)
-      echo(victim.room, msg(KernelMsg.DEATH_RESPAWN, "name" to victim.name), victim)
+      tellSight(
+        victim.room,
+        "enter",
+        victim,
+        msg(KernelMsg.DEATH_RESPAWN, "name" to victim.name),
+        victim,
+      )
       send(victim, describeRoom(victim))
     }
   }
@@ -262,6 +303,7 @@ fun World.applyAffect(
   source: Actor? = null,
   modifiers: Modifiers = emptyMap(),
   wornFrom: EntityId? = null,
+  senseDeltas: Map<Channel, Int> = emptyMap(),
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -285,6 +327,7 @@ fun World.applyAffect(
       expireMessage,
       modifiers,
       wornFrom,
+      senseDeltas,
     )
   target.affects += affect
   target.dirty = true
@@ -326,7 +369,7 @@ private fun World.endAffect(
     send(a, affect.expireMessage)
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
   if ("summoned" in affect.flags && a is Mob && a.inWorld) {
-    echo(a.room, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
+    tellSight(a.room, "exit", a, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
     disengageAll(a)
     removeActor(a)
   }
@@ -423,6 +466,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             effect.expireMessage,
             caster,
             effect.modifiers,
+            senseDeltas = effect.senseDeltas,
           )
         is Effect.Dispel -> {
           val gone = t.affects.filter(effect::matches)

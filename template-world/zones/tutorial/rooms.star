@@ -2,9 +2,9 @@
 #
 #                      arena (LARGE)
 #                        |
-#    tar_pit ---- hall (LARGE) ==== armory     (the guide waits in the hall)
-#  (sticky floor)        |   (locked door)
-#                      gate  <- start here
+#  gravel - tar_pit ---- hall (LARGE) ==== armory     (the guide waits in the hall)
+#  (crunchy)  (sticky floor)  |   (locked, creaky door)
+#                           gate  <- start here
 #
 # Each room's `size` sets its track: SIZE.cramped (1 position), SIZE.normal (3) or SIZE.large (5). Combat
 # range depends on how far apart actors stand on it.
@@ -47,7 +47,9 @@ room("hall",
         # Arrive at the far end of the arena: entry_index -1 means the back of the track.
         exit(DIR.north, to = ":arena", entry_index = -1),
         # A locked door. Doors on both sides of a passage open and close together.
-        exit(DIR.east, to = ":armory", door = door(state = DOOR.locked, key = ":brass_key")),
+        # Tags are free-form words the rules read: rules/manipulation.star makes a "creaky"
+        # door twice as loud to open and close, so people next door hear it.
+        exit(DIR.east, to = ":armory", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"])),
     ],
     # Spawns refill on zone reset, and respawn_pulses after the last one leaves the world.
     spawns = [spawn(":guide", at_index = 2)],
@@ -62,7 +64,24 @@ room("tar_pit",
     size = SIZE.normal,
     flags = ["dead_end_ok"],
     tags = ["sticky_floor"],
-    exits = [exit(DIR.east, to = ":hall")],
+    exits = [exit(DIR.east, to = ":hall"), exit(DIR.west, to = ":gravel")],
+)
+
+def _crunch(ctx):
+    # ctx.emit raises a perceivable event: a channel, an event name, and how strong it is where
+    # it happens. It spreads through the exits, weakening on the way (rules/perception.star
+    # decides how much), and whoever can still perceive it reacts: mobs through on_perceive,
+    # players in other rooms through rules.perceive_message, which shows them the text.
+    if ctx.actor.is_player:
+        ctx.emit("sound", "crunch", intensity = 3, text = "Gravel crunches loudly somewhere to the west.")
+
+room("gravel",
+    name = "The Gravel Path",
+    desc = "Loose stones shift and crunch with every step.",
+    size = SIZE.normal,
+    flags = ["dead_end_ok"],
+    exits = [exit(DIR.east, to = ":tar_pit")],
+    on_enter = _crunch,
 )
 
 def _stock_armory(ctx):
@@ -78,7 +97,7 @@ room("armory",
     desc = "A cramped closet of racks, mostly empty.",
     size = SIZE.cramped,
     flags = ["dead_end_ok"],
-    exits = [exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key"))],
+    exits = [exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"]))],
     on_load = _stock_armory,
     on_reset = _stock_armory,
 )

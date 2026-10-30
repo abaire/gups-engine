@@ -199,7 +199,7 @@ class FixedRules(
   override fun mitigate(c: RulesContext, amount: Int, type: DamageType): Map<String, Int> =
     mitigation?.invoke(c, amount, type) ?: mapOf(fs.health to amount)
 
-  override fun initiative(c: RulesContext): Int = initiative[c.actor.name] ?: 10
+  override fun initiative(c: RulesContext): Int = initiative[c.requireActor().name] ?: 10
 
   override fun fleeChance(c: RulesContext): Int = flee ?: super.fleeChance(c)
 

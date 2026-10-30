@@ -50,6 +50,7 @@ sealed interface Effect {
     val onExpire: HookRef? = null,
     val expireMessage: String = "",
     val modifiers: Modifiers = emptyMap(),
+    val senseDeltas: Map<Channel, Int> = emptyMap(),
   ) : Effect
 
   /**

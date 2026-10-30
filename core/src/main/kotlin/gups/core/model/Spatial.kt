@@ -41,9 +41,11 @@ value class Channel(val name: String) {
   companion object {
     val SIGHT = Channel("sight")
     val SOUND = Channel("sound")
-    val NOISE = Channel("noise")
 
-    val BUILT_IN: List<Channel> = listOf(SIGHT, SOUND, NOISE)
+    val BUILT_IN: List<Channel> = listOf(SIGHT, SOUND)
+
+    /** What every actor senses on the built-in channels before `senses` overrides and deltas. */
+    val BUILTIN_SENSES: Map<Channel, Int> = mapOf(SIGHT to 1, SOUND to 1)
   }
 }
 
@@ -51,11 +53,6 @@ enum class DoorState {
   OPEN,
   CLOSED,
   LOCKED,
-}
-
-enum class Sense {
-  HEARING,
-  SIGHT,
 }
 
 enum class DormantRecovery {

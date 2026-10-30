@@ -84,7 +84,7 @@ private fun <T> World.chain(
   base: T,
   show: (T) -> String,
 ): ChainResult<T> {
-  val steps = chainSteps(point, c.actor)
+  val steps = chainSteps(point, c.requireActor())
   val text = StringBuilder("rules.${point.scriptName} base=${show(base)}")
   var v = base
   for (step in steps) {
@@ -120,7 +120,7 @@ fun World.castAllowed(c: RulesContext): String? {
   val req =
     gups.core.model.RestrictionRequest(
       point = gups.core.model.RestrictionPoint.CAST,
-      actor = c.actor,
+      actor = c.requireActor(),
       skill = c.skill,
       target = c.target,
     )

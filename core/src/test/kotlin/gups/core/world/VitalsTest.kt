@@ -93,8 +93,8 @@ class VitalsTest(private val fs: FixtureSchema) {
   private fun incapacitating(): FixedRules = rules {
     conditionOf = { c ->
       when {
-        c.actor.current(fs.health) <= -10 -> Condition.DEAD
-        c.actor.current(fs.health) <= 0 -> Condition.INCAPACITATED
+        c.requireActor().current(fs.health) <= -10 -> Condition.DEAD
+        c.requireActor().current(fs.health) <= 0 -> Condition.INCAPACITATED
         else -> Condition.OK
       }
     }
@@ -176,7 +176,7 @@ class VitalsTest(private val fs: FixtureSchema) {
   // ---- Death ----------------------------------------------------------------------------------
 
   private fun lastVitalKills(): FixedRules = rules {
-    conditionOf = { c -> if (c.actor.current(last) <= 0) Condition.DEAD else Condition.OK }
+    conditionOf = { c -> if (c.requireActor().current(last) <= 0) Condition.DEAD else Condition.OK }
   }
 
   @Test
@@ -224,7 +224,7 @@ class VitalsTest(private val fs: FixtureSchema) {
           rules {
             regenOf = { emptyMap() }
             conditionOf = { c ->
-              val since = c.actor.vitals.getValue(last).belowZeroSince
+              val since = c.requireActor().vitals.getValue(last).belowZeroSince
               if (since != null && c.world.pulse - since >= 60) Condition.DEAD else Condition.OK
             }
           }
@@ -270,7 +270,7 @@ class VitalsTest(private val fs: FixtureSchema) {
           rules {
             deathOf = { c ->
               PlayerDeathOutcome(
-                (c.actor as gups.core.model.Player).recallRoom,
+                (c.requireActor() as gups.core.model.Player).recallRoom,
                 mapOf(fs.health to 7),
                 0,
               )
@@ -299,7 +299,7 @@ class VitalsTest(private val fs: FixtureSchema) {
           rules {
             deathOf = { c ->
               PlayerDeathOutcome(
-                (c.actor as gups.core.model.Player).recallRoom,
+                (c.requireActor() as gups.core.model.Player).recallRoom,
                 mapOf(fs.health to -5),
                 0,
               )
@@ -412,7 +412,9 @@ class VitalsTest(private val fs: FixtureSchema) {
     val mobs = Label("//t:ogre")
     val proto = MobProto(mobs, "an ogre", listOf("ogre"), vitals = mapOf(fs.health to 33))
     val rules = rules {
-      startingOf = { c -> StartingStats(max = mapOf(fs.health to c.actor.max(fs.health) * 2)) }
+      startingOf = { c ->
+        StartingStats(max = mapOf(fs.health to c.requireActor().max(fs.health) * 2))
+      }
     }
     val f = Fixture(rules = rules, protos = T.protos(extraMobs = listOf(proto)))
     val ogre = f.mob(mobs)
@@ -434,7 +436,7 @@ class VitalsTest(private val fs: FixtureSchema) {
         rules =
           rules {
             startingOf = { c ->
-              inWorld = c.actor.inWorld
+              inWorld = c.requireActor().inWorld
               StartingStats()
             }
           }
@@ -448,7 +450,7 @@ class VitalsTest(private val fs: FixtureSchema) {
   fun `a spawn's condition is settled at once, and a dead start is a rules error that fills it`() {
     val rules = rules {
       conditionOf = { c ->
-        val now = c.actor.current(fs.health)
+        val now = c.requireActor().current(fs.health)
         when {
           now <= 0 -> Condition.DEAD
           now < 10 -> Condition.INCAPACITATED

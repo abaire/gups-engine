@@ -104,6 +104,24 @@ class CreationRegistrationTest {
   }
 
   @Test
+  fun `trait sense deltas must name a built-in or declared channel`() {
+    assertContains(
+      refusal { it.addTrait(PluginTrait("x", senseDeltas = mapOf("sigth" to 1))) },
+      "unknown channel 'sigth'",
+    )
+    assertContains(
+      refusal { it.addTrait(PluginTrait("x", senseDeltas = mapOf("sigth" to 1))) },
+      "'sight'",
+    )
+    val host =
+      PluginHost.of(
+        plugin("keen") { it.addTrait(PluginTrait("keen", senseDeltas = mapOf("sound" to 2))) },
+        schema = schema,
+      )
+    assertEquals(emptyList(), host.warnings)
+  }
+
+  @Test
   fun `a trait can't carry the stunned flag`() {
     assertEquals(
       "trait 'dazed': flags cannot contain 'stunned'",

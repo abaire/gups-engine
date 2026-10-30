@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.model.Channel
 import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.Item
@@ -157,7 +158,6 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
       val live = oldExits[ep.direction]
       val wasProto = was?.exits?.firstOrNull { it.direction == ep.direction }
       if (live != null && wasProto != null) {
-        if (live.sensesBlocked != wasProto.sensesBlocked) exit.sensesBlocked = live.sensesBlocked
         val door = exit.door
         val liveDoor = live.door
         if (door != null && liveDoor != null && liveDoor.state != wasProto.door?.state)
@@ -189,6 +189,10 @@ private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
   for (name in full) m.vitalMap.getValue(name).current = m.max(name)
   for (stat in p.stats.keys + was.stats.keys) {
     m.baseStats[stat] = follow(m.baseStats[stat], was.stats[stat], p.stats[stat]) ?: 0
+  }
+  if (m.baseSenses == Channel.BUILTIN_SENSES + was.senses) {
+    m.baseSenses.clear()
+    m.baseSenses.putAll(Channel.BUILTIN_SENSES + p.senses)
   }
   if (m.resists == was.resists) {
     m.resists.clear()

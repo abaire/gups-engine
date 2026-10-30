@@ -159,12 +159,6 @@ able to return move-cost or lag changes, or forbid movement past a hard limit?
 
 ## Perception and the world
 
-### What players perceive from next door
-
-**Spec:** §5.7 defines perception for mobs (`on_nearby`) only. **Today:** players hear nothing from adjacent rooms
-except `shout`, which follows the noise channel (D-018, D-120). **Question:** should players also hear combat, death
-cries and voices through open exits, as text such as "You hear fighting to the north"?
-
 ### Recognizing an unfamiliar spell
 
 **Spec:** §5.3 (warmup messages), §4.6 (rules exports). **Today:** when a cast's warmup begins, onlookers who know the
@@ -173,13 +167,6 @@ spell. **Questions:** - Should onlookers with high Wisdom or Intelligence, or wh
 spell they don't know by watching the caster? - Is that check a rules export, such as `recognizes_spell(ctx) -> bool`,
 and does it run once per onlooker per cast? - Does the skill's `kind` or another field make some spells harder to
 recognize, or hide them entirely?
-
-### Events from rooms, doors and items
-
-**Spec:** §5.7's table lists only actor events. **Today:** doors opening and closing, items breaking or falling, and
-room-scripted events are never perceived. **Question:** should scripts be able to raise perceivable events, for example
-with `ctx.noise(room, event, text)`, and should door commands emit `sound`? Such a verb should take any channel,
-including those a world declares (§3.9), which today have no engine effect.
 
 ### Cost of `pursue` and other world-wide searches
 

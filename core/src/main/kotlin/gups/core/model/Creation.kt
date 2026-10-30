@@ -40,6 +40,7 @@ class Trait(
   val resistDeltas: Map<String, Int> = emptyMap(),
   val flags: Set<String> = emptySet(),
   val modifiers: Map<ModifierPoint, TraitModifier> = emptyMap(),
+  val senseDeltas: Map<Channel, Int> = emptyMap(),
 )
 
 fun interface TraitModifier {

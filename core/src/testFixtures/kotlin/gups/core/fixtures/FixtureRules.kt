@@ -2,10 +2,13 @@ package gups.core.fixtures
 
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Dice
+import gups.core.model.DoorState
 import gups.core.model.Player
+import gups.core.model.TrackSize
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
@@ -37,6 +40,57 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   /** Replaces `on_player_death` when set. */
   var deathOf: ((RulesContext) -> PlayerDeathOutcome)? = null
 
+  /** Replaces `sense_cost` when set. */
+  var senseCostOf: ((RulesContext) -> Int)? = null
+
+  override fun senseCost(c: RulesContext): Int {
+    senseCostOf?.let {
+      return it(c)
+    }
+    val exit = checkNotNull(c.exit)
+    val channel = checkNotNull(c.channel)
+    if ("sealed" in exit.tags) return -1
+    var cost = 1
+    if (checkNotNull(c.room).proto.size == TrackSize.LARGE && channel != Channel.SIGHT) cost++
+    val door = exit.door
+    if (door != null && door.state != DoorState.OPEN) {
+      if (channel == Channel.SIGHT && "transparent" !in door.tags) return -1
+      cost += if ("heavy" in door.tags) 2 else 1
+    }
+    return cost
+  }
+
+  override fun perceiveMessage(c: RulesContext): String? {
+    val via = c.viaExit
+    if (via == null && c.event != "shout") return null
+    return when (c.event) {
+      "shout" ->
+        if (via == null)
+          "${c.source?.name?.replaceFirstChar { it.uppercase() } ?: "Someone"} shouts, '${c.text.orEmpty()}'"
+        else "Someone shouts from the $via, '${c.text.orEmpty()}'"
+      "combat_start",
+      "combat" -> "You hear the sounds of combat from the $via."
+      "death" -> "You hear a death cry from the $via."
+      "open",
+      "close",
+      "lock",
+      "unlock" -> "You hear something ${c.event} to the $via."
+      else -> c.text?.takeIf { it.isNotEmpty() }
+    }
+  }
+
+  override fun doorIntensity(c: RulesContext): Int {
+    val tags = c.tags
+    return when {
+      "silent" in tags -> 0
+      c.action == "open" || c.action == "close" ->
+        if (tags.any { it == "heavy" || it == "creaky" || it == "loud" }) 2 else 1
+      c.action == "lock" || c.action == "unlock" ->
+        if (tags.any { it == "clanking" || it == "noisy_lock" || it == "heavy" }) 1 else 0
+      else -> 0
+    }
+  }
+
   private fun stat(a: Actor, name: String?): Int = name?.let(a::stat) ?: 0
 
   override fun equipmentSlots(): List<String> = SLOTS
@@ -45,7 +99,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     startingOf?.let {
       return it(c)
     }
-    val a = c.actor
+    val a = c.requireActor()
     val stats = fs.stats.associateWith { if (it == fs.armor) 0 else 10 }
     return if (a is Player) {
       StartingStats(stats = stats, max = fs.playerMax, current = fs.startsEmpty.mapValues { 0 })
@@ -59,11 +113,11 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   }
 
   override fun condition(c: RulesContext): Condition {
-    conditionCalls.merge(c.actor.name, 1, Int::plus)
+    conditionCalls.merge(c.requireActor().name, 1, Int::plus)
     conditionOf?.let {
       return it(c)
     }
-    return if (c.actor.current(fs.health) <= 0) Condition.DEAD else Condition.OK
+    return if (c.requireActor().current(fs.health) <= 0) Condition.DEAD else Condition.OK
   }
 
   override fun toHit(c: RulesContext): Int {
@@ -91,22 +145,23 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     return mapOf(fs.health to (afterArmor * (100 - resist) / 100).coerceAtLeast(0))
   }
 
-  override fun initiative(c: RulesContext): Int = c.actor.stat(fs.agility) + c.actor.level
+  override fun initiative(c: RulesContext): Int =
+    c.requireActor().stat(fs.agility) + c.requireActor().level
 
   override fun castAllowed(c: RulesContext): String? = null
 
   override fun interruptCheck(c: RulesContext, amount: Int): Boolean {
-    val pct = c.actor.casting?.action?.interrupt?.damagePct ?: return false
-    return amount * 100 >= pct * c.actor.max(fs.health).coerceAtLeast(1)
+    val pct = c.requireActor().casting?.action?.interrupt?.damagePct ?: return false
+    return amount * 100 >= pct * c.requireActor().max(fs.health).coerceAtLeast(1)
   }
 
   override fun retreatCheck(c: RulesContext): Int {
     val pinner = c.target?.stat(fs.agility) ?: 10
-    return (50 + (c.actor.stat(fs.agility) - pinner) * 3).coerceIn(5, 95)
+    return (50 + (c.requireActor().stat(fs.agility) - pinner) * 3).coerceIn(5, 95)
   }
 
   override fun fleeChance(c: RulesContext): Int =
-    (40 + (c.actor.stat(fs.agility) - 10) * 2).coerceIn(5, 95)
+    (40 + (c.requireActor().stat(fs.agility) - 10) * 2).coerceIn(5, 95)
 
   override fun moveCost(c: RulesContext): Map<String, Int> =
     moveCostOf?.invoke(c) ?: mapOf(fs.stamina to 1)
@@ -115,7 +170,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     regenOf?.let {
       return it(c)
     }
-    val a = c.actor
+    val a = c.requireActor()
     return buildMap {
       put(fs.health, 1 + a.stat(fs.toughness) / 4 + a.level / 2)
       if (fs.energy != fs.stamina) put(fs.energy, 1 + fs.mind.sumOf(a::stat) / (4 * fs.mind.size))
@@ -123,7 +178,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     }
   }
 
-  override fun carryLimit(c: RulesContext): Int = c.actor.stat(fs.strength) * 10
+  override fun carryLimit(c: RulesContext): Int = c.requireActor().stat(fs.strength) * 10
 
   override fun encumbrance(c: RulesContext): Map<String, Int> = mapOf(fs.agility to -2)
 
@@ -150,7 +205,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     deathOf?.let {
       return it(c)
     }
-    val p = c.actor as Player
+    val p = c.requireActor() as Player
     return PlayerDeathOutcome(p.recallRoom, mapOf(fs.health to 1), p.xp / 10)
   }
 

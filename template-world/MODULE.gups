@@ -38,7 +38,7 @@ module(
     # damage_types.
     unarmed_damage_type = "bludgeon",
 
-    # Perception channels beyond the built-in sight, sound and noise. Exits and doors can block
+    # Perception channels beyond the built-in sight and sound. Exits and doors can block
     # them and skills can list them; the engine raises no events on them itself.
     channels = ["spell"],
 

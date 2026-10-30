@@ -140,6 +140,19 @@ data class WorldModule(
         !channels.add(c) -> add("MODULE.gups: channel '$c' is declared more than once")
       }
     }
+    val ranked = HashSet<String>()
+    val knownChannels = schema.allChannels.map { it.name }
+    for (c in schema.channelPriority) {
+      when {
+        c !in knownChannels ->
+          add(
+            "MODULE.gups: channel_priority names '$c', which is not a channel" +
+              schema.suggest(c, knownChannels)
+          )
+        !ranked.add(c) ->
+          add("MODULE.gups: channel '$c' is ranked more than once in channel_priority")
+      }
+    }
     schema.prompt?.let { prompt ->
       for (m in PROMPT_PLACEHOLDER.findAll(prompt)) {
         val key = m.groupValues[1]
@@ -257,7 +270,13 @@ data class WorldModule(
             DeclParam(
               "channels",
               "list[str]",
-              "Perception channels beyond sight, sound and noise.",
+              "Perception channels beyond sight and sound.",
+              default = "[]",
+            ),
+            DeclParam(
+              "channel_priority",
+              "list[str]",
+              "Channels from strongest to weakest: a player is told the text of the first one they perceive. Channels left out follow, built-in ones first.",
               default = "[]",
             ),
             DeclParam(
@@ -403,6 +422,7 @@ data class WorldModule(
             unarmedDamageType = d.reqStr("unarmed_damage_type"),
             channels = d.strList("channels"),
             prompt = d.str("prompt"),
+            channelPriority = d.strList("channel_priority"),
           )
         result =
           WorldModule(

@@ -17,11 +17,11 @@ mob("guide",
     desc="A patient old adventurer with a lantern.",
     level=10,
     vitals=vitals(hp=200),
-    senses={"hearing": 1},
+    senses={"sound": 1},
     behaviors=[sentinel()],
     on_say=_guide_hears,
     before_exit=_guide_blocks,
-    on_nearby=_guide_listens,
+    on_perceive=_guide_listens,
     )
 ```
 
@@ -31,9 +31,11 @@ mob("guide",
 * **`vitals`:** Declares baseline maximum pools (e.g. `hp = 200`, `mana = 50`). Note: In GUPS, these parameter names
   correspond to your world's `MODULE.gups` schema, not hardcoded engine terms.
 * **`stats`:** Base attributes (e.g. `stats(str = 14, dex = 12, con = 15)`).
-* **`senses`:** Configures sensory perception:
-  * `"sight": 0` — sees in the same room.
-  * `"hearing": 1` — hears noise from adjacent rooms connected by exits.
+* **`senses`:** Base sense scores by channel. Every actor starts with `sight` and `sound` at 1 (and any channel your
+  world declares at 0); `senses` merges over those defaults, so `senses={"sound": 3}` leaves sight at 1. A score of 0
+  means the mob cannot sense that channel at all, even in its own room: `senses={"sight": 0}` blinds it. Higher scores
+  let a mob notice fainter and more distant events. Items (`sense_deltas`), affects (`apply_affect(...,
+  sense_deltas={...})`) and plugin traits change the score while they last.
 * **`dormant_recovery`:** Sets what happens when a mob wakes from the reality bubble sleep (`"full"`, `"regen"`, or
   `"none"`).
 

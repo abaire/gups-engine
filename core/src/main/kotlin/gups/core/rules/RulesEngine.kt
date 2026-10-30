@@ -4,9 +4,13 @@ import gups.core.Label
 import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.DamageType
+import gups.core.model.Direction
+import gups.core.model.Exit
 import gups.core.model.Item
+import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.world.World
 
@@ -16,15 +20,33 @@ import gups.core.world.World
  */
 class RulesContext(
   val world: World,
-  val actor: Actor,
+  /** Null for calls about a room rather than an actor, such as `sense_cost`. */
+  val actor: Actor? = null,
   val target: Actor? = null,
   val weapon: Item? = null,
   val band: Band? = null,
   val skill: SkillProto? = null,
   val item: Item? = null,
+  /** For the perception calls, the room the call is about when no [actor] is. */
+  val room: Room? = null,
+  val exit: Exit? = null,
+  val channel: Channel? = null,
+  val event: String? = null,
+  val intensity: Int? = null,
+  val cost: Int? = null,
+  val sourceRoom: Room? = null,
+  val viaExit: Direction? = null,
+  val text: String? = null,
+  val action: String? = null,
+  val tags: Set<String> = emptySet(),
+  /** The actor who caused a perceived event, if any. */
+  val source: Actor? = null,
 ) {
+  /** [actor] for the calls that always have one. */
+  fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
+
   val attacker: Actor
-    get() = actor
+    get() = requireActor()
 
   val defender: Actor
     get() = checkNotNull(target) { "This rules call has no defender" }
@@ -41,6 +63,8 @@ data class StartingStats(
   val stats: Map<String, Int> = emptyMap(),
   val max: Map<String, Int> = emptyMap(),
   val current: Map<String, Int> = emptyMap(),
+  /** Base senses by channel, merged over the built-in defaults. */
+  val senses: Map<Channel, Int> = emptyMap(),
 )
 
 /** What `rules.on_player_death` decides: where the player respawns and with which vitals. */
@@ -52,7 +76,8 @@ data class PlayerDeathOutcome(
 )
 
 /**
- * One method per `//rules:combat.star` export; the Starlark-backed implementation is the only one.
+ * One method per export of the `//rules` package's files; the Starlark-backed implementation is the
+ * only one.
  */
 interface RulesEngine {
   fun equipmentSlots(): List<String>
@@ -125,4 +150,23 @@ interface RulesEngine {
 
   /** Recovery lag after [RulesContext.actor] fails to flee; there is no target. */
   fun fleeFailLag(c: RulesContext): Int
+
+  /**
+   * What the signal of [RulesContext.channel] loses crossing [RulesContext.exit] into
+   * [RulesContext.room]; a negative price blocks it.
+   */
+  fun senseCost(c: RulesContext): Int = 1
+
+  /** Whether [RulesContext.actor] notices the perceived event. */
+  fun canPerceive(c: RulesContext): Boolean {
+    val sense = c.actor?.sense(c.channel ?: Channel.SOUND) ?: 0
+    return sense > 0 &&
+      (c.sourceRoom === (c.room ?: c.actor?.room) || (c.intensity ?: 1) + sense > (c.cost ?: 0))
+  }
+
+  /** What a player in another room is told about the perceived event, or null for nothing. */
+  fun perceiveMessage(c: RulesContext): String? = null
+
+  /** The sound intensity of a door or container [RulesContext.action]; 0 is silent. */
+  fun doorIntensity(c: RulesContext): Int = if (c.action == "open" || c.action == "close") 1 else 0
 }

@@ -114,6 +114,46 @@ def test_the_guide_hears_sparring_next_door(t):
     p.do("kill dummy")
     t.contains(listener.output(), "I hear someone sparring in the arena. Good!")
 
+def test_the_gravel_crunches_where_it_is_heard(t):
+    w = _world(t)
+    guide_room = w.spawn_player("Gus", at = ":hall")
+    next_door = w.spawn_player("Wen", at = ":tar_pit")
+    walker = w.spawn_player("Walt", at = ":tar_pit")
+    walker.do("west")
+    # A player next door is shown the emit's text; the guide, two rooms away, still hears it.
+    t.contains(next_door.output(), "Gravel crunches loudly somewhere to the west.")
+    t.contains(guide_room.output(), "Someone is crunching about on the gravel to the west.")
+
+def test_large_rooms_muffle_sound(t):
+    # rules/perception.star charges an extra point of sound for entering a large room.
+    # A shout (intensity 3) from the gate reaches the large hall (cost 2) but not the large arena
+    # beyond it (cost 4), though both are listeners with the same senses.
+    w = _world(t)
+    shouter = w.spawn_player("Sam", at = ":gate")
+    in_hall = w.spawn_player("Hal", at = ":hall")
+    in_arena = w.spawn_player("Ari", at = ":arena")
+    shouter.do("shout hello")
+    w.run(pulses = 2)
+    t.contains(in_hall.output(), "Someone shouts from the south")
+    t.not_contains(in_arena.output(), "Someone shouts")
+
+def test_the_gravel_is_too_far_for_the_gate(t):
+    w = _world(t)
+    far = w.spawn_player("Fay", at = ":gate")
+    walker = w.spawn_player("Walt", at = ":tar_pit")
+    walker.do("west")
+    t.not_contains(far.output(), "Gravel")
+
+def test_the_creaky_armory_door_is_heard_at_the_gate(t):
+    w = _world(t)
+    listener = w.spawn_player("Gus", at = ":gate")
+    p = w.spawn_player("Tess", at = ":hall")
+    p.do("say do you have a key?")
+    p.do("unlock east")
+    t.not_contains(listener.output(), "You hear something")
+    p.do("open east")
+    t.contains(listener.output(), "You hear something open to the north.")
+
 def test_the_arena_only_wakes_with_someone_near(t):
     # bubble = True simulates only rooms near players, as the server does. The dummy's timer
     # waits while nobody is around.

@@ -83,7 +83,7 @@ class M5ScriptTest {
   }
 
   @Test
-  fun `on_nearby sees the event, its room and the mob's own exit toward it`() {
+  fun `on_perceive sees the event, its room and the mob's own exit toward it`() {
     val f =
       ScriptFixture(
         zone(
@@ -94,7 +94,7 @@ class M5ScriptTest {
 
                 room("start", exits = [exit("north", ":den")])
                 room("den", exits = [exit("south", ":start")])
-                mob("wolf", senses = {"hearing": 1}, on_nearby = _heard)
+                mob("wolf", senses = {"sound": 1}, on_perceive = _heard)
                 """
         )
       )

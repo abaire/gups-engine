@@ -93,27 +93,15 @@
           "since": 1
         },
         {
-          "symbol": "door.open_senses_blocked",
-          "name": "open_senses_blocked",
+          "symbol": "door.tags",
+          "name": "tags",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "[]",
           "allowed_values": [],
-          "doc": "Channels blocked while the door is open.",
-          "since": 1
-        },
-        {
-          "symbol": "door.closed_senses_blocked",
-          "name": "closed_senses_blocked",
-          "type": "list[str]",
-          "positional": false,
-          "keyword": true,
-          "required": false,
-          "default": "['sight', 'sound']",
-          "allowed_values": [],
-          "doc": "Channels blocked while the door is closed or locked.",
+          "doc": "Tags the rules read, such as 'heavy', 'creaky' or 'transparent', to price sensing and muffling.",
           "since": 1
         }
       ]
@@ -164,15 +152,15 @@
           "since": 1
         },
         {
-          "symbol": "exit.senses_blocked",
-          "name": "senses_blocked",
+          "symbol": "exit.tags",
+          "name": "tags",
           "type": "list[str]",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "[]",
           "allowed_values": [],
-          "doc": "Perception and spell channels blocked by this exit.",
+          "doc": "Tags the rules read, such as 'soundproof' or 'sealed', to price sensing across the exit.",
           "since": 1
         },
         {
@@ -398,6 +386,18 @@
           "default": "stats()",
           "allowed_values": [],
           "doc": "Stat adjustments applied while the item is worn, built with stats(...).",
+          "since": 1
+        },
+        {
+          "symbol": "item.sense_deltas",
+          "name": "sense_deltas",
+          "type": "dict[str, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Sense score changes by channel while the item is worn.",
           "since": 1
         },
         {
@@ -670,8 +670,8 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["hearing", "sight"],
-          "doc": "Perception radii in exits (0..1) by sense.",
+          "allowed_values": [],
+          "doc": "Base sense score by channel, merged over sight and sound at 1; 0 senses nothing on that channel.",
           "since": 1
         },
         {
@@ -1467,7 +1467,19 @@
           "required": false,
           "default": "[]",
           "allowed_values": [],
-          "doc": "Perception channels beyond sight, sound and noise.",
+          "doc": "Perception channels beyond sight and sound.",
+          "since": 1
+        },
+        {
+          "symbol": "module.channel_priority",
+          "name": "channel_priority",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Channels from strongest to weakest: a player is told the text of the first one they perceive. Channels left out follow, built-in ones first.",
           "since": 1
         },
         {
@@ -1864,8 +1876,8 @@
       "symbol": "SENSE",
       "name": "SENSE",
       "type": "struct",
-      "value": "struct(sight = \"sight\", sound = \"sound\", noise = \"noise\", all = [\"sight\", \"sound\", \"noise\"])",
-      "doc": "Perception senses (SENSE.sight, SENSE.sound, SENSE.noise, declared senses) and SENSE.all.",
+      "value": "struct(sight = \"sight\", sound = \"sound\", all = [\"sight\", \"sound\"])",
+      "doc": "Perception senses (SENSE.sight, SENSE.sound, declared senses) and SENSE.all.",
       "since": 1
     },
     {
@@ -1899,6 +1911,16 @@
       "attach_to": ["mob", "item", "room"],
       "ctx_fields": ["self", "actor", "skill", "target", "room", "pulse", "rng"],
       "doc": "Fires before casting begins; return ctx.deny(msg) to veto.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:before_close",
+      "name": "before_close",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires before an actor starts closing a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
       "since": 1
     },
     {
@@ -1942,6 +1964,36 @@
       "since": 1
     },
     {
+      "symbol": "hook:before_lock",
+      "name": "before_lock",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires before an actor starts locking a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:before_open",
+      "name": "before_open",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires before an actor starts opening a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:before_unlock",
+      "name": "before_unlock",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires before an actor starts unlocking a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+      "since": 1
+    },
+    {
       "symbol": "hook:before_use",
       "name": "before_use",
       "signature": "fn(ctx)",
@@ -1971,6 +2023,16 @@
       "attach_to": ["mob", "item", "room"],
       "ctx_fields": ["self", "actor", "skill", "target", "room", "pulse", "rng"],
       "doc": "Fires when a skill enters casting warmup.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:on_close",
+      "name": "on_close",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires after a door or container is closed. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
       "since": 1
     },
     {
@@ -2065,13 +2127,33 @@
       "since": 1
     },
     {
-      "symbol": "hook:on_nearby",
-      "name": "on_nearby",
+      "symbol": "hook:on_lock",
+      "name": "on_lock",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires after a door or container is locked. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:on_open",
+      "name": "on_open",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires after a door or container is opened. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:on_perceive",
+      "name": "on_perceive",
       "signature": "fn(ctx)",
       "vetoable": false,
       "attach_to": ["mob"],
-      "ctx_fields": ["self", "event", "actor", "source_room", "via_exit", "text", "room", "pulse", "rng"],
-      "doc": "Fires on a mob with senses when a perceptible event happens within its sense radius.",
+      "ctx_fields": ["self", "event", "channel", "intensity", "cost", "actor", "source_room", "via_exit", "text", "room", "pulse", "rng"],
+      "doc": "Fires on a mob when `rules.can_perceive` lets it notice an event on a channel, in its room or carried to it from farther away.",
       "since": 1
     },
     {
@@ -2122,6 +2204,16 @@
       "attach_to": ["room", "mob", "item"],
       "ctx_fields": ["self", "room", "pulse", "rng"],
       "doc": "Fires on each world tick while simulated.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:on_unlock",
+      "name": "on_unlock",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["item", "room", "mob"],
+      "ctx_fields": ["self", "actor", "direction", "item", "room", "pulse", "rng"],
+      "doc": "Fires after a door or container is unlocked. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
       "since": 1
     },
     {
@@ -2177,6 +2269,18 @@
         "since": 1
       },
       {
+        "symbol": "ctx.channel",
+        "name": "channel",
+        "doc": "For on_perceive: the channel the event travelled on, such as 'sound'.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.cost",
+        "name": "cost",
+        "doc": "For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.direction",
         "name": "direction",
         "doc": "The movement direction name, for enter and exit hooks.",
@@ -2191,13 +2295,19 @@
       {
         "symbol": "ctx.event",
         "name": "event",
-        "doc": "For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.",
+        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit.",
         "since": 1
       },
       {
         "symbol": "ctx.from_room",
         "name": "from_room",
         "doc": "The room the actor came from, for enter hooks.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.intensity",
+        "name": "intensity",
+        "doc": "For on_perceive: the event's strength where it happened.",
         "since": 1
       },
       {
@@ -2258,7 +2368,7 @@
       {
         "symbol": "ctx.source_room",
         "name": "source_room",
-        "doc": "For on_nearby: the room the event happened in.",
+        "doc": "For on_perceive: the room the event happened in.",
         "since": 1
       },
       {
@@ -2294,7 +2404,7 @@
       {
         "symbol": "ctx.via_exit",
         "name": "via_exit",
-        "doc": "For on_nearby: this mob's own exit toward the event, or None for its own room.",
+        "doc": "For on_perceive: this mob's own exit toward the event, or None for its own room.",
         "since": 1
       },
       {
@@ -2663,6 +2773,16 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Rules modifiers active while the affect lasts, by modifier point name."
+          },
+          {
+            "symbol": "ctx.apply_affect.sense_deltas",
+            "name": "sense_deltas",
+            "positional": true,
+            "named": true,
+            "default": "{}",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Sense score changes by channel while the affect lasts."
           }
         ]
       },
@@ -2925,6 +3045,74 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Actors who don't receive the text."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.emit",
+        "name": "emit",
+        "doc": "Raises a perceivable event on a channel. It spreads through nearby rooms from room, weakening on the way; actors who can perceive it hear or see it through on_perceive and rules.perceive_message.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.emit.channel",
+            "name": "channel",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "A built-in or declared channel name."
+          },
+          {
+            "symbol": "ctx.emit.event",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Event name that on_perceive hooks see."
+          },
+          {
+            "symbol": "ctx.emit.intensity",
+            "name": "intensity",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Strength at the origin; 0 or less emits nothing."
+          },
+          {
+            "symbol": "ctx.emit.text",
+            "name": "text",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Text that goes with the event."
+          },
+          {
+            "symbol": "ctx.emit.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, where it happens; defaults to ctx.room."
+          },
+          {
+            "symbol": "ctx.emit.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who caused it; defaults to ctx.actor. The causer does not perceive it."
           }
         ]
       },
@@ -3485,44 +3673,6 @@
         ]
       },
       {
-        "symbol": "ctx.set_exit_senses_blocked",
-        "name": "set_exit_senses_blocked",
-        "doc": "Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.",
-        "since": 1,
-        "params": [
-          {
-            "symbol": "ctx.set_exit_senses_blocked.room",
-            "name": "room",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Room, or room label, that has the exit."
-          },
-          {
-            "symbol": "ctx.set_exit_senses_blocked.dir",
-            "name": "dir",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Direction of the exit."
-          },
-          {
-            "symbol": "ctx.set_exit_senses_blocked.channels",
-            "name": "channels",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Channels to block, built in or declared by the world."
-          }
-        ]
-      },
-      {
         "symbol": "ctx.spawn",
         "name": "spawn",
         "doc": "Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count > 1 makes several.",
@@ -3862,6 +4012,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.senses",
+          "name": "senses",
+          "doc": "Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.skills",
           "feature": "skills",
           "name": "skills",
@@ -4066,6 +4222,12 @@
           "since": 1
         },
         {
+          "symbol": "view:affect.sense_deltas",
+          "name": "sense_deltas",
+          "doc": "Sense score changes by channel granted by this affect.",
+          "since": 1
+        },
+        {
           "symbol": "view:affect.source",
           "name": "source",
           "doc": "Who applied it, if still in the world.",
@@ -4090,6 +4252,34 @@
       "methods": []
     },
     {
+      "symbol": "view:door",
+      "name": "door",
+      "builtin_type": "door",
+      "doc": "A read-only view of an exit's door.",
+      "since": 1,
+      "fields": [
+        {
+          "symbol": "view:door.key",
+          "name": "key",
+          "doc": "The key's item label, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "view:door.state",
+          "name": "state",
+          "doc": "'open', 'closed' or 'locked'.",
+          "since": 1
+        },
+        {
+          "symbol": "view:door.tags",
+          "name": "tags",
+          "doc": "Tags declared on door(tags = [...]), sorted.",
+          "since": 1
+        }
+      ],
+      "methods": []
+    },
+    {
       "symbol": "view:exit",
       "name": "exit",
       "builtin_type": "exit",
@@ -4105,7 +4295,7 @@
         {
           "symbol": "view:exit.door",
           "name": "door",
-          "doc": "'open', 'closed' or 'locked'; None without a door.",
+          "doc": "The exit's door, or None without one.",
           "since": 1
         },
         {
@@ -4134,9 +4324,9 @@
           "since": 1
         },
         {
-          "symbol": "view:exit.senses_blocked",
-          "name": "senses_blocked",
-          "doc": "Effective blocked channels: the exit's own plus its door's.",
+          "symbol": "view:exit.tags",
+          "name": "tags",
+          "doc": "Tags declared on exit(tags = [...]), sorted.",
           "since": 1
         },
         {
@@ -4232,6 +4422,12 @@
           "feature": "track",
           "name": "range",
           "doc": "A weapon's reach: 'melee', 'near' or 'far'.",
+          "since": 1
+        },
+        {
+          "symbol": "view:item.sense_deltas",
+          "name": "sense_deltas",
+          "doc": "Sense score changes by channel while worn.",
           "since": 1
         },
         {
@@ -4725,6 +4921,17 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Rules modifiers active while the affect lasts, by modifier point name."
+        },
+        {
+          "symbol": "apply_affect.sense_deltas",
+          "feature": "skills",
+          "name": "sense_deltas",
+          "positional": true,
+          "named": true,
+          "default": "{}",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Sense score changes by channel while the affect lasts."
         }
       ]
     },
@@ -5154,6 +5361,12 @@
       "since": 1,
       "fields": [
         {
+          "symbol": "rules_ctx.action",
+          "name": "action",
+          "doc": "For door_intensity: 'open', 'close', 'lock' or 'unlock'.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.actor",
           "name": "actor",
           "doc": "Whom the call is about: the attacker, caster, mover or regenerating actor.",
@@ -5173,9 +5386,39 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.channel",
+          "name": "channel",
+          "doc": "For the perception calls: the channel name, such as 'sound'.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.cost",
+          "name": "cost",
+          "doc": "For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.defender",
           "name": "defender",
           "doc": "For attack calls, the one attacked; also the one taking damage in mitigate.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.event",
+          "name": "event",
+          "doc": "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.exit",
+          "name": "exit",
+          "doc": "For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.intensity",
+          "name": "intensity",
+          "doc": "For can_perceive and perceive_message: the event's strength where it happened.",
           "since": 1
         },
         {
@@ -5199,7 +5442,7 @@
         {
           "symbol": "rules_ctx.room",
           "name": "room",
-          "doc": "The actor's room.",
+          "doc": "The actor's room; for sense_cost, the room the signal enters.",
           "since": 1
         },
         {
@@ -5209,9 +5452,39 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.source",
+          "name": "source",
+          "doc": "For can_perceive and perceive_message: the actor who caused the event, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.source_room",
+          "name": "source_room",
+          "doc": "For can_perceive and perceive_message: the room the event happened in.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.tags",
+          "name": "tags",
+          "doc": "For door_intensity: the door's or container's tags, sorted.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.target",
           "name": "target",
           "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.text",
+          "name": "text",
+          "doc": "For can_perceive and perceive_message: the event's text, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.via_exit",
+          "name": "via_exit",
+          "doc": "For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.",
           "since": 1
         },
         {
@@ -5272,6 +5545,15 @@
         "since": 1
       },
       {
+        "symbol": "rules:can_perceive",
+        "name": "can_perceive",
+        "signature": "can_perceive(ctx)",
+        "return_type": "bool",
+        "ctx_fields": ["actor", "target", "source", "room", "source_room", "via_exit", "channel", "event", "intensity", "cost", "text", "pulse", "rng"],
+        "doc": "Whether ctx.actor, a candidate listener, notices the event. Asked for every simulated actor in a room the event reaches, the room it happened in included, except the actor who caused it.",
+        "since": 1
+      },
+      {
         "symbol": "rules:carry_limit",
         "name": "carry_limit",
         "signature": "carry_limit(ctx)",
@@ -5307,6 +5589,15 @@
         "return_type": "int",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
         "doc": "Raw attack damage before modifiers and mitigation.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:door_intensity",
+        "name": "door_intensity",
+        "signature": "door_intensity(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "room", "action", "tags", "exit", "item", "pulse", "rng"],
+        "doc": "The sound intensity of ctx.action ('open', 'close', 'lock' or 'unlock') on a door (ctx.exit) or container (ctx.item); 0 or less is silent.",
         "since": 1
       },
       {
@@ -5405,6 +5696,15 @@
         "since": 1
       },
       {
+        "symbol": "rules:perceive_message",
+        "name": "perceive_message",
+        "signature": "perceive_message(ctx)",
+        "return_type": "str | None",
+        "ctx_fields": ["actor", "target", "source", "room", "source_room", "via_exit", "channel", "event", "intensity", "cost", "text", "pulse", "rng"],
+        "doc": "What a player in another room is told about an event they can_perceive, or None for nothing. The room of the event is told as it happens and never asked.",
+        "since": 1
+      },
+      {
         "symbol": "rules:regen",
         "name": "regen",
         "signature": "regen(ctx)",
@@ -5441,6 +5741,15 @@
         "return_type": "int",
         "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
         "doc": "Recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:sense_cost",
+        "name": "sense_cost",
+        "signature": "sense_cost(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["room", "exit", "channel", "pulse", "rng"],
+        "doc": "What a perceivable event on ctx.channel loses crossing ctx.exit into ctx.room, one hop toward the listeners. The price is added to the event's cost; a negative price blocks the hop. ctx.actor is None.",
         "since": 1
       },
       {
@@ -5728,6 +6037,12 @@
           "symbol": "p.room",
           "name": "room",
           "doc": "The room the actor is currently in.",
+          "since": 1
+        },
+        {
+          "symbol": "p.senses",
+          "name": "senses",
+          "doc": "Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.",
           "since": 1
         },
         {
@@ -6843,6 +7158,15 @@
       "since": 1
     },
     {
+      "symbol": "message:combat.fighting.heard",
+      "feature": "combat",
+      "id": "combat.fighting.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a fight break out.",
+      "since": 1
+    },
+    {
       "symbol": "message:combat.flee.failed",
       "feature": "combat",
       "id": "combat.flee.failed",
@@ -6876,6 +7200,15 @@
       "placeholders": ["direction"],
       "required": [],
       "default": "You flee {direction}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.heard",
+      "feature": "combat",
+      "id": "combat.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear the sounds of combat.",
       "since": 1
     },
     {
@@ -7106,6 +7439,38 @@
       "since": 1
     },
     {
+      "symbol": "message:container.heard.close",
+      "id": "container.heard.close",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something closing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.lock",
+      "id": "container.heard.lock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something locking.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.open",
+      "id": "container.heard.open",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something opening.",
+      "since": 1
+    },
+    {
+      "symbol": "message:container.heard.unlock",
+      "id": "container.heard.unlock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear something unlocking.",
+      "since": 1
+    },
+    {
       "symbol": "message:container.no_lock",
       "id": "container.no_lock",
       "placeholders": ["item"],
@@ -7186,6 +7551,14 @@
       "since": 1
     },
     {
+      "symbol": "message:death.heard",
+      "id": "death.heard",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a death cry.",
+      "since": 1
+    },
+    {
       "symbol": "message:death.respawn",
       "id": "death.respawn",
       "placeholders": ["name"],
@@ -7207,6 +7580,38 @@
       "placeholders": [],
       "required": [],
       "default": "You are DEAD!",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.close",
+      "id": "door.heard.close",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door closing.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.lock",
+      "id": "door.heard.lock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door locking.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.open",
+      "id": "door.heard.open",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door opening.",
+      "since": 1
+    },
+    {
+      "symbol": "message:door.heard.unlock",
+      "id": "door.heard.unlock",
+      "placeholders": [],
+      "required": [],
+      "default": "You hear a door unlocking.",
       "since": 1
     },
     {
@@ -8458,22 +8863,6 @@
       "placeholders": [],
       "required": [],
       "default": "Too much input.",
-      "since": 1
-    },
-    {
-      "symbol": "message:shout.near",
-      "id": "shout.near",
-      "placeholders": ["text"],
-      "required": ["text"],
-      "default": "Someone nearby shouts, '{text}'",
-      "since": 1
-    },
-    {
-      "symbol": "message:shout.room",
-      "id": "shout.room",
-      "placeholders": ["actor", "text"],
-      "required": ["text"],
-      "default": "{actor} shouts, '{text}'",
       "since": 1
     },
     {

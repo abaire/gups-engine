@@ -279,7 +279,7 @@ data class TypeSpec(
   val since: Int = FIRST_API_VERSION,
 )
 
-/** One function exported by `//rules:combat.star`. */
+/** One function exported by the files of `//rules`. */
 data class RulesExportSpec(
   val export: RulesExport,
   val signature: String,
@@ -520,6 +520,7 @@ object ScriptApi {
       ActorView::class.java,
       AffectView::class.java,
       Denial::class.java,
+      DoorView::class.java,
       ExitView::class.java,
       ItemView::class.java,
       LocationView::class.java,

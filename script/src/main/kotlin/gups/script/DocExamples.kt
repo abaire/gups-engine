@@ -431,8 +431,8 @@ object DocExamples {
                 room("closet",
                     desc = "A closet behind a thick curtain.",
                     flags = ["dead_end_ok"],
-                    # Nothing gets through: no sight, sound or noise.
-                    exits = [exit(DIR.north, to = ":start", one_way = True, senses_blocked = SENSE.all)],
+                    # Nothing gets through, if the rules honour the tag: no sight or sound.
+                    exits = [exit(DIR.north, to = ":start", one_way = True, tags = ["sealed"])],
                 )
             """
         ),

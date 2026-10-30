@@ -130,7 +130,9 @@ internal fun World.decay(item: Item) {
   val loc = item.location
   if (loc is ItemLocation.InRoom) {
     for (inner in item.contents) moveItem(inner, loc)
-    entity(loc.room)?.let { room -> echo(room as Room, msg(KernelMsg.DECAYS, "item" to item.name)) }
+    entity(loc.room)?.let { room ->
+      tellSight(room as Room, "decay", null, msg(KernelMsg.DECAYS, "item" to item.name))
+    }
   }
   destroy(item)
 }

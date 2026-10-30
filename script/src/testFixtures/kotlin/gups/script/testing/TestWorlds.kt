@@ -29,12 +29,15 @@ object TestWorlds {
 
   const val RULES_PACKAGE: String = "package(api_version = 1, kind = \"rules\")\n"
 
+  /** The template world's rules files, which test worlds keep together in `combat.star`. */
   private val base: String by lazy {
-    TestWorlds::class
-      .java
-      .getResourceAsStream("/template-rules/combat.star")!!
-      .readBytes()
-      .toString(Charsets.UTF_8)
+    listOf("combat.star", "perception.star", "manipulation.star").joinToString("\n") {
+      TestWorlds::class
+        .java
+        .getResourceAsStream("/template-rules/$it")!!
+        .readBytes()
+        .toString(Charsets.UTF_8)
+    }
   }
 
   /**
@@ -73,6 +76,14 @@ object TestWorlds {
     return (blocks(base).filter { it.first !in names } + over)
       .filter { (name, _) -> OWNED[name].let { it == null || it in enabled } }
       .joinToString("\n") { it.second }
+      .let { text ->
+        if ("track" in enabled) text
+        else
+          text.replace(
+            "    if ctx.room.size == \"large\" and ctx.channel == \"sound\":\n        cost += 1\n",
+            "",
+          )
+      }
       .let { text ->
         if ("leveling" in enabled) text
         else

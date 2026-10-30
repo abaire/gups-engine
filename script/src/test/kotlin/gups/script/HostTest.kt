@@ -418,7 +418,7 @@ class HostTest {
                     ctx.open_door("//zones/z:start", "north")
                     path = ctx.path_to(":vault")
                     ctx.send(a, "coins=%d ground=%d path=%s door=%s near=%d" % (
-                        coins.count, len(ctx.room.items()), path, ctx.room.exit("north").door,
+                        coins.count, len(ctx.room.items()), path, ctx.room.exit("north").door.state,
                         len(ctx.allies_near(a, "far"))))
                     ctx.teleport(a, ":vault")
 

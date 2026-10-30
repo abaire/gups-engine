@@ -176,6 +176,34 @@ class WorldModuleTest {
   }
 
   @Test
+  fun `channel_priority may rank built-in and declared channels, and unlisted ones follow`() {
+    val schema =
+      read(mod("channels = [\"psionic\"], channel_priority = [\"psionic\", \"sound\"]"))
+        .first
+        .schema
+    assertEquals(listOf("psionic", "sound", "sight"), schema.perceptionOrder.map { it.name })
+    assertEquals(
+      listOf("sight", "sound", "psionic"),
+      read(mod("channels = [\"psionic\"]")).first.schema.perceptionOrder.map { it.name },
+    )
+  }
+
+  @Test
+  fun `channel_priority rejects unknown and repeated channels`() {
+    assertContains(
+      read(mod("channels = [\"psionic\"], channel_priority = [\"psionc\"]"))
+        .first
+        .problems()
+        .single(),
+      "channel_priority names 'psionc', which is not a channel (did you mean 'psionic'?)",
+    )
+    assertContains(
+      read(mod("channel_priority = [\"sight\", \"sight\"]")).first.problems().single(),
+      "channel 'sight' is ranked more than once",
+    )
+  }
+
+  @Test
   fun `an unknown prompt placeholder is a problem`() {
     assertContains(
       read(mod("prompt = \"<{hp} {mna}> \"")).first.problems().single(),

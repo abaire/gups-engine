@@ -68,15 +68,6 @@ class PersistenceTest {
   }
 
   @Test
-  fun `room exit senses are saved as senses_blocked, and older blocks keys still load`() {
-    val payload = RoomPayload(sensesBlocked = mapOf("NORTH" to listOf("sight")))
-    val json = JSON.encodeToString(RoomPayload.serializer(), payload)
-    assertContains(json, "\"senses_blocked\"")
-    val old = JSON.decodeFromString(RoomPayload.serializer(), """{"blocks":{"NORTH":["sight"]}}""")
-    assertEquals(payload.sensesBlocked, old.sensesBlocked)
-  }
-
-  @Test
   fun `a world and its characters survive a restart`() {
     val file = tempDb()
     val a = PersistWorld(file)

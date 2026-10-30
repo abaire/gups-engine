@@ -22,20 +22,35 @@ import gups.core.model.SkillProto
 /** The `say` verb: the room hears it and `on_say` fires. */
 fun World.say(speaker: Actor, text: String) {
   tell(speaker, KernelMsg.SAY_SELF, "text" to text)
-  echo(
-    speaker.room,
-    msg(KernelMsg.SAY_ROOM, "actor" to speaker.name.cap(), "text" to text),
-    speaker,
-  )
-  channel("say", speaker, text, speaker.room.actors)
+  val heard =
+    tellPerceivers(
+      speaker.room,
+      "say",
+      speaker,
+      mapOf(
+        Channel.SOUND to msg(KernelMsg.SAY_ROOM, "actor" to speaker.name.cap(), "text" to text)
+      ),
+      eventText = text,
+      exclude = arrayOf(speaker),
+    )
+  channel("say", speaker, text, heard.filterValues { it == Channel.SOUND }.keys + speaker)
   dispatch(HookName.ON_SAY, null, speaker.room, HookContext(actor = speaker, text = text))
   perceive("say", Channel.SOUND, speaker.room, speaker, text)
 }
 
 /** The `emote` verb: everyone in the room, the actor included, sees "Name text". */
 fun World.emote(actor: Actor, text: String) {
-  echo(actor.room, msg(KernelMsg.EMOTE, "actor" to actor.name.cap(), "text" to text))
-  perceive("emote", Channel.SOUND, actor.room, actor, text)
+  val line = msg(KernelMsg.EMOTE, "actor" to actor.name.cap(), "text" to text)
+  send(actor, line)
+  tellPerceivers(
+    actor.room,
+    "emote",
+    actor,
+    mapOf(Channel.SIGHT to line),
+    eventText = text,
+    exclude = arrayOf(actor),
+  )
+  perceive("emote", Channel.SIGHT, actor.room, actor, text)
 }
 
 /**
@@ -52,16 +67,6 @@ fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
     other.dirty = true
   }
   graphChanged()
-}
-
-/**
- * The `set_exit_senses_blocked` verb: replaces the exit's own `senses_blocked`; the door's set
- * still adds to it.
- */
-fun World.setExitSensesBlocked(room: Room, dir: Direction, channels: Set<Channel>) {
-  val exit = requireNotNull(room.exits[dir]) { "${room.label} has no exit $dir" }
-  exit.sensesBlocked = channels
-  room.dirty = true
 }
 
 /** The `split` verb: moves [n] of a stack into a new item beside it. */

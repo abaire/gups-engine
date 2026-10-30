@@ -15,7 +15,7 @@ dependencies {
 // Test worlds get the template world's rules unless they write their own.
 tasks.processTestFixturesResources {
   from(rootProject.layout.projectDirectory.dir("template-world/rules")) {
-    include("combat.star")
+    include("*.star")
     into("template-rules")
   }
 }

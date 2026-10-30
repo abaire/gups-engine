@@ -3,6 +3,7 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
@@ -34,6 +35,7 @@ import gups.core.world.isSimulated
 import gups.core.world.moveItem
 import gups.core.world.opponentsOf
 import gups.core.world.pathTo
+import gups.core.world.perceive
 import gups.core.world.removeAffect
 import gups.core.world.roomOfEntity
 import gups.core.world.say
@@ -41,7 +43,6 @@ import gups.core.world.send
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
-import gups.core.world.setExitSensesBlocked
 import gups.core.world.spawnItem
 import gups.core.world.splitItem
 import gups.core.world.startCombat
@@ -201,21 +202,43 @@ internal constructor(
     name = "event",
     structField = true,
     doc =
-      "For on_nearby: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter' or 'exit'.",
+      "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit.",
   )
   fun event(): Any = field { hc.event ?: Starlark.NONE }
 
   @StarlarkMethod(
+    name = "channel",
+    structField = true,
+    doc = "For on_perceive: the channel the event travelled on, such as 'sound'.",
+  )
+  fun channel(): Any = field { hc.channel ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "intensity",
+    structField = true,
+    doc = "For on_perceive: the event's strength where it happened.",
+  )
+  fun intensity(): Any = field { hc.intensity?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "cost",
+    structField = true,
+    doc =
+      "For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.",
+  )
+  fun cost(): Any = field { hc.cost?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "source_room",
     structField = true,
-    doc = "For on_nearby: the room the event happened in.",
+    doc = "For on_perceive: the room the event happened in.",
   )
   fun sourceRoom(): Any = field { v(hc.sourceRoom) }
 
   @StarlarkMethod(
     name = "via_exit",
     structField = true,
-    doc = "For on_nearby: this mob's own exit toward the event, or None for its own room.",
+    doc = "For on_perceive: this mob's own exit toward the event, or None for its own room.",
   )
   fun viaExit(): Any = field { hc.viaExit?.name ?: Starlark.NONE }
 
@@ -410,6 +433,65 @@ internal constructor(
         text(text, "echo(text)"),
         *skip.toTypedArray(),
       )
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "emit",
+    doc =
+      "Raises a perceivable event on a channel. It spreads through nearby rooms from room, weakening on the way; actors who can perceive it hear or see it through on_perceive and rules.perceive_message.",
+    parameters =
+      [
+        Param(name = "channel", named = true, doc = "A built-in or declared channel name."),
+        Param(name = "event", named = true, doc = "Event name that on_perceive hooks see."),
+        Param(
+          name = "intensity",
+          named = true,
+          defaultValue = "1",
+          doc = "Strength at the origin; 0 or less emits nothing.",
+        ),
+        Param(
+          name = "text",
+          named = true,
+          defaultValue = "None",
+          doc = "Text that goes with the event.",
+        ),
+        Param(
+          name = "room",
+          named = true,
+          defaultValue = "None",
+          doc = "Room, or room label, where it happens; defaults to ctx.room.",
+        ),
+        Param(
+          name = "actor",
+          named = true,
+          defaultValue = "None",
+          doc = "Actor who caused it; defaults to ctx.actor. The causer does not perceive it.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun emit(
+    channel: Any,
+    event: Any,
+    intensity: Any,
+    text: Any,
+    room: Any,
+    actor: Any,
+    thread: StarlarkThread,
+  ): Any =
+    verb("emit") {
+      val known = world.schema.allChannels.map { it.name }
+      val ch = Channel(choice(str(channel, "emit(channel)"), "emit(channel)", known))
+      val name = text(event, "emit(event)")
+      if (name.isBlank()) fail("emit(event): must not be empty")
+      val strength = int(intensity, "emit(intensity)")
+      val body = if (isNone(text)) null else text(text, "emit(text)")
+      val at =
+        if (isNone(room)) hc.room ?: world.roomOfEntity(owner)
+        else roomArg(room, "emit(room)", thread)
+      val cause = if (isNone(actor)) hc.actor else actorArg(actor, "emit(actor)")
+      if (strength > 0 && at != null) world.perceive(name, ch, at, cause, body, strength)
       Starlark.NONE
     }
 
@@ -786,6 +868,12 @@ internal constructor(
           defaultValue = "{}",
           doc = "Rules modifiers active while the affect lasts, by modifier point name.",
         ),
+        Param(
+          name = "sense_deltas",
+          named = true,
+          defaultValue = "{}",
+          doc = "Sense score changes by channel while the affect lasts.",
+        ),
       ],
   )
   fun applyAffect(
@@ -799,6 +887,7 @@ internal constructor(
     onExpire: Any,
     expireMsg: Any,
     modifiers: Any,
+    senseDeltas: Any,
   ): Any =
     verb("apply_affect") {
       val t = actorArg(target, "apply_affect(target)")
@@ -813,7 +902,9 @@ internal constructor(
           onExpire,
           expireMsg,
           modifiers,
+          senseDeltas,
           "apply_affect",
+          world.schema,
           world.features,
         )
       val a =
@@ -829,6 +920,7 @@ internal constructor(
           e.expireMessage,
           owner as? Actor,
           e.modifiers,
+          senseDeltas = e.senseDeltas,
         )
       a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
     }
@@ -1052,33 +1144,6 @@ internal constructor(
   )
   fun unlockDoor(room: Any, dir: Any, thread: StarlarkThread): Any =
     door(room, dir, thread, "unlock_door") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
-
-  @StarlarkMethod(
-    name = "set_exit_senses_blocked",
-    doc =
-      "Replaces the sensory channels an exit blocks: 'sight', 'sound', 'noise' or a declared channel.",
-    parameters =
-      [
-        Param(name = "room", named = true, doc = "Room, or room label, that has the exit."),
-        Param(name = "dir", named = true, doc = "Direction of the exit."),
-        Param(
-          name = "channels",
-          named = true,
-          doc = "Channels to block, built in or declared by the world.",
-        ),
-      ],
-    useStarlarkThread = true,
-  )
-  fun setExitSensesBlocked(room: Any, dir: Any, channels: Any, thread: StarlarkThread): Any =
-    verb("set_exit_senses_blocked") {
-      val set = gups.script.channels(channels, "set_exit_senses_blocked(channels)", world.schema)
-      world.setExitSensesBlocked(
-        roomArg(room, "set_exit_senses_blocked(room)", thread),
-        dir(dir, "set_exit_senses_blocked(dir)"),
-        set,
-      )
-      Starlark.NONE
-    }
 
   // ---- State ---------------------------------------------------------------------------------
 

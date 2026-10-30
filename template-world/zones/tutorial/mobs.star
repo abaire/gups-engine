@@ -26,23 +26,27 @@ def _guide_blocks(ctx):
         return ctx.deny("The guide blocks your way: say '%s' first." % READY_WORD)
 
 def _guide_listens(ctx):
-    # on_nearby is perception: it fires for events in the mob's own room, and with
-    # senses = {"hearing": 1} for sounds and noise from the rooms next door too, unless the
-    # exit between blocks them. ctx.via_exit is the guide's own exit toward the sound.
+    # on_perceive is perception: it fires for events in the mob's own room, and for events
+    # that reach it from rooms nearby while rules.can_perceive says it notices them. ctx.channel
+    # says how it came, ctx.intensity how strong it started, ctx.cost how much it faded, and
+    # ctx.via_exit is the guide's own exit toward the source.
     if ctx.event == "combat_start" and ctx.via_exit == "north":
         ctx.say(ctx.self, "I hear someone sparring in the arena. Good!")
+    elif ctx.event == "crunch":
+        # Events a script raises with ctx.emit arrive here like any other.
+        ctx.say(ctx.self, "Someone is crunching about on the gravel to the west.")
 
 mob("guide",
     name = "the guide",
     desc = "A patient old adventurer with a lantern.",
     level = 10,
     vitals = vitals(hp = 200),
-    senses = {"hearing": 1},
+    senses = {"sound": 1},
     # Built-in behaviors: sentinel() keeps the guide at its post.
     behaviors = [sentinel()],
     on_say = _guide_hears,
     before_exit = _guide_blocks,
-    on_nearby = _guide_listens,
+    on_perceive = _guide_listens,
 )
 
 def _mend(ctx):

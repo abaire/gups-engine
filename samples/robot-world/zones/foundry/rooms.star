@@ -56,7 +56,7 @@ room("vault",
     desc = "Shelves of spare plating and power cells.",
     exits = [
         exit(DIR.north, to = ":assembly"),
-        exit(DIR.east, to = ":whisper_hall", senses_blocked = [SENSE.psionic]),
+        exit(DIR.east, to = ":whisper_hall", tags = ["psionic_proof"]),
     ],
 )
 

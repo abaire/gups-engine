@@ -7,7 +7,7 @@ current milestone.
 
 ### Master Status Logs (Consolidated)
 
-Next ID: D-183 - Ratified decisions are folded into [`SPEC.md`](SPEC.md) and removed from these logs. -
+Next ID: D-199 - Ratified decisions are folded into [`SPEC.md`](SPEC.md) and removed from these logs. -
 [`REVISE_DECISIONS.md`](REVISE_DECISIONS.md): Consolidated master record of decisions requiring code/spec revisions. -
 Be sure to update the Next ID above when adding new decisions.
 

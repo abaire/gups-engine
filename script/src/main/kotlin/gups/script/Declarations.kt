@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableCollection
 import com.google.common.collect.ImmutableList
 import gups.core.EngineInfo
 import gups.core.Label
-import gups.core.PERCEPTION_MAX_RADIUS
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Band
 import gups.core.model.Channel
@@ -26,7 +25,6 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Modifiers
 import gups.core.model.RegionProto
 import gups.core.model.RoomProto
-import gups.core.model.Sense
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.SpawnRule
@@ -280,13 +278,16 @@ internal object HookCatalog {
         doc = "Fires on each world tick while simulated.",
       ),
       HookSpec(
-        hook = HookName.ON_NEARBY,
+        hook = HookName.ON_PERCEIVE,
         signature = "fn(ctx)",
         attachTo = listOf(M),
         ctxFields =
           listOf(
             "self",
             "event",
+            "channel",
+            "intensity",
+            "cost",
             "actor",
             "source_room",
             "via_exit",
@@ -295,9 +296,36 @@ internal object HookCatalog {
             "pulse",
             "rng",
           ),
-        doc = "Fires on a mob with senses when a perceptible event happens within its sense radius.",
+        doc =
+          "Fires on a mob when `rules.can_perceive` lets it notice an event on a channel, in its room or carried to it from farther away.",
       ),
-    )
+    ) + manipulationHooks()
+
+  /** The before and after hooks of `open`, `close`, `lock` and `unlock` on a door or container. */
+  private fun manipulationHooks(): List<HookSpec> =
+    listOf(
+        HookName.BEFORE_OPEN to "opening",
+        HookName.ON_OPEN to "opened",
+        HookName.BEFORE_CLOSE to "closing",
+        HookName.ON_CLOSE to "closed",
+        HookName.BEFORE_LOCK to "locking",
+        HookName.ON_LOCK to "locked",
+        HookName.BEFORE_UNLOCK to "unlocking",
+        HookName.ON_UNLOCK to "unlocked",
+      )
+      .map { (hook, word) ->
+        HookSpec(
+          hook = hook,
+          signature = "fn(ctx)",
+          attachTo = listOf(I, R, M),
+          ctxFields = listOf("self", "actor", "direction", "item", "room", "pulse", "rng"),
+          doc =
+            if (hook.vetoable)
+              "Fires before an actor starts $word a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around."
+            else
+              "Fires after a door or container is $word. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.",
+        )
+      }
 
   val attach: Map<HookName, Set<OwnerKind>> = specs.associate { it.hook to it.attachTo.toSet() }
 
@@ -388,6 +416,20 @@ private fun declName(fn: String, d: ParsedDecl, ctx: LoadCtx): String {
 internal fun channels(v: Any?, what: String, schema: WorldSchema): Set<Channel> {
   val known = schema.allChannels.map { it.name }
   return strList(v, what).mapTo(LinkedHashSet()) { Channel(choice(it, what, known)) }
+}
+
+/** Sense scores by channel in [v]: each channel built-in or declared, each value an int. */
+internal fun senses(
+  v: Any?,
+  what: String,
+  schema: WorldSchema,
+  allowNegative: Boolean,
+): Map<Channel, Int> {
+  val known = schema.allChannels.map { it.name }
+  return intDict(v, what).entries.associate { (k, n) ->
+    if (!allowNegative && n < 0) fail("$what[\"$k\"]: must be 0 or more")
+    Channel(choice(k, what, known)) to n
+  }
 }
 
 private fun dice(v: Any?, what: String): Dice =
@@ -671,7 +713,7 @@ internal class DeclarationBuiltins(
           direction = dir,
           to = to,
           entryIndex = d.int("entry_index") ?: 0,
-          sensesBlocked = channels(d["senses_blocked"], d.what("senses_blocked"), schema),
+          tags = parseTags(d),
           door =
             d["door"]?.let {
               (it as? DoorDecl)?.proto
@@ -698,14 +740,7 @@ internal class DeclarationBuiltins(
         DoorProto(
           state = d.choice("state")?.let { DoorState.valueOf(it.uppercase()) } ?: def.state,
           key = d.str("key")?.let { label(it, ctx.pkg.path, d.what("key")) },
-          openSensesBlocked =
-            if (d["open_senses_blocked"] != null)
-              channels(d["open_senses_blocked"], d.what("open_senses_blocked"), schema)
-            else def.openSensesBlocked,
-          closedSensesBlocked =
-            if (d["closed_senses_blocked"] != null)
-              channels(d["closed_senses_blocked"], d.what("closed_senses_blocked"), schema)
-            else def.closedSensesBlocked,
+          tags = parseTags(d),
         )
       DoorDecl(proto)
     }
@@ -800,16 +835,7 @@ internal class DeclarationBuiltins(
           if (prof !in 0..100) fail("mob(skills[\"$k\"]): proficiency must be 0..100")
           skill to prof
         }
-      val senses =
-        d.intDict("senses").entries.associate { (k, v) ->
-          val sense =
-            Sense.valueOf(
-              choice(k, d.what("senses"), Sense.entries.map { it.name.lowercase() }).uppercase()
-            )
-          if (v !in 0..PERCEPTION_MAX_RADIUS)
-            fail("mob(senses[\"$k\"]): radius must be 0..$PERCEPTION_MAX_RADIUS")
-          sense to v
-        }
+      val senses = senses(d["senses"], d.what("senses"), schema, allowNegative = false)
       val loot =
         d.list("loot").map {
           (it as? LootDecl)?.rule ?: fail("mob(loot): expected loot(...), got ${typeName(it)}")
@@ -897,6 +923,7 @@ internal class DeclarationBuiltins(
               )
             },
           statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas")),
+          senseDeltas = senses(d["sense_deltas"], d.what("sense_deltas"), schema, true),
           tags = parseTags(d),
           stackable = d.bool("stackable") ?: false,
           decayPulses = d.int("decay_pulses"),
@@ -1332,6 +1359,12 @@ internal class DeclarationBuiltins(
           defaultValue = "{}",
           doc = "Rules modifiers active while the affect lasts, by modifier point name.",
         ),
+        Param(
+          name = "sense_deltas",
+          named = true,
+          defaultValue = "{}",
+          doc = "Sense score changes by channel while the affect lasts.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1344,6 +1377,7 @@ internal class DeclarationBuiltins(
     onExpire: Any,
     expireMsg: Any,
     modifiers: Any,
+    senseDeltas: Any,
   ): Any =
     effect(
       "apply_affect",
@@ -1357,7 +1391,9 @@ internal class DeclarationBuiltins(
         onExpire,
         expireMsg,
         modifiers,
+        senseDeltas,
         "apply_affect",
+        schema,
         features,
       ),
     )
@@ -1488,7 +1524,6 @@ internal class DeclarationBuiltins(
     private val TRACK_SIZES = TrackSize.entries.map { it.name.lowercase() }
     private val DOOR_STATES = DoorState.entries.map { it.name.lowercase() }
     private val BANDS = Band.entries.map { it.word }
-    private val SENSES = Sense.entries.map { it.name.lowercase() }
     private val DORMANT_MODES = DormantRecovery.entries.map { it.name.lowercase() }
     private val SKILL_RANGES = SkillRange.entries.map { it.name.lowercase() }
     private val TARGET_KINDS = TargetKind.entries.map { it.name.lowercase() }
@@ -1545,7 +1580,7 @@ internal class DeclarationBuiltins(
           "SENSE",
           "struct",
           Starlark.repr(CONSTANTS.getValue("SENSE")),
-          "Perception senses (SENSE.sight, SENSE.sound, SENSE.noise, declared senses) and SENSE.all.",
+          "Perception senses (SENSE.sight, SENSE.sound, declared senses) and SENSE.all.",
         ),
         ConstantSpec(
           "DOOR",
@@ -1754,9 +1789,9 @@ internal class DeclarationBuiltins(
               default = "0",
             ),
             DeclParam(
-              "senses_blocked",
+              "tags",
               "list[str]",
-              "Perception and spell channels blocked by this exit.",
+              "Tags the rules read, such as 'soundproof' or 'sealed', to price sensing across the exit.",
               default = "[]",
             ),
             DeclParam(
@@ -1794,16 +1829,10 @@ internal class DeclarationBuiltins(
               default = "None",
             ),
             DeclParam(
-              "open_senses_blocked",
+              "tags",
               "list[str]",
-              "Channels blocked while the door is open.",
+              "Tags the rules read, such as 'heavy', 'creaky' or 'transparent', to price sensing and muffling.",
               default = "[]",
-            ),
-            DeclParam(
-              "closed_senses_blocked",
-              "list[str]",
-              "Channels blocked while the door is closed or locked.",
-              default = "['sight', 'sound']",
             ),
           ),
       )
@@ -1955,9 +1984,8 @@ internal class DeclarationBuiltins(
             DeclParam(
               "senses",
               "dict[str, int]",
-              "Perception radii in exits (0..1) by sense.",
+              "Base sense score by channel, merged over sight and sound at 1; 0 senses nothing on that channel.",
               default = "{}",
-              allowedValues = SENSES,
             ),
             DeclParam(
               "think",
@@ -2052,6 +2080,12 @@ internal class DeclarationBuiltins(
               "stats",
               "Stat adjustments applied while the item is worn, built with stats(...).",
               default = "stats()",
+            ),
+            DeclParam(
+              "sense_deltas",
+              "dict[str, int]",
+              "Sense score changes by channel while the item is worn.",
+              default = "{}",
             ),
             DeclParam(
               "tags",
@@ -2299,7 +2333,9 @@ internal fun affectEffect(
   onExpire: Any,
   expireMsg: Any,
   mods: Any,
+  senseDeltas: Any,
   fn: String,
+  schema: WorldSchema,
   features: Features = Features.ALL,
 ): Effect.ApplyAffect {
   val d = int(duration, "$fn(duration)")
@@ -2316,6 +2352,7 @@ internal fun affectEffect(
     onExpire = hookRefOrNull(onExpire, "$fn(on_expire)"),
     expireMessage = str(expireMsg, "$fn(expire_msg)"),
     modifiers = modifiers(mods, "$fn(modifiers)", features),
+    senseDeltas = senses(senseDeltas, "$fn(sense_deltas)", schema, allowNegative = true),
   )
 }
 

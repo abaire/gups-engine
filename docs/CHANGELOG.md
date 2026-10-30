@@ -4,6 +4,36 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
+
+Every actor, player or mob, has a sense score per channel. `sight` and `sound` default to 1 and declared channels to 0;
+`mob(senses = {...})` and `starting_stats` merge over the defaults and take any score of 0 or more. A score of 0 senses
+nothing on that channel, even in the same room. `"hearing"` is gone; use `"sound"`. `sense_deltas` on `item(...)`,
+`apply_affect(...)`, `ctx.apply_affect(...)` and plugin traits (`PluginTrait.senseDeltas`) change the score while they
+last. `actor.senses` and `actor.base.senses` read it.
+
+`on_nearby` is renamed `on_perceive` and gains `ctx.channel`, `ctx.intensity` and `ctx.cost`. Which events carry, how
+far and to whom is now decided by four rules exports, spread over as many files of the `//rules` package as you like (an
+export defined in two files is a load error): `sense_cost(ctx)` prices each hop, `can_perceive(ctx)` decides who
+notices, `perceive_message(ctx)` is what a player in another room is shown (replacing the engine's fixed "Someone nearby
+shouts"), and `door_intensity(ctx)` is how loud a door or container is. All four are required.
+
+`ctx.emit(channel, event, intensity = 1, text = None, room = None, actor = None)` raises a perceivable event from a
+room, item or spell. `open`, `close`, `lock` and `unlock` on doors and containers fire `before_*` (vetoable) and `on_*`
+hooks, and `door(tags = [...])` gives `door_intensity` something to read. `emote` is now seen rather than heard.
+
+`exit.door` is a door view instead of a string, and `exit.key` is unchanged.
+
+```python
+# before
+mob("wolf", senses = {"hearing": 1}, on_nearby = _heard)
+if ctx.room.exit("north").door == "closed": ...
+
+# after
+mob("wolf", senses = {"sound": 1}, on_perceive = _heard)
+if ctx.room.exit("north").door.state == "closed": ...
+```
+
 ### Added `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag`
 
 The recovery lags of `advance`, a successful `retreat`, a failed `retreat_check` and a failed `flee` are rules exports
@@ -341,37 +371,27 @@ After:
 item("dazing_helm", wear = "head", equip_affects = [{"flag": "stunned", "pulses": 4}])
 ```
 
-### `exit(blocks)` is now `exit(senses_blocked)`
+### Exits and doors carry tags instead of blocked channels
 
-The name says the channels are senses an exit stops, not whether it can be walked through.
+`exit(senses_blocked)`, `door(open_senses_blocked)`, `door(closed_senses_blocked)`, the views' `senses_blocked`,
+`open_senses_blocked` and `closed_senses_blocked`, and `ctx.set_exit_senses_blocked` are gone. `exit(tags = [...])` and
+the exit view's `tags` take their place, and `rules.sense_cost` reads the tags, the door's `state` and its `tags`. The
+template's `sense_cost` blocks every channel through an exit tagged `sealed`, `sound` through one tagged `soundproof`,
+and `sight` through a closed door unless it is tagged `transparent`.
+
+A `sense_cost` of 0 is now a free hop; only a negative result blocks it.
 
 Before:
-
-```python
-exit("east", to = ":long_hall", blocks = ALL)
-```
-
-After:
 
 ```python
 exit("east", to = ":long_hall", senses_blocked = ALL)
 ```
 
-### `door(open_blocks)` is now `door(open_senses_blocked)`
+After:
 
-Renamed to match `exit(senses_blocked)`.
-
-### `door(closed_blocks)` is now `door(closed_senses_blocked)`
-
-Renamed to match `exit(senses_blocked)`.
-
-### `ctx.set_exit_blocks` is now `ctx.set_exit_senses_blocked`
-
-Renamed to match `exit(senses_blocked)`; the arguments are unchanged.
-
-### The exit view's `blocks` is now `senses_blocked`
-
-Renamed to match `exit(senses_blocked)`.
+```python
+exit("east", to = ":long_hall", tags = ["sealed"])
+```
 
 ### Added `module.features`: `combat`, `track`, `skills` and `leveling`
 

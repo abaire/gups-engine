@@ -419,6 +419,7 @@ class World(
     m.level = proto.level
     initVitals(m)
     m.baseStats.putAll(proto.stats)
+    m.baseSenses.putAll(proto.senses)
     for ((name, max) in proto.vitals) {
       val v = m.vitalMap[name] ?: continue
       v.max = max
@@ -441,6 +442,7 @@ class World(
    */
   private fun applyStartingStats(a: Actor, r: StartingStats, keepCurrent: Boolean = false) {
     a.baseStats.putAll(r.stats)
+    a.baseSenses.putAll(r.senses)
     for ((name, v) in a.vitalMap) {
       val max = r.max[name]
       if (max != null) v.max = max
@@ -641,8 +643,14 @@ class World(
         }
       }
     }
-    // The sound of a combat round carries as noise.
-    for (r in rooms) perceive("combat", gups.core.model.Channel.NOISE, r, actor = null)
+    // The din of a combat round carries as sound.
+    for (r in rooms) perceive(
+      "combat",
+      gups.core.model.Channel.SOUND,
+      r,
+      actor = null,
+      intensity = COMBAT_INTENSITY,
+    )
   }
 
   /** Phase 4. Checkpoint capture arrives with persistence. */

@@ -32,16 +32,27 @@
 <table>
 <thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
 <tbody>
+<tr id="rules_ctx.action"><td><code>action</code></td><td>1</td><td>For door_intensity: 'open', 'close', 'lock' or 'unlock'.</td></tr>
 <tr id="rules_ctx.actor"><td><code>actor</code></td><td>1</td><td>Whom the call is about: the attacker, caster, mover or regenerating actor.</td></tr>
 <tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
+<tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
+<tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.</td></tr>
+<tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
+<tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
 <tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
 <tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
-<tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room.</td></tr>
+<tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>
 <tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
+<tr id="rules_ctx.source"><td><code>source</code></td><td>1</td><td>For can_perceive and perceive_message: the actor who caused the event, or None.</td></tr>
+<tr id="rules_ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For can_perceive and perceive_message: the room the event happened in.</td></tr>
+<tr id="rules_ctx.tags"><td><code>tags</code></td><td>1</td><td>For door_intensity: the door's or container's tags, sorted.</td></tr>
 <tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.</td></tr>
+<tr id="rules_ctx.text"><td><code>text</code></td><td>1</td><td>For can_perceive and perceive_message: the event's text, or None.</td></tr>
+<tr id="rules_ctx.via_exit"><td><code>via_exit</code></td><td>1</td><td>For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.</td></tr>
 <tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
 </tbody>
 </table>
@@ -68,7 +79,7 @@
 </article>
 </section>
 <h2>Exports</h2>
-<p class="intro">Functions of //rules:combat.star the engine calls.</p>
+<p class="intro">Functions the files of //rules export for the engine to call.</p>
 <section id="rules-advance_lag" class="entry">
 <h3><code>advance_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
 <p>Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.</p>

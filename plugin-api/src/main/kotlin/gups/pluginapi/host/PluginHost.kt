@@ -69,6 +69,7 @@ data class PluginTraitInfo(
   val resistDeltas: Map<String, Int> = emptyMap(),
   val flags: Set<String> = emptySet(),
   val modifiers: Set<String> = emptySet(),
+  val senseDeltas: Map<String, Int> = emptyMap(),
 )
 
 data class PluginRestrictionInfo(val point: String, val doc: String)
@@ -283,6 +284,10 @@ internal class PluginRegistryImpl(
     }
     for (s in trait.statDeltas.keys) {
       require(s in schema.statNames) { "unknown stat '$s'${didYouMean(s, schema.statNames)}" }
+    }
+    val channelNames = schema.allChannels.map { it.name }
+    for (c in trait.senseDeltas.keys) {
+      require(c in channelNames) { "unknown channel '$c'${didYouMean(c, channelNames)}" }
     }
     for (v in trait.maxVitalDeltas.keys) {
       require(v in schema.vitalNames) { "unknown vital '$v'${didYouMean(v, schema.vitalNames)}" }
@@ -508,6 +513,7 @@ internal constructor(
                 resistDeltas = it.resistDeltas,
                 flags = it.flags,
                 modifiers = it.modifiers.keys.map { m -> m.name }.toSet(),
+                senseDeltas = it.senseDeltas,
               )
             }
             .sortedBy { it.name },

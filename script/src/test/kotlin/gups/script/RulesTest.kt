@@ -179,7 +179,7 @@ class RulesTest {
         Case("retreat_fail_lag", "ctx", "3") { w, c -> assertEquals(0, w.rules.retreatFailLag(c)) },
         Case("flee_fail_lag", "ctx", "3") { w, c -> assertEquals(0, w.rules.fleeFailLag(c)) },
         Case("condition", "ctx", "'ok'") { w, c ->
-          assertEquals(c.actor.condition, w.rules.condition(c))
+          assertEquals(c.requireActor().condition, w.rules.condition(c))
         },
         Case("xp_for_kill", "ctx", "10") { w, c -> assertEquals(0L, w.rules.xpForKill(c)) },
         Case("on_player_death", "ctx", "{'respawn': ctx.actor.recall_room}") { w, c ->

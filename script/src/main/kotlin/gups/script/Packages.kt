@@ -139,6 +139,9 @@ class ScriptPackage internal constructor(val path: String) {
   val namespace: String
     get() = path.substringAfterLast('/')
 
+  /** Where each rules export is defined, across the files of a rules package. */
+  internal val rulesExports = LinkedHashMap<String, HookRef>()
+
   internal val roomList = mutableListOf<RoomProto>()
   internal val mobList = mutableListOf<MobProto>()
   internal val itemList = mutableListOf<ItemProto>()

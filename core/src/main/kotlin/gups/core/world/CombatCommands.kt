@@ -11,6 +11,8 @@ object CombatMsg : MsgGroup(Feature.COMBAT) {
   val ATTACK_SELF = msg("combat.attack", "You attack {target}!", "target")
   val ATTACK_TARGET = msg("combat.attacked", "{actor} attacks you!", "actor")
   val FIGHTING = msg("combat.fighting", "{actor} and {target} are fighting!", "actor,target")
+  val FIGHTING_HEARD = msg("combat.fighting.heard", "You hear a fight break out.")
+  val COMBAT_HEARD = msg("combat.heard", "You hear the sounds of combat.")
   val OUT_OF_REACH = msg("combat.out_of_reach", "{target} is out of reach.", "target")
   val MISS_SELF = msg("combat.miss.self", "You miss {target}.", "target")
   val MISS_TARGET = msg("combat.miss.target", "{actor} misses you.", "actor")

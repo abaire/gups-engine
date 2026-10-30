@@ -31,8 +31,7 @@ typealias Modifiers = Map<ModifierPoint, HookRef>
 data class DoorProto(
   val state: DoorState = DoorState.CLOSED,
   val key: Label? = null,
-  val openSensesBlocked: Set<Channel> = emptySet(),
-  val closedSensesBlocked: Set<Channel> = setOf(Channel.SIGHT, Channel.SOUND),
+  val tags: Set<String> = emptySet(),
 )
 
 data class ExitProto(
@@ -40,7 +39,8 @@ data class ExitProto(
   val to: Label,
   /** Arrival index; `-1` means the back of the destination (`trackSize - 1`). */
   val entryIndex: Int = 0,
-  val sensesBlocked: Set<Channel> = emptySet(),
+  /** Free-form words the rules read, such as `soundproof`. */
+  val tags: Set<String> = emptySet(),
   val door: DoorProto? = null,
   val oneWay: Boolean = false,
 )
@@ -85,7 +85,7 @@ data class MobProto(
   val vitals: Map<String, Int> = emptyMap(),
   val resists: Map<DamageType, Int> = emptyMap(),
   val skills: Map<Label, Int> = emptyMap(),
-  val senses: Map<Sense, Int> = emptyMap(),
+  val senses: Map<Channel, Int> = emptyMap(),
   /** Built-in behaviors in declaration order. */
   val behaviors: List<Behavior> = emptyList(),
   val think: ThinkFn? = null,
@@ -119,6 +119,7 @@ data class ItemProto(
   /** Null means the world's unarmed damage type. */
   val damageType: DamageType? = null,
   val statDeltas: Map<String, Int> = emptyMap(),
+  val senseDeltas: Map<Channel, Int> = emptyMap(),
   val tags: Set<String> = emptySet(),
   val stackable: Boolean = false,
   val decayPulses: Int? = null,

@@ -73,12 +73,15 @@ class HookCtxFieldsTest {
                     def _wake(ctx, elapsed_pulses):
                         pass
 
-                    room("start", exits = [exit("north", ":hall")], spawns = [spawn(":wolf")], ${hooks(OwnerKind.ROOM)})
+                    room("start", exits = [exit("north", ":hall"), exit("east", ":vault", door = door(state = "locked", key = ":key"))], spawns = [spawn(":wolf")], ${hooks(OwnerKind.ROOM)})
                     room("hall", exits = [exit("south", ":start")], ${hooks(OwnerKind.ROOM)})
+                    room("vault", exits = [exit("west", ":start", door = door(state = "locked", key = ":key"))], ${hooks(OwnerKind.ROOM)})
                     room("far", ${hooks(OwnerKind.ROOM)})
-                    mob("wolf", vitals = vitals(hp = 8), senses = {"hearing": 1, "sight": 1}, ${hooks(OwnerKind.MOB)})
+                    mob("wolf", vitals = vitals(hp = 8), senses = {"sound": 1, "sight": 1}, ${hooks(OwnerKind.MOB)})
                     item("rock", kind = "melee", wear = "wield", dice = "1d2", ${hooks(OwnerKind.ITEM)})
                     item("cup", ${hooks(OwnerKind.ITEM)})
+                    item("key", kind = "key")
+                    item("chest", container = container(state = "locked", key = ":key"), ${hooks(OwnerKind.ITEM)})
                     skill("zap", range = "far", warmup = 1, effect = damage(dice = "1d2"))
                 """,
         ),
@@ -89,6 +92,8 @@ class HookCtxFieldsTest {
     p.skills[Label("//zones/z:zap")] = 100
     f.w.spawnItem(Label("//zones/z:rock"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:chest"), ItemLocation.Carried(p.id))
     f.run()
     for (line in
       listOf(
@@ -99,6 +104,14 @@ class HookCtxFieldsTest {
         "use cup wolf",
         "give cup wolf",
         "wield rock",
+        "unlock east",
+        "open east",
+        "close east",
+        "lock east",
+        "unlock chest",
+        "open chest",
+        "close chest",
+        "lock chest",
         "north",
         "south",
         "cast zap wolf",

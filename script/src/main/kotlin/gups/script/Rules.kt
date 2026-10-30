@@ -5,6 +5,9 @@ import gups.core.Label
 import gups.core.model.Band
 import gups.core.model.Condition
 import gups.core.model.DamageType
+import gups.core.model.Direction
+import gups.core.model.DoorProto
+import gups.core.model.ExitProto
 import gups.core.model.Interrupt
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
@@ -31,7 +34,7 @@ import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkValue
 import net.starlark.java.spelling.SpellChecker
 
-// The rules module: `//rules:combat.star` exports one function per rules call. The package is
+// The rules module: the files of `//rules` export one function per rules call. The package is
 // required, so a call that fails gives a neutral result instead of falling back to anything.
 
 /**
@@ -103,8 +106,96 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   )
   fun skill(): Any = field { c.skill?.let { SkillView(it, c.world.schema) } ?: Starlark.NONE }
 
-  @StarlarkMethod(name = "room", structField = true, doc = "The actor's room.")
-  fun room(): Any = field { v(c.actor.room) }
+  @StarlarkMethod(
+    name = "room",
+    structField = true,
+    doc = "The actor's room; for sense_cost, the room the signal enters.",
+  )
+  fun room(): Any = field { v(c.room ?: c.actor?.room) }
+
+  @StarlarkMethod(
+    name = "source",
+    structField = true,
+    doc = "For can_perceive and perceive_message: the actor who caused the event, or None.",
+  )
+  fun source(): Any = field { v(c.source) }
+
+  @StarlarkMethod(
+    name = "exit",
+    structField = true,
+    doc =
+      "For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.",
+  )
+  fun exit(): Any = field {
+    val r = c.room ?: c.actor?.room
+    val exit = c.exit
+    if (r != null && exit != null) ExitView(frame, r, exit) else Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "channel",
+    structField = true,
+    doc = "For the perception calls: the channel name, such as 'sound'.",
+  )
+  fun channel(): Any = field { c.channel?.name ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "event",
+    structField = true,
+    doc = "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.",
+  )
+  fun event(): Any = field { c.event ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "intensity",
+    structField = true,
+    doc = "For can_perceive and perceive_message: the event's strength where it happened.",
+  )
+  fun intensity(): Any = field { c.intensity?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "cost",
+    structField = true,
+    doc =
+      "For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.",
+  )
+  fun cost(): Any = field { c.cost?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "source_room",
+    structField = true,
+    doc = "For can_perceive and perceive_message: the room the event happened in.",
+  )
+  fun sourceRoom(): Any = field { v(c.sourceRoom) }
+
+  @StarlarkMethod(
+    name = "via_exit",
+    structField = true,
+    doc =
+      "For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.",
+  )
+  fun viaExit(): Any = field { c.viaExit?.name ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "text",
+    structField = true,
+    doc = "For can_perceive and perceive_message: the event's text, or None.",
+  )
+  fun text(): Any = field { c.text ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "action",
+    structField = true,
+    doc = "For door_intensity: 'open', 'close', 'lock' or 'unlock'.",
+  )
+  fun action(): Any = field { c.action ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "tags",
+    structField = true,
+    doc = "For door_intensity: the door's or container's tags, sorted.",
+  )
+  fun tags(): Any = field { sList(c.tags.sorted()) }
 
   @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
   fun pulse(): Any = field { sInt(c.world.pulse) }
@@ -141,7 +232,7 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   override fun isImmutable(): Boolean = true
 
   override fun repr(printer: Printer) {
-    printer.append("<rules ctx ${frame.site.hook} of ${c.actor.name}>")
+    printer.append("<rules ctx ${frame.site.hook} of ${c.actor?.name ?: c.room?.name ?: "none"}>")
   }
 }
 
@@ -191,7 +282,7 @@ internal fun StarlarkHost.runModifier(
       null,
       "modifier ${point.scriptName} ($source)",
       point == ModifierPoint.CAST_ALLOWED,
-      c.actor.id,
+      c.requireActor().id,
     )
   var out: Any? = base
   val result =
@@ -214,14 +305,13 @@ internal fun StarlarkHost.runModifier(
 }
 
 /**
- * The Starlark rules module: calls the functions `//<pkg>:combat.star` exports. There is no
+ * The Starlark rules module: calls the functions the files of `//<pkg>` export. There is no
  * built-in ruleset to fall back to: a call that fails, returns the wrong type or names an
  * undeclared name records a diagnostic, raises a `rules_error` alert and gives a neutral result
  * that never hurts, kills, rewards or traps anyone. Bound to its world by [StarlarkHost.install].
  */
 class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") : RulesEngine {
   internal var world: World? = null
-  private val file = Label("//$pkg:combat.star")
   private val lastAlert = HashMap<String, Long>()
   private var goodSlots: List<String> = emptyList()
 
@@ -232,8 +322,11 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   internal var collected: MutableList<String>? = null
 
   /** True if the rules package is loaded and defines [export]. */
-  fun defines(export: RulesExport): Boolean =
-    host.scripts.function(HookRef(file, export.scriptName)) != null
+  fun defines(export: RulesExport): Boolean = refOf(export) != null
+
+  /** Where [export] is defined: any non-test file of the rules package. */
+  private fun refOf(export: RulesExport): HookRef? =
+    host.scripts.packages[pkg]?.rulesExports?.get(export.scriptName)
 
   /**
    * Calls [export] with the rules ctx of [c] (or [args] alone when [c] is null) and converts the
@@ -248,8 +341,8 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   ): T? {
     val name = export.scriptName
     val w = c?.world ?: world ?: return null
-    val ref = HookRef(file, name)
-    if (host.scripts.packages[pkg] == null || host.scripts.function(ref) == null) {
+    val ref = refOf(export)
+    if (ref == null || host.scripts.function(ref) == null) {
       fault(w, name, "rules.$name is not defined by //$pkg")
       return null
     }
@@ -338,6 +431,10 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         stats = typed(fields["stats"], TypedKind.STATS, "$what.stats"),
         max = typed(fields["max"], TypedKind.VITALS, "$what.max"),
         current = typed(fields["current"], TypedKind.VITALS, "$what.current"),
+        senses =
+          fields["senses"]?.let {
+            senses(it, "$what.senses", c.world.schema, allowNegative = false)
+          } ?: emptyMap(),
       )
     } ?: StartingStats()
 
@@ -346,7 +443,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       val word = str(v, "rules.condition return value")
       Condition.parse(word)
         ?: fail("rules.condition return value: '$word' is not 'ok', 'incapacitated' or 'dead'")
-    } ?: c.actor.condition
+    } ?: c.requireActor().condition
 
   override fun toHit(c: RulesContext): Int =
     run(RulesExport.TO_HIT, c, ctxArgs(c), convert = intOf(RulesExport.TO_HIT)) ?: 0
@@ -415,6 +512,33 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 
   private class Lag(val pulses: Int?)
 
+  override fun senseCost(c: RulesContext): Int =
+    run(RulesExport.SENSE_COST, c, ctxArgs(c), convert = intOf(RulesExport.SENSE_COST)) ?: -1
+
+  override fun canPerceive(c: RulesContext): Boolean =
+    run(RulesExport.CAN_PERCEIVE, c, ctxArgs(c)) { v -> bool(v, "rules.can_perceive return value") }
+      ?: false
+
+  override fun perceiveMessage(c: RulesContext): String? =
+    run(RulesExport.PERCEIVE_MESSAGE, c, ctxArgs(c)) { v ->
+        Message(
+          if (isNone(v)) null
+          else
+            checkString(
+              str(v, "rules.perceive_message return value"),
+              "rules.perceive_message",
+              host.limits,
+            )
+        )
+      }
+      ?.text
+
+  private class Message(val text: String?)
+
+  override fun doorIntensity(c: RulesContext): Int =
+    run(RulesExport.DOOR_INTENSITY, c, ctxArgs(c), convert = intOf(RulesExport.DOOR_INTENSITY))
+      ?.coerceAtLeast(0) ?: 0
+
   override fun advanceLag(c: RulesContext): Int =
     run(RulesExport.ADVANCE_LAG, c, ctxArgs(c), convert = lagOf(RulesExport.ADVANCE_LAG)) ?: 0
 
@@ -460,15 +584,20 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         d["vitals"]?.let { typed(it, TypedKind.VITALS, "rules.on_player_death[\"vitals\"]") },
         (d["xp_loss"]?.let { int(it, "rules.on_player_death[\"xp_loss\"]") } ?: 0).toLong(),
       )
-    } ?: PlayerDeathOutcome((c.actor as? Player)?.recallRoom ?: c.actor.room.label, null, 0)
+    }
+      ?: PlayerDeathOutcome(
+        (c.requireActor() as? Player)?.recallRoom ?: c.requireActor().room.label,
+        null,
+        0,
+      )
 
   companion object {
-    private val STARTING_FIELDS = listOf("stats", "max", "current")
+    private val STARTING_FIELDS = listOf("stats", "max", "current", "senses")
     private val DEATH_FIELDS = listOf("respawn", "vitals", "xp_loss")
   }
 }
 
-/** The functions `//rules:combat.star` may export. [RULES_EXPORTS] documents each. */
+/** The functions the files of `//rules` may export. [RULES_EXPORTS] documents each. */
 enum class RulesExport(val scriptName: String) {
   EQUIPMENT_SLOTS("equipment_slots"),
   STARTING_STATS("starting_stats"),
@@ -493,6 +622,10 @@ enum class RulesExport(val scriptName: String) {
   XP_FOR_KILL("xp_for_kill"),
   XP_TO_LEVEL("xp_to_level"),
   ON_PLAYER_DEATH("on_player_death"),
+  SENSE_COST("sense_cost"),
+  CAN_PERCEIVE("can_perceive"),
+  PERCEIVE_MESSAGE("perceive_message"),
+  DOOR_INTENSITY("door_intensity"),
 }
 
 /** The docs of every [RulesExport]. */
@@ -691,6 +824,68 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       doc =
         "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int}; vitals sets the respawned character's current vitals.",
     ),
+    RulesExportSpec(
+      export = RulesExport.SENSE_COST,
+      signature = "sense_cost(ctx)",
+      returnType = "int",
+      ctxFields = listOf("room", "exit", "channel", "pulse", "rng"),
+      doc =
+        "What a perceivable event on ctx.channel loses crossing ctx.exit into ctx.room, one hop toward the listeners. The price is added to the event's cost; a negative price blocks the hop. ctx.actor is None.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.CAN_PERCEIVE,
+      signature = "can_perceive(ctx)",
+      returnType = "bool",
+      ctxFields =
+        listOf(
+          "actor",
+          "target",
+          "source",
+          "room",
+          "source_room",
+          "via_exit",
+          "channel",
+          "event",
+          "intensity",
+          "cost",
+          "text",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "Whether ctx.actor, a candidate listener, notices the event. Asked for every simulated actor in a room the event reaches, the room it happened in included, except the actor who caused it.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.PERCEIVE_MESSAGE,
+      signature = "perceive_message(ctx)",
+      returnType = "str | None",
+      ctxFields =
+        listOf(
+          "actor",
+          "target",
+          "source",
+          "room",
+          "source_room",
+          "via_exit",
+          "channel",
+          "event",
+          "intensity",
+          "cost",
+          "text",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "What a player in another room is told about an event they can_perceive, or None for nothing. The room of the event is told as it happens and never asked.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.DOOR_INTENSITY,
+      signature = "door_intensity(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "room", "action", "tags", "exit", "item", "pulse", "rng"),
+      doc =
+        "The sound intensity of ctx.action ('open', 'close', 'lock' or 'unlock') on a door (ctx.exit) or container (ctx.item); 0 or less is silent.",
+    ),
   )
 
 /** The modifier points in the rules modifier chain. */
@@ -782,7 +977,8 @@ internal fun dryRunRules(
   val rules = host.rules(pkg)
   val problems = mutableListOf<String>()
   rules.collected = problems
-  val room = RoomProto(Label("//engine:dry_run"), "The dry run")
+  val dryExit = ExitProto(Direction.NORTH, Label("//engine:dry_run"), door = DoorProto())
+  val room = RoomProto(Label("//engine:dry_run"), "The dry run", exits = listOf(dryExit))
   val protos = Prototypes(rooms = listOf(room), mobs = result.prototypes().mobs.values.toList())
   val world =
     World(
@@ -872,6 +1068,36 @@ internal fun dryRunRules(
           band,
         )
       if (a is Player) rules.onPlayerDeath(RulesContext(world, a))
+      val here = world.room(at)
+      val exit = here.exits.getValue(Direction.NORTH)
+      for (channel in schema.allChannels) {
+        rules.senseCost(RulesContext(world, room = here, exit = exit, channel = channel))
+        for (sourceRoom in listOf(here, null)) {
+          val heard =
+            RulesContext(
+              world,
+              a,
+              a,
+              room = here,
+              channel = channel,
+              event = "dry_run",
+              intensity = 1,
+              cost = if (sourceRoom == null) 1 else 0,
+              sourceRoom = sourceRoom,
+              viaExit = if (sourceRoom == null) Direction.NORTH else null,
+              text = "dry run",
+              source = other,
+            )
+          rules.canPerceive(heard)
+          rules.perceiveMessage(heard)
+        }
+      }
+      for (action in listOf("open", "close", "lock", "unlock")) {
+        rules.doorIntensity(
+          RulesContext(world, a, room = here, action = action, tags = setOf("heavy"), exit = exit)
+        )
+        rules.doorIntensity(RulesContext(world, a, room = here, action = action))
+      }
     }
   } catch (e: RuntimeException) {
     problems += "the dry run could not set up its actors: ${e.message}"

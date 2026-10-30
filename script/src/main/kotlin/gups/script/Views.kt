@@ -6,6 +6,7 @@ import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.Direction
+import gups.core.model.Door
 import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.Item
@@ -162,6 +163,20 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     doc = "Base stat values, without affects, equipment or encumbrance: base.dex.",
   )
   fun base(): Any = read { BaseView(actor, scope.world.schema) }
+
+  @StarlarkMethod(
+    name = "senses",
+    structField = true,
+    doc =
+      "Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.",
+  )
+  fun senses(): Any = read {
+    sDict(
+      actor.effectiveSenses(scope.world.schema.allChannels).entries.associate {
+        it.key.name to sInt(it.value)
+      }
+    )
+  }
 
   @StarlarkMethod(
     name = "resists",
@@ -424,6 +439,34 @@ class RoomView(scope: ViewScope, val room: Room) : EntityView(scope, room) {
   fun items(): Any = read { sList(room.items.map { ItemView(scope, it) }) }
 }
 
+@StarlarkBuiltin(name = "door", doc = "A read-only view of an exit's door.")
+class DoorView internal constructor(private val scope: ViewScope, private val door: Door) :
+  StarlarkValue {
+  private fun <T> read(block: () -> T): T {
+    scope.check()
+    return block()
+  }
+
+  @StarlarkMethod(name = "state", structField = true, doc = "'open', 'closed' or 'locked'.")
+  fun state(): Any = read { door.state.name.lowercase() }
+
+  @StarlarkMethod(name = "key", structField = true, doc = "The key's item label, or None.")
+  fun key(): Any = read { door.key?.v ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "tags",
+    structField = true,
+    doc = "Tags declared on door(tags = [...]), sorted.",
+  )
+  fun tags(): Any = read { sList(door.tags.sorted()) }
+
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append("<door ${door.state.name.lowercase()}>")
+  }
+}
+
 @StarlarkBuiltin(name = "exit", doc = "A read-only view of an exit.")
 class ExitView
 internal constructor(private val scope: ViewScope, private val room: Room, private val exit: Exit) :
@@ -453,20 +496,14 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
   fun entryIndex(): Any = read("exit.entry_index") { sInt(exit.entryIndex) }
 
   @StarlarkMethod(
-    name = "senses_blocked",
+    name = "tags",
     structField = true,
-    doc = "Effective blocked channels: the exit's own plus its door's.",
+    doc = "Tags declared on exit(tags = [...]), sorted.",
   )
-  fun sensesBlocked(): Any = read {
-    sList(exit.effectiveSensesBlocked.map { it.name.lowercase() }.sorted())
-  }
+  fun tags(): Any = read { sList(exit.tags.sorted()) }
 
-  @StarlarkMethod(
-    name = "door",
-    structField = true,
-    doc = "'open', 'closed' or 'locked'; None without a door.",
-  )
-  fun door(): Any = read { exit.door?.state?.name?.lowercase() ?: Starlark.NONE }
+  @StarlarkMethod(name = "door", structField = true, doc = "The exit's door, or None without one.")
+  fun door(): Any = read { exit.door?.let { DoorView(scope, it) } ?: Starlark.NONE }
 
   @StarlarkMethod(name = "key", structField = true, doc = "The door's key label, or None.")
   fun key(): Any = read { exit.door?.key?.v ?: Starlark.NONE }
@@ -575,6 +612,15 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun statDeltas(): Any = read {
     TypedMap(TypedKind.STATS, item.proto.statDeltas, scope.world.schema.statNames)
   }
+
+  @StarlarkMethod(
+    name = "sense_deltas",
+    structField = true,
+    doc = "Sense score changes by channel while worn.",
+  )
+  fun senseDeltas(): Any = read {
+    sDict(item.proto.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
+  }
 }
 
 /** Where an item is. */
@@ -654,6 +700,14 @@ internal constructor(private val scope: ViewScope, private val host: Actor, val 
     doc = "Stat adjustments granted by this affect.",
   )
   fun statDeltas(): Any = TypedMap(TypedKind.STATS, affect.statDeltas, scope.world.schema.statNames)
+
+  @StarlarkMethod(
+    name = "sense_deltas",
+    structField = true,
+    doc = "Sense score changes by channel granted by this affect.",
+  )
+  fun senseDeltas(): Any =
+    sDict(affect.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
 
   @StarlarkMethod(
     name = "source",
@@ -811,6 +865,8 @@ class BaseView internal constructor(private val actor: Actor, private val schema
       name in schema.statNames -> sInt(actor.baseStat(name))
       name.startsWith("max_") && name.removePrefix("max_") in schema.vitalNames ->
         sInt(actor.baseMax(name.removePrefix("max_")))
+      name == "senses" ->
+        sDict(schema.allChannels.associate { it.name to sInt(actor.baseSenses[it] ?: 0) })
       name == "resists" ->
         TypedMap(
           TypedKind.RESISTS,
@@ -821,7 +877,9 @@ class BaseView internal constructor(private val actor: Actor, private val schema
     }
 
   override fun getFieldNames(): ImmutableCollection<String> =
-    ImmutableList.copyOf(schema.statNames + schema.vitalNames.map { "max_$it" } + listOf("resists"))
+    ImmutableList.copyOf(
+      schema.statNames + schema.vitalNames.map { "max_$it" } + listOf("senses", "resists")
+    )
 
   override fun getErrorMessageForUnknownField(field: String): String =
     "'base' value has no field '$field'${didYouMean(field, getFieldNames())}"

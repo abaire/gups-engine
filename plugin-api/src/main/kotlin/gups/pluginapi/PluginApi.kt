@@ -169,6 +169,8 @@ data class PluginTrait(
   val resistDeltas: Map<String, Int> = emptyMap(),
   val flags: Set<String> = emptySet(),
   val modifiers: Map<PluginModifierPoint, PluginModifier> = emptyMap(),
+  /** Sense changes by channel name, built-in or world-declared. */
+  val senseDeltas: Map<String, Int> = emptyMap(),
 )
 
 enum class PluginModifierPoint {

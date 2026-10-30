@@ -76,8 +76,10 @@ internal class AdvanceAction(private val target: Actor) : Action {
     val step = Integer.signum(target.trackIndex - actor.trackIndex)
     if (step != 0) w.placeActor(actor, actor.room, actor.trackIndex + step)
     w.tell(actor, TrackMsg.ADVANCE_SELF, "target" to target.name)
-    w.echo(
+    w.tellSight(
       actor.room,
+      "advance",
+      actor,
       w.msg(TrackMsg.ADVANCE_ROOM, "actor" to actor.name.cap(), "target" to target.name),
       actor,
     )
@@ -111,8 +113,10 @@ internal class RetreatAction(private val from: Actor?) : Action {
     val dir = step(actor.trackIndex, t.trackIndex, actor.room.trackSize) ?: return 0
     w.placeActor(actor, actor.room, actor.trackIndex + dir)
     w.tell(actor, TrackMsg.RETREAT_SELF, "target" to t.name)
-    w.echo(
+    w.tellSight(
       actor.room,
+      "retreat",
+      actor,
       w.msg(TrackMsg.RETREAT_ROOM, "actor" to actor.name.cap(), "target" to t.name),
       actor,
     )

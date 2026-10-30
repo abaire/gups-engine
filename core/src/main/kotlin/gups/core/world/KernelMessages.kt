@@ -58,8 +58,6 @@ object KernelMsg : MsgGroup(null) {
   val GOSSIP_LINE = msg("gossip.line", "[gossip] {actor}: {text}", "actor,text", "text")
   val SHOUT_WHAT = msg("shout.what", "Shout what?")
   val SHOUT_SELF = msg("shout.self", "You shout, '{text}'", "text", "text")
-  val SHOUT_ROOM = msg("shout.room", "{actor} shouts, '{text}'", "actor,text", "text")
-  val SHOUT_NEAR = msg("shout.near", "Someone nearby shouts, '{text}'", "text", "text")
   val WHISPER_USAGE = msg("whisper.usage", "Whisper what to whom?")
   val WHISPER_SELF = msg("whisper.self", "You whisper to {target}, '{text}'", "target,text", "text")
   val WHISPER_TARGET =
@@ -128,6 +126,8 @@ object KernelMsg : MsgGroup(null) {
     perVerb("door.self", { "You ${it.word} the door {direction}." }, "direction")
   internal val DOOR_ROOM =
     perVerb("door.room", { "{actor} ${it.word}s the door {direction}." }, "actor,direction")
+  internal val DOOR_HEARD = perVerb("door.heard", { "You hear a door ${it.heardAs}." }, "")
+  internal val BOX_HEARD = perVerb("container.heard", { "You hear something ${it.heardAs}." }, "")
   internal val BOX_SELF = perVerb("container.self", { "You ${it.word} {item}." }, "item")
   internal val BOX_ROOM = perVerb("container.room", { "{actor} ${it.word}s {item}." }, "actor,item")
   val DOOR_NONE = msg("door.none", "There is no door {direction}.", "direction")
@@ -150,6 +150,7 @@ object KernelMsg : MsgGroup(null) {
 
   val DEATH_SELF = msg("death.self", "You are DEAD!")
   val DEATH_ROOM = msg("death.room", "{actor} is DEAD!", "actor")
+  val DEATH_HEARD = msg("death.heard", "You hear a death cry.")
   val DEATH_RESPAWN = msg("death.respawn", "{name} appears, looking shaken.", "name")
   val CONDITION_DOWN = msg("condition.down", "You are incapacitated.")
   val CONDITION_DOWN_ROOM = msg("condition.down_room", "{actor} collapses.", "actor")

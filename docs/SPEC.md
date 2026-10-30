@@ -445,16 +445,15 @@ implements. Hooks are not stored on prototypes: the host looks them up by protot
 `modifiers: Map<ModifierPoint, StarlarkCallable>`, frozen with the prototype. - `flags`: `always_active`, `dead_end_ok`.
 - `spawns: List<SpawnRule>`. - `commands: Map<String, StarlarkCallable>`.
 
-**Exit** - `direction`. - `to: Label`. - `entryIndex: Int`. Default `0`; `-1` means `trackSize - 1`. - `sensesBlocked:
-Set<Channel>`, where a `Channel` is one of the built-in `sight`, `sound` and `noise`, or a channel the world declares
-(§3.9). It only stops perception (§5.7); it never affects whether the exit can be walked through. - `door: Door?`. -
-`oneWay: Boolean`.
+**Exit** - `direction`. - `to: Label`. - `entryIndex: Int`. Default `0`; `-1` means `trackSize - 1`. - `tags:
+Set<String>`, free-form words the rules read, such as `soundproof` or `sealed`; they never affect whether the exit can
+be walked through. - `door: Door?`. - `oneWay: Boolean`.
 
-**Door** - `state`: `OPEN`, `CLOSED`, or `LOCKED`. - `keyLabel: Label?`. - `openSensesBlocked`, `closedSensesBlocked:
-Set<Channel>`.
+**Door** - `state`: `OPEN`, `CLOSED`, or `LOCKED`. - `keyLabel: Label?`. - `tags: Set<String>`, such as `heavy` or
+`transparent`.
 
-The **effective** `sensesBlocked` set of an exit is the exit's `sensesBlocked` plus the door's set for its current
-state.
+Neither the engine nor the data says which channels an exit or door blocks. `rules.sense_cost` (§4.6) reads the tags and
+the door state and prices every crossing, with a negative price standing for "never".
 
 **Actor** (sealed: `Player`, `Mob`) - **Position:** `room: RoomRef` and `trackIndex: Int` (always 0 without the `track`
 feature, §3.10). - **Stats and vitals,** keyed by the names the world's schema declares (§3.9): - `baseStats:
@@ -538,7 +537,7 @@ algorithm changes every replay.
     vitals stay, capped at the new maximum, except that a vital that was at its maximum moves to the new one. Prototype
     traits always follow the new prototype (granted ones stay), and the maxima compared are base values; the effective
     maximum then follows from the traits.
-  - Rooms: door states and exit `senses_blocked` sets follow the same rule.
+  - Rooms: door states follow the same rule.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
   - Spawn rules carry their live mobs over by label. New rooms fill their spawns, then get `on_load`.
@@ -626,16 +625,16 @@ enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher impl
 - **References:** An item's location names a room by label (with a track index) and an actor or container by id. Rooms
   keep their saved ids across restarts, so ids stay unique, but nothing refers to a room by id.
 - **Deltas:**
-  - Rooms store door states and exit `senses_blocked` sets that differ from the prototype, plus attributes and timers.
-  - Mobs always store position, current vitals, xp, home room and spawn binding. Level, vital maxima, stats, resists,
-    skills, `think_every` and `dormant_recovery` are stored only when they differ from the prototype, each as a whole
-    value. `grantedTraits` is stored when not empty; prototype traits never are.
+  - Rooms store door states that differ from the prototype, plus attributes and timers.
+  - Mobs always store position, current vitals, xp, home room and spawn binding. Level, vital maxima, stats, senses,
+    resists, skills, `think_every` and `dormant_recovery` are stored only when they differ from the prototype, each as a
+    whole value. `grantedTraits` is stored when not empty; prototype traits never are.
   - Stats, vitals and resists are stored as objects keyed by their schema names; a vital is `{"cur", "max"}`, plus
     `"belowZeroSince"` when set.
   - Items store count, decay, name override, container state, attributes, timers and their prototype name.
-  - Players store everything, role included. Vital maxima and resists are the base values; `choices` is an object and
-    `grantedTraits` a sorted array, both empty when there are none. A payload written before they existed reads as
-    empty.
+  - Players store everything, role included. Vital maxima, senses and resists are the base values; `choices` is an
+    object and `grantedTraits` a sorted array, both empty when there are none. A payload written before they existed
+    reads as empty.
   - A restored actor's traits are worked out before its vitals are restored, and `current` is capped at the effective
     maximum, so a value that only a trait allows (a mage's extra mana) survives a restart. A mob delta without a vital
     `max` takes the prototype's base maximum.
@@ -721,8 +720,13 @@ module(
     `condition`, `below_zero_since`, or `max_<vital>` for a declared vital. The view fields are those of the actor view
     class itself, so a field added to it is reserved too. Vital names may not start with `max`.
   - Damage type names are unique; `unarmed_damage_type` must be one of them. It is the type of an unarmed auto-attack.
-  - Channel names are unique and may not be a built-in channel (`sight`, `sound`, `noise`). Declared channels can be
-    blocked by exits and doors and listed in a skill's `channels`, but nothing in the engine raises events on them.
+  - Channel names are unique and may not be a built-in channel (`sight`, `sound`). Declared channels can be blocked by
+    exits and doors, listed in a skill's `channels`, sensed (`senses`, `sense_deltas`), and raised by scripts with
+    `ctx.emit` (§5.7). The engine's own events use only the built-in ones.
+  - `channel_priority = [...]` ranks channels, built-in or declared, from strongest to weakest. A player who is told
+    about an event as it happens (§5.7) is told through the first channel they perceive that has text. A name that isn't
+    a channel, or one listed twice, stops the server. Channels left out rank after the listed ones, `sight` and `sound`
+    first, then the declared channels in order. It is not recorded per database; changing it needs only a restart.
   - A schema problem stops the server, with a "did you mean" suggestion where one applies. Suggestions come from an edit
     distance in which a swap of two letters counts as one edit, and the nearest name is offered when it is within a
     third of the misspelled name's length.
@@ -747,7 +751,7 @@ module(
 - **Where names are checked:**
 
   - At package load: `stat_deltas`, `cost`, mob `stats`/`vitals`/`resists`, item `damage_type`, the `damage(...)` and
-    `heal(...)` primitives, `flee(below = ...)`, channels in `senses_blocked` and skill `channels`.
+    `heal(...)` primitives, `flee(below = ...)` and skill `channels`.
   - When the rules package loads: the dry run (§4.6).
   - At run time: actor view fields (`ctx.actor.lfe` is an error suggesting `life`), and the `type` and `vital` arguments
     of verbs.
@@ -841,9 +845,8 @@ room("entrance",
     exits = [
         exit(DIR.north, to=":tunnel",
              door=door(state=DOOR.closed, key="//zones/goblin_caves:rusty_key",
-                       open_senses_blocked=[],
-                       closed_senses_blocked=[SENSE.sight, SENSE.sound, SENSE.noise])),
-        exit(DIR.east, to=":long_hall", senses_blocked=SENSE.all),  # never carries anything
+                       tags=["creaky"])),            # free-form words the rules read (§4.6)
+        exit(DIR.east, to=":long_hall", tags=["sealed"]),  # the template's sense_cost never carries anything
         exit(DIR.south, to="//zones/forest:clearing", entry_index=-1),  # arrive at back
     ],
     spawns = [spawn(":goblin_scout", count=2, respawn_pulses=1200, at_index=2)],
@@ -857,7 +860,7 @@ mob("goblin_scout",
     level = 3, stats = stats(str = 10, dex = 14, con = 9, int = 6, wis = 6, armor = 2),
     vitals = vitals(hp = 30), resists = resists(fire = -10),   # schema-checked (§3.9)
     skills = {"//skills/martial:kick": 40},
-    senses = {"hearing": 1, "sight": 0},
+    senses = {"sound": 3, "sight": 0},      # merged over sight/sound = 1; 0 senses nothing (§5.7)
     behaviors = [wander(radius=4, chance=0.1), aggressive(toward="players"),
                  assist(allies=["goblin_*"]), flee(below=vitals(hp = 20))],
     think = _scout_think, think_every = 4,
@@ -871,6 +874,7 @@ item("short_bow",
     name = "a short bow", kind = "ranged", range = "far", weight = 2,
     wear = "wield", dice = "1d6", damage_type = "pierce",
     stat_deltas = stats(dex = 1),
+    sense_deltas = {"sight": 1},                      # sense score changes while worn (§5.7)
     tags = ["light_weapon"],                          # free-form, for plugins (§4.19)
     modifiers = {}, equip_affects = [],               # apply while worn (§4.6)
     stackable = False, decay_pulses = None,
@@ -942,7 +946,7 @@ skill("fireball",
     lag       = 4,                    # waitState pulses after resolution
     range     = "far",                # melee | near | far | self | room
     target    = "enemy",              # enemy | ally | self | item | none
-    channels  = ["spell", "noise"],   # built-in or declared channels
+    channels  = ["spell", "sound"],   # built-in or declared channels
     interrupt = {"damage_pct": 10, "stun": True},
     attack_while_casting = False,     # default; True lets auto-attacks continue during warmup
     effect    = damage(dice="4d6", type=DAMAGE.fire),
@@ -973,17 +977,17 @@ from `ctx.actor.skills`.
 
 **Effect primitives (v0):**
 
-|                                                                 Primitive                                                                 |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
-|-------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `damage(dice, type)`                                                                                                                      | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6).                                                                                                                                                                                                                                                                                                                |
-| `heal(dice, vital)`                                                                                                                       | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={})` | Attach a timed buff or debuff.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `dispel(name=None, flag=None, all=False, count=None)`                                                                                     | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
-| `knockback(steps)`                                                                                                                        | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                            |
-| `pull(steps)`                                                                                                                             | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                               |
-| `stun(pulses)`                                                                                                                            | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `summon(label, count=1, duration=None)`                                                                                                   | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
-| `sequence(*effects)`                                                                                                                      | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|                                                                         Primitive                                                                          |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `damage(dice, type)`                                                                                                                                       | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6).                                                                                                                                                                                                                                                                                                                |
+| `heal(dice, vital)`                                                                                                                                        | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={})` | Attach a timed buff or debuff.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `dispel(name=None, flag=None, all=False, count=None)`                                                                                                      | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
+| `knockback(steps)`                                                                                                                                         | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                            |
+| `pull(steps)`                                                                                                                                              | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                               |
+| `stun(pulses)`                                                                                                                                             | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `summon(label, count=1, duration=None)`                                                                                                                    | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
+| `sequence(*effects)`                                                                                                                                       | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 Spell `damage(...)` effects don't go through the `damage` modifier point; only auto-attacks do (§4.6).
 
@@ -992,31 +996,33 @@ Spell `damage(...)` effects don't go through the `damage` modifier point; only a
 Every hook is a named top-level function. Hooks named `before_*` may return `ctx.deny(msg)` to veto the action. Any
 other return value means "allow". The return values of `on_*` hooks are ignored.
 
-|                    Hook                     |   Veto    |             Attach to              |                     Key ctx fields                     |
-|---------------------------------------------|-----------|------------------------------------|--------------------------------------------------------|
-| `on_load`                                   | —         | Room, Mob, Item                    | `self`                                                 |
-| `on_spawn`                                  | —         | Room, Mob, Item                    | `self`, `item`                                         |
-| `on_reset`                                  | —         | Room (zone reset)                  | `self`                                                 |
-| `on_wake(ctx, elapsed_pulses)`              | —         | Room, Mob, Item                    | `self`, `elapsed_pulses`                               |
-| `before_enter` / `on_enter`                 | ✓ / —     | Room, Mob (observer)               | `actor`, `direction`, `from_room`                      |
-| `before_exit` / `on_exit`                   | ✓ / —     | Room, Mob (observer)               | `actor`, `direction`, `to_room`                        |
-| `on_say`                                    | —         | Mob, Room                          | `actor`, `text`                                        |
-| `on_tell`                                   | —         | Mob                                | `actor`, `text` (no `target`)                          |
-| `before_get` / `on_get`                     | ✓ / —     | Item, Mob (observer)               | `actor`, `item`                                        |
-| `before_drop` / `on_drop`                   | ✓ / —     | Item, Mob (observer)               | `actor`, `item`                                        |
-| `before_use` / `on_use`                     | ✓ / —     | Item                               | `actor`, `item`, `target`                              |
-| `on_give`                                   | —         | Mob (receiver), Item               | `actor`, `item`, `target`                              |
-| `before_attack`                             | ✓         | Mob, Item (equipped)               | `actor`, `target`, `weapon`                            |
-| `before_cast` / `on_cast_start` / `on_cast` | ✓ / — / — | Mob, Item (equipped), Room         | `actor`, `skill`, `target`                             |
-| `on_damage`                                 | —         | Mob, Item (equipped)               | `actor` (source), `target`, `amount`, `type`, `losses` |
-| `on_death`                                  | —         | Mob, Room                          | `actor` (killer), `target`                             |
-| `on_combat_tick`                            | —         | Mob, Item (equipped)               | `self`, `actor`, `targets`                             |
-| `on_tick`                                   | —         | Any (world tick)                   | `self`                                                 |
-| `on_nearby`                                 | —         | Mob (any; `senses` widen it, §5.7) | `event`, `actor`, `text`, `source_room`, `via_exit`    |
-| `think`                                     | —         | Mob                                | `self`, `proposals`                                    |
-| `commands[verb]`                            | —         | Room, Item                         | `actor`, `args`, `target`, `item`                      |
-| affect `on_tick`                            | —         | Affect                             | `self` (host), `affect`                                |
-| affect `on_expire`                          | —         | Affect                             | `self` (host), `affect`, `reason`                      |
+|                             Hook                              |   Veto    |         Attach to          |                                   Key ctx fields                                    |
+|---------------------------------------------------------------|-----------|----------------------------|-------------------------------------------------------------------------------------|
+| `on_load`                                                     | —         | Room, Mob, Item            | `self`                                                                              |
+| `on_spawn`                                                    | —         | Room, Mob, Item            | `self`, `item`                                                                      |
+| `on_reset`                                                    | —         | Room (zone reset)          | `self`                                                                              |
+| `on_wake(ctx, elapsed_pulses)`                                | —         | Room, Mob, Item            | `self`, `elapsed_pulses`                                                            |
+| `before_enter` / `on_enter`                                   | ✓ / —     | Room, Mob (observer)       | `actor`, `direction`, `from_room`                                                   |
+| `before_exit` / `on_exit`                                     | ✓ / —     | Room, Mob (observer)       | `actor`, `direction`, `to_room`                                                     |
+| `on_say`                                                      | —         | Mob, Room                  | `actor`, `text`                                                                     |
+| `on_tell`                                                     | —         | Mob                        | `actor`, `text` (no `target`)                                                       |
+| `before_get` / `on_get`                                       | ✓ / —     | Item, Mob (observer)       | `actor`, `item`                                                                     |
+| `before_drop` / `on_drop`                                     | ✓ / —     | Item, Mob (observer)       | `actor`, `item`                                                                     |
+| `before_use` / `on_use`                                       | ✓ / —     | Item                       | `actor`, `item`, `target`                                                           |
+| `on_give`                                                     | —         | Mob (receiver), Item       | `actor`, `item`, `target`                                                           |
+| `before_attack`                                               | ✓         | Mob, Item (equipped)       | `actor`, `target`, `weapon`                                                         |
+| `before_cast` / `on_cast_start` / `on_cast`                   | ✓ / — / — | Mob, Item (equipped), Room | `actor`, `skill`, `target`                                                          |
+| `on_damage`                                                   | —         | Mob, Item (equipped)       | `actor` (source), `target`, `amount`, `type`, `losses`                              |
+| `on_death`                                                    | —         | Mob, Room                  | `actor` (killer), `target`                                                          |
+| `on_combat_tick`                                              | —         | Mob, Item (equipped)       | `self`, `actor`, `targets`                                                          |
+| `on_tick`                                                     | —         | Any (world tick)           | `self`                                                                              |
+| `on_perceive`                                                 | —         | Mob (§5.7)                 | `event`, `channel`, `intensity`, `cost`, `actor`, `text`, `source_room`, `via_exit` |
+| `before_open`, `before_close`, `before_lock`, `before_unlock` | ✓         | Item, Room, Mob (§5.7)     | `actor`, `direction` (a door) or `item` (a container)                               |
+| `on_open`, `on_close`, `on_lock`, `on_unlock`                 | —         | Item, Room, Mob (§5.7)     | `actor`, `direction` (a door) or `item` (a container)                               |
+| `think`                                                       | —         | Mob                        | `self`, `proposals`                                                                 |
+| `commands[verb]`                                              | —         | Room, Item                 | `actor`, `args`, `target`, `item`                                                   |
+| affect `on_tick`                                              | —         | Affect                     | `self` (host), `affect`                                                             |
+| affect `on_expire`                                            | —         | Affect                     | `self` (host), `affect`, `reason`                                                   |
 
 **Observer semantics:** Hooks on a mob fire for actions *by others in the same room*. `ctx.self` is always the hook's
 owner.
@@ -1072,11 +1078,13 @@ feature), `flags`, `has_flag(flag)`, `equipped(slot)`, `inventory()`, `carried_w
 (`combat` feature), `wait_state`.
 
 **Room view:** - Identity: `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`, `tags`. - Contents:
-`exits()`, `actors()`, `items()`, `contents()`. - `exit(dir)`, an exit view that includes its effective `senses_blocked`
-and door state.
+`exits()`, `actors()`, `items()`, `contents()`. - `exit(dir)`, an exit view with its `tags` and `door`: a door view
+(`state`, `key`, `tags`), or `None` without a door. **Actor view:** `senses` (the effective score on every channel) and
+`base.senses` (the unmodified scores).
 
 **Item view:** `id`, `label`, `name`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
-`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `tags`, `in_world`.
+`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `sense_deltas`, `tags`,
+`in_world`.
 
 **Skill view:** includes `cost`, `channels`, `interrupt` and `tags`.
 
@@ -1090,7 +1098,8 @@ and door state.
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
 | Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)`                                                                                          |
 | Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=1)`, `move_item(item, to)`, `destroy(item)`, `split(item, n)`                                                                                                                                                  |
-| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`, `set_exit_senses_blocked(room, dir, channels)`                                                                                                                                                                       |
+| Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
+| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                         |
 | Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                            |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                             |
@@ -1126,44 +1135,63 @@ are public `core` functions, so Kotlin and plugins share them.
 
 ### 4.6 Rules Module and the Modifier Chain
 
-The rules package is required, and its `//rules:combat.star` (the package is named `rules`, kind `rules`; `gups lint`
-reports its absence) defines the world's rules as the functions below. The engine has no built-in ruleset and nothing to
-fall back to: every export that an enabled feature uses (the "Feature" column) must be defined, and an export of a
-feature that is off must not be. The engine calls them with a rules `ctx` that is read-only, apart from `deny`. Any
-other public top-level function in `combat.star` (one whose name doesn't start with `_`) is a load error for the rules
-package. A misspelled export can't be silently ignored; helpers take a `_` prefix.
+The rules package is required, and its `.star` files (the package is named `rules`, kind `rules`; `gups lint` reports
+its absence; the template splits them into `combat.star`, `perception.star` and `manipulation.star`) define the world's
+rules as the functions below. Each export is defined in exactly one non-test file of the package; defining it in two is
+a load error naming both files. A missing export is reported once for the package, after all its files have loaded,
+since it belongs to no file; a forbidden export or a public function that isn't an export is reported at its file and
+line. The engine has no built-in ruleset and nothing to fall back to: every export that an enabled feature uses (the
+"Feature" column) must be defined, and an export of a feature that is off must not be. The engine calls them with a
+rules `ctx` that is read-only, apart from `deny`. Any other public top-level function in a rules file (one whose name
+doesn't start with `_`) is a load error for the rules package. A misspelled export can't be silently ignored; helpers
+take a `_` prefix.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the other actor, if any: the
 defender, the pinner, the killed or the killer, or the actor advanced on or retreated from), `weapon`, `item`, `band` (a
 word in the calls that set one, such as `get_lag` and the track lag exports; otherwise `None`, and always `None` without
-the `track` feature), `skill`, `room` (the actor's), `pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in
-`cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`,
-`traits` and `has_trait` (§4.19).
+the `track` feature), `skill`, `room` (the actor's, or the room the call is about), `pulse`, `rng`, `roll(dice)`, and
+`deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of
+§4.5, and `choices`, `traits` and `has_trait` (§4.19).
 
-|                 Function                 |  Feature   |                                                                                   Returns                                                                                   |
-|------------------------------------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `equipment_slots()`                      | kernel     | `list[str]`, the equipment slots.                                                                                                                                           |
-| `starting_stats(ctx)`                    | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...))`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob. |
-| `condition(ctx)`                         | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                      |
-| `mitigate(ctx, amount, type)`            | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                      |
-| `move_cost(ctx)`                         | kernel     | `vitals(...)`, what a room transition spends.                                                                                                                               |
-| `regen(ctx)`                             | kernel     | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                     |
-| `carry_limit(ctx)`                       | kernel     | Weight.                                                                                                                                                                     |
-| `encumbrance(ctx)`                       | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                          |
-| `on_player_death(ctx)`                   | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int}`                                                                                                                 |
-| `to_hit(ctx)`                            | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`.                                                                                               |
-| `damage(ctx)`                            | `combat`   | Raw auto-attack damage, an int.                                                                                                                                             |
-| `initiative(ctx)`                        | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                              |
-| `flee_chance(ctx)`                       | `combat`   | Percent.                                                                                                                                                                    |
-| `retreat_check(ctx)`                     | `track`    | Success chance in percent, used when pinned.                                                                                                                                |
-| `get_lag(ctx, band)`                     | `track`    | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                       |
-| `advance_lag(ctx)`                       | `track`    | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                        |
-| `retreat_lag(ctx)`                       | `track`    | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                               |
-| `retreat_fail_lag(ctx)`                  | `track`    | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                           |
-| `flee_fail_lag(ctx)`                     | `combat`   | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                    |
-| `cast_allowed(ctx)`                      | `skills`   | `None` or `deny(msg)`.                                                                                                                                                      |
-| `interrupt_check(ctx, amount)`           | `skills`   | Whether a casting actor is interrupted, a bool.                                                                                                                             |
-| `xp_for_kill(ctx)`, `xp_to_level(level)` | `leveling` | Ints.                                                                                                                                                                       |
+|                 Function                 |  Feature   |                                                                                                   Returns                                                                                                    |
+|------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `equipment_slots()`                      | kernel     | `list[str]`, the equipment slots.                                                                                                                                                                            |
+| `starting_stats(ctx)`                    | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
+| `condition(ctx)`                         | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
+| `mitigate(ctx, amount, type)`            | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
+| `move_cost(ctx)`                         | kernel     | `vitals(...)`, what a room transition spends.                                                                                                                                                                |
+| `regen(ctx)`                             | kernel     | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                      |
+| `carry_limit(ctx)`                       | kernel     | Weight.                                                                                                                                                                                                      |
+| `encumbrance(ctx)`                       | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
+| `on_player_death(ctx)`                   | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int}`                                                                                                                                                  |
+| `to_hit(ctx)`                            | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`.                                                                                                                                |
+| `damage(ctx)`                            | `combat`   | Raw auto-attack damage, an int.                                                                                                                                                                              |
+| `initiative(ctx)`                        | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
+| `flee_chance(ctx)`                       | `combat`   | Percent.                                                                                                                                                                                                     |
+| `retreat_check(ctx)`                     | `track`    | Success chance in percent, used when pinned.                                                                                                                                                                 |
+| `get_lag(ctx, band)`                     | `track`    | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                                                        |
+| `advance_lag(ctx)`                       | `track`    | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                                                         |
+| `retreat_lag(ctx)`                       | `track`    | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                                                                |
+| `retreat_fail_lag(ctx)`                  | `track`    | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                                                            |
+| `flee_fail_lag(ctx)`                     | `combat`   | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                                                     |
+| `cast_allowed(ctx)`                      | `skills`   | `None` or `deny(msg)`.                                                                                                                                                                                       |
+| `interrupt_check(ctx, amount)`           | `skills`   | Whether a casting actor is interrupted, a bool.                                                                                                                                                              |
+| `sense_cost(ctx)`                        | kernel     | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                         |
+| `can_perceive(ctx)`                      | kernel     | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                 |
+| `perceive_message(ctx)`                  | kernel     | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel. |
+| `door_intensity(ctx)`                    | kernel     | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                            |
+| `xp_for_kill(ctx)`, `xp_to_level(level)` | `leveling` | Ints.                                                                                                                                                                                                        |
+
+**Perception exports** (§5.7): the perception calls get a `ctx` about a listener or a room rather than a fighter. -
+`sense_cost`: `ctx.room` is the room the signal enters, `ctx.exit` the exit of that room leading back toward the source
+(with its `door` and `tags`), `ctx.channel`, `pulse`, `rng`; `ctx.actor` is `None`. The template's `sense_cost` charges
+one extra point on the `sound` channel for entering a `large` room. `room.size` is part of the `track` feature, so a
+world without `track` leaves that check out. - `can_perceive` and `perceive_message`: `ctx.actor` (also `ctx.target`) is
+the listener, `ctx.source` the actor who caused the event (or `None`), `ctx.room` the listener's room, `ctx.source_room`
+where it happened, `ctx.via_exit` the listener's exit toward it (`None` in the same room), `ctx.channel`, `ctx.event`,
+`ctx.intensity` (the starting strength), `ctx.cost` (the attenuation along the cheapest path; 0 in the same room) and
+`ctx.text`. - `door_intensity`: `ctx.actor`, `ctx.room`, `ctx.action` (`open`, `close`, `lock` or `unlock`), `ctx.tags`
+(those of the door or container), `ctx.exit` (a door) or `ctx.item` (a container). A negative result is 0.
 
 **Signatures and results:** - `mitigate(ctx, amount, type)` gets the damage type as a string, `get_lag(ctx, band)` the
 band as a word, and `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill` and the total of the damage
@@ -1175,14 +1203,15 @@ subtracted with no floor. - `move_cost` spends from each named vital. A transiti
 the vital's maximum; vitals it doesn't name don't change. - `starting_stats(ctx)`: `ctx.actor` is the new actor. A
 player has every stat and vital at 0; a mob carries its prototype's declared `stats`, `vitals` (as maxima) and
 `resists`. The result overrides those values. A `current` it doesn't give equals the maximum, so a vital that starts
-empty gives both: `max = vitals(rads = 100), current = vitals(rads = 0)`. It runs before the actor enters the world, so
-it can randomize with `ctx.rng`. - For a player, the answers and traits are already set (§4.19): `ctx.actor.choices` is
-readable, and effective values already include trait deltas. The result's `stats` and `max` are base values; the trait
-deltas apply on top, and "the maximum" above is the effective one. - Players created without choices (no provider, the
-harness without `choices`, the dry run's plain player) see `ctx.actor.choices == {}`. - A mob runs with its prototype's
-traits set, so `ctx.actor.max_<vital>` already includes their deltas. A ruleset that keeps the prototype's maxima
-returns `ctx.actor.base.max_<vital>`, as the template does; returning the effective value would count the traits twice.
-- `condition(ctx)` decides `ctx.actor`'s life state (§5.4): after any change to one of the actor's vitals, and for every
+empty gives both: `max = vitals(rads = 100), current = vitals(rads = 0)`. A `senses` field (channel to a score of 0 or
+more) merges over the built-in `sight` and `sound` at 1. It runs before the actor enters the world, so it can randomize
+with `ctx.rng`. - For a player, the answers and traits are already set (§4.19): `ctx.actor.choices` is readable, and
+effective values already include trait deltas. The result's `stats` and `max` are base values; the trait deltas apply on
+top, and "the maximum" above is the effective one. - Players created without choices (no provider, the harness without
+`choices`, the dry run's plain player) see `ctx.actor.choices == {}`. - A mob runs with its prototype's traits set, so
+`ctx.actor.max_<vital>` already includes their deltas. A ruleset that keeps the prototype's maxima returns
+`ctx.actor.base.max_<vital>`, as the template does; returning the effective value would count the traits twice. -
+`condition(ctx)` decides `ctx.actor`'s life state (§5.4): after any change to one of the actor's vitals, and for every
 simulated actor at each world tick, so a rule such as "dead after 60 pulses with `oxygen` below zero" can use
 `below_zero_since`. - `on_player_death`: `respawn` resolves relative labels against the rules package; `vitals` sets the
 respawned character's current vitals (capped at their maxima); `xp_loss` is allowed only with the `leveling` feature. -
@@ -1198,12 +1227,16 @@ The actors live in a throwaway world with one room: two players and one mob per 
 called against another (the first player against the second, everyone else against the first player), unarmed. `get_lag`
 runs once per band, the three track lag exports see the pair's other actor as `ctx.target` at band `melee`,
 `flee_fail_lag` sees no target, and `cast_allowed` and `interrupt_check` get a synthetic skill with `interrupt =
-{"damage_pct": 10}`. With a creation provider (§4.19), `starting_stats` also runs for one synthetic player per option of
-each choice. Its answers are built in choice order: that option for its own choice, and the first available option for
-every other. An option that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose
-own package failed to load isn't checked. Only the package named `rules` is dry-run; a test world that names another
-rules package (§4.12) isn't. An error, a wrong return type or an undeclared name in a result fails the rules package's
-load with the usual diagnostic. A branch the dry run doesn't reach is checked when it first runs.
+{"damage_pct": 10}`. The room has a north exit back to itself with a closed door. For every channel, `sense_cost` sees
+that exit, and `can_perceive` and `perceive_message` are each called once as an event in the actor's own room and once
+as one carried in through the north exit at cost 1, with no source room. `door_intensity` is called for each of `open`,
+`close`, `lock` and `unlock`, with and without a tag. With a creation provider (§4.19), `starting_stats` also runs for
+one synthetic player per option of each choice. Its answers are built in choice order: that option for its own choice,
+and the first available option for every other. An option that isn't available on that path, or whose path the provider
+fails on, is skipped. A mob whose own package failed to load isn't checked. Only the package named `rules` is dry-run; a
+test world that names another rules package (§4.12) isn't. An error, a wrong return type or an undeclared name in a
+result fails the rules package's load with the usual diagnostic. A branch the dry run doesn't reach is checked when it
+first runs.
 
 **Template ruleset.** The template world's `rules/combat.star` implements these, for its schema (§3.9). They are the
 formulas an instructor starts from:
@@ -1324,7 +1357,8 @@ uses the default names. Every player-facing message here is the default text of 
 
 - **`tell <name>`** finds an in-world player by name first, otherwise a mob in the room by keyword, which receives
   `on_tell`.
-- **`shout`** reaches the room and every room whose exit toward it doesn't block `noise` (§5.7), players included.
+- **`shout`** is a `sound` event (§5.7): every player it reaches, in the room or beyond, hears it through
+  `rules.perceive_message`, so a deaf player doesn't. The speaker is told directly.
 - **`whisper`** shows bystanders "X whispers something to Y."
 - **`keyring`** lists the keys on the keyring: carried items with `kind = "key"` and no other purpose (no `wear` slot,
   `container`, `commands`, `dice`, `stat_deltas`, `equip_affects` or `modifiers`). `inventory` leaves them out; item
@@ -1579,8 +1613,9 @@ role.
   - `Room.Bands`: actors (the viewer excluded) and ground items of the viewer's room, by band from the viewer's index:
     actors first, then items, each in ascending id.
   - `Comm.Channel.Text`: `say` goes to everyone in the room, the speaker included. `tell` and `whisper` go to both ends.
-    `shout` goes to the speaker's room and the rooms that hear it, and `gossip` to every player. `text` is what was
-    said, without the framing.
+    `shout` goes to the speaker and to each player whom `rules.perceive_message` (§5.7) lets hear it, in any room, and
+    `gossip` to every player. `text` is what was said, without the framing, except in a `shout` heard by someone else,
+    where it is the text `perceive_message` returned for them.
   - `Gups.Trace`: `{"line"}` replaces the `[trace]` line, the per-pulse overflow summary included.
   - `Char.Creation` is an event, never cached. `name` is the character's name; `options` are the available ones, in
     order; `help` is `""` when the option has none; `answers` are those given so far (all of them at `confirm`, where
@@ -2013,6 +2048,7 @@ data class PluginTrait(
     val resistDeltas: Map<String, Int> = emptyMap(),
     val flags: Set<String> = emptySet(),
     val modifiers: Map<PluginModifierPoint, PluginModifier> = emptyMap(),
+    val senseDeltas: Map<String, Int> = emptyMap(),       // by channel: built-in or declared (§5.7)
 )
 
 enum class PluginModifierPoint { TO_HIT, DAMAGE, INITIATIVE, MOVE_COST, REGEN }
@@ -2123,9 +2159,9 @@ fun interface PluginEffect {
   and recorded as a `plugin` diagnostic, and the pulse goes on. Creation, trait modifier and restriction failures are
   handled as §4.19 says.
 - **Traits** (`addTrait`): the name matches `[a-z][a-z0-9_]*` and is unique across every plugin's traits. Every key of
-  `statDeltas`, `maxVitalDeltas` and `resistDeltas` must be a declared stat, vital or damage type, and `flags` may not
-  contain `stunned`. A modifier point of a feature that is off (`TO_HIT`, `DAMAGE` and `INITIATIVE` need `combat`) is
-  refused. Any of these fails `register`.
+  `statDeltas`, `maxVitalDeltas`, `resistDeltas` and `senseDeltas` must be a declared stat, vital, damage type or
+  channel, and `flags` may not contain `stunned`. A modifier point of a feature that is off (`TO_HIT`, `DAMAGE` and
+  `INITIATIVE` need `combat`) is refused. Any of these fails `register`.
 - **Creation** (`setCreation`): at most once per plugin, and only one plugin per world; a second plugin's call is a
   clash that skips it. Its choices follow §4.19, and every trait an option names must be one the same plugin registers.
   Both are checked when `register` returns. The definitions are read once; `available`, `validate`, `startRoom` and
@@ -2562,7 +2598,7 @@ The world coroutine selects over the input channel and the next pulse boundary. 
   happen. 4. **World tick** (`pulse % 120 == 0`): - Regenerate vitals via `rules.regen` and the modifier chain. Actors
   with a `no_regen` affect are skipped. - Fire `on_tick` for active entities. - Process zone resets and respawns that
   are due. - Advance item decay. - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11). 5.
-  **Deferred perception:** Dispatch the `on_nearby` events queued during this pulse (§5.7). 6. **Bubble maintenance:**
+  **Deferred perception:** Dispatch the `on_perceive` events queued during this pulse (§5.7). 6. **Bubble maintenance:**
   Apply bubble changes recorded during this pulse (§5.9). - **Session expiry** (not a numbered phase): link-dead and
   idle auto-quit run here, after phases 5 and 6 and before the output flush. 7. **Output flush:** Flush output and send
   GMCP deltas (state packages only when changed, §4.10).
@@ -2824,37 +2860,92 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   - All nested hooks share the top-level event's step budget (§6.1).
 - **Quarantine:** Hooks of a quarantined package aren't invoked.
 
-### 5.7 Adjacent-Room Perception
+### 5.7 Perception
 
-- **Opt-in:** It's per mob, through `senses`, with a radius of 0 or 1. The default is 0 (same room only). A mob
-  perceives events in its own room whatever its senses, with no `via_exit`. A sense of 1 adds the rooms its own exits
-  lead to: `hearing` covers `sound` and `noise`, `sight` covers `sight`.
-- **Channels:** `sight`, `sound` and `noise` are built in, and the engine's events use only them. Channels a world
-  declares (§3.9) can be blocked by exits and doors, but no event is raised on them yet.
-- **Channels by event type:**
+An event starts in a room on a **channel** with an **intensity**, spreads through the room graph, and weakens on every
+exit it crosses. Every simulated actor it reaches, player or mob, is asked whether it can perceive it.
 
-|                    Event                     | Channel |  Carries to   |
-|----------------------------------------------|---------|---------------|
-| `say`, `emote`                               | `sound` | `hearing ≥ 1` |
-| `shout`, combat start, combat round, `death` | `noise` | `hearing ≥ 1` |
-| `enter`, `exit` (visible movement)           | `sight` | `sight ≥ 1`   |
-| `whisper`, `tell`                            | —       | never         |
+- **Senses:** every actor has a score per channel. The built-in channels `sight` and `sound` default to 1, and channels
+  the world declares (§3.9) to 0. `mob(senses = {...})` and the `senses` of `starting_stats` merge over those defaults,
+  with scores of 0 or more: `senses = {"sound": 3}` leaves sight at 1, and `senses = {"sight": 0}` blinds. A score of 0
+  means the actor cannot sense that channel at all, even in the room of the event.
+- **Sense deltas:** `sense_deltas` on equipped items, on affects (`apply_affect`, `ctx.apply_affect`) and on traits
+  (`PluginTrait.senseDeltas`) change a score while they last. The effective score is `max(0, base + traits + affects +
+  equipment)`; `actor.senses` gives it for every channel and `actor.base.senses` the unmodified scores.
+- **Events:** each has a channel, an intensity, a room, an optional actor (who caused it and never perceives it) and
+  optional text:
+
+|                 Event                 | Channel |        Intensity        |
+|---------------------------------------|---------|-------------------------|
+| `say`                                 | `sound` | 1                       |
+| `emote`                               | `sight` | 1                       |
+| `enter`, `exit` (visible movement)    | `sight` | 1                       |
+| `combat_start`, `combat`, `death`     | `sound` | 2                       |
+| `shout`                               | `sound` | 3                       |
+| `open`, `close`, `lock`, `unlock`     | `sound` | `rules.door_intensity`  |
+| `ctx.emit(channel, event, intensity)` | any     | the script's, default 1 |
+| `whisper`, `tell`                     | —       | never perceived         |
+
+`whisper` and `tell` are never propagated or sent to `on_perceive`.
+
+- **In-room messages:** the built-in commands tell the players of the event's own room through the same
+  `rules.can_perceive` check, so senses apply there too. Each player is tried channel by channel in `channel_priority`
+  order and gets the first line for a channel they pass. The context's intensity is 2 for combat, the door's own for
+  doors and containers, and 1 otherwise.
+
+|                                                                                            Event                                                                                            |                              Channels                               |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `emote`, `enter`/`exit` (also teleport, respawn and a summon fading), `drop`, `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast`, item decay, `incapacitated`, `recovered` | `sight`                                                             |
+| `whisper` (the gesture seen by bystanders; its words go only to the target)                                                                                                                 | `sight`                                                             |
+| `say`                                                                                                                                                                                       | `sound`                                                             |
+| `combat_start`, `combat`, `death`                                                                                                                                                           | `sight`, then `sound`                                               |
+| door or container `open`, `close`, `lock`, `unlock`                                                                                                                                         | `sight`, then `sound` (only when `rules.door_intensity` is above 0) |
+
+A `say` has no sight alternative, and `shout` has its own delivery.
 
 - **Event names and `ctx.actor`:** `say`, `emote` and `shout` carry their text, and the actor is the speaker.
   `combat_start`: the attacker. `combat` (once per room per round): no actor. `death`: the one who died. `enter` and
-  `exit`, including teleports: the mover.
-- **Propagation:** An event in room R reaches a listening mob in a room adjacent to R only if the connecting exit's
-  effective `senses_blocked` doesn't contain the event's channel. The exit checked is the listener's exit toward the
-  source, so a one-way exit into the source room carries events and one out of it doesn't. A closed default door blocks
-  `SIGHT` and `SOUND` but not `NOISE`. `senses_blocked = SENSE.all` blocks everything.
+  `exit`, including teleports: the mover. `open`, `close`, `lock` and `unlock`: whoever did it.
+- **Propagation:** a shortest-path search from the room of the event, up to `BUBBLE_RADIUS` (3) exits. A hop from a room
+  to a neighbour whose exit leads into it asks `rules.sense_cost` (§4.6) with the neighbour as `ctx.room` and that exit
+  as `ctx.exit`. A negative price blocks the hop; otherwise it adds to the cost of the path, and 0 is a free hop. Each
+  room is reached by its cheapest path of at most `BUBBLE_RADIUS` exits, so a cheaper but longer path never hides a
+  dearer one that is within range. The exit priced is the listener's own exit toward the source, so a one-way exit into
+  the source room carries events and one out of it doesn't. The template's `sense_cost` blocks `sight` through a closed
+  door unless its tags say `transparent`, muffles `sound` by the door's extra cost, and blocks everything through an
+  exit tagged `sealed` (and `sound` through one tagged `soundproof`); the engine itself reads no tags.
+- **Who perceives:** for each simulated actor in each reached room (the room of the event, at cost 0, included), the
+  engine asks `rules.can_perceive` whenever the answer would be used: for a mob with an `on_perceive` hook, and for a
+  player in another room or, for a `shout`, in the event's own room. The template needs a score above 0, and in other
+  rooms `intensity + score > cost`.
 - **Delivery:**
-  - It's **deferred** to phase 5 of the current pulse, and calls `on_nearby` on the mob. Events raised while phase 5
-    delivers wait for the next pulse's phase 5.
-  - `ctx.via_exit` is the mob's own exit direction leading toward the source.
-  - Only mobs that are themselves simulated (in the bubble, or active) and have an `on_nearby` hook receive events.
-- **Notify only:** A mob can never veto from an adjacent room.
-- **Budget:** The hook runs against the *listening* mob's package for step budget and quarantine.
-- **Deduplication:** Events are coalesced per (mob, event, source room) per pulse, keeping the first.
+  - It's **deferred** to phase 5 of the current pulse. Events raised while phase 5 delivers wait for the next pulse's
+    phase 5.
+  - A mob with an `on_perceive` hook gets it with `ctx.event`, `channel`, `intensity`, `cost`, `actor`, `source_room`,
+    `via_exit` (the mob's own exit toward the source, `None` in the same room) and `text`.
+  - A player in another room is sent whatever `rules.perceive_message` returns, if it is a non-empty string. The room of
+    the event is never sent this, except for a `shout`, which the speaker is told of directly and everyone else, in the
+    room or not, hears this way (`ctx.via_exit` is `None` in the speaker's room). For any other event the built-in
+    commands tell the players of the room as they happen, so reactions appear in causal order. Each player is tried
+    channel by channel in `channel_priority` order and is told through the first channel they pass `rules.can_perceive`
+    for and that has text, and through no other. A built-in channel's text is the engine's own message, which exists
+    only on the channels an event has: `say` is heard, `emote` and most actions (`enter`, `exit`, `whisper`, `drop`,
+    `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast`, item decay, and a character falling
+    incapacitated or recovering) are seen, and combat, deaths and doors have a sight and a sound line (a door's or
+    container's sound only when `rules.door_intensity` is above 0). A world channel asks `rules.perceive_message`
+    (`None` or an empty string for nothing) with `ctx.channel` set, so a psionic can feel a hit that a blinded player
+    can't see. A player who passes no channel with text is told nothing. Link lost, reconnect and quit notices and the
+    admin tools' lines are not events and are told to everyone.
+- **Doors and containers:** `open`, `close`, `lock` and `unlock` run `before_*` (which can veto with `ctx.deny`) and
+  `on_*` hooks, on the door's room, the container item and the people in the room. A door's sound starts in the room of
+  the actor and in the room `exit.to` names, whether or not that room has an exit back. Each room is reached from
+  whichever origin is cheaper, so a listener on the far side is in the event's own room: it gets no `via_exit`, and is
+  told only by the door's own echo. A container's sound starts only in the actor's room. `rules.door_intensity` prices
+  it from the door's or container's `tags`.
+- **Notify only:** a mob can never veto from another room.
+- **Budget:** the hook runs against the *listening* mob's package for step budget and quarantine.
+- **Deduplication:** events are coalesced per (listener, event, source room) per pulse, keeping the strongest
+  (`intensity - cost`), and the first on a tie.
 
 ### 5.8 Mob AI
 
@@ -2872,8 +2963,8 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 ### 5.9 Reality Bubble
 
 - **Anchors:** Every in-world player (including link-dead ones), plus every entity with a non-empty `anchorReasons`.
-- **Active set:** All rooms within `BUBBLE_RADIUS = 3` exits of any anchor's room. Exit `senses_blocked` and door state
-  are ignored when computing it. Rooms flagged `always_active` are always in the set.
+- **Active set:** All rooms within `BUBBLE_RADIUS = 3` exits of any anchor's room. Exit tags and door state are ignored
+  when computing it. Rooms flagged `always_active` are always in the set.
 - **Simulated entities:** Players, and entities with non-empty `activeReasons` or `anchorReasons`, wherever they are.
   Anything else is simulated when its room (following carriers and containers) is active. Pets and followers bonded to a
   player get the reason `bond:<player_id>`.
@@ -2940,8 +3031,7 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 
 - **Pathfinding:** `ctx.path_to` runs a BFS over the full room graph, over exits in declaration order (so ties resolve
   the same way every time) and through open doors only: closed and locked doors block. Results are cached per `(source,
-  dest)`. A door change and a reload clear the cache; `set_exit_senses_blocked` doesn't, since `senses_blocked` never
-  affects passability.
+  dest)`. A door change and a reload clear the cache.
 
 ### 5.10 Hot Reload and Deploy
 
@@ -3237,12 +3327,12 @@ a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused fo
 
 Limits apply per top-level event: one hook invocation plus its synchronous cascade.
 
-|                      Context                       | Step limit | Wall-clock backstop |
-|----------------------------------------------------|------------|---------------------|
-| Zone hooks, `think`, `on_nearby`, timers, commands | 50,000     | 20 ms               |
-| Rules module and modifier chain (per evaluation)   | 200,000    | 20 ms               |
-| Package top-level evaluation (load)                | 5,000,000  | 2 s                 |
-| `@eval`                                            | 1,000,000  | 1 s                 |
+|                       Context                        | Step limit | Wall-clock backstop |
+|------------------------------------------------------|------------|---------------------|
+| Zone hooks, `think`, `on_perceive`, timers, commands | 50,000     | 20 ms               |
+| Rules module and modifier chain (per evaluation)     | 200,000    | 20 ms               |
+| Package top-level evaluation (load)                  | 5,000,000  | 2 s                 |
+| `@eval`                                              | 1,000,000  | 1 s                 |
 
 - The step counter is the **deterministic** limit: the harness and production agree on it exactly. The wall-clock guard
   only catches slow host calls: it is measured from the start of the top-level event or package load, and checked at
@@ -3332,6 +3422,10 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     | `move_cost`, `regen`, `encumbrance`, `starting_stats`                        | nothing spent, gained, changed or overridden                   |
     | `carry_limit`                                                                | no limit (`Int.MAX_VALUE`)                                     |
     | `get_lag`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` | 0                                                              |
+    | `sense_cost`                                                                 | -1 (blocks the hop)                                            |
+    | `can_perceive`                                                               | false                                                          |
+    | `perceive_message`                                                           | `None` (nothing shown)                                         |
+    | `door_intensity`                                                             | 0 (silent)                                                     |
     | `condition`                                                                  | the actor's previous condition                                 |
     | `xp_for_kill`                                                                | 0                                                              |
     | `xp_to_level`                                                                | no level-up (`Long.MAX_VALUE`)                                 |
@@ -3377,7 +3471,8 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     wounded actor healed within its tier surviving; identical order and outcomes across replays with the same seed.
   - **Tactical track:** bands, advance and retreat, pinning, flee, entry index clamping, and cramped rooms.
   - **Event dispatch:** ordering, short-circuiting, cascade depth limit, and the shared step budget.
-  - **Perception:** channels × exit `senses_blocked` × door states, deferral, and coalescing.
+  - **Perception:** channels × sense scores and deltas × exit tags × door states, multi-hop attenuation, deferral, and
+    coalescing.
   - **Rules chain:** ordering; the dry run; each export's neutral result (§6.3).
   - **Reality bubble:** incremental BFS correctness against a full recompute, the dormant/wake timer conversion, lazy
     catch-up, and active vs anchor semantics.
@@ -3516,18 +3611,19 @@ template's `.github/workflows/gates.yml`.
 
 ### 7.4 Implementation Milestones (each gated by its tests)
 
-| Milestone |                                                                                                                                                                                             Scope                                                                                                                                                                                             |
-|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **M0**    | Gradle skeleton, module graph, `gups` CLI stub, CI matrix                                                                                                                                                                                                                                                                                                                                     |
-| **M1**    | `core` scheduler, entities, command pipeline, tactical track, the Kotlin default ruleset, combat rounds. Runs headless with a Kotlin test world.                                                                                                                                                                                                                                              |
-| **M2**    | `script`: loader, labels, freezing, `ctx`, views, verbs, hooks, limits, error handling, quarantine. `harness` with `gups test`. Tutorial zone.                                                                                                                                                                                                                                                |
-| **M3**    | `net`: raw telnet with options and ANSI, plus `--dev` login. Playable locally. Auto-reload, `@trace`, `@eval`.                                                                                                                                                                                                                                                                                |
-| **M4**    | `persist`: checkpoints, reconciliation, backups, `--fresh`, crash tests                                                                                                                                                                                                                                                                                                                       |
-| **M5**    | Rules module, modifier chain, skills and affects, behaviors and `think`, perception, reality bubble, items/equipment/containers, `//lib:quest.star`                                                                                                                                                                                                                                           |
-| **M6**    | Built in six stages: **M6.1** accounts and login, and the `--prod` profile; **M6.2** roles, builder scope and the in-game tools, restrictions and alerts; **M6.3** TLS and GMCP; **M6.4** WebSocket and the web client; **M6.5** the admin port, metrics, the deploy pipeline and release images; **M6.6** the course world template and CI gates. The load test was deferred (§1.7).         |
-| **M7**    | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15).                                                                                                                               |
-| **M8**    | Disabling accounts: `@role disable`/`enable`, the disabled record (migration 4), and the roster's `disabled` column (§3.5, §4.9, §4.13).                                                                                                                                                                                                                                                      |
-| **M9**    | Configurable actor schema: stats, vitals, damage types and channels declared in `MODULE.gups`; typed constructors and schema view fields; no built-in ruleset, with `starting_stats`, `condition`, vital-keyed `mitigate`/`move_cost`/`regen`, the dry run and neutral results; incapacitation; `Char.Schema`; the plugin facade by name; `--wipe`; `samples/robot-world` (§3.9, §4.6, §6.3). |
-| **M10**   | Feature modules: `combat`, `track`, `skills` and `leveling` turned on per world, command renames, the engine message catalog and `MESSAGES.gups`, plugin feature requirements (§3.10, §4.18). Ships in the same release as M9.                                                                                                                                                                |
-| **M11**   | Character creation: plugin-declared choices asked at creation over telnet, the web client and `--dev`; traits with effective stats, maxima, resists, flags and modifiers; restrictions on wearing, entering, casting and learning; `tags`; the choice, trait and skill verbs; `Char.Creation` and `Char.Traits`; `samples/heritage-plugin` (§4.19, §4.15, §5.12).                             |
-| **M12**   | Track-movement lags as rules exports: `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`; the template's `sticky_floor` tar pit (§4.6, §5.5, §6.3).                                                                                                                                                                                                                            |
+| Milestone |                                                                                                                                                                                                                         Scope                                                                                                                                                                                                                         |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **M0**    | Gradle skeleton, module graph, `gups` CLI stub, CI matrix                                                                                                                                                                                                                                                                                                                                                                                             |
+| **M1**    | `core` scheduler, entities, command pipeline, tactical track, the Kotlin default ruleset, combat rounds. Runs headless with a Kotlin test world.                                                                                                                                                                                                                                                                                                      |
+| **M2**    | `script`: loader, labels, freezing, `ctx`, views, verbs, hooks, limits, error handling, quarantine. `harness` with `gups test`. Tutorial zone.                                                                                                                                                                                                                                                                                                        |
+| **M3**    | `net`: raw telnet with options and ANSI, plus `--dev` login. Playable locally. Auto-reload, `@trace`, `@eval`.                                                                                                                                                                                                                                                                                                                                        |
+| **M4**    | `persist`: checkpoints, reconciliation, backups, `--fresh`, crash tests                                                                                                                                                                                                                                                                                                                                                                               |
+| **M5**    | Rules module, modifier chain, skills and affects, behaviors and `think`, perception, reality bubble, items/equipment/containers, `//lib:quest.star`                                                                                                                                                                                                                                                                                                   |
+| **M6**    | Built in six stages: **M6.1** accounts and login, and the `--prod` profile; **M6.2** roles, builder scope and the in-game tools, restrictions and alerts; **M6.3** TLS and GMCP; **M6.4** WebSocket and the web client; **M6.5** the admin port, metrics, the deploy pipeline and release images; **M6.6** the course world template and CI gates. The load test was deferred (§1.7).                                                                 |
+| **M7**    | Built in five stages: **M7.1** the API model and `api.json` (§4.16); **M7.2** `gups docs` (§4.16); **M7.3** the changelog and the API-change check (§4.17); **M7.4** the plugin API (§4.15); **M7.5** the sample plugin and the engine-developer guide (§4.15).                                                                                                                                                                                       |
+| **M8**    | Disabling accounts: `@role disable`/`enable`, the disabled record (migration 4), and the roster's `disabled` column (§3.5, §4.9, §4.13).                                                                                                                                                                                                                                                                                                              |
+| **M9**    | Configurable actor schema: stats, vitals, damage types and channels declared in `MODULE.gups`; typed constructors and schema view fields; no built-in ruleset, with `starting_stats`, `condition`, vital-keyed `mitigate`/`move_cost`/`regen`, the dry run and neutral results; incapacitation; `Char.Schema`; the plugin facade by name; `--wipe`; `samples/robot-world` (§3.9, §4.6, §6.3).                                                         |
+| **M10**   | Feature modules: `combat`, `track`, `skills` and `leveling` turned on per world, command renames, the engine message catalog and `MESSAGES.gups`, plugin feature requirements (§3.10, §4.18). Ships in the same release as M9.                                                                                                                                                                                                                        |
+| **M11**   | Character creation: plugin-declared choices asked at creation over telnet, the web client and `--dev`; traits with effective stats, maxima, resists, flags and modifiers; restrictions on wearing, entering, casting and learning; `tags`; the choice, trait and skill verbs; `Char.Creation` and `Char.Traits`; `samples/heritage-plugin` (§4.19, §4.15, §5.12).                                                                                     |
+| **M12**   | Track-movement lags as rules exports: `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`; the template's `sticky_floor` tar pit (§4.6, §5.5, §6.3).                                                                                                                                                                                                                                                                                    |
+| **M13**   | Senses and perception: per-channel `senses` for every actor with `sense_deltas` on items, affects and traits; `on_perceive` (was `on_nearby`) with channel, intensity and cost; multi-hop propagation priced by `sense_cost`, listeners by `can_perceive`, distant players by `perceive_message`; `ctx.emit`; door and container hooks with `door_intensity`; `exit.door` as a door view; rules exports spread over several files (§4.6, §5.7, §6.3). |

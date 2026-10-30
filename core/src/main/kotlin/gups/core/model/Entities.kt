@@ -33,24 +33,16 @@ sealed class Entity(val id: EntityId, val protoLabel: Label) {
 class Door(proto: DoorProto) {
   var state: DoorState = proto.state
   val key: Label? = proto.key
-  val openSensesBlocked: Set<Channel> = proto.openSensesBlocked
-  val closedSensesBlocked: Set<Channel> = proto.closedSensesBlocked
-
-  val sensesBlocked: Set<Channel>
-    get() = if (state == DoorState.OPEN) openSensesBlocked else closedSensesBlocked
+  val tags: Set<String> = proto.tags
 }
 
 class Exit(proto: ExitProto) {
   val direction: Direction = proto.direction
   val to: Label = proto.to
   val entryIndex: Int = proto.entryIndex
-  var sensesBlocked: Set<Channel> = proto.sensesBlocked
+  val tags: Set<String> = proto.tags
   val door: Door? = proto.door?.let(::Door)
   val oneWay: Boolean = proto.oneWay
-
-  /** The exit's own `sensesBlocked` plus the door's set for its current state. */
-  val effectiveSensesBlocked: Set<Channel>
-    get() = door?.let { sensesBlocked + it.sensesBlocked } ?: sensesBlocked
 
   /** Closed and locked doors cannot be walked through. */
   val passable: Boolean
@@ -128,6 +120,7 @@ class Affect(
   val modifiers: Modifiers = emptyMap(),
   /** The worn item this lasts as long as, or null for a timed affect. */
   val wornFrom: EntityId? = null,
+  val senseDeltas: Map<Channel, Int> = emptyMap(),
 )
 
 /** A pending script callback. Exactly one of [due] and [remaining] is set. */
@@ -179,6 +172,12 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var grantedTraits: Set<String> = emptySet()
   var traits: List<Trait> = emptyList()
 
+  /** Base sense per channel; the built-in channels default to 1, custom ones to 0. */
+  val baseSenses: MutableMap<Channel, Int> = LinkedHashMap(Channel.BUILTIN_SENSES)
+
+  var traitSenseDeltas: Map<Channel, Int> = emptyMap()
+    internal set
+
   var traitStatDeltas: Map<String, Int> = emptyMap()
     internal set
 
@@ -206,18 +205,21 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
     traits = traitList.distinctBy { it.name }.sortedBy { it.name }
 
     val statDeltas = mutableMapOf<String, Int>()
+    val senseDeltas = mutableMapOf<Channel, Int>()
     val maxVitalDeltas = mutableMapOf<String, Int>()
     val resistDeltas = mutableMapOf<String, Int>()
     val flags = mutableSetOf<String>()
 
     for (t in traits) {
       for ((s, d) in t.statDeltas) statDeltas[s] = (statDeltas[s] ?: 0) + d
+      for ((c, d) in t.senseDeltas) senseDeltas[c] = (senseDeltas[c] ?: 0) + d
       for ((v, d) in t.maxVitalDeltas) maxVitalDeltas[v] = (maxVitalDeltas[v] ?: 0) + d
       for ((r, d) in t.resistDeltas) resistDeltas[r] = (resistDeltas[r] ?: 0) + d
       flags.addAll(t.flags)
     }
 
     traitStatDeltas = statDeltas
+    traitSenseDeltas = senseDeltas
     traitMaxVitalDeltas = maxVitalDeltas
     traitResistDeltas = resistDeltas
     traitFlags = flags
@@ -280,6 +282,17 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
       (encumbrance[name] ?: 0)
 
   fun baseStat(name: String): Int = baseStats[name] ?: 0
+
+  /** Effective sense on [channel]: base plus trait, affect and equipment deltas, never below 0. */
+  fun sense(channel: Channel): Int =
+    ((baseSenses[channel] ?: 0) +
+        (traitSenseDeltas[channel] ?: 0) +
+        affects.sumOf { it.senseDeltas[channel] ?: 0 } +
+        equipmentIndex.values.sumOf { it.proto.senseDeltas[channel] ?: 0 })
+      .coerceAtLeast(0)
+
+  fun effectiveSenses(allChannels: Collection<Channel>): Map<Channel, Int> =
+    allChannels.associateWith { sense(it) }
 
   fun current(vital: String): Int = vitalMap[vital]?.current ?: 0
 

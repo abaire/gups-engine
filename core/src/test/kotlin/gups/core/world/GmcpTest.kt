@@ -1,10 +1,12 @@
 package gups.core.world
 
+import gups.core.Label
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.Channel
 import gups.core.model.Player
 import gups.core.rules.StartingStats
 import kotlin.test.Test
@@ -62,11 +64,12 @@ class GmcpTest(private val fs: FixtureSchema) {
     name: String,
     index: Int = 0,
     sink: GmcpSink = GmcpSink(),
+    at: Label = T.HALL,
   ): Pair<Player, GmcpSink> {
     val p =
       w.spawnPlayer(
         name,
-        T.HALL,
+        at,
         overrides = StartingStats(max = mapOf(fs.health to 50), current = mapOf(fs.health to 50)),
         index = index,
       )
@@ -203,6 +206,39 @@ class GmcpTest(private val fs: FixtureSchema) {
       sink.take().single().second,
     )
     assertEquals(emptyList(), plain.take(), "a client without Core.Supports gets no GMCP")
+  }
+
+  @Test
+  fun `a shout reaches a distant player's channel only as perceive_message lets them hear it`() {
+    val f = Fixture()
+    val (ann, _) = f.gmcpPlayer("Ann")
+    val (_, near) = f.gmcpPlayer("Cat", index = 1)
+    val (eve, mute) = f.gmcpPlayer("Eve", index = 4)
+    f.w.applyAffect(eve, "deaf", 100, senseDeltas = mapOf(Channel.SOUND to -1))
+    val (_, far) = f.gmcpPlayer("Bob", index = 2, at = T.YARD)
+    val (dan, deaf) = f.gmcpPlayer("Dan", index = 3, at = T.YARD)
+    f.w.applyAffect(dan, "deaf", 100, senseDeltas = mapOf(Channel.SOUND to -1))
+    f.run()
+    for (s in listOf(near, far, deaf, mute)) s.take()
+    f.input(ann, "shout HELLO")
+    f.run(2)
+    fun shouts(s: GmcpSink) = s.take().filter { it.first == "Comm.Channel.Text" }.map { it.second }
+    assertEquals(
+      listOf(mapOf("channel" to "shout", "talker" to "Ann", "text" to "Ann shouts, 'HELLO'")),
+      shouts(near),
+    )
+    assertEquals(
+      listOf(
+        mapOf(
+          "channel" to "shout",
+          "talker" to "Ann",
+          "text" to "Someone shouts from the south, 'HELLO'",
+        )
+      ),
+      shouts(far),
+    )
+    assertEquals(emptyList(), shouts(deaf))
+    assertEquals(emptyList(), shouts(mute), "a deaf player in the speaker's room hears nothing")
   }
 
   @Test

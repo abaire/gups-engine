@@ -43,7 +43,8 @@ persistence, and linking to official specifications and generated API references
 6. **[06. Hooks, Perception, and Interactivity](06_hooks_and_interactivity.md)**
    * The lifecycle hook catalog (`on_enter`, `on_say`, `on_death`, `on_reset`)
    * Vetoing player actions with `before_*` hooks and `ctx.deny()`
-   * Sensory perception (`senses`, `on_nearby`, sound propagation)
+   * Sensory perception (`senses`, `sense_deltas`, `on_perceive`, `ctx.emit`)
+   * The rules that decide who notices what (`sense_cost`, `can_perceive`, `perceive_message`, `door_intensity`)
    * Asynchronous timers with `ctx.after()`
 7. **[07. Testing and Verifying Your Zone](07_testing_your_zone.md)**
    * The Starlark test harness API (`*_test.star`)

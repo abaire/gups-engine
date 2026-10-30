@@ -379,7 +379,7 @@ object DocsRenderer {
     fun StringBuilder.rules() {
       val ctxName = model.rules.ctx.name
       type(model.rules.ctx, ctxName)
-      h2("Exports", "Functions of //rules:combat.star the engine calls.")
+      h2("Exports", "Functions the files of //rules export for the engine to call.")
       for (e in model.rules.exports) {
         val symbol = "rules:${e.name}"
         entryStart("section", symbol, e.name, e.since)

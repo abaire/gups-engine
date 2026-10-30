@@ -67,10 +67,15 @@ room("hall",
      exits=[
          exit(DIR.south, to=":gate"),
          exit(DIR.north, to=":arena", entry_index=-1),
-         exit(DIR.east, to=":armory", door=door(state=DOOR.locked, key=":brass_key")),
+         exit(DIR.east, to=":armory",
+              door=door(state=DOOR.locked, key=":brass_key", tags=["creaky"])),
      ],
      )
 ```
+
+A door's `tags` are free-form words that the rules module reads: in the template, `rules/manipulation.star` makes
+`"creaky"` and `"heavy"` doors louder to open and close, and `rules/perception.star` makes `"heavy"` doors muffle sound
+more (see [06](06_hooks_and_interactivity.md)).
 
 ### How Paired Doors Work
 
@@ -224,7 +229,7 @@ room("tar_pit",
     size = SIZE.normal,
     flags = ["dead_end_ok"],
     tags = ["sticky_floor"],
-    exits = [exit(DIR.east, to = ":hall")],
+    exits = [exit(DIR.east, to = ":hall"), exit(DIR.west, to = ":gravel")],
 )
 ```
 

@@ -23,9 +23,21 @@ internal fun World.transition(actor: Actor, exit: Exit, leave: Msg = KernelMsg.M
   val from = actor.room
   val to = room(exit.to)
   disengageAll(actor)
-  echo(from, msg(leave, "actor" to actor.name.cap(), "direction" to exit.direction), actor)
+  tellPerceivers(
+    from,
+    "exit",
+    actor,
+    mapOf(Channel.SIGHT to msg(leave, "actor" to actor.name.cap(), "direction" to exit.direction)),
+    exclude = arrayOf(actor),
+  )
   placeActor(actor, to, entryIndexFor(exit, to))
-  echo(to, msg(KernelMsg.MOVE_ARRIVES, "actor" to actor.name.cap()), actor)
+  tellPerceivers(
+    to,
+    "enter",
+    actor,
+    mapOf(Channel.SIGHT to msg(KernelMsg.MOVE_ARRIVES, "actor" to actor.name.cap())),
+    exclude = arrayOf(actor),
+  )
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
   perceive("enter", Channel.SIGHT, to, actor)
@@ -63,9 +75,21 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     if (!actor.inWorld) return@deferRemoval
     val from = actor.room
     disengageAll(actor)
-    echo(from, msg(KernelMsg.TELEPORT_VANISHES, "actor" to actor.name.cap()), actor)
+    tellPerceivers(
+      from,
+      "exit",
+      actor,
+      mapOf(Channel.SIGHT to msg(KernelMsg.TELEPORT_VANISHES, "actor" to actor.name.cap())),
+      exclude = arrayOf(actor),
+    )
     placeActor(actor, to, index ?: 0)
-    echo(to, msg(KernelMsg.TELEPORT_APPEARS, "actor" to actor.name.cap()), actor)
+    tellPerceivers(
+      to,
+      "enter",
+      actor,
+      mapOf(Channel.SIGHT to msg(KernelMsg.TELEPORT_APPEARS, "actor" to actor.name.cap())),
+      exclude = arrayOf(actor),
+    )
     if (actor is Player) send(actor, describeRoom(actor))
     perceive("exit", Channel.SIGHT, from, actor)
     perceive("enter", Channel.SIGHT, to, actor)

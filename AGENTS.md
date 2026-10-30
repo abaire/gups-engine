@@ -33,3 +33,9 @@ errors.
 Whenever Markdown documentation or tutorial files are modified, run `./gradlew markdownFormat` before committing.
 Markdown formatting is enforced by `./gradlew markdownCheck` (which runs as part of `./gradlew check`) and verified in
 GitHub CI.
+
+## Ignored directories
+
+`local-world/` is a gitignored developer artifact: a personal scratch copy of a world for running a dev server. It is
+not part of the engine, is never tested or kept in sync, and may be stale. Never read, search, edit, lint or investigate
+it, and ignore it in search results and when reporting what else might need updating.

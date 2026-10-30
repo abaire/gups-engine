@@ -143,10 +143,6 @@ class SchemaTest {
       failure("skill(\"s\", effect = heal(dice = \"1d4\", vital = \"hit\"))"),
       "heal(vital): unknown vital 'hit'",
     )
-    assertContains(
-      failure("room(\"r\", exits = [exit(\"north\", \":r\", senses_blocked = [\"smell\"])])"),
-      "exit(senses_blocked)",
-    )
     assertContains(failure("skill(\"s\", channels = [\"smell\"])"), "skill(channels)")
     assertContains(
       failure("mob(\"m\", behaviors = [flee(below = vitals(hp = 120))])"),
@@ -159,8 +155,7 @@ class SchemaTest {
     assertTrue(
       load(
           """
-          room("r", exits = [exit("north", ":r", senses_blocked = ["spell", "noise"])])
-          skill("s", channels = ["spell"])
+          skill("s", channels = ["spell", "sound"])
           """
         )
         .ok
@@ -177,7 +172,7 @@ class SchemaTest {
     val p = f.player()
     f.input(p, "all")
     f.run()
-    assertEquals("sight,sound,noise,spell\n", f.out(p))
+    assertEquals("sight,sound,spell\n", f.out(p))
   }
 
   // ---- Actor view fields ---------------------------------------------------------------------

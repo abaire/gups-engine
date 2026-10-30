@@ -1,6 +1,7 @@
 package gups.pluginapi.host
 
 import gups.core.Label
+import gups.core.model.Channel
 import gups.core.model.CreationChoice
 import gups.core.model.CreationOption
 import gups.core.model.CreationProvider
@@ -116,10 +117,10 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
             PluginModifierCall(
               world = WorldFacade(w, pluginId, Facades.logOf(w)),
               point = PluginModifierPoint.valueOf(point.name),
-              actor = ActorFacade(c.actor, w),
+              actor = ActorFacade(c.requireActor(), w),
               other = c.target?.let { ActorFacade(it, w) },
               weapon = c.weapon?.let { ItemFacade(it) },
-              room = RoomFacade(c.actor.room, w),
+              room = RoomFacade(c.requireActor().room, w),
             )
           fun refuse(why: String): Any {
             w.record(
@@ -181,6 +182,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
     resistDeltas = pt.resistDeltas,
     flags = pt.flags,
     modifiers = mods,
+    senseDeltas = pt.senseDeltas.mapKeys { Channel(it.key) },
   )
 }
 

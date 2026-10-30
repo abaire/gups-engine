@@ -53,6 +53,10 @@ data class WorldSchema(
   val channels: List<String> = emptyList(),
   /** The prompt template, or null for the default. */
   val prompt: String? = null,
+  /**
+   * Channels from strongest to weakest for text that is told as it happens; see [perceptionOrder].
+   */
+  val channelPriority: List<String> = emptyList(),
 ) {
   val statNames: List<String> = stats.map { it.name }
   val vitalNames: List<String> = vitals.map { it.name }
@@ -69,6 +73,13 @@ data class WorldSchema(
   /** Every channel a skill or exit may name: the built-in ones, then the declared ones. */
   val allChannels: List<Channel>
     get() = Channel.BUILT_IN + channels.map(::Channel)
+
+  /**
+   * Every channel from the one whose rendering of an event a player is told first to the last:
+   * [channelPriority], then the channels it leaves out in their usual order.
+   */
+  val perceptionOrder: List<Channel>
+    get() = (channelPriority.map(::Channel) + allChannels).distinct()
 
   fun statLabel(name: String): String = stats.first { it.name == name }.label
 

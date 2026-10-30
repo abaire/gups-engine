@@ -297,24 +297,21 @@ internal object KernelCommands {
     c.world.channel("gossip", c.actor, c.args, c.world.players)
   }
 
-  /** Heard in the room and in every room whose exit toward it lets noise through. */
+  /** Everyone else hears it, and gets its channel event, through `rules.perceive_message`. */
   private fun shout(c: CommandCall) {
     val w = c.world
     if (c.args.isEmpty()) return w.tell(c.actor, KernelMsg.SHOUT_WHAT)
     w.tell(c.actor, KernelMsg.SHOUT_SELF, "text" to c.args)
-    w.echo(
+    w.channel("shout", c.actor, c.args, setOf(c.actor))
+    w.perceive(
+      "shout",
+      Channel.SOUND,
       c.actor.room,
-      w.msg(KernelMsg.SHOUT_ROOM, "actor" to c.actor.name.cap(), "text" to c.args),
       c.actor,
+      c.args,
+      SHOUT_INTENSITY,
+      tellRoom = true,
     )
-    val near =
-      w.inbound(c.actor.room)
-        .filter { (_, exit) -> Channel.NOISE !in exit.effectiveSensesBlocked }
-        .map { it.first }
-        .distinct()
-    for (room in near) w.echo(room, w.msg(KernelMsg.SHOUT_NEAR, "text" to c.args))
-    w.channel("shout", c.actor, c.args, c.actor.room.actors + near.flatMap { it.actors })
-    w.perceive("shout", Channel.NOISE, c.actor.room, c.actor, c.args)
   }
 
   private fun whisper(c: CommandCall) {
@@ -325,8 +322,10 @@ internal object KernelCommands {
     w.tell(c.actor, KernelMsg.WHISPER_SELF, "target" to target.name, "text" to text)
     w.tell(target, KernelMsg.WHISPER_TARGET, "actor" to c.actor.name.cap(), "text" to text)
     w.channel("whisper", c.actor, text, setOf(c.actor, target))
-    w.echo(
+    w.tellSight(
       c.actor.room,
+      "whisper",
+      c.actor,
       w.msg(KernelMsg.WHISPER_ROOM, "actor" to c.actor.name.cap(), "target" to target.name),
       c.actor,
       target,
@@ -587,8 +586,10 @@ internal object KernelCommands {
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.InRoom(actor.room.id, actor.trackIndex))
         w.tell(actor, KernelMsg.DROP_SELF, "item" to item.name)
-        w.echo(
+        w.tellSight(
           actor.room,
+          "drop",
+          actor,
           w.msg(KernelMsg.DROP_ROOM, "actor" to actor.name.cap(), "item" to item.name),
           actor,
         )
@@ -628,8 +629,10 @@ internal object KernelCommands {
         w.moveItem(item, ItemLocation.Carried(target.id))
         w.tell(actor, KernelMsg.GIVE_SELF, "item" to item.name, "target" to target.name)
         w.tell(target, KernelMsg.GIVE_TARGET, "actor" to actor.name.cap(), "item" to item.name)
-        w.echo(
+        w.tellSight(
           actor.room,
+          "give",
+          actor,
           w.msg(
             KernelMsg.GIVE_ROOM,
             "actor" to actor.name.cap(),
@@ -686,8 +689,10 @@ internal object KernelCommands {
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.Contained(box.id))
         w.tell(actor, KernelMsg.PUT_SELF, "item" to item.name, "container" to box.name)
-        w.echo(
+        w.tellSight(
           actor.room,
+          "put",
+          actor,
           w.msg(
             KernelMsg.PUT_ROOM,
             "actor" to actor.name.cap(),
@@ -751,8 +756,10 @@ internal object KernelCommands {
           if (wielded) KernelMsg.WIELD_SELF else KernelMsg.WEAR_SELF,
           "item" to item.name,
         )
-        w.echo(
+        w.tellSight(
           actor.room,
+          if (wielded) "wield" else "wear",
+          actor,
           w.msg(
             if (wielded) KernelMsg.WIELD_ROOM else KernelMsg.WEAR_ROOM,
             "actor" to actor.name.cap(),
@@ -859,29 +866,52 @@ internal object KernelCommands {
         return null
       }
 
+      private fun hookCtx(actor: Actor) =
+        HookContext(actor = actor, room = actor.room, direction = dir)
+
+      override fun veto(w: World, actor: Actor): String? =
+        w.dispatch(verb.before, null, actor.room, hookCtx(actor))
+
       override fun resolve(w: World, actor: Actor): Int {
         val exit = actor.room.exits.getValue(dir)
         w.setDoor(actor.room, dir, verb.to)
         w.send(actor, w.msg(KernelMsg.DOOR_SELF.getValue(verb), "direction" to dir))
-        w.echo(
+        val door = exit.door!!
+        val intensity = w.noiseOf(verb, actor, door.tags, exit = exit)
+        val heard = w.msg(KernelMsg.DOOR_HEARD.getValue(verb)).takeIf { intensity > 0 }
+        w.tellPerceivers(
           actor.room,
-          w.msg(
-            KernelMsg.DOOR_ROOM.getValue(verb),
-            "actor" to actor.name.cap(),
-            "direction" to dir,
-          ),
+          verb.word,
           actor,
+          renderings(
+            w.msg(
+              KernelMsg.DOOR_ROOM.getValue(verb),
+              "actor" to actor.name.cap(),
+              "direction" to dir,
+            ),
+            heard,
+          ),
+          intensity.coerceAtLeast(1),
+          exclude = arrayOf(actor),
         )
         w.reverseExit(actor.room, exit)?.let { (other, back) ->
-          w.echo(
+          w.tellPerceivers(
             other,
-            w.msg(
-              if (verb.to == DoorState.OPEN) KernelMsg.DOOR_OTHER_OPENS
-              else KernelMsg.DOOR_OTHER_CLOSES,
-              "direction" to back.direction,
+            verb.word,
+            actor,
+            renderings(
+              w.msg(
+                if (verb.to == DoorState.OPEN) KernelMsg.DOOR_OTHER_OPENS
+                else KernelMsg.DOOR_OTHER_CLOSES,
+                "direction" to back.direction,
+              ),
+              heard,
             ),
+            intensity.coerceAtLeast(1),
           )
         }
+        w.makeNoise(verb, actor, intensity, w.room(exit.to))
+        w.dispatch(verb.after, null, actor.room, hookCtx(actor))
         return 0
       }
     }
@@ -909,15 +939,33 @@ internal object KernelCommands {
         return null
       }
 
+      private fun hookCtx(actor: Actor) = HookContext(actor = actor, room = actor.room, item = box)
+
+      override fun veto(w: World, actor: Actor): String? =
+        w.dispatch(verb.before, box, actor.room, hookCtx(actor))
+
       override fun resolve(w: World, actor: Actor): Int {
         box.container!!.state = verb.to
         box.dirty = true
         w.send(actor, w.msg(KernelMsg.BOX_SELF.getValue(verb), "item" to box.name))
-        w.echo(
+        val intensity = w.noiseOf(verb, actor, box.tags, item = box)
+        w.tellPerceivers(
           actor.room,
-          w.msg(KernelMsg.BOX_ROOM.getValue(verb), "actor" to actor.name.cap(), "item" to box.name),
+          verb.word,
           actor,
+          renderings(
+            w.msg(
+              KernelMsg.BOX_ROOM.getValue(verb),
+              "actor" to actor.name.cap(),
+              "item" to box.name,
+            ),
+            w.msg(KernelMsg.BOX_HEARD.getValue(verb)).takeIf { intensity > 0 },
+          ),
+          intensity.coerceAtLeast(1),
+          exclude = arrayOf(actor),
         )
+        w.makeNoise(verb, actor, intensity, null)
+        w.dispatch(verb.after, box, actor.room, hookCtx(actor))
         return 0
       }
     }
@@ -933,11 +981,84 @@ internal fun splitFirst(s: String): Pair<String, String> {
   return if (i < 0) t to "" else t.substring(0, i) to t.substring(i + 1).trim()
 }
 
-internal enum class DoorVerb(val word: String, val from: Set<DoorState>, val to: DoorState) {
-  OPEN("open", setOf(DoorState.CLOSED), DoorState.OPEN),
-  CLOSE("close", setOf(DoorState.OPEN), DoorState.CLOSED),
-  LOCK("lock", setOf(DoorState.CLOSED), DoorState.LOCKED),
-  UNLOCK("unlock", setOf(DoorState.LOCKED), DoorState.CLOSED),
+internal enum class DoorVerb(
+  val word: String,
+  val heardAs: String,
+  val from: Set<DoorState>,
+  val to: DoorState,
+  val before: HookName,
+  val after: HookName,
+) {
+  OPEN(
+    "open",
+    "opening",
+    setOf(DoorState.CLOSED),
+    DoorState.OPEN,
+    HookName.BEFORE_OPEN,
+    HookName.ON_OPEN,
+  ),
+  CLOSE(
+    "close",
+    "closing",
+    setOf(DoorState.OPEN),
+    DoorState.CLOSED,
+    HookName.BEFORE_CLOSE,
+    HookName.ON_CLOSE,
+  ),
+  LOCK(
+    "lock",
+    "locking",
+    setOf(DoorState.CLOSED),
+    DoorState.LOCKED,
+    HookName.BEFORE_LOCK,
+    HookName.ON_LOCK,
+  ),
+  UNLOCK(
+    "unlock",
+    "unlocking",
+    setOf(DoorState.LOCKED),
+    DoorState.CLOSED,
+    HookName.BEFORE_UNLOCK,
+    HookName.ON_UNLOCK,
+  ),
+}
+
+/** What a player in the room is told of a door or container being worked: sight, and its sound. */
+private fun renderings(seen: String, heard: String?): Map<Channel, String> = buildMap {
+  put(Channel.SIGHT, seen)
+  if (heard != null) put(Channel.SOUND, heard)
+}
+
+/** How loud `rules.door_intensity` says [actor] doing [verb] to a door or container is. */
+private fun World.noiseOf(
+  verb: DoorVerb,
+  actor: Actor,
+  tags: Set<String>,
+  exit: Exit? = null,
+  item: Item? = null,
+): Int =
+  rules.doorIntensity(
+    RulesContext(
+      this,
+      actor = actor,
+      room = actor.room,
+      action = verb.word,
+      tags = tags,
+      exit = exit,
+      item = item,
+    )
+  )
+
+/**
+ * The sound of [actor] doing [verb] to a door or container; a door is heard from both its sides.
+ */
+private fun World.makeNoise(
+  verb: DoorVerb,
+  actor: Actor,
+  intensity: Int,
+  otherSide: gups.core.model.Room?,
+) {
+  perceive(verb.word, Channel.SOUND, actor.room, actor, intensity = intensity, alsoAt = otherSide)
 }
 
 /**
@@ -1018,8 +1139,10 @@ internal class GetAction(
         w.msg(KernelMsg.GET_SELF_FROM, "item" to it.name, "container" to container.name)
       else w.msg(KernelMsg.GET_SELF, "item" to it.name),
     )
-    w.echo(
+    w.tellSight(
       actor.room,
+      "get",
+      actor,
       w.msg(KernelMsg.GET_ROOM, "actor" to actor.name.cap(), "item" to it.name),
       actor,
     )
@@ -1066,6 +1189,7 @@ internal val ItemProto.isKeyOnly: Boolean
       commands.isEmpty() &&
       dice == null &&
       statDeltas.isEmpty() &&
+      senseDeltas.isEmpty() &&
       equipAffects.isEmpty() &&
       modifiers.isEmpty()
 

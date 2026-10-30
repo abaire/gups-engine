@@ -1,8 +1,10 @@
 # The course rules: every number that gives the world's stats, vitals and damage types a
-# meaning lives here. The engine has no built-in ruleset, so every function below is required,
-# and a function that is missing, fails or returns the wrong thing is reported to the
-# instructors while the engine carries on as though it did nothing. Change any formula to
-# rebalance the game. Every function must be a top-level def, and helpers start with `_`.
+# meaning lives here. The engine has no built-in ruleset, so every function the rules package
+# defines is required, and a function that is missing, fails or returns the wrong thing is
+# reported to the instructors while the engine carries on as though it did nothing. Change any
+# formula to rebalance the game. Every function must be a top-level def, and helpers start with
+# `_`. The package may spread its functions over several files: this one holds combat, and
+# perception.star and manipulation.star hold senses and doors. A function lives in one file only.
 #
 # Stats, vitals and resists are read from the actor by name: ctx.actor.dex, ctx.actor.hp,
 # ctx.actor.max_hp, ctx.actor.resists.fire. Results are built with the constructors

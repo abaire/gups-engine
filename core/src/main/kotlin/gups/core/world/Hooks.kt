@@ -41,7 +41,15 @@ enum class HookName(val scriptName: String) {
   ON_DEATH("on_death"),
   ON_COMBAT_TICK("on_combat_tick"),
   ON_TICK("on_tick"),
-  ON_NEARBY("on_nearby");
+  ON_PERCEIVE("on_perceive"),
+  BEFORE_OPEN("before_open"),
+  ON_OPEN("on_open"),
+  BEFORE_CLOSE("before_close"),
+  ON_CLOSE("on_close"),
+  BEFORE_LOCK("before_lock"),
+  ON_LOCK("on_lock"),
+  BEFORE_UNLOCK("before_unlock"),
+  ON_UNLOCK("on_unlock");
 
   val vetoable: Boolean
     get() = scriptName.startsWith("before_")
@@ -76,8 +84,14 @@ data class HookContext(
   /** Why [affect] ended, for its `on_expire`. */
   val affectEndReason: AffectEndReason? = null,
   val elapsedPulses: Long? = null,
-  /** The perception event type for `on_nearby`, for example `say` or `enter`. */
+  /** The perception event type for `on_perceive`, for example `say` or `enter`. */
   val event: String? = null,
+  /** The perceived event's channel name. */
+  val channel: String? = null,
+  /** The perceived event's initial intensity. */
+  val intensity: Int? = null,
+  /** The path attenuation between the event's room and the listener. */
+  val cost: Int? = null,
   val sourceRoom: Room? = null,
   /** The listening mob's own exit leading toward the source; null for its own room. */
   val viaExit: Direction? = null,

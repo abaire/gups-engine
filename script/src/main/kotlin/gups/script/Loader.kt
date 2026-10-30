@@ -204,6 +204,7 @@ class ScriptLoader(
         for (file in dir.files(p, tests = false)) loadFile(file, st)
         for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
         findMigrate(st)
+        if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
       }
     }
 
@@ -222,6 +223,33 @@ class ScriptLoader(
             "migrate() is defined in more than one file: ${defs.joinToString(", ")}",
           )
       defs.singleOrNull()?.let { st.pkg.migrate = HookRef(it, "migrate") }
+    }
+
+    /**
+     * Finds the file that defines each rules export. Any non-test file of the package may define
+     * some of them, but not the same one twice; every export the enabled features need must exist.
+     */
+    fun findRulesExports(st: PkgState) {
+      val files = dir.files(st.pkg.path, tests = false)
+      for (export in RulesExport.entries) {
+        val name = export.scriptName
+        val defs =
+          files.filter { file ->
+            val m = modules[file]
+            (m?.globals?.get(name) as? StarlarkFunction)?.module === m
+          }
+        if (defs.size > 1)
+          st.errors +=
+            LoadError(
+              st.pkg.path,
+              "rules",
+              "$name() is defined in more than one file: ${defs.joinToString(", ")}",
+            )
+        defs.singleOrNull()?.let { st.pkg.rulesExports[name] = HookRef(it, name) }
+      }
+      if (st.failed) return
+      for (name in missingRulesExports(st.pkg.rulesExports.keys, features)) st.errors +=
+        LoadError(st.pkg.path, "rules", "the rules package must define $name(...)")
     }
 
     fun dependOn(st: PkgState, dep: String) {
@@ -365,7 +393,7 @@ class ScriptLoader(
         }
         return null
       }
-      if (!test && st.pkg.kind == PackageKind.RULES && file.name == RULES_FILE) {
+      if (!test && st.pkg.kind == PackageKind.RULES) {
         val forbidden = forbiddenRulesExports(module, features)
         if (forbidden.isNotEmpty()) {
           for ((name, feature) in forbidden) {
@@ -378,13 +406,6 @@ class ScriptLoader(
                 bindingLine(parsed, name),
               )
             )
-          }
-          return null
-        }
-        val missing = missingRulesExports(module, features)
-        if (missing.isNotEmpty()) {
-          for (name in missing) {
-            err(LoadError(st.pkg.path, "rules", "the rules package must define $name(...)", file.v))
           }
           return null
         }
@@ -456,9 +477,12 @@ class ScriptLoader(
       val rules = states[RULES_PACKAGE]?.takeIf { it.contentDone && !it.failed } ?: return
       val problems = dryRunRules(result(), schema, limits, features = features, wiring = plugins)
       if (problems.isEmpty()) return
+      val exports = rules.pkg.rulesExports
       rules.errors +=
-        problems.map {
-          LoadError(RULES_PACKAGE, "rules", "dry run: $it", "//$RULES_PACKAGE:$RULES_FILE")
+        problems.map { problem ->
+          // A problem starts with the rules function it came from; point at the file defining it.
+          val export = Regex("^rules\\.(\\w+)").find(problem)?.groupValues?.get(1)
+          LoadError(RULES_PACKAGE, "rules", "dry run: $problem", exports[export]?.file?.v)
         }
       propagate()
     }
@@ -666,20 +690,20 @@ private fun bindingLine(file: StarlarkFile, name: String): Int? =
     ?.startLocation
     ?.line()
 
-/** The file of a rules package whose functions the engine calls. */
-internal const val RULES_FILE = "combat.star"
-
 /** The package the engine reads its rules from. */
 const val RULES_PACKAGE = "rules"
 
-/** The [RulesExport]s that [module] doesn't define as functions; every export is required. */
-internal fun missingRulesExports(module: Module, features: Features = Features.ALL): List<String> =
+/** The [RulesExport]s not in [defined]; every export the enabled features need is required. */
+internal fun missingRulesExports(
+  defined: Collection<String>,
+  features: Features = Features.ALL,
+): List<String> =
   RulesExport.entries
     .filter {
       FeatureOwnership.of("rules:${it.scriptName}").let { f -> f == null || f in features }
     }
     .map { it.scriptName }
-    .filter { module.globals[it] !is StarlarkFunction }
+    .filter { it !in defined }
     .sorted()
 
 /** Exports of a feature that is off which [module] defines anyway, with the feature. */

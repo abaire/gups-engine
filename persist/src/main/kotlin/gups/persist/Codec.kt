@@ -33,7 +33,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNames
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -96,6 +95,7 @@ data class AffectJson(
   val expireMessage: String = "",
   /** Modifier functions by point name. */
   val modifiers: Map<String, RefJson> = emptyMap(),
+  val senseDeltas: Map<String, Int> = emptyMap(),
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -123,14 +123,6 @@ data class RoomPayload(
   @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   /** Door states that differ from the prototype, by direction. */
   val doors: Map<String, String> = emptyMap(),
-  /**
-   * Exit `senses_blocked` sets that differ from the prototype, by direction. Saves written before
-   * the rename used the key `blocks`; it is still read.
-   */
-  @OptIn(ExperimentalSerializationApi::class)
-  @SerialName("senses_blocked")
-  @JsonNames("blocks")
-  val sensesBlocked: Map<String, List<String>> = emptyMap(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   /** `set_active` and `set_anchor` reasons. */
@@ -152,6 +144,7 @@ data class MobPayload(
   // The delta: present only where the instance differs from its prototype.
   val level: Int? = null,
   val stats: Map<String, Int>? = null,
+  val senses: Map<String, Int>? = null,
   val resists: Map<String, Int>? = null,
   val skills: Map<String, Int>? = null,
   val thinkEvery: Int? = null,
@@ -193,6 +186,8 @@ data class PlayerPayload(
   val vitals: Map<String, VitalJson>,
   val condition: String = "ok",
   val stats: Map<String, Int>,
+  /** Base senses by channel name; a payload without them keeps the built-in defaults. */
+  val senses: Map<String, Int> = emptyMap(),
   val resists: Map<String, Int> = emptyMap(),
   val skills: Map<String, Int> = emptyMap(),
   val choices: Map<String, String> = emptyMap(),
@@ -278,6 +273,7 @@ internal fun affectsJson(a: Actor) =
         it.onExpire?.json(),
         it.expireMessage,
         it.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
+        it.senseDeltas.entries.associate { (k, v) -> k.name to v },
       )
     }
 
@@ -307,6 +303,7 @@ internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
         x.modifiers.entries
           .mapNotNull { (k, v) -> ModifierPoint.byName(k)?.let { it to v.ref() } }
           .toMap(),
+        senseDeltas = x.senseDeltas.mapKeys { Channel(it.key) },
       )
   }
 }
@@ -335,14 +332,6 @@ internal fun World.encode(e: Entity): EntityRow? =
                 val state = x.door?.state ?: return@mapNotNull null
                 val was = e.proto.exits.first { it.direction == x.direction }.door?.state
                 if (state == was) null else x.direction.name to state.name.lowercase()
-              }
-              .toMap(),
-          sensesBlocked =
-            e.exits.values
-              .mapNotNull { x ->
-                val was = e.proto.exits.first { it.direction == x.direction }.sensesBlocked
-                if (x.sensesBlocked == was) null
-                else x.direction.name to x.sensesBlocked.map { it.name.lowercase() }.sorted()
               }
               .toMap(),
           attrs = attrsJson(e.customAttributes),
@@ -377,6 +366,11 @@ internal fun World.encode(e: Entity): EntityRow? =
           summonedBy = e.summonedBy?.v,
           level = delta(e.level, p.level),
           stats = delta(e.baseStats.toMap(), p.stats),
+          senses =
+            delta(
+              e.baseSenses.mapKeys { it.key.name },
+              (Channel.BUILTIN_SENSES + p.senses).mapKeys { it.key.name },
+            ),
           resists = delta(e.resists.mapKeys { it.key.name }, p.resists.mapKeys { it.key.name }),
           skills = delta(e.skills.mapKeys { it.key.v }, p.skills.mapKeys { it.key.v }),
           thinkEvery = delta(e.thinkEvery, p.thinkEvery),
@@ -442,6 +436,7 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
       vitals = p.vitals.mapValues { (_, v) -> VitalJson(v.current, v.max, v.belowZeroSince) },
       condition = p.condition.word,
       stats = p.baseStats.toMap(),
+      senses = p.baseSenses.mapKeys { it.key.name },
       resists = p.resists.mapKeys { it.key.name },
       skills = p.skills.mapKeys { it.key.v },
       choices = p.choices.toMap(),
@@ -469,10 +464,6 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
     .firstOrNull { it.direction.name == dir }
     ?.door
     ?.state = DoorState.valueOf(state.uppercase())
-  for ((dir, channels) in p.sensesBlocked) {
-    room.exits.values.firstOrNull { it.direction.name == dir }?.sensesBlocked =
-      channels.mapTo(LinkedHashSet()) { Channel(it.lowercase()) }
-  }
   room.customAttributes.clear()
   room.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(room, p.timers)
@@ -481,6 +472,10 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
 
 internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   p.level?.let { m.level = it }
+  p.senses?.let { s ->
+    m.baseSenses.clear()
+    m.baseSenses.putAll(s.mapKeys { Channel(it.key) })
+  }
   p.skills?.let { s ->
     m.skills.clear()
     m.skills.putAll(s.mapKeys { Label(it.key) })
@@ -527,6 +522,7 @@ internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {
   pl.choices.putAll(p.choices)
   pl.grantedTraits = p.grantedTraits.toSet()
   pl.recomputeTraits(world)
+  pl.baseSenses.putAll(p.senses.mapKeys { Channel(it.key) })
   world.restoreActorNumbers(
     pl,
     stats = p.stats,
