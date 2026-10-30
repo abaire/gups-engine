@@ -308,6 +308,21 @@ class LoaderTest {
   }
 
   @Test
+  fun `a global command named after a direction or its alias fails to load`() {
+    for (verb in listOf("north", "ne")) {
+      val dir =
+        load(
+          mapOf(
+            "lib/package.star" to libPkg(),
+            "lib/a.star" to "def f(ctx):\n    pass\nglobal_command(\"$verb\", f)",
+          ),
+          "lib",
+        )
+      assertContains(only(dir, "lib").message, "'$verb' clashes with the direction")
+    }
+  }
+
+  @Test
   fun `an exit named after an engine or global command fails to load`() {
     val engine =
       load(

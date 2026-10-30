@@ -3,6 +3,7 @@ package gups.script
 import com.google.common.collect.ImmutableMap
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.model.Direction
 import gups.core.model.Prototypes
 import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
@@ -591,7 +592,7 @@ class ScriptLoader(
       }
     }
 
-    /** Global commands may not shadow engine commands or each other. */
+    /** Global commands may not shadow engine commands, directions or each other. */
     fun checkCommands() {
       val seen = HashMap<String, String>()
       for (st in live) {
@@ -599,6 +600,7 @@ class ScriptLoader(
           val clash =
             when {
               c.name in engineVerbs -> "engine command"
+              Direction.parse(c.name) in Direction.STANDARD -> "direction"
               else -> seen.put(c.name, st.pkg.path)?.let { "global command of //$it" }
             } ?: continue
           st.errors +=

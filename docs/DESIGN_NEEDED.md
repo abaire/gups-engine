@@ -187,13 +187,6 @@ command names and aliases, and reject such an exit like any other reserved name?
 be added or removed between runs. Does a newly added plugin command fail packages that loaded fine before, or does the
 plugin fail instead? - Do role-gated plugin commands reserve the name for everyone, even players who can't use them?
 
-### Global commands named after a direction
-
-**Spec:** §4.9 (global commands), §5.2. **Today:** `global_command("north", …)` (or `n`, or any standard direction)
-loads, but it can never run: a standard direction always resolves to movement before global commands are looked up.
-Plugin commands named after a direction are already refused. **Questions:** - Should such a global command fail its
-package's load, as plugin commands do? - Should the check cover direction aliases (`n`, `ne`) as well as full names?
-
 ## Plugins
 
 ### Plugins that share a GMCP package tree

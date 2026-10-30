@@ -254,9 +254,9 @@ gups-engine/
   - `package.star` must call `package()` exactly once and holds nothing else, apart from the top-level functions its
     `modifiers` name (§4.6). It can't be `load()`ed.
   - Content files evaluate in alphabetical order. Only test files may load `*_test.star` files.
-  - Global commands may not shadow an engine command or alias, or another package's global command. An attribute
-    namespace used by two packages (or by a package and a shared namespace, or equal to a plugin id) fails every package
-    involved.
+  - Global commands may not shadow an engine command or alias, a standard direction or its alias (`north`, `n`), or
+    another package's global command. An attribute namespace used by two packages (or by a package and a shared
+    namespace, or equal to a plugin id) fails every package involved.
 - **`MODULE.gups`:** Starlark with exactly one call, `module(engine, api_version, checkpoint_minutes, start_room,
   plugins, aliases, prefixes, stats, vitals, damage_types, unarmed_damage_type, channels, prompt, features, rename)`.
   The file is required, and so are `stats`, `vitals`, `damage_types` and `unarmed_damage_type`; every other argument is
