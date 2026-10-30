@@ -30,9 +30,14 @@ avoid obvious comments.
 See [README.md](README.md). `./gradlew check` must pass, including the module-graph check. All Kotlin warnings are
 errors.
 
-Whenever Markdown documentation or tutorial files are modified, run `./gradlew markdownFormat` before committing.
-Markdown formatting is enforced by `./gradlew markdownCheck` (which runs as part of `./gradlew check`) and verified in
-GitHub CI.
+- **Markdown formatting:** Whenever Markdown documentation or tutorial files are modified, run `./gradlew
+  markdownFormat` before committing. Markdown formatting is enforced by `./gradlew markdownCheck` (which runs as part of
+  `./gradlew check`) and verified in GitHub CI.
+
+- **Java environment:** The build requires JDK 21.
+- **Sandbox execution:** Gradle commands (including `./gradlew check`, `./gradlew markdownCheck`, and `./gradlew
+  markdownFormat`) must be run outside standard sandbox isolation (`BypassSandbox: true`) so the Gradle client process
+  can connect to the Gradle daemon over the local loopback socket (`127.0.0.1`).
 
 ## Ignored directories
 
