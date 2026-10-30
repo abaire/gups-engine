@@ -2379,8 +2379,9 @@ and `Char.Traits` in play (§4.10). `gups docs --world` lists the choices, optio
 
 ### 5.1 World Loop
 
-The world coroutine selects over the input channel and the next pulse boundary. Pulse boundaries come from
-`System.nanoTime()`.
+The world coroutine in [WorldLoop.kt](../core/src/main/kotlin/gups/core/loop/WorldLoop.kt) and
+[World.kt](../core/src/main/kotlin/gups/core/world/World.kt) selects over the input channel and the next pulse boundary.
+Pulse boundaries come from `System.nanoTime()`.
 
 - **Between pulses:** Each dequeued `ClientInputEvent` is classified (§5.2). Fast-lane commands execute immediately.
   Tick-lane commands are appended to the actor's queue. Output produced while handling a session's input between pulses
@@ -2388,24 +2389,36 @@ The world coroutine selects over the input channel and the next pulse boundary. 
 - **At each pulse boundary**, `pulse++` and then these phases run in this exact order:
   1. **Timers:** Fire `ScriptTimer`s and affect ticks/expiries due at this pulse, ordered by `(due, id)`.
   2. **Action pulse:** For each active actor, in **initiative order** (§5.4.1):
-  - If `casting`, advance it. When the warmup completes, resolve the action (§5.3).
-  - Otherwise, if `waitState > 0`, decrement it.
-  - Otherwise, if the queue is non-empty, pop the head and execute it.
-  - Otherwise, if the actor is a mob whose think cadence is due, run the think cycle (§5.8).
-  3. **Combat round** (`pulse % 8 == 0`): Roll initiative for the new round (§5.4.1). Then, for each engaged active
-     actor in initiative order, resolve one auto-attack (§5.4) and fire `on_combat_tick` on the actor, then on each item
-     it has equipped that declares the hook, in ascending `EntityId` order (§4.4).
+     - If `casting`, advance it. When the warmup completes, resolve the action (§5.3).
+     - Otherwise, if `waitState > 0`, decrement it.
+     - Otherwise, if the queue is non-empty, pop the head and execute it.
+     - Otherwise, if the actor is a mob whose think cadence is due, run the think cycle (§5.8).
+  3. **Combat round** (`pulse % COMBAT_ROUND_PULSES == 0`,
+     [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)): Roll initiative for the new round
+     (§5.4.1). Then, for each engaged active actor in initiative order, resolve one auto-attack (§5.4) and fire
+     `on_combat_tick` on the actor, then on each item it has equipped that declares the hook, in ascending `EntityId`
+     order (§4.4).
 
-  Within phases 2 and 3, actors act in **initiative tiers**, from the highest initiative to the lowest. An actor killed
-  or incapacitated by a *higher* tier is skipped for the rest of that phase, so a faster actor can kill an enemy before
-  it strikes, even within the same pulse. Actors in the *same* tier act simultaneously (§5.4.1): all of their actions
-  happen. 4. **World tick** (`pulse % 120 == 0`): - Regenerate vitals via `rules.regen` and the modifier chain. Actors
-  with a `no_regen` affect are skipped. - Fire `on_tick` for active entities. - Process zone resets and respawns that
-  are due. - Advance item decay. - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11). 5.
-  **Deferred perception:** Dispatch the `on_perceive` events queued during this pulse (§5.7). 6. **Bubble maintenance:**
-  Apply bubble changes recorded during this pulse (§5.9). - **Session expiry** (not a numbered phase): link-dead and
-  idle auto-quit run here, after phases 5 and 6 and before the output flush. 7. **Output flush:** Flush output and send
-  GMCP deltas (state packages only when changed, §4.10).
+     Within phases 2 and 3, actors act in **initiative tiers**, from the highest initiative to the lowest. An actor
+     killed or incapacitated by a *higher* tier is skipped for the rest of that phase, so a faster actor can kill an
+     enemy before it strikes, even within the same pulse. Actors in the *same* tier act simultaneously (§5.4.1): all of
+     their actions happen.
+
+  4. **World tick** (`pulse % WORLD_TICK_PULSES == 0`,
+     [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)):
+
+     - Regenerate vitals via `rules.regen` and the modifier chain. Actors with a `no_regen` affect are skipped.
+     - Fire `on_tick` for active entities.
+     - Process zone resets and respawns that are due.
+     - Advance item decay.
+     - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11).
+  5. **Deferred perception:** Dispatch the `on_perceive` events queued during this pulse (§5.7).
+  6. **Bubble maintenance:** Apply bubble changes recorded during this pulse (§5.9).
+
+     Session expiry is not a numbered phase: link-dead and idle auto-quit run between phases 6 and 7, before the output
+     flush.
+
+  7. **Output flush:** Flush output and send GMCP deltas (state packages only when changed, §4.10).
 
 - **Deaths outside a tier:** Damage dealt from timers, fast-lane commands, or direct verb calls outside phases 2 and 3
   processes death, and any room transition, right away instead of deferring it to the end of a tier.
@@ -2416,50 +2429,51 @@ The world coroutine selects over the input channel and the next pulse boundary. 
   boundary. The pulse counter advances only once per pulse actually executed, so a lag spike slows game time instead of
   making it lurch forward.
 
-- **Overrun reporting:** A pulse overruns when it takes longer than 250 ms. If more than 10% of pulses in the last
+- **Overrun reporting:** A pulse overruns when it takes longer than `PULSE_MS`
+  ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). If more than 10% of pulses in the last
   minute overran, instructors get an `overrun` alert (§6.2) naming the top step-consuming package: script steps per
   package (rules functions included) are sampled every combat round, and the package with the largest increase over the
   sampled minute is named. Nothing is auto-quarantined for this.
 
 ### 5.2 Command Classification and Admission
 
+Command classification, queue admission, and rate limiting are handled by
+[Commands.kt](../core/src/main/kotlin/gups/core/world/Commands.kt):
+
 1. Parse the verb, resolve the world's aliases and prefixes (§2.3), and look it up in the engine commands, global
    commands, then room and item `commands`. Ambiguity resolves in that order.
-
-- Room `commands` are checked before item `commands`. Item `commands` come from equipped items, then inventory, then
-  items on the ground; within a layer the lowest item ID wins. Items inside containers grant no commands.
-- A line starting with a prefix character runs that prefix's command with the rest of the line as its arguments
-  (`'hello` is `say hello` in the template world).
-- An exact name or alias wins and is never ambiguous (in the template world `l` is `look`'s alias, though `lock` also
-  starts with `l`). Otherwise a verb that is a prefix of the names or aliases of exactly one engine, global or plugin
-  command resolves to it; a prefix matching more than one command (`cl` for `clear` and `close`) is ambiguous and gets
-  "Huh?". Prefixes are tried only after every room and item command. An `@` prefix follows the same rule among the `@`
-  commands the actor may use (§4.9).
-- **Line limit:** Before any of this, and before login, every input line takes a token from a second per-session bucket:
-  capacity 25, refill 25 tokens/s. When it is empty the line is dropped silently, whatever it would have parsed to.
-  These drops count toward the fast-lane disconnect below.
-
+   - Room `commands` are checked before item `commands`. Item `commands` come from equipped items, then inventory, then
+     items on the ground; within a layer the lowest item ID wins. Items inside containers grant no commands.
+   - A line starting with a prefix character runs that prefix's command with the rest of the line as its arguments
+     (`'hello` is `say hello` in the template world).
+   - An exact name or alias wins and is never ambiguous (in the template world `l` is `look`'s alias, though `lock` also
+     starts with `l`). Otherwise a verb that is a prefix of the names or aliases of exactly one engine, global or plugin
+     command resolves to it; a prefix matching more than one command (`cl` for `clear` and `close`) is ambiguous and
+     gets "Huh?". Prefixes are tried only after every room and item command. An `@` prefix follows the same rule among
+     the `@` commands the actor may use (§4.9).
+   - **Line limit:** Before any of this, and before login, every input line takes a token from a second per-session
+     bucket: capacity 25, refill 25 tokens/s. When it is empty the line is dropped silently, whatever it would have
+     parsed to. These drops count toward the fast-lane disconnect below.
 2. **Fast lane:**
-
-- Rate limiting uses a per-session token bucket: capacity 20, refill 5 tokens/s.
-- When the bucket is empty, input is dropped with "Slow down." More than 3 drops within 60s, counting line-limit drops,
-  disconnects the session.
-
+   - Rate limiting uses a per-session token bucket: capacity 20, refill 5 tokens/s.
+   - When the bucket is empty, input is dropped with "Slow down." More than 3 drops within 60s, counting line-limit
+     drops, disconnects the session.
 3. **Tick lane:**
-
-- The command is appended to the actor's queue.
-- If the queue already holds 10, it's rejected with "You can't plan that far ahead." and nothing is enqueued.
-
+   - The command is appended to the actor's queue.
+   - If the queue already holds `ACTION_QUEUE_MAX`
+     ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)), it's rejected with "You can't plan that
+     far ahead." and nothing is enqueued.
 4. **`stop` / `clear`** (fast lane):
-
-- Flushes the queue.
-- Cancels a channeled cast, with no cost paid and no lag applied.
-- Does **not** end combat engagement or clear existing `waitState`.
-
+   - Flushes the queue.
+   - Cancels a channeled cast, with no cost paid and no lag applied.
+   - Does **not** end combat engagement or clear existing `waitState`.
 5. **Parsing:** A queued entry keeps the verb and argument text. Arguments, including target keywords, are resolved when
    the action is popped, so `kill goblin` targets whichever goblin is present then.
 
 ### 5.3 Action Lifecycle (tick lane)
+
+Tick-lane action execution, warmup, interrupts, and recovery lag are handled by
+[Actions.kt](../core/src/main/kotlin/gups/core/world/Actions.kt).
 
 For each popped action:
 
@@ -2501,7 +2515,10 @@ Instant actions (`warmup == 0`) run steps 1, 2, 5, and 6 in the same pulse. Cast
 ### 5.4 Combat Rounds
 
 Everything in this section is the `combat` feature, except conditions, death, corpses and respawns, which are the kernel
-and work with or without it (§3.10).
+and work with or without it (§3.10). Combat resolution is implemented in
+[Combat.kt](../core/src/main/kotlin/gups/core/world/Combat.kt), vitals and conditions in
+[Vitals.kt](../core/src/main/kotlin/gups/core/world/Vitals.kt), and progression mechanics in
+[Leveling.kt](../core/src/main/kotlin/gups/core/world/Leveling.kt).
 
 - **Engagement:**
   - Combat starts through `kill`/`attack`, `aggressive`/`assist` behaviors, a hostile skill landing, or
@@ -2513,8 +2530,8 @@ and work with or without it (§3.10).
   - Engagement is always symmetric. `start_combat` engages both sides and sets each side's primary target if it has
     none. "Hostile", wherever the track rules use it, means an engaged opponent in the same room.
 - **Auto-attacks:**
-  - Every 8 pulses, each engaged actor auto-attacks one target: its current primary target, or the lowest-`EntityId`
-    remaining opponent.
+  - Every `COMBAT_ROUND_PULSES` ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)), each engaged
+    actor auto-attacks one target: its current primary target, or the lowest-`EntityId` remaining opponent.
   - Auto-attacks are independent of `waitState` and of queued actions, so active skills weave between swings.
   - A **casting** actor does not auto-attack, unless the skill being cast sets `attack_while_casting = True`.
 - **Range:** An auto-attack happens only if the target's band is within the wielded weapon's `range` (unarmed or melee:
@@ -2550,7 +2567,8 @@ and work with or without it (§3.10).
     room with the vitals `on_player_death` returned, its condition `ok`, and all affects removed. If `condition` still
     says `dead` for the respawned player, that is a rules error, and the player's vitals are set to their maxima. After
     the respawn the player loses `level_loss` levels.
-  - Corpses decay after `CORPSE_DECAY_PULSES`. Decay drops a container's contents where it lay.
+  - Corpses decay after `CORPSE_DECAY_PULSES` ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)).
+    Decay drops a container's contents where it lay.
   - Death clears `casting`, the queue, and engagement. It's processed exactly once. During phases 2 and 3 it's deferred
     to the end of the current initiative tier (§5.4.1).
 - **Levelling** (the `leveling` feature): XP is gained from kills and `award_xp` and lost to `take_xp` and
@@ -2613,8 +2631,10 @@ and work with or without it (§3.10).
 
 ### 5.5 Intra-Room Spatial Model
 
-All combat is self-contained within a single room. No projectiles cross exits. The track, bands, `advance`, `retreat`
-and pinning are the `track` feature; without it every room has one slot (§3.10), and only room transitions below apply.
+All combat is self-contained within a single room. No projectiles cross exits. Spatial bands and room track geometry are
+defined in [Spatial.kt](../core/src/main/kotlin/gups/core/model/Spatial.kt) and movement verbs in
+[Movement.kt](../core/src/main/kotlin/gups/core/world/Movement.kt). The track, bands, `advance`, `retreat` and pinning
+are the `track` feature; without it every room has one slot (§3.10), and only room transitions below apply.
 
 ```
 Room Track Index:     [ 0 ]            [ 1 ]            [ 2 ]            [ 3 ]
@@ -2659,6 +2679,8 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 
 ### 5.6 Event Dispatch
 
+Event propagation and hook dispatch are handled by [Hooks.kt](../core/src/main/kotlin/gups/core/world/Hooks.kt):
+
 - **Order:**
 
   1. The acting entity's own hook.
@@ -2683,12 +2705,17 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **Cascades:**
 
   - Verbs that cause events (`damage` → `on_damage` → `on_death` → loot `on_spawn`) dispatch synchronously, nested.
-  - The maximum nesting depth is 8. Every script entry counts toward it: dispatched events, self-only hooks (`on_tick`,
-    `on_spawn`, …), and timer and affect callbacks. An entry that would nest deeper is dropped with a diagnostic.
+  - The maximum nesting depth is `CASCADE_MAX_DEPTH`
+    ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Every script entry counts toward it:
+    dispatched events, self-only hooks (`on_tick`, `on_spawn`, …), and timer and affect callbacks. An entry that would
+    nest deeper is dropped with a diagnostic.
   - All nested hooks share the top-level event's step budget (§6.1).
 - **Quarantine:** Hooks of a quarantined package aren't invoked.
 
 ### 5.7 Perception
+
+Sensory perception and deferred event propagation are implemented in
+[Perception.kt](../core/src/main/kotlin/gups/core/world/Perception.kt).
 
 An event starts in a room on a **channel** with an **intensity**, spreads through the room graph, and weakens on every
 exit it crosses. Every simulated actor it reaches, player or mob, is asked whether it can perceive it.
@@ -2734,14 +2761,15 @@ A `say` has no sight alternative, and `shout` has its own delivery.
 - **Event names and `ctx.actor`:** `say`, `emote` and `shout` carry their text, and the actor is the speaker.
   `combat_start`: the attacker. `combat` (once per room per round): no actor. `death`: the one who died. `enter` and
   `exit`, including teleports: the mover. `open`, `close`, `lock` and `unlock`: whoever did it.
-- **Propagation:** a shortest-path search from the room of the event, up to `BUBBLE_RADIUS` (3) exits. A hop from a room
-  to a neighbour whose exit leads into it asks `rules.sense_cost` (§4.6) with the neighbour as `ctx.room` and that exit
-  as `ctx.exit`. A negative price blocks the hop; otherwise it adds to the cost of the path, and 0 is a free hop. Each
-  room is reached by its cheapest path of at most `BUBBLE_RADIUS` exits, so a cheaper but longer path never hides a
-  dearer one that is within range. The exit priced is the listener's own exit toward the source, so a one-way exit into
-  the source room carries events and one out of it doesn't. The template's `sense_cost` blocks `sight` through a closed
-  door unless its tags say `transparent`, muffles `sound` by the door's extra cost, and blocks everything through an
-  exit tagged `sealed` (and `sound` through one tagged `soundproof`); the engine itself reads no tags.
+- **Propagation:** a shortest-path search from the room of the event, up to `BUBBLE_RADIUS` exits
+  ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). A hop from a room to a neighbour whose exit
+  leads into it asks `rules.sense_cost` (§4.6) with the neighbour as `ctx.room` and that exit as `ctx.exit`. A negative
+  price blocks the hop; otherwise it adds to the cost of the path, and 0 is a free hop. Each room is reached by its
+  cheapest path of at most `BUBBLE_RADIUS` exits, so a cheaper but longer path never hides a dearer one that is within
+  range. The exit priced is the listener's own exit toward the source, so a one-way exit into the source room carries
+  events and one out of it doesn't. The template's `sense_cost` blocks `sight` through a closed door unless its tags say
+  `transparent`, muffles `sound` by the door's extra cost, and blocks everything through an exit tagged `sealed` (and
+  `sound` through one tagged `soundproof`); the engine itself reads no tags.
 - **Who perceives:** for each simulated actor in each reached room (the room of the event, at cost 0, included), the
   engine asks `rules.can_perceive` whenever the answer would be used: for a mob with an `on_perceive` hook, and for a
   player in another room or, for a `shout`, in the event's own room. The template needs a score above 0, and in other
@@ -2777,10 +2805,14 @@ A `say` has no sight alternative, and `shout` has its own delivery.
 
 ### 5.8 Mob AI
 
+Autonomous NPC behavior and think cycles are implemented in
+[Behaviors.kt](../core/src/main/kotlin/gups/core/world/Behaviors.kt):
+
 - A mob is "a player controlled by code". It acts only by enqueueing tick-lane actions, and pays the same warmup, lag,
   pinning, retreat, and flee costs.
 - **Think cycle:** It runs when the mob is idle (empty queue, `waitState == 0`, not casting) and `pulse − lastThink ≥
-  thinkEvery`. Each cycle:
+  thinkEvery` (where `thinkEvery` defaults to `THINK_DEFAULT_PULSES`,
+  [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Each cycle:
   1. Each behavior proposes at most one action.
   2. Proposals are sorted by priority, then by behavior declaration order.
   3. If `think` is defined, it's called with `ctx.proposals`. A `None` return enqueues the top proposal, an `act_*` call
@@ -2790,9 +2822,13 @@ A `say` has no sight alternative, and `shout` has its own delivery.
 
 ### 5.9 Reality Bubble
 
+The reality bubble and room simulation lifecycle are implemented in
+[Bubble.kt](../core/src/main/kotlin/gups/core/world/Bubble.kt):
+
 - **Anchors:** Every in-world player (including link-dead ones), plus every entity with a non-empty `anchorReasons`.
-- **Active set:** All rooms within `BUBBLE_RADIUS = 3` exits of any anchor's room. Exit tags and door state are ignored
-  when computing it. Rooms flagged `always_active` are always in the set.
+- **Active set:** All rooms within `BUBBLE_RADIUS` exits
+  ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)) of any anchor's room. Exit tags and door
+  state are ignored when computing it. Rooms flagged `always_active` are always in the set.
 - **Simulated entities:** Players, and entities with non-empty `activeReasons` or `anchorReasons`, wherever they are.
   Anything else is simulated when its room (following carriers and containers) is active. Pets and followers bonded to a
   player get the reason `bond:<player_id>`.
@@ -2804,7 +2840,7 @@ A `say` has no sight alternative, and `shout` has its own delivery.
   - A simulated entity can't target, fight, or perceive *dormant* entities. They're inert to it until a bubble covers
     them: they can't be found by keyword, aren't opponents, aren't in `enemies_near`/`allies_near`, and are skipped by
     `room`-range skills.
-  - `anchor` projects a full radius-3 bubble.
+  - `anchor` projects a full `BUBBLE_RADIUS` bubble.
 - **Reference counting:** Both sets are ref-counted by reason (`death_mark:<player_id>`). The entity stops being active
   or anchored only when its last reason is cleared.
 - **Recomputation:**
@@ -2863,6 +2899,10 @@ A `say` has no sight alternative, and `shout` has its own delivery.
 
 ### 5.10 Hot Reload and Deploy
 
+Instance reconciliation and prototype swapping are implemented in
+[Reconcile.kt](../core/src/main/kotlin/gups/core/world/Reconcile.kt), and the production git deployment workflow in
+[Deployer.kt](../cli/src/main/kotlin/gups/cli/Deployer.kt).
+
 **`--dev` auto-reload:** The file watcher (§2.5) reports changes once nothing has changed for 200 ms, grouped by
 package: the nearest directory with a `package.star`, or the file's own directory if that file was just deleted. It then
 posts `Reload(changedPackages)`, which carries package paths (`zones/forest`), since a reload swaps whole packages.
@@ -2913,6 +2953,12 @@ A change to `MODULE.gups` (an engine upgrade) or `MESSAGES.gups` needs a restart
 a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused for both.
 
 ### 5.11 Persistence and Checkpoints
+
+State persistence, checkpoints, and crash consistency are implemented in
+[Checkpoints.kt](../persist/src/main/kotlin/gups/persist/Checkpoints.kt) and
+[SqlitePersistence.kt](../persist/src/main/kotlin/gups/persist/SqlitePersistence.kt), state restoration in
+[Restore.kt](../core/src/main/kotlin/gups/core/world/Restore.kt), and SQLite backups in
+[Backups.kt](../persist/src/main/kotlin/gups/persist/Backups.kt).
 
 - **Dirty tracking:** Any change, whether through a verb or engine code, sets the entity's `dirty` flag.
 - **Periodic checkpoint** (every `checkpoint_minutes`, default 30, set in `MODULE.gups`; checked at world ticks). Writes
@@ -2982,6 +3028,12 @@ a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused fo
   removed from the world; their rows stay.
 
 ### 5.12 Sessions and Authentication
+
+Authentication and session management are implemented in
+[AccountLogin.kt](../auth/src/main/kotlin/gups/auth/AccountLogin.kt), password hashing in
+[Passwords.kt](../auth/src/main/kotlin/gups/auth/Passwords.kt), login rate limiting in
+[LoginLimiter.kt](../auth/src/main/kotlin/gups/auth/LoginLimiter.kt), and the interactive character creation flow in
+[CreationFlow.kt](../core/src/main/kotlin/gups/core/world/CreationFlow.kt).
 
 - **Creating accounts:**
   - `gups import-roster roster.csv` reads the columns `login,github_handle,role` (only `login` is required; `role`
@@ -3106,11 +3158,14 @@ a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused fo
   - A character already playing is taken over: the old connection is told why and closed.
 - **Disconnects:**
   - A dropped connection makes the character **link-dead**. It stays in the world, keeps anchoring its bubble, and keeps
-    fighting with auto-attacks only, for 3 minutes. Disconnecting clears the action queue, and can't be used to escape
-    combat.
+    fighting with auto-attacks only, for `LINKDEAD_PULSES`
+    ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Disconnecting clears the action queue, and
+    can't be used to escape combat.
   - Reconnecting within that window resumes the session.
   - Otherwise the character auto-quits, with an immediate checkpoint. The auto-quit ignores combat.
-- **Idle players:** After 30 minutes without input, a player is auto-quit. Instructors are exempt.
+- **Idle players:** After `IDLE_QUIT_PULSES` without input
+  ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)), a player is auto-quit. Instructors are
+  exempt.
 - **`--dev`:**
   - With a database, `--dev` creates the account `instructor` (role instructor, no password) on first boot. Every dev
     character belongs to it (dev characters saved before it existed join it), so each gets the instructor role and is
@@ -3125,6 +3180,10 @@ a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused fo
     still works.
 
 ### 5.13 Developer Tooling Behavior
+
+Interactive developer tooling, tracing, and dynamic evaluation are implemented in
+[DevTools.kt](../script/src/main/kotlin/gups/script/DevTools.kt) and
+[Tools.kt](../core/src/main/kotlin/gups/core/world/Tools.kt).
 
 - **`@trace`:**
   - Streams one line per hook invocation, verb call, and rules chain evaluation, with step counts.
@@ -3153,36 +3212,26 @@ a schema or feature change also needs `--wipe` (§3.9). Hot reload is refused fo
 
 ### 6.1 Script Resource Limits
 
-Limits apply per top-level event: one hook invocation plus its synchronous cascade.
+Resource bounds, deterministic step accounting, wall-clock backstops, and boundary allocation caps are enforced by
+[Limits.kt](../script/src/main/kotlin/gups/script/Limits.kt):
 
-|                       Context                        | Step limit | Wall-clock backstop |
-|------------------------------------------------------|------------|---------------------|
-| Zone hooks, `think`, `on_perceive`, timers, commands | 50,000     | 20 ms               |
-| Rules module and modifier chain (per evaluation)     | 200,000    | 20 ms               |
-| Package top-level evaluation (load)                  | 5,000,000  | 2 s                 |
-| `@eval`                                              | 1,000,000  | 1 s                 |
-
-- The step counter is the **deterministic** limit: the harness and production agree on it exactly. The wall-clock guard
-  only catches slow host calls: it is measured from the start of the top-level event or package load, and checked at
-  every `ctx` verb call and every declaration call, so a hook that loops without calling the engine is stopped by the
-  step limit only. The harness turns the wall clock off.
-- The load limit is per package, across its files.
-- **Rules evaluations:** each rules function call and each modifier counts as one evaluation, with a fresh budget even
-  when a hook triggered it (for example `ctx.damage` asking `interrupt_check`); its steps aren't charged to the hook's
-  cascade. Failures are charged to the package of the function's file (the rules package, or the zone, library or skill
-  package a modifier lives in) and count toward that package's quarantine.
-- **Charging:** a package's charges decide the step budget's diagnostics, the quarantine count and the quarantine check.
-  - A hook is charged to its owner's prototype package, even when the function lives in a loaded library file.
-  - Timers and affect hooks are charged to the owner's package if it is a script package, otherwise to the package of
-    the function's file (for example, a timer on a player).
-  - Zone commands are charged to the declaring package, global commands to the registering package.
-- **Allocation caps:** Starlark-Java has no allocation hook, so caps apply where values reach the engine: verb
-  arguments, hook return values, stored attributes and timer arguments.
-  - A string over 1,048,576 characters, or a list or dict over 131,072 elements (1 MB at 8 bytes each), is an
-    `alloc_limit` error. A hook can build larger values internally as long as it doesn't hand them over; the step limit
-    bounds that work.
-  - `customAttributes` over 64 KB per entity rejects the `set_attr` that would exceed it.
-- Starlark's own guarantees still apply: frozen module globals, no I/O, and no unbounded recursion.
+- **Deterministic step budgets:** Execution step limits apply per top-level event and its synchronous cascade (zone
+  hooks, `think`, `on_perceive`, timers, and commands). The step counter is deterministic so the test harness and
+  production environments agree exactly on execution bounds. Package loading and interactive `@eval` have dedicated step
+  limits.
+- **Wall-clock backstops:** A wall-clock guard catches slow host calls. It is measured from the beginning of the
+  top-level event or package load and checked at every `ctx` verb call and declaration call. The test harness disables
+  wall-clock checks to guarantee reproducible execution.
+- **Rules evaluations:** Each rules function invocation and each modifier evaluation receives an independent step and
+  wall-clock budget, even when triggered from within a hook cascade. Failures are charged to the package where the rules
+  function or modifier file resides.
+- **Package charging:** Diagnostics and quarantine error counts are attributed to the responsible package: hooks charge
+  to the owner entity's prototype package; timers and affect hooks charge to the script owner or function file; and
+  commands charge to their declaring or registering package.
+- **Boundary allocation caps:** Values crossing from Starlark into the engine (strings, lists, dicts, timer arguments,
+  and serialized entity `customAttributes`) are checked against boundary size caps to prevent memory exhaustion, raising
+  an `alloc_limit` error when exceeded.
+- Starlark's language invariants guarantee frozen module globals, no I/O access, and no unbounded recursion.
 
 ### 6.2 Script Error Handling
 
@@ -3192,33 +3241,32 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
    and invariant-preserving. Authors are taught to do their checks first and their verbs last.
 2. The triggering action **proceeds as if the hook returned `None`**. A crashing `before_exit` never traps a player.
 3. A diagnostic row is written with the next checkpoint batch, periodic or immediate. It contains:
+   - The package, prototype label, hook, file label, line, and kind.
+   - The message and Starlark stack.
+   - A one-line `ctx` summary.
+   - The seed and pulse, and the room the owner was in.
+   - A **repro bundle**: the seed, the failure pulse, the pulse of the last periodic checkpoint, the hook and message,
+     and the failing room's rows as of that checkpoint (the room, the mobs and players there, and every item in it or
+     held by them, transitively). It also holds the inputs (tick-lane commands and `say`s, never tells) since that
+     checkpoint by actors in rooms of the failing package.
 
-- The package, prototype label, hook, file label, line, and kind.
-- The message and Starlark stack.
-- A one-line `ctx` summary.
-- The seed and pulse, and the room the owner was in.
-- A **repro bundle**: the seed, the failure pulse, the pulse of the last periodic checkpoint, the hook and message, and
-  the failing room's rows as of that checkpoint (the room, the mobs and players there, and every item in it or held by
-  them, transitively). It also holds the inputs (tick-lane commands and `say`s, never tells) since that checkpoint by
-  actors in rooms of the failing package.
+   Repro is exact in the harness and best-effort from production.
 
-Repro is exact in the harness and best-effort from production. - **Script kinds:** `script_error`, `step_limit`,
-`wall_clock`, `alloc_limit`, `missing` (a hook or timer function no longer exists) and `quarantine`. The kind `script`
-is for failures of Kotlin-hosted handlers. Other kinds include `engine`, `invariant`, `reload`, `checkpoint`, `deploy`
-and `plugin`. - **`gups repro`** builds a headless world from today's packages with the bundle's seed. It starts at the
-checkpoint pulse, with ids above the bundle's and no spawns, and doesn't fire `on_load`. It restores the bundle and
-replays each input by actor id at its pulse, running 16 pulses past the failure. It counts as reproduced when a
-diagnostic with the same hook and message appears; the exit status is 1 otherwise. Players come back without a
-connection, so output to them is dropped.
-
+   - **Script kinds:** `script_error`, `step_limit`, `wall_clock`, `alloc_limit`, `missing` (a hook or timer function no
+     longer exists) and `quarantine`. The kind `script` is for failures of Kotlin-hosted handlers. Other kinds include
+     `engine`, `invariant`, `reload`, `checkpoint`, `deploy` and `plugin`.
+   - **`gups repro`:** builds a headless world from today's packages with the bundle's seed. It starts at the checkpoint
+     pulse, with ids above the bundle's and no spawns, and doesn't fire `on_load`. It restores the bundle and replays
+     each input by actor id at its pulse, running 16 pulses past the failure. It counts as reproduced when a diagnostic
+     with the same hook and message appears; the exit status is 1 otherwise. Players come back without a connection, so
+     output to them is dropped.
 4. **Who sees what:**
-
-- **Owner alerts:** online builders (not instructors) whose scope has the package get a one-line in-game alert for
-  `script_error`, `step_limit`, `wall_clock` and `missing`, with at most one per package per 10 s.
-- **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always to the server log, at most once
-  a minute per kind. Kinds include `quarantine`, `rules_error` (at most once a minute per failing rules function),
-  `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy results.
-- Players see nothing. For a failed zone command, they see "Nothing happens."
+   - **Owner alerts:** online builders (not instructors) whose scope has the package get a one-line in-game alert for
+     `script_error`, `step_limit`, `wall_clock` and `missing`, with at most one per package per 10 s.
+   - **Instructor alerts** go to online instructors and admins as `[alert] ...`, and always to the server log, at most
+     once a minute per kind. Kinds include `quarantine`, `rules_error` (at most once a minute per failing rules
+     function), `checkpoint`, `engine_errors`, `overrun`, `plugin_load` and deploy results.
+   - Players see nothing. For a failed zone command, they see "Nothing happens."
 
 ### 6.3 Quarantine (circuit breaker)
 
@@ -3238,29 +3286,13 @@ connection, so output to them is dropped.
   - **Load:** a rules package that fails to load, or fails its dry run, stops the server at startup. A reload or deploy
     with such a package is refused, and the previous rules stay live.
   - **Run time:** a rules function that throws, or returns the wrong type or an undeclared name, records a
-    `script_error` diagnostic against the rules package, raises a `rules_error` alert, and gives a neutral result. A
-    rules error never hurts, kills, rewards or traps anyone:
-
-    |                                    Export                                    |                         Neutral result                         |
-    |------------------------------------------------------------------------------|----------------------------------------------------------------|
-    | `to_hit`, `retreat_check`, `flee_chance`                                     | 0                                                              |
-    | `damage`, `mitigate`                                                         | no damage                                                      |
-    | `initiative`                                                                 | 0                                                              |
-    | `cast_allowed`                                                               | denied with "Nothing happens.", no lag                         |
-    | `interrupt_check`                                                            | false                                                          |
-    | `move_cost`, `regen`, `encumbrance`, `starting_stats`                        | nothing spent, gained, changed or overridden                   |
-    | `carry_limit`                                                                | no limit (`Int.MAX_VALUE`)                                     |
-    | `get_lag`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` | 0                                                              |
-    | `sense_cost`                                                                 | -1 (blocks the hop)                                            |
-    | `can_perceive`                                                               | false                                                          |
-    | `perceive_message`                                                           | `None` (nothing shown)                                         |
-    | `door_intensity`                                                             | 0 (silent)                                                     |
-    | `condition`                                                                  | the actor's previous condition                                 |
-    | `xp_for_kill`                                                                | 0                                                              |
-    | `xp_to_level`                                                                | no level-up (`Long.MAX_VALUE`)                                 |
-    | `on_player_death`                                                            | respawn at the recall room, vitals at their maxima, no XP loss |
-    | `on_level_up`                                                                | no gains                                                       |
-    | `equipment_slots`                                                            | the last good list (empty before any)                          |
+    `script_error` diagnostic against the rules package, raises a `rules_error` alert, and substitutes a neutral
+    fallback result. Under the **safe-neutral-fallback principle**, rules errors never hurt, kill, reward, or trap
+    actors: attacks miss (`to_hit = 0`), no damage or vital loss occurs, movement and lag penalties are zeroed,
+    perception hops are blocked, casts fail harmlessly, and player deaths fall back to safe respawns at effective vital
+    maxima without XP loss. Complete neutral fallback mappings and host integration are documented in
+    [Rules.kt](../script/src/main/kotlin/gups/script/Rules.kt) and
+    [Host.kt](../script/src/main/kotlin/gups/script/Host.kt).
 
 ### 6.4 Engine-Side Failures
 
@@ -3277,7 +3309,8 @@ connection, so output to them is dropped.
 
 ### 6.5 Invariant Enforcement
 
-- The invariants in §3.8 are enforced in the Kotlin verb implementations, never in scripts.
+- The simulation invariants (§3.8) are enforced in the Kotlin verb implementations and validated by
+  [Invariants.kt](../core/src/main/kotlin/gups/core/world/Invariants.kt), never in scripts.
 - In `--dev` and in the harness, an invariant check runs at the end of every pulse. In the harness (strict mode) a
   violation throws and fails the test. In `--dev` each violation is logged as an `invariant` diagnostic every pulse it
   persists, and the world keeps running.
@@ -3291,91 +3324,50 @@ connection, so output to them is dropped.
 
 ### 7.1 Engine Tests (Kotlin, `gups-engine` CI)
 
-- **Matrix:** Run on `linux-x64`, `linux-arm64`, and `macos-arm64`.
-- **Unit tests:**
-  - **Scheduler:** phase ordering, combat round and world tick cadence, overrun skipping.
-  - **Command pipeline:** lane classification, the token bucket, queue cap, and `stop`/`clear` semantics.
-  - **Action lifecycle:** warmup, interrupt, re-validation, lag, and veto-no-lag.
-  - **Initiative:** tier ordering within a round; an actor killed by a higher tier never acting later in that phase;
-    same-tier mutual kills both landing; a same-tier flee and an attack on the fleeing actor both resolving; a mortally
-    wounded actor healed within its tier surviving; identical order and outcomes across replays with the same seed.
-  - **Tactical track:** bands, advance and retreat, pinning, flee, entry index clamping, and cramped rooms.
-  - **Event dispatch:** ordering, short-circuiting, cascade depth limit, and the shared step budget.
-  - **Perception:** channels × sense scores and deltas × exit tags × door states, multi-hop attenuation, deferral, and
-    coalescing.
-  - **Rules chain:** ordering; the dry run; each export's neutral result (§6.3).
-  - **Reality bubble:** incremental BFS correctness against a full recompute, the dormant/wake timer conversion, lazy
-    catch-up, and active vs anchor semantics.
-  - **Dormant recovery:** each `dormant_recovery` mode, and piecewise catch-up across `no_regen` and slowed-regen
-    affects that expire during dormancy.
-  - **Persistence:** schema migrations, and reconciliation (version migrate, delta overlay, tombstones).
-  - **Auth:** Argon2id parameters and PHC round trip; lockout timing per account and per IP under a virtual clock; dummy
-    hashing for unknown logins; roster import idempotence and single-use, expiring setup codes; the whole telnet login
-    flow against a headless world (wrong passwords, takeover, creation, reserved names, the character limit); hashing
-    never on the world thread (a 1 s blocking hash keeps the world pulsing); an account change surviving a crash.
-  - **Roles and tools:** CODEOWNERS parsing and precedence; scope enforcement for every builder command; restrictions
-    (timed expiry under a virtual wall clock, the ladder, lifting, history, surviving a restart); each instructor
-    command; alert rate limits; the overrun attribution.
-  - **Telnet and GMCP:** option negotiation against recorded client transcripts (Mudlet, TinTin++, raw `nc`), over TLS
-    too; GMCP delta suppression; `Room.Bands` from each viewer's index; no GMCP without `Core.Supports`; certificate hot
-    reload.
-  - **Web:** HTTP login and lockout; token expiry and revocation closing live sockets; a frame-level WebSocket session;
-    a headless browser test (Selenium's Java bindings with headless Firefox, no Node) that logs in, moves and sees
-    vitals. It runs on Linux x64 CI (`CI=true`, `os.arch` `amd64`/`x86_64`) and is skipped elsewhere;
-    `-Dgups.browserTest=true` runs it on any machine with Firefox. Selenium Manager fetches geckodriver.
-  - **Operations:** admin auth and constant-time comparison; metric names present after one pulse; deploys end to end
-    against a local bare repository (success, a load failure leaving the world untouched, concurrent deploys refused, a
-    `MODULE.gups` or `plugins/` change refused, CODEOWNERS changes taking effect); `/healthz` turning 503 when the world
-    thread stalls.
-  - **Docs and API:** the rendered reference is deterministic, every symbol has its anchor, every link resolves, nothing
-    unescaped gets through, and a small model matches golden files; every doc example runs; the API-change check (§4.17)
-    passes and covers removal, addition, rename, signature and version-bump cases.
-  - **Schema:** each schema problem stopping the server (§3.9); constructors refusing undeclared names and plain dicts;
-    view fields and suggestions; the dry run catching a misspelled vital and a wrong return type; `starting_stats` for
-    players and mobs, randomized and not; conditions, incapacitation and time-based deaths; a changed schema or feature
-    set refusing to start, and `--wipe` keeping accounts. Every test that touches vitals runs against two fixture
-    schemas: the template's, and a non-fantasy one with no `hp` or `mana`.
-  - **Features:** `FeatureMatrixTest` runs every valid feature set (12) through a smoke scenario (moving, getting,
-    using, a death through `condition`, plus what each enabled feature adds) with the invariant check every pulse. For
-    each feature that is off: its commands say "Huh?", its declarations, hooks and exports fail to load naming it, and
-    its GMCP packages and fields are absent. Renames, and the message catalog (every id has a default; overrides apply;
-    bad ids and placeholders stop the server).
-  - **Plugins:** every extension point end to end in the server and in `gups test`; each loading failure skipping only
-    its plugin; every name clash refused; deploys touching `plugins/` refused while other deploys keep plugins working;
-    no `core` or `script` type in the public `gups.pluginapi` surface; the sample plugins' unit and end-to-end tests.
-  - **Creation, traits and restrictions:** the creation flow over telnet, WebSocket and `--dev` (numbers, ids, labels
-    and prefixes; `help`; `back` and `cancel` from every step; skipped choices; availability changing after an earlier
-    answer is changed; a validation refusal; a name taken during the steps; the idle timeout); missing choices at login
-    after an option or the plugin is removed; `Char.Creation` payloads and `null`; trait effects on effective stats,
-    maxima, resists and flags, with `current` capped on loss and invariant 3 checked; mob prototype traits (load errors
-    for unknown names, effects, restrictions, following a reload) and traits granted to a mob surviving a restart; trait
-    modifiers in chain order with `@trace`; each restriction point refusing with no lag, allowing mobs and staff when
-    the check says so, and allowing on an exception; a change re-checking worn items; saved answers and granted traits
-    surviving a restart and an unknown trait being kept; every registration rule refused; a world without a provider
-    behaving byte-identically to one built before this feature.
-  - **Levels:** the level steps and their gain records, including unwinding random gains; deferred mode and the ready
-    notice; the four verbs and their feature gate; `on_level_change` ordering and cascade depth; `level_loss` at death;
-    the dry-run checks; persistence of `levelGains`; the template's kill scaling, curve and death loss.
-- **Property-based tests:**
-  - Random sequences of item verbs never violate the single-location or forest invariant.
-  - Random checkpoint, kill, and restore sequences never duplicate or lose an item that was part of a committed
-    transfer.
-- **Determinism:** The same seed and input script produce byte-identical output and final world state across runs and
-  platforms.
-- **Crash consistency:** `kill -9` the server at random points during checkpoint writes, hundreds of iterations. Every
-  restart must open cleanly and satisfy §3.8.
-  - A child JVM shuffles 20 gems between four players (who log in and out), two bags and the ground. It checkpoints
-    every few pulses, immediate and periodic mixed, calling `checkpoint` far more often than a server would so kills
-    land mid-write, and is killed with SIGKILL at a random moment. Each restart must hold exactly 20 gems once all
-    players log in. This also covers the checkpoint/kill/restore property test.
-  - `./gradlew check` runs 20 iterations; `-Dgups.crashIterations=300` runs the full set.
-- **API model:** tests fire every hook and check its documented `ctx` fields both ways, check that every
-  `@StarlarkBuiltin` class in `gups.script` and `gups.harness` is in the model, and compare `api.json` with the golden
-  copy (`-Dgups.updateGolden=true` rewrites it).
-- **Load test** (deferred to a later milestone, §1.7):
-  - 500 scripted bot connections over TLS telnet and WebSocket, in mixed combat and movement, against the tutorial world
-    scaled ×50.
-  - **Pass criteria:** pulse p99 < 50 ms, zero overruns over 30 min, and checkpoint p99 < 500 ms.
+- **Platform matrix:** Tests execute on `linux-x64`, `linux-arm64`, and `macos-arm64`.
+- **Deterministic unit and simulation tests:** Validate core simulation contracts under deterministic virtual clocks and
+  seeded RNG: scheduler phase ordering and overrun policies; command pipeline admission, rate limiting, and queue caps;
+  tick-lane action lifecycles, warmup interrupts, and lag recovery; combat round initiative tiers, auto-attacks, and
+  simultaneous tie resolution; tactical track movement, pinning, and fleeing; hook cascades, containment, and step
+  accounting; multi-hop sensory perception, sense deltas, and deferred delivery; rules engine modifier chains, dry runs,
+  and each export's neutral result (§6.3); reality bubble incremental BFS, dormancy transitions, and piecewise catch-up;
+  SQLite schema migrations, instance reconciliation, checkpoints, and backups; authentication flows, Argon2id hashing,
+  and lockout limiters; telnet/TLS option negotiation and GMCP delta suppression; developer tooling, tracing, and
+  `@eval`; and character creation choices, trait calculations, restrictions, and reversible leveling steps. Specific
+  requirements:
+  - **Initiative:** an actor killed by a higher tier never acts later in that phase; same-tier mutual kills both land;
+    replays with the same seed give identical order and outcomes.
+  - **Auth:** hashing never runs on the world thread (a 1 s blocking hash keeps the world pulsing); an account change
+    survives a crash.
+  - **Telnet:** option negotiation is checked against recorded client transcripts (Mudlet, TinTin++, raw `nc`), over TLS
+    too.
+  - **Schema:** every test that touches vitals runs against two fixture schemas: the template's, and a non-fantasy one
+    with no `hp` or `mana`.
+  - **Plugins:** no `core` or `script` type appears in the public `gups.pluginapi` surface.
+  - **Creation:** a world without a creation provider behaves byte-identically to one built before character creation
+    existed.
+  - **Levels:** the four level verbs and their feature gate are covered.
+- **`FeatureMatrixTest`:** Tests all 12 valid feature combinations (`combat`, `track`, `skills`, `leveling`) through a
+  smoke scenario with the invariant check every pulse. For each feature that is off, its commands say "Huh?", its
+  declarations, hooks and exports fail to load naming it, and its GMCP packages and fields are absent.
+- **Property-based tests:** Random item manipulation sequences verify single-location custody and acyclic containment
+  forest invariants across arbitrary transfers, and random checkpoint/crash sequences ensure zero item duplication or
+  loss.
+- **SIGKILL crash-consistency tests:** A child JVM shuffles 20 gems between four players (who log in and out), two bags
+  and the ground, checkpointing every few pulses (immediate and periodic mixed), and is killed with SIGKILL at a random
+  moment. Every restart must open cleanly, satisfy §3.8, and hold exactly 20 gems once all players log in. `./gradlew
+  check` runs 20 iterations; `-Dgups.crashIterations=300` runs the full set.
+- **API model and golden checks:** Validate that every hook, view, and `@StarlarkBuiltin` in `gups.script` and
+  `gups.harness` matches the documented API model, verify changelog integrity, and compare `api.json` and generated
+  documentation against golden copies (`-Dgups.updateGolden=true` rewrites them).
+- **Browser smoke tests:** Headless Firefox via Selenium's Java bindings (no Node) logs in, moves and sees vitals. It
+  runs on Linux x64 CI (`CI=true`, `os.arch` `amd64`/`x86_64`) and is skipped elsewhere; `-Dgups.browserTest=true` runs
+  it on any machine with Firefox.
+- **Deterministic replay:** Byte-identical world states and outputs are verified across executions and target platforms
+  given identical random seeds and input sequences.
+- **Load test** (deferred, §1.7): 500 scripted bot connections over TLS telnet and WebSocket, in mixed combat and
+  movement, against the tutorial world scaled ×50. Pass criteria: pulse p99 < 50 ms, zero overruns over 30 min, and
+  checkpoint p99 < 500 ms.
 
 ### 7.2 Script Tests (Starlark, via harness)
 
@@ -3467,3 +3459,4 @@ template's `.github/workflows/gates.yml`.
 | **M12**   | Track-movement lags as rules exports: `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`; the template's `sticky_floor` tar pit (§4.6, §5.5, §6.3).                                                                                                                                                                                                                                                                                    |
 | **M13**   | Senses and perception: per-channel `senses` for every actor with `sense_deltas` on items, affects and traits; `on_perceive` (was `on_nearby`) with channel, intensity and cost; multi-hop propagation priced by `sense_cost`, listeners by `can_perceive`, distant players by `perceive_message`; `ctx.emit`; door and container hooks with `door_intensity`; `exit.door` as a door view; rules exports spread over several files (§4.6, §5.7, §6.3). |
 | **M14**   | Experience and levels, built in three stages: **M14.1** the reversible level step, `on_level_up`, the gain record, `level_loss` and the template's curve, kill scaling and death loss; **M14.2** `level_mode`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels` and the harness verbs; **M14.3** the `on_level_change` hook, the `score` line and the template examples (§3.9, §4.4, §4.6, §5.4).                       |
+| **M15**   | Specification refactoring and KDoc alignment: high-level architectural spec in SPEC.md with implementation details, constants, entity fields, seams, and limits documented in KDoc.                                                                                                                                                                                                                                                                   |

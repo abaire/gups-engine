@@ -391,10 +391,10 @@ current phase's **Exit Criteria** is satisfied.
 
 #### Phase 5 Exit Criteria
 
-- [] Phases 1 through 7 in `docs/SPEC.md` §5.1 render as a 7-item numbered list.
-- [] `docs/SPEC.md` §6.1 and §6.3 link to `Limits.kt` and `Rules.kt` instead of duplicating threshold tables and the
+- [x] Phases 1 through 7 in `docs/SPEC.md` §5.1 render as a 7-item numbered list.
+- [x] `docs/SPEC.md` §6.1 and §6.3 link to `Limits.kt` and `Rules.kt` instead of duplicating threshold tables and the
   20-row neutral-result table.
-- [] `docs/SPEC.md` §7.4 includes the **M15** row.
-- [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns **0 matches**.
-- [] `./gradlew markdownFormat` followed by `./gradlew check` (run with `BypassSandbox: true`) exits `0` with zero
+- [x] `docs/SPEC.md` §7.4 includes the **M15** row.
+- [x] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns **0 matches**.
+- [x] `./gradlew markdownFormat` followed by `./gradlew check` (run with `BypassSandbox: true`) exits `0` with zero
   warnings and all tests passing.
