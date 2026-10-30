@@ -323,13 +323,13 @@ current phase's **Exit Criteria** is satisfied.
 
 #### Phase 4 Exit Criteria
 
-- [] `docs/SPEC.md` §4 contains **no** `interface ScriptHost`, `interface GupsPlugin`, or `interface PluginRegistry`
+- [x] `docs/SPEC.md` §4 contains **no** `interface ScriptHost`, `interface GupsPlugin`, or `interface PluginRegistry`
   Kotlin code blocks.
-- [] `docs/SPEC.md` §4.6 no longer contains the hardcoded Template Ruleset formula table, and instead links to
+- [x] `docs/SPEC.md` §4.6 no longer contains the hardcoded Template Ruleset formula table, and instead links to
   `template-world/rules/`.
-- [] All collapsed inline `- ` lists in §4.4, §4.5, §4.6, §4.9, §4.15, §4.16, and §4.19 are formatted as proper
+- [x] All collapsed inline `- ` lists in §4.4, §4.5, §4.6, §4.9, §4.15, §4.16, and §4.19 are formatted as proper
   multi-line Markdown lists.
-- [] `./gradlew markdownFormat && ./gradlew markdownCheck` (with `BypassSandbox: true`) exits `0`.
+- [x] `./gradlew markdownFormat && ./gradlew markdownCheck` (with `BypassSandbox: true`) exits `0`.
 
 ---
 
