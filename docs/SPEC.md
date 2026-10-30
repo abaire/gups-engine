@@ -2582,7 +2582,8 @@ and work with or without it (§3.10). Combat resolution is implemented in
   fires `on_level_change`; the rules are not called. A level with nothing remembered unwinds nothing. Each level's entry
   belongs to that level alone: applying a level replaces whatever was remembered for it, and a level that gives no
   `stats` or `max` remembers nothing, so a later loss of it never subtracts gains it did not give. Entries for other
-  levels are never touched. One call applies at most 100 levels.
+  levels are never touched. One call applies at most 100 levels. A player whose level changes, up or down, is sent
+  `Char.Status` at once, with the message, rather than at the end of the pulse.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves the world. The rule refills
   to `count` at the first world tick at or after the deadline. A fresh world's rooms fill their spawns when the world
   starts (§4.11).

@@ -9,6 +9,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - Added the `on_level_up(ctx)` rules export: called when an actor advances a level, returning `None` or a `struct` with
   optional `stats`, `max` and `current` deltas. It is required when the `leveling` feature is enabled and forbidden when
   it is off.
+- Added the `leveling.level_down` message: sent when an actor loses one or more levels (`You have fallen to level
+  {level}.`).
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

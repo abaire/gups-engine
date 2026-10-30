@@ -3669,6 +3669,15 @@
       "since": 1
     },
     {
+      "symbol": "message:leveling.level_down",
+      "feature": "leveling",
+      "id": "leveling.level_down",
+      "placeholders": ["level", "count"],
+      "required": ["level"],
+      "default": "You have fallen to level {level}.",
+      "since": 1
+    },
+    {
       "symbol": "message:leveling.level_up",
       "feature": "leveling",
       "id": "leveling.level_up",

@@ -9,6 +9,8 @@ object LevelingMsg : MsgGroup(Feature.LEVELING) {
   val SCORE_LEVEL = msg("leveling.score", "Level {level} ({xp} xp)", "level,xp")
   val GAIN = msg("leveling.gain", "You gain {amount} experience.", "amount", "amount")
   val LEVEL_UP = msg("leveling.level_up", "You have reached level {level}!", "level", "level")
+  val LEVEL_DOWN =
+    msg("leveling.level_down", "You have fallen to level {level}.", "level,count", "level")
 }
 
 /** The most level steps one call applies, and the most [pendingLevels] counts. */
@@ -128,4 +130,83 @@ fun World.awardXp(a: Actor, amount: Long) {
     refreshGmcp(a, "Char.Status")
   }
   a.dirty = true
+}
+
+/**
+ * Lowers [a]'s level by one step. This is the only code that lowers a level. The caller guarantees
+ * that `a.level >= 2`.
+ *
+ * The step proceeds in this order:
+ * 1. Takes and removes `a.levelGains[a.level]`, if any. A level with no recorded entry unwinds
+ *    nothing.
+ * 2. Subtracts any recorded stats from base stats and recorded maxima from base vital maxima.
+ * 3. Decrements `a.level` by one.
+ * 4. Caps every current vital at its new effective maximum.
+ * 5. Applies the "never owed the level just lost" rule: clamps `a.xp` to `min(a.xp,
+ *    rules.xp_to_level(a.level) - 1)` (never below 0). This also removes any other pending levels.
+ * 6. Asks condition once if any vital maximum changed or a current vital was capped.
+ * 7. Marks the actor dirty.
+ */
+fun World.levelDownStep(a: Actor) {
+  require(a.level >= 2) { "cannot step down below level 1" }
+
+  val gain = a.levelGains.remove(a.level)
+  if (gain != null) {
+    for ((name, delta) in gain.stats) a.baseStats[name] = (a.baseStats[name] ?: 0) - delta
+    for ((name, delta) in gain.max) a.vitalMap[name]?.let { it.max -= delta }
+  }
+
+  a.level -= 1
+
+  val capped = capVitals(a)
+
+  a.xp = maxOf(0L, minOf(a.xp, rules.xpToLevel(a.level) - 1))
+
+  if (gain?.max?.isNotEmpty() == true || capped) refreshCondition(a)
+
+  a.dirty = true
+}
+
+/**
+ * Lowers [a]'s level by up to [count] steps, stopping at level 1.
+ *
+ * If at least one step was taken, sends [LevelingMsg.LEVEL_DOWN] to the actor once and, for a
+ * player, requests an immediate GMCP `Char.Status` refresh and an immediate checkpoint. Returns the
+ * number of levels actually lost.
+ *
+ * The rules are never called: the engine subtracts exactly what was stored in the level gain
+ * records, so gains that used random numbers unwind exactly, and so do gains from a rules package
+ * that has since changed.
+ */
+fun World.levelDown(a: Actor, count: Int = 1): Int {
+  if (Feature.LEVELING !in features || count <= 0) return 0
+  var steps = 0
+  while (steps < count && a.level > 1) {
+    levelDownStep(a)
+    steps++
+  }
+  if (steps > 0) {
+    tell(a, LevelingMsg.LEVEL_DOWN, "level" to a.level, "count" to steps)
+    if (a is Player) {
+      refreshGmcp(a, "Char.Status")
+      requestImmediate("level")
+    }
+  }
+  return steps
+}
+
+/**
+ * Removes up to [amount] experience points from [a], returning the amount actually removed.
+ *
+ * If leveling is disabled or [amount] is not positive, returns 0. The actor's experience never goes
+ * below 0. Removing experience never changes the actor's level and sends nothing.
+ */
+fun World.takeXp(a: Actor, amount: Long): Long {
+  if (Feature.LEVELING !in features || amount <= 0L) return 0L
+  val removed = minOf(amount, a.xp)
+  if (removed > 0L) {
+    a.xp -= removed
+    a.dirty = true
+  }
+  return removed
 }
