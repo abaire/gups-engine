@@ -64,8 +64,9 @@ import kotlinx.serialization.json.longOrNull
  *   (`cur`, and `max` only when overridden, plus `belowZeroSince`), life condition, xp, home room,
  *   spawn binding, and summonedBy. Delta fields (level, stats, senses, resists, skills,
  *   `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if they equal prototype
- *   defaults. Prototype traits are never stored; only runtime `grantedTraits` are. Active/anchor
- *   reasons, custom attributes, timers, and active affects are also stored.
+ *   defaults, each stored as a whole value rather than per key. Prototype traits are never stored;
+ *   only runtime `grantedTraits` are. Active/anchor reasons, custom attributes, timers, and active
+ *   affects are also stored.
  * - **Items ([ItemPayload]):** Persists count, decay deadline pulse, display name override,
  *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons, and
  *   prototype name.

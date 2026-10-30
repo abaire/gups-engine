@@ -1,6 +1,6 @@
 # GUPS Engine — Architecture & Technical Specification
 
-Status: v0, implemented through milestone M7. Script API: `api_version = 1` (unstable).
+Script API: `api_version = 1` (unstable).
 
 This is the single source of truth for the engine's design. Choices made while implementing that it doesn't settle are
 logged in [DECISIONS.md](DECISIONS.md) until they are folded in here, and features it leaves out go in
@@ -53,12 +53,11 @@ compatibility promises.
 - **Platforms:** Linux on ARM64 and x86_64, and macOS on Apple Silicon (ARM64) only.
 - **Scale:** Hundreds of concurrent connections. Memory is not a design constraint; the whole world graph lives in
   memory.
-- **Engine core:** Kotlin (JVM), `kotlinx.coroutines`. Every listener runs on Netty 4.2 (NIO transport); HTTP listeners
-  use Ktor's Netty engine.
-- **Scripting:** `net.starlark.java`, the canonical Bazel JVM implementation of Starlark. Its only Maven Central
-  packaging is `com.eed3si9n.starlark:starlark` 4.2.1 (Bazel 4.2.1's interpreter). That version rejects `lambda` and
-  nested `def`s at parse time, so every hook, command, timer and modifier is a top-level `def`. `load` is a reserved
-  word.
+- **Engine core:** Kotlin (JVM), `kotlinx.coroutines`. Every listener runs on Netty (NIO transport); HTTP listeners use
+  Ktor's Netty engine. Pinned library versions are declared in [libs.versions.toml](../gradle/libs.versions.toml).
+- **Scripting:** `net.starlark.java`, the canonical Bazel JVM implementation of Starlark (pinned in
+  [libs.versions.toml](../gradle/libs.versions.toml)). The interpreter rejects `lambda` and nested `def`s at parse time,
+  so every hook, command, timer and modifier is a top-level `def`. `load` is a reserved word.
 - **Persistence:** SQLite in WAL mode, used as a hybrid document store. Payloads are `kotlinx.serialization` JSON.
 - **Build:** Gradle with the Kotlin DSL. Releases are per-platform `jlink` runtime images plus a Docker image.
 
@@ -161,10 +160,8 @@ gups-engine/
 **Release artifacts:**
 
 - `gups` runtime images for `linux-x64`, `linux-arm64`, and `macos-arm64`, built with `jlink`. Students need no JDK.
-  - The image (`build/image/gups`) is a jlink runtime, the jars and a `bin/gups` launcher. Its modules are those `jdeps`
-    finds in the plain jars, plus the non-static `requires` of the modular jars' descriptors, plus the reflectively
-    loaded `jdk.crypto.ec`, `jdk.naming.dns`, `jdk.unsupported`, `java.management` and `java.naming`. The list is
-    written to `modules.txt`.
+  - The image (`build/image/gups`) is a jlink runtime, the jars and a `bin/gups` launcher, configured in
+    [cli/build.gradle.kts](../cli/build.gradle.kts).
   - Each is packed as `gups-<version>-<platform>.tar.gz`. Every CI platform builds and smoke-tests it with `gups test`;
     a `v*` tag attaches the archives to the GitHub release.
 - An OCI image for the course server: `eclipse-temurin:21-jre-noble` plus `git`, `openssh-client`, `curl` and `jq`. One
@@ -234,40 +231,34 @@ gups-engine/
   - Global commands may not shadow an engine command or alias, a standard direction or its alias (`north`, `n`), or
     another package's global command. An attribute namespace used by two packages (or by a package and a shared
     namespace, or equal to a plugin id) fails every package involved.
-- **`MODULE.gups`:** Starlark with exactly one call, `module(engine, api_version, checkpoint_minutes, start_room,
-  plugins, aliases, prefixes, stats, vitals, damage_types, unarmed_damage_type, channels, prompt, features, rename)`.
-  The file is required, and so are `stats`, `vitals`, `damage_types` and `unarmed_damage_type`; every other argument is
-  optional. A world without the file, or without one of the required arguments, stops the server.
+- **`MODULE.gups`:** Starlark with exactly one call, `module(...)`, documented in
+  [WorldModule.kt](../script/src/main/kotlin/gups/script/WorldModule.kt). The file is required, and so are `stats`,
+  `vitals`, `damage_types` and `unarmed_damage_type`; every other argument is optional. A world without the file, or
+  without one of the required arguments, stops the server.
   - `stats`, `vitals`, `damage_types`, `unarmed_damage_type`, `channels` and `prompt` are the world's schema (§3.9);
     `features` and `rename` choose its feature modules and command names (§3.10).
   - A pinned `api_version` the engine doesn't support stops the server. A different pinned `engine` version only warns.
   - `start_room` sets where new characters start, in both profiles (`--start` overrides it). Without either, it is
     `//zones/tutorial:gate` if that exists, else the first room by label. A `start_room` that isn't a room stops the
     server.
-  - `plugins = {"<id>": "sha256:<64 lowercase hex>"}` pins plugin jars (§4.15). An id that doesn't match
-    `[a-z][a-z0-9_]*`, that equals a reserved name, or whose checksum is malformed is a `MODULE.gups` problem, so it
-    stops the server.
-  - `aliases = {"l": "look", "inv": "inventory"}` gives engine commands shorter words, and `prefixes = {"'": "say", "%":
-    "cast"}` makes a single character at the start of a line stand for a command (§5.2). Several aliases or prefixes may
-    name the same command. The engine hardcodes none: a world without them has no aliases, and the template world's
-    `MODULE.gups` ships the defaults (`l`, `i`/`inv`, `eq`, `k`/`attack`, `c`, `take`, `unwield`; `'` and `"` for `say`,
-    `%` for `cast`). An alias that isn't `[a-z][a-z0-9_]*`, is an engine command or a standard direction, or names
-    something other than a non-`@` engine command, and a prefix that isn't one character other than a letter, digit,
-    space or `@`, or that names something other than such a command, stop the server.
+  - `plugins` pins plugin jars (§4.15). Plugin identifier syntax and checksum validation are enforced per
+    [WorldModule.kt](../script/src/main/kotlin/gups/script/WorldModule.kt).
+  - `aliases` gives engine commands shorter words, and `prefixes` makes a single character at the start of a line stand
+    for a command (§5.2). Validation rules for alias identifiers and prefix characters, along with template defaults,
+    are documented in [WorldModule.kt](../script/src/main/kotlin/gups/script/WorldModule.kt).
   - Command names in `aliases` and `prefixes` are the names after `rename` (§3.10); an alias or prefix naming a command
     of a feature that is off stops the server.
   - Changing the file needs a restart (§5.10). The file watcher and reload never read it. Changing its schema or
     features also needs a server wipe (§3.9).
 - **`MESSAGES.gups`:** optional Starlark with exactly one call, `messages({...})`, that overrides engine message text
-  (§4.18). Like `MODULE.gups`, it is instructor-owned, read only at startup, and a problem in it stops the server.
+  (§4.18), validated according to [WorldMessages.kt](../script/src/main/kotlin/gups/script/WorldMessages.kt). Like
+  `MODULE.gups`, it is instructor-owned, read only at startup, and a problem in it stops the server.
 - **CODEOWNERS:** the first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS`, in GitHub's order. No file
   means no CODEOWNERS scope.
   - Each line is a path pattern, then owners. A pattern maps to every package whose directory it matches; for example
     `/zones/forest/` owns `zones/forest` and the packages below it. The last matching pattern wins, as on GitHub.
-  - Patterns are gitignore-style, matched against package directories. A leading `/` or an inner slash anchors to the
-    world root; otherwise the name matches at any depth. `*` stays within a directory and `**` crosses them. A directory
-    pattern also owns the packages below it. File patterns such as `*.star` own no package. Inline `#` comments aren't
-    supported, as on GitHub.
+  - Patterns are gitignore-style, matched against package directories. Pattern syntax and owner parsing rules follow
+    [CodeOwners.kt](../auth/src/main/kotlin/gups/auth/CodeOwners.kt).
   - Owners are `@user` handles, compared in lowercase with accounts' `github_handle`. Team and email owners are
     warnings, as are handles that match no account.
 - **Deploying:** An engine upgrade is a PR that edits `MODULE.gups`. CI shows exactly which packages break.
@@ -313,16 +304,21 @@ gups-engine/
   )
   ```
 
-  Every setting also has a CLI flag, and a flag overrides the file: - Listeners: `--telnet`/`telnet` (binds every
-  interface), `--telnet-tls`/`telnet_tls`, and `--https`/`https`. Both TLS listeners share one certificate: `--tls-cert`
-  and `--tls-key` (`tls_cert`, `tls_key`), or `--self-signed`, which needs a TLS listener. - Admin port:
-  `--admin`/`admin` (default `127.0.0.1:9090`) and `--admin-token-file`/`admin_token_file`/`GUPS_ADMIN_TOKEN_FILE`
-  (§4.14). - Accounts: `--open-signup`/`--no-open-signup`, `--max-characters`, `reserved_names`, `restriction_ladder`. -
-  Deploys: `--repository`, `--deploy-branch` and `--deploy-key-file` (or `GUPS_DEPLOY_KEY_FILE`), with configuration
-  keys of the same names. - Shutdown: `--shutdown-timeout`/`shutdown_timeout`, in seconds (default 30, at least 1;
-  §5.11). - The existing `--world`, `--db`, `--start` and `--fresh`. - The startup message lists the bound port of each
-  transport (`telnet`, `tls`, `ws`, `admin`).
+  Every setting also has a CLI flag, and a flag overrides the file (see
+  [ServerConfig.kt](../script/src/main/kotlin/gups/script/ServerConfig.kt) and
+  [Commands.kt](../cli/src/main/kotlin/gups/cli/Commands.kt)):
 
+  - **Listeners:** `--telnet`/`telnet` (binds every interface), `--telnet-tls`/`telnet_tls`, and `--https`/`https`. Both
+    TLS listeners share one certificate: `--tls-cert` and `--tls-key` (`tls_cert`, `tls_key`), or `--self-signed`, which
+    needs a TLS listener.
+  - **Admin port:** `--admin`/`admin` (default `127.0.0.1:9090`) and
+    `--admin-token-file`/`admin_token_file`/`GUPS_ADMIN_TOKEN_FILE` (§4.14).
+  - **Accounts:** `--open-signup`/`--no-open-signup`, `--max-characters`, `reserved_names`, `restriction_ladder`.
+  - **Deploys:** `--repository`, `--deploy-branch` and `--deploy-key-file` (or `GUPS_DEPLOY_KEY_FILE`), with
+    configuration keys of the same names.
+  - **Shutdown:** `--shutdown-timeout`/`shutdown_timeout`, in seconds (default 30, at least 1; §5.11).
+  - **General options:** `--world`, `--db`, `--start` and `--fresh`.
+  - **Startup output:** The startup message lists the bound port of each transport (`telnet`, `tls`, `ws`, `admin`).
 - **`--prod` and the world commit:** When the world is a git working tree, `--prod` refuses to start if tracked files
   have uncommitted changes, or if `HEAD` isn't the `meta.world_commit` the database was saved at. `--force-commit`
   adopts what is there. The first start records `HEAD`. A world that isn't a working tree, or has no commits, starts
@@ -330,175 +326,156 @@ gups-engine/
 
 ### 2.5 Process and Thread Topology
 
-- **Network I/O** runs on `Dispatchers.IO`. This covers Telnet and ANSI parsing, option negotiation, line framing, GMCP
-  encoding, and output buffering.
-- **The world thread** is a single-threaded dispatcher (`Dispatchers.Default.limitedParallelism(1)`). It owns the entire
-  world graph, the scheduler, all Starlark evaluation, and checkpoint *capture*. Every world mutation happens here, so
-  they are lock-free and race-free by construction. The dispatcher is one process-wide view, so every world in a process
-  shares one thread.
-- **The checkpoint writer** is a dedicated thread. It is the only SQLite writer, and it applies batches in FIFO order
-  (§5.11).
-- **Background work:** Argon2id takes roughly 100–300 ms per hash and a git fetch takes seconds; neither may run on the
-  world thread. Slow work (password hashing, account store access, account commands, `@snapshot`, `@audit`) runs on one
-  pool of 4 threads (`Dispatchers.IO.limitedParallelism(4)`). `World.later(work, then)` runs `work` there and `then`
-  with its result on the world thread, through a `WorldControlEvent.Task`. A world without a pool (headless tests) runs
-  both at once.
-- **Deploys** run one at a time, each on a thread of its own (§5.10).
-- **The file watcher** (`--dev` only) posts reload requests into the world input channel. It polls every 100 ms,
-  comparing the modification time and size of every non-test `.star` file, rather than using `WatchService` (which polls
-  every few seconds on macOS).
-- **Ingress:** All network input reaches the world as `ClientInputEvent`s on one `Channel`. Output leaves through
-  per-session `OutputSink`s, which never block the world thread.
+- **Network I/O** runs on an asynchronous I/O thread pool. This covers Telnet and ANSI parsing, option negotiation, line
+  framing, GMCP encoding, and output buffering.
+- **The world thread** is a single dedicated thread owning the entire world graph, the scheduler, all Starlark
+  evaluation, and checkpoint *capture* ([WorldLoop.kt](../core/src/main/kotlin/gups/core/loop/WorldLoop.kt)). Every
+  world mutation happens here, so they are lock-free and race-free by construction.
+- **The checkpoint writer** is a dedicated background thread. It is the only SQLite database writer, applying batches in
+  FIFO order ([Checkpoints.kt](../persist/src/main/kotlin/gups/persist/Checkpoints.kt)).
+- **Background work:** Slow operations such as Argon2id password hashing, account store access, git operations, and
+  diagnostics run on a dedicated background worker pool. `World.later(work, then)` executes slow work off the world
+  thread and dispatches the result back to the world loop as a control event.
+- **Deploys** run one at a time, each on a dedicated thread (§5.10).
+- **The file watcher** (`--dev` only) polls modification times and file sizes of non-test `.star` files every 100 ms and
+  posts reload requests into the world input channel ([Watcher.kt](../script/src/main/kotlin/gups/script/Watcher.kt)).
+- **Ingress and egress:** Network input reaches the world as client input events on a channel. Output leaves through
+  per-session output sinks, which never block the world thread.
 
 ---
 
 ## 3. Data Structures, Types & State Contracts
 
-### 3.1 Time Constants
+### 3.1 Time and Simulation Constants
 
-```kotlin
-const val PULSE_MS = 250L
-const val COMBAT_ROUND_PULSES = 8      // 2.0 s
-const val WORLD_TICK_PULSES = 120    // 30.0 s
-const val THINK_DEFAULT_PULSES = 4     // 1.0 s; per-mob override 1..N
-const val BUBBLE_RADIUS = 3      // exits
-const val PERCEPTION_MAX_RADIUS = 1    // exits
-const val ACTION_QUEUE_MAX = 10
-const val CASCADE_MAX_DEPTH = 8
-const val LINKDEAD_PULSES = 720    // 3 min
-const val IDLE_QUIT_PULSES = 7200   // 30 min
-const val CORPSE_DECAY_PULSES = 1200   // 5 min
-```
+Game time is a monotonic `pulse: Long` counter. Every persisted in-game deadline (timers, affect expirations, decays,
+and respawns) is stored as an absolute pulse number. Wall-clock time is used only for external concerns: logging, backup
+timestamps, account restriction expirations, and session-token expiry.
 
-Game time is `pulse: Long`. Every persisted deadline is an absolute pulse number. Wall-clock time is used only for
-logging, backups, and session-token expiry.
+The engine defines its timing and capacity constants in
+[TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt):
+
+- **Base heartbeat and cadences:** pulse duration (`PULSE_MS`), combat round interval (`COMBAT_ROUND_PULSES`), world
+  tick interval (`WORLD_TICK_PULSES`), and default mob think cadence (`THINK_DEFAULT_PULSES`).
+- **Spatial and simulation bounds:** reality bubble and perception propagation radius (`BUBBLE_RADIUS`), per-actor
+  tick-lane action queue capacity (`ACTION_QUEUE_MAX`), and synchronous hook cascade depth (`CASCADE_MAX_DEPTH`).
+- **Session and entity timeouts:** link-dead grace period (`LINKDEAD_PULSES`), player idle auto-quit timeout
+  (`IDLE_QUIT_PULSES`), and corpse decay duration (`CORPSE_DECAY_PULSES`).
 
 ### 3.2 Script-Compatible Values
 
-```kotlin
-sealed interface AttrValue {
-  data class I(val v: Long) : AttrValue
-  data class S(val v: String) : AttrValue
-  data class B(val v: Boolean) : AttrValue
-  data class L(val v: List<AttrValue>) : AttrValue
-  data class M(val v: Map<String, AttrValue>) : AttrValue
-}
-```
+Custom attributes on entities store script-compatible primitives represented by
+[`AttrValue`](../core/src/main/kotlin/gups/core/AttrValue.kt). Starlark types convert both ways according to the
+conversion rules in [Values.kt](../script/src/main/kotlin/gups/script/Values.kt):
 
-- Starlark `int`, `str`, `bool`, `list`, and `dict` with string keys convert both ways. `None` means "absent": setting
-  an attribute to `None` deletes it.
-- Floats, functions, and host objects can't be stored.
-- An entity's serialized `customAttributes` is limited to 64 KB, measured as compact JSON.
-- `core` stays free of kotlinx.serialization. `persist` maps values to JSON itself: ints and bools as JSON numbers and
-  booleans, strings as strings, lists as arrays and dicts as objects.
+- Starlark `int` (as 64-bit integer), `str`, `bool`, `list`, and `dict` with string keys convert both ways.
+- `None` means "absent": setting an attribute to `None` deletes it.
+- Floats, functions, and host objects cannot be stored and produce errors when assigned.
+- An entity's serialized custom attributes are limited to 64 KB, measured as compact JSON.
+- `core` stays free of `kotlinx.serialization`. Custom attribute values are serialized directly to JSON in the `persist`
+  module: ints and booleans as JSON numbers and booleans, strings as strings, lists as arrays, and dicts as objects.
 
 ### 3.3 Entities
 
-All entities are strongly typed Kotlin classes that share a base:
+The world graph consists of immutable **prototypes** evaluated from packages and mutable **live entities** simulated by
+the engine.
 
-```kotlin
-sealed class Entity {
-  abstract val id: EntityId                 // @JvmInline value class EntityId(val v: Long)
-  abstract val protoLabel: Label            // e.g. //zones/goblin_caves:goblin_scout
-  abstract var protoVersion: Int
-  val customAttributes: MutableMap<String, AttrValue>   // keys are namespaced (§3.7)
-  val timers: MutableList<ScriptTimer>
-  val activeReasons: MutableSet<String>     // ref-counted by reason string (§5.9)
-  val anchorReasons: MutableSet<String>
-  var dirty: Boolean
-  var debug: Boolean                        // builder-spawned; never persisted (§4.9)
-}
-```
+#### Prototypes
 
-**Reserved engine labels:** `//engine:player` is the prototype label of every player. `//engine:corpse` is the built-in
-corpse container, always present in the item table.
+Prototypes ([Protos.kt](../core/src/main/kotlin/gups/core/model/Protos.kt)) are immutable Kotlin data classes created
+when a package evaluates. They define base templates for rooms (`RoomProto`), exits (`ExitProto`), doors (`DoorProto`),
+mobs (`MobProto`), items (`ItemProto`), skills (`SkillProto`), and zones (`ZoneProto`).
 
-**Prototypes** are immutable Kotlin data classes in `core` (`RoomProto`, `MobProto`, `ItemProto`, `SkillProto`,
-`ZoneProto`). Behaviors, `think`, zone commands and custom `resolve` are Kotlin function interfaces that the script host
-implements. Hooks are not stored on prototypes: the host looks them up by prototype label.
+- **Reserved prototype labels:** `//engine:player` is the prototype label of every player character. `//engine:corpse`
+  is the built-in corpse container item prototype.
+- **Behaviors and hooks:** Behaviors, `think`, zone commands and custom `resolve` are Kotlin function interfaces that
+  the script host implements, held on the prototypes. Hooks are not stored on prototypes: the host looks them up by
+  prototype label.
 
-**Room**
+#### Live Entities
 
-- `trackSize`: `CRAMPED = 1`, `NORMAL = 3`, or `LARGE = 5`. Always 1 without the `track` feature (§3.10).
-- `exits: Map<Direction, Exit>`. - `regions: Set<String>`.
-- `tags: Set<String>`, as items and skills have (§4.2).
-- `modifiers: Map<ModifierPoint, StarlarkCallable>`, frozen with the prototype.
-- `flags`: `always_active`, `dead_end_ok`.
-- `spawns: List<SpawnRule>`.
-- `commands: Map<String, StarlarkCallable>`.
+Live entities ([Entities.kt](../core/src/main/kotlin/gups/core/model/Entities.kt)) are stateful objects instantiated in
+the world graph:
 
-**Exit**
+**Entity** ([`Entity`](../core/src/main/kotlin/gups/core/model/Entities.kt), abstract base of `Room`, `Actor`, and
+`Item`):
 
-- `direction: Direction`.
-- `to: Label`.
-- `entryIndex: Int`. Default `0`; `-1` means `trackSize - 1`.
-- `tags: Set<String>`, free-form words the rules read, such as `soundproof` or `sealed`; they never affect whether the
-  exit can be walked through.
-- `door: Door?`. - `oneWay: Boolean`.
+- **Identity and versioning:** unique monotonic `id` (`EntityId`), immutable `protoLabel`, and mutable `protoVersion`.
+- **Script storage:** namespaced `customAttributes` map (§3.7) and scheduled `timers` (`ScriptTimer`).
+- **Simulation state:** active reasons (`activeReasons`) and anchor reasons (`anchorReasons`) reference sets (§5.9).
+- **Engine metadata:** `dirty` persistence flag and transient builder `debug` flag.
 
-**Door** - `state`: `OPEN`, `CLOSED`, or `LOCKED`. - `keyLabel: Label?`. - `tags: Set<String>`, such as `heavy` or
-`transparent`.
+**Room** ([`Room`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
-Neither the engine nor the data says which channels an exit or door blocks. `rules.sense_cost` (§4.6) reads the tags and
-the door state and prices every crossing, with a negative price standing for "never".
+- **Tactical layout:** `trackSize` (`1`, `3`, or `5`; always `1` without the `track` feature, §3.10).
+- **Spatial connectivity:** outward `exits` map keyed by cardinal `Direction`.
+- **Classification and tags:** builder `regions`, queryable `tags` (§4.2), and frozen prototype `modifiers`.
+- **Spawns and commands:** mob `spawns` rules, zone `commands` map, and simulation flags (`always_active`,
+  `dead_end_ok`).
 
-**Actor** (sealed: `Player`, `Mob`) - **Position:** - `room: RoomRef` - `trackIndex: Int` (always 0 without the `track`
-feature, §3.10). - **Stats and vitals,** keyed by the names the world's schema declares (§3.9): - `baseStats:
-Map<String, Int>`, one entry per declared stat. The effective value adds affect, equipment, encumbrance and trait deltas
-(§4.19). - `vitals: Map<String, Vital>`, one per declared vital. A `Vital` has `current` and `max` (the base maximum;
-`current` may be negative) and `belowZeroSince: Long?`, the pulse `current` last dropped below 0, cleared when it is 0
-or more again. The effective maximum adds trait deltas, at least 0, and `current ≤` the effective maximum. - `resists:
-Map<DamageType, Int>`, keyed by declared damage types: the base resists. The effective value adds trait deltas. -
-`condition`: `OK`, `INCAPACITATED` or `DEAD`, as `rules.condition` last decided (§4.6). - Leveling (the `leveling`
-feature): `level`, `xp`. A player or mob also has `levelGains`, a map from a level to the stat and maximum-vital deltas
-that level applied, kept so a lost level can be unwound exactly (§5.4). - **Skills** (the `skills` feature): `Map<Label,
-Int>`, the skill label and a proficiency of 0–100. - **Traits** (§4.19): `grantedTraits: Set<String>`, as saved, unknown
-ones included, and `traits`, the effective set of known traits: for a player, from its choices and granted traits; for a
-mob, from its prototype's `traits` and granted traits. `traits` and the sums of their stat, max-vital and resist deltas
-and flags are worked out again, and kept on the actor, whenever an input changes: at spawn, at load, on a change (§4.19)
-and on reload. They are never derived on the fly, so effective reads stay cheap on hot paths. - **Affects:** `affects:
-List<Affect>`. - **Action state:** - `actionQueue: ArrayDeque<QueuedAction>`, capacity 10. - `waitState: Int`, in
-pulses. - `casting: CastState?` (only with the `skills` feature). - `fighting: Set<EntityId>` (only with the `combat`
-feature). - **Mob only:** - `behaviors`. - `thinkFn`. - `thinkEvery: Int`. - `senses: Map<Sense, Int>` with radius 0..1.
-Senses are `HEARING` and `SIGHT`. - `homeRoom`. - `summonedBy: EntityId?`, the actor whose `summon` (§4.3) spawned it. -
-`dormantRecovery`: `FULL` (default), `REGEN`, or `NONE` (§5.9). - **Player only:** - `accountId` (none for characters in
-a world without a database). - `role` and builder scope, copied from the account each time the character enters the game
-and whenever the account changes (§3.5). - `session: SessionRef?`. `null` while link-dead; the player is removed from
-the world after quitting. - `recallRoom`. - `choices: Map<String, String>` (choice id → option id), as saved, unknown
-ones included (§4.19).
+**Exit and Door** ([`Exit`](../core/src/main/kotlin/gups/core/model/Entities.kt),
+[`Door`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
-**Item** - `location: ItemLocation`. - `count: Int`. This is 1 unless the prototype is `stackable`. - `weight`. -
-`container: ContainerState?` with `capacity`, `maxWeight`, `state` (OPEN, CLOSED, or LOCKED), and `keyLabel`. - `range:
-Band`, for weapons (the `track` feature). - `kind`, for example `melee`, `ranged`, `armor`, or `consumable`. -
-`statDeltas`, keyed by declared stats. - `tags`, from the prototype. - `decayAt: Long?`. - `modifiers` and
-`equipAffects`, which apply when the item is worn (§4.6, §4.2). - `wear`: the item's slot or slot family (§4.2).
+- **Exit:** cardinal `direction`, target room destination `to` label, `entryIndex` on the destination track (default
+  `0`, `-1` for end of track), queryable `tags` (e.g. `soundproof`, `sealed`), optional `door`, and `oneWay` flag.
+- **Door:** state (`OPEN`, `CLOSED`, `LOCKED`), optional `keyLabel`, and `tags` (e.g. `heavy`, `transparent`).
+- **Transmission costs:** exits and doors do not hardcode channel blockage; `rules.sense_cost` (§4.6) evaluates exit
+  tags and door state dynamically to determine crossing costs per channel.
 
-```kotlin
-@Serializable
-sealed interface ItemLocation {
-  data class InRoom(val room: EntityId, val trackIndex: Int) : ItemLocation
-  data class Carried(val actor: EntityId) : ItemLocation
-  data class Equipped(val actor: EntityId, val slot: String) : ItemLocation
-  data class Contained(val container: EntityId) : ItemLocation
-}
-```
+**Actor** ([`Actor`](../core/src/main/kotlin/gups/core/model/Entities.kt), sealed base of
+[`Player`](../core/src/main/kotlin/gups/core/model/Entities.kt) and
+[`Mob`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
-**Affect** - `id`. - `label`, the skill or affect prototype. - `source: EntityId?`. - `expiresAt: Long`, an absolute
-pulse. - `statDeltas`, keyed by declared stats. - `flags`, for example `stunned`, `silenced` (blocks casting, §5.3, and
-speech, §4.9), or `no_regen` (suppresses all vitals regen, including dormant catch-up, until the affect expires). -
-Re-applying an affect with the same name, a `stun` included, replaces the old one only if the new one would expire
-later. Otherwise the old one stays as it is, so a shorter affect never cuts a longer one short. - `tickEvery: Int?`. -
-`onTick` and `onExpire`: `HookRef?`. - `modifiers`: modifier functions stored as `HookRef`s, so they persist (§4.6). -
-`expireMessage`.
+- **Spatial position:** current `Room` and `trackIndex` (always `0` when the `track` feature is off).
+- **Schema-keyed attributes:** base stats, vitals (current, base max, and `belowZeroSince` pulse), damage-type resists,
+  per-channel base senses, and life `condition` (`OK`, `INCAPACITATED`, `DEAD`). Effective values combine base values
+  with trait, affect, equipment, and encumbrance deltas.
+- **Progression:** `level`, `xp`, `levelGains` (recorded per level so level loss unwinds exact stat/vital deltas), and
+  `skills` proficiency map.
+- **Traits and affects:** permanent `traits` (recomputed and cached whenever choices, prototype traits, or
+  `grantedTraits` change) and timed `affects`.
+- **Action and combat state:** tick-lane `actionQueue`, recovery `waitState` (and `heldWaitState` while disabled),
+  active `casting` state, engaged `fighting` set, `primaryTarget`, round `initiative`, and `lastAttacker`.
+- **Inventory and equipment:** carried items, equipped items by slot, and current `encumbrance` stat deltas.
+- **Mob-specific state:** prototype reference, `thinkEvery` and `lastThink`, `homeRoom`, `dormantRecovery` mode,
+  `leader`, `spawnedBy`, `summonedBy`, and `debugOwner`/`debugUntil`.
+- **Player-specific state:** `accountId`, `role` and builder `scope`, active `session` and `linkDeadSince`,
+  `lastInputPulse` and `idleExempt`, `recallRoom`, and character creation `choices`.
 
-**ScriptTimer** - `id`. - `fn: HookRef`. - `args: Map<String, AttrValue>`. - `due: Long?` (absolute pulse, while
-running). - `remaining: Int?` (while paused in a dormant room).
+**Item** ([`Item`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
-**HookRef** is `(file label, top-level function name)`. Lambdas and nested functions don't parse (§1.5), so every
-function a script hands the engine is a top-level `def`.
+- **Location hierarchy:** mutually exclusive single containment via `ItemLocation`: in a room (`InRoom` with track
+  index), carried in an actor's inventory (`Carried`), equipped in an actor's slot (`Equipped`), or contained in another
+  item (`Contained`).
+- **Quantities and decay:** `count` (stackable items), `weight`, and scheduled `decayAt` pulse.
+- **Container properties:** optional `ContainerState` with `capacity`, `maxWeight`, access `state` (`OPEN`, `CLOSED`,
+  `LOCKED`), and `keyLabel`.
+- **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, schema
+  `statDeltas`, prototype `tags`, equipment slot `wear`, and worn `modifiers` and `equipAffects`.
 
-**RNG:** `Rng` wraps `kotlin.random.Random(seed)` (XorWow), which is deterministic across platforms. Changing the
-algorithm changes every replay.
+**Affect** ([`Affect`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
+
+- **Tracking:** unique `id`, source `label`, optional `source` entity ID, and absolute expiration pulse `expiresAt`.
+- **Mechanics:** schema `statDeltas`, status `flags` (such as `stunned`, `silenced`, or `no_regen`), periodic
+  `tickEvery` cadence with `onTick` and `onExpire` hook references, and applied `modifiers`.
+- **Replacement rule:** re-applying an affect with the same name replaces the existing affect only if the new
+  `expiresAt` is strictly later; shorter affects never truncate longer active affects.
+
+**ScriptTimer** ([`ScriptTimer`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
+
+- Identified by unique `id`, targeting callback `fn` (`HookRef`) with argument map `args`.
+- Scheduled with absolute `due` pulse while running in active rooms, or preserved `remaining` pulse count while
+  suspended in dormant rooms (§5.9).
+
+**HookRef** ([`HookRef`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
+
+- Stores a package file label and top-level function name. Since Starlark forbids lambdas and nested functions (§1.5),
+  all script callbacks are top-level definitions.
+
+**RNG** ([`Rng`](../core/src/main/kotlin/gups/core/Rng.kt)):
+
+- Wraps deterministic seeded pseudorandom number generation (`XorWow`), ensuring reproducible rolls across platforms and
+  replay runs.
 
 ### 3.4 Prototypes, Instances, Versions
 
@@ -540,96 +517,90 @@ algorithm changes every replay.
 
 ### 3.5 Accounts and Roles
 
-```kotlin
-enum class Role { PLAYER, BUILDER, INSTRUCTOR, ADMIN }   // ordered; higher implies lower
-```
+The engine defines a four-tier role hierarchy (`PLAYER < BUILDER < INSTRUCTOR < ADMIN`), where higher roles inherit all
+privileges of lower roles ([Role.kt](../core/src/main/kotlin/gups/core/Role.kt)).
 
-- **Account fields:** `id`, `login`, `pwHash` (Argon2id; absent until a roster account is set up), `roles`,
-  `githubHandle?`, `disabled` (with `disabledBy?`, `disabledAt?` and `disabledReason?`), and `createdAt`.
-  - Logins are 3–24 characters from `[a-z0-9_.-]`, unique case-insensitively and stored lowercase.
-  - An account has one role; the higher roles imply the lower, so `roles_json` stores `{"role": "BUILDER", "scope":
-    [...], "manual": [...]}`.
-  - A disabled account can't log in (§5.12). Disabling it does four things at once: it quits the account's characters
-    and closes its sessions, deletes its web tokens and unused setup codes, and records who disabled it, when and why.
-    Re-enabling clears that record and restores nothing else. Accounts are disabled with `@role` (§4.9) or the roster
-    (§4.13).
+- **Account records:** Managed via [Accounts.kt](../core/src/main/kotlin/gups/core/Accounts.kt), an account contains
+  `id`, `login`, `pwHash` (Argon2id; absent until a roster account is set up), role and builder scopes, optional
+  `githubHandle`, active status (`disabled` with provenance fields `disabledBy`, `disabledAt`, and `disabledReason`),
+  and `createdAt`.
+  - Logins are 3–24 characters from `[a-z0-9_.-]`, unique case-insensitively and stored in lowercase.
+  - An account has one role; the higher roles imply the lower, so builder roles record both CODEOWNERS and manual
+    builder package scopes.
+  - A disabled account cannot log in (§5.12). Disabling an account immediately disconnects its active characters, closes
+    its sessions, revokes its web tokens and unused setup codes, and records provenance. Re-enabling clears the
+    provenance record. Accounts are disabled via `@role` (§4.9) or roster import (§4.13).
 - **Characters:** An account owns 1..N characters (`max_characters`, default 5; instructors and admins unlimited) and
-  plays one at a time, across every transport (§5.12). Character names are 2–16 letters, unique across all accounts
-  (case-insensitive), and checked against the reserved names:
-  - Built in: `self`, `me`, `all`, `someone`, `here`, the menu words `new`, `password` and `quit`, `guest`,
-    `instructor`, `admin`, and every standard direction with its abbreviation.
-  - Per world: the name and aliases of every engine, global and tool command (without `@`), every keyword and every word
-    of the name of each mob prototype (so no player can pass for an NPC), and the server configuration's
-    `reserved_names`.
+  plays one at a time across all transports (§5.12). Character names are 2–16 letters, unique across all accounts
+  (case-insensitive), and checked against reserved words:
+  - Built-in reserved names: `self`, `me`, `all`, `someone`, `here`, menu commands (`new`, `password`, `quit`), `guest`,
+    `instructor`, `admin`, and standard cardinal directions and abbreviations.
+  - World reserved names: names and aliases of engine, global, and tool commands (without `@`), all words in mob
+    prototype names (to prevent impersonating NPCs), and server configuration `reserved_names`.
   - Logins reserve only `new`.
-- **Builder scope:** The `BUILDER` role is scoped to a set of package paths, the union of two scopes stored in
-  `roles_json`:
-  - The **CODEOWNERS scope**, derived from `CODEOWNERS` (§2.3) by matching `githubHandle`. It is synced at startup and
+- **Builder scope:** The `BUILDER` role is scoped to specific package paths, formed from the union of two scopes:
+  - **CODEOWNERS scope:** derived from `CODEOWNERS` (§2.3) by matching `githubHandle`. It is synchronized at startup and
     after each deploy. Every account other than instructors and admins gets its CODEOWNERS packages, players included,
     so promoting a player scopes them at once. A sync never promotes or demotes: it only replaces scopes, and `@role`
     sets roles.
-  - The **manual scope**, set by `@role <account> builder <packages>` (§4.9). Packages that CODEOWNERS covers are
-    refused there, and a sync drops any that CODEOWNERS later covers.
-  - Instructors and admins have neither scope; they see everything.
-  - A changed scope applies to characters in play at once.
-- **Storage seam:** `AccountStore` (in `core`, with `Account` and `Invite`) is exposed as `Persistence.accounts` and
-  implemented in `persist`; `auth` uses only the interface, so it still depends only on `core`. Account changes are rare
-  and small and must survive a crash, but they aren't world state, and the checkpoint writer stays the only SQLite
-  writer:
-  - Each change is a batch of its own, submitted to the checkpoint writer as an immediate batch (written at once, in
-    FIFO order) so it never merges with world captures. The caller blocks (off the world thread) for at most 30 s until
-    it commits. Account batches don't count toward the checkpoint-backlog alert.
-  - A taken login (`INSERT OR IGNORE`) and a used invite (`UPDATE … WHERE used_by IS NULL`) are reported as results,
-    never thrown, so they can't wedge the writer's retry loop. That also makes single use hold across processes.
-  - Reads use a read-only connection of the store's own beside the writer (WAL). Accounts aren't cached, so CLI tools
-    writing the same database directly are safe.
-  - `update` writes role, scopes, GitHub handle and the disabled flag with its record, never the password. `setPassword`
-    deletes the account's `session_tokens`. Disabling an account deletes them too, along with its unused setup codes.
-- **Invite and setup codes:** 10 characters grouped as `XXXXX-XXXXX`, drawn from the alphabet
-  `23456789ABCDEFGHJKMNPQRSTWXYZ` (no 0/O, 1/I/L, U/V). They are compared after uppercasing and removing spaces and
-  dashes, and stored as the SHA-256 hex of that canonical form; they are random enough that an unsalted fast hash
-  suffices. A setup code is bound to one account; an invite carries a role.
+  - **Manual scope:** assigned via `@role <account> builder <packages>` (§4.9). Packages covered by CODEOWNERS are
+    rejected when manually added, and a sync drops any manual package that CODEOWNERS later covers.
+  - Instructors and admins have universal scope across all packages.
+  - Scope modifications take effect on active characters immediately.
+- **Storage seam:** `AccountStore` ([Accounts.kt](../core/src/main/kotlin/gups/core/Accounts.kt)) is exposed through
+  `Persistence.accounts` and implemented in the `persist` module
+  ([Database.kt](../persist/src/main/kotlin/gups/persist/Database.kt)). Account changes are crash-resilient but
+  decoupled from world snapshots:
+  - Each account mutation is dispatched to the checkpoint writer as an immediate batch written in FIFO order without
+    merging into periodic world captures. Callers suspend or wait off the world thread for confirmation (up to 30 s).
+  - Claiming a login or redeeming an invite is handled atomically and reported as an explicit result rather than
+    throwing, preventing database retries from stalling the writer loop.
+  - Reads use a dedicated read-only WAL connection. Accounts are not cached in memory, ensuring CLI tools directly
+    interacting with SQLite remain consistent.
+  - Updating account details modifies metadata and disabled provenance; passwords are updated separately via dedicated
+    methods that revoke active session tokens. Disabling an account revokes all active session tokens and setup codes.
+- **Invite and setup codes:** 10 characters grouped as `XXXXX-XXXXX`, drawn from an unambiguous alphanumeric alphabet
+  (`23456789ABCDEFGHJKMNPQRSTWXYZ`, excluding confusing characters like 0/O, 1/I/L, and U/V). Codes are normalized by
+  uppercasing and removing spaces and dashes, and stored as SHA-256 hashes. Setup codes bind to a specific account;
+  invites grant an initial role.
 
 ### 3.6 Persistence Schema (SQLite, WAL)
+
+The engine persists world state and account information to SQLite in WAL mode
+([Database.kt](../persist/src/main/kotlin/gups/persist/Database.kt)).
 
 |      Table       |                                                          Columns (abridged)                                                          |                                                                                           Notes                                                                                            |
 |------------------|--------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `meta`           | `key`, `value`                                                                                                                       | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `world_schema` and `world_features` (§3.9), `snapshot_taken_at` (sanitized copies only) |
-| `accounts`       | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at`   | `roles_json` holds the role, CODEOWNERS `scope` and `manual` scope; the `disabled_*` columns record the current disable (migration 4)                                                      |
-| `session_tokens` | `token_hash`, `account_id`, `expires_at`                                                                                             | web client; revocable                                                                                                                                                                      |
-| `invites`        | `code_hash`, `role`, `expires_at`, `used_by`, `account_id`                                                                           | `account_id` binds a setup code to its account (migration 2)                                                                                                                               |
-| `restrictions`   | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`                                | migration 3 (§4.9)                                                                                                                                                                         |
-| `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                          | character stats, skills, affects, attrs, position, `choices`, `grantedTraits` (§4.19) and `levelGains`                                                                                     |
-| `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                       | rooms, mobs, and **all items**, including carried ones                                                                                                                                     |
-| `zone_states`    | `package`, `payload_json`                                                                                                            | reset and respawn deadlines, quarantine state; a quarantined non-zone package gets a row with only its quarantine flag                                                                     |
-| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                               | custody audit of changes involving a player; locations as JSON; cause `spawn`, `move` or `destroy`                                                                                         |
-| `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json` |                                                                                                                                                                                            |
+| `accounts`       | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at`   | `roles_json` holds role, CODEOWNERS scope, and manual scope; `disabled_*` columns record disable provenance                                                                                |
+| `session_tokens` | `token_hash`, `account_id`, `expires_at`                                                                                             | web client session tokens; revocable                                                                                                                                                       |
+| `invites`        | `code_hash`, `role`, `expires_at`, `used_by`, `account_id`                                                                           | invite and account setup codes; `account_id` binds setup codes to specific accounts                                                                                                        |
+| `restrictions`   | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`                                | temporary and permanent account capability bans (§4.9)                                                                                                                                     |
+| `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                          | character stats, skills, affects, attributes, position, `choices`, `grantedTraits` (§4.19), and `levelGains`                                                                               |
+| `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                       | rooms, mobs, and **all items**, including carried and contained items                                                                                                                      |
+| `zone_states`    | `package`, `payload_json`                                                                                                            | reset and respawn deadlines, package quarantine flags                                                                                                                                      |
+| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                               | custody audit trail for player-involved items (cause: `spawn`, `move`, `destroy`)                                                                                                          |
+| `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json` | runtime script exceptions and diagnostics                                                                                                                                                  |
 
-- **Item location:** An item's location is stored **only** on the item row. Inventories and container contents are
-  derived when the world loads. A player row never lists items, so no partial checkpoint can put one item in two places.
+- **Single-location item invariant:** An item's location is stored **only** on its own `world_entities` row. Inventories
+  and container contents are derived dynamically when the world loads. Player rows never list item IDs, preventing torn
+  checkpoints from duplicating or stranding items.
 - **Entity IDs:** `next_entity_id` is written in every checkpoint transaction. IDs allocated after the last committed
-  checkpoint may be reused after a crash. This is safe because nothing that referenced them was committed either.
-- **Payloads:** Each JSON payload carries a `format_version` for engine-side schema evolution. Field names are camelCase
-  except `format_version`.
-- **References:** An item's location names a room by label (with a track index) and an actor or container by id. Rooms
-  keep their saved ids across restarts, so ids stay unique, but nothing refers to a room by id.
-- **Deltas:**
-  - Rooms store door states that differ from the prototype, plus attributes and timers.
-  - Mobs always store position, current vitals, xp, home room and spawn binding. Level, vital maxima, stats, senses,
-    resists, skills, `think_every` and `dormant_recovery` are stored only when they differ from the prototype, each as a
-    whole value. `grantedTraits` and `levelGains` are stored when not empty; prototype traits never are.
-  - Stats, vitals and resists are stored as objects keyed by their schema names; a vital is `{"cur", "max"}`, plus
-    `"belowZeroSince"` when set.
-  - Items store count, decay, name override, container state, attributes, timers and their prototype name.
-  - Players store everything, role included. Vital maxima, senses and resists are the base values; `choices` is an
-    object, `grantedTraits` a sorted array and `levelGains` a map, empty when there are none. A payload written before
-    they existed reads as empty.
-  - A restored actor's traits are worked out before its vitals are restored, and `current` is capped at the effective
-    maximum, so a value that only a trait allows (a mage's extra mana) survives a restart. A mob delta without a vital
-    `max` takes the prototype's base maximum.
-  - Every entity and player stores its active and anchor reasons (§5.9).
-- **SQLite settings:** WAL with `synchronous = NORMAL`, which survives process kills but may lose the last commits on
-  power loss. `busy_timeout` is 5 s.
+  checkpoint may be reused safely after a crash because uncommitted entities were never referenced by committed state.
+- **JSON payloads and delta encoding:** Payloads are serialized using delta encoding
+  ([Codec.kt](../persist/src/main/kotlin/gups/persist/Codec.kt)). Each payload carries a `format_version` integer for
+  engine schema evolution:
+  - Rooms store modified door states, custom attributes, and running timers.
+  - Mobs store position, current vitals, XP, home room, and spawn rule bindings. Modifiable stats, vitals maxima,
+    resists, skills, and behavior cadences are persisted only when differing from prototype definitions.
+  - Schema-keyed stats, vitals, and resists are stored as JSON maps, recording current values, base maxima, and
+    negative-vital pulse markers.
+  - Items store stack counts, decay deadlines, name overrides, container state, attributes, and timers.
+  - Players store complete character state, including base attributes, choices, granted traits, and level progression
+    deltas. Restored traits are computed before vitals are applied so trait bonuses are preserved without truncation.
+  - Active and anchor reasons are persisted across restarts (§5.9).
+- **SQLite configuration:** WAL mode with `synchronous = NORMAL`, which survives process kills but may lose the last
+  commits on power loss, and a 5-second `busy_timeout`.
 
 ### 3.7 Attribute Namespacing
 
@@ -716,9 +687,8 @@ module(
     about an event as it happens (§5.7) is told through the first channel they perceive that has text. A name that isn't
     a channel, or one listed twice, stops the server. Channels left out rank after the listed ones, `sight` and `sound`
     first, then the declared channels in order. It is not recorded per database; changing it needs only a restart.
-  - A schema problem stops the server, with a "did you mean" suggestion where one applies. Suggestions come from an edit
-    distance in which a swap of two letters counts as one edit, and the nearest name is offered when it is within a
-    third of the misspelled name's length.
+  - A schema problem stops the server, providing "did you mean" suggestions for close matches based on optimal string
+    alignment distance ([Schema.kt](../core/src/main/kotlin/gups/core/model/Schema.kt)).
 - **`prompt`** is the telnet prompt (§4.10). Its placeholders are `{<vital>}` and `{max_<vital>}` for declared vitals;
   another placeholder stops the server. A placeholder is `{name}` with `name` matching `[a-z][a-z0-9_]*`; braces that
   don't form one print as written. The default is `<` then `{<vital>}<vital>` for each vital, space-separated, then `>
@@ -747,14 +717,11 @@ module(
   - At run time: actor view fields (`ctx.actor.lfe` is an error suggesting `life`), and the `type` and `vital` arguments
     of verbs.
 - **Fixed per database.** The first start records the schema's names (stats, vitals, damage types and channels, in
-  order) in `meta.world_schema`. A later start whose `MODULE.gups` declares different names refuses to start, lists what
-  changed, and points to `--wipe` (§2.4). Labels, `prompt` and `unarmed_damage_type` aren't recorded and need only a
-  restart. `gups migrate-check` fails the same way (§7.3).
-  - The refusal reads "The world's schema in MODULE.gups differs from the one this database was started with:", then one
-    line per kind that changed (`stats: added luck; removed wis`; a reordering reads `reordered`), then that saved
-    characters and items can't follow a schema change and that `--wipe` starts again.
-  - A wipe reports "Wiped N characters and M items; the previous database is at <prewipe backup>." and that the schema
-    was recorded.
+  order) in `meta.world_schema`. A later start whose `MODULE.gups` declares different names refuses to start, detailing
+  the added, removed, or reordered elements and explaining that saved characters and items cannot follow schema
+  modifications without a `--wipe` ([SchemaRecord.kt](../persist/src/main/kotlin/gups/persist/SchemaRecord.kt)). Labels,
+  `prompt` and `unarmed_damage_type` are not recorded per database and need only a restart. `gups migrate-check`
+  verifies schema compatibility the same way (§7.3).
 
 ### 3.10 Feature Modules
 

@@ -193,7 +193,7 @@ current phase's **Exit Criteria** is satisfied.
 #### Tasks
 
 1. **Header ([docs/SPEC.md](SPEC.md#L1-L9)):**
-   - Change `Status: v0, implemented through milestone M7.` to `Status: v0, implemented through milestone M15.`
+   - Remove the `Status: v0, implemented through milestone M7.` milestone marker; it goes stale and isn't maintained.
 2. **§1 & §2 ([docs/SPEC.md](SPEC.md#L11-L352)):**
    - In **§1.5**, keep the platform/stack overview and the Starlark parser rule (no `lambda` or nested `def`), and link
      to [libs.versions.toml](../gradle/libs.versions.toml) instead of hardcoding library versions.
@@ -248,12 +248,12 @@ current phase's **Exit Criteria** is satisfied.
 
 #### Phase 3 Exit Criteria
 
-- [] `docs/SPEC.md` §§1–3 contain **no** Kotlin `sealed class Entity`, `sealed interface AttrValue`, `sealed interface
+- [x] `docs/SPEC.md` §§1–3 contain **no** Kotlin `sealed class Entity`, `sealed interface AttrValue`, `sealed interface
   ItemLocation`, `enum class Role`, or `const val PULSE_MS` code blocks.
-- [] `docs/SPEC.md` §§1–3 contain **no** occurrences of `PERCEPTION_MAX_RADIUS`, `RoomRef`, `SessionRef`, `Map<Sense`,
+- [x] `docs/SPEC.md` §§1–3 contain **no** occurrences of `PERCEPTION_MAX_RADIUS`, `RoomRef`, `SessionRef`, `Map<Sense`,
   or `@Serializable`.
-- [] All lists in `docs/SPEC.md` §§1–3 are properly formatted with one item per line (no inline ` - ` chains).
-- [] `./gradlew markdownFormat && ./gradlew markdownCheck` (with `BypassSandbox: true`) exits `0`.
+- [x] All lists in `docs/SPEC.md` §§1–3 are properly formatted with one item per line (no inline ` - ` chains).
+- [x] `./gradlew markdownFormat && ./gradlew markdownCheck` (with `BypassSandbox: true`) exits `0`.
 
 ---
 

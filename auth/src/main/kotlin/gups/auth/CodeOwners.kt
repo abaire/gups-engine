@@ -15,6 +15,10 @@ import gups.core.Role
  *
  * ## Rule Evaluation Semantics
  * - Lines specify a gitignore-style path pattern followed by zero or more owner tokens.
+ * - A leading `/` or an inner slash anchors a pattern to the world root; otherwise the name matches
+ *   at any depth. `*` stays within one directory and `**` crosses directories.
+ * - File patterns such as `*.star` own no package. Inline `#` comments aren't supported, as on
+ *   GitHub.
  * - A rule matches a package if its pattern matches the package's relative directory path or any
  *   ancestor directory.
  * - **Last-match-wins:** When multiple rules match a package, the last matching rule in the file
@@ -127,8 +131,9 @@ data class SyncReport(val changed: List<Account>, val warnings: List<String>)
 
 /**
  * Replaces every account's CODEOWNERS scope: an account whose GitHub handle owns packages gets
- * them; instructors and admins are never scoped. Roles never change. Hand scope (`@role`) loses any
- * package CODEOWNERS now covers. Blocks on the store.
+ * them, players included, so promoting a player scopes them at once; instructors and admins are
+ * never scoped. A sync never promotes or demotes: roles never change. Hand scope (`@role`) loses
+ * any package CODEOWNERS now covers. Blocks on the store.
  */
 fun syncScopes(store: AccountStore, owners: CodeOwners, packages: Collection<String>): SyncReport {
   val scopes = owners.scopes(packages)

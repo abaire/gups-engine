@@ -45,10 +45,13 @@ import net.starlark.java.syntax.SyntaxError
  * - `plugins`: Map of plugin IDs to `sha256:<hex>` checksums of `plugins/<id>.jar`.
  * - `features`: List of engine feature module IDs to enable (`combat`, `track`, `skills`,
  *   `leveling`). If omitted, all features are enabled by default.
- * - `schema`: Declares the world's stats, vitals, resists, damage types, and sensory channels. The
- *   declared schema names are permanently recorded in the database on first run and cannot be
- *   altered without a `--wipe`.
- * - `aliases`: Shorthand command aliases and prefix triggers for commands.
+ * - `stats`, `vitals`, `damage_types`, `unarmed_damage_type`, `channels`, `prompt`: The world's
+ *   schema. The declared names are recorded in the database on first run and cannot be altered
+ *   without a `--wipe`.
+ * - `aliases`: Extra words for engine commands, such as `{"l": "look"}`. Several aliases may name
+ *   the same command.
+ * - `prefixes`: Single characters that stand for a command at the start of a line, such as `{"'":
+ *   "say"}`.
  * - `rename`: Engine command renames, mapping canonical names to custom alternatives.
  *
  * ## Validation Rules
@@ -58,7 +61,12 @@ import net.starlark.java.syntax.SyntaxError
  * - **Features:** Every ID must be a known feature, and each feature's requirements must also be
  *   on: `track` requires `combat`; `combat`, `skills` and `leveling` require nothing.
  * - **Commands and aliases:** Command renames must not form cycles or collide with other command
- *   names. Aliases and prefix triggers must not clash with existing commands or reserved keywords.
+ *   names. An alias must match `[a-z][a-z0-9_]*`, must not be an engine command or a standard
+ *   direction, and must name a non-`@` engine command. A prefix must be one character other than a
+ *   letter, digit, space or `@`, and must name such a command. Names are those after `rename`, and
+ *   naming a command of a disabled feature is an error.
+ * - **No built-in aliases:** The engine hardcodes no aliases or prefixes; the template world's
+ *   `MODULE.gups` ships the usual defaults.
  * - **Schema integrity:** Stat, vital, damage type, and sensory channel names must be valid
  *   identifiers, distinct across categories, and meet minimum required declarations.
  */

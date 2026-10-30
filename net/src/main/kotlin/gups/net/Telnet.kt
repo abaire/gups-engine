@@ -63,8 +63,7 @@ private const val MAX_SUBNEGOTIATION = 8192
  *
  * ## Constraints & Boundaries
  * - Input lines are capped at 512 bytes ([MAX_LINE_BYTES]); longer lines are truncated.
- * - Connections are closed on the 5th malformed telnet byte sequence
- *   ([MAX_PROTOCOL_ERRORS]).
+ * - Connections are closed on the 5th malformed telnet byte sequence ([MAX_PROTOCOL_ERRORS]).
  * - Output buffers are bounded at 256 KB (defined in `TelnetServer`); slow clients exceeding this
  *   buffer limit are disconnected and marked link-dead.
  *

@@ -112,7 +112,10 @@ class WorldLoop(
   }
 
   companion object {
-    /** The single-threaded world dispatcher. */
+    /**
+     * The single-threaded world dispatcher. It is one process-wide view, so every world in a
+     * process shares the same thread.
+     */
     val worldDispatcher: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(1)
   }
 }

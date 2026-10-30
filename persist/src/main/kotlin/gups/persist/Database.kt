@@ -96,7 +96,8 @@ data class ItemEventRow(
  * - `PRAGMA journal_mode = WAL`: Write-Ahead Logging mode enables non-blocking concurrent reads
  *   while transactions are written.
  * - `PRAGMA synchronous = NORMAL`: Syncs WAL on checkpoints rather than every commit, ensuring
- *   durability against process crashes while reducing disk I/O overhead.
+ *   durability against process crashes while reducing disk I/O overhead. The last commits may be
+ *   lost on power loss.
  * - `PRAGMA busy_timeout = 5000`: Blocks for up to 5,000 ms on lock contention before throwing
  *   SQLite busy errors.
  *
@@ -123,7 +124,8 @@ data class ItemEventRow(
  *    payload_json, updated_pulse`). Stores rooms, mobs, and all items (whether in a room, carried
  *    by an actor, or inside a container).
  * 8. `zone_states`: Per-package state (`package TEXT PRIMARY KEY, payload_json`). Maintains zone
- *    reset deadlines, mob respawn deadlines, and package quarantine status.
+ *    reset deadlines, mob respawn deadlines, and package quarantine status. A quarantined non-zone
+ *    package gets a row holding only its quarantine flag.
  * 9. `item_events`: Item custody audit log (`id, item_id, pulse, wall_time, from_json, to_json,
  *    cause`). Immutable log capturing transfers involving players (`spawn`, `move`, `destroy`).
  * 10. `diagnostics`: Script and engine failure diagnostics (`id, pulse, wall_time, package, label,

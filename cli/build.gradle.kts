@@ -119,7 +119,9 @@ val imageDir = layout.buildDirectory.dir("image/gups")
 
 /**
  * A self-contained `gups`: a jlink runtime with just the JDK modules jdeps finds the libraries
- * need, the jars, and a launcher that uses that runtime.
+ * need, the jars, and a launcher that uses that runtime. The modules are those jdeps finds in the
+ * plain jars, the non-static `requires` of the modular jars, and a few loaded reflectively; the
+ * list is written to `modules.txt` in the image.
  */
 val jlinkImage =
   tasks.register("jlinkImage") {

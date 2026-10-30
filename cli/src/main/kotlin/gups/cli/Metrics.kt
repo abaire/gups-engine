@@ -43,28 +43,31 @@ private val TRANSPORTS = listOf("telnet", "tls", "ws", "local")
  * eliminating synchronization locks during metrics export.
  *
  * ## Published Prometheus Metrics
- * - `gups_pulse_duration_seconds` (meter `gups.pulse.duration`): Percentile histogram timer tracking elapsed execution time per world
- *   pulse.
- * - `gups_pulse_overruns_total` (meter `gups.pulse.overruns`): Monotonic counter tracking pulse intervals skipped when world processing
- *   exceeds 250 ms.
- * - `gups_world_input_queue_depth` (meter `gups.world.input.queue.depth`): Gauge tracking client input commands waiting in the world
- *   inbox.
- * - `gups_checkpoint_duration_seconds` (meter `gups.checkpoint.duration`): Percentile histogram timer measuring duration of SQLite transaction
- *   commits.
- * - `gups_checkpoint_entities` (meter `gups.checkpoint.entities`): Gauge tracking entity and player row counts in the most recent
- *   committed checkpoint.
- * - `gups_checkpoint_backlog` (meter `gups.checkpoint.backlog`): Gauge tracking pending checkpoint batches queued for the writer
- *   thread.
- * - `gups_quarantined_packages` (meter `gups.quarantined.packages`): Gauge counting packages currently quarantined due to excessive
- *   runtime errors.
- * - `gups_bubble_rooms` (meter `gups.bubble.rooms`): Gauge tracking actively simulated rooms inside the reality bubble.
- * - `gups_bubble_entities` (meter `gups.bubble.entities`): Gauge tracking simulated entities inside active rooms.
- * - `gups_sessions` (meter `gups.sessions`): Gauge tracking active client connections, tagged with `transport` (`telnet`,
- *   `tls`, `ws`, `local`).
- * - `gups_script_steps_total` (meter `gups.script.steps`): Function counter tracking Starlark bytecode steps executed, tagged by
- *   `package`.
- * - `gups_script_errors_total` (meter `gups.script.errors`): Counter tracking script failures, tagged by `package` and `kind`
- *   (`script_error`, `step_limit`, `wall_clock`, `alloc_limit`, `missing`).
+ * - `gups_pulse_duration_seconds` (meter `gups.pulse.duration`): Percentile histogram timer
+ *   tracking elapsed execution time per world pulse.
+ * - `gups_pulse_overruns_total` (meter `gups.pulse.overruns`): Monotonic counter tracking pulse
+ *   intervals skipped when world processing exceeds 250 ms.
+ * - `gups_world_input_queue_depth` (meter `gups.world.input.queue.depth`): Gauge tracking client
+ *   input commands waiting in the world inbox.
+ * - `gups_checkpoint_duration_seconds` (meter `gups.checkpoint.duration`): Percentile histogram
+ *   timer measuring duration of SQLite transaction commits.
+ * - `gups_checkpoint_entities` (meter `gups.checkpoint.entities`): Gauge tracking entity and player
+ *   row counts in the most recent committed checkpoint.
+ * - `gups_checkpoint_backlog` (meter `gups.checkpoint.backlog`): Gauge tracking pending checkpoint
+ *   batches queued for the writer thread.
+ * - `gups_quarantined_packages` (meter `gups.quarantined.packages`): Gauge counting packages
+ *   currently quarantined due to excessive runtime errors.
+ * - `gups_bubble_rooms` (meter `gups.bubble.rooms`): Gauge tracking actively simulated rooms inside
+ *   the reality bubble.
+ * - `gups_bubble_entities` (meter `gups.bubble.entities`): Gauge tracking simulated entities inside
+ *   active rooms.
+ * - `gups_sessions` (meter `gups.sessions`): Gauge tracking active client connections, tagged with
+ *   `transport` (`telnet`, `tls`, `ws`, `local`).
+ * - `gups_script_steps_total` (meter `gups.script.steps`): Function counter tracking Starlark
+ *   bytecode steps executed, tagged by `package`.
+ * - `gups_script_errors_total` (meter `gups.script.errors`): Counter tracking script failures,
+ *   tagged by `package` and `kind` (`script_error`, `step_limit`, `wall_clock`, `alloc_limit`,
+ *   `missing`).
  */
 class Metrics(private val world: World, writer: CheckpointWriter?, overruns: () -> Long) {
   val registry = PrometheusMeterRegistry(PrometheusConfig.DEFAULT)

@@ -125,8 +125,8 @@ private const val MAX_BACKOFF_MS = 5_000L
  *   elapse.
  * - Any commit failure marks [healthy] as `false`, causing the engine to refuse new logins until
  *   writes resume.
- * - [SqlitePersistence] logs and alerts a `checkpoint` diagnostic when a batch stays uncommitted for
- *   more than three world ticks.
+ * - [SqlitePersistence] logs and alerts a `checkpoint` diagnostic when a batch stays uncommitted
+ *   for more than three world ticks.
  */
 class CheckpointWriter(
   /** Commits one batch in one transaction; [Database.write] in production. */

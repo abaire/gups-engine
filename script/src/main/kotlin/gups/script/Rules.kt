@@ -336,8 +336,8 @@ internal fun StarlarkHost.runModifier(
  * - `condition`: the actor's current condition, unchanged.
  * - `xp_for_kill`: `0` XP awarded.
  * - `xp_to_level`: `Long.MAX_VALUE` (no level up possible).
- * - `on_player_death`: respawns at the player's recall room (or the current room when none is
- *   set), restores vitals to effective maxima, with `0` XP lost.
+ * - `on_player_death`: respawns at the player's recall room (or the current room when none is set),
+ *   restores vitals to effective maxima, with `0` XP lost.
  * - `equipment_slots`: the last valid slot list it returned, or an empty list before any.
  *
  * Bound to its world by [StarlarkHost.install].
