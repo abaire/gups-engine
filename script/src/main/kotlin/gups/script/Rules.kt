@@ -1047,7 +1047,8 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  * ## Export Verification
  * - Calls `equipment_slots` to ensure slot names are valid lowercase identifiers.
  * - If the `leveling` feature is enabled, verifies that `xp_to_level(level)` strictly increases for
- *   all levels from 1 to 50, and checks `xp_for_kill`.
+ *   all levels from 1 to 50, checks `xp_for_kill`, and calls `on_level_up` for each synthetic actor
+ *   with its level set to 2 (validated but not applied).
  * - If the `combat` feature is enabled, tests `to_hit`, `damage`, `initiative`, `flee_chance`, and
  *   `flee_fail_lag`.
  * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
@@ -1130,7 +1131,29 @@ internal fun dryRunRules(
     }
     val actors = listOf(player, foe) + mobs
     rules.equipmentSlots()
-    if (Feature.LEVELING in features) rules.xpToLevel(1)
+    if (Feature.LEVELING in features) {
+      var prevXp: Long? = null
+      for (level in 1..50) {
+        val problemsBefore = problems.size
+        val xp = rules.xpToLevel(level)
+        if (problems.size > problemsBefore) break
+        if (prevXp != null && xp <= prevXp) {
+          problems +=
+            "rules.xp_to_level is not strictly increasing: level $level ($xp) <= level ${level - 1} ($prevXp)"
+          break
+        }
+        prevXp = xp
+      }
+      for (a in actors) {
+        val originalLevel = a.level
+        a.level = 2
+        try {
+          rules.onLevelUp(RulesContext(world, a))
+        } finally {
+          a.level = originalLevel
+        }
+      }
+    }
     for (a in actors) {
       val other = if (a === player) foe else player
       val c = RulesContext(world, a, other)

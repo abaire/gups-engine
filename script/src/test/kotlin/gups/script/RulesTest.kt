@@ -240,12 +240,15 @@ class RulesTest {
       world(
         """
         def on_level_up(ctx):
-            return struct(stats = stats(bogus = 1), max = vitals(hp = 5))
+            if ctx.actor.level == 9:
+                return struct(stats = stats(bogus = 1), max = vitals(hp = 5))
+            return None
         """
       )
     val alerts = mutableListOf<String>()
     f.host.alerts = { kind, _ -> alerts += kind }
-    val result = f.w.rules.onLevelUp(RulesContext(f.w, f.player()))
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
+    val result = f.w.rules.onLevelUp(RulesContext(f.w, p))
     assertNull(result)
     val errors = f.diagnostics("script_error").map { it.message }
     assertTrue(errors.any { "unknown stat 'bogus'" in it }, errors.toString())
@@ -258,12 +261,14 @@ class RulesTest {
       world(
         """
         def on_level_up(ctx):
-            return struct(unknown_field = 123)
+            if ctx.actor.level == 9:
+                return struct(unknown_field = 123)
+            return None
         """
       )
     val alerts = mutableListOf<String>()
     f.host.alerts = { kind, _ -> alerts += kind }
-    val p = f.player()
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
     val ctx = RulesContext(f.w, p)
     val result = f.w.rules.onLevelUp(ctx)
     assertNull(result)
@@ -870,6 +875,72 @@ class RulesTest {
 
           def retreat_fail_lag(ctx):
               return 1 + 0 * len(ctx.target.name)
+          """
+        )
+      )
+    assertTrue(result.ok, result.report())
+  }
+
+  @Test
+  fun `an on_level_up that fails for a level-2 actor fails the rules package load`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def on_level_up(ctx):
+              if ctx.actor.level == 2:
+                  return struct(stats = stats(bogus = 1))
+              return None
+          """
+        )
+      )
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "unknown stat 'bogus'")
+  }
+
+  @Test
+  fun `an xp_to_level that is not strictly increasing in 1 to 50 fails load`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def xp_to_level(level):
+              if level == 50:
+                  return 49000
+              return 1000 * level
+          """
+        )
+      )
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "xp_to_level")
+    assertContains(error.message, "not strictly increasing")
+  }
+
+  @Test
+  fun `the dry run applies nothing and synthetic actors stats are unchanged after it`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def starting_stats(ctx):
+              return struct(
+                  stats = stats(str = 10, dex = 10, con = 10, int = 10, wis = 10, armor = 0),
+                  max = vitals(hp = 20, mana = 20, move = 100),
+              )
+
+          def on_level_up(ctx):
+              return struct(
+                  stats = stats(str = 20),
+                  max = vitals(hp = 50),
+                  current = vitals(hp = 50),
+              )
+
+          def carry_limit(ctx):
+              if ctx.actor.str != 10 or ctx.actor.level != 1 or ctx.actor.max_hp != 20:
+                  fail("actor state modified in dry run: str=" + str(ctx.actor.str) + " hp=" + str(ctx.actor.max_hp) + " lvl=" + str(ctx.actor.level))
+              return 100
           """
         )
       )
