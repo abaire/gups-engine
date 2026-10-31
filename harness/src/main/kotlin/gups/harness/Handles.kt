@@ -14,16 +14,21 @@ import gups.core.rules.StartingStats
 import gups.core.world.Diagnostic
 import gups.core.world.World
 import gups.core.world.attach
+import gups.core.world.awardXp
 import gups.core.world.damage
 import gups.core.world.flushOutput
 import gups.core.world.grantTrait
 import gups.core.world.handle
+import gups.core.world.levelDown
+import gups.core.world.levelUpAndNotify
 import gups.core.world.removeTrait
 import gups.core.world.setChoices
 import gups.core.world.spawnItem
 import gups.core.world.submit
+import gups.core.world.takeXp
 import gups.script.ActorView
 import gups.script.EntityView
+import gups.script.FeatureOwnership
 import gups.script.ItemView
 import gups.script.RoomView
 import gups.script.StarlarkHost
@@ -66,6 +71,9 @@ internal fun int(v: Any?, what: String): Int =
   (v as? StarlarkInt)?.toInt(what) ?: evalFail("$what: expected an int, got ${typeName(v)}")
 
 internal fun intOrNull(v: Any?, what: String): Int? = if (isNone(v)) null else int(v, what)
+
+internal fun long(v: Any?, what: String): Long =
+  (v as? StarlarkInt)?.toLong(what) ?: evalFail("$what: expected an int, got ${typeName(v)}")
 
 internal fun label(text: String, pkg: String?, what: String): Label =
   try {
@@ -501,6 +509,88 @@ internal constructor(
     val t = str(name, "remove_trait(name)")
     val refusal = world.removeTrait(a, t)
     return refusal ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "award_xp",
+    doc =
+      "Awards experience points to actor, applying pending levels in auto mode or sending" +
+        " the ready notice in deferred mode. Needs the leveling feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to receive experience."),
+        Param(name = "amount", named = true, doc = "Points to award; must be at least 1."),
+      ],
+  )
+  fun awardXp(actor: Any, amount: Any): Any {
+    requireFeature("award_xp")
+    val a = actorArg(actor, "award_xp(actor)")
+    val n = long(amount, "award_xp(amount)")
+    if (n < 1L) evalFail("award_xp(amount): must be at least 1")
+    world.awardXp(a, n)
+    return Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "take_xp",
+    doc =
+      "Removes up to amount experience points from actor, never going below 0. Never changes" +
+        " level and sends no message. Returns the amount actually removed. Needs the leveling" +
+        " feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to remove experience from."),
+        Param(name = "amount", named = true, doc = "Points to remove; must be at least 1."),
+      ],
+  )
+  fun takeXp(actor: Any, amount: Any): Any {
+    requireFeature("take_xp")
+    val a = actorArg(actor, "take_xp(actor)")
+    val n = long(amount, "take_xp(amount)")
+    if (n < 1L) evalFail("take_xp(amount): must be at least 1")
+    return StarlarkInt.of(world.takeXp(a, n))
+  }
+
+  @StarlarkMethod(
+    name = "level_up",
+    doc =
+      "Applies one pending level to actor, in either level mode. In deferred mode, sends the" +
+        " ready notice again if more levels are still pending. Returns True if a level was" +
+        " gained, or False if none was pending. Needs the leveling feature.",
+    parameters = [Param(name = "actor", named = true, doc = "Actor to advance.")],
+  )
+  fun levelUp(actor: Any): Any {
+    requireFeature("level_up")
+    val a = actorArg(actor, "level_up(actor)")
+    return world.levelUpAndNotify(a)
+  }
+
+  @StarlarkMethod(
+    name = "level_down",
+    doc =
+      "Lowers actor by up to count levels, stopping at level 1. Returns the number of levels" +
+        " actually lost. Needs the leveling feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to lower."),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "1",
+          doc = "Number of level steps to unwind; must be at least 1.",
+        ),
+      ],
+  )
+  fun levelDown(actor: Any, count: Any): Any {
+    requireFeature("level_down")
+    val a = actorArg(actor, "level_down(actor)")
+    val c = int(count, "level_down(count)")
+    if (c < 1) evalFail("level_down(count): must be at least 1")
+    return StarlarkInt.of(world.levelDown(a, c))
+  }
+
+  private fun requireFeature(name: String) {
+    FeatureOwnership.refused("w.$name", "w.$name()", world.features)?.let { evalFail(it) }
   }
 
   private fun <T> guard(what: String, block: () -> T): T =

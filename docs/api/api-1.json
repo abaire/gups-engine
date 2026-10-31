@@ -6668,6 +6668,35 @@
       ],
       "methods": [
         {
+          "symbol": "w.award_xp",
+          "feature": "leveling",
+          "name": "award_xp",
+          "doc": "Awards experience points to actor, applying pending levels in auto mode or sending the ready notice in deferred mode. Needs the leveling feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.award_xp.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor to receive experience."
+            },
+            {
+              "symbol": "w.award_xp.amount",
+              "name": "amount",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Points to award; must be at least 1."
+            }
+          ]
+        },
+        {
           "symbol": "w.damage",
           "name": "damage",
           "doc": "Damages one vital of an actor by amount, or by pct of that vital's maximum. Fires on_damage; death is processed at once.",
@@ -6795,6 +6824,54 @@
               "varargs": false,
               "kwargs": false,
               "doc": "The trait name."
+            }
+          ]
+        },
+        {
+          "symbol": "w.level_down",
+          "feature": "leveling",
+          "name": "level_down",
+          "doc": "Lowers actor by up to count levels, stopping at level 1. Returns the number of levels actually lost. Needs the leveling feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.level_down.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor to lower."
+            },
+            {
+              "symbol": "w.level_down.count",
+              "name": "count",
+              "positional": true,
+              "named": true,
+              "default": "1",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Number of level steps to unwind; must be at least 1."
+            }
+          ]
+        },
+        {
+          "symbol": "w.level_up",
+          "feature": "leveling",
+          "name": "level_up",
+          "doc": "Applies one pending level to actor, in either level mode. In deferred mode, sends the ready notice again if more levels are still pending. Returns True if a level was gained, or False if none was pending. Needs the leveling feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.level_up.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor to advance."
             }
           ]
         },
@@ -7068,6 +7145,35 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Character creation answers, or None."
+            }
+          ]
+        },
+        {
+          "symbol": "w.take_xp",
+          "feature": "leveling",
+          "name": "take_xp",
+          "doc": "Removes up to amount experience points from actor, never going below 0. Never changes level and sends no message. Returns the amount actually removed. Needs the leveling feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.take_xp.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor to remove experience from."
+            },
+            {
+              "symbol": "w.take_xp.amount",
+              "name": "amount",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Points to remove; must be at least 1."
             }
           ]
         },

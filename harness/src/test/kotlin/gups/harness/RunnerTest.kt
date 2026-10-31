@@ -247,4 +247,154 @@ class RunnerTest {
         """)
     assertTrue(run(files, "//zones/a").ok)
   }
+
+  @Test
+  fun `a harness test drives each of the four w verbs and checks the level and XP`() {
+    val autoFiles =
+      zone +
+        mapOf(
+          "zones/a/auto_test.star" to
+            """
+              def test_auto_verbs(t):
+                  w = t.world(seed = 1)
+                  p = w.spawn_player("Pat", at = ":start", level = 1)
+                  t.eq(p.level, 1)
+                  t.eq(p.xp, 0)
+
+                  # 1. award_xp raises level immediately in auto mode
+                  w.award_xp(p, 2500)
+                  t.eq(p.level, 2)
+                  t.eq(p.xp, 2500)
+
+                  # 2. take_xp removes experience without changing level
+                  taken = w.take_xp(p, 400)
+                  t.eq(taken, 400)
+                  t.eq(p.xp, 2100)
+                  t.eq(p.level, 2)
+
+                  # 3. level_down lowers level and clamps XP below the lost level's threshold
+                  lost = w.level_down(p)
+                  t.eq(lost, 1)
+                  t.eq(p.level, 1)
+                  t.eq(p.xp, 999)
+
+                  # 4. level_up when nothing pending returns False
+                  t.false(w.level_up(p))
+                  t.eq(p.level, 1)
+
+                  # Mob handling with award_xp and level_down(count=2)
+                  mob = w.spawn(":rat", at = ":start")
+                  t.eq(mob.level, 1)
+                  w.award_xp(mob, 6000)
+                  t.eq(mob.level, 4)
+                  t.eq(mob.xp, 6000)
+                  lost_mob = w.level_down(mob, count = 2)
+                  t.eq(lost_mob, 2)
+                  t.eq(mob.level, 2)
+                  t.eq(mob.xp, 2999)
+            """
+        )
+    val autoReport = run(autoFiles, "//zones/a")
+    assertTrue(autoReport.ok, autoReport.results.joinToString("\n") { it.render() })
+
+    val deferredFiles =
+      zone +
+        mapOf(
+          "MODULE.gups" to TestWorlds.module("level_mode = \"deferred\""),
+          "zones/a/deferred_test.star" to
+            """
+              def test_deferred_verbs(t):
+                  w = t.world(seed = 2)
+                  p = w.spawn_player("Pat", at = ":start", level = 1)
+                  t.eq(p.level, 1)
+                  t.eq(p.xp, 0)
+                  t.eq(p.pending_levels, 0)
+
+                  # award_xp leaves level pending
+                  w.award_xp(p, 3000)
+                  t.eq(p.xp, 3000)
+                  t.eq(p.level, 1)
+                  t.eq(p.pending_levels, 2)
+
+                  # level_up steps one level
+                  gained = w.level_up(p)
+                  t.true(gained)
+                  t.eq(p.level, 2)
+                  t.eq(p.pending_levels, 1)
+
+                  # second level_up steps the remaining level
+                  gained2 = w.level_up(p)
+                  t.true(gained2)
+                  t.eq(p.level, 3)
+                  t.eq(p.pending_levels, 0)
+
+                  # level_up when nothing pending returns False
+                  t.false(w.level_up(p))
+            """,
+        )
+    val deferredReport = run(deferredFiles, "//zones/a")
+    assertTrue(deferredReport.ok, deferredReport.results.joinToString("\n") { it.render() })
+
+    val badAmount =
+      run(
+        zone +
+          mapOf(
+            "zones/a/bad_test.star" to
+              """
+                def test_bad(t):
+                    w = t.world()
+                    p = w.spawn_player("Pat", at = ":start")
+                    w.award_xp(p, 0)
+              """
+          ),
+        "//zones/a",
+      )
+    assertEquals(Status.ERROR, badAmount.results.single().status)
+    assertContains(badAmount.results.single().message!!, "award_xp(amount): must be at least 1")
+
+    val badCount =
+      run(
+        zone +
+          mapOf(
+            "zones/a/bad_test.star" to
+              """
+                def test_bad(t):
+                    w = t.world()
+                    p = w.spawn_player("Pat", at = ":start")
+                    w.level_down(p, count = 0)
+              """
+          ),
+        "//zones/a",
+      )
+    assertEquals(Status.ERROR, badCount.results.single().status)
+    assertContains(badCount.results.single().message!!, "level_down(count): must be at least 1")
+  }
+
+  @Test
+  fun `the four w leveling verbs fail with the feature refusal when leveling is off`() {
+    val off = listOf("combat", "track", "skills")
+    for (call in listOf("award_xp(p, 10)", "take_xp(p, 10)", "level_up(p)", "level_down(p)")) {
+      val report =
+        run(
+          zone +
+            mapOf(
+              "MODULE.gups" to TestWorlds.module("features = [${off.joinToString { "\"$it\"" }}]"),
+              "rules/package.star" to TestWorlds.RULES_PACKAGE,
+              "rules/combat.star" to TestWorlds.rulesFor(off),
+              "zones/a/off_test.star" to
+                """
+                  def test_off(t):
+                      w = t.world()
+                      p = w.spawn_player("Pat", at = ":start")
+                      w.$call
+                """,
+            ),
+          "//zones/a",
+        )
+      val result = report.results.single()
+      assertEquals(Status.ERROR, result.status, call)
+      val name = call.substringBefore('(')
+      assertContains(result.message!!, "w.$name() needs the leveling feature")
+    }
+  }
 }
