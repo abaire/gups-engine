@@ -29,7 +29,10 @@ class DocExamplesTest {
       val files =
         linkedMapOf(
           "MODULE.gups" to
-            File(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText(),
+            File(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText().let {
+              if (example.module.isBlank()) it
+              else it.substringBeforeLast(")") + "    ${example.module},\n)\n"
+            },
           "zones/ex/package.star" to
             "package(api_version = 1, kind = \"${if (symbol in DocExamples.LIB_SYMBOLS) "lib" else "zone"}\")\n",
           "zones/ex/fixture.star" to DocExamples.FIXTURE,

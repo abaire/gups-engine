@@ -5,9 +5,11 @@ package gups.script
 
 /**
  * One example for an API entry. [pkg] is Starlark for a zone package's content file, [test] the
- * body of a harness test function. At least one is non-blank.
+ * body of a harness test function. At least one of them is non-blank. [module] holds extra
+ * `module(...)` arguments, such as `level_mode = "deferred"`, that the example's world adds to the
+ * template world's `MODULE.gups`.
  */
-data class DocExample(val pkg: String = "", val test: String = "")
+data class DocExample(val pkg: String = "", val test: String = "", val module: String = "")
 
 object DocExamples {
   /**
@@ -38,10 +40,11 @@ object DocExamples {
    */
   val LIB_SYMBOLS: Set<String> = setOf("global_command")
 
-  private fun ex(pkg: String = "", test: String = ""): DocExample =
+  private fun ex(pkg: String = "", test: String = "", module: String = ""): DocExample =
     DocExample(
       pkg = pkg.trimIndent().let { if (it.isEmpty()) it else it + "\n" },
       test = test.trimIndent().let { if (it.isEmpty()) it else it + "\n" },
+      module = module.trim(),
     )
 
   /** Examples keyed by `api.json` symbol. */
@@ -546,6 +549,42 @@ object DocExamples {
                 skill("call_wisps", kind = "spell", cost = vitals(mana = 10), target = "none",
                       effect = summon(label = ":wisp", count = 2, duration = 80))
             """
+        ),
+
+      // ---- Ctx verbs ----------------------------------------------------------------------
+      "ctx.level_up" to
+        ex(
+          module = "level_mode = \"deferred\"",
+          pkg =
+            """
+                def _train(ctx):
+                    if ctx.actor.pending_levels > 0:
+                        # level_up would also return False, changing nothing, with none pending.
+                        ctx.level_up(ctx.actor)
+                    else:
+                        ctx.send(ctx.actor, "You have nothing to learn.")
+
+                room("hall",
+                    name = "Training Hall",
+                    desc = "A quiet hall where adventurers train.",
+                    flags = ["dead_end_ok"],
+                    commands = {"train": _train},
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":hall")
+                w.award_xp(p, 1000)
+                t.contains(p.output(), "You feel ready to advance.")
+                t.eq(p.level, 1)
+                t.eq(p.pending_levels, 1)
+                t.contains(p.do("score"), "You are ready to advance.")
+                t.contains(p.do("train"), "You have reached level 2!")
+                t.eq(p.level, 2)
+                t.eq(p.pending_levels, 0)
+                t.not_contains(p.do("score"), "You are ready to advance.")
+            """,
         ),
 
       // ---- Behaviors ----------------------------------------------------------------------

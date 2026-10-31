@@ -735,6 +735,12 @@ object DocsRenderer {
     fun StringBuilder.example(symbol: String) {
       val e = examples[symbol] ?: return
       append("<div class=\"example\">\n<p class=\"caption\">Example</p>\n")
+      if (e.module.isNotBlank()) {
+        append("<p class=\"caption\">MODULE.gups</p>\n")
+        append("<pre><code>")
+          .append(esc("module(\n    ...\n    ${e.module},\n)"))
+          .append("</code></pre>\n")
+      }
       if (e.pkg.isNotBlank())
         append("<pre><code>").append(esc(e.pkg.trimEnd())).append("</code></pre>\n")
       if (e.test.isNotBlank()) {

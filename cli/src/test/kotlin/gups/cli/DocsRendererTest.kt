@@ -113,6 +113,14 @@ class DocsRendererTest {
   }
 
   @Test
+  fun `an example with module arguments shows them as a MODULE gups block`() {
+    val page = docs.getValue(DocsRenderer.symbolHref(full, "ctx.level_up").substringBefore('#'))
+    val example = page.substringAfter("id=\"ctx.level_up\"").substringBefore("</article>")
+    assertContains(example, "<p class=\"caption\">MODULE.gups</p>")
+    assertContains(example, "level_mode = &quot;deferred&quot;,\n)")
+  }
+
+  @Test
   fun `the bundled changelog has the current version's anchor`() {
     assertContains(docs.getValue("changelog.html"), "id=\"api_version-${full.apiVersion}\"")
     assertContains(docs.getValue("plugins.html"), "No plugins are loaded.")

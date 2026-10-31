@@ -1,5 +1,7 @@
 package gups.script.testing
 
+import gups.script.DocExamples
+
 /**
  * The `MODULE.gups` and rules package that test worlds get unless they bring their own: the
  * template world's fantasy schema and rules, so tests of scripts need not write a whole ruleset.
@@ -28,6 +30,22 @@ object TestWorlds {
   val MODULE: String = module()
 
   const val RULES_PACKAGE: String = "package(api_version = 1, kind = \"rules\")\n"
+
+  /**
+   * The deferred-mode trainer example of `ctx.level_up` as a world: its package is `zones/ex` and
+   * the trainer is in `//zones/ex:hall`.
+   */
+  val DEFERRED_TRAINER: Map<String, String> by lazy {
+    val e = DocExamples.ALL.getValue("ctx.level_up")
+    withDefaults(
+      mapOf(
+        "MODULE.gups" to module(e.module),
+        "zones/ex/package.star" to "package(api_version = 1, kind = \"zone\")\n",
+        "zones/ex/fixture.star" to DocExamples.FIXTURE,
+        "zones/ex/example.star" to e.pkg,
+      )
+    )
+  }
 
   /** The template world's rules files, which test worlds keep together in `combat.star`. */
   private val base: String by lazy {
