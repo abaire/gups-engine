@@ -207,9 +207,16 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   override fun fleeFailLag(c: RulesContext): Int = 4
 
-  override fun xpForKill(c: RulesContext): Long = xpForKillOf?.invoke(c) ?: (50L * c.defender.level)
+  override fun xpForKill(c: RulesContext): Long {
+    xpForKillOf?.let {
+      return it(c)
+    }
+    val pct = (100 + 20 * (c.defender.level - c.attacker.level)).coerceIn(0, 150)
+    return 50L * c.defender.level * pct / 100
+  }
 
-  override fun xpToLevel(level: Int): Long = xpToLevelOf?.invoke(level) ?: (1000L * level)
+  override fun xpToLevel(level: Int): Long =
+    xpToLevelOf?.invoke(level) ?: (500L * level * (level + 1))
 
   override fun onLevelUp(c: RulesContext): LevelUpResult? = levelUpOf?.invoke(c)
 
@@ -218,7 +225,12 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
       return it(c)
     }
     val p = c.requireActor() as Player
-    return PlayerDeathOutcome(p.recallRoom, mapOf(fs.health to 1), p.xp / 10)
+    val floor = if (p.level > 1) xpToLevel(p.level - 1) else 0L
+    return PlayerDeathOutcome(
+      p.recallRoom,
+      mapOf(fs.health to 1),
+      ((p.xp - floor) / 10).coerceAtLeast(0),
+    )
   }
 
   companion object {

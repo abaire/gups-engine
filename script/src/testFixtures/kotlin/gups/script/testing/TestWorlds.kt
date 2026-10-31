@@ -82,9 +82,19 @@ object TestWorlds {
       "on_level_up" to "leveling",
     )
 
+  /**
+   * Default overrides when the `leveling` feature is off: `on_player_death` has no `xp_loss` or
+   * `level_loss` and does not call `xp_to_level`.
+   */
+  private const val LEVELING_OFF_DEATH: String =
+    "def on_player_death(ctx):\n    return {\"respawn\": ctx.actor.recall_room, \"vitals\": vitals(hp = 1),}\n"
+
   /** The template's rules without the exports of the features not in [enabled] (feature ids). */
   fun rulesFor(enabled: Collection<String>, vararg overrides: String): String {
-    return merged(overrides)
+    val allOverrides =
+      if ("leveling" in enabled) overrides
+      else (listOf(LEVELING_OFF_DEATH) + overrides).toTypedArray()
+    return merged(allOverrides)
       .filter { (name, _) -> OWNED[name].let { it == null || it in enabled } }
       .joinToString("\n") { it.second }
       .let { text ->
@@ -102,7 +112,6 @@ object TestWorlds {
             .replace(" + (a.level - d.level) * 3", "")
             .replace("ctx.actor.dex + ctx.actor.level", "ctx.actor.dex")
             .replace(" + a.level // 2", "")
-            .replace("        \"xp_loss\": ctx.actor.xp // 10,\n", "")
       }
   }
 

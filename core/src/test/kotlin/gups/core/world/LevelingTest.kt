@@ -78,7 +78,7 @@ class LevelingTest {
     assertEquals("You have reached level 2!\n", f.out(p))
 
     // A null result (neutral fallback) also raises the level without applying or recording gains.
-    p.xp = 2000L
+    p.xp = 3000L
     rules.levelUpOf = { null }
     assertTrue(f.w.levelUp(p))
     assertEquals(3, p.level)
@@ -163,7 +163,7 @@ class LevelingTest {
   @Test
   fun `a kill that crosses two thresholds applies two steps in order and sends two LEVEL_UP messages and one GMCP refresh`() {
     val rules = FixtureRules()
-    rules.xpForKillOf = { 2500L }
+    rules.xpForKillOf = { 3000L }
     val f = Fixture(rules = rules)
     val (p, sink) = f.gmcpPlayer("Ann")
     f.run()
@@ -173,12 +173,12 @@ class LevelingTest {
     f.w.damage(mob, mapOf(f.fs.health to 100), DamageType(f.fs.unarmed), p)
 
     assertEquals(3, p.level)
-    assertEquals(2500L, p.xp)
+    assertEquals(3000L, p.xp)
 
     // Flushing without the end-of-tick GMCP pass shows the refresh was queued by the award itself.
     f.w.flush(f.w.sessions.getValue(p.session!!))
     val out = sink.drain()
-    assertContains(out, "You gain 2500 experience.")
+    assertContains(out, "You gain 3000 experience.")
     val level2Index = out.indexOf("You have reached level 2!")
     val level3Index = out.indexOf("You have reached level 3!")
     assertTrue(level2Index != -1, "level 2 message sent")
@@ -189,8 +189,8 @@ class LevelingTest {
     assertEquals(1, statusUpdates.size, "expected exactly one GMCP Char.Status refresh")
     @Suppress("UNCHECKED_CAST") val status = statusUpdates.single().second as Map<String, Any?>
     assertEquals(3, status["level"])
-    assertEquals(2500L, status["xp"])
-    assertEquals(3000L, status["xp_next"])
+    assertEquals(3000L, status["xp"])
+    assertEquals(6000L, status["xp_next"])
 
     f.run()
     assertTrue(sink.take().none { it.first == "Char.Status" }, "the tick does not resend it")
@@ -219,9 +219,9 @@ class LevelingTest {
     val p = f.player("Ann")
     assertEquals(1, p.level)
 
-    // With xpToLevel(level) = 1000L * level, level 100 -> 101 requires 100,000 XP.
-    // 200,000 XP would be enough for level 201 (>100 levels).
-    f.w.awardXp(p, 200_000L)
+    // Level 100 ends at 5,050,000 XP and level 244 at 29,890,000, so 30,000,000 XP owes more
+    // than 200 levels.
+    f.w.awardXp(p, 30_000_000L)
     assertEquals(101, p.level, "capped at 100 levels on first award")
     assertEquals(100, f.w.pendingLevels(p), "levels still pending after cap")
 
@@ -312,7 +312,7 @@ class LevelingTest {
     val f = Fixture()
     val (p, sink) = f.gmcpPlayer("Ann")
     p.level = 4
-    p.xp = 4000L
+    p.xp = 7000L
     f.run()
     sink.take()
 
@@ -325,8 +325,8 @@ class LevelingTest {
     assertEquals(1, statusUpdates.size, "expected exactly one GMCP Char.Status refresh")
     @Suppress("UNCHECKED_CAST") val status = statusUpdates.single().second as Map<String, Any?>
     assertEquals(2, status["level"])
-    assertEquals(1999L, status["xp"])
-    assertEquals(2000L, status["xp_next"])
+    assertEquals(2999L, status["xp"])
+    assertEquals(3000L, status["xp_next"])
   }
 
   @Test
@@ -334,7 +334,7 @@ class LevelingTest {
     val f = Fixture()
     val p = f.player("Ann")
     p.level = 2
-    p.xp = 4000L
+    p.xp = 10_000L
     assertEquals(3, f.w.pendingLevels(p))
 
     assertEquals(1, f.w.levelDown(p, 1))

@@ -1234,7 +1234,7 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
   simulated actor at each world tick, so a rule such as "dead after 60 pulses with `oxygen` below zero" can use
   `below_zero_since`.
 - `on_player_death`: `respawn` resolves relative labels against the rules package; `vitals` sets the respawned
-  character's current vitals (capped at their maxima); `xp_loss` is taken from `xp` before the respawn.
+  character's current vitals (capped at their maxima); `xp_loss` (an int `>= 0`) is taken from `xp` before the respawn.
 - `level_loss` (default 0) is the number of levels the player loses after the respawn. It is allowed only with the
   `leveling` feature, like `xp_loss`. The engine keeps `xp` at 0 or more and `level` at 1 or more and enforces no other
   floor.

@@ -147,12 +147,16 @@ def flee_fail_lag(ctx):
     return 4
 
 def xp_for_kill(ctx):
-    # XP ctx.actor earns for killing ctx.target.
-    return 50 * ctx.target.level
+    # 50 per victim level, scaled by how the victim's level compares to the killer's:
+    # 5+ levels below pays nothing, 2+ levels above pays 140%, capped at 150%.
+    diff = ctx.target.level - ctx.actor.level
+    pct = _clamp(100 + 20 * diff, 0, 150)
+    return 50 * ctx.target.level * pct // 100
 
 def xp_to_level(level):
-    # XP needed to go from `level` to the next one.
-    return 1000 * level
+    # Total XP at which `level` ends: 1000, 3000, 6000, 10000... Each level costs 1000 * level
+    # more than the last, so 20 kills of an equal-level mob earn a level at any level.
+    return 500 * level * (level + 1)
 
 def on_level_up(ctx):
     # Deterministic gains; heal by the same amount so the new points are usable.
@@ -162,8 +166,21 @@ def on_level_up(ctx):
 
 def on_player_death(ctx):
     # Where a dead player (ctx.actor) wakes up, with which vitals, and the XP it costs them.
+    a = ctx.actor
+    floor = xp_to_level(a.level - 1) if a.level > 1 else 0
+    # 10% of the XP earned within this level. XP can sit below the floor (taken by a script, or
+    # a character created above level 1), so the loss never goes negative.
+    xp_loss = max(0, (a.xp - floor) // 10)
+    level_loss = 0
+    # A punishing variant takes 10% of all XP and drops each level the rest no longer pays for:
+    #     xp_loss = a.xp // 10
+    #     for _ in range(a.level - 1):
+    #         if a.xp - xp_loss >= xp_to_level(a.level - 1 - level_loss):
+    #             break
+    #         level_loss += 1
     return {
-        "respawn": ctx.actor.recall_room,
+        "respawn": a.recall_room,
         "vitals": vitals(hp = 1),
-        "xp_loss": ctx.actor.xp // 10,
+        "xp_loss": xp_loss,
+        "level_loss": level_loss,
     }

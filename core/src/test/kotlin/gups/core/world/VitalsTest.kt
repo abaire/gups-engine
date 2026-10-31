@@ -187,7 +187,7 @@ class VitalsTest(private val fs: FixtureSchema) {
     assertFalse(g.isEngaged)
     f.w.damage(g, mapOf(last to 1000), DamageType(fs.unarmed), p)
     assertFalse(g.inWorld, "the goblin died of its $last")
-    assertEquals(100L, p.xp, "the last damager gets the kill")
+    assertEquals(120L, p.xp, "the last damager gets the kill")
     assertEquals(1, f.w.room(T.HALL).items.count { it.name == "the corpse of a goblin" })
   }
 

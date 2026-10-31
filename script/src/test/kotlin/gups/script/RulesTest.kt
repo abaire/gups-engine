@@ -330,6 +330,31 @@ class RulesTest {
   }
 
   @Test
+  fun `a negative xp_loss is a bad return value`() {
+    val f =
+      world(
+        // Only a level-9 actor gets the bad value, so the load-time dry run (level 1) still passes.
+        """
+        def on_player_death(ctx):
+            if ctx.actor.level == 9:
+                return {"respawn": ctx.actor.recall_room, "xp_loss": -1}
+            return {"respawn": ctx.actor.recall_room}
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
+    val outcome = f.w.rules.onPlayerDeath(RulesContext(f.w, p))
+    assertEquals(0L, outcome.xpLoss)
+    val errors = f.diagnostics("script_error").map { it.message }
+    assertTrue(
+      errors.any { "rules.on_player_death returned a bad value" in it && "xp_loss" in it },
+      errors.toString(),
+    )
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
   fun `on_player_death parses level_loss`() {
     val f =
       world(
@@ -947,8 +972,7 @@ class RulesTest {
     assertTrue(result.ok, result.report())
   }
 
-  @Test
-  fun `the template world's rules agree with the fixture ruleset`() {
+  private fun loadTemplateWorld(): World {
     val dir = WorldDir(java.nio.file.Path.of("../template-world"))
     val loader = ScriptLoader(dir, ScriptLimits.HARNESS)
     val result = loader.load(listOf("rules", "zones/tutorial"))
@@ -963,6 +987,12 @@ class RulesTest {
         WorldConfig(seed = 3, strict = true),
       )
     host.install(w)
+    return w
+  }
+
+  @Test
+  fun `the template world's rules agree with the fixture ruleset`() {
+    val w = loadTemplateWorld()
     val kotlin = FixtureRules(FixtureSchemas.FANTASY)
     val a =
       w.spawnPlayer(
@@ -981,7 +1011,7 @@ class RulesTest {
         level = 5,
         overrides = StartingStats(stats = mapOf("armor" to 6)),
       )
-    a.xp = 777
+    a.xp = 3500
     w.applyAffect(a, "clumsy", 50, statDeltas = mapOf("dex" to -3))
     val c = RulesContext(w, a, b, band = Band.NEAR)
     assertEquals(kotlin.equipmentSlots(), w.rules.equipmentSlots())
@@ -1008,6 +1038,68 @@ class RulesTest {
     assertEquals(kotlin.xpToLevel(4), w.rules.xpToLevel(4))
     assertEquals(kotlin.onPlayerDeath(c), w.rules.onPlayerDeath(c))
     assertEquals(null, w.rules.castAllowed(c))
+    assertTrue(w.diagnostics.isEmpty(), w.diagnostics.toString())
+  }
+
+  @Test
+  fun `template world kill XP scales with level difference`() {
+    val w = loadTemplateWorld()
+    val killer3 = w.spawnPlayer("Killer3", Label("//zones/tutorial:hall"), level = 3)
+    val victim3 = w.spawnPlayer("Victim3", Label("//zones/tutorial:hall"), level = 3)
+    val killer6 = w.spawnPlayer("Killer6", Label("//zones/tutorial:hall"), level = 6)
+    val victim1 = w.spawnPlayer("Victim1", Label("//zones/tutorial:hall"), level = 1)
+    val victim5 = w.spawnPlayer("Victim5", Label("//zones/tutorial:hall"), level = 5)
+    val killer1 = w.spawnPlayer("Killer1", Label("//zones/tutorial:hall"), level = 1)
+
+    // 5 levels below pays 0 (diff = 1 - 6 = -5)
+    assertEquals(0L, w.rules.xpForKill(RulesContext(w, killer6, victim1)))
+    // equal pays 50 * level (diff = 3 - 3 = 0, pct = 100%, pays 50 * 3)
+    assertEquals(150L, w.rules.xpForKill(RulesContext(w, killer3, victim3)))
+    // 2 levels above pays 140% (diff = 5 - 3 = 2, pct = 140%, pays 50 * 5 * 140 / 100)
+    assertEquals(350L, w.rules.xpForKill(RulesContext(w, killer3, victim5)))
+    // 4 above pays 150% (diff = 5 - 1 = 4, pct = 150%, pays 50 * 5 * 150 / 100)
+    assertEquals(375L, w.rules.xpForKill(RulesContext(w, killer1, victim5)))
+  }
+
+  @Test
+  fun `template world xp_to_level gives 1000, 3000 and 6000, and is strictly increasing to level 50`() {
+    val w = loadTemplateWorld()
+    assertEquals(1000L, w.rules.xpToLevel(1))
+    assertEquals(3000L, w.rules.xpToLevel(2))
+    assertEquals(6000L, w.rules.xpToLevel(3))
+    var prev = 0L
+    for (level in 1..50) {
+      val curr = w.rules.xpToLevel(level)
+      assertTrue(
+        curr > prev,
+        "level $level ($curr) must be strictly greater than level ${level - 1} ($prev)",
+      )
+      prev = curr
+    }
+  }
+
+  @Test
+  fun `template world dying with 1500 XP at level 2 loses 50, and dying at level 1 with 100 XP loses 10`() {
+    val w = loadTemplateWorld()
+    val p2 = w.spawnPlayer("P2", Label("//zones/tutorial:hall"), level = 2)
+    p2.xp = 1500L
+    val outcome2 = w.rules.onPlayerDeath(RulesContext(w, p2, p2))
+    assertEquals(50L, outcome2.xpLoss)
+    assertEquals(0, outcome2.levelLoss)
+
+    val p1 = w.spawnPlayer("P1", Label("//zones/tutorial:hall"), level = 1)
+    p1.xp = 100L
+    val outcome1 = w.rules.onPlayerDeath(RulesContext(w, p1, p1))
+    assertEquals(10L, outcome1.xpLoss)
+    assertEquals(0, outcome1.levelLoss)
+  }
+
+  @Test
+  fun `template world dying with XP below the level's floor loses nothing`() {
+    val w = loadTemplateWorld()
+    val p = w.spawnPlayer("P5", Label("//zones/tutorial:hall"), level = 5)
+    assertEquals(0L, p.xp)
+    assertEquals(0L, w.rules.onPlayerDeath(RulesContext(w, p, p)).xpLoss)
     assertTrue(w.diagnostics.isEmpty(), w.diagnostics.toString())
   }
 

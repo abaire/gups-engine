@@ -636,13 +636,15 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         )
       if (c.world.roomOrNull(respawn) == null)
         fail("rules.on_player_death: there is no room $respawn")
+      val xpLoss = d["xp_loss"]?.let { int(it, "rules.on_player_death[\"xp_loss\"]") } ?: 0
+      if (xpLoss < 0) fail("rules.on_player_death[\"xp_loss\"]: must be at least 0, got $xpLoss")
       val levelLoss = d["level_loss"]?.let { int(it, "rules.on_player_death[\"level_loss\"]") } ?: 0
       if (levelLoss < 0)
         fail("rules.on_player_death[\"level_loss\"]: must be at least 0, got $levelLoss")
       PlayerDeathOutcome(
         respawn,
         d["vitals"]?.let { typed(it, TypedKind.VITALS, "rules.on_player_death[\"vitals\"]") },
-        (d["xp_loss"]?.let { int(it, "rules.on_player_death[\"xp_loss\"]") } ?: 0).toLong(),
+        xpLoss.toLong(),
         levelLoss,
       )
     }

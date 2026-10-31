@@ -149,7 +149,7 @@ class CombatTest(private val fs: FixtureSchema) {
     val corpse = f.w.room(den).items.single()
     assertEquals("the corpse of a goblin", corpse.name)
     assertEquals(listOf("a brass key", "a sword"), corpse.contents.map { it.name }.sorted())
-    assertEquals(100L, p.xp)
+    assertEquals(120L, p.xp)
     assertNotNull(corpse.decayAt)
 
     f.runTo(120) // first world tick after the respawn deadline
@@ -256,7 +256,7 @@ class CombatTest(private val fs: FixtureSchema) {
   fun `level ups follow xp_to_level`() {
     val f = Fixture()
     val p = f.player("Ann")
-    f.w.awardXp(p, 2500)
+    f.w.awardXp(p, 3000)
     assertEquals(3, p.level)
   }
 

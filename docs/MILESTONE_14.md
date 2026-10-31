@@ -289,7 +289,7 @@ def on_player_death(ctx):
     return {
         "respawn": a.recall_room,
         "vitals": vitals(hp = 1),
-        "xp_loss": (a.xp - floor) // 10,  # 10% of the XP earned within this level
+        "xp_loss": max(0, (a.xp - floor) // 10),  # 10% of the XP earned within this level
         "level_loss": 0,
     }
 ```

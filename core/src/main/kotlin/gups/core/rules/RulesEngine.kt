@@ -94,7 +94,7 @@ data class PlayerDeathOutcome(
   val respawn: Label,
   /** Vital values restored upon respawning; unlisted vitals recover to maximum. */
   val vitals: Map<String, Int>?,
-  /** Experience points deducted as a death penalty. */
+  /** Experience points deducted as a death penalty; never negative. */
   val xpLoss: Long,
   /** The number of levels lost after the respawn. */
   val levelLoss: Int = 0,
