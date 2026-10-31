@@ -2800,6 +2800,35 @@
         ]
       },
       {
+        "symbol": "ctx.award_xp",
+        "feature": "leveling",
+        "name": "award_xp",
+        "doc": "Awards experience points to actor, applying pending levels in auto mode or sending the ready notice in deferred mode. Returns None. Needs the leveling feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.award_xp.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to receive experience."
+          },
+          {
+            "symbol": "ctx.award_xp.amount",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Points to award; must be at least 1."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.cancel",
         "name": "cancel",
         "doc": "Cancels one of this owner's timers; True if it was pending.",
@@ -3349,6 +3378,54 @@
         ]
       },
       {
+        "symbol": "ctx.level_down",
+        "feature": "leveling",
+        "name": "level_down",
+        "doc": "Lowers actor by up to count levels, stopping at level 1. Returns the number of levels actually lost. Needs the leveling feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.level_down.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to lower."
+          },
+          {
+            "symbol": "ctx.level_down.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of level steps to unwind; must be at least 1."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.level_up",
+        "feature": "leveling",
+        "name": "level_up",
+        "doc": "Applies one pending level to actor, in either level mode. In deferred mode, sends the ready notice again if more levels are still pending. Returns True if a level was gained, or False, changing nothing, if none was pending. Needs the leveling feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.level_up.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to advance."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.lock_door",
         "name": "lock_door",
         "doc": "Closes and locks the door.",
@@ -3821,6 +3898,35 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Opponent, or None for all of a's fights."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.take_xp",
+        "feature": "leveling",
+        "name": "take_xp",
+        "doc": "Removes up to amount experience points from actor, never going below 0. Never changes level and sends no message. Returns the amount actually removed. Needs the leveling feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.take_xp.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor to remove experience from."
+          },
+          {
+            "symbol": "ctx.take_xp.amount",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Points to remove; must be at least 1."
           }
         ]
       },

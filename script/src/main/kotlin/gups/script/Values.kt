@@ -46,6 +46,12 @@ internal fun int(v: Any?, what: String): Int =
 
 internal fun intOrNull(v: Any?, what: String): Int? = if (isNone(v)) null else int(v, what)
 
+internal fun long(v: Any?, what: String): Long =
+  when (v) {
+    is StarlarkInt -> v.toLong(what)
+    else -> fail("$what: expected an int, got ${typeName(v)}")
+  }
+
 internal fun bool(v: Any?, what: String): Boolean =
   v as? Boolean ?: fail("$what: expected True or False, got ${typeName(v)}")
 

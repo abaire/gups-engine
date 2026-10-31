@@ -23,6 +23,7 @@ import gups.core.world.actCast
 import gups.core.world.actMove
 import gups.core.world.actRetreat
 import gups.core.world.applyAffect
+import gups.core.world.awardXp
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
 import gups.core.world.damage
@@ -32,6 +33,8 @@ import gups.core.world.emote
 import gups.core.world.findActor
 import gups.core.world.heal
 import gups.core.world.isSimulated
+import gups.core.world.levelDown
+import gups.core.world.levelUpAndNotify
 import gups.core.world.moveItem
 import gups.core.world.opponentsOf
 import gups.core.world.pathTo
@@ -47,6 +50,7 @@ import gups.core.world.spawnItem
 import gups.core.world.splitItem
 import gups.core.world.startCombat
 import gups.core.world.stopCombat
+import gups.core.world.takeXp
 import gups.core.world.teleport
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
@@ -769,6 +773,84 @@ internal constructor(
         checkName(str(vital, "heal(vital)"), world.schema.vitalNames, "vital", "heal(vital)")
       world.heal(actorArg(target, "heal(target)"), name, n)
       Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "award_xp",
+    doc =
+      "Awards experience points to actor, applying pending levels in auto mode or sending" +
+        " the ready notice in deferred mode. Returns None. Needs the leveling feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to receive experience."),
+        Param(name = "amount", named = true, doc = "Points to award; must be at least 1."),
+      ],
+  )
+  fun awardXp(actor: Any, amount: Any): Any =
+    verb("award_xp") {
+      val a = actorArg(actor, "award_xp(actor)")
+      val n = long(amount, "award_xp(amount)")
+      if (n < 1L) fail("award_xp(amount): must be at least 1")
+      world.awardXp(a, n)
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "take_xp",
+    doc =
+      "Removes up to amount experience points from actor, never going below 0. Never changes" +
+        " level and sends no message. Returns the amount actually removed. Needs the leveling" +
+        " feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to remove experience from."),
+        Param(name = "amount", named = true, doc = "Points to remove; must be at least 1."),
+      ],
+  )
+  fun takeXp(actor: Any, amount: Any): Any =
+    verb("take_xp") {
+      val a = actorArg(actor, "take_xp(actor)")
+      val n = long(amount, "take_xp(amount)")
+      if (n < 1L) fail("take_xp(amount): must be at least 1")
+      sInt(world.takeXp(a, n))
+    }
+
+  @StarlarkMethod(
+    name = "level_up",
+    doc =
+      "Applies one pending level to actor, in either level mode. In deferred mode, sends the" +
+        " ready notice again if more levels are still pending. Returns True if a level was" +
+        " gained, or False, changing nothing, if none was pending. Needs the leveling feature.",
+    parameters = [Param(name = "actor", named = true, doc = "Actor to advance.")],
+  )
+  fun levelUp(actor: Any): Any =
+    verb("level_up") {
+      val a = actorArg(actor, "level_up(actor)")
+      world.levelUpAndNotify(a)
+    }
+
+  @StarlarkMethod(
+    name = "level_down",
+    doc =
+      "Lowers actor by up to count levels, stopping at level 1. Returns the number of levels" +
+        " actually lost. Needs the leveling feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor to lower."),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "1",
+          doc = "Number of level steps to unwind; must be at least 1.",
+        ),
+      ],
+  )
+  fun levelDown(actor: Any, count: Any): Any =
+    verb("level_down") {
+      val a = actorArg(actor, "level_down(actor)")
+      val c = int(count, "level_down(count)")
+      if (c < 1) fail("level_down(count): must be at least 1")
+      sInt(world.levelDown(a, c))
     }
 
   @StarlarkMethod(

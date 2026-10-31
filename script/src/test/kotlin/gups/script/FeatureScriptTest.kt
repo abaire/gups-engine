@@ -312,6 +312,18 @@ class FeatureScriptTest {
           "x = a.pending_levels",
           "actor.pending_levels needs the leveling feature",
         ),
+        Triple(
+          Feature.LEVELING,
+          "ctx.award_xp(a, 10)",
+          "ctx.award_xp() needs the leveling feature",
+        ),
+        Triple(Feature.LEVELING, "ctx.take_xp(a, 10)", "ctx.take_xp() needs the leveling feature"),
+        Triple(Feature.LEVELING, "ctx.level_up(a)", "ctx.level_up() needs the leveling feature"),
+        Triple(
+          Feature.LEVELING,
+          "ctx.level_down(a)",
+          "ctx.level_down() needs the leveling feature",
+        ),
         Triple(Feature.TRACK, "x = a.track_index", "actor.track_index needs the track feature"),
         Triple(Feature.TRACK, "x = a.band_of(a)", "actor.band_of needs the track feature"),
         Triple(Feature.TRACK, "x = ctx.room.size", "room.size needs the track feature"),

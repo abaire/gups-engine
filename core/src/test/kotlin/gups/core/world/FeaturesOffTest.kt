@@ -127,6 +127,14 @@ class FeaturesOffTest {
     f.w.awardXp(ann, 10_000)
     assertEquals(0L, ann.xp)
     assertEquals(0, f.w.pendingLevels(ann))
+    // Leftover progression state from before leveling was turned off is left alone.
+    ann.level = 3
+    ann.xp = 500L
+    assertEquals(0L, f.w.takeXp(ann, 100))
+    assertFalse(f.w.levelUp(ann))
+    assertEquals(0, f.w.levelDown(ann))
+    assertEquals(3, ann.level)
+    assertEquals(500L, ann.xp)
     assertTrue("Level" in Fixture().let { g -> g.say(g.player("Bea"), "score") })
   }
 

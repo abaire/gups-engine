@@ -173,6 +173,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.award_xp" class="entry">
+<h4><code>award_xp(actor, amount)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Awards experience points to actor, applying pending levels in auto mode or sending the ready notice in deferred mode. Returns None. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.award_xp.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to receive experience.</td></tr>
+<tr id="ctx.award_xp.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to award; must be at least 1.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.cancel" class="entry">
 <h4><code>cancel(timer_id)</code> <span class="since">since api_version 1</span></h4>
 <p>Cancels one of this owner's timers; True if it was pending.</p>
@@ -367,6 +378,27 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.level_down" class="entry">
+<h4><code>level_down(actor, count = 1)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Lowers actor by up to count levels, stopping at level 1. Returns the number of levels actually lost. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.level_down.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to lower.</td></tr>
+<tr id="ctx.level_down.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of level steps to unwind; must be at least 1.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.level_up" class="entry">
+<h4><code>level_up(actor)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Applies one pending level to actor, in either level mode. In deferred mode, sends the ready notice again if more levels are still pending. Returns True if a level was gained, or False, changing nothing, if none was pending. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.level_up.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to advance.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.lock_door" class="entry">
 <h4><code>lock_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
 <p>Closes and locks the door.</p>
@@ -542,6 +574,17 @@
 <tbody>
 <tr id="ctx.stop_combat.a"><td><code>a</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
 <tr id="ctx.stop_combat.b"><td><code>b</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.take_xp" class="entry">
+<h4><code>take_xp(actor, amount)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Removes up to amount experience points from actor, never going below 0. Never changes level and sends no message. Returns the amount actually removed. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.take_xp.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to remove experience from.</td></tr>
+<tr id="ctx.take_xp.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to remove; must be at least 1.</td></tr>
 </tbody>
 </table>
 </article>

@@ -21,6 +21,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   been given. Requires the `leveling` feature.
 - Changed the rules export to `xp_to_level(ctx, level)`, passing the actor whose threshold is being queried. `ctx.rng`,
   `ctx.roll` and `ctx.pulse` are not available in it, because it must give the same answer every time.
+- Added the leveling ctx verbs: `ctx.award_xp(actor, amount)`, `ctx.take_xp(actor, amount)`, `ctx.level_up(actor)` and
+  `ctx.level_down(actor, count=1)`. Each requires the `leveling` feature.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 
