@@ -65,7 +65,7 @@ internal object KernelCommands {
       FastCommand(
         "score",
         category = CommandCategory.INFORMATION,
-        help = "View your character status, vitals, stats, and resistances.\nUsage: score",
+        help = "View your character status, vitals, stats, resistances, and level.\nUsage: score",
       ) {
         score(it)
       },
@@ -332,6 +332,12 @@ internal object KernelCommands {
     )
   }
 
+  /**
+   * `score`: the name, the effective stats as `<label> <value>` and vitals as `<label> cur/max` in
+   * schema order, and the effective resists. With `leveling`, the level and XP, followed on the
+   * next line by the ready line while levels are pending in either level mode. Then each known
+   * creation choice in choice order and the carried traits in name order.
+   */
   private fun score(c: CommandCall) {
     val a = c.actor
     val w = c.world
@@ -348,8 +354,12 @@ internal object KernelCommands {
           KernelMsg.SCORE_RESISTS,
           "resists" to schema.damageTypes.joinToString("  ") { "$it ${a.effectiveResist(it)}" },
         )
-    if (Feature.LEVELING in w.features)
+    if (Feature.LEVELING in w.features) {
       lines += w.msg(LevelingMsg.SCORE_LEVEL, "level" to a.level, "xp" to a.xp)
+      if (w.pendingLevels(a) > 0) {
+        lines += w.msg(LevelingMsg.SCORE_READY)
+      }
+    }
     if (a is Player && w.creation != null) {
       for (choice in w.creation!!.choices) {
         val optId = a.choices[choice.id] ?: continue

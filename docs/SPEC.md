@@ -1390,12 +1390,10 @@ uses the default names. Every player-facing message here is the default text of 
 - A `silenced` speaker can't use `say`, `tell`, `gossip`, `shout` or `whisper`: it is told "You can't get the words
   out!", nobody hears anything, and no `on_say` or `on_tell` fires.
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The link-dead auto-quit ignores combat.
-- **`score`** lists the character's stats and vitals by label in schema order, its resists by damage type, and its level
-  and XP with the `leveling` feature. It prints the name, the stats as `<label> <value>`, the vitals as `<label>
-  cur/max`, `Resists: <type> <n>` for every declared damage type, and `Level N (X xp)`. Stats, maxima and resists are
-  effective values. With choices or traits (§4.19), it then prints each known answer as `<title>: <label>` in choice
-  order, and `Traits: <labels>` (comma-separated, in name order) when the character carries any. A character with
-  neither sees no such lines.
+- **`score`** shows the character a summary of its own state: its stats, vitals and resists, its progression with the
+  `leveling` feature, and its choices and traits (§4.19). Which lines it prints and how they are laid out is not fixed
+  here; the lines are engine messages (§4.18). Clients read the same state as structured data from the GMCP
+  `Char.Vitals`, `Char.Status` and `Char.Traits` packages (§4.10).
 - **`look`** describes another actor's health by its condition first: "is incapacitated" or "is mortally wounded", and
   otherwise by its lowest vital as a share of its maximum (among vitals with a positive maximum): 100% or more "is in
   excellent condition", 75% "has a few scratches", 50% "is wounded", 25% "is badly hurt", below that "is in awful

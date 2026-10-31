@@ -699,4 +699,33 @@ class LevelingTest {
       dispatches,
     )
   }
+
+  @Test
+  fun `score shows the ready line only while a level is pending, in either level mode`() {
+    for (mode in LevelMode.entries) {
+      val f = Fixture()
+      val p = f.player("Ann")
+      f.w.levelMode = mode
+
+      f.input(p, "score")
+      f.run(4)
+      val out1 = f.out(p)
+      assertTrue("Level 1 (0 xp)" in out1, "$mode")
+      assertFalse("You are ready to advance." in out1, "$mode")
+
+      // Setting XP directly bypasses awardXp, so the level stays pending even in auto mode.
+      p.xp = 1000L
+      assertEquals(1, f.w.pendingLevels(p), "$mode")
+      f.input(p, "score")
+      f.run(4)
+      assertTrue("Level 1 (1000 xp)\nYou are ready to advance." in f.out(p), "$mode")
+
+      assertTrue(f.w.levelUp(p), "$mode")
+      f.input(p, "score")
+      f.run(4)
+      val out3 = f.out(p)
+      assertTrue("Level 2 (1000 xp)" in out3, "$mode")
+      assertFalse("You are ready to advance." in out3, "$mode")
+    }
+  }
 }

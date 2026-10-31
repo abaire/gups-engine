@@ -31,6 +31,7 @@ object LevelingMsg : MsgGroup(Feature.LEVELING) {
   val LEVEL_DOWN =
     msg("leveling.level_down", "You have fallen to level {level}.", "level,count", "level")
   val READY = msg("leveling.ready", "You feel ready to advance.")
+  val SCORE_READY = msg("leveling.score_ready", "You are ready to advance.")
 }
 
 /** The most level steps one call applies, and the most [pendingLevels] counts. */

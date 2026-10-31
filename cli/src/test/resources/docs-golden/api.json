@@ -3838,6 +3838,15 @@
       "since": 1
     },
     {
+      "symbol": "message:leveling.score_ready",
+      "feature": "leveling",
+      "id": "leveling.score_ready",
+      "placeholders": [],
+      "required": [],
+      "default": "You are ready to advance.",
+      "since": 1
+    },
+    {
       "symbol": "message:login.account_disabled",
       "id": "login.account_disabled",
       "placeholders": [],
