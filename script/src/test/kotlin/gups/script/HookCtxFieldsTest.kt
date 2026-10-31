@@ -9,6 +9,7 @@ import gups.core.world.HookName
 import gups.core.world.HookOutcome
 import gups.core.world.ScriptHost
 import gups.core.world.World
+import gups.core.world.awardXp
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import kotlin.test.Test
@@ -122,6 +123,7 @@ class HookCtxFieldsTest {
     }
     f.input(p, "kill wolf")
     f.run(60)
+    f.w.awardXp(p, 1000)
     // on_tick and zone resets come with the world tick.
     f.run(WORLD_TICK_PULSES)
     val far = f.w.room(Label("//zones/z:far"))
@@ -133,23 +135,21 @@ class HookCtxFieldsTest {
       spy.calls.groupBy({ it.first }, { fieldsSet(it.first, it.second) }).mapValues { (_, sets) ->
         sets.flatten().toSortedSet()
       }
-    val expected = HookName.entries.toSet() - HookName.ON_LEVEL_CHANGE
+    val expected = HookName.entries.toSet()
     assertEquals(expected, seen.keys, "hooks that never fired: ${expected - seen.keys}")
     val problems =
-      HookCatalog.specs
-        .filter { it.hook != HookName.ON_LEVEL_CHANGE }
-        .flatMap { spec ->
-          val listed = spec.ctxFields.toSet()
-          val got = seen.getValue(spec.hook)
-          listOfNotNull(
-            (got - listed)
-              .takeIf { it.isNotEmpty() }
-              ?.let { "${spec.name} sets ${it.joinToString()}, which its ctx_fields don't list" },
-            (listed - got)
-              .takeIf { it.isNotEmpty() }
-              ?.let { "${spec.name} lists ${it.joinToString()}, which it never sets here" },
-          )
-        }
+      HookCatalog.specs.flatMap { spec ->
+        val listed = spec.ctxFields.toSet()
+        val got = seen.getValue(spec.hook)
+        listOfNotNull(
+          (got - listed)
+            .takeIf { it.isNotEmpty() }
+            ?.let { "${spec.name} sets ${it.joinToString()}, which its ctx_fields don't list" },
+          (listed - got)
+            .takeIf { it.isNotEmpty() }
+            ?.let { "${spec.name} lists ${it.joinToString()}, which it never sets here" },
+        )
+      }
     assertTrue(problems.isEmpty(), problems.joinToString("\n"))
   }
 

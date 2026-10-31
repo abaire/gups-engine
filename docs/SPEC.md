@@ -1004,8 +1004,9 @@ and must be attachable to that kind of entity per the "Attach to" column. `befor
 **`on_damage`:** `ctx.amount` is the total of the vital losses and `ctx.losses` the losses themselves, a `vitals(...)`
 value (§3.9); `ctx.type` is the damage type. It fires once per damage event, after the losses are applied.
 
-**`on_level_change`** needs `leveling`. It fires once per level step, after the gains or their unwinding, the message
-and the gain record, so it sees the new state; a loss of three levels fires it three times.
+**`on_level_change`** needs `leveling`. It fires once per level step, after the gains or their unwinding and the gain
+record, so it sees the new state; a loss of three levels fires it three times. A level gained is announced before its
+hook fires; a loss is announced once, after the last step's hook.
 
 **Timing:**
 
@@ -2562,9 +2563,10 @@ and work with or without it (§3.10). Combat resolution is implemented in
 - **Death:**
   - Engine-owned, and part of the kernel: any vital can kill, in or out of combat. The killer is the last actor who
     damaged the victim, if still in the world. The order is: messages, `on_death` (target's own hook, then the room,
-    then observers), XP (with the `leveling` feature), then the corpse.
-  - **For mobs:** awards XP via `xp_for_kill` and creates a corpse container holding the mob's inventory, its equipment
-    and the loot rolls. A summoned mob (`summonedBy` set) awards no XP and rolls no loot.
+    then observers), the corpse, then XP (with the `leveling` feature). The XP is priced by `xp_for_kill` as the victim
+    died but awarded last, so a level it raises is not heard by the victim or by the belongings it leaves.
+  - **For mobs:** creates a corpse container holding the mob's inventory, its equipment and the loot rolls, and awards
+    XP via `xp_for_kill`. A summoned mob (`summonedBy` set) awards no XP and rolls no loot.
   - **For players:** applies `rules.on_player_death`, takes its `xp_loss` from `xp` (never below 0) and leaves a corpse
     holding the carried inventory only; equipment stays on the player. The player respawns at index 0 of the respawn
     room with the vitals `on_player_death` returned, its condition `ok`, and all affects removed. If `condition` still

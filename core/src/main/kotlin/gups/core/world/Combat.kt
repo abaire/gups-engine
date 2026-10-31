@@ -212,8 +212,12 @@ internal fun World.processDeath(victim: Actor) {
   // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
   // worth nothing either and drops no loot, so it can't be farmed.
   val summoned = victim is Mob && victim.summonedBy != null
-  if (Feature.LEVELING in features && killer != null && !victim.debug && !summoned)
-    awardXp(killer, rules.xpForKill(RulesContext(this, killer, victim)))
+  // Priced now, against the victim as it died, but awarded last: a level the award raises fires
+  // on_level_change, which must not reach the victim or the belongings it is about to lose.
+  val killXp =
+    if (Feature.LEVELING in features && killer != null && !victim.debug && !summoned)
+      rules.xpForKill(RulesContext(this, killer, victim))
+    else 0L
 
   val corpse =
     spawnItem(
@@ -254,6 +258,7 @@ internal fun World.processDeath(victim: Actor) {
       if (outcome.levelLoss > 0) levelDown(victim, outcome.levelLoss)
     }
   }
+  if (killer != null && killer.inWorld) awardXp(killer, killXp)
 }
 
 /**

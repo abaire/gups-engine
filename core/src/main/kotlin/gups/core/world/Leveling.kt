@@ -86,7 +86,8 @@ private fun World.countPendingLevels(a: Actor, limit: Int): Int {
  *    current vital deltas are never recorded.
  * 6. Sends the level-up message to the actor.
  * 7. Asks for the actor's condition once if any vital changed.
- * 8. Marks the actor dirty, requests an immediate checkpoint if a player, and returns true.
+ * 8. Dispatches `on_level_change` with `old_level = a.level - 1` and `new_level = a.level`.
+ * 9. Marks the actor dirty, requests an immediate checkpoint if a player, and returns true.
  */
 fun World.levelUp(a: Actor): Boolean {
   if (countPendingLevels(a, 1) <= 0) return false
@@ -120,6 +121,13 @@ fun World.levelUp(a: Actor): Boolean {
   tell(a, LevelingMsg.LEVEL_UP, "level" to a.level)
 
   if (max.isNotEmpty() || current.isNotEmpty() || capped) refreshCondition(a)
+
+  dispatch(
+    HookName.ON_LEVEL_CHANGE,
+    a,
+    a.room,
+    HookContext(actor = a, oldLevel = a.level - 1, newLevel = a.level),
+  )
 
   a.dirty = true
   if (a is Player) requestImmediate("level")
@@ -157,8 +165,9 @@ fun World.levelUpAndNotify(a: Actor): Boolean {
  * to the actor's experience and sends [LevelingMsg.GAIN].
  *
  * In [LevelMode.AUTO] mode, applies owed levels up to [MAX_LEVEL_STEPS] via [levelUp]; levels still
- * owed after that wait for the next award. If [a] is a player whose level changed, requests an
- * immediate GMCP `Char.Status` refresh at the end.
+ * owed after that wait for the next award. Each step fires `on_level_change`, so it also stops
+ * early if a hook takes the actor out of the world, such as by killing it. If [a] is a player whose
+ * level changed, requests an immediate GMCP `Char.Status` refresh at the end.
  *
  * In [LevelMode.DEFERRED] mode, levels are not applied automatically. If [pendingLevels] rises from
  * zero to more than zero as a result of this award, sends [LevelingMsg.READY] to notify the actor
@@ -174,7 +183,7 @@ fun World.awardXp(a: Actor, amount: Long) {
     LevelMode.AUTO -> {
       val initialLevel = a.level
       var steps = 0
-      while (steps < MAX_LEVEL_STEPS && levelUp(a)) {
+      while (steps < MAX_LEVEL_STEPS && a.inWorld && levelUp(a)) {
         steps++
       }
       if (a is Player && a.level != initialLevel) {
@@ -203,7 +212,8 @@ fun World.awardXp(a: Actor, amount: Long) {
  * 5. Applies the "never owed the level just lost" rule: clamps `a.xp` to `min(a.xp,
  *    rules.xp_to_level(a.level) - 1)` (never below 0). This also removes any other pending levels.
  * 6. Asks condition once if any vital maximum changed or a current vital was capped.
- * 7. Marks the actor dirty.
+ * 7. Dispatches `on_level_change` with `old_level = a.level + 1` and `new_level = a.level`.
+ * 8. Marks the actor dirty.
  */
 fun World.levelDownStep(a: Actor) {
   require(a.level >= 2) { "cannot step down below level 1" }
@@ -222,16 +232,24 @@ fun World.levelDownStep(a: Actor) {
 
   if (gain?.max?.isNotEmpty() == true || capped) refreshCondition(a)
 
+  dispatch(
+    HookName.ON_LEVEL_CHANGE,
+    a,
+    a.room,
+    HookContext(actor = a, oldLevel = a.level + 1, newLevel = a.level),
+  )
+
   a.dirty = true
 }
 
 /**
- * Lowers [a]'s level by up to [count] steps, stopping at level 1.
+ * Lowers [a]'s level by up to [count] steps, stopping at level 1, or early if an `on_level_change`
+ * hook takes the actor out of the world.
  *
  * If leveling is disabled or [count] is not positive, returns 0 and changes nothing. If at least
- * one step was taken, sends [LevelingMsg.LEVEL_DOWN] to the actor once and, for a player, requests
- * an immediate GMCP `Char.Status` refresh and an immediate checkpoint. Returns the number of levels
- * actually lost.
+ * one step was taken, sends [LevelingMsg.LEVEL_DOWN] to the actor once, after the last step's
+ * `on_level_change`, and, for a player, requests an immediate GMCP `Char.Status` refresh and an
+ * immediate checkpoint. Returns the number of levels actually lost.
  *
  * The rules are never called: the engine subtracts exactly what was stored in the level gain
  * records, so gains that used random numbers unwind exactly, and so do gains from a rules package
@@ -240,7 +258,7 @@ fun World.levelDownStep(a: Actor) {
 fun World.levelDown(a: Actor, count: Int = 1): Int {
   if (Feature.LEVELING !in features || count <= 0) return 0
   var steps = 0
-  while (steps < count && a.level > 1) {
+  while (steps < count && a.level > 1 && a.inWorld) {
     levelDownStep(a)
     steps++
   }

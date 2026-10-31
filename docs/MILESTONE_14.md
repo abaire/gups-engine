@@ -156,7 +156,8 @@ unwind exactly, and so do gains from a rules package that has since changed.
     pending after the cap wait for the next award.
   - In `deferred` mode it sends `LevelingMsg.READY` when `pending_levels` went from 0 to above 0.
   - For a player whose level changed it requests an immediate GMCP `Char.Status` once, at the end.
-  - The kill path calls it exactly as today (debug mobs and summons award nothing).
+  - The kill path calls it as today (debug mobs and summons award nothing), except that the XP, priced as the victim
+    died, is awarded after the corpse, the removal or the respawn, so the victim never hears the killer's level change.
 - `World.takeXp(a, amount): Long` removes `min(amount, a.xp)`, returns the amount removed, and sends nothing. It never
   changes `level`.
 - **Pending levels:** `pendingLevels(a)` counts the consecutive `k >= 0` with `a.xp >= xp_to_level(ctx, a.level + k)`,
@@ -200,10 +201,10 @@ The harness `w` handle gets `award_xp(actor, amount)`, `take_xp(actor, amount)`,
 - Catalog row: `on_level_change`, no veto, attaches to `Mob`, `Room` and `Item` (carried or equipped), needs `leveling`.
 - Key ctx fields: `actor` (the one whose level changed), `old_level`, `new_level`. `old_level` and `new_level` are two
   new ctx fields; they differ by exactly one, and are `None` for every other hook.
-- It fires only from `levelUp` and `levelDownStep`, once per step, after the gains or the unwinding, the record update
-  and the message, so the hook sees the new state. Every cause of a level change (a kill, `award_xp`, `level_up`,
-  `level_down`, `level_loss`) therefore fires it exactly once per level, in order (1→2, 2→3 or 4→3, 3→2). `take_xp`
-  never fires it.
+- It fires only from `levelUp` and `levelDownStep`, once per step, after the gains or the unwinding and the record
+  update, so the hook sees the new state. A level gained is announced before its hook; a loss is announced once by
+  `levelDown`, after the last step's hook. Every cause of a level change (a kill, `award_xp`, `level_up`, `level_down`,
+  `level_loss`) therefore fires it exactly once per level, in order (1→2, 2→3 or 4→3, 3→2). `take_xp` never fires it.
 - Dispatch has the `on_death` shape and the §5.6 order:
   1. The actor's own hook, if it is a mob.
   2. The room.

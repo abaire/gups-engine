@@ -671,4 +671,32 @@ class LevelingTest {
     @Suppress("UNCHECKED_CAST") val status = statusUpdates.single().second as Map<String, Any?>
     assertEquals(2, status["level"])
   }
+
+  @Test
+  fun `levelUp and levelDownStep dispatch ON_LEVEL_CHANGE with oldLevel and newLevel`() {
+    val host = RecordingHost()
+    val dispatches = mutableListOf<Triple<String, Int?, Int?>>()
+    host.handlers[HookName.ON_LEVEL_CHANGE] = { _, owner, ctx ->
+      dispatches += Triple(owner.name, ctx.oldLevel, ctx.newLevel)
+      null
+    }
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    p.xp = 1000L
+
+    assertTrue(f.w.levelUp(p))
+    assertEquals(2, p.level)
+    assertEquals(
+      listOf<Triple<String, Int?, Int?>>(Triple("Ann", 1, 2), Triple("The Hall", 1, 2)),
+      dispatches,
+    )
+
+    dispatches.clear()
+    f.w.levelDownStep(p)
+    assertEquals(1, p.level)
+    assertEquals(
+      listOf<Triple<String, Int?, Int?>>(Triple("Ann", 2, 1), Triple("The Hall", 2, 1)),
+      dispatches,
+    )
+  }
 }

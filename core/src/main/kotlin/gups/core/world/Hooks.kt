@@ -92,7 +92,9 @@ enum class HookName(
    * Invoked when an actor's level changes up or down, once per level step.
    *
    * [HookContext.actor] is the actor whose level changed, [HookContext.oldLevel] is the level
-   * before the change, and [HookContext.newLevel] is the level after the change.
+   * before the change, and [HookContext.newLevel] is the level after the change. It fires after the
+   * gains or their unwinding and the gain record, so it sees the new state. A level gained is
+   * announced before its hook fires; a loss is announced once, after the last step's hook.
    */
   ON_LEVEL_CHANGE("on_level_change"),
 
