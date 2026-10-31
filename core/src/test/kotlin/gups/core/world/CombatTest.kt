@@ -4,15 +4,20 @@ import gups.core.HookRef
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.DamageType
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
+import gups.core.rules.LevelUpResult
+import gups.core.rules.PlayerDeathOutcome
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -185,6 +190,66 @@ class CombatTest(private val fs: FixtureSchema) {
     assertTrue(p.inventory.isEmpty())
     assertEquals("the corpse of Ann", f.w.room(T.HALL).items.single().name)
     assertFalse(g.isEngaged)
+  }
+
+  @Test
+  fun `level_loss lowers the level after the respawn, in the respawn room, and the respawn vitals are capped at the lowered maxima`() {
+    val rules = FixedRules(fs)
+    rules.levelUpOf = {
+      LevelUpResult(max = mapOf(fs.health to 20), current = mapOf(fs.health to 20))
+    }
+    val f = Fixture(rules = rules)
+    val p = f.player("Ann", hp = 50)
+    p.recallRoom = T.YARD
+    p.xp = 1000L
+    assertTrue(f.w.levelUp(p))
+    assertEquals(2, p.level)
+    assertEquals(70, p.baseMax(fs.health))
+    assertEquals(70, p.current(fs.health))
+
+    rules.deathOf = {
+      PlayerDeathOutcome(
+        respawn = p.recallRoom,
+        vitals = mapOf(fs.health to 70),
+        xpLoss = 100L,
+        levelLoss = 1,
+      )
+    }
+
+    f.w.damage(p, mapOf(fs.health to 100), DamageType(fs.unarmed))
+    f.run()
+
+    assertEquals(1, p.level)
+    assertEquals(T.YARD, p.room.label)
+    assertEquals(50, p.baseMax(fs.health))
+    assertEquals(50, p.current(fs.health))
+    val out = f.out(p)
+    assertContains(out, "You have fallen to level 1.")
+    val respawnIndex = out.indexOf("The Yard")
+    val levelDownIndex = out.indexOf("You have fallen to level 1.")
+    assertNotEquals(respawnIndex, -1)
+    assertNotEquals(levelDownIndex, -1)
+    assertTrue(respawnIndex < levelDownIndex)
+  }
+
+  @Test
+  fun `xp_loss larger than xp leaves 0`() {
+    val rules = FixedRules(fs)
+    rules.deathOf = {
+      PlayerDeathOutcome(
+        respawn = (it.requireActor() as Player).recallRoom,
+        vitals = mapOf(fs.health to 1),
+        xpLoss = 1000L,
+      )
+    }
+    val f = Fixture(rules = rules)
+    val p = f.player("Ann")
+    p.xp = 350L
+
+    f.w.damage(p, mapOf(fs.health to 100), DamageType(fs.unarmed))
+    f.run()
+
+    assertEquals(0L, p.xp)
   }
 
   @Test

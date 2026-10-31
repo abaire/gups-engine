@@ -251,6 +251,7 @@ internal fun World.processDeath(victim: Actor) {
         victim,
       )
       send(victim, describeRoom(victim))
+      if (outcome.levelLoss > 0) levelDown(victim, outcome.levelLoss)
     }
   }
 }
