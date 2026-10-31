@@ -126,6 +126,11 @@ class World(
   val scripts: ScriptHost = ScriptHost.NONE,
   val config: WorldConfig = WorldConfig(),
   boot: Boot = Boot(),
+  /**
+   * How earned levels are applied to actors in this world: automatically upon eligibility or
+   * deferred until a script advances them.
+   */
+  var levelMode: LevelMode = LevelMode.AUTO,
 ) {
   /** The live prototype table; a reload swaps it. */
   var protos: Prototypes = protos

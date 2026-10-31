@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.DamageType
 import gups.core.model.LevelGain
 import gups.core.rules.LevelUpResult
@@ -448,5 +449,20 @@ class LevelingTest {
     assertEquals(1, f.w.levelDown(p))
     f.run()
     assertEquals(listOf("level"), captures.immediate)
+  }
+
+  @Test
+  fun `world levelMode defaults to AUTO and can be set to DEFERRED`() {
+    val schema = FixtureSchemas.FANTASY.schema
+    val protos = T.protos(FixtureSchemas.FANTASY)
+    val rules = FixedRules(FixtureSchemas.FANTASY)
+
+    val w = World(protos, schema, rules)
+    assertEquals(LevelMode.AUTO, w.levelMode)
+    w.levelMode = LevelMode.DEFERRED
+    assertEquals(LevelMode.DEFERRED, w.levelMode)
+
+    val wDeferred = World(protos, schema, rules, levelMode = LevelMode.DEFERRED)
+    assertEquals(LevelMode.DEFERRED, wDeferred.levelMode)
   }
 }

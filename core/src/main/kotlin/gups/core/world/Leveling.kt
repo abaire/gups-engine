@@ -5,6 +5,25 @@ import gups.core.model.LevelGain
 import gups.core.model.Player
 import gups.core.rules.RulesContext
 
+/**
+ * How earned levels are applied to actors: automatically upon eligibility or deferred until a
+ * script advances them.
+ */
+enum class LevelMode {
+  /**
+   * Earned levels apply immediately. Experience awards call `levelUp` while the actor is eligible,
+   * so kills, experience awards, and scripts share one progression path.
+   */
+  AUTO,
+
+  /**
+   * Experience awards only accumulate experience points. When an award causes pending levels to
+   * rise from zero to more than zero, the actor is notified that they are ready to advance. Levels
+   * are applied only when a script or command explicitly advances the actor.
+   */
+  DEFERRED,
+}
+
 object LevelingMsg : MsgGroup(Feature.LEVELING) {
   val SCORE_LEVEL = msg("leveling.score", "Level {level} ({xp} xp)", "level,xp")
   val GAIN = msg("leveling.gain", "You gain {amount} experience.", "amount", "amount")
