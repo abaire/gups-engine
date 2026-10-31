@@ -138,7 +138,8 @@ list) after a flee or a disengage?
 
 **Spec:** §4.7 `aggressive(toward, unless_level_above=None)`. **Today:** an aggressive mob attacks the lowest-id match
 at once. Nothing hides players or models stealth. **Question:** is sneaking or invisibility in scope, and should
-`aggressive` take a chance or a delay?
+`aggressive` take a chance or a delay? Also, should we support "unless_level_below" and more complex player targeting
+like `attack_healers_first`?
 
 ### Behavior trees and GOAP
 
