@@ -11,7 +11,7 @@ import gups.core.rules.RulesContext
  */
 enum class LevelMode {
   /**
-   * Earned levels apply immediately. Experience awards call `levelUp` while the actor is eligible,
+   * Earned levels apply immediately. Experience awards call [levelUp] while the actor is eligible,
    * so kills, experience awards, and scripts share one progression path.
    */
   AUTO,
@@ -30,6 +30,7 @@ object LevelingMsg : MsgGroup(Feature.LEVELING) {
   val LEVEL_UP = msg("leveling.level_up", "You have reached level {level}!", "level", "level")
   val LEVEL_DOWN =
     msg("leveling.level_down", "You have fallen to level {level}.", "level,count", "level")
+  val READY = msg("leveling.ready", "You feel ready to advance.")
 }
 
 /** The most level steps one call applies, and the most [pendingLevels] counts. */
@@ -129,24 +130,65 @@ fun World.levelUp(a: Actor): Boolean {
 }
 
 /**
+ * Applies a single level increase to [a] via [levelUp] and notifies the actor.
+ *
+ * If the level was raised:
+ * - If [a] is a [Player], requests an immediate GMCP `Char.Status` refresh.
+ * - In [LevelMode.DEFERRED] mode, sends [LevelingMsg.READY] if additional levels remain pending.
+ *   The ready notice is stateless: it fires only when levels remain pending after a level-up step
+ *   or when an award first makes levels pending.
+ *
+ * Returns true if a level was applied, or false if the actor had no pending levels.
+ */
+fun World.levelUpAndNotify(a: Actor): Boolean {
+  val raised = levelUp(a)
+  if (raised) {
+    if (a is Player) {
+      refreshGmcp(a, "Char.Status")
+    }
+    if (levelMode == LevelMode.DEFERRED && countPendingLevels(a, 1) > 0) {
+      tell(a, LevelingMsg.READY)
+    }
+  }
+  return raised
+}
+
+/**
  * Awards [amount] experience points to [a].
  *
  * Ignored unless the leveling feature is enabled and [amount] is strictly positive. Adds [amount]
- * to the actor's experience, sends [LevelingMsg.GAIN], and applies owed levels up to
- * [MAX_LEVEL_STEPS] via [levelUp]; levels still owed after that wait for the next award. If [a] is
- * a player whose level changed, requests an immediate GMCP `Char.Status` refresh at the end.
+ * to the actor's experience and sends [LevelingMsg.GAIN].
+ *
+ * In [LevelMode.AUTO] mode, applies owed levels up to [MAX_LEVEL_STEPS] via [levelUp]; levels still
+ * owed after that wait for the next award. If [a] is a player whose level changed, requests an
+ * immediate GMCP `Char.Status` refresh at the end.
+ *
+ * In [LevelMode.DEFERRED] mode, levels are not applied automatically. If [pendingLevels] rises from
+ * zero to more than zero as a result of this award, sends [LevelingMsg.READY] to notify the actor
+ * that advancement is available. Subsequent awards while levels are already pending do not repeat
+ * the notification.
  */
 fun World.awardXp(a: Actor, amount: Long) {
   if (Feature.LEVELING !in features || amount <= 0) return
+  val hadPending = levelMode == LevelMode.DEFERRED && countPendingLevels(a, 1) > 0
   a.xp += amount
   tell(a, LevelingMsg.GAIN, "amount" to amount)
-  val initialLevel = a.level
-  var steps = 0
-  while (steps < MAX_LEVEL_STEPS && levelUp(a)) {
-    steps++
-  }
-  if (a is Player && a.level != initialLevel) {
-    refreshGmcp(a, "Char.Status")
+  when (levelMode) {
+    LevelMode.AUTO -> {
+      val initialLevel = a.level
+      var steps = 0
+      while (steps < MAX_LEVEL_STEPS && levelUp(a)) {
+        steps++
+      }
+      if (a is Player && a.level != initialLevel) {
+        refreshGmcp(a, "Char.Status")
+      }
+    }
+    LevelMode.DEFERRED -> {
+      if (!hadPending && countPendingLevels(a, 1) > 0) {
+        tell(a, LevelingMsg.READY)
+      }
+    }
   }
   a.dirty = true
 }

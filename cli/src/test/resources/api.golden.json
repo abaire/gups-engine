@@ -8089,6 +8089,15 @@
       "since": 1
     },
     {
+      "symbol": "message:leveling.ready",
+      "feature": "leveling",
+      "id": "leveling.ready",
+      "placeholders": [],
+      "required": [],
+      "default": "You feel ready to advance.",
+      "since": 1
+    },
+    {
       "symbol": "message:leveling.score",
       "feature": "leveling",
       "id": "leveling.score",

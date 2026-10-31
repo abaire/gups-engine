@@ -465,4 +465,124 @@ class LevelingTest {
     val wDeferred = World(protos, schema, rules, levelMode = LevelMode.DEFERRED)
     assertEquals(LevelMode.DEFERRED, wDeferred.levelMode)
   }
+
+  @Test
+  fun `XP crossing a threshold sends READY once, a second award does not repeat it, and the level does not change`() {
+    val f = Fixture()
+    f.w.levelMode = LevelMode.DEFERRED
+    val p = f.player("Ann")
+    assertEquals(1, p.level)
+    assertEquals(0L, p.xp)
+
+    // Crossing the first threshold (1000 xp) sends GAIN and READY, and does not change level.
+    f.w.awardXp(p, 1000L)
+    assertEquals(1, p.level)
+    assertEquals(1000L, p.xp)
+    assertEquals(1, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You gain 1000 experience.\nYou feel ready to advance.\n", f.out(p))
+
+    // A second award while already pending does not repeat READY.
+    f.w.awardXp(p, 500L)
+    assertEquals(1, p.level)
+    assertEquals(1500L, p.xp)
+    assertEquals(1, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You gain 500 experience.\n", f.out(p))
+
+    // Crossing another threshold while levels are already pending also does not repeat READY.
+    f.w.awardXp(p, 1500L)
+    assertEquals(1, p.level)
+    assertEquals(3000L, p.xp)
+    assertEquals(2, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You gain 1500 experience.\n", f.out(p))
+  }
+
+  @Test
+  fun `READY is sent again when an award crosses a threshold after pending levels were used up`() {
+    val f = Fixture()
+    f.w.levelMode = LevelMode.DEFERRED
+    val p = f.player("Ann")
+    f.w.awardXp(p, 1000L)
+    assertTrue(f.w.levelUpAndNotify(p))
+    assertEquals(0, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    f.out(p)
+
+    f.w.awardXp(p, 2000L)
+    assertEquals(2, p.level)
+    assertEquals(1, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You gain 2000 experience.\nYou feel ready to advance.\n", f.out(p))
+  }
+
+  @Test
+  fun `levelUpAndNotify applies one level and sends READY again only if another is pending`() {
+    val f = Fixture()
+    f.w.levelMode = LevelMode.DEFERRED
+    val p = f.player("Ann")
+    f.w.awardXp(p, 3000L)
+    assertEquals(2, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    f.out(p)
+
+    // First levelUpAndNotify applies one level; one level is still pending, so READY is sent.
+    assertTrue(f.w.levelUpAndNotify(p))
+    assertEquals(2, p.level)
+    assertEquals(1, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You have reached level 2!\nYou feel ready to advance.\n", f.out(p))
+
+    // Second levelUpAndNotify applies the second level; 0 pending, so READY is not sent.
+    assertTrue(f.w.levelUpAndNotify(p))
+    assertEquals(3, p.level)
+    assertEquals(0, f.w.pendingLevels(p))
+    f.w.flushOutput()
+    assertEquals("You have reached level 3!\n", f.out(p))
+
+    // Third call with nothing pending returns false, changes nothing, and sends nothing.
+    assertFalse(f.w.levelUpAndNotify(p))
+    assertEquals(3, p.level)
+    f.w.flushOutput()
+    assertEquals("", f.out(p))
+
+    // Works for mobs too.
+    val m = f.mob(T.DUMMY)
+    m.xp = 1000L
+    assertTrue(f.w.levelUpAndNotify(m))
+    assertEquals(2, m.level)
+  }
+
+  @Test
+  fun `levelUpAndNotify sends one immediate GMCP Char Status refresh for a player when it raises the level, and none when nothing is pending`() {
+    val f = Fixture()
+    f.w.levelMode = LevelMode.DEFERRED
+    val (p, sink) = f.gmcpPlayer("Ann")
+    f.run()
+    sink.take()
+
+    // Nothing pending: levelUpAndNotify returns false and sends no GMCP updates.
+    assertFalse(f.w.levelUpAndNotify(p))
+    f.w.flush(f.w.sessions.getValue(p.session!!))
+    sink.drain()
+    assertTrue(
+      sink.take().none { it.first == "Char.Status" },
+      "no GMCP refresh when nothing is pending",
+    )
+
+    // With a pending level: levelUpAndNotify raises the level and sends one immediate Char.Status
+    // refresh.
+    p.xp = 1000L
+    sink.take()
+    assertTrue(f.w.levelUpAndNotify(p))
+    assertEquals(2, p.level)
+
+    f.w.flush(f.w.sessions.getValue(p.session!!))
+    sink.drain()
+    val statusUpdates = sink.take().filter { it.first == "Char.Status" }
+    assertEquals(1, statusUpdates.size, "expected exactly one GMCP Char.Status refresh")
+    @Suppress("UNCHECKED_CAST") val status = statusUpdates.single().second as Map<String, Any?>
+    assertEquals(2, status["level"])
+  }
 }
