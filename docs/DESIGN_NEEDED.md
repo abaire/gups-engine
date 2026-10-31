@@ -221,6 +221,15 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
+### Enchantments on rooms
+
+**Spec:** §4.2 (room `tags` and `modifiers`, `region` modifiers), §4.6 (the modifier chain). **Today:** a room's tags
+and modifiers come only from its prototype and its regions, so a script or plugin can't consecrate, ward or curse one
+room for a while. Items gain per-instance tag changes and affects; rooms don't. **Questions:** - Should rooms carry
+enchantments at all, and should they work through per-instance tag changes like items, through timed room affects that
+contribute modifiers to the chain, or through some other mechanism? - Does a zone reset keep, clear or restore a room's
+enchantments? - Do room enchantments tick and expire while the room is dormant, or catch up on wake as mob affects do?
+
 ## Commands
 
 ### Exits named after a plugin command
