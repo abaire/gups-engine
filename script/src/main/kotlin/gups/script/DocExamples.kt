@@ -552,6 +552,43 @@ object DocExamples {
         ),
 
       // ---- Ctx verbs ----------------------------------------------------------------------
+      "ctx.level_down" to
+        ex(
+          pkg =
+            """
+                def _drain(ctx):
+                    # Steal up to 250 XP from the victim and award it to the caster.
+                    stolen = ctx.take_xp(ctx.target, 250)
+                    if stolen > 0:
+                        ctx.award_xp(ctx.actor, stolen)
+                    # Drain one level from the victim, undoing exactly what that level gave them.
+                    ctx.level_down(ctx.target)
+
+                skill("vampiric_drain",
+                    kind = "spell",
+                    range = "near",
+                    target = "enemy",
+                    resolve = _drain,
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                v = w.spawn_player("Vlad", at = ":start", skills = {":vampiric_drain": 100})
+                p = w.spawn_player("Tess", at = ":start")
+                hp0 = p.max_hp
+                w.award_xp(p, 1000)
+                t.eq(p.level, 2)
+                t.eq(p.xp, 1000)
+                t.true(p.max_hp > hp0)
+                v.do("cast vampiric_drain Tess")
+                t.eq(p.level, 1)
+                t.eq(p.max_hp, hp0)
+                t.eq(p.xp, 750)
+                t.eq(v.xp, 250)
+                t.contains(p.output(), "You have fallen to level 1.")
+            """,
+        ),
       "ctx.level_up" to
         ex(
           module = "level_mode = \"deferred\"",
