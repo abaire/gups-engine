@@ -241,6 +241,22 @@ class FeatureScriptTest {
   }
 
   @Test
+  fun `level_loss without leveling is refused at load`() {
+    val bad =
+      TestWorlds.rulesFor(without(Feature.LEVELING).ids)
+        .replace("\"vitals\": vitals(hp = 1),", "\"vitals\": vitals(hp = 1), \"level_loss\": 1,")
+    val r =
+      load(
+        world(without(Feature.LEVELING), "zones/z/a.star" to "room(\"start\")") +
+          ("rules/combat.star" to bad)
+      )
+    assertTrue(
+      r.errors.any { "level_loss" in it.message && "needs the leveling feature" in it.message },
+      r.report(),
+    )
+  }
+
+  @Test
   fun `a world with leveling off that defines on_level_up fails to load naming the feature`() {
     val r =
       load(

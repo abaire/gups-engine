@@ -299,6 +299,47 @@ class RulesTest {
   }
 
   @Test
+  fun `a negative level_loss is a bad return value`() {
+    val f =
+      world(
+        // Only a level-9 actor gets the bad value, so the load-time dry run (level 1) still passes.
+        """
+        def on_player_death(ctx):
+            if ctx.actor.level == 9:
+                return {"respawn": ctx.actor.recall_room, "level_loss": -1}
+            return {"respawn": ctx.actor.recall_room}
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
+    val outcome = f.w.rules.onPlayerDeath(RulesContext(f.w, p))
+    assertEquals(0, outcome.levelLoss)
+    assertEquals(p.recallRoom, outcome.respawn)
+    val errors = f.diagnostics("script_error").map { it.message }
+    assertTrue(
+      errors.any { "rules.on_player_death returned a bad value" in it && "level_loss" in it },
+      errors.toString(),
+    )
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
+  fun `on_player_death parses level_loss`() {
+    val f =
+      world(
+        """
+        def on_player_death(ctx):
+            return {"respawn": ctx.actor.recall_room, "level_loss": 3}
+        """
+      )
+    val p = f.player()
+    val outcome = f.w.rules.onPlayerDeath(RulesContext(f.w, p))
+    assertEquals(3, outcome.levelLoss)
+    assertEquals(p.recallRoom, outcome.respawn)
+  }
+
+  @Test
   fun `a missing export fails the rules package, naming each one`() {
     val result = loadWith("def to_hit(ctx):\n    return 100\n")
     assertTrue("rules" in result.failed)

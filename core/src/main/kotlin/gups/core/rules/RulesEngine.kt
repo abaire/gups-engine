@@ -96,6 +96,8 @@ data class PlayerDeathOutcome(
   val vitals: Map<String, Int>?,
   /** Experience points deducted as a death penalty. */
   val xpLoss: Long,
+  /** The number of levels lost after the respawn. */
+  val levelLoss: Int = 0,
 )
 
 /**

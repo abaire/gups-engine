@@ -339,7 +339,7 @@ internal fun StarlarkHost.runModifier(
  * - `xp_to_level`: `Long.MAX_VALUE` (no level up possible).
  * - `on_level_up`: no gains (the level is still raised).
  * - `on_player_death`: respawns at the player's recall room (or the current room when none is set),
- *   restores vitals to effective maxima, with `0` XP lost.
+ *   restores vitals to effective maxima, with `0` XP lost and no level loss.
  * - `equipment_slots`: the last valid slot list it returned, or an empty list before any.
  *
  * Bound to its world by [StarlarkHost.install].
@@ -626,6 +626,8 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       for (k in d.keys) choice(k, what, DEATH_FIELDS)
       if ("xp_loss" in d && Feature.LEVELING !in c.world.features)
         fail(FeatureOwnership.refusal("$what[\"xp_loss\"]", Feature.LEVELING))
+      if ("level_loss" in d && Feature.LEVELING !in c.world.features)
+        fail(FeatureOwnership.refusal("$what[\"level_loss\"]", Feature.LEVELING))
       val respawn =
         label(
           str(d["respawn"], "rules.on_player_death[\"respawn\"]"),
@@ -634,10 +636,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         )
       if (c.world.roomOrNull(respawn) == null)
         fail("rules.on_player_death: there is no room $respawn")
+      val levelLoss = d["level_loss"]?.let { int(it, "rules.on_player_death[\"level_loss\"]") } ?: 0
+      if (levelLoss < 0)
+        fail("rules.on_player_death[\"level_loss\"]: must be at least 0, got $levelLoss")
       PlayerDeathOutcome(
         respawn,
         d["vitals"]?.let { typed(it, TypedKind.VITALS, "rules.on_player_death[\"vitals\"]") },
         (d["xp_loss"]?.let { int(it, "rules.on_player_death[\"xp_loss\"]") } ?: 0).toLong(),
+        levelLoss,
       )
     }
       ?: PlayerDeathOutcome(
@@ -648,7 +654,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 
   companion object {
     private val STARTING_FIELDS = listOf("stats", "max", "current", "senses")
-    private val DEATH_FIELDS = listOf("respawn", "vitals", "xp_loss")
+    private val DEATH_FIELDS = listOf("respawn", "vitals", "xp_loss", "level_loss")
     private val LEVEL_UP_FIELDS = listOf("stats", "max", "current")
   }
 }
@@ -887,7 +893,7 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "dict[str, any]",
       ctxFields = listOf("actor", "target", "room", "pulse", "rng"),
       doc =
-        "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int}; vitals sets the respawned character's current vitals.",
+        "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int, 'level_loss': int}; vitals sets the respawned character's current vitals.",
     ),
     RulesExportSpec(
       export = RulesExport.SENSE_COST,

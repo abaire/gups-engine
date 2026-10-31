@@ -5702,7 +5702,7 @@
         "signature": "on_player_death(ctx)",
         "return_type": "dict[str, any]",
         "ctx_fields": ["actor", "target", "room", "pulse", "rng"],
-        "doc": "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int}; vitals sets the respawned character's current vitals.",
+        "doc": "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int, 'level_loss': int}; vitals sets the respawned character's current vitals.",
         "since": 1
       },
       {

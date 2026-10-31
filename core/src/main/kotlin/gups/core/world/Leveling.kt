@@ -170,9 +170,10 @@ fun World.levelDownStep(a: Actor) {
 /**
  * Lowers [a]'s level by up to [count] steps, stopping at level 1.
  *
- * If at least one step was taken, sends [LevelingMsg.LEVEL_DOWN] to the actor once and, for a
- * player, requests an immediate GMCP `Char.Status` refresh and an immediate checkpoint. Returns the
- * number of levels actually lost.
+ * If leveling is disabled or [count] is not positive, returns 0 and changes nothing. If at least
+ * one step was taken, sends [LevelingMsg.LEVEL_DOWN] to the actor once and, for a player, requests
+ * an immediate GMCP `Char.Status` refresh and an immediate checkpoint. Returns the number of levels
+ * actually lost.
  *
  * The rules are never called: the engine subtracts exactly what was stored in the level gain
  * records, so gains that used random numbers unwind exactly, and so do gains from a rules package

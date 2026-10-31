@@ -11,6 +11,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   it is off.
 - Added the `leveling.level_down` message: sent when an actor loses one or more levels (`You have fallen to level
   {level}.`).
+- Added optional `level_loss: int` to the `on_player_death(ctx)` return dictionary: the number of levels lost after the
+  respawn. Allowed only when the `leveling` feature is enabled.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

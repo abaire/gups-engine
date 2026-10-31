@@ -752,7 +752,8 @@ as leaving it out.
   `condition` (§5.4), with the last actor who damaged the victim as its killer. `quit` is never refused for fighting.
 - **Without `skills`,** `use` and item `on_use` hooks are the way to act on things; affects still come from
   `ctx.apply_affect` and `equip_affects`.
-- **Without `leveling`,** no XP is awarded and nothing levels up; `on_player_death`'s `xp_loss` is refused.
+- **Without `leveling`,** no XP is awarded and nothing levels up; `on_player_death`'s `xp_loss` and `level_loss` are
+  refused.
 - **Renaming commands:** `rename = {"cast": "invoke", "kill": "attack"}` renames non-`@` engine commands, of the kernel
   or of an enabled feature. The old name stops being a command and is free for global or plugin commands. Aliases,
   prefixes, reserved exit and character names, `help` and the docs use the new names. Renaming a command that doesn't

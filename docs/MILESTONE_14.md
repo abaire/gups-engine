@@ -608,14 +608,18 @@ module arguments.
 
 **Task:** Add the `deferred` branch to `awardXp` and `LevelingMsg.READY`, as in **Awarding and taking XP**, together
 with `World.levelUpAndNotify(a): Boolean`, which calls `levelUp` and then, in `deferred` mode, sends `READY` if levels
-are still pending. The verbs and the facade call this function.
+are still pending. When the level was raised and the actor is a player, it also requests an immediate GMCP `Char.Status`
+refresh, as `awardXp` and `levelDown` do. The verbs and the facade call this function.
 
-**KDoc:** `awardXp` describes both modes; `levelUpAndNotify` says when it sends `READY`, and that `READY` is stateless.
+**KDoc:** `awardXp` describes both modes; `levelUpAndNotify` says when it sends `READY`, that `READY` is stateless, and
+that it refreshes a player's `Char.Status` at once.
 
 **Tests** (Kotlin, calling `World` functions directly):
 
 - XP crossing a threshold sends `READY` once, a second award does not repeat it, and the level does not change.
 - `levelUpAndNotify` applies one level and sends `READY` again only if another is pending.
+- `levelUpAndNotify` sends one immediate GMCP `Char.Status` refresh for a player when it raises the level, and none when
+  nothing is pending.
 
 **Exit condition:** the tests above exist and pass, and the standing checks pass.
 
