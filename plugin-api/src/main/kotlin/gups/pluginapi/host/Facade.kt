@@ -14,16 +14,21 @@ import gups.core.world.Diagnostic
 import gups.core.world.Feature
 import gups.core.world.World
 import gups.core.world.applyAffect
+import gups.core.world.awardXp
 import gups.core.world.damage
 import gups.core.world.echo
 import gups.core.world.grantTrait
 import gups.core.world.heal
+import gups.core.world.levelDown
+import gups.core.world.levelUpAndNotify
+import gups.core.world.pendingLevels
 import gups.core.world.removeAffect
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.send
 import gups.core.world.setChoices
 import gups.core.world.setSkill
+import gups.core.world.takeXp
 import gups.core.world.teleport
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
@@ -183,6 +188,12 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
     get() {
       needs(world, Feature.LEVELING, "level")
       return actor.level
+    }
+
+  override val pendingLevels: Int
+    get() {
+      needs(world, Feature.LEVELING, "pendingLevels")
+      return world.pendingLevels(actor)
     }
 
   override val affects: List<String>
@@ -393,6 +404,29 @@ internal class WorldFacade(
         ?: throw IllegalArgumentException("removeSkill(skill): invalid skill label '$skill'")
     val a = actorOf(actor, "removeSkill(actor)")
     return world.removeSkill(a, label)
+  }
+
+  override fun awardXp(actor: PluginActor, amount: Long) {
+    needs(world, Feature.LEVELING, "awardXp")
+    require(amount >= 1L) { "awardXp(amount): must be at least 1" }
+    world.awardXp(actorOf(actor, "awardXp(actor)"), amount)
+  }
+
+  override fun takeXp(actor: PluginActor, amount: Long): Long {
+    needs(world, Feature.LEVELING, "takeXp")
+    require(amount >= 1L) { "takeXp(amount): must be at least 1" }
+    return world.takeXp(actorOf(actor, "takeXp(actor)"), amount)
+  }
+
+  override fun levelUp(actor: PluginActor): Boolean {
+    needs(world, Feature.LEVELING, "levelUp")
+    return world.levelUpAndNotify(actorOf(actor, "levelUp(actor)"))
+  }
+
+  override fun levelDown(actor: PluginActor, count: Int): Int {
+    needs(world, Feature.LEVELING, "levelDown")
+    require(count >= 1) { "levelDown(count): must be at least 1" }
+    return world.levelDown(actorOf(actor, "levelDown(actor)"), count)
   }
 
   private fun key(key: String, write: Boolean, what: String): String {

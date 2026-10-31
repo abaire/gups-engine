@@ -150,6 +150,7 @@ class HeritagePluginTest {
     override fun baseResist(type: String) = 0
 
     override val level = 1
+    override val pendingLevels = 0
     override val affects = emptyList<String>()
 
     override fun hasAffect(name: String) = false
@@ -241,6 +242,14 @@ class HeritagePluginTest {
     override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? = null
 
     override fun removeSkill(actor: PluginActor, skill: String) = TODO()
+
+    override fun awardXp(actor: PluginActor, amount: Long) = TODO()
+
+    override fun takeXp(actor: PluginActor, amount: Long): Long = TODO()
+
+    override fun levelUp(actor: PluginActor): Boolean = TODO()
+
+    override fun levelDown(actor: PluginActor, count: Int): Int = TODO()
 
     override fun rooms() = emptyList<PluginRoom>()
 

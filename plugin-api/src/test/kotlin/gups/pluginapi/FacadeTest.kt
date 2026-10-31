@@ -1,16 +1,26 @@
 package gups.pluginapi
 
+import gups.core.CapturingSink
+import gups.core.ClientInputEvent
 import gups.core.Label
+import gups.core.SessionId
+import gups.core.WorldControlEvent
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
+import gups.core.world.LevelingMsg
 import gups.core.world.World
+import gups.core.world.attach
 import gups.core.world.destroy
+import gups.core.world.flushOutput
+import gups.core.world.handle
 import gups.core.world.quit
 import gups.core.world.spawnItem
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.ItemFacade
 import gups.pluginapi.host.WorldFacade
+import gups.script.testing.TestWorlds
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -108,6 +118,174 @@ class FacadeTest {
       "get_attr(entity): ${stick.name} is no longer in the world",
       assertFailsWith<IllegalArgumentException> { f.getAttr(stick, "x") }.message,
     )
+    assertFailsWith<IllegalArgumentException> { f.awardXp(ann, 10) }
+    assertFailsWith<IllegalArgumentException> { f.takeXp(ann, 10) }
+    assertFailsWith<IllegalArgumentException> { f.levelUp(ann) }
+    assertFailsWith<IllegalArgumentException> { f.levelDown(ann, 1) }
+  }
+
+  @Test
+  fun `leveling verbs in auto mode`() {
+    val lw = world(LEVELING_FILES)
+    val lf = WorldFacade(lw, "weather") {}
+    val bob = ActorFacade(lw.spawnPlayer("Bob", Label("//zones/z:a")), lw)
+    val firstThreshold = lw.rules.xpToLevel(RulesContext(lw, bob.actor), 1)
+    assertEquals(1, bob.level)
+    assertEquals(0, bob.pendingLevels)
+
+    lf.awardXp(bob, firstThreshold - 1)
+    assertEquals(1, bob.level)
+    assertEquals(0, bob.pendingLevels)
+
+    assertEquals(200L, lf.takeXp(bob, 200))
+    assertEquals(firstThreshold - 201, lf.takeXp(bob, firstThreshold))
+    assertEquals(0L, lf.takeXp(bob, 100))
+
+    val baseHp = bob.maxVital("hp")
+    lf.awardXp(bob, firstThreshold)
+    assertEquals(2, bob.level)
+    assertEquals(0, bob.pendingLevels)
+    assertEquals(baseHp + 5, bob.maxVital("hp"))
+
+    assertFalse(lf.levelUp(bob))
+
+    assertEquals(1, lf.levelDown(bob, 1))
+    assertEquals(1, bob.level)
+    assertEquals(baseHp, bob.maxVital("hp"))
+    assertEquals(firstThreshold - 1, (bob.actor as Player).xp)
+
+    assertEquals(0, lf.levelDown(bob, 1))
+  }
+
+  @Test
+  fun `leveling verbs in deferred mode`() {
+    val deferredFiles =
+      ZONE + mapOf("MODULE.gups" to TestWorlds.module("level_mode = \"deferred\""))
+    val dw = world(deferredFiles)
+    val df = WorldFacade(dw, "weather") {}
+    val dan = dw.spawnPlayer("Dan", Label("//zones/z:a"))
+    val sink = connect(dw, dan)
+    val player = ActorFacade(dan, dw)
+    val c = RulesContext(dw, dan)
+    assertEquals(1, player.level)
+    assertEquals(0, player.pendingLevels)
+
+    df.awardXp(player, dw.rules.xpToLevel(c, 2))
+    assertEquals(1, player.level)
+    assertEquals(2, player.pendingLevels)
+    dw.flushOutput()
+    assertEquals(1, sink.drain().split(READY).size - 1)
+
+    assertTrue(df.levelUp(player))
+    assertEquals(2, player.level)
+    assertEquals(1, player.pendingLevels)
+    dw.flushOutput()
+    assertContains(sink.drain(), READY)
+
+    assertTrue(df.levelUp(player))
+    assertEquals(3, player.level)
+    assertEquals(0, player.pendingLevels)
+    dw.flushOutput()
+    val last = sink.drain()
+    assertContains(last, "level 3")
+    assertFalse(READY in last)
+
+    assertFalse(df.levelUp(player))
+  }
+
+  @Test
+  fun `leveling verbs work on a mob`() {
+    val lw = world(LEVELING_FILES)
+    val lf = WorldFacade(lw, "weather") {}
+    val wolf = ActorFacade(lw.spawnMob(Label("//zones/z:wolf"), lw.room(Label("//zones/z:a"))), lw)
+    val baseHp = wolf.maxVital("hp")
+
+    lf.awardXp(wolf, lw.rules.xpToLevel(RulesContext(lw, wolf.actor), 2))
+    assertEquals(3, wolf.level)
+    assertEquals(baseHp + 10, wolf.maxVital("hp"))
+    assertEquals(setOf(2, 3), wolf.actor.levelGains.keys)
+
+    assertEquals(100L, lf.takeXp(wolf, 100))
+    assertEquals(2, lf.levelDown(wolf, 5))
+    assertEquals(1, wolf.level)
+    assertEquals(baseHp, wolf.maxVital("hp"))
+    assertTrue(wolf.actor.levelGains.isEmpty())
+  }
+
+  @Test
+  fun `leveling facade members give the same results as the ctx verbs`() {
+    val script =
+      """
+      def _go(ctx):
+          wolf = [x for x in ctx.room.actors() if not x.is_player][0]
+          out = []
+          for a in [ctx.actor, wolf]:
+              ctx.award_xp(a, 3500)
+              out.append(str(ctx.take_xp(a, 200)))
+              out.append(str(ctx.level_up(a)))
+              out.append(str(ctx.level_down(a, 5)))
+              ctx.award_xp(a, 3500)
+              out.append(str(ctx.level_down(a, 1)))
+          ctx.send(ctx.actor, "results: " + " ".join(out))
+    """
+    fun files(withCommand: Boolean): Map<String, String> {
+      val rooms = ZONE.getValue("zones/z/rooms.star").trimIndent()
+      val exits = "exits = [exit(DIR.north, \":b\")]"
+      val wired =
+        if (withCommand) rooms.replace(exits, "$exits, commands = {\"go\": _go}") else rooms
+      return LEVELING_FILES + ("zones/z/rooms.star" to script.trimIndent() + "\n" + wired)
+    }
+
+    val sw = world(files(withCommand = true))
+    val sAnn = sw.spawnPlayer("Ann", Label("//zones/z:a"))
+    val sWolf = sw.spawnMob(Label("//zones/z:wolf"), sw.room(Label("//zones/z:a")))
+    val sSink = connect(sw, sAnn)
+    sw.handle(ClientInputEvent(sAnn.session!!, "go", 1_000_000_000))
+    sw.runPulse()
+    sw.flushOutput()
+    val scriptOut = sSink.drain()
+
+    val fw = world(files(withCommand = false))
+    val fAnn = fw.spawnPlayer("Ann", Label("//zones/z:a"))
+    val fWolf = fw.spawnMob(Label("//zones/z:wolf"), fw.room(Label("//zones/z:a")))
+    val fSink = connect(fw, fAnn)
+    val ff = WorldFacade(fw, "weather") {}
+    val results = mutableListOf<String>()
+    for (a in listOf(ActorFacade(fAnn, fw), ActorFacade(fWolf, fw))) {
+      ff.awardXp(a, 3500)
+      results += ff.takeXp(a, 200).toString()
+      results += if (ff.levelUp(a)) "True" else "False"
+      results += ff.levelDown(a, 5).toString()
+      ff.awardXp(a, 3500)
+      results += ff.levelDown(a, 1).toString()
+    }
+    fw.flushOutput()
+    val facadeOut = fSink.drain()
+
+    assertContains(scriptOut, "results: " + results.joinToString(" "))
+    assertContains(scriptOut, "You have fallen to level 1.")
+    fun leveling(out: String) = out.lines().filter { it.startsWith("You ") }
+    assertEquals(leveling(scriptOut), leveling(facadeOut))
+    for ((s, f) in listOf(sAnn to fAnn, sWolf to fWolf)) {
+      assertEquals(2, s.level)
+      assertEquals(setOf(2), s.levelGains.keys)
+      assertEquals(s.level, f.level)
+      assertEquals(s.xp, f.xp)
+      assertEquals(s.levelGains, f.levelGains)
+      assertEquals(s.baseStats, f.baseStats)
+      assertEquals(s.max("hp"), f.max("hp"))
+      assertEquals(s.current("hp"), f.current("hp"))
+    }
+  }
+
+  @Test
+  fun `leveling verbs reject non-positive arguments`() {
+    assertFailsWith<IllegalArgumentException> { f.awardXp(ann, 0) }
+    assertFailsWith<IllegalArgumentException> { f.awardXp(ann, -1) }
+    assertFailsWith<IllegalArgumentException> { f.takeXp(ann, 0) }
+    assertFailsWith<IllegalArgumentException> { f.takeXp(ann, -1) }
+    assertFailsWith<IllegalArgumentException> { f.levelDown(ann, 0) }
+    assertFailsWith<IllegalArgumentException> { f.levelDown(ann, -1) }
   }
 
   @Test
@@ -186,5 +364,28 @@ class FacadeTest {
     assertEquals(PluginNamed("hp", "Hit points"), s.vitals.first())
     assertEquals(listOf("hp", "mana", "move"), s.vitals.map { it.name })
     assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)
+  }
+
+  private fun connect(w: World, p: Player): CapturingSink {
+    val id = SessionId(1)
+    val sink = CapturingSink()
+    w.handle(WorldControlEvent.Connect(id, sink), 0)
+    w.attach(id, p)
+    w.flushOutput()
+    sink.drain()
+    return sink
+  }
+
+  private companion object {
+    val READY = LevelingMsg.READY.default
+
+    /** A world whose `on_level_up` adds 5 max hp per level. */
+    val LEVELING_FILES =
+      ZONE +
+        mapOf(
+          "rules/package.star" to TestWorlds.RULES_PACKAGE,
+          "rules/combat.star" to
+            TestWorlds.rules("def on_level_up(ctx):\n    return struct(max = vitals(hp = 5))\n"),
+        )
   }
 }

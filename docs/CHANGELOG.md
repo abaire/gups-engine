@@ -23,6 +23,9 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   `ctx.roll` and `ctx.pulse` are not available in it, because it must give the same answer every time.
 - Added the leveling ctx verbs: `ctx.award_xp(actor, amount)`, `ctx.take_xp(actor, amount)`, `ctx.level_up(actor)` and
   `ctx.level_down(actor, count=1)`. Each requires the `leveling` feature.
+- Added leveling members to the plugin facade: `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and
+  `levelDown(actor, count=1)` on `PluginWorld`, and `val pendingLevels: Int` on `PluginActor`. Each requires the
+  `leveling` feature.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

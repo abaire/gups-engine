@@ -39,6 +39,39 @@ class FeatureFacadeTest {
   }
 
   @Test
+  fun `PluginActor pendingLevels throws without leveling, naming the feature`() {
+    val w = world(zone, features = noLevel)
+    val ann = ActorFacade(w.spawnPlayer("Ann", Label("//zones/z:a")), w)
+    val e = assertFailsWith<IllegalStateException> { ann.pendingLevels }
+    assertEquals("pendingLevels needs the leveling feature", e.message)
+    val on = world(zone)
+    assertEquals(0, ActorFacade(on.spawnPlayer("Ann", Label("//zones/z:a")), on).pendingLevels)
+  }
+
+  @Test
+  fun `PluginWorld leveling verbs throw without leveling, naming the feature`() {
+    val w = world(zone, features = noLevel)
+    val f = WorldFacade(w, "p") {}
+    val ann = ActorFacade(w.spawnPlayer("Ann", Label("//zones/z:a")), w)
+    assertEquals(
+      "awardXp needs the leveling feature",
+      assertFailsWith<IllegalStateException> { f.awardXp(ann, 100) }.message,
+    )
+    assertEquals(
+      "takeXp needs the leveling feature",
+      assertFailsWith<IllegalStateException> { f.takeXp(ann, 100) }.message,
+    )
+    assertEquals(
+      "levelUp needs the leveling feature",
+      assertFailsWith<IllegalStateException> { f.levelUp(ann) }.message,
+    )
+    assertEquals(
+      "levelDown needs the leveling feature",
+      assertFailsWith<IllegalStateException> { f.levelDown(ann) }.message,
+    )
+  }
+
+  @Test
   fun `PluginRoom size throws without the track`() {
     val w = world(zone, features = noTrack)
     val room = RoomFacade(w.room(Label("//zones/z:a")), w)

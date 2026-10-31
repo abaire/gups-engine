@@ -142,6 +142,9 @@ class WeatherPluginTest {
     override val level
       get() = TODO()
 
+    override val pendingLevels: Int
+      get() = TODO()
+
     override val affects: List<String>
       get() = TODO()
 
@@ -240,6 +243,14 @@ class WeatherPluginTest {
     override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? = TODO()
 
     override fun removeSkill(actor: PluginActor, skill: String): Boolean = TODO()
+
+    override fun awardXp(actor: PluginActor, amount: Long) = TODO()
+
+    override fun takeXp(actor: PluginActor, amount: Long): Long = TODO()
+
+    override fun levelUp(actor: PluginActor): Boolean = TODO()
+
+    override fun levelDown(actor: PluginActor, count: Int): Int = TODO()
   }
 
   private val registry = FakeRegistry().also { WeatherPlugin().register(it) }

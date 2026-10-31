@@ -5,8 +5,8 @@ package gups.pluginapi
  *
  * ## Facade Verb Guarantees & Invariant Preservation
  * - Every verb (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`,
- *   `setChoices`, `grantTrait`, `setSkill`) directly delegates to the engine's internal
- *   implementation of the corresponding Starlark `ctx` verb.
+ *   `setChoices`, `grantTrait`, `setSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`) directly
+ *   delegates to the engine's internal implementation of the corresponding Starlark `ctx` verb.
  * - This guarantees that all game invariants, state checks, entity dirty flags, immediate
  *   checkpoint triggers, event cascades, and perception broadcasts behave identically whether
  *   invoked from Starlark scripts or Kotlin plugins.
@@ -74,6 +74,45 @@ interface PluginWorld {
   fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String?
 
   fun removeSkill(actor: PluginActor, skill: String): Boolean
+
+  // Leveling (`leveling` feature).
+
+  /**
+   * Awards [amount] experience points to [actor], applying pending levels in auto mode or sending
+   * the ready notice in deferred mode.
+   *
+   * @throws IllegalStateException naming the leveling feature when leveling is disabled.
+   * @throws IllegalArgumentException when [amount] is less than 1.
+   */
+  fun awardXp(actor: PluginActor, amount: Long)
+
+  /**
+   * Removes up to [amount] experience points from [actor], never going below 0. Never changes the
+   * actor's level and sends no message.
+   *
+   * @return the amount of experience actually removed.
+   * @throws IllegalStateException naming the leveling feature when leveling is disabled.
+   * @throws IllegalArgumentException when [amount] is less than 1.
+   */
+  fun takeXp(actor: PluginActor, amount: Long): Long
+
+  /**
+   * Applies one pending level to [actor], in either level mode. In deferred mode, sends the ready
+   * notice again if more levels are still pending.
+   *
+   * @return true if a level was gained, or false if no level was pending.
+   * @throws IllegalStateException naming the leveling feature when leveling is disabled.
+   */
+  fun levelUp(actor: PluginActor): Boolean
+
+  /**
+   * Lowers [actor] by up to [count] levels, stopping at level 1.
+   *
+   * @return the number of levels actually lost.
+   * @throws IllegalStateException naming the leveling feature when leveling is disabled.
+   * @throws IllegalArgumentException when [count] is less than 1.
+   */
+  fun levelDown(actor: PluginActor, count: Int = 1): Int
 
   // ---- Reads ----
 
@@ -145,6 +184,13 @@ interface PluginActor : PluginEntity {
   val role: PluginRole?
   val room: PluginRoom
   val level: Int
+
+  /**
+   * The number of levels the actor is currently eligible to advance.
+   *
+   * @throws IllegalStateException naming the leveling feature when leveling is disabled.
+   */
+  val pendingLevels: Int
 
   /** The effective value of a declared stat. An undeclared name throws, with a suggestion. */
   fun stat(name: String): Int
