@@ -77,6 +77,12 @@ class DocsWorldTest {
     }
     assertContains(robotDocs.getValue("rules.html"), "id=\"rules-flee_fail_lag\"")
     assertFalse("hook-on_combat_tick" !in robotDocs.getValue("hooks.html"))
+    assertFalse("hook-on_level_change" in robotDocs.getValue("hooks.html"))
+    assertContains(all.getValue("hooks.html"), "hook-on_level_change")
+    for (field in listOf("old_level", "new_level")) {
+      assertFalse("id=\"ctx.$field\"" in robotDocs.getValue("ctx.html"), field)
+      assertContains(all.getValue("ctx.html"), "id=\"ctx.$field\"")
+    }
     assertFalse("id=\"knockback\"" in robotDocs.getValue("effects.html"))
     assertContains(all.getValue("effects.html"), "id=\"knockback\"")
     assertFalse("id=\"message-leveling.gain\"" in robotDocs.getValue("world.html"))

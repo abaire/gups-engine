@@ -115,6 +115,75 @@ class FeatureScriptTest {
   }
 
   @Test
+  fun `a mob, a room and an item can declare on_level_change, and another kind of entity can't`() {
+    val r =
+      load(
+        world(
+          Features.ALL,
+          "zones/z/a.star" to
+            """
+            def f(ctx):
+                pass
+
+            room("start", on_level_change = f)
+            mob("m", on_level_change = f)
+            item("i", on_level_change = f)
+            """,
+        )
+      )
+    assertTrue(r.ok, "room, mob and item can declare on_level_change: ${r.report()}")
+
+    val exitInvalid =
+      load(
+        world(
+          Features.ALL,
+          "zones/z/a.star" to
+            """
+            def f(ctx):
+                pass
+
+            room("start", exits = [exit("north", ":other", on_level_change = f)])
+            room("other")
+            """,
+        )
+      )
+    assertFalse(exitInvalid.ok)
+    assertTrue(
+      exitInvalid.errors.any { "exit(): unexpected argument 'on_level_change'" in it.message }
+    )
+
+    val skillInvalid =
+      load(
+        world(
+          Features.ALL,
+          "zones/z/a.star" to
+            """
+            def f(ctx):
+                pass
+
+            skill("s", on_level_change = f)
+            """,
+        )
+      )
+    assertFalse(skillInvalid.ok)
+    assertTrue(
+      skillInvalid.errors.any { "skill(): unexpected argument 'on_level_change'" in it.message }
+    )
+  }
+
+  @Test
+  fun `declaring on_level_change without leveling fails to load naming the feature`() {
+    for (decl in
+      listOf(
+        "mob(\"m\", on_level_change = f)",
+        "room(\"start\", on_level_change = f)",
+        "item(\"i\", on_level_change = f)",
+      )) {
+      refused(Feature.LEVELING, "def f(ctx):\n    pass\n$decl", "hook 'on_level_change'")
+    }
+  }
+
+  @Test
   fun `behaviors of a feature need it`() {
     refused(Feature.COMBAT, "mob(\"m\", behaviors = [aggressive()])", "aggressive()")
     refused(Feature.COMBAT, "mob(\"m\", behaviors = [assist(\"m\")])", "assist()")

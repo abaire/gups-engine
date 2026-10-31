@@ -28,6 +28,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   `leveling` feature.
 - Added the harness verbs to the `w` handle: `w.award_xp(actor, amount)`, `w.take_xp(actor, amount)`,
   `w.level_up(actor)` and `w.level_down(actor, count=1)`. Each requires the `leveling` feature.
+- Added the `on_level_change` hook (attachable to mob, room and item) and its context fields `ctx.old_level` and
+  `ctx.new_level`. Requires the `leveling` feature.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

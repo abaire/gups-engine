@@ -2130,6 +2130,17 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_level_change",
+      "feature": "leveling",
+      "name": "on_level_change",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["mob", "room", "item"],
+      "ctx_fields": ["self", "actor", "old_level", "new_level", "room", "pulse", "rng"],
+      "doc": "Fires once per level step when an actor's level changes up or down.",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_load",
       "name": "on_load",
       "signature": "fn(ctx)",
@@ -2333,6 +2344,20 @@
         "symbol": "ctx.losses",
         "name": "losses",
         "doc": "The vital losses behind amount, as vitals(...), for on_damage.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.new_level",
+        "feature": "leveling",
+        "name": "new_level",
+        "doc": "For on_level_change: the actor's level after the change.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.old_level",
+        "feature": "leveling",
+        "name": "old_level",
+        "doc": "For on_level_change: the actor's level before the change.",
         "since": 1
       },
       {

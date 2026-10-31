@@ -12,6 +12,7 @@ import gups.core.world.World
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -132,24 +133,46 @@ class HookCtxFieldsTest {
       spy.calls.groupBy({ it.first }, { fieldsSet(it.first, it.second) }).mapValues { (_, sets) ->
         sets.flatten().toSortedSet()
       }
-    assertEquals(
-      HookName.entries.toSet(),
-      seen.keys,
-      "hooks that never fired: ${HookName.entries - seen.keys}",
-    )
+    val expected = HookName.entries.toSet() - HookName.ON_LEVEL_CHANGE
+    assertEquals(expected, seen.keys, "hooks that never fired: ${expected - seen.keys}")
     val problems =
-      HookCatalog.specs.flatMap { spec ->
-        val listed = spec.ctxFields.toSet()
-        val got = seen.getValue(spec.hook)
-        listOfNotNull(
-          (got - listed)
-            .takeIf { it.isNotEmpty() }
-            ?.let { "${spec.name} sets ${it.joinToString()}, which its ctx_fields don't list" },
-          (listed - got)
-            .takeIf { it.isNotEmpty() }
-            ?.let { "${spec.name} lists ${it.joinToString()}, which it never sets here" },
-        )
-      }
+      HookCatalog.specs
+        .filter { it.hook != HookName.ON_LEVEL_CHANGE }
+        .flatMap { spec ->
+          val listed = spec.ctxFields.toSet()
+          val got = seen.getValue(spec.hook)
+          listOfNotNull(
+            (got - listed)
+              .takeIf { it.isNotEmpty() }
+              ?.let { "${spec.name} sets ${it.joinToString()}, which its ctx_fields don't list" },
+            (listed - got)
+              .takeIf { it.isNotEmpty() }
+              ?.let { "${spec.name} lists ${it.joinToString()}, which it never sets here" },
+          )
+        }
     assertTrue(problems.isEmpty(), problems.joinToString("\n"))
+  }
+
+  @Test
+  fun `old_level and new_level are None outside on_level_change`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            def _check(ctx):
+                if ctx.old_level != None or ctx.new_level != None:
+                    fail("expected None")
+                ctx.send(ctx.actor, "ok")
+
+            room("start", commands = {"check": _check})
+            """,
+        )
+      )
+    val p = f.player()
+    f.input(p, "check")
+    f.run(1)
+    assertContains(f.out(p), "ok")
   }
 }

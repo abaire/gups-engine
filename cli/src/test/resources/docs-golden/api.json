@@ -411,6 +411,20 @@
         "since": 1
       },
       {
+        "symbol": "ctx.new_level",
+        "feature": "leveling",
+        "name": "new_level",
+        "doc": "For on_level_change: the actor's level after the change.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.old_level",
+        "feature": "leveling",
+        "name": "old_level",
+        "doc": "For on_level_change: the actor's level before the change.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.proposals",
         "name": "proposals",
         "doc": "For think: behavior proposals, best first.",

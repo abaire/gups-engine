@@ -88,6 +88,14 @@ enum class HookName(
   /** Invoked when an actor dies. */
   ON_DEATH("on_death"),
 
+  /**
+   * Invoked when an actor's level changes up or down, once per level step.
+   *
+   * [HookContext.actor] is the actor whose level changed, [HookContext.oldLevel] is the level
+   * before the change, and [HookContext.newLevel] is the level after the change.
+   */
+  ON_LEVEL_CHANGE("on_level_change"),
+
   /** Invoked on engaged combatants during each combat round tick. */
   ON_COMBAT_TICK("on_combat_tick"),
 
@@ -185,6 +193,10 @@ data class HookContext(
   val viaExit: Direction? = null,
   /** Secondary item target for multi-item interactions, or null. */
   val targetItem: Item? = null,
+  /** Actor's level before a level change for `on_level_change`, or null. */
+  val oldLevel: Int? = null,
+  /** Actor's level after a level change for `on_level_change`, or null. */
+  val newLevel: Int? = null,
 )
 
 /** Outcome result of a package reload operation. */

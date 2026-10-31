@@ -319,6 +319,20 @@ internal constructor(
   @StarlarkMethod(name = "rng", structField = true, doc = "The seeded random number generator.")
   fun rng(): Any = field { RngView(frame) }
 
+  @StarlarkMethod(
+    name = "old_level",
+    structField = true,
+    doc = "For on_level_change: the actor's level before the change.",
+  )
+  fun oldLevel(): Any = field { hc.oldLevel?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "new_level",
+    structField = true,
+    doc = "For on_level_change: the actor's level after the change.",
+  )
+  fun newLevel(): Any = field { hc.newLevel?.let(::sInt) ?: Starlark.NONE }
+
   // ---- Argument conversion -------------------------------------------------------------------
 
   private fun actorArg(x: Any?, what: String): Actor {

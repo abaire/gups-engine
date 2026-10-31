@@ -264,6 +264,13 @@ internal object HookCatalog {
         doc = "Fires when an actor dies.",
       ),
       HookSpec(
+        hook = HookName.ON_LEVEL_CHANGE,
+        signature = "fn(ctx)",
+        attachTo = listOf(M, R, I),
+        ctxFields = listOf("self", "actor", "old_level", "new_level", "room", "pulse", "rng"),
+        doc = "Fires once per level step when an actor's level changes up or down.",
+      ),
+      HookSpec(
         hook = HookName.ON_COMBAT_TICK,
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
