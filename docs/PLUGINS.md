@@ -64,6 +64,9 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
   `delAttr`. Each does what the `ctx` verb of the same name does, so the engine's invariants hold. Attribute keys
   without `ns:` are in the plugin's own namespace (its id), and a plugin writes only its own namespace. `damage(target,
   amount, type, vital)` and `heal(target, amount, vital)` name the vital they change, as the `ctx` verbs do.
+- **leveling:** `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and `levelDown(actor, count = 1)` do
+  what `ctx.award_xp`, `ctx.take_xp`, `ctx.level_up` and `ctx.level_down` do. They throw `IllegalStateException` naming
+  `leveling` when the feature is off, and `IllegalArgumentException` when `amount` or `count` is below 1.
 - **schema names:** a vital, stat or damage type the world's `MODULE.gups` doesn't declare, in a verb or in a
   `statDeltas` key, throws `IllegalArgumentException` with a "did you mean" suggestion.
 - **reads:** `schema` (a `PluginSchema` with `stats` and `vitals`, each a `PluginNamed(name, label)`, and `damageTypes`,
@@ -71,7 +74,7 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
 - **diagnostics:** `diagnose(message)` records a `"plugin"` diagnostic; `log(message)` writes to the server log.
 - **views:** `PluginRoom`, `PluginActor` and `PluginItem` read current state on every access. A `PluginActor` has
   `stat(name)` (effective), `baseStat(name)`, `vital(name)`, `maxVital(name)` and `resist(type)` by schema name, plus
-  `level`, `affects` and `hasAffect(name)`.
+  `level`, `pendingLevels`, `affects` and `hasAffect(name)`.
 - **`PluginViews`** converts raw Starlark values for builtins installed with `addBuiltin(name, value, doc)`:
   `room(value)`, `actor(value)`, `item(value)`, and `world(thread)` for a method declared with `useStarlarkThread =
   true`.

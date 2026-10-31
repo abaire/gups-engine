@@ -507,7 +507,7 @@ immediate checkpoint for a player, as a level-up does.
 
 - Gains that used `ctx.rng` unwind exactly: stats and maxima equal their values before the level-up.
 - A level with no record unwinds nothing and still drops.
-- `xp` is clamped to `xp_to_level(level) - 1`, and any other pending levels disappear.
+- `xp` is clamped to `xp_to_level(ctx, level) - 1`, and any other pending levels disappear.
 - `levelDown(count = 3)` from level 2 stops at 1 and returns 1.
 - `levelDown` sends `LEVEL_DOWN` once for several steps.
 - A mob unwinds like a player.

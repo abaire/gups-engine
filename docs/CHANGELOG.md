@@ -32,6 +32,10 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   `ctx.new_level`. Requires the `leveling` feature.
 - Added the `leveling.score_ready` message: printed by `score` on the line after the level line while an actor has
   pending levels, in either level mode (`You are ready to advance.`).
+- Changed the template world's rules: `xp_for_kill` pays 50 per victim level, scaled from 0% (victim 5 or more levels
+  below) to 150% by the level difference; `xp_to_level` is the total-XP curve `500 * level * (level + 1)` (1000, 3000,
+  6000, ...); `on_level_up` raises the hp, mana and move maxima and heals by the same amount; and `on_player_death`
+  takes 10% of the XP earned within the current level, with a commented variant that also takes levels.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 
