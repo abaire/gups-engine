@@ -144,7 +144,33 @@ effective score is never below 0; read it with `ctx.actor.senses["sight"]`, or t
 
 ---
 
-## 5. Delayed Execution: Timers (`ctx.after()`)
+## 5. Reacting to Level Changes: `on_level_change`
+
+In a world with the `leveling` feature, `on_level_change` fires once for every level an actor gains or loses, whether
+from a kill, `ctx.award_xp`, `ctx.level_up`, `ctx.level_down` or a level lost at death. `ctx.actor` is the actor whose
+level changed, and `ctx.old_level` and `ctx.new_level` always differ by exactly one. The hook runs after the change, so
+`ctx.actor.level` already equals `ctx.new_level`.
+
+It can go on a mob, a room or an item. A mob's hook fires for its own level changes and for those of anyone in its room,
+so the tutorial guide checks who `ctx.actor` is before congratulating them:
+
+```python
+def _guide_congratulates(ctx):
+    if ctx.actor.is_player and ctx.new_level > ctx.old_level:
+        ctx.say(ctx.self, "Well done on reaching level %d, %s!" % (ctx.new_level, ctx.actor.name))
+
+
+mob("guide",
+    # ...
+    on_level_change=_guide_congratulates,
+    )
+```
+
+An item's hook fires when the actor carrying or wearing it changes level, and when anyone in the item's room does.
+
+---
+
+## 6. Delayed Execution: Timers (`ctx.after()`)
 
 To schedule an action in the future without blocking the server loop, use `ctx.after()`:
 

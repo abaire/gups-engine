@@ -183,3 +183,18 @@ def test_the_tar_pit_slows_footwork(t):
     # do() returns while the lag is still pending, so wait_state reads the full lag.
     t.eq(_footwork(t, ":tar_pit"), (4, 4))
     t.eq(_footwork(t, ":hall"), (2, 2))
+
+def test_the_guide_congratulates_on_level_up(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":hall")
+    w.award_xp(p, 1000)
+    t.contains(p.output(), "Well done on reaching level 2, Tess!")
+
+    w.level_down(p)
+    t.not_contains(p.output(), "Well done")
+
+    # The guide hears its own level changes too, and only congratulates players.
+    guide = [a for a in w.room(":hall").actors() if a.label == "//zones/tutorial:guide"][0]
+    w.award_xp(guide, 55000)
+    t.eq(guide.level, 11)
+    t.not_contains(p.output(), "Well done")

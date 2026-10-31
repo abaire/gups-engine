@@ -45,6 +45,7 @@ persistence, and linking to official specifications and generated API references
    * Vetoing player actions with `before_*` hooks and `ctx.deny()`
    * Sensory perception (`senses`, `sense_deltas`, `on_perceive`, `ctx.emit`)
    * The rules that decide who notices what (`sense_cost`, `can_perceive`, `perceive_message`, `door_intensity`)
+   * Reacting to level changes with `on_level_change`
    * Asynchronous timers with `ctx.after()`
 7. **[07. Testing and Verifying Your Zone](07_testing_your_zone.md)**
    * The Starlark test harness API (`*_test.star`)

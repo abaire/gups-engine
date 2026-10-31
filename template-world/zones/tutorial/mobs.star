@@ -36,6 +36,13 @@ def _guide_listens(ctx):
         # Events a script raises with ctx.emit arrive here like any other.
         ctx.say(ctx.self, "Someone is crunching about on the gravel to the west.")
 
+def _guide_congratulates(ctx):
+    # On a mob, on_level_change fires for the mob's own level changes and, as an observer,
+    # for anyone else's in its room, so check who ctx.actor is. ctx.old_level and
+    # ctx.new_level always differ by exactly one; a lost level has new_level < old_level.
+    if ctx.actor.is_player and ctx.new_level > ctx.old_level:
+        ctx.say(ctx.self, "Well done on reaching level %d, %s!" % (ctx.new_level, ctx.actor.name))
+
 mob("guide",
     name = "the guide",
     desc = "A patient old adventurer with a lantern.",
@@ -47,6 +54,7 @@ mob("guide",
     on_say = _guide_hears,
     before_exit = _guide_blocks,
     on_perceive = _guide_listens,
+    on_level_change = _guide_congratulates,
 )
 
 def _mend(ctx):

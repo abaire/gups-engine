@@ -22,6 +22,7 @@ mob("guide",
     on_say=_guide_hears,
     before_exit=_guide_blocks,
     on_perceive=_guide_listens,
+    on_level_change=_guide_congratulates,
     )
 ```
 
