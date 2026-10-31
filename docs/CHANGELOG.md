@@ -13,6 +13,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   {level}.`).
 - Added optional `level_loss: int` to the `on_player_death(ctx)` return dictionary: the number of levels lost after the
   respawn. Allowed only when the `leveling` feature is enabled.
+- Added `level_mode = "auto" | "deferred"` to `module(...)` in `MODULE.gups` (defaults to `"auto"`): chooses whether
+  earned levels apply immediately or wait for an explicit script call (`ctx.level_up`). Requires the `leveling` feature.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

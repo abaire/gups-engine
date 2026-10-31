@@ -2,6 +2,7 @@ package gups.harness
 
 import gups.core.Label
 import gups.core.model.WorldSchema
+import gups.core.world.LevelMode
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.script.LoadResult
@@ -38,6 +39,8 @@ internal constructor(
   private val settings: WorldConfig = WorldConfig(),
   /** The names the world's actors are measured by, from `MODULE.gups`. */
   private val schema: WorldSchema = WorldSchema.EMPTY,
+  /** How earned levels apply in the test worlds. */
+  private val levelMode: LevelMode = LevelMode.AUTO,
 ) : StarlarkValue {
   internal val worlds = mutableListOf<WorldHandle>()
 
@@ -114,6 +117,7 @@ internal constructor(
           strict = true,
           bubble = (bubble as? Boolean) ?: evalFail("world(bubble): expected True or False"),
         ),
+        levelMode = levelMode,
       )
     plugins.install(world)
     host.install(world)

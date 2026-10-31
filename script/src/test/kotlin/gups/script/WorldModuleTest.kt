@@ -1,6 +1,8 @@
 package gups.script
 
 import gups.core.model.WorldSchema
+import gups.core.world.LevelMode
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -330,6 +332,59 @@ class WorldModuleTest {
       assertNotNull(ServerConfig.read(dir.resolve("missing.gups")).second).message,
       "no server configuration",
     )
+  }
+
+  @Test
+  fun `level_mode defaults to auto and can be set to deferred`() {
+    val (autoDefault, errDefault) = read(mod())
+    assertNull(errDefault)
+    assertEquals(LevelMode.AUTO, autoDefault.levelMode)
+
+    val (autoExplicit, errAuto) = read(mod("level_mode = \"auto\""))
+    assertNull(errAuto)
+    assertEquals(LevelMode.AUTO, autoExplicit.levelMode)
+
+    val (deferred, errDeferred) = read(mod("level_mode = \"deferred\""))
+    assertNull(errDeferred)
+    assertEquals(LevelMode.DEFERRED, deferred.levelMode)
+  }
+
+  @Test
+  fun `an unknown level_mode fails to load`() {
+    val error = assertNotNull(read(mod("level_mode = \"instant\"")).second)
+    assertContains(error.message, "module(level_mode)")
+    assertContains(error.message, "'instant' is not one of auto, deferred")
+  }
+
+  @Test
+  fun `level_mode without leveling fails to load naming the feature`() {
+    val errDeferred =
+      assertNotNull(read(mod("features = [\"combat\"], level_mode = \"deferred\"")).second)
+    assertContains(errDeferred.message, "module(level_mode) needs the leveling feature")
+
+    val errAuto = assertNotNull(read(mod("features = [\"combat\"], level_mode = \"auto\"")).second)
+    assertContains(errAuto.message, "module(level_mode) needs the leveling feature")
+
+    val (withoutLevelingDefault, noErr) = read(mod("features = [\"combat\"]"))
+    assertNull(noErr)
+    assertEquals(LevelMode.AUTO, withoutLevelingDefault.levelMode)
+  }
+
+  @Test
+  fun `world receives level_mode from module`() {
+    val fAuto =
+      ScriptFixture(
+        mapOf("MODULE.gups" to TestWorlds.module("level_mode = \"auto\"")),
+        listOf("zones/z"),
+      )
+    assertEquals(LevelMode.AUTO, fAuto.w.levelMode)
+
+    val fDeferred =
+      ScriptFixture(
+        mapOf("MODULE.gups" to TestWorlds.module("level_mode = \"deferred\"")),
+        listOf("zones/z"),
+      )
+    assertEquals(LevelMode.DEFERRED, fDeferred.w.levelMode)
   }
 
   private companion object {

@@ -94,7 +94,15 @@ class MigrationChecker(
           rename = loader.module.rename,
         )
       val world =
-        World(loadResult.prototypes(), loader.schema, host.rules(), host, config, boot = boot)
+        World(
+          loadResult.prototypes(),
+          loader.schema,
+          host.rules(),
+          host,
+          config,
+          boot = boot,
+          levelMode = loader.module.levelMode,
+        )
       plugins.install(world)
       host.install(world)
       plugins.started(world)

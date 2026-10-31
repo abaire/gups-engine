@@ -122,6 +122,7 @@ class TraitScriptTest {
         host.rules(),
         host,
         loader.module.config(WorldConfig(seed = 1, checkInvariants = true, strict = true)),
+        levelMode = loader.module.levelMode,
       )
       .also {
         wiring.install(it)

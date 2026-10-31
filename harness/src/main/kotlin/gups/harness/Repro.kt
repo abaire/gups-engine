@@ -57,6 +57,7 @@ class ReproRunner(
           .first
           .config(WorldConfig(seed = seed, checkInvariants = true), WorldMessages.read(dir).first),
         Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
+        levelMode = WorldModule.read(dir).first.levelMode,
       )
     plugins.install(world)
     host.install(world)

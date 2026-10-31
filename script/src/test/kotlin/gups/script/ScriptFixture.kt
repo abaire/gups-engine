@@ -63,6 +63,7 @@ class ScriptFixture(
           WorldConfig(seed = seed, checkInvariants = true, strict = true, bubble = bubble),
           WorldMessages.read(WorldDir(root)).first,
         ),
+        levelMode = loader.module.levelMode,
       )
       .also {
         host.install(it)

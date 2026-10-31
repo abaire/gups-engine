@@ -11,6 +11,7 @@ import gups.core.world.CommandAliases
 import gups.core.world.CommandRegistry
 import gups.core.world.Feature
 import gups.core.world.Features
+import gups.core.world.LevelMode
 import gups.core.world.PROMPT_PLACEHOLDER
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
@@ -53,6 +54,9 @@ import net.starlark.java.syntax.SyntaxError
  * - `prefixes`: Single characters that stand for a command at the start of a line, such as `{"'":
  *   "say"}`.
  * - `rename`: Engine command renames, mapping canonical names to custom alternatives.
+ * - `level_mode`: How earned levels apply: `"auto"` (the default) applies a level as soon as the
+ *   actor has the XP; `"deferred"` only adds XP and waits for `ctx.level_up`. Needs the `leveling`
+ *   feature.
  *
  * ## Validation Rules
  * - **API version:** Pinned `api_version` must equal [EngineInfo.API_VERSION].
@@ -88,10 +92,13 @@ data class WorldModule(
   val featureIds: List<String>? = null,
   /** Engine command renames, old name to new. */
   val rename: Map<String, String> = emptyMap(),
+  /**
+   * How earned levels apply: automatically upon eligibility or deferred until explicitly advanced.
+   */
+  val levelMode: LevelMode = LevelMode.AUTO,
 ) {
   /** The features the world has on. Unknown ids are left out here and reported by [problems]. */
-  val features: Features =
-    featureIds?.let { ids -> Features(ids.mapNotNull(Feature::byId).toSet()) } ?: Features.ALL
+  val features: Features = featuresOf(featureIds)
 
   /** The world's non-`@` engine command names, renames applied. */
   val commandNames: Set<String>
@@ -215,6 +222,12 @@ data class WorldModule(
     const val DEFAULT_CHECKPOINT_MINUTES = 30
     val PLUGIN_ID = Regex("[a-z][a-z0-9_]*")
     val CHECKSUM = Regex("sha256:[0-9a-f]{64}")
+
+    /**
+     * The features named by [ids], or every feature when [ids] is null; unknown ids are dropped.
+     */
+    private fun featuresOf(ids: List<String>?): Features =
+      ids?.let { Features(it.mapNotNull(Feature::byId).toSet()) } ?: Features.ALL
 
     /** Every field name of the actor view, which no stat or vital may take. */
     val reservedViewNames: Set<String> by lazy {
@@ -353,6 +366,13 @@ data class WorldModule(
               "Renames engine commands, such as {\"cast\": \"invoke\"}. Aliases, prefixes and docs use the new names.",
               default = "{}",
             ),
+            DeclParam(
+              "level_mode",
+              "str",
+              "How earned levels apply: 'auto' (immediately) or 'deferred' (waiting for ctx.level_up). Not fixed per database; changing it needs only a restart.",
+              default = "'auto'",
+              allowedValues = listOf("auto", "deferred"),
+            ),
           ),
       )
 
@@ -448,6 +468,15 @@ data class WorldModule(
           d["features"]
             ?.let { d.strList("features") }
             ?.takeUnless { ids -> ids.toSet() == Feature.entries.map { it.id }.toSet() }
+        if (d["level_mode"] != null) {
+          FeatureOwnership.refused("module.level_mode", "module(level_mode)", featuresOf(features))
+            ?.let { fail(it) }
+        }
+        val levelMode =
+          when (d.choice("level_mode")) {
+            "deferred" -> LevelMode.DEFERRED
+            else -> LevelMode.AUTO
+          }
         val rename =
           d.dict("rename").mapValues { (old, v) ->
             v as? String ?: fail("module(rename): the new name of '$old' must be a string")
@@ -473,6 +502,7 @@ data class WorldModule(
             schema = schema,
             featureIds = features,
             rename = rename,
+            levelMode = levelMode,
           )
         Starlark.NONE
       }

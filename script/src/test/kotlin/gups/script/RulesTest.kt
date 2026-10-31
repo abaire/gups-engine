@@ -985,6 +985,7 @@ class RulesTest {
         host.rules(),
         host,
         WorldConfig(seed = 3, strict = true),
+        levelMode = loader.module.levelMode,
       )
     host.install(w)
     return w

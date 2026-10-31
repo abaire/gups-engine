@@ -137,6 +137,7 @@ class FuzzWalker(
             WorldConfig(seed = seed, bubble = false, checkInvariants = true),
             WorldMessages.read(dir).first,
           ),
+        levelMode = WorldModule.read(dir).first.levelMode,
       )
     plugins.install(world)
     host.install(world)

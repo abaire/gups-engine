@@ -295,7 +295,8 @@ class GupsServer(
         rename = module.rename,
         messages = messages.texts,
       )
-    world = World(protos, module.schema, host.rules(), host, config, boot)
+    world =
+      World(protos, module.schema, host.rules(), host, config, boot, levelMode = module.levelMode)
     plugins.install(world)
     host.install(world)
     if (saved != null) {

@@ -1553,6 +1553,19 @@
           "allowed_values": [],
           "doc": "Renames engine commands, such as {\"cast\": \"invoke\"}. Aliases, prefixes and docs use the new names.",
           "since": 1
+        },
+        {
+          "symbol": "module.level_mode",
+          "feature": "leveling",
+          "name": "level_mode",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'auto'",
+          "allowed_values": ["auto", "deferred"],
+          "doc": "How earned levels apply: 'auto' (immediately) or 'deferred' (waiting for ctx.level_up). Not fixed per database; changing it needs only a restart.",
+          "since": 1
         }
       ]
     },

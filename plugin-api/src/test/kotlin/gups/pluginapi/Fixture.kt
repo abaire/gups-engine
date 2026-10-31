@@ -55,6 +55,7 @@ fun world(
       host.rules(),
       host,
       WorldConfig(seed = seed, checkInvariants = true, features = features),
+      levelMode = loader.module.levelMode,
     )
   plugins.install(world)
   host.install(world)

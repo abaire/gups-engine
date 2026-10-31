@@ -175,6 +175,7 @@ class TestRunner(
         plugins = plugins,
         settings = settings,
         schema = loader.schema,
+        levelMode = loader.module.levelMode,
       )
     val printed = StringBuilder()
     var status = Status.PASS
