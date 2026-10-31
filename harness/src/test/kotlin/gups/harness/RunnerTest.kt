@@ -207,9 +207,10 @@ class RunnerTest {
       zone +
         mapOf(
           "rules/package.star" to "package(api_version = 1, kind = \"rules\")",
-          "rules/combat.star" to TestWorlds.rules("def xp_to_level(level):\n    return level"),
+          "rules/combat.star" to TestWorlds.rules("def xp_to_level(ctx, level):\n    return level"),
           "house/package.star" to "package(api_version = 1, kind = \"rules\")",
-          "house/combat.star" to TestWorlds.rules("def xp_to_level(level):\n    return 2 * level"),
+          "house/combat.star" to
+            TestWorlds.rules("def xp_to_level(ctx, level):\n    return 2 * level"),
           "zones/a/a_test.star" to
             """
                 def test_default_rules(t):

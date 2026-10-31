@@ -2170,13 +2170,13 @@
         {
           "symbol": "rules_ctx.pulse",
           "name": "pulse",
-          "doc": "Game time.",
+          "doc": "Game time; not available in xp_to_level.",
           "since": 1
         },
         {
           "symbol": "rules_ctx.rng",
           "name": "rng",
-          "doc": "The seeded random number generator.",
+          "doc": "The seeded random number generator; not available in xp_to_level.",
           "since": 1
         },
         {
@@ -2256,7 +2256,7 @@
         {
           "symbol": "rules_ctx.roll",
           "name": "roll",
-          "doc": "Rolls dice such as '2d6+1' with the seeded rng.",
+          "doc": "Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.",
           "since": 1,
           "params": [
             {

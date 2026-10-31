@@ -190,8 +190,24 @@ interface RulesEngine {
   /** Calculates experience points awarded to an actor for defeating a target. */
   fun xpForKill(c: RulesContext): Long
 
-  /** Calculates the total XP at which [level] ends. */
-  fun xpToLevel(level: Int): Long
+  /**
+   * Calculates the total experience points at which [level] ends for the actor in [c].
+   *
+   * [c]`actor` is the actor whose curve is asked about; its current level may differ from [level]
+   * when evaluating higher or lower thresholds.
+   *
+   * The result must depend only on the actor and [level], as it is evaluated frequently and with
+   * levels other than the actor's current level. It must not use random numbers, dice rolls, or
+   * game time pulses.
+   *
+   * Values must be strictly increasing for each actor: each level threshold must be strictly
+   * greater than the threshold for the level below it for the same actor.
+   *
+   * If an actor's curve changes, past levels are not re-evaluated; the new curve takes effect at
+   * the next experience award, level check, or progression step without modifying existing level
+   * gain records.
+   */
+  fun xpToLevel(c: RulesContext, level: Int): Long
 
   /**
    * Calculates stat and vital deltas awarded when an actor reaches a new level, or null for no

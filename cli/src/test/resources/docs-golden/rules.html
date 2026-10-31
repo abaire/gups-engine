@@ -43,8 +43,8 @@
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
 <tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
-<tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
-<tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator.</td></tr>
+<tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time; not available in xp_to_level.</td></tr>
+<tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>
 <tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
 <tr id="rules_ctx.source"><td><code>source</code></td><td>1</td><td>For can_perceive and perceive_message: the actor who caused the event, or None.</td></tr>
@@ -69,7 +69,7 @@
 </article>
 <article id="rules_ctx.roll" class="entry">
 <h4><code>roll(dice)</code> <span class="since">since api_version 1</span></h4>
-<p>Rolls dice such as '2d6+1' with the seeded rng.</p>
+<p>Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>

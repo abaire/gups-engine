@@ -19,6 +19,7 @@ import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.world.Proposal
 import gups.core.world.World
+import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
@@ -149,6 +150,15 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
 
   @StarlarkMethod(name = "xp", structField = true, doc = "Current experience points.")
   fun xp(): Any = read("actor.xp") { sInt(actor.xp) }
+
+  @StarlarkMethod(
+    name = "pending_levels",
+    structField = true,
+    doc =
+      "How many levels the actor has the XP for and has not been given. A read costs one" +
+        " xp_to_level call per pending level, plus one.",
+  )
+  fun pendingLevels(): Any = read("actor.pending_levels") { sInt(scope.world.pendingLevels(actor)) }
 
   @StarlarkMethod(
     name = "condition",

@@ -122,9 +122,11 @@ class FeaturesOffTest {
     assertFalse(gob.inWorld)
     assertEquals(0L, ann.xp)
     assertEquals(1, ann.level)
+    assertEquals(0, f.w.pendingLevels(ann))
     assertFalse("Level" in f.say(ann, "score"))
     f.w.awardXp(ann, 10_000)
     assertEquals(0L, ann.xp)
+    assertEquals(0, f.w.pendingLevels(ann))
     assertTrue("Level" in Fixture().let { g -> g.say(g.player("Bea"), "score") })
   }
 

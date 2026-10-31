@@ -4,6 +4,7 @@ import gups.core.model.Band
 import gups.core.rules.RulesContext
 import gups.core.world.Feature
 import gups.core.world.Features
+import gups.core.world.awardXp
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -306,6 +307,11 @@ class FeatureScriptTest {
       listOf(
         Triple(Feature.LEVELING, "x = a.level", "actor.level needs the leveling feature"),
         Triple(Feature.LEVELING, "x = a.xp", "actor.xp needs the leveling feature"),
+        Triple(
+          Feature.LEVELING,
+          "x = a.pending_levels",
+          "actor.pending_levels needs the leveling feature",
+        ),
         Triple(Feature.TRACK, "x = a.track_index", "actor.track_index needs the track feature"),
         Triple(Feature.TRACK, "x = a.band_of(a)", "actor.band_of needs the track feature"),
         Triple(Feature.TRACK, "x = ctx.room.size", "room.size needs the track feature"),
@@ -381,5 +387,46 @@ class FeatureScriptTest {
     f.run(2)
     assertContains(f.out(p), "level 1 at 0")
     assertFalse(f.diagnostics("script_error").isNotEmpty())
+  }
+
+  @Test
+  fun `pending_levels counts the owed levels in deferred mode, and is 0 after an auto award`() {
+    val zoneFiles =
+      "zones/z/a.star" to
+        """
+        def _check(ctx):
+            ctx.send(ctx.actor, "pending: " + str(ctx.actor.pending_levels))
+
+        room("start", commands = {"check": _check})
+        """
+
+    val fDeferred =
+      ScriptFixture(
+        world(Features.ALL, zoneFiles) +
+          mapOf("MODULE.gups" to TestWorlds.module("level_mode = \"deferred\""))
+      )
+    val pDef = fDeferred.player()
+    fDeferred.input(pDef, "check")
+    fDeferred.run(1)
+    assertContains(fDeferred.out(pDef), "pending: 0")
+
+    fDeferred.w.awardXp(pDef, 1000)
+    fDeferred.input(pDef, "check")
+    fDeferred.run(1)
+    assertContains(fDeferred.out(pDef), "pending: 1")
+
+    fDeferred.w.awardXp(pDef, 2000)
+    fDeferred.input(pDef, "check")
+    fDeferred.run(1)
+    assertContains(fDeferred.out(pDef), "pending: 2")
+    assertEquals(1, pDef.level)
+
+    val fAuto = ScriptFixture(world(Features.ALL, zoneFiles))
+    val pAuto = fAuto.player()
+    fAuto.w.awardXp(pAuto, 3000)
+    assertEquals(3, pAuto.level)
+    fAuto.input(pAuto, "check")
+    fAuto.run(1)
+    assertContains(fAuto.out(pAuto), "pending: 0")
   }
 }

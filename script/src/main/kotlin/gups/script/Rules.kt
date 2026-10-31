@@ -39,8 +39,14 @@ import net.starlark.java.spelling.SpellChecker
 // required, so a call that fails gives a neutral result instead of falling back to anything.
 
 /**
- * The read-only `ctx` of a rules function or modifier. It has the call's fields and `rng`, and
- * `deny` for `cast_allowed`; it has no verbs.
+ * Rules exports that must give the same answer every time they are called with the same arguments,
+ * and therefore cannot read rng, roll dice or observe pulse.
+ */
+private val DETERMINISTIC_RULES_EXPORTS = setOf("rules.xp_to_level")
+
+/**
+ * The read-only `ctx` of a rules function or modifier. It has the call's fields and `rng` (except
+ * in `xp_to_level`), and `deny` for `cast_allowed`; it has no verbs.
  */
 @StarlarkBuiltin(name = "rules_ctx", doc = "The read-only context of a rules call or modifier.")
 class RulesCtx internal constructor(private val frame: Frame, private val c: RulesContext) :
@@ -48,6 +54,15 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   private fun <T> field(block: () -> T): T {
     frame.check()
     return block()
+  }
+
+  private fun requireNondeterministic(what: String) {
+    if (frame.site.hook in DETERMINISTIC_RULES_EXPORTS) {
+      val export = frame.site.hook.removePrefix("rules.")
+      fail(
+        "$what is not available in $export: $export must give the same answer every time it is asked"
+      )
+    }
   }
 
   private fun v(e: gups.core.model.Entity?): Any = view(frame, e)
@@ -198,18 +213,33 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   )
   fun tags(): Any = field { sList(c.tags.sorted()) }
 
-  @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
-  fun pulse(): Any = field { sInt(c.world.pulse) }
+  @StarlarkMethod(
+    name = "pulse",
+    structField = true,
+    doc = "Game time; not available in xp_to_level.",
+  )
+  fun pulse(): Any = field {
+    requireNondeterministic("pulse")
+    sInt(c.world.pulse)
+  }
 
-  @StarlarkMethod(name = "rng", structField = true, doc = "The seeded random number generator.")
-  fun rng(): Any = field { RngView(frame) }
+  @StarlarkMethod(
+    name = "rng",
+    structField = true,
+    doc = "The seeded random number generator; not available in xp_to_level.",
+  )
+  fun rng(): Any = field {
+    requireNondeterministic("rng")
+    RngView(frame)
+  }
 
   @StarlarkMethod(
     name = "roll",
-    doc = "Rolls dice such as '2d6+1' with the seeded rng.",
+    doc = "Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.",
     parameters = [Param(name = "dice", named = true, doc = "Dice expression such as '2d6+1'.")],
   )
   fun roll(dice: Any): Any = field {
+    requireNondeterministic("roll()")
     val d =
       try {
         gups.core.model.Dice.parse(str(dice, "roll(dice)"))
@@ -591,8 +621,8 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       int(v, "rules.xp_for_kill return value").toLong()
     } ?: 0
 
-  override fun xpToLevel(level: Int): Long =
-    run(RulesExport.XP_TO_LEVEL, null, { listOf(sInt(level)) }) { v ->
+  override fun xpToLevel(c: RulesContext, level: Int): Long =
+    run(RulesExport.XP_TO_LEVEL, c, ctxArgs(c, sInt(level))) { v ->
       int(v, "rules.xp_to_level return value").toLong().also {
         if (it < 1) fail("rules.xp_to_level must be at least 1")
       }
@@ -876,10 +906,10 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
     ),
     RulesExportSpec(
       export = RulesExport.XP_TO_LEVEL,
-      signature = "xp_to_level(level)",
+      signature = "xp_to_level(ctx, level)",
       returnType = "int",
-      ctxFields = emptyList(),
-      doc = "The total XP at which the given level ends.",
+      ctxFields = listOf("actor"),
+      doc = "The total XP at which the given level ends for the actor.",
     ),
     RulesExportSpec(
       export = RulesExport.ON_LEVEL_UP,
@@ -1048,9 +1078,10 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *
  * ## Export Verification
  * - Calls `equipment_slots` to ensure slot names are valid lowercase identifiers.
- * - If the `leveling` feature is enabled, verifies that `xp_to_level(level)` strictly increases for
- *   all levels from 1 to 50, checks `xp_for_kill`, and calls `on_level_up` for each synthetic actor
- *   with its level set to 2 (validated but not applied).
+ * - If the `leveling` feature is enabled, verifies that `xp_to_level(ctx, level)` strictly
+ *   increases for all levels from 1 to 50 for each synthetic actor, stopping at the first actor
+ *   whose curve fails, checks `xp_for_kill`, and calls `on_level_up` for each synthetic actor with
+ *   its level set to 2 (validated but not applied).
  * - If the `combat` feature is enabled, tests `to_hit`, `damage`, `initiative`, `flee_chance`, and
  *   `flee_fail_lag`.
  * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
@@ -1134,17 +1165,21 @@ internal fun dryRunRules(
     val actors = listOf(player, foe) + mobs
     rules.equipmentSlots()
     if (Feature.LEVELING in features) {
-      var prevXp: Long? = null
-      for (level in 1..50) {
-        val problemsBefore = problems.size
-        val xp = rules.xpToLevel(level)
-        if (problems.size > problemsBefore) break
-        if (prevXp != null && xp <= prevXp) {
-          problems +=
-            "rules.xp_to_level is not strictly increasing: level $level ($xp) <= level ${level - 1} ($prevXp)"
-          break
+      // A curve that ignores the actor fails the same way for every actor, so stop at the first.
+      curves@ for (a in actors) {
+        val c = RulesContext(world, a)
+        var prevXp: Long? = null
+        for (level in 1..50) {
+          val problemsBefore = problems.size
+          val xp = rules.xpToLevel(c, level)
+          if (problems.size > problemsBefore) break@curves
+          if (prevXp != null && xp <= prevXp) {
+            problems +=
+              "rules.xp_to_level for ${a.name} is not strictly increasing: level $level ($xp) <= level ${level - 1} ($prevXp)"
+            break@curves
+          }
+          prevXp = xp
         }
-        prevXp = xp
       }
       for (a in actors) {
         val originalLevel = a.level

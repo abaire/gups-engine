@@ -1163,35 +1163,35 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
 `deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of
 §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 
-|                 Function                 |  Feature   |                                                                                                   Returns                                                                                                    |
-|------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `equipment_slots()`                      | kernel     | `list[str]`, the equipment slots.                                                                                                                                                                            |
-| `starting_stats(ctx)`                    | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
-| `condition(ctx)`                         | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
-| `mitigate(ctx, amount, type)`            | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
-| `move_cost(ctx)`                         | kernel     | `vitals(...)`, what a room transition spends.                                                                                                                                                                |
-| `regen(ctx)`                             | kernel     | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                      |
-| `carry_limit(ctx)`                       | kernel     | Weight.                                                                                                                                                                                                      |
-| `encumbrance(ctx)`                       | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
-| `on_player_death(ctx)`                   | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int, "level_loss": int}`                                                                                                                               |
-| `to_hit(ctx)`                            | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`.                                                                                                                                |
-| `damage(ctx)`                            | `combat`   | Raw auto-attack damage, an int.                                                                                                                                                                              |
-| `initiative(ctx)`                        | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
-| `flee_chance(ctx)`                       | `combat`   | Percent.                                                                                                                                                                                                     |
-| `retreat_check(ctx)`                     | `track`    | Success chance in percent, used when pinned.                                                                                                                                                                 |
-| `get_lag(ctx, band)`                     | `track`    | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                                                        |
-| `advance_lag(ctx)`                       | `track`    | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                                                         |
-| `retreat_lag(ctx)`                       | `track`    | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                                                                |
-| `retreat_fail_lag(ctx)`                  | `track`    | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                                                            |
-| `flee_fail_lag(ctx)`                     | `combat`   | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                                                     |
-| `cast_allowed(ctx)`                      | `skills`   | `None` or `deny(msg)`.                                                                                                                                                                                       |
-| `interrupt_check(ctx, amount)`           | `skills`   | Whether a casting actor is interrupted, a bool.                                                                                                                                                              |
-| `sense_cost(ctx)`                        | kernel     | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                         |
-| `can_perceive(ctx)`                      | kernel     | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                 |
-| `perceive_message(ctx)`                  | kernel     | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel. |
-| `door_intensity(ctx)`                    | kernel     | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                            |
-| `xp_for_kill(ctx)`, `xp_to_level(level)` | `leveling` | Ints.                                                                                                                                                                                                        |
-| `on_level_up(ctx)`                       | `leveling` | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                             |
+|                   Function                    |  Feature   |                                                                                                   Returns                                                                                                    |
+|-----------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `equipment_slots()`                           | kernel     | `list[str]`, the equipment slots.                                                                                                                                                                            |
+| `starting_stats(ctx)`                         | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
+| `condition(ctx)`                              | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
+| `mitigate(ctx, amount, type)`                 | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
+| `move_cost(ctx)`                              | kernel     | `vitals(...)`, what a room transition spends.                                                                                                                                                                |
+| `regen(ctx)`                                  | kernel     | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                      |
+| `carry_limit(ctx)`                            | kernel     | Weight.                                                                                                                                                                                                      |
+| `encumbrance(ctx)`                            | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
+| `on_player_death(ctx)`                        | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int, "level_loss": int}`                                                                                                                               |
+| `to_hit(ctx)`                                 | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`.                                                                                                                                |
+| `damage(ctx)`                                 | `combat`   | Raw auto-attack damage, an int.                                                                                                                                                                              |
+| `initiative(ctx)`                             | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
+| `flee_chance(ctx)`                            | `combat`   | Percent.                                                                                                                                                                                                     |
+| `retreat_check(ctx)`                          | `track`    | Success chance in percent, used when pinned.                                                                                                                                                                 |
+| `get_lag(ctx, band)`                          | `track`    | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                                                        |
+| `advance_lag(ctx)`                            | `track`    | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                                                         |
+| `retreat_lag(ctx)`                            | `track`    | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                                                                |
+| `retreat_fail_lag(ctx)`                       | `track`    | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                                                            |
+| `flee_fail_lag(ctx)`                          | `combat`   | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                                                     |
+| `cast_allowed(ctx)`                           | `skills`   | `None` or `deny(msg)`.                                                                                                                                                                                       |
+| `interrupt_check(ctx, amount)`                | `skills`   | Whether a casting actor is interrupted, a bool.                                                                                                                                                              |
+| `sense_cost(ctx)`                             | kernel     | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                         |
+| `can_perceive(ctx)`                           | kernel     | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                 |
+| `perceive_message(ctx)`                       | kernel     | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel. |
+| `door_intensity(ctx)`                         | kernel     | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                            |
+| `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` | `leveling` | Ints.                                                                                                                                                                                                        |
+| `on_level_up(ctx)`                            | `leveling` | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                             |
 
 **Perception exports** (§5.7): the perception calls get a `ctx` about a listener or a room rather than a fighter.
 
@@ -1210,7 +1210,7 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
 
 - `mitigate(ctx, amount, type)` gets the damage type as a string, `get_lag(ctx, band)` the band as a word, and
   `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill` and the total of the damage event's losses as
-  `amount`. `equipment_slots()` and `xp_to_level(level)` get no ctx.
+  `amount`. `equipment_slots()` gets no ctx, and `xp_to_level(ctx, level)` gets the level it is asked about as `level`.
 - `mitigate` is called for auto-attacks and the `damage(...)` effect primitive, never for the raw `ctx.damage` verb. Its
   result may name any vitals, so a world can send psychic damage to `sanity` or let a `shield` vital soak damage first.
   Each loss is subtracted with no floor.
@@ -1242,8 +1242,10 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
   with any of `stats`, `max` and `current`, built with `stats(...)` and `vitals(...)`. All are deltas and may be
   negative. `stats` and `max` change the base values and are remembered for that level so that losing it takes them back
   (§5.4); `current` is added to the current vitals, which are then capped at the new maxima, and is not remembered.
-- `xp_to_level(level)` is the total XP at which `level` ends. `xp_to_level(level + 1)` must be greater than
-  `xp_to_level(level)`; a value that is not is a bad return value, and no level is owed past it (§5.4).
+- `xp_to_level(ctx, level)` is the total XP at which `level` ends for `ctx.actor`, so a world can give each actor its
+  own curve influenced by attributes. Note that `ctx.actor.level` may differ from `level`. The answer must depend only
+  on the actor and `level`. `xp_to_level(ctx, level + 1)` must be greater than `xp_to_level(ctx, level)` for the same
+  actor; a value that is not is a bad return value, and no level is owed past it (§5.4).
 - `get_lag` returns `None` for out of reach.
 - `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` and `get_lag` return pulses, an int of at least 0; a
   negative value is a bad return value. The lag exports set the action's recovery lag, and 0 means none.
@@ -1253,20 +1255,20 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
 and in `gups lint`), the engine calls every export it defines against synthetic actors built from the schema: a fresh
 actor after `starting_stats`, both as a player and as each mob prototype, and `mitigate` once per declared damage type.
 `on_level_up` runs once for each synthetic actor as if it had just reached level 2, and its result is checked but not
-applied; `xp_to_level` runs for levels 1 to 50 and must strictly increase. The actors live in a throwaway world with one
-room: two players and one mob per loaded mob prototype. Each actor is called against another (the first player against
-the second, everyone else against the first player), unarmed. `get_lag` runs once per band, the three track lag exports
-see the pair's other actor as `ctx.target` at band `melee`, `flee_fail_lag` sees no target, and `cast_allowed` and
-`interrupt_check` get a synthetic skill with `interrupt = {"damage_pct": 10}`. The room has a north exit back to itself
-with a closed door. For every channel, `sense_cost` sees that exit, and `can_perceive` and `perceive_message` are each
-called once as an event in the actor's own room and once as one carried in through the north exit at cost 1, with no
-source room. `door_intensity` is called for each of `open`, `close`, `lock` and `unlock`, with and without a tag. With a
-creation provider (§4.19), `starting_stats` also runs for one synthetic player per option of each choice. Its answers
-are built in choice order: that option for its own choice, and the first available option for every other. An option
-that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose own package failed to
-load isn't checked. Only the package named `rules` is dry-run; a test world that names another rules package (§4.12)
-isn't. An error, a wrong return type or an undeclared name in a result fails the rules package's load with the usual
-diagnostic. A branch the dry run doesn't reach is checked when it first runs.
+applied; `xp_to_level` runs for levels 1 to 50 for each actor and must strictly increase for each. The actors live in a
+throwaway world with one room: two players and one mob per loaded mob prototype. Each actor is called against another
+(the first player against the second, everyone else against the first player), unarmed. `get_lag` runs once per band,
+the three track lag exports see the pair's other actor as `ctx.target` at band `melee`, `flee_fail_lag` sees no target,
+and `cast_allowed` and `interrupt_check` get a synthetic skill with `interrupt = {"damage_pct": 10}`. The room has a
+north exit back to itself with a closed door. For every channel, `sense_cost` sees that exit, and `can_perceive` and
+`perceive_message` are each called once as an event in the actor's own room and once as one carried in through the north
+exit at cost 1, with no source room. `door_intensity` is called for each of `open`, `close`, `lock` and `unlock`, with
+and without a tag. With a creation provider (§4.19), `starting_stats` also runs for one synthetic player per option of
+each choice. Its answers are built in choice order: that option for its own choice, and the first available option for
+every other. An option that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose
+own package failed to load isn't checked. Only the package named `rules` is dry-run; a test world that names another
+rules package (§4.12) isn't. An error, a wrong return type or an undeclared name in a result fails the rules package's
+load with the usual diagnostic. A branch the dry run doesn't reach is checked when it first runs.
 
 **Template ruleset.** The template world implements these exports for its default schema (§3.9), serving as the starting
 formulas for custom worlds. See [combat.star](../template-world/rules/combat.star),
@@ -2573,17 +2575,17 @@ and work with or without it (§3.10). Combat resolution is implemented in
   - Death clears `casting`, the queue, and engagement. It's processed exactly once. During phases 2 and 3 it's deferred
     to the end of the current initiative tier (§5.4.1).
 - **Levelling** (the `leveling` feature): XP is gained from kills and `award_xp` and lost to `take_xp` and
-  `on_player_death`. An actor is owed level `L + 1` once `xp >= xp_to_level(L)`, unless `xp_to_level(L)` is not greater
-  than `xp_to_level(L - 1)`. In `auto` mode (`level_mode`, §3.9) the engine calls `level_up` for each owed level at
-  once. In `deferred` mode it tells the player "You feel ready to advance." and applies a level only when `level_up` is
-  called. Applying a level raises `level` by one, calls `on_level_up`, adds its `stats` and `max` to the base values and
-  remembers them in `levelGains` under the new level, adds its `current` to the vitals, tells the actor, and fires
-  `on_level_change`. Losing a level (`level_down`, or `level_loss` at death) subtracts the remembered gains of that
-  level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most one below `xp_to_level(level)`, and
-  fires `on_level_change`; the rules are not called. A level with nothing remembered unwinds nothing. Each level's entry
-  belongs to that level alone: applying a level replaces whatever was remembered for it, and a level that gives no
-  `stats` or `max` remembers nothing, so a later loss of it never subtracts gains it did not give. Entries for other
-  levels are never touched. One call applies at most 100 levels. A player whose level changes, up or down, is sent
+  `on_player_death`. An actor is owed level `L + 1` once `xp` reaches its own `xp_to_level(ctx, L)`, unless that is not
+  greater than its `xp_to_level(ctx, L - 1)`. In `auto` mode (`level_mode`, §3.9) the engine calls `level_up` for each
+  owed level at once. In `deferred` mode it tells the player "You feel ready to advance." and applies a level only when
+  `level_up` is called. Applying a level raises `level` by one, calls `on_level_up`, adds its `stats` and `max` to the
+  base values and remembers them in `levelGains` under the new level, adds its `current` to the vitals, tells the actor,
+  and fires `on_level_change`. Losing a level (`level_down`, or `level_loss` at death) subtracts the remembered gains of
+  that level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most one below `xp_to_level(ctx,
+  level)`, and fires `on_level_change`; the rules are not called. A level with nothing remembered unwinds nothing. Each
+  level's entry belongs to that level alone: applying a level replaces whatever was remembered for it, and a level that
+  gives no `stats` or `max` remembers nothing, so a later loss of it never subtracts gains it did not give. Entries for
+  other levels are never touched. One call applies at most 100 levels. A player whose level changes, up or down, is sent
   `Char.Status` at once, with the message, rather than at the end of the pulse.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves the world. The rule refills
   to `count` at the first world tick at or after the deadline. A fresh world's rooms fill their spawns when the world

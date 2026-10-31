@@ -119,6 +119,18 @@ fun World.alert(kind: String, message: String) {
   for (p in players) if (p.role.atLeast(Role.INSTRUCTOR)) send(p, "{yellow}[alert]{/} $message")
 }
 
+/**
+ * Records a diagnostic and raises a `rules_error` alert for a rules failure identified by [key],
+ * throttled to at most once per [World.quarantineWindowPulses] for that key.
+ */
+fun World.rulesFault(key: String, message: String) {
+  val last = rulesFaultTimes[key]
+  if (last != null && pulse - last < quarantineWindowPulses) return
+  rulesFaultTimes[key] = pulse
+  diagnose("rules", message)
+  alert("rules_error", message)
+}
+
 /** Owner alerts and the engine-error alert, for each diagnostic as it is recorded. */
 internal fun World.alertFor(d: Diagnostic) {
   val pkg = d.pkg

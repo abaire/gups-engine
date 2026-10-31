@@ -224,14 +224,16 @@ class RulesTest {
     val f =
       world(
         """
-            def xp_to_level(level):
+            def xp_to_level(ctx, level):
                 if level == 99:
                     return 1 // 0
                 return 1000 * level
             """
       )
-    assertEquals(Long.MAX_VALUE, f.w.rules.xpToLevel(99))
-    assertEquals(2000L, f.w.rules.xpToLevel(2))
+    val p = f.player()
+    val c = RulesContext(f.w, p)
+    assertEquals(Long.MAX_VALUE, f.w.rules.xpToLevel(c, 99))
+    assertEquals(2000L, f.w.rules.xpToLevel(c, 2))
   }
 
   @Test
@@ -930,7 +932,7 @@ class RulesTest {
       loadWith(
         TestWorlds.rules(
           """
-          def xp_to_level(level):
+          def xp_to_level(ctx, level):
               if level == 50:
                   return 49000
               return 1000 * level
@@ -941,6 +943,60 @@ class RulesTest {
     val error = result.errors.single { it.kind == "rules" }
     assertContains(error.message, "xp_to_level")
     assertContains(error.message, "not strictly increasing")
+  }
+
+  @Test
+  fun `the dry run fails a curve that strictly increases for one synthetic actor and not for another, naming the second`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def xp_to_level(ctx, level):
+              if ctx.actor.name == "Dryrunfoe":
+                  return 1000
+              return 1000 * level
+          """
+        )
+      )
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "Dryrunfoe")
+    assertContains(error.message, "not strictly increasing")
+    assertFalse(error.message.contains("Dryrunner"))
+  }
+
+  @Test
+  fun `reading ctx rng, ctx roll or ctx pulse in xp_to_level fails load at dry run`() {
+    for (field in listOf("ctx.rng", "ctx.roll('1d6')", "ctx.pulse")) {
+      val result =
+        loadWith(
+          TestWorlds.rules(
+            """
+            def xp_to_level(ctx, level):
+                x = $field
+                return 1000 * level
+            """
+          )
+        )
+      assertTrue("rules" in result.failed, "expected failure for $field")
+      val error = result.errors.single { it.kind == "rules" }
+      assertContains(error.message, "not available in xp_to_level")
+      assertContains(error.message, "xp_to_level must give the same answer every time it is asked")
+    }
+
+    val okResult =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def on_level_up(ctx):
+              r = ctx.rng
+              d = ctx.roll("1d6")
+              p = ctx.pulse
+              return None
+          """
+        )
+      )
+    assertFalse("rules" in okResult.failed)
   }
 
   @Test
@@ -1036,7 +1092,7 @@ class RulesTest {
     assertEquals(kotlin.retreatFailLag(c), w.rules.retreatFailLag(c))
     assertEquals(kotlin.fleeFailLag(c), w.rules.fleeFailLag(c))
     assertEquals(kotlin.xpForKill(c), w.rules.xpForKill(c))
-    assertEquals(kotlin.xpToLevel(4), w.rules.xpToLevel(4))
+    assertEquals(kotlin.xpToLevel(c, 4), w.rules.xpToLevel(c, 4))
     assertEquals(kotlin.onPlayerDeath(c), w.rules.onPlayerDeath(c))
     assertEquals(null, w.rules.castAllowed(c))
     assertTrue(w.diagnostics.isEmpty(), w.diagnostics.toString())
@@ -1065,12 +1121,14 @@ class RulesTest {
   @Test
   fun `template world xp_to_level gives 1000, 3000 and 6000, and is strictly increasing to level 50`() {
     val w = loadTemplateWorld()
-    assertEquals(1000L, w.rules.xpToLevel(1))
-    assertEquals(3000L, w.rules.xpToLevel(2))
-    assertEquals(6000L, w.rules.xpToLevel(3))
+    val p = w.spawnPlayer("Tester", Label("//zones/tutorial:hall"))
+    val c = RulesContext(w, p)
+    assertEquals(1000L, w.rules.xpToLevel(c, 1))
+    assertEquals(3000L, w.rules.xpToLevel(c, 2))
+    assertEquals(6000L, w.rules.xpToLevel(c, 3))
     var prev = 0L
     for (level in 1..50) {
-      val curr = w.rules.xpToLevel(level)
+      val curr = w.rules.xpToLevel(c, level)
       assertTrue(
         curr > prev,
         "level $level ($curr) must be strictly greater than level ${level - 1} ($prev)",

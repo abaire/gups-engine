@@ -89,6 +89,8 @@ class FeatureMatrixTest {
       f.w.awardXp(ann, 5_000)
       assertTrue(ann.level > 1, "a level-up: $features")
       log.append(f.out(ann))
+    } else {
+      assertEquals(0, f.w.pendingLevels(ann))
     }
 
     // Death through `condition`, by a raw damage verb.

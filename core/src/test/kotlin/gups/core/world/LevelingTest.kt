@@ -124,12 +124,39 @@ class LevelingTest {
     assertEquals(0, f.w.pendingLevels(p))
     assertTrue(alerts.isEmpty(), "no alert when threshold is never reached")
 
-    rules.xpToLevelOf = { 1000L }
+    rules.xpToLevelOf = { _, _ -> 1000L }
     p.xp = 5000L
     assertEquals(1, f.w.pendingLevels(p))
     assertEquals(1, alerts.size, "expected exactly one alert")
     assertContains(alerts.single(), "xp_to_level")
     assertEquals(f.w.pulse, f.w.alertTimes["rules_error"])
+  }
+
+  @Test
+  fun `pendingLevels on a non-increasing xp_to_level, called repeatedly within one window, raises one rules_error alert, and raises another after the window passes`() {
+    val rules = FixtureRules()
+    val f = Fixture(rules = rules)
+    val alerts = mutableListOf<String>()
+    f.w.onAlert = { alerts += it }
+
+    rules.xpToLevelOf = { _, _ -> 1000L }
+    val p = f.player("Ann")
+    p.xp = 5000L
+
+    assertEquals(1, f.w.pendingLevels(p))
+    assertEquals(1, alerts.size)
+    assertContains(alerts.single(), "xp_to_level")
+
+    // Repeated calls within the quarantine window raise no new alert
+    assertEquals(1, f.w.pendingLevels(p))
+    f.run(10)
+    assertEquals(1, f.w.pendingLevels(p))
+    assertEquals(1, alerts.size)
+
+    // After the quarantine window passes, another alert is raised
+    f.runTo(f.w.quarantineWindowPulses)
+    assertEquals(1, f.w.pendingLevels(p))
+    assertEquals(2, alerts.size)
   }
 
   @Test
@@ -200,7 +227,7 @@ class LevelingTest {
   @Test
   fun `an award stops at a non-increasing xp_to_level with one rules_error alert`() {
     val rules = FixtureRules()
-    rules.xpToLevelOf = { level -> if (level <= 2) 1000L * level else 2000L }
+    rules.xpToLevelOf = { _, level -> if (level <= 2) 1000L * level else 2000L }
     val f = Fixture(rules = rules)
     val alerts = mutableListOf<String>()
     f.w.onAlert = { alerts += it }
@@ -306,6 +333,65 @@ class LevelingTest {
     assertEquals(1, f.w.levelDown(p))
     assertEquals(initialMaxHp, p.baseMax("hp"))
     assertEquals(initialMaxHp, p.current("hp"))
+  }
+
+  @Test
+  fun `lowering a level clamps xp using that actor's own curve`() {
+    val rules = FixtureRules()
+    rules.xpToLevelOf = { actor, level ->
+      if (actor.name == "Fast") 1000L * level else 2000L * level
+    }
+    val f = Fixture(rules = rules)
+    val fast = f.player("Fast")
+    fast.level = 2
+    fast.xp = 5000L
+
+    val slow = f.player("Slow")
+    slow.level = 2
+    slow.xp = 5000L
+
+    assertEquals(1, f.w.levelDown(fast))
+    assertEquals(1, fast.level)
+    assertEquals(999L, fast.xp)
+
+    assertEquals(1, f.w.levelDown(slow))
+    assertEquals(1, slow.level)
+    assertEquals(1999L, slow.xp)
+  }
+
+  @Test
+  fun `a ruleset whose xp_to_level depends on an actor attribute owes different levels to two actors with the same XP, and Char Status xp_next differs between them`() {
+    val rules = FixtureRules()
+    rules.xpToLevelOf = { actor, level ->
+      if (actor.name == "Fast") 1000L * level else 2000L * level
+    }
+    val f = Fixture(rules = rules)
+    val (fast, fastSink) = f.gmcpPlayer("Fast")
+    val (slow, slowSink) = f.gmcpPlayer("Slow")
+
+    fast.xp = 1500L
+    slow.xp = 1500L
+
+    assertEquals(1, f.w.pendingLevels(fast))
+    assertEquals(0, f.w.pendingLevels(slow))
+
+    fastSink.take()
+    slowSink.take()
+
+    f.w.refreshGmcp(fast, "Char.Status")
+    f.w.refreshGmcp(slow, "Char.Status")
+    f.w.flush(f.w.sessions.getValue(fast.session!!))
+    f.w.flush(f.w.sessions.getValue(slow.session!!))
+
+    @Suppress("UNCHECKED_CAST")
+    val fastStatus =
+      fastSink.take().single { it.first == "Char.Status" }.second as Map<String, Any?>
+    @Suppress("UNCHECKED_CAST")
+    val slowStatus =
+      slowSink.take().single { it.first == "Char.Status" }.second as Map<String, Any?>
+
+    assertEquals(1000L, fastStatus["xp_next"])
+    assertEquals(2000L, slowStatus["xp_next"])
   }
 
   @Test

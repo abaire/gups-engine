@@ -45,7 +45,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   var levelUpOf: ((RulesContext) -> LevelUpResult?)? = null
 
   /** Replaces `xp_to_level` when set. */
-  var xpToLevelOf: ((Int) -> Long)? = null
+  var xpToLevelOf: ((Actor, Int) -> Long)? = null
 
   /** Replaces `xp_for_kill` when set. */
   var xpForKillOf: ((RulesContext) -> Long)? = null
@@ -215,8 +215,8 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     return 50L * c.defender.level * pct / 100
   }
 
-  override fun xpToLevel(level: Int): Long =
-    xpToLevelOf?.invoke(level) ?: (500L * level * (level + 1))
+  override fun xpToLevel(c: RulesContext, level: Int): Long =
+    xpToLevelOf?.invoke(c.actor!!, level) ?: (500L * level * (level + 1))
 
   override fun onLevelUp(c: RulesContext): LevelUpResult? = levelUpOf?.invoke(c)
 
@@ -225,7 +225,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
       return it(c)
     }
     val p = c.requireActor() as Player
-    val floor = if (p.level > 1) xpToLevel(p.level - 1) else 0L
+    val floor = if (p.level > 1) xpToLevel(c, p.level - 1) else 0L
     return PlayerDeathOutcome(
       p.recallRoom,
       mapOf(fs.health to 1),

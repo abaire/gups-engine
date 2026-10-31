@@ -39,29 +39,26 @@ const val MAX_LEVEL_STEPS = 100
 /**
  * Calculates how many pending levels [a] is currently eligible to advance.
  *
- * Counts consecutive step offsets `k >= 0` where `a.xp >= rules.xpToLevel(a.level + k)`, up to
- * [MAX_LEVEL_STEPS]. The loop stops at the first step offset where the threshold is not strictly
- * increasing (emitting a `rules_error` alert), or when the threshold is not reached. The first
- * threshold is compared with the one for the level below, so an actor that already stepped past a
- * non-increasing threshold is owed nothing more. Returns 0 if leveling is disabled or if the
- * threshold is never reached.
+ * Counts consecutive step offsets `k >= 0` where `a.xp >= rules.xpToLevel(c, a.level + k)` for a
+ * rules context about [a], up to [MAX_LEVEL_STEPS]. The loop stops at the first step offset where
+ * the threshold is not strictly increasing (emitting a `rules_error` alert at most once per
+ * quarantine window), or when the threshold is not reached. The first threshold is compared with
+ * the one for the level below, so an actor that already stepped past a non-increasing threshold is
+ * owed nothing more. Returns 0 if leveling is disabled or if the threshold is never reached.
  */
 fun World.pendingLevels(a: Actor): Int = countPendingLevels(a, MAX_LEVEL_STEPS)
 
 private fun World.countPendingLevels(a: Actor, limit: Int): Int {
   if (Feature.LEVELING !in features) return 0
+  val c = RulesContext(this, a)
   var count = 0
-  var prev: Long? = if (a.level >= 2) rules.xpToLevel(a.level - 1) else null
+  var prev: Long? = if (a.level >= 2) rules.xpToLevel(c, a.level - 1) else null
   for (k in 0 until limit) {
     val lvl = a.level + k
-    val threshold = rules.xpToLevel(lvl)
+    val threshold = rules.xpToLevel(c, lvl)
     if (prev != null && threshold <= prev) {
-      diagnose(
-        "rules",
-        "rules.xp_to_level for level $lvl ($threshold) is not strictly greater than previous level ($prev)",
-      )
-      alert(
-        "rules_error",
+      rulesFault(
+        "xp_to_level",
         "rules.xp_to_level for level $lvl ($threshold) is not strictly greater than previous level ($prev)",
       )
       break
@@ -221,7 +218,7 @@ fun World.levelDownStep(a: Actor) {
 
   val capped = capVitals(a)
 
-  a.xp = maxOf(0L, minOf(a.xp, rules.xpToLevel(a.level) - 1))
+  a.xp = maxOf(0L, minOf(a.xp, rules.xpToLevel(RulesContext(this, a), a.level) - 1))
 
   if (gain?.max?.isNotEmpty() == true || capped) refreshCondition(a)
 

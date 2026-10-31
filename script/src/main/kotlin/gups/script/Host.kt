@@ -166,6 +166,7 @@ class StarlarkHost(
    */
   fun install(world: World) {
     (world.rules as? StarlarkRules)?.world = world
+    world.quarantineWindowPulses = limits.quarantineWindowPulses
     for (pkg in scripts.packages.values) {
       for (c in pkg.globalCommands) {
         if (world.commands.isPluginCommand(c.name)) {

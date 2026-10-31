@@ -200,10 +200,17 @@ class World(
 
   // Alert rate limits, the engine-error window and step samples.
   internal val alertTimes = HashMap<String, Long>()
+  internal val rulesFaultTimes = HashMap<String, Long>()
   internal val ownerAlertTimes = HashMap<String, Long>()
   internal val engineErrors = ArrayDeque<Long>()
   internal val stepSamples = ArrayDeque<Pair<Long, Map<String, Long>>>()
   internal var shutdownReason: String? = null
+
+  /**
+   * Sliding window in pulses for throttling repeated rules fault alerts and diagnostics for the
+   * same key. The script host replaces the default with its own quarantine window when installed.
+   */
+  var quarantineWindowPulses: Long = MINUTE_PULSES
 
   internal var slotCache: List<String>? = null
 

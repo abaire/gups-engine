@@ -4,6 +4,7 @@ import gups.core.PULSE_MS
 import gups.core.model.Band
 import gups.core.model.DoorState
 import gups.core.model.Player
+import gups.core.rules.RulesContext
 
 // GMCP payloads. `core` builds them as plain values (String,
 // Long/Int, Boolean, List, Map, null) and the listener encodes them. Field
@@ -112,7 +113,7 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
         if (Feature.LEVELING in features) {
           out["level"] = p.level
           out["xp"] = p.xp
-          out["xp_next"] = rules.xpToLevel(p.level)
+          out["xp_next"] = rules.xpToLevel(RulesContext(this, p), p.level)
         }
         out["wait"] = p.waitState
         if (Feature.SKILLS in features)

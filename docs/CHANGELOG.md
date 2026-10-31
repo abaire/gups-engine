@@ -17,6 +17,10 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   earned levels apply immediately or wait for an explicit script call (`ctx.level_up`). Requires the `leveling` feature.
 - Added the `leveling.ready` message: sent in deferred level mode when an actor becomes eligible to advance (`You feel
   ready to advance.`).
+- Added the read-only `pending_levels` field to the actor view: how many levels the actor has the XP for and has not
+  been given. Requires the `leveling` feature.
+- Changed the rules export to `xp_to_level(ctx, level)`, passing the actor whose threshold is being queried. `ctx.rng`,
+  `ctx.roll` and `ctx.pulse` are not available in it, because it must give the same answer every time.
 
 ### Senses and perception: `on_perceive`, `senses`, `sense_deltas`, `ctx.emit`
 

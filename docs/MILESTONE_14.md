@@ -83,15 +83,17 @@ choice, log it in `DECISIONS.md` as usual and propose the wording in your summar
 ### Three separate steps
 
 1. **Accrual:** `xp` goes up (a kill, `award_xp`) or down (`take_xp`, death).
-2. **Eligibility:** the actor is eligible for level `L + 1` when `xp >= rules.xp_to_level(L)`. `xp_to_level(level)` is
-   the **total** XP at which `level` ends, not the XP between levels.
+2. **Eligibility:** the actor is eligible for level `L + 1` when `xp >= rules.xp_to_level(ctx, L)`, with `ctx.actor` set
+   to that actor. `xp_to_level(ctx, level)` is the **total** XP at which `level` ends for that actor, not the XP between
+   levels. Because it gets the actor, a world can give each class or race its own curve (phase 16b).
 3. **Application:** a level step raises `level` by one. Every level increase goes through one function, `World.levelUp`,
    which is also what `ctx.level_up` calls. In `auto` mode the engine calls it as soon as the actor is eligible; in
    `deferred` mode only a script does.
 
-`xp_to_level` must be strictly increasing: `xp_to_level(L) > xp_to_level(L - 1)` for every `L >= 2`. A value that isn't
-is a bad return value (a rules error) and stops the loop that found it. A single call never applies more than
-`MAX_LEVEL_STEPS = 100` steps, and `pending_levels` never counts past it.
+`xp_to_level` must be strictly increasing for each actor: `xp_to_level(ctx, L) > xp_to_level(ctx, L - 1)` for every `L
+
+> = 2`. A value that isn't is a bad return value (a rules error) and stops the loop that found it. A single call never
+> applies more than `MAX_LEVEL_STEPS = 100` steps, and `pending_levels` never counts past it.
 
 ### The level mode
 
@@ -135,8 +137,8 @@ In `deferred` mode the caller then tells the actor `LevelingMsg.READY` if levels
 2. Subtract its `stats` from the base stats and its `max` from the base vital maxima.
 3. `a.level -= 1`.
 4. Cap every current vital at its new effective maximum.
-5. **Never owed the level just lost:** `a.xp = min(a.xp, rules.xp_to_level(a.level) - 1)`. This also removes any other
-   pending levels.
+5. **Never owed the level just lost:** `a.xp = min(a.xp, rules.xp_to_level(ctx, a.level) - 1)`. This also removes any
+   other pending levels.
 6. Ask `condition` once for the vitals that changed.
 7. Dispatch `on_level_change` with `old_level = a.level + 1` and `new_level = a.level`.
 8. Mark the actor dirty.
@@ -157,8 +159,8 @@ unwind exactly, and so do gains from a rules package that has since changed.
   - The kill path calls it exactly as today (debug mobs and summons award nothing).
 - `World.takeXp(a, amount): Long` removes `min(amount, a.xp)`, returns the amount removed, and sends nothing. It never
   changes `level`.
-- **Pending levels:** `pendingLevels(a)` counts the consecutive `k >= 0` with `a.xp >= xp_to_level(a.level + k)`, up to
-  `MAX_LEVEL_STEPS`. It stops at the first `k` for which the threshold is not strictly increasing.
+- **Pending levels:** `pendingLevels(a)` counts the consecutive `k >= 0` with `a.xp >= xp_to_level(ctx, a.level + k)`,
+  up to `MAX_LEVEL_STEPS`. It stops at the first `k` for which the threshold is not strictly increasing.
 - **READY is stateless and only for `deferred` worlds:** it is sent when an award takes `pending_levels` from 0 to above
   0, and after a `ctx.level_up` that leaves levels pending. Later gains do not repeat it.
 
@@ -237,8 +239,8 @@ owed the level just lost" rule of the step down.
   - A failing `xp_to_level` gives `Long.MAX_VALUE` (it already does), so no level-up happens.
   - A failing `on_player_death` gives **no level loss**, as well as no XP loss.
 - The dry run calls `on_level_up` once for each synthetic actor with its level set to 2, after `starting_stats`. The
-  result is validated but not applied. The dry run also calls `xp_to_level` for levels 1 through 50 and fails the rules
-  package's load if the values are not strictly increasing.
+  result is validated but not applied. The dry run also calls `xp_to_level` for levels 1 through 50 for each synthetic
+  actor and fails the rules package's load if any actor's values are not strictly increasing.
 
 ### Persistence
 
@@ -272,7 +274,7 @@ def xp_for_kill(ctx):
     pct = _clamp(100 + 20 * diff, 0, 150)
     return 50 * ctx.target.level * pct // 100
 
-def xp_to_level(level):
+def xp_to_level(ctx, level):
     # Total XP at which `level` ends: 1000, 3000, 6000, 10000... Each level costs 1000 * level
     # more than the last, so 20 kills of an equal-level mob earn a level at any level.
     return 500 * level * (level + 1)
@@ -285,7 +287,7 @@ def on_level_up(ctx):
 
 def on_player_death(ctx):
     a = ctx.actor
-    floor = xp_to_level(a.level - 1) if a.level > 1 else 0
+    floor = xp_to_level(ctx, a.level - 1) if a.level > 1 else 0
     return {
         "respawn": a.recall_room,
         "vitals": vitals(hp = 1),
@@ -636,6 +638,117 @@ that it refreshes a player's `Char.Status` at once.
 - Reading it without `leveling` fails with the feature refusal (`FeaturesOffTest`, `FeatureMatrixTest`).
 
 **Exit condition:** the tests above exist and pass, and the standing checks pass.
+
+### Phase 16a: Throttle the non-increasing `xp_to_level` alert
+
+Added after the phase 16 review. The phase is numbered 16a so that the later phase numbers stay as they are.
+
+`countPendingLevels` calls `diagnose` and `alert("rules_error", ...)` directly when a threshold does not strictly
+increase. Every other rules failure goes through `StarlarkRules.fault`, which alerts at most once per
+`quarantineWindowPulses` per export. Since phase 16 any script can read `pending_levels` as often as it likes, so a
+broken `xp_to_level` would raise an alert on every read.
+
+**Task:** The monotonicity check lives in `core`, so it can't call `StarlarkRules.fault`. Add a throttled `World`
+helper, for example `rulesFault(key, message)`, that records the diagnostic and raises the `rules_error` alert at most
+once per window per key. Route `countPendingLevels` through it with the key `xp_to_level`. Use the same window that
+`StarlarkRules.fault` uses. If that window is a script `Limits` value that `core` can't see, move it to the world
+config, or pass it in when the host is installed.
+
+Each `pending_levels` read calls `xp_to_level` once per pending level, plus once. That is one call in `auto` mode and a
+few in `deferred` mode, so the result is not cached. Add caching only if profiling shows a need. Caching keyed by level
+would be wrong anyway once phase 16b makes the curve depend on the actor.
+
+**KDoc:**
+
+- The throttled `World` helper: what it throttles and the window.
+- `pendingLevels`: a non-increasing threshold alerts at most once per window.
+- The `pending_levels` `@StarlarkMethod` doc: a read costs one `xp_to_level` call per pending level, plus one.
+
+**Tests:**
+
+- `pendingLevels` on a non-increasing `xp_to_level`, called repeatedly within one window, raises one `rules_error`
+  alert, and raises another after the window passes. Update the phase 6 test if it depends on the old behavior.
+
+**Exit condition:** the test above exists and passes, and the standing checks pass.
+
+### Phase 16b: Give `xp_to_level` the actor
+
+Added after the phase 16 review. Some worlds need a different XP curve per class or race, and `xp_to_level(level)` gets
+no ctx, so it cannot tell actors apart. This phase changes the export to `xp_to_level(ctx, level)`, with the actor as
+`ctx.actor`. Every engine caller already has an actor. Phases 5 to 12 are merged, so this phase reworks their code.
+
+**SPEC.md:** the maintainer approved the wording below. Apply it in this phase, with no `DECISIONS.md` entry.
+
+**Task:** Change the export and its Kotlin seam, `RulesEngine.xpToLevel(level: Int)`, to `xpToLevel(c: RulesContext,
+level: Int)`, and update every caller and implementer:
+
+- **Level arithmetic:** `countPendingLevels`, `levelUp` (through it) and `levelDownStep`'s "never owed the level just
+  lost" clamp, all in `core/.../world/Leveling.kt`. Each passes `RulesContext(this, a)`.
+- **GMCP:** `Char.Status` `xp_next` in `core/.../world/Gmcp.kt`.
+- **`StarlarkRules.xpToLevel` in `script/.../Rules.kt`:** pass `ctxArgs(c, sInt(level))`. Change the `RulesExportSpec`
+  signature to `xp_to_level(ctx, level)`.
+- **`dryRunRules`:** run the 1 to 50 check once for each synthetic actor, not once in total. The check fails the load if
+  any actor's curve does not strictly increase, and the error names that actor.
+- **Rulesets:** `FixtureRules` (`xpToLevelOf` receives the actor too), `FixedRules`, `TestWorlds`,
+  `template-world/rules/combat.star` (both the definition and the calls in `on_player_death`, including the commented
+  punishing variant), `RunnerTest`'s inline rules, and any other rules package found with `grep -rln xp_to_level`.
+- **`RulesCtx` in `script/.../Rules.kt`:** `rng`, `roll` and `pulse` fail when the call site is `rules.xp_to_level`, the
+  same way `deny` checks `frame.site.hook`. The error says that `xp_to_level` must give the same answer every time it is
+  asked. Keep the restricted exports in one set in `Rules.kt`, so that a later export can join it. The check follows the
+  engine's call site: a rules function that calls `xp_to_level` directly with its own ctx is not covered, and that is
+  accepted, because the engine's level arithmetic uses only its own calls.
+- **The Design section of this document** is already updated to the new signature.
+- The **API files**.
+
+**Contract:**
+
+- `ctx.actor` is the actor whose curve is asked about. `ctx.actor.level` is its current level, which may differ from
+  `level`: the engine also asks about the levels above and below it.
+- The result must depend only on the actor and `level`, because it is called often and with levels other than the
+  actor's own. `ctx.rng`, `ctx.roll` and `ctx.pulse` are not available in it, and reading them is a rules error. Because
+  the dry run calls the export, a curve that reads them fails the rules package's load.
+- Strict increase is a property of one actor's curve: `xp_to_level(ctx, L) > xp_to_level(ctx, L - 1)` for the same
+  actor.
+- If the curve changes for an actor, for example when its class changes, the engine does not re-evaluate past levels.
+  The new curve applies at the next award, read or step: the actor may be owed levels at once, or owed none until it
+  catches up. Its `levelGains` are untouched.
+
+**KDoc:**
+
+- `RulesEngine.xpToLevel`: the contract above.
+- `StarlarkRules`, `## Neutral Fallback Return Values`: no change.
+- `dryRunRules`, `## Export Verification`: the 1 to 50 check runs per synthetic actor.
+- `RulesCtx`: its class KDoc ("It has the call's fields and `rng`") and the `rng`, `roll` and `pulse` `@StarlarkMethod`
+  docs say that they are not available in `xp_to_level`. Because these docs change, update the **API files**.
+
+**Tests:**
+
+- A ruleset whose `xp_to_level` depends on an actor attribute owes different levels to two actors with the same XP, and
+  `Char.Status` `xp_next` differs between them.
+- The dry run fails a curve that strictly increases for one synthetic actor and not for another, naming the second.
+- Lowering a level clamps `xp` using that actor's own curve.
+- Reading `ctx.rng`, `ctx.roll` or `ctx.pulse` in `xp_to_level` fails the rules package's load at the dry run, and the
+  error says why. The same fields still work in another export, such as `on_level_up`.
+- Update the existing `xp_to_level` tests (`RulesTest`, `LevelingTest`, `CombatTest`, the template tests) to the new
+  signature. Their numbers do not change.
+
+**SPEC.md wording (approved):**
+
+- §4.6 export table: `` `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` `` | `leveling` | Ints.
+- §4.6 **Signatures and results**, first bullet: replace "`equipment_slots()` and `xp_to_level(level)` get no ctx." with
+  "`equipment_slots()` gets no ctx, and `xp_to_level(ctx, level)` gets the level it is asked about as `level`."
+- §4.6 **Signatures and results**, the `xp_to_level` bullet becomes: "`xp_to_level(ctx, level)` is the total XP at which
+  `level` ends for `ctx.actor`, so a world can give each actor its own curve influenced by attributes. Note that
+  `ctx.actor.level` may differ from `level`. The answer must depend only on the actor and `level`. `xp_to_level(ctx,
+  level + 1)` must be greater than `xp_to_level(ctx, level)` for the same actor; a value that is not is a bad return
+  value, and no level is owed past it (§5.4)."
+- §4.6 **The dry run**: "`xp_to_level` runs for levels 1 to 50 and must strictly increase" becomes "`xp_to_level` runs
+  for levels 1 to 50 for each actor and must strictly increase for each".
+- §5.4 **Levelling**: "An actor is owed level `L + 1` once `xp >= xp_to_level(L)`, unless `xp_to_level(L)` is not
+  greater than `xp_to_level(L - 1)`." becomes "An actor is owed level `L + 1` once `xp` reaches its own
+  `xp_to_level(ctx, L)`, unless that is not greater than its `xp_to_level(ctx, L - 1)`."
+
+**Exit condition:** SPEC.md has the approved wording, the tests above exist and pass, and the standing checks pass.
 
 ### Phase 17: The four ctx verbs
 

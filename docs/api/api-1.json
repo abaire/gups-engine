@@ -4007,6 +4007,13 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.pending_levels",
+          "feature": "leveling",
+          "name": "pending_levels",
+          "doc": "How many levels the actor has the XP for and has not been given. A read costs one xp_to_level call per pending level, plus one.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.recall_room",
           "name": "recall_room",
           "doc": "A player's recall room label; None for mobs.",
@@ -5443,13 +5450,13 @@
         {
           "symbol": "rules_ctx.pulse",
           "name": "pulse",
-          "doc": "Game time.",
+          "doc": "Game time; not available in xp_to_level.",
           "since": 1
         },
         {
           "symbol": "rules_ctx.rng",
           "name": "rng",
-          "doc": "The seeded random number generator.",
+          "doc": "The seeded random number generator; not available in xp_to_level.",
           "since": 1
         },
         {
@@ -5529,7 +5536,7 @@
         {
           "symbol": "rules_ctx.roll",
           "name": "roll",
-          "doc": "Rolls dice such as '2d6+1' with the seeded rng.",
+          "doc": "Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.",
           "since": 1,
           "params": [
             {
@@ -5808,10 +5815,10 @@
         "symbol": "rules:xp_to_level",
         "feature": "leveling",
         "name": "xp_to_level",
-        "signature": "xp_to_level(level)",
+        "signature": "xp_to_level(ctx, level)",
         "return_type": "int",
-        "ctx_fields": [],
-        "doc": "The total XP at which the given level ends.",
+        "ctx_fields": ["actor"],
+        "doc": "The total XP at which the given level ends for the actor.",
         "since": 1
       }
     ],
@@ -6042,6 +6049,12 @@
           "symbol": "p.name",
           "name": "name",
           "doc": "The entity's display name.",
+          "since": 1
+        },
+        {
+          "symbol": "p.pending_levels",
+          "name": "pending_levels",
+          "doc": "How many levels the actor has the XP for and has not been given. A read costs one xp_to_level call per pending level, plus one.",
           "since": 1
         },
         {

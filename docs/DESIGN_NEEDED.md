@@ -165,6 +165,17 @@ have a declarative `use_effect` (an effect primitive) for novices who don't writ
 every effect primitive acts on actors (D-123). Items have no affects. **Questions:** should items be able to carry
 affects (enchantments, curses)? Should there be item primitives such as `repair` or `identify`?
 
+### Equipment slots that depend on the actor
+
+**Spec:** §4.6 (`equipment_slots()` gets no ctx, and is asked once and again after each reload), §3.3, §4.9 (`wear`,
+`remove`). **Today:** every actor has the same slot list. A world can't give a centaur no `feet` slot, a four-armed race
+two extra `hand` slots, or a mob a `saddle` slot. **Questions:** - Does `equipment_slots` take a ctx with the actor, or
+does a race or trait add and remove slots on top of one global list? - Can mob prototypes declare their own slots? -
+What happens to an item worn in a slot the actor loses, for example after a race change: is it moved to the inventory,
+dropped, or kept until removed? - The slot list is cached today: what is cached when the answer depends on the actor,
+and when is it asked again? - What do `item(slot=...)` validation, the lint and the equipment display order check
+against: the union of every possible slot, or something declared separately?
+
 ### Quantities and `all`
 
 **Spec:** §4.9 lists `get`, `drop`, `give` and `put` without argument syntax. **Today:** these commands move one item,
