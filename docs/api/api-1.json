@@ -3074,7 +3074,7 @@
       {
         "symbol": "ctx.destroy",
         "name": "destroy",
-        "doc": "Removes an item and everything inside it.",
+        "doc": "Removes an item and everything inside it, or count of a stack.",
         "since": 1,
         "params": [
           {
@@ -3086,6 +3086,16 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Item to remove from the world."
+          },
+          {
+            "symbol": "ctx.destroy.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of items of the stack to remove, or None for the whole stack."
           }
         ]
       },
@@ -3351,10 +3361,10 @@
             "name": "count",
             "positional": true,
             "named": true,
-            "default": "1",
+            "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Number of items to spawn when given a label."
+            "doc": "Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item."
           }
         ]
       },
@@ -3493,7 +3503,7 @@
       {
         "symbol": "ctx.move_item",
         "name": "move_item",
-        "doc": "Moves an item to a room (at index), an actor's inventory, or a container.",
+        "doc": "Moves an item, or count of a stack, to a room (at index), an actor's inventory, or a container. Returns the moved item.",
         "since": 1,
         "params": [
           {
@@ -3526,6 +3536,16 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Track index when moving to a room."
+          },
+          {
+            "symbol": "ctx.move_item.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of items of the stack to move, or None for the whole stack."
           }
         ]
       },
@@ -3845,34 +3865,6 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Number to spawn; more than 1 returns a list."
-          }
-        ]
-      },
-      {
-        "symbol": "ctx.split",
-        "name": "split",
-        "doc": "Splits n off a stack into a new item beside it.",
-        "since": 1,
-        "params": [
-          {
-            "symbol": "ctx.split.item",
-            "name": "item",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Stack to split."
-          },
-          {
-            "symbol": "ctx.split.n",
-            "name": "n",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Number of items to split off."
           }
         ]
       },

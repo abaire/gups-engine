@@ -514,6 +514,21 @@ when `leveling` or `track` is off.
   `plural` and the item has no name override, and as `"<name> (<count>)"` otherwise.
 - The engine's corpse prototype carries the `no_all` tag, which keeps an item out of bare `all` in `get`, `drop`, `give`
   and `put`.
+- `move_item(item, to, index=0, count=None)` moves the whole item, or `count` of a stack, and returns the moved item's
+  view. A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and fires
+  no `on_spawn`. Moving part of an equipped or non-stackable item is an error.
+- `give(actor, label_or_item, count=None)`: `count` now also bounds how much of an item view is moved (it previously
+  only applied to labels). `destroy(item, count=None)` removes the whole item, or `count` of a stack.
+- `ctx.split` is removed; use `move_item(..., count=n)` to move part of a stack.
+
+```python
+# before
+part = ctx.split(coins, 2)
+ctx.move_item(part, ctx.room)
+
+# after
+part = ctx.move_item(coins, ctx.room, index = 0, count = 2)
+```
 
 ## api_version 1
 

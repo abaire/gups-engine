@@ -28,24 +28,60 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boole
   return item
 }
 
-/** The `move_item` verb: the single writer of [Item.location]. */
-fun World.moveItem(item: Item, to: ItemLocation) {
+/**
+ * The `move_item` verb, and the single writer of [Item.location]: moves [count] of [item] (by
+ * default the whole stack) to [to] and returns the item now at [to]. Moving part of a stack leaves
+ * the rest in place and creates a new item with the same attributes, name override, debug flag and
+ * decay deadline. A moved part does not fire `on_spawn`, because no new content was created.
+ */
+fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item {
   require(item.id in entities) { "$item is not in the world" }
-  checkTarget(item, to)
-  val before = custodian(item) as? Player
-  val from = item.location
-  unindex(item)
-  item.location = to
-  index(item, to)
-  item.dirty = true
-  val after = custodian(item) as? Player
-  if (before !== after && !item.debug) {
-    itemEvents += ItemEvent(item.id, pulse, from, to, "move")
-    // An item changing hands between players is saved at once, both sides together.
-    if (before != null && after != null) requestImmediate("transfer")
+  require(count in 1..item.count) {
+    "move_item: count must be between 1 and ${item.count}, got $count"
   }
+  if (count == item.count) {
+    checkTarget(item, to)
+    val before = custodian(item) as? Player
+    val from = item.location
+    unindex(item)
+    item.location = to
+    index(item, to)
+    item.dirty = true
+    val after = custodian(item) as? Player
+    if (before !== after && !item.debug) {
+      itemEvents += ItemEvent(item.id, pulse, from, to, "move")
+      // An item changing hands between players is saved at once, both sides together.
+      if (before != null && after != null) requestImmediate("transfer")
+    }
+    holderOf(from)?.let { updateEncumbrance(it) }
+    custodian(item)?.let { updateEncumbrance(it) }
+    return item
+  }
+  require(item.proto.stackable) { "${item.name} is not stackable" }
+  require(item.location !is ItemLocation.Equipped && to !is ItemLocation.Equipped) {
+    "move_item: can't move part of a stack to or from equipment"
+  }
+  checkTarget(item, to)
+  val from = item.location
+  val before = custodian(item) as? Player
+  val part = Item(allocateId(), item.proto, to, count)
+  part.debug = item.debug
+  part.nameOverride = item.nameOverride
+  part.decayAt = item.decayAt
+  part.customAttributes.putAll(item.customAttributes)
+  part.dirty = true
+  item.count -= count
+  item.dirty = true
+  register(part)
+  index(part, to)
+  val after = custodian(part) as? Player
+  // The part is a new id, so it always needs an origin record when a player is involved.
+  if ((before != null || after != null) && !part.debug)
+    itemEvents += ItemEvent(part.id, pulse, from, to, "split")
+  if (before != null && after != null && before !== after) requestImmediate("transfer")
   holderOf(from)?.let { updateEncumbrance(it) }
-  custodian(item)?.let { updateEncumbrance(it) }
+  custodian(part)?.let { updateEncumbrance(it) }
+  return part
 }
 
 /** The actor whose load an item at [loc] counts toward, if any. */
@@ -106,13 +142,30 @@ fun World.stack(item: Item): Item {
   return into
 }
 
-/** The `destroy` verb: removes [item] and everything inside it. */
-fun World.destroy(item: Item) {
+/**
+ * The `destroy` verb: removes [item] and everything inside it, or only [count] of a stack when
+ * [count] is less than its count.
+ */
+fun World.destroy(item: Item, count: Int = item.count) {
+  require(item.id in entities) { "$item is not in the world" }
+  require(count in 1..item.count) {
+    "destroy: count must be between 1 and ${item.count}, got $count"
+  }
+  if (count == item.count) {
+    val holder = custodian(item)
+    if (holder is Player && !item.debug)
+      itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
+    unindex(item)
+    markRemoved(item)
+    forgetItemTree(item)
+    holder?.let { updateEncumbrance(it) }
+    return
+  }
   val holder = custodian(item)
-  if (holder is Player) itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
-  unindex(item)
-  markRemoved(item)
-  forgetItemTree(item)
+  if (holder is Player && !item.debug)
+    itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "reduce")
+  item.count -= count
+  item.dirty = true
   holder?.let { updateEncumbrance(it) }
 }
 

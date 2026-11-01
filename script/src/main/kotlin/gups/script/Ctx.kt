@@ -47,7 +47,6 @@ import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
 import gups.core.world.spawnItem
-import gups.core.world.splitItem
 import gups.core.world.startCombat
 import gups.core.world.stopCombat
 import gups.core.world.takeXp
@@ -1101,8 +1100,9 @@ internal constructor(
         Param(
           name = "count",
           named = true,
-          defaultValue = "1",
-          doc = "Number of items to spawn when given a label.",
+          defaultValue = "None",
+          doc =
+            "Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item.",
         ),
       ],
     useStarlarkThread = true,
@@ -1113,12 +1113,13 @@ internal constructor(
       val to = ItemLocation.Carried(a.id)
       if (labelOrItem is ItemView) {
         val i = itemArg(labelOrItem, "give(item)")
-        world.moveItem(i, to)
-        return@verb v(i)
+        val n = intOrNull(count, "give(count)") ?: i.count
+        if (n !in 1..i.count) fail("give(count): must be between 1 and ${i.count}")
+        return@verb v(world.moveItem(i, to, n))
       }
       val l = label(str(labelOrItem, "give(label_or_item)"), pkgOf(thread), "give(label)")
       if (l !in world.protos.items) fail("give(label): there is no item $l")
-      val n = int(count, "give(count)")
+      val n = intOrNull(count, "give(count)") ?: 1
       if (n < 1) fail("give(count): must be at least 1")
       val made =
         if (world.protos.item(l).stackable) listOf(world.spawnItem(l, to, n))
@@ -1128,7 +1129,8 @@ internal constructor(
 
   @StarlarkMethod(
     name = "move_item",
-    doc = "Moves an item to a room (at index), an actor's inventory, or a container.",
+    doc =
+      "Moves an item, or count of a stack, to a room (at index), an actor's inventory, or a container. Returns the moved item.",
     parameters =
       [
         Param(name = "item", named = true, doc = "Item to move."),
@@ -1139,38 +1141,46 @@ internal constructor(
           defaultValue = "0",
           doc = "Track index when moving to a room.",
         ),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "None",
+          doc = "Number of items of the stack to move, or None for the whole stack.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun moveItem(item: Any, to: Any, index: Any, thread: StarlarkThread): Any =
+  fun moveItem(item: Any, to: Any, index: Any, count: Any, thread: StarlarkThread): Any =
     verb("move_item") {
       trackIndex("move_item", index)
-      world.moveItem(itemArg(item, "move_item(item)"), location(to, index, "move_item(to)", thread))
-      Starlark.NONE
+      val i = itemArg(item, "move_item(item)")
+      val n = intOrNull(count, "move_item(count)") ?: i.count
+      if (n !in 1..i.count) fail("move_item(count): must be between 1 and ${i.count}")
+      v(world.moveItem(i, location(to, index, "move_item(to)", thread), n))
     }
 
   @StarlarkMethod(
     name = "destroy",
-    doc = "Removes an item and everything inside it.",
-    parameters = [Param(name = "item", named = true, doc = "Item to remove from the world.")],
-  )
-  fun destroy(item: Any): Any =
-    verb("destroy") {
-      world.destroy(itemArg(item, "destroy(item)"))
-      Starlark.NONE
-    }
-
-  @StarlarkMethod(
-    name = "split",
-    doc = "Splits n off a stack into a new item beside it.",
+    doc = "Removes an item and everything inside it, or count of a stack.",
     parameters =
       [
-        Param(name = "item", named = true, doc = "Stack to split."),
-        Param(name = "n", named = true, doc = "Number of items to split off."),
+        Param(name = "item", named = true, doc = "Item to remove from the world."),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "None",
+          doc = "Number of items of the stack to remove, or None for the whole stack.",
+        ),
       ],
   )
-  fun split(item: Any, n: Any): Any =
-    verb("split") { v(world.splitItem(itemArg(item, "split(item)"), int(n, "split(n)"))) }
+  fun destroy(item: Any, count: Any): Any =
+    verb("destroy") {
+      val i = itemArg(item, "destroy(item)")
+      val n = intOrNull(count, "destroy(count)") ?: i.count
+      if (n !in 1..i.count) fail("destroy(count): must be between 1 and ${i.count}")
+      world.destroy(i, n)
+      Starlark.NONE
+    }
 
   // ---- Doors and exits -----------------------------------------------------------------------
 

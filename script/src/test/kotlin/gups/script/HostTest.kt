@@ -10,6 +10,7 @@ import gups.core.world.damage
 import gups.core.world.moveItem
 import gups.core.world.spawnItem
 import gups.core.world.startCombat
+import gups.core.world.teleport
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -410,22 +411,47 @@ class HostTest {
                     a = ctx.actor
                     ctx.give(a, ":coin", count = 5)
                     coins = a.inventory()[0]
-                    part = ctx.split(coins, 2)
-                    ctx.move_item(part, ctx.room, index = 0)
+                    part = ctx.move_item(coins, ctx.room, index = 0, count = 2)
                     gem = ctx.spawn(":gem", ctx.room)
                     ctx.destroy(gem)
+                    ctx.give(a, part, count = 1)
+                    ctx.destroy(coins, count = 1)
                     ctx.unlock_door(ctx.room, "north")
                     ctx.open_door("//zones/z:start", "north")
                     path = ctx.path_to(":vault")
-                    ctx.send(a, "coins=%d ground=%d path=%s door=%s near=%d" % (
-                        coins.count, len(ctx.room.items()), path, ctx.room.exit("north").door.state,
-                        len(ctx.allies_near(a, "far"))))
+                    ctx.send(a, "coins=%d part=%d ground=%d path=%s door=%s near=%d" % (
+                        coins.count, part.count, len(ctx.room.items()), path,
+                        ctx.room.exit("north").door.state, len(ctx.allies_near(a, "far"))))
                     ctx.teleport(a, ":vault")
+
+                def _bad_move0(ctx):
+                    ctx.move_item(ctx.actor.inventory()[0], ctx.room, index = 0, count = 0)
+
+                def _bad_movebig(ctx):
+                    coins = ctx.actor.inventory()[0]
+                    ctx.move_item(coins, ctx.room, index = 0, count = coins.count + 1)
+
+                def _bad_give0(ctx):
+                    ctx.give(ctx.actor, ctx.actor.inventory()[0], count = 0)
+
+                def _bad_givebig(ctx):
+                    coins = ctx.actor.inventory()[0]
+                    ctx.give(ctx.actor, coins, count = coins.count + 1)
+
+                def _bad_destroy0(ctx):
+                    ctx.destroy(ctx.actor.inventory()[0], count = 0)
+
+                def _bad_destroybig(ctx):
+                    coins = ctx.actor.inventory()[0]
+                    ctx.destroy(coins, count = coins.count + 1)
 
                 def _arrive(ctx):
                     ctx.send(ctx.actor, "In the vault, from " + ctx.from_room.name)
 
-                room("start", name = "Start", commands = {"go": _go},
+                room("start", name = "Start",
+                     commands = {"go": _go, "bad_move0": _bad_move0, "bad_movebig": _bad_movebig,
+                                 "bad_give0": _bad_give0, "bad_givebig": _bad_givebig,
+                                 "bad_destroy0": _bad_destroy0, "bad_destroybig": _bad_destroybig},
                      exits = [exit("north", ":vault", door = door(state = "locked"))])
                 room("vault", exits = [exit("south", ":start", door = door(state = "locked"))], on_enter = _arrive)
                 item("coin", stackable = True)
@@ -437,7 +463,7 @@ class HostTest {
     f.input(p, "go")
     f.run()
     assertEquals(
-      "coins=3 ground=1 path=[\"north\"] door=open near=0\nIn the vault, from Start\n",
+      "coins=2 part=1 ground=1 path=[\"north\"] door=open near=0\nIn the vault, from Start\n",
       f.out(p)
         .lines()
         .filter { it.startsWith("coins") || it.startsWith("In the") }
@@ -448,6 +474,23 @@ class HostTest {
       DoorState.OPEN,
       f.w.room(Label("//zones/z:vault")).exits.values.single().door!!.state,
     )
+    f.w.teleport(p, f.w.room(Label("//zones/z:start")))
+    for ((command, verb) in
+      listOf(
+        "bad_move0" to "move_item",
+        "bad_movebig" to "move_item",
+        "bad_give0" to "give",
+        "bad_givebig" to "give",
+        "bad_destroy0" to "destroy",
+        "bad_destroybig" to "destroy",
+      )) {
+      val before = f.diagnostics("script_error").size
+      f.input(p, command)
+      f.run()
+      val errors = f.diagnostics("script_error")
+      assertEquals(before + 1, errors.size, "$command should raise one script error")
+      assertContains(errors.last().message, "$verb(count)")
+    }
   }
 
   @Test

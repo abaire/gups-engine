@@ -581,7 +581,7 @@ The engine persists world state and account information to SQLite in WAL mode
 | `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                          | character stats, skills, affects, attributes, position, `choices`, `grantedTraits` (§4.19), and `levelGains`                                                                               |
 | `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                       | rooms, mobs, and **all items**, including carried and contained items                                                                                                                      |
 | `zone_states`    | `package`, `payload_json`                                                                                                            | reset and respawn deadlines, package quarantine flags                                                                                                                                      |
-| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                               | custody audit trail for player-involved items (cause: `spawn`, `move`, `destroy`)                                                                                                          |
+| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                               | custody audit trail for player-involved items (cause: `spawn`, `move`, `split` for a new item moved off part of a stack, `reduce` for a stack destroyed in part, `destroy`)                |
 | `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json` | runtime script exceptions and diagnostics                                                                                                                                                  |
 
 - **Single-location item invariant:** An item's location is stored **only** on its own `world_entities` row. Inventories
@@ -1088,7 +1088,7 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
 | Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)`                                                                                          |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=1)`, `move_item(item, to)`, `destroy(item)`, `split(item, n)`                                                                                                                                                  |
+| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`                                                                                                                                |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                         |
@@ -1114,9 +1114,14 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 - **Items:**
   - `spawn` returns a view, or a list when it makes several entities. For items, `at` may be a room or room label
     (ground, at `index`), an actor (carried) or a container.
-  - `give(actor, label_or_item, count=1)` spawns or moves the item into the inventory and fires no hooks.
-  - `move_item` takes `index=0` for rooms.
-  - `split` copies the stack's attributes and decay deadline to the new item, and refuses equipped stacks.
+  - `give(actor, label_or_item, count=None)` spawns `count` of a label (default 1), or moves `count` of an item (default
+    the whole stack), into the actor's inventory. It returns the item view, or a list of views when it spawns several
+    non-stackable items, and fires no hooks.
+  - `move_item(item, to, index=0, count=None)` moves the item, or `count` of a stack, and returns the moved item's view.
+    A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and doesn't
+    fire `on_spawn`. Moving part of an equipped or non-stackable item is an error.
+  - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
+    count, removes that many from the stack.
   - Verbs never merge stacks.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
   door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
@@ -1136,8 +1141,8 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 - **Simulation verbs:** return `None`. A reason added twice counts once.
 - **`apply_affect`:** takes `modifiers`, as the effect primitive does.
 
-Verbs without a player command (`say`, `emote`, door and exit-block setters, `split`, `path_to`, and the mob actions)
-are public `core` functions, so Kotlin and plugins share them.
+Verbs without a player command (`say`, `emote`, door and exit-block setters, `path_to`, and the mob actions) are public
+`core` functions, so Kotlin and plugins share them.
 
 - `award_xp(actor, amount)`: gives `actor` `amount` experience (an int of at least 1) as a kill does: the gain message,
   then level steps as the world's `level_mode` says (§5.4). Returns `None`.

@@ -1,17 +1,21 @@
 package gups.core.world
 
+import gups.core.AttrValue
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ContainerProto
 import gups.core.model.DoorState
 import gups.core.model.EquipAffect
+import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Prototypes
+import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -262,7 +266,7 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     assertFalse(mine.id in f.w.entities)
     assertEquals(8, f.w.room(T.HALL).items.single().count)
     val marked = f.carry(p, coin, 2)
-    marked.customAttributes["t:cursed"] = gups.core.AttrValue.B(true)
+    marked.customAttributes["t:cursed"] = AttrValue.B(true)
     f.doLine(p, "drop coin")
     assertEquals(2, f.w.room(T.HALL).items.size)
   }
@@ -398,5 +402,62 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
   @Test
   fun `the corpse prototype is tagged no_all`() {
     assertTrue("no_all" in Prototypes.CORPSE.tags)
+  }
+
+  @Test
+  fun `moving part of a stack records a split event for the part, none for the source`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_SPAWN] = { _, _, _ -> null }
+    val f = fixture(host)
+    val p = f.player("Ann")
+    val hall = f.w.room(T.HALL)
+    val stack = f.w.spawnItem(coin, ItemLocation.InRoom(hall.id, 0), 5)
+    stack.nameOverride = "a lucky coin"
+    stack.decayAt = f.w.pulse + 100
+    stack.customAttributes["t:cursed"] = AttrValue.B(true)
+    host.calls.clear()
+    val part = f.w.moveItem(stack, ItemLocation.Carried(p.id), 2)
+    assertEquals(2, part.count)
+    assertEquals(3, stack.count)
+    assertEquals(ItemLocation.InRoom(hall.id, 0), stack.location)
+    assertEquals(ItemLocation.Carried(p.id), part.location)
+    assertEquals("a lucky coin", part.nameOverride)
+    assertEquals(stack.decayAt, part.decayAt)
+    assertEquals(stack.customAttributes, part.customAttributes)
+    assertEquals(emptyList<String>(), host.calls)
+    val events = f.w.drainItemEvents()
+    assertEquals(listOf("split"), events.map { it.cause })
+    assertEquals(part.id, events.single().item)
+  }
+
+  @Test
+  fun `destroying part of a carried stack records a reduce event`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val limit = f.w.rules.carryLimit(RulesContext(f.w, p))
+    val stack = f.carry(p, coin, limit + 5)
+    assertEquals(mapOf(fs.agility to -2), p.encumbrance)
+    f.w.drainItemEvents()
+    f.w.destroy(stack, 10)
+    assertEquals(limit - 5, stack.count)
+    assertNull(p.encumbrance[fs.agility])
+    val events = f.w.drainItemEvents()
+    assertEquals(listOf("reduce"), events.map { it.cause })
+    assertEquals(stack.id, events.single().item)
+  }
+
+  @Test
+  fun `moving part of a non-stackable or equipped stack throws`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = f.w.room(T.HALL)
+    // A non-stackable item with a count above 1, built directly so a partial move is possible.
+    val loose = Item(f.w.allocateId(), f.w.protos.item(loaf), ItemLocation.InRoom(hall.id, 0), 2)
+    f.w.register(loose)
+    assertFailsWith<IllegalArgumentException> { f.w.moveItem(loose, ItemLocation.Carried(p.id), 1) }
+    // An equipped stackable: moving part of it is refused.
+    val stack = f.w.spawnItem(coin, ItemLocation.InRoom(hall.id, 0), 5)
+    f.w.moveItem(stack, ItemLocation.Equipped(p.id, "wield"))
+    assertFailsWith<IllegalArgumentException> { f.w.moveItem(stack, ItemLocation.Carried(p.id), 2) }
   }
 }

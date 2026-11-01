@@ -265,12 +265,13 @@
 </table>
 </article>
 <article id="ctx.destroy" class="entry">
-<h4><code>destroy(item)</code> <span class="since">since api_version 1</span></h4>
-<p>Removes an item and everything inside it.</p>
+<h4><code>destroy(item, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes an item and everything inside it, or count of a stack.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.destroy.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to remove from the world.</td></tr>
+<tr id="ctx.destroy.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number of items of the stack to remove, or None for the whole stack.</td></tr>
 </tbody>
 </table>
 </article>
@@ -347,14 +348,14 @@
 </table>
 </article>
 <article id="ctx.give" class="entry">
-<h4><code>give(actor, label_or_item, count = 1)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>give(actor, label_or_item, count = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Puts an item (a view, or a label to spawn) into an actor's inventory.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.give.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who receives the item.</td></tr>
 <tr id="ctx.give.label_or_item"><td><code>label_or_item</code></td><td>positional or named</td><td></td><td>Item view to move, or item prototype label to spawn.</td></tr>
-<tr id="ctx.give.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of items to spawn when given a label.</td></tr>
+<tr id="ctx.give.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item.</td></tr>
 </tbody>
 </table>
 </article>
@@ -413,14 +414,15 @@
 </table>
 </article>
 <article id="ctx.move_item" class="entry">
-<h4><code>move_item(item, to, index = 0)</code> <span class="since">since api_version 1</span></h4>
-<p>Moves an item to a room (at index), an actor's inventory, or a container.</p>
+<h4><code>move_item(item, to, index = 0, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Moves an item, or count of a stack, to a room (at index), an actor's inventory, or a container. Returns the moved item.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.move_item.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to move.</td></tr>
 <tr id="ctx.move_item.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
 <tr id="ctx.move_item.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when moving to a room.</td></tr>
+<tr id="ctx.move_item.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number of items of the stack to move, or None for the whole stack.</td></tr>
 </tbody>
 </table>
 </article>
@@ -543,17 +545,6 @@
 <tr id="ctx.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
 <tr id="ctx.spawn.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
 <tr id="ctx.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
-</tbody>
-</table>
-</article>
-<article id="ctx.split" class="entry">
-<h4><code>split(item, n)</code> <span class="since">since api_version 1</span></h4>
-<p>Splits n off a stack into a new item beside it.</p>
-<table>
-<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
-<tbody>
-<tr id="ctx.split.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Stack to split.</td></tr>
-<tr id="ctx.split.n"><td><code>n</code></td><td>positional or named</td><td></td><td>Number of items to split off.</td></tr>
 </tbody>
 </table>
 </article>

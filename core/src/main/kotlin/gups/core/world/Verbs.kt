@@ -6,7 +6,6 @@ import gups.core.model.Actor
 import gups.core.model.Channel
 import gups.core.model.Direction
 import gups.core.model.DoorState
-import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Player
@@ -67,20 +66,6 @@ fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
     other.dirty = true
   }
   graphChanged()
-}
-
-/** The `split` verb: moves [n] of a stack into a new item beside it. */
-fun World.splitItem(item: Item, n: Int): Item {
-  require(item.proto.stackable) { "${item.name} is not stackable" }
-  require(n in 1 until item.count) { "split: n must be between 1 and ${item.count - 1}" }
-  val at = item.location
-  require(at !is ItemLocation.Equipped) { "split: can't split an equipped item" }
-  val part = spawnItem(item.protoLabel, at, n)
-  part.customAttributes.putAll(item.customAttributes)
-  part.decayAt = item.decayAt
-  item.count -= n
-  item.dirty = true
-  return part
 }
 
 /**
