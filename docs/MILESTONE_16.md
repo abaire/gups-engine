@@ -2,41 +2,52 @@
 
 ## Overview & Agreed Design
 
-- **Source `DESIGN_NEEDED`:** `docs/DESIGN_NEEDED.md` — `### Quantities and all` (under `## Items`, lines 179–183).
+- **Source `DESIGN_NEEDED`:** `docs/DESIGN_NEEDED.md` — ``### Quantities and `all` `` (under `## Items`, line 199).
 - **Design Summary:**
-  - **Pluralization & Stack Display (`plural`):** `item(...)` declarations gain an optional `plural` string
-    (`ItemProto.plural: String? = null`), exposed on the Starlark item view (`item.plural`) and `PluginItem.plural`.
-    Words from `plural` (minus articles `a`, `an`, `the`, `some`) are included in keyword matching (`Item.matches` and
-    default `keywords`) so players can target items by singular or plural words in any language without hardcoded
-    English `-s` stripping. `Item.name` stays the singular name (`nameOverride ?: proto.name`), while
-    `Item.describe(count: Int = this.count): String` formats quantities for player output: `item.name` when `count ==
-    1`, `"$count ${proto.plural}"` when `count > 1 && nameOverride == null && proto.plural != null`, and `"${item.name}
-    ($count)"` otherwise.
-  - **Tag-Based `all` Exclusion (`no_all`):** Bare `all` (`get all`, `get all [from] <container>`, `drop all`, `put all
-    [in|into] <container>`, `give all [to] <target>`) skips any item with `"no_all" in item.tags`. `Prototypes.CORPSE`
-    carries `tags = setOf("no_all")`, and keyring-only items (`ItemProto.isKeyOnly`) automatically receive `"no_all"` in
-    their tags. `put` also excludes the target container itself (`item !== box`). Explicit keyword filters (`all
-    <keyword>`, `<count> <keyword>`, `<keyword>`) ignore `no_all`.
-  - **No In-Place Stack Splitting (`split` removed; `count` on `move_item`, `give`, `destroy`):** `World.splitItem` and
-    `ctx.split` are removed completely. Instead, `World.moveItem(item, to, count = item.count): Item`,
-    `World.destroy(item, count = item.count)`, `ctx.move_item(item, to, index = 0, count = None)`, `ctx.give(actor,
-    label_or_item, count = None)`, and `ctx.destroy(item, count = None)` directly accept a `count` argument to move or
-    destroy part of a stack in a single step without leaving unmerged twin stacks at the source.
-  - **Quantities, `all`, and Optional Prepositions in Commands:** `get <what> [[from] <container>]`, `drop <what>`,
-    `give <what> [to] <target>`, and `put <what> [in|into] <container>` all resolve items at tick-lane execution time
-    (`validate` / `resolve`) and support `<keyword>`, `<ordinal>.<keyword>`, `<count> <keyword>`, `<count>
-    <ordinal>.<keyword>`, `all`, and `all <keyword>` (with a space, no `all.<keyword>` dot syntax).
-  - **Capping & Single-Check Per Stack:** Requested counts cap to what is available in the source (when at least 1
-    matching item exists) and to what fits within the destination's remaining weight/capacity (`carry_limit` for
-    `get`/`give`, container `capacity` and `maxWeight` for `put`). Each stack `Item` moved runs a single `before_*` veto
-    check, `moveItem(item, to, moveCount)`, message, `on_*` hook, and `stack(moved)` merge. When a transfer is capped by
-    weight or capacity after moving at least 1 unit (or when 0 units can move), the existing full message (`CANT_CARRY`,
-    `GIVE_FULL`, `PUT_FULL`, or `PUT_WONT_FIT`) is sent.
+  - **Keyword phrases:** `Item.matches(phrase)` accepts a phrase of one or more words. Articles (`a`, `an`, `the`,
+    `some`) are dropped from the phrase, and every remaining word must prefix-match some keyword of the item, or some
+    word of its `plural`. So `get gold coin`, `get coins` and `get the coin` all find `a gold coin`. Because
+    `World.findItem` uses `Item.matches`, every item command gains phrase matching. `Actor.matches` is unchanged.
+  - **Pluralization and stack display (`plural`):** `item(...)` declarations gain an optional `plural` string
+    (`ItemProto.plural: String? = null`), exposed as `item.plural` on the Starlark item view and as `PluginItem.plural`.
+    Words of `plural` are matched by `Item.matches` only. They are not added to `ItemProto.keywords`, so `item.keywords`
+    shows exactly what was declared or defaulted. `Item.name` stays the singular name (`nameOverride ?: proto.name`).
+    `Item.describe(amount: Int = count): String` formats quantities for player output:
+    - `name` when `amount == 1`;
+    - `"$amount ${proto.plural}"` when `amount > 1`, `nameOverride == null`, and `proto.plural != null`;
+    - `"$name ($amount)"` otherwise.
+  - **Bare `all` exclusion:** bare `all` (`get all`, `get all [from] <container>`, `drop all`, `put all [in|into]
+    <container>`, `give all [to] <target>`) skips an item when `"no_all" in item.tags` or `item.proto.isKeyOnly`.
+    `Prototypes.CORPSE` declares `tags = setOf("no_all")`. Keyring-only keys are skipped by the `isKeyOnly` check, not
+    by a tag, so their `tags` are unchanged. `put` also never moves the target container itself. Explicit keywords (`all
+    <keyword>`, `<count> <keyword>`, `<keyword>`) ignore both exclusions.
+  - **No in-place stack splitting:** `World.splitItem` and `ctx.split` are removed. Instead, `World.moveItem(item, to,
+    count = item.count): Item` and `World.destroy(item, count = item.count)` take a count, and so do the script verbs
+    `ctx.move_item(item, to, index = 0, count = None)`, `ctx.give(actor, label_or_item, count = None)` and
+    `ctx.destroy(item, count = None)`. Part of a stack moves or is destroyed in one step, without leaving an unmerged
+    twin stack at the source. A moved part does not fire `on_spawn`, because no new content was created.
+  - **Command syntax:** `get <what> [[from] <container>]`, `drop <what>`, `give <what> [to] <target>`, and `put <what>
+    [in|into] <container>` resolve their items when the action runs in the tick lane (`validate` / `resolve`), not when
+    the command is planned. `<what>` is one of: `<keyword>`, `<ordinal>.<keyword>`, `<count> <keyword>`, `<count>
+    <ordinal>.<keyword>`, `all`, or `all <keyword>`. There is no `all.<keyword>` syntax. In `get`, `all <word>` where
+    `<word>` names a reachable container means "everything in that container" (`get all corpse` loots the corpse); to
+    pick up a corpse itself, use `get corpse`.
+  - **Capping and one cycle per stack:** a requested count is capped to what the source holds, and to what fits at the
+    destination: the actor's `carry_limit` for `get`, the receiver's `carry_limit` for `give`, and the container's
+    `capacity` and `max_weight` for `put`. `get` from a container the actor already carries is not capped by
+    `carry_limit`, since the actor's load doesn't change. Each source stack goes through one cycle: `get` and `drop` run
+    their `before_*` hook, then `moveItem(item, to, n)`, the messages, the `on_*` hook (`put` has none), and
+    `stack(moved)`. `give` and `put` have no `before_*` hook, as today. When the transfer is capped by weight or
+    capacity, the existing message (`CANT_CARRY`, `GIVE_FULL`, `PUT_FULL`, or `PUT_WONT_FIT`) is sent once at the end.
+  - **Hooks see the source stack:** `before_get` and `before_drop` receive the whole source stack as `item`; the number
+    of units being moved is not exposed. `on_get`, `on_drop` and `on_give` receive the moved item.
+  - **No new message IDs.** `get` that finds nothing says `DONT_SEE`. `drop`, `give` and `put` that find nothing in the
+    inventory say `NOT_CARRYING`, including `drop` with no argument (unchanged from today).
 - **Specification Impact:** `docs/SPEC.md` `§3.3` (Item), `§4.2` (Content Declarations: `item`), `§4.5` (Item view and
   Item verbs), `§4.9` (Commands: `inventory`, `keyring`, `look`, `get`, `drop`, `give`, `put`), `§4.15` (PluginItem),
   `§7.4` (M16 row).
-- **Decision Record Updates:** None (all prior `D-xxx` entries in `docs/DECISIONS.md` are already ratified and folded
-  into `docs/SPEC.md`).
+- **Decision Record Updates:** None. All prior `D-xxx` entries in `docs/DECISIONS.md` are already ratified and folded
+  into `docs/SPEC.md`.
 
 ---
 
@@ -46,35 +57,42 @@
    to the local daemon.
 2. **No spec or decision citations in code.** KDoc and comments in `.kt` files must never contain `§`, `SPEC`, or
    decision IDs such as `D-005`. State behavior directly.
-3. **Every phase must end green.** Do not proceed to the next phase until all exit conditions for the current phase
-   pass.
-4. **Markdown formatting.** Whenever any `.md` file is modified, run `./gradlew markdownFormat` and verify `./gradlew
+3. **Every phase must end green.** Do not start the next phase until every exit condition of the current phase passes.
+4. **Markdown formatting.** Whenever a `.md` file changes, run `./gradlew markdownFormat`, then verify `./gradlew
    markdownCheck`.
+5. **Golden files.** Whenever the script API changes, regenerate all three API files and commit them:
+   - `./gradlew :cli:test -Dgups.updateGolden=true` rewrites `cli/src/test/resources/api.golden.json` and
+     `cli/src/test/resources/docs-golden/api.json`.
+   - `./gradlew :cli:installDist && cli/build/install/gups/bin/gups docs --update-baseline` rewrites
+     `docs/api/api-1.json`.
+6. **Warnings are errors.** Kotlin warnings fail the build, including "extension is shadowed by a member".
 
 ---
 
-## Phase 1: Item `plural` Property, Plural Keyword Matching, `no_all` Tag, and Stack Display
+## Phase 1: Phrase Matching, `plural`, CORPSE `no_all`, and Stack Display
 
 ### Objective & Scope
 
 - **In Scope:**
-  - Add `plural: String? = null` to `ItemProto`, `item(...)` in Starlark declarations, `ItemView.plural`, and
-    `PluginItem.plural`.
-  - Include words from `plural` (minus articles) in default `keywords` and in `Item.matches(keyword)`.
-  - Add `"no_all"` tag to `Prototypes.CORPSE` and automatically include `"no_all"` in `ItemProto.tags` when an item is
-    keyring-only (`isKeyOnly`).
-  - Add `Item.describe(count: Int = this.count): String` and update `look` (room ground and open containers),
-    `inventory`, and `keyring` to display stack quantities with `describe()`.
-  - Update API model golden/baseline files, `docs/CHANGELOG.md`, and `docs/SPEC.md` (`§3.3`, `§4.2`, `§4.5`, `§4.9`,
+  - Move the keyword word-splitting helper and the article list into core, and make `Item.matches` match phrases and
+    `plural` words.
+  - Add `plural: String? = null` to `ItemProto`, to `item(...)` in Starlark declarations, to `ItemView`, and to
+    `PluginItem`.
+  - Add `tags = setOf("no_all")` to `Prototypes.CORPSE`.
+  - Add `Item.describe(amount)` and use it in `look` (room items and open containers), `inventory`, `keyring`, and the
+    `get`, `drop`, `give` and `put` messages.
+  - Update the API golden and baseline files, `docs/CHANGELOG.md`, and `docs/SPEC.md` (`§3.3`, `§4.2`, `§4.5`, `§4.9`,
     `§4.15`).
 - **Out of Scope:**
-  - `World.moveItem` / `World.destroy` partial counts and `ctx.split` removal (Phase 2).
-  - Command argument parsing for `<count>` and `all` in `get`, `drop`, `give`, and `put` (Phases 3–4).
+  - Partial counts on `World.moveItem` / `World.destroy`, and removing `ctx.split` (Phase 2).
+  - Parsing `<count>` and `all` in `get`, `drop`, `give`, and `put` (Phases 3–4).
+  - The bare-`all` exclusion check itself (Phase 3).
 
 ### Context Working Set
 
 - **Read / Reference Only:**
-  - `core/src/main/kotlin/gups/core/world/Messages.kt` (message placeholder capitalization rules in `Messages.fill`)
+  - `core/src/main/kotlin/gups/core/world/Messages.kt` (`Messages.fill` capitalizes a placeholder at the start of a
+    message, so `"5 gold coins"` and `"a gold coin"` both read correctly at a sentence start)
   - `script/src/main/kotlin/gups/script/ApiModel.kt`
 - **Files to Modify / Create:**
   - `core/src/main/kotlin/gups/core/model/Protos.kt`
@@ -88,6 +106,7 @@
   - `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`
   - `script/src/test/kotlin/gups/script/LoaderTest.kt`
   - `cli/src/test/resources/api.golden.json`
+  - `cli/src/test/resources/docs-golden/api.json`
   - `docs/api/api-1.json`
   - `docs/CHANGELOG.md`
   - `docs/SPEC.md`
@@ -98,143 +117,143 @@
 
 ### Specification & Decision Record Changes
 
-Update `docs/SPEC.md`: - **`§3.3` (Item):** Under `Quantities and decay`, note that `ItemProto` may declare an optional
-`plural` display name used by `Item.describe` when formatting stacks of `count > 1`, and that items carrying the
-`no_all` tag (including `//engine:corpse` and keyring-only keys) are skipped by bare `all` item commands. - **`§4.2`
-(`item` declaration example and `Declaration rules`):** - Add `plural = None` to the `item(...)` example or `Defaults`
-bullet: - Under `Defaults`: `"The display name defaults to the identifier with _ as spaces. An item may also give plural
-(for example plural = "gold coins"), used when formatting stacks of 2 or more. keywords default to the display name's
-(and plural's) words minus articles, or else the identifier; when keywords are given explicitly on an item, words from
-plural minus articles are also matched."` - Under `Tags`: Note that `no_all` excludes an item from bare `all` in `get`,
-`drop`, `give` and `put`, and is added automatically to `//engine:corpse` and keyring-only keys. - **`§4.5` (`Item
-view`):** Add `plural` after `name`. - **`§4.9` (`keyring` and `look` / `inventory`):** Note that `inventory`,
-`keyring`, and `look` format stacks of `count > 1` as `"<count> <plural>"` when `plural` is set on the prototype (and
-the item has no `nameOverride`), or `"<name> (<count>)"` otherwise.
+Update `docs/SPEC.md`:
+
+- **`§3.3` (Item), under "Quantities and decay":** add that an item prototype may declare an optional `plural` display
+  name, used to show stacks of 2 or more as `"<count> <plural>"`, and that bare `all` in item commands skips items
+  tagged `no_all` (such as `//engine:corpse`) and keyring-only keys.
+- **`§4.2` (`item` declaration):**
+  - Add `plural = None` to the `item(...)` example.
+  - Under "Defaults", add: "An item may also give `plural` (for example `plural = "gold coins"`), used when showing
+    stacks of 2 or more. Players can name an item by the words of its keywords or of its plural."
+  - Under "Tags", add: "`no_all` keeps an item out of bare `all` in `get`, `drop`, `give` and `put`. `//engine:corpse`
+    carries it."
+- **`§4.5` (Item view):** add `plural` after `name`.
+- **`§4.9` (`look`, `inventory`, `keyring`):** add that stacks of 2 or more show as `"<count> <plural>"` when the
+  prototype has a `plural` and the item has no name override, or as `"<name> (<count>)"` otherwise. Add that item
+  keywords can be phrases: every word must match the start of one of the item's keywords or plural words, and articles
+  are ignored.
+- **`§4.15` (PluginItem):** add `plural`.
 
 ### Implementation Blueprint
 
-- **Signatures & Types:**
-  - In `core/src/main/kotlin/gups/core/model/Protos.kt`:
+- **Shared keyword words (`core/src/main/kotlin/gups/core/model/Entities.kt`, top level, public):**
 
-    ```kotlin
-    data class ItemProto(
-    val label: Label,
-    val name: String,
-    val keywords: List<String>,
-    val desc: String = "",
-    val kind: String = "misc",
-    val range: Band = Band.MELEE,
-    val weight: Int = 1,
-    val wear: String? = null,
-    val dice: Dice? = null,
-    val damageType: DamageType? = null,
-    val statDeltas: Map<String, Int> = emptyMap(),
-    val senseDeltas: Map<Channel, Int> = emptyMap(),
-    val tags: Set<String> = emptySet(),
-    val stackable: Boolean = false,
-    val decayPulses: Int? = null,
-    val container: ContainerProto? = null,
-    val commands: Map<String, ZoneCommand> = emptyMap(),
-    val equipAffects: List<EquipAffect> = emptyList(),
-    val modifiers: Modifiers = emptyMap(),
-    val version: Int = 1,
-    /** Optional plural display name used when formatting quantities greater than 1. */
-    val plural: String? = null,
-    )
-    ```
-  - In `Prototypes.CORPSE` (`Protos.kt` line 392): add `tags = setOf("no_all")`.
-  - In `ItemProto`: ensure keyring-only items (`kind == "key"` with no `wear`, `container`, `commands`, `dice`,
-    `statDeltas`, `senseDeltas`, `equipAffects`, or `modifiers`) include `"no_all"` in `tags` (either via an `init`
-    block or computed backing property on `ItemProto`, e.g., in `ItemProto` constructor or `Declarations.kt` +
-    `ItemProto` `isKeyOnly` helper moved to `ItemProto`). Moving `val isKeyOnly: Boolean` onto `ItemProto` in
-    `Protos.kt` and normalizing `val tags: Set<String> = if (isKeyOnly) (tags + "no_all").toSortedSet() else tags`
-    ensures both Kotlin fixture `ItemProto`s and Starlark `item()` declarations automatically carry `"no_all"` when
-    `isKeyOnly` is true!
-  - In `core/src/main/kotlin/gups/core/model/Entities.kt` on `Item`:
+  ```kotlin
+  /** Articles ignored when deriving or matching item keywords. */
+  val KEYWORD_ARTICLES: Set<String> = setOf("a", "an", "the", "some")
 
-    ```kotlin
-    /**
-     * Display description of this item for a given [amount] (defaulting to [count]): [name] when
-     * [amount] is 1, `"$amount ${proto.plural}"` when [amount] > 1 and [nameOverride] is null and
-     * [ItemProto.plural] is set, or `"$name ($amount)"` otherwise.
-    */
-    fun describe(amount: Int = count): String =
+  private val WORD_SPLIT = Regex("[^a-z0-9]+")
+
+  /** The lowercase words of [text], minus articles. */
+  fun keywordWords(text: String): List<String> =
+    text.lowercase().split(WORD_SPLIT).filter { it.isNotEmpty() && it !in KEYWORD_ARTICLES }
+  ```
+
+  In `script/src/main/kotlin/gups/script/Declarations.kt`, delete the private `ARTICLES` and rewrite `defaultKeywords`
+  to reuse it, with identical behavior:
+
+  ```kotlin
+  private fun defaultKeywords(name: String, id: String): List<String> =
+    keywordWords(name).ifEmpty { listOf(id.lowercase()) }
+  ```
+- **`ItemProto` (`Protos.kt`):** add a last constructor parameter:
+
+  ```kotlin
+  /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
+  val plural: String? = null,
+  ```
+
+  In `Prototypes.CORPSE`, add `tags = setOf("no_all"),`. Do not change `isKeyOnly` or move it.
+
+- **`Item` (`Entities.kt`):**
+
+  ```kotlin
+  /**
+   * How players see [amount] of this item (by default the whole stack): [name] for one,
+   * `"<amount> <plural>"` when the prototype has a plural and there is no [nameOverride], else
+   * `"<name> (<amount>)"`.
+   */
+  fun describe(amount: Int = count): String =
     when {
     amount <= 1 -> name
     nameOverride == null && proto.plural != null -> "$amount ${proto.plural}"
     else -> "$name ($amount)"
     }
-    ```
 
-    And update `Item.matches(keyword: String): Boolean`:
+  /**
+   * True if every word of [phrase], minus articles, is the start of one of this item's keywords
+   * or plural words, ignoring case.
+   */
+  fun matches(phrase: String): Boolean {
+    val words = keywordWords(phrase)
+    if (words.isEmpty()) return false
+    val candidates = keywords.map { it.lowercase() } + proto.plural?.let(::keywordWords).orEmpty()
+    return words.all { w -> candidates.any { it.startsWith(w) } }
+  }
+  ```
 
-    ```kotlin
-    fun matches(keyword: String): Boolean {
-    val k = keyword.lowercase()
-    if (keywords.any { it.lowercase().startsWith(k) }) return true
-    val p = proto.plural ?: return false
-    return p.lowercase().split(WORD_SPLIT).any { it.isNotEmpty() && it !in ARTICLES && it.startsWith(k) }
-    }
-    ```
+  `keywordWords` splits on any non-alphanumeric character, so the existing `ordinal()` helper in `KernelCommands.kt`
+  must keep stripping the `2.` prefix before calling `matches` (it already does).
 
-    (where `WORD_SPLIT = Regex("[^a-z0-9]+")` and `ARTICLES = setOf("a", "an", "the", "some")`).
+- **`Reconcile.kt`:** in `tombstone(was)`, add `plural = was.plural`. Do not copy `tags`.
 
-  - In `core/src/main/kotlin/gups/core/world/Reconcile.kt`: update `tombstone(was: ItemProto)` to copy `plural =
-    was.plural` and `tags = was.tags`.
+- **`KernelCommands.kt`:** replace `it.name` / `item.name` with `describe()` in these places only:
 
-  - In `core/src/main/kotlin/gups/core/world/KernelCommands.kt`:
+  - `look` at an open container (line 255): `inside.joinToString(", ") { it.describe() }`.
+  - `inventory` (line 386) and `keyring` (line 400): `"item" to it.describe()`.
+  - `describeRoom`, room items without a track (line 1279) and items by band (line 1312).
+  - The `"item"` placeholder of `GET_SELF`, `GET_SELF_FROM`, `GET_ROOM`, `DROP_SELF`, `DROP_ROOM`, `GIVE_SELF`,
+    `GIVE_TARGET`, `GIVE_ROOM`, `PUT_SELF` and `PUT_ROOM`. Compute `val desc = item.describe()` before any call to
+    `w.stack(item)`, because `stack` can merge the item into another stack and destroy it.
 
-    - In `look` (line 255, container contents): replace `inside.joinToString(", ") { it.name }` with
-      `inside.joinToString(", ") { it.describe() }`.
-    - In `inventory` (line 386) and `keyring` (line 400): replace `"item" to it.name` with `"item" to it.describe()`.
-    - In `describeRoom` (lines 1279 and 1312): replace `it.name` with `it.describe()`.
-    - In `drop`, `give`, `put`, and `GetAction` resolve messages: pass `item.describe()` for the `"item"` placeholder
-      instead of `item.name` (note: obtain `val desc = item.describe()` *before* calling `w.stack(item)` in `resolve`,
-      because `w.stack(item)` merges `item` into an existing stack at the destination and mutates `into.count`!).
-  - In `script/src/main/kotlin/gups/script/Declarations.kt`:
-    - Add `DeclParam("plural", "str", "Plural display name shown for stacks of 2 or more, such as 'gold coins'.",
-      default = "None")` to `ITEM_SPEC` right after `"name"`.
-    - In `DeclarationBuiltins.item`: read `val plural = d.str("plural")`, pass `plural = plural` to `ItemProto`, and
-      when `d["keywords"] == null`, merge `(defaultKeywords(name, id) + (plural?.let { defaultKeywords(it, id) } ?:
-      emptyList())).distinct()`.
-  - In `script/src/main/kotlin/gups/script/Views.kt` on `ItemView`:
+  Leave `CANT_REACH`, `PUT_WONT_FIT`, `NOT_CONTAINER`, and all equipment and container-lock messages on `name`.
 
-    ```kotlin
-    @StarlarkMethod(
+- **`Declarations.kt`:**
+
+  - Add `DeclParam("plural", "str", "Display name for stacks of 2 or more, such as 'gold coins'.", default = "None")` to
+    `ITEM_SPEC`, right after `"name"`.
+  - In `DeclarationBuiltins.item`, read `val plural = d.str("plural")` and pass `plural = plural` to `ItemProto`. Do not
+    change how `keywords` defaults.
+- **`Views.kt`, on `ItemView`:**
+
+  ```kotlin
+  @StarlarkMethod(
     name = "plural",
     structField = true,
     allowReturnNones = true,
-    doc = "Plural display name for stacks of 2 or more, or None.",
-    )
-    fun plural(): Any? = read { item.proto.plural }
-    ```
-  - In `plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt` on `PluginItem` and
-    `plugin-api/src/main/kotlin/gups/pluginapi/host/Facade.kt` on `ItemFacade`:
-    - Add `val plural: String?` returning `item.proto.plural`.
+    doc = "Display name for stacks of 2 or more, or None.",
+  )
+  fun plural(): Any? = read { item.proto.plural }
+  ```
+- **`plugin-api/.../Facade.kt`:** add `val plural: String?` to `interface PluginItem`, documented like the Starlark
+  field. In `plugin-api/.../host/Facade.kt`, `class ItemFacade` implements it as `override val plural: String? get() =
+  item.proto.plural`.
 
 ### Test & Documentation Requirements
 
 - In `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`:
-  - Update `coin` in `ItemCommandsTest` (or add a pluralized stackable item alongside an un-pluralized one) to verify:
-    - `Item.describe()` formats `count == 1` as `"a gold coin"`, `count > 1` with `plural = "gold coins"` as `"5 gold
-      coins"`, and `count > 1` without `plural` (or with `nameOverride`) as `"a gold coin (5)"`.
-    - `Item.matches("coins")` matches an item with `name = "a gold coin", plural = "gold coins"`.
-    - `inventory` and `look` display `"5 gold coins"` (or `"a gold coin (5)"`) when `count > 1`.
-    - `Prototypes.CORPSE` and `bareKey` (`isKeyOnly`) both have `"no_all" in item.tags`.
-- In `script/src/test/kotlin/gups/script/LoaderTest.kt`:
-  - Test declaring `item("loaf", name = "a loaf of bread", plural = "loaves of bread", stackable = True)` and reading
-    `item.plural` and `item.keywords`.
-- Regenerate API golden and baseline files:
-  - `./gradlew :cli:test -Dgups.updateGolden=true`
-  - `./gradlew :cli:installDist && cli/build/install/gups/bin/gups docs --update-baseline`
-- Add a section `### Item quantities, pluralization, and all` under `## api_version 1 (unreleased)` in
-  `docs/CHANGELOG.md` documenting `item(plural=...)`, `item.plural`, `PluginItem.plural`, stack display formatting, and
-  the `no_all` tag.
+  - Give the `coin` fixture `plural = "gold coins"`. Add a second stackable fixture with no plural, such as
+    `ItemProto(pebble, "a pebble", listOf("pebble"), stackable = true)`.
+  - `describe()`: a coin with `count == 1` is `"a gold coin"`. Five coins are `"5 gold coins"`. Five pebbles are `"a
+    pebble (5)"`. Five coins with `nameOverride = "a lucky coin"` are `"a lucky coin (5)"`.
+  - `matches`: a coin matches `"coins"`, `"gold coin"`, `"the coin"` and `"go co"`, but not `"silver coin"` or `"the"`.
+  - `inventory` shows `"5 gold coins"` and `"a pebble (5)"`, and `look` shows them on the ground and in an open chest.
+  - `get gold coin` picks up a coin from the ground (this fails today).
+  - `"no_all" in Prototypes.CORPSE.tags`.
+- In `script/src/test/kotlin/gups/script/LoaderTest.kt`: declare `item("loaf", name = "a loaf of bread", plural =
+  "loaves of bread", stackable = True)`, and assert that `item.plural == "loaves of bread"` and that `item.keywords ==
+  ["loaf", "of", "bread"]` (plural words are not added).
+- Regenerate the golden and baseline files (Standing Rule 5).
+- In `docs/CHANGELOG.md`, add a section `### Item quantities, pluralization, and all` under `## api_version 1
+  (unreleased)`. It documents `item(plural=...)`, `item.plural`, `PluginItem.plural`, phrase matching for item keywords,
+  stack display, and the `no_all` tag on corpses.
 
 ### Exit Conditions
 
 - [] `./gradlew markdownFormat && ./gradlew check` (with `BypassSandbox: true`) exits `0` with zero warnings.
 - [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns `0` matches.
+- [] `grep -n "ARTICLES" script/src/main/kotlin/gups/script/Declarations.kt` returns `0` matches.
 - [] `ApiDiffTest`, `LoaderTest`, and `ItemCommandsTest` pass.
 
 ---
@@ -246,18 +265,18 @@ the item has no `nameOverride`), or `"<name> (<count>)"` otherwise.
 - **In Scope:**
   - Remove `World.splitItem` from `core/src/main/kotlin/gups/core/world/Verbs.kt` and `ctx.split` from
     `script/src/main/kotlin/gups/script/Ctx.kt`.
-  - Add `count: Int = item.count` to `World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item` and
-    `World.destroy(item: Item, count: Int = item.count)`.
-  - Add optional `count` to `ctx.move_item(item, to, index = 0, count = None)` and `ctx.destroy(item, count = None)`,
-    and support `count` when passing an `ItemView` to `ctx.give(actor, label_or_item, count = None)`.
-  - Update `HostTest.kt`, `docs/SPEC.md` (`§4.5`), `docs/CHANGELOG.md`, and the API golden/baseline files.
+  - Add `count` to `World.moveItem` (which now returns the moved `Item`) and to `World.destroy`.
+  - Add an optional `count` to `ctx.move_item` (which now returns the moved item view), `ctx.destroy`, and `ctx.give`
+    with an item view.
+  - Update `HostTest.kt`, `docs/SPEC.md` (`§4.5`), `docs/CHANGELOG.md`, and the API golden and baseline files.
 - **Out of Scope:**
-  - Player command argument parsing (`get`, `drop`, `give`, `put`), which is in Phases 3 and 4.
+  - Player command parsing for `get`, `drop`, `give`, and `put` (Phases 3 and 4).
 
 ### Context Working Set
 
 - **Read / Reference Only:**
   - `core/src/main/kotlin/gups/core/world/Invariants.kt`
+  - `core/src/main/kotlin/gups/core/world/Persistence.kt` (`ItemEvent`)
   - `persist/src/test/kotlin/gups/persist/PersistenceTest.kt`
 - **Files to Modify / Create:**
   - `core/src/main/kotlin/gups/core/world/Items.kt`
@@ -266,188 +285,180 @@ the item has no `nameOverride`), or `"<name> (<count>)"` otherwise.
   - `script/src/test/kotlin/gups/script/HostTest.kt`
   - `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`
   - `cli/src/test/resources/api.golden.json`
+  - `cli/src/test/resources/docs-golden/api.json`
   - `docs/api/api-1.json`
   - `docs/CHANGELOG.md`
   - `docs/SPEC.md`
 - **Do Not Touch:**
-  - `core/src/main/kotlin/gups/core/world/KernelCommands.kt`
+  - `core/src/main/kotlin/gups/core/world/KernelCommands.kt` (its `moveItem` and `destroy` calls keep compiling, because
+    `count` has a default and the new `Item` return value can be ignored)
 
 ### Specification & Decision Record Changes
 
-Update `docs/SPEC.md` `§4.5`: - In the **Verbs (v0)** table (`Items` row): - Replace `spawn(label, at, index=0,
-count=1)`, `give(actor, label_or_item, count=1)`, `move_item(item, to)`, `destroy(item)`, `split(item, n)` with:
-`spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0,
-count=None)`, `destroy(item, count=None)` - In **Verb semantics** under `Items`: - Update `give`: `"give(actor,
-label_or_item, count=None) spawns count of a label (default 1) or moves count of an item (default the whole stack) into
-the inventory, returns the item view (or list of views when spawning multiple non-stackable items), and fires no
-hooks."` - Update `move_item`: `"move_item(item, to, index=0, count=None) moves the item (or count of a stack, copying
-its attributes, name override, debug flag and decay deadline to the moved stack) and returns the moved item view. Moving
-part of an equipped item or a non-stackable item is an error."` - Update `destroy`: `"destroy(item, count=None) removes
-the item and everything inside it, or removes count from a stack when count is less than the stack's count."` - Remove
-the `split` bullet and remove `"split,"` from the paragraph `"Verbs without a player command..."`.
+Update `docs/SPEC.md` `§4.5`:
+
+- In the **Verbs (v0)** table, `Items` row, replace `give(actor, label_or_item, count=1)`, `move_item(item, to)`,
+  `destroy(item)`, and `split(item, n)` with `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0,
+  count=None)`, and `destroy(item, count=None)`. Keep `spawn(label, at, index=0, count=1)` as it is.
+- In **Verb semantics**, under `Items`:
+  - `give`: "`give(actor, label_or_item, count=None)` spawns `count` of a label (default 1), or moves `count` of an item
+    (default the whole stack), into the actor's inventory. It returns the item view, or a list of views when it spawns
+    several non-stackable items, and fires no hooks."
+  - `move_item`: "`move_item(item, to, index=0, count=None)` moves the item, or `count` of a stack, and returns the
+    moved item's view. A moved part is a new item with the stack's attributes, name override, debug flag and decay
+    deadline, and doesn't fire `on_spawn`. Moving part of an equipped or non-stackable item is an error."
+  - `destroy`: "`destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the
+    stack's count, removes that many from the stack."
+  - Remove the `split` bullet, and remove `split,` from the paragraph that starts "Verbs without a player command...".
 
 ### Implementation Blueprint
 
-- **Signatures & Types:**
-  - In `core/src/main/kotlin/gups/core/world/Items.kt`:
+- **Signatures (`Items.kt`):**
 
-    ```kotlin
-    /**
-     * The `move_item` verb: moves [count] of [item] (by default the whole stack) to [to] and
-     * returns the [Item] now at [to]. When [count] is less than [Item.count], [item] must be a
-     * stackable, unequipped item; [count] is subtracted from [item] and placed at [to] as a new
-     * [Item] with the same custom attributes, name override, debug flag, and decay deadline.
-    */
-    fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item
-    ```
+  ```kotlin
+  /**
+   * The `move_item` verb, and the single writer of [Item.location]: moves [count] of [item] (by
+   * default the whole stack) to [to] and returns the item now at [to]. Moving part of a stack
+   * leaves the rest in place and creates a new item with the same attributes, name override,
+   * debug flag and decay deadline.
+   */
+  fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item
 
-    and
-
-    ```kotlin
-    /**
-     * The `destroy` verb: removes [count] of [item] (by default the whole stack). When [count]
-     * equals [Item.count], removes [item] and everything inside it; when [count] is smaller,
-     * subtracts [count] from [Item.count] and updates encumbrance.
-    */
-    fun World.destroy(item: Item, count: Int = item.count)
-    ```
+  /**
+   * The `destroy` verb: removes [item] and everything inside it, or only [count] of a stack when
+   * [count] is less than its count.
+   */
+  fun World.destroy(item: Item, count: Int = item.count)
+  ```
 - **Algorithmic Steps & Invariants:**
   1. **`World.moveItem(item, to, count)`:**
-     - Validate `require(item.id in entities) { "$item is not in the world" }` and `require(count in 1..item.count) {
-       "move_item: count must be between 1 and ${item.count}, got $count" }`.
+     - `require(item.id in entities) { "$item is not in the world" }`
+     - `require(count in 1..item.count) { "move_item: count must be between 1 and ${item.count}, got $count" }`
+     - If `count == item.count`: run the existing whole-item logic unchanged, then `return item`.
      - If `count < item.count`:
        - `require(item.proto.stackable) { "${item.name} is not stackable" }`
-       - `require(item.location !is ItemLocation.Equipped) { "move_item: can't move part of an equipped item" }`
+       - `require(item.location !is ItemLocation.Equipped && to !is ItemLocation.Equipped) { "move_item: can't move part
+         of a stack to or from equipment" }`
        - `checkTarget(item, to)`
-       - Create `val part = Item(allocateId(), item.proto, to, count)` with `part.debug = item.debug`,
-         `part.nameOverride = item.nameOverride`, `part.decayAt = item.decayAt`,
-         `part.customAttributes.putAll(item.customAttributes)`, and `part.dirty = true`.
-       - Decrement `item.count -= count` and set `item.dirty = true`.
-       - `register(part)` and `index(part, to)`.
-       - Custody audit trail: let `val from = item.location`, `val before = custodian(item) as? Player`, `val after =
-         custodian(part) as? Player`. If `(before != null || after != null) && !part.debug`:
-         - Record `ItemEvent(part.id, pulse, from, to, "move")`.
-         - If `before != null && after != null && before !== after`, call `requestImmediate("transfer")`.
-       - Update encumbrance: `holderOf(from)?.let { updateEncumbrance(it) }` and `custodian(part)?.let {
-         updateEncumbrance(it) }`.
-       - Return `part`.
-     - If `count == item.count`:
-       - Run the existing whole-item move logic and return `item`.
+       - `val from = item.location` and `val before = custodian(item) as? Player`.
+       - Create `val part = Item(allocateId(), item.proto, to, count)`, and copy `debug`, `nameOverride`, `decayAt` and
+         `customAttributes` (`part.customAttributes.putAll(item.customAttributes)`). Do not copy timers. Set `part.dirty
+         = true`.
+       - `item.count -= count` and `item.dirty = true`.
+       - `register(part)`, then `index(part, to)`.
+       - `val after = custodian(part) as? Player`.
+       - Audit trail. The part is a new id, so it always needs an origin record when a player is involved: if `(before
+         != null || after != null) && !part.debug`, record `itemEvents += ItemEvent(part.id, pulse, from, to, "split")`.
+         If `before != null && after != null && before !== after`, call `requestImmediate("transfer")`.
+       - `holderOf(from)?.let { updateEncumbrance(it) }` and `custodian(part)?.let { updateEncumbrance(it) }`.
+       - Do not call `invokeOn(..., HookName.ON_SPAWN, ...)`.
+       - `return part`.
   2. **`World.destroy(item, count)`:**
-     - Validate `require(item.id in entities) { "$item is not in the world" }` and `require(count in 1..item.count) {
-       "destroy: count must be between 1 and ${item.count}, got $count" }`.
+     - `require(item.id in entities) { "$item is not in the world" }`
+     - `require(count in 1..item.count) { "destroy: count must be between 1 and ${item.count}, got $count" }`
+     - If `count == item.count`: run the existing full-removal logic unchanged.
      - If `count < item.count`:
-       - `item.count -= count`
-       - `item.dirty = true`
-       - `custodian(item)?.let { updateEncumbrance(it) }`
-       - Return.
-     - If `count == item.count`: run the existing full-item removal logic.
-  3. **In `script/src/main/kotlin/gups/script/Ctx.kt`:**
-     - Delete `fun split(...)` and the `import gups.core.world.splitItem`.
-     - Update `give(actor, labelOrItem, count, thread)`:
-       - Change `count` parameter `defaultValue = "None"` and doc to `"Number of items to spawn or move; defaults to 1
-         for a label or the whole stack for an item."`.
-       - When `labelOrItem is ItemView`:
-         - `val i = itemArg(labelOrItem, "give(item)")`
-         - `val n = if (isNone(count)) i.count else int(count, "give(count)")`
-         - `if (n !in 1..i.count) fail("give(count): must be between 1 and ${i.count}")`
-         - `return@verb v(world.moveItem(i, to, n))`
-       - When `labelOrItem` is a label string:
-         - `val n = if (isNone(count)) 1 else int(count, "give(count)")` (rest unchanged).
-     - Update `moveItem(item, to, index, count, thread)`:
-       - Add `Param(name = "count", named = true, defaultValue = "None", doc = "Number of items from the stack to move,
-         or None for the whole stack.")`.
-       - `val i = itemArg(item, "move_item(item)")`
-       - `val n = if (isNone(count)) i.count else int(count, "move_item(count)")`
-       - `if (n !in 1..i.count) fail("move_item(count): must be between 1 and ${i.count}")`
-       - Return `v(world.moveItem(i, location(to, index, "move_item(to)", thread), n))`.
-     - Update `destroy(item, count)`:
-       - Add `Param(name = "count", named = true, defaultValue = "None", doc = "Number of items from the stack to
-         remove, or None for the whole stack.")`.
-       - `val i = itemArg(item, "destroy(item)")`
-       - `val n = if (isNone(count)) i.count else int(count, "destroy(count)")`
-       - `if (n !in 1..i.count) fail("destroy(count): must be between 1 and ${i.count}")`
-       - Call `world.destroy(i, n)` and return `Starlark.NONE`.
+       - `val holder = custodian(item)`
+       - If `holder is Player && !item.debug`, record `itemEvents += ItemEvent(item.id, pulse, item.location,
+         item.location, "reduce")`, so every change to a player-held stack leaves a row.
+       - `item.count -= count`, `item.dirty = true`, and `holder?.let { updateEncumbrance(it) }`.
+  3. **`Verbs.kt`:** delete `World.splitItem` and its KDoc.
+  4. **`Ctx.kt`:**
+     - Delete `fun split(...)`, its `@StarlarkMethod`, and `import gups.core.world.splitItem`.
+     - **`give`:** change the `count` param to `defaultValue = "None"`, with the doc "Number of items to spawn or move;
+       defaults to 1 for a label, or the whole stack for an item."
+       - Item view: `val i = itemArg(labelOrItem, "give(item)")`, `val n = if (isNone(count)) i.count else int(count,
+         "give(count)")`, `if (n !in 1..i.count) fail("give(count): must be between 1 and ${i.count}")`, then
+         `return@verb v(world.moveItem(i, to, n))`.
+       - Label: `val n = if (isNone(count)) 1 else int(count, "give(count)")`; the rest is unchanged.
+     - **`move_item`:** add `Param(name = "count", named = true, defaultValue = "None", doc = "Number of items of the
+       stack to move, or None for the whole stack.")` and a `count: Any` parameter before `thread`. Keep the existing
+       `trackIndex("move_item", index)` call. Then `val i = itemArg(item, "move_item(item)")`, `val n = if
+       (isNone(count)) i.count else int(count, "move_item(count)")`, `if (n !in 1..i.count) fail("move_item(count): must
+       be between 1 and ${i.count}")`, and `v(world.moveItem(i, location(to, index, "move_item(to)", thread), n))`.
+       Update the method doc to say it returns the moved item.
+     - **`destroy`:** add the same kind of `count` param ("Number of items of the stack to remove, or None for the whole
+       stack."). Then `val i = itemArg(item, "destroy(item)")`, `val n = if (isNone(count)) i.count else int(count,
+       "destroy(count)")`, `if (n !in 1..i.count) fail("destroy(count): must be between 1 and ${i.count}")`,
+       `world.destroy(i, n)`, and return `Starlark.NONE`.
 
 ### Test & Documentation Requirements
 
-- In `script/src/test/kotlin/gups/script/HostTest.kt`:
-  - Update `item, door and query verbs` (line 413) to use `ctx.move_item(coins, ctx.room, index = 0, count = 2)` instead
-    of `ctx.split`, and also test `ctx.give(actor, item, count = ...)` and `ctx.destroy(item, count = ...)`.
-  - Add error tests verifying out-of-range `count` (`0` or `> item.count`) on `move_item`, `give`, and `destroy` raises
-    a script error.
-- Regenerate API golden and baseline files (`./gradlew :cli:test -Dgups.updateGolden=true` and `gups docs
-  --update-baseline`) and update `docs/CHANGELOG.md`.
+- In `script/src/test/kotlin/gups/script/HostTest.kt`, in `item, door and query verbs` (line 404):
+  - Replace the `ctx.split` call with `ctx.move_item(coins, ctx.room, index = 0, count = 2)`, and assert that the
+    returned view has count 2 and that the source's count dropped by 2.
+  - Add `ctx.give(actor, coins, count = 1)` and `ctx.destroy(coins, count = 1)`, and assert the counts.
+  - Add error tests: `count = 0` and `count = coins.count + 1` on `move_item`, `give` and `destroy` each raise a script
+    error.
+- In `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`:
+  - `moveItem(stack, Carried(p), 2)` from the ground records one `"split"` event for the part, and none for the source.
+  - `destroy(stack, 2)` on a carried stack records one `"reduce"` event and updates encumbrance.
+  - Moving part of a non-stackable or equipped item throws `IllegalArgumentException`.
+- Regenerate the golden and baseline files (Standing Rule 5). In `docs/CHANGELOG.md`, record the removal of `ctx.split`,
+  the new `count` parameters, `move_item` returning the moved view, and that a moved part fires no `on_spawn`.
 
 ### Exit Conditions
 
 - [] `./gradlew markdownFormat && ./gradlew check` (with `BypassSandbox: true`) exits `0` with zero warnings.
-- [] `grep -rn "splitItem" */src/` returns `0` matches.
+- [] `grep -rn "splitItem" --include='*.kt' .` returns `0` matches, and `grep -rn '"split"' cli/src/test/resources
+  docs/api` returns `0` matches.
 - [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns `0` matches.
 
 ---
 
-## Phase 3: Item Specifier Parsing, Optional Prepositions, and `get` / `drop` with Quantities and `all`
+## Phase 3: Item Specifiers, Optional `from`, and `get` / `drop` with Quantities and `all`
 
 ### Objective & Scope
 
 - **In Scope:**
-  - Implement shared item target parsing (`ItemSpec`) and pool matching in
-    `core/src/main/kotlin/gups/core/world/KernelCommands.kt` supporting:
-    - `<keyword>` and `<ordinal>.<keyword>`
-    - `<count> <keyword>` and `<count> <ordinal>.<keyword>`
-    - `all` and `all <keyword>` (with `"no_all" in item.tags` excluded for bare `all`).
-  - Support optional `from` in `get <what> [[from] <container>]` with ground-item vs. container disambiguation.
-  - Refactor `GetAction` and `planDrop` (`DropAction`) to resolve items at tick-lane execution time (`validate` /
-    `resolve`), collect across multiple stacks/items, cap to available and carry limits, run one `before_*` / `moveItem`
-    / `on_*` / `stack` cycle per moved stack, and emit `KernelMsg.CANT_CARRY` when capped by carry limit.
-  - Add any needed empty-pool messages (`GET_NOTHING`, `GET_EMPTY`, `DROP_NOTHING`) to `KernelMessages.kt` and
-    `docs/SPEC.md` (`§4.18`).
+  - Add a shared item-specifier parser (`ItemSpec`, `parseItemSpec`) and pool matcher (`matchItems`) to
+    `core/src/main/kotlin/gups/core/world/KernelCommands.kt`.
+  - Make `from` optional in `get <what> [[from] <container>]`, with the container-versus-ground rule below.
+  - Rewrite `GetAction` and the drop action so that they resolve items when they run, collect across several stacks, cap
+    counts, and run one hook / move / message / stack cycle per source stack.
+  - Update `scavenge` in `Behaviors.kt` for the new `GetAction` constructor.
 - **Out of Scope:**
-  - `give` and `put` commands (Phase 4).
+  - `give` and `put` (Phase 4).
+  - New message IDs. There are none.
 
 ### Context Working Set
 
 - **Read / Reference Only:**
   - `core/src/main/kotlin/gups/core/world/Items.kt`
-  - `core/src/main/kotlin/gups/core/world/Messages.kt`
-- **Files to Modify / Create:**
+  - `core/src/main/kotlin/gups/core/world/Actions.kt` (the action lifecycle: `validate`, `veto`, `resolve`)
   - `core/src/main/kotlin/gups/core/world/KernelMessages.kt`
+- **Files to Modify / Create:**
   - `core/src/main/kotlin/gups/core/world/KernelCommands.kt`
+  - `core/src/main/kotlin/gups/core/world/Behaviors.kt`
   - `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`
-  - `cli/src/test/resources/api.golden.json`
-  - `docs/api/api-1.json`
   - `docs/CHANGELOG.md`
   - `docs/SPEC.md`
 - **Do Not Touch:**
   - `script/src/main/kotlin/gups/script/Ctx.kt`
+  - `core/src/main/kotlin/gups/core/world/KernelMessages.kt`
 
 ### Specification & Decision Record Changes
 
-Update `docs/SPEC.md`: - **`§4.9` (`Item and combat command details`):** - Document the `<what>` syntax shared by `get`,
-`drop`, `give`, and `put`: `<keyword>`, `<ordinal>.<keyword>`, `<count> <keyword>`, `<count> <ordinal>.<keyword>`,
-`all`, and `all <keyword>`. - Document that `from` in `get <what> [[from] <container>]` is optional, that bare `all`
-skips items tagged `no_all` (including corpses and keyring-only keys), and that `<count>` caps to what is available and
-what the actor can carry (sending `"You can't carry that much."` when capped by `carry_limit`), evaluating `before_*`,
-`moveItem`, `on_*`, and stack merging once per moved stack. - **`§4.18` (Engine Messages):** If any new message IDs are
-added to `KernelMsg` (or if existing `DONT_SEE` / `NOT_CARRYING` are used), keep `§4.18` and the API files in sync.
-*(Recommendation: reuse existing `KernelMsg.DONT_SEE` when `get` finds nothing on the ground or in a container, and
-`KernelMsg.NOT_CARRYING` / `KernelMsg.INVENTORY_EMPTY` when `drop` finds nothing in inventory, so no new message IDs are
-needed unless helpful!)*
+Update `docs/SPEC.md` `§4.9` ("Item and combat command details"):
+
+- Document the `<what>` syntax that `get`, `drop`, `give` and `put` share: `<keyword>`, `<ordinal>.<keyword>`, `<count>
+  <keyword>`, `<count> <ordinal>.<keyword>`, `all`, and `all <keyword>`. A keyword may be a phrase.
+- Document these behaviors:
+  - `from` in `get <what> [[from] <container>]` is optional.
+  - `get all <container>` loots the container.
+  - Bare `all` skips items tagged `no_all` (such as corpses) and keyring-only keys.
+  - A count is capped to what is there and to what the actor can carry, and the actor is told "You can't carry that
+    much." when the carry limit capped it.
+  - Each source stack runs `before_get` / `before_drop`, the move, and `on_get` / `on_drop` once.
 
 ### Implementation Blueprint
 
-- **Signatures & Types (`KernelCommands.kt`):**
+- **Types and helpers (`KernelCommands.kt`, internal, top level):**
 
   ```kotlin
   /**
-   * Parsed `<what>` item specifier for `get`, `drop`, `give`, and `put`.
-   *
-   * - [all] is true for `all` and `all <keyword>` ([keyword] is null for bare `all`).
-   * - [count] is the explicit requested unit count (`>= 1`), or null when none was given (meaning
-   *   one matched [Item] entity, or all matching entities when [all] is true).
-   * - [ordinal] is the 1-based match index (`2.sword` -> 2, default 1).
-   * - [keyword] is the target keyword phrase, or null for bare `all`.
+   * A parsed `<what>`: [all] for `all` and `all <keyword>`, [count] for an explicit unit count,
+   * [ordinal] for `2.sword` (default 1), and [keyword] (null only for bare `all`).
    */
   internal data class ItemSpec(
     val all: Boolean,
@@ -455,142 +466,149 @@ needed unless helpful!)*
     val ordinal: Int,
     val keyword: String?,
   )
+
+  /** True if bare `all` may pick [this] up: not tagged `no_all` and not a keyring-only key. */
+  internal val Item.inBareAll: Boolean
+    get() = "no_all" !in tags && !proto.isKeyOnly
   ```
 - **Algorithmic Steps & Invariants:**
-  1. **Parsing `ItemSpec` (`parseItemSpec(raw: String): ItemSpec?`):**
-     - Trim `raw`. If empty, return `null`.
-     - If `raw.equals("all", ignoreCase = true)`, return `ItemSpec(all = true, count = null, ordinal = 1, keyword =
+  1. **`parseItemSpec(raw: String): ItemSpec?`:**
+     - `val t = raw.trim()`. If `t` is empty, return `null`.
+     - If `t.equals("all", ignoreCase = true)`, return `ItemSpec(all = true, count = null, ordinal = 1, keyword =
        null)`.
-     - Split first token `first` and remainder `rest = splitFirst(raw)`:
-       - If `first.equals("all", ignoreCase = true)` and `rest.isNotEmpty()`:
-         - Return `ItemSpec(all = true, count = null, ordinal = 1, keyword = rest.lowercase())`.
-       - If `first.toIntOrNull()` is an integer `n`:
-         - If `n < 1` or `rest.isEmpty()`, return `null` (invalid count syntax).
-         - Parse `(ord, word) = ordinal(rest)`. If `word.isEmpty()`, return `null`.
-         - Return `ItemSpec(all = false, count = n, ordinal = ord, keyword = word)`.
-       - Otherwise:
-         - Parse `(ord, word) = ordinal(raw)`. If `word.isEmpty()` or `ord < 1`, return `null`.
-         - Return `ItemSpec(all = false, count = null, ordinal = ord, keyword = word)`.
-  2. **Matching Candidates (`matchItems(pool: List<Item>, spec: ItemSpec, exclude: Item? = null): List<Pair<Item,
-     Int>>`):**
-     - Filter `pool` by `it !== exclude`:
-       - If `spec.all && spec.keyword == null`: keep `it` where `"no_all" !in it.tags`.
-       - Else: keep `it` where `it.matches(spec.keyword!!)`.
-     - Apply `drop(spec.ordinal - 1)`.
-     - If `spec.all`: return each matched item paired with `it.count`.
-     - If `spec.count == null`: take the first matched item (if any) paired with `it.count` (moves the single `Item` or
-       whole stack).
-     - If `spec.count != null`: iterate through matched items accumulating `take = minOf(remaining, it.count)` until
-       `remaining == 0` or the list ends, returning `List<Pair<Item, Int>>`.
-  3. **Parsing `get <what> [[from] <container>]` (`planGet` and `GetAction`):**
-     - In `planGet(c: CommandCall)`:
-       - If `c.args.isBlank()`, tell `KernelMsg.GET_WHAT` and return `null`.
-       - Update `get` help string usage to `"Usage: get <item|count item|all [item]> [[from] <container>]"`.
-       - Pass `c.args.trim()` to `GetAction(rawArgs = c.args.trim())` so container and item resolution happen at
-         execution time (`validate` / `resolve`)! (Keep the secondary constructor `GetAction(what: String, container:
-         Item?, fixed: Item? = null)` for `scavenge()` in `Behaviors.kt`, which passes `fixed = item`).
-     - How `GetAction` parses `rawArgs` against `actor` and `room`:
-       - Check if `rawArgs` contains `\s+from\s+` (case-insensitive):
-         - Split into `whatStr` and `fromStr`. Both must be non-empty (`parseItemSpec(whatStr)` non-null), else return
-           `w.msg(KernelMsg.GET_WHAT)`. `container` is `w.findItem(actor, fromStr, inventory = true, ground = true) ?:
-           return w.msg(KernelMsg.DONT_SEE)`.
-       - If `rawArgs` has no `\s+from\s+`:
-         - Can `rawArgs` have a trailing `<container>` word without `from`?
-         - Split off the last whitespace-delimited token: `beforeLast` and `lastWord`.
-         - If `beforeLast.isNotEmpty()`:
-           - Check if `lastWord` matches a container in inventory or on the ground (`val candidateBox =
-             w.findItem(actor, lastWord, inventory = true, ground = true)?.takeIf { it.container != null }`) AND
-             `parseItemSpec(beforeLast)` is non-null.
-           - When does ground item win over `candidateBox`?
-             - If `beforeLast.equals("all", ignoreCase = true)` and `candidateBox != null`: `"get all chest"` / `"get
-               all corpse"` means `what = all`, `container = candidateBox`!
-             - Otherwise, if `candidateBox != null`: check if `parseItemSpec(rawArgs)` matches any item directly on the
-               ground in `room.items`. If it does NOT match any ground item, treat `candidateBox` as the container and
-               `parseItemSpec(beforeLast)` as `spec`!
-         - If not resolved as `<what> <container>`, parse `spec = parseItemSpec(rawArgs) ?: return
-           w.msg(KernelMsg.GET_WHAT)` with `container = null`.
-  4. **Validating and Resolving `GetAction`:**
-     - In `validate(w, actor)`:
-       - Determine `sourcePool`: if `fixed != null`, `listOf(fixed)` (if in room and present); else if `container ==
-         null`, `room.items`; else validate `container` is present, has `container != null` (`NOT_CONTAINER`), is `OPEN`
-         (`PUT_CLOSED`), and reachable if on ground (`w.reach(actor, container)`), then `container.contents`.
-       - Compute `matches = matchItems(sourcePool, spec)`. If `matches.isEmpty()`, return `w.msg(KernelMsg.DONT_SEE)`.
-       - Check reach and carry limit across `matches`:
-         - If none of the matched items can be reached (when `Feature.TRACK in w.features`), return
-           `w.msg(KernelMsg.CANT_REACH, "item" to matches.first().first.name)`.
-         - If the first reachable item cannot fit even 1 unit (`unitWeight(item) > remainingCarry(w, actor)` where
-           `remainingCarry = w.rules.carryLimit(RulesContext(w, actor, item = item)) - actor.carriedWeight()`), and no
-           subsequent matched item in an `all` command can fit 1 unit, return `w.msg(KernelMsg.CANT_CARRY)`.
-     - In `resolve(w, actor)`:
-       - Re-evaluate `matches` (or iterate the matched items still in the source location).
-       - Track `var maxLag = 0` and `var cappedByWeight = false`.
-       - For each `(item, wantedCount)` in `matches`:
-         - Verify `item` is still at the expected source location (`InRoom` or `Contained(container.id)`).
-         - If `Feature.TRACK in w.features`:
-           - Compute `band` (for `container ?: item`). Ask `w.rules.getLag(RulesContext(w, actor, item = item, band =
-             band), band)`.
-           - If `lag == null`: tell `actor` `w.msg(KernelMsg.CANT_REACH, "item" to item.name)` and continue.
-         - Compute how many units of `item` fit in `actor`'s remaining carry limit:
-           - `val limit = w.rules.carryLimit(RulesContext(w, actor, item = item))`
-           - `val remWeight = limit - actor.carriedWeight()`
-           - For a stackable item (`item.proto.stackable`, which never has container contents):
-             - `val fitCount = if (item.proto.weight <= 0) wantedCount else (remWeight /
-               item.proto.weight).coerceAtLeast(0)`
-             - If `fitCount <= 0`: `cappedByWeight = true`; continue (or break if not `spec.all`).
-             - If `fitCount < wantedCount`: `cappedByWeight = true`.
-             - `val actualCount = minOf(wantedCount, fitCount)`
-           - For a non-stackable item (`actualCount = 1`):
-             - If `item.weight > remWeight`: `cappedByWeight = true`; continue.
-         - Check `val veto = w.dispatch(HookName.BEFORE_GET, item, actor.room, HookContext(actor = actor, item = item))`
-           - If `veto != null`: `w.send(actor, veto)`; continue.
-         - If `Feature.TRACK in w.features`: `maxLag = maxOf(maxLag, itemLag)`.
-         - Move `val moved = w.moveItem(item, ItemLocation.Carried(actor.id), actualCount)`.
-         - Format `val desc = moved.describe()` (before `w.stack(moved)`!).
-         - Send `GET_SELF` / `GET_SELF_FROM` and `GET_ROOM` using `"item" to desc`.
-         - Dispatch `ON_GET` with `moved`.
-         - If `moved.id in w.entities`, call `w.stack(moved)`.
-       - After the loop, if `cappedByWeight` is true, `w.tell(actor, KernelMsg.CANT_CARRY)`.
-       - Return `maxLag`.
-  5. **Refactoring `planDrop` (`DropAction`):**
-     - Update `drop` help string usage to `"Usage: drop <item|count item|all [item]>"`.
-     - In `planDrop(c: CommandCall)`: parse `val spec = parseItemSpec(c.args) ?: return null.also {
-       c.world.tell(c.actor, KernelMsg.NOT_CARRYING) }` (or if `c.args.isBlank()`, tell `"Drop what?"` or `NOT_CARRYING`
-       — check existing tests: if any test calls `drop` with an unknown item, it expects `NOT_CARRYING`).
-     - In `DropAction.validate(w, actor)`:
-       - `val matches = matchItems(actor.inventory, spec)`
-       - If `matches.isEmpty()`, return `w.msg(KernelMsg.NOT_CARRYING)`.
-       - Return `null`.
-     - In `DropAction.resolve(w, actor)`:
-       - For each `(item, count)` in `matchItems(actor.inventory, spec)`:
-         - If `item.location != ItemLocation.Carried(actor.id)` continue.
-         - Check `BEFORE_DROP` on `item`: if vetoed (`veto != null`), `w.send(actor, veto)` and continue.
-         - `val moved = w.moveItem(item, ItemLocation.InRoom(actor.room.id, actor.trackIndex), count)`
-         - `val desc = moved.describe()`
-         - Tell `DROP_SELF` and `DROP_ROOM` with `"item" to desc`.
-         - Dispatch `ON_DROP` with `moved`.
-         - If `moved.id in w.entities`, call `w.stack(moved)`.
-       - Return `0`.
+     - `val (first, rest) = splitFirst(t)`.
+     - If `first.equals("all", ignoreCase = true)`, return `ItemSpec(true, null, 1, rest.lowercase())`. (`rest` is not
+       empty here.)
+     - If `first.toIntOrNull()` is an `n`: if `n < 1` or `rest.isEmpty()`, return `null`. Otherwise `val (ord, word) =
+       ordinal(rest)`; if `ord < 1` or `word.isEmpty()`, return `null`; else return `ItemSpec(false, n, ord, word)`.
+     - Otherwise `val (ord, word) = ordinal(t)`; if `ord < 1` or `word.isEmpty()`, return `null`; else return
+       `ItemSpec(false, null, ord, word)`.
+  2. **`matchItems(pool: List<Item>, spec: ItemSpec, exclude: Item? = null): List<Pair<Item, Int>>`:** returns `(stack,
+     units wanted from it)`.
+     - `val hits = pool.filter { it !== exclude && if (spec.keyword == null) it.inBareAll else it.matches(spec.keyword)
+       }.drop(spec.ordinal - 1)`.
+     - If `spec.all`: return `hits.map { it to it.count }`.
+     - If `spec.count == null`: return `hits.take(1).map { it to it.count }` (one item, or one whole stack).
+     - Otherwise walk `hits`, taking `minOf(remaining, it.count)` from each until `remaining == 0`. This caps the count
+       to what is there.
+  3. **`planGet(c)`:**
+     - If `c.args.isBlank()`, tell `KernelMsg.GET_WHAT` and return `null`.
+     - Change the help usage to `"Usage: get <item|count item|all [item]> [[from] <container>]"`.
+     - Return `GetAction(c.args.trim())`.
+  4. **`GetAction` constructor:** `internal class GetAction(private val args: String, private val fixed: Item? = null)`.
+     - `scavenge` in `Behaviors.kt` (line 241) becomes `GetAction("", fixed = item)`. When `fixed != null`, `args` is
+       ignored: the source pool is `fixed` alone (if it is still `InRoom` and present), the wanted count is
+       `fixed.count`, and there is no container.
+     - Delete the existing `veto()` override. `before_get` now runs inside `resolve`, per stack; keeping `veto()` would
+       fire it twice.
+     - Private state, set in `validate` and used by `resolve`: `spec: ItemSpec?`, `container: Item?`.
+  5. **Resolving `args` into `spec` and `container` (start of `validate`, when `fixed == null`):**
+     - **Explicit `from`:** if `Regex("\\s+from\\s+", RegexOption.IGNORE_CASE).findAll(args).lastOrNull()` matches,
+       `whatStr` is the text before it and `fromStr` the text after.
+       - `spec = parseItemSpec(whatStr) ?: return w.msg(KernelMsg.GET_WHAT)`
+       - `container = w.findItem(actor, fromStr, inventory = true, ground = true) ?: return w.msg(KernelMsg.DONT_SEE)`
+     - **No `from`, one word:** `spec = parseItemSpec(args) ?: return w.msg(KernelMsg.GET_WHAT)` and `container = null`.
+     - **No `from`, two or more words:** split off the last word, giving `beforeLast` and `lastWord`. Let `box =
+       w.findItem(actor, lastWord, inventory = true, ground = true)?.takeIf { it.container != null }` and `boxSpec =
+       parseItemSpec(beforeLast)`.
+       - If `box == null` or `boxSpec == null`, the whole of `args` is the item: `spec = parseItemSpec(args) ?: return
+         w.msg(KernelMsg.GET_WHAT)` and `container = null`.
+       - If `boxSpec.all` is true, the container wins (`get all chest`, `get all coin chest`).
+       - Otherwise, the container wins unless both of these hold: the box finds nothing (it is closed, or
+         `matchItems(box.contents, boxSpec)` is empty), and `parseItemSpec(args)` finds something on the ground
+         (`matchItems(w.roomOf(actor).items, it)` is not empty). In that case the whole phrase is a ground item.
+       - Worked examples, in a room with an open chest holding a coin, and a coin on the ground:
+         - `get coin chest`: the chest holds a coin, so the coin comes from the chest.
+         - `get gold coin`: `coin` is not a container, so the coin comes from the ground.
+         - `get coin chest` with the chest closed: "coin chest" matches nothing on the ground, so the container wins and
+           `validate` reports `PUT_CLOSED`.
+  6. **Rest of `GetAction.validate(w, actor)`:**
+     - Source pool: `listOf(fixed)` (see step 4); `room.items` when `container == null`; otherwise check the container:
+       - present (`DONT_SEE`);
+       - is a container (`NOT_CONTAINER`);
+       - is `OPEN` (`PUT_CLOSED`);
+       - reachable when on the ground (`w.reach(actor, container)?.let { return it }`).
+
+     Then use `container.contents`. - `val matches = matchItems(pool, spec)`. If it is empty, return
+     `w.msg(KernelMsg.DONT_SEE)`. - When `Feature.TRACK in w.features` and no matched item is in reach (`getLag` returns
+     null for each), return `w.msg(KernelMsg.CANT_REACH, "item" to matches.first().first.name)`. - `val carriedSource =
+     container != null && w.custodian(container) === actor`. Unless `carriedSource` is true, if no matched item can fit
+     even 1 unit within `carry_limit`, return `w.msg(KernelMsg.CANT_CARRY)`. A unit weighs `item.proto.weight` for a
+     stackable item, or `item.weight` otherwise. - Return `null`.
+
+  7. **`GetAction.resolve(w, actor)`:**
+
+     - Recompute `matches` from the same pool. `var maxLag = 0` and `var capped = false`.
+     - For each `(item, wanted)`:
+       - Skip the item if it is no longer at the source (`InRoom` in the actor's room, or `Contained(container.id)`).
+       - With the track: compute `band` from `container ?: item`. `val lag = w.rules.getLag(RulesContext(w, actor, item
+         = item, band = band), band)`. If `lag == null`, tell `CANT_REACH` with `"item" to item.name` and continue.
+       - `val veto = w.dispatch(HookName.BEFORE_GET, item, actor.room, HookContext(actor = actor, item = item))`. If it
+         is not null, `w.send(actor, veto)` and continue.
+       - A hook may have changed or removed the stack. Skip if `item.id !in w.entities`; otherwise `var n =
+         minOf(wanted, item.count)`.
+       - Unless `carriedSource`, cap to the carry limit: `val free = w.rules.carryLimit(RulesContext(w, actor, item =
+         item)) - actor.carriedWeight()`.
+         - Stackable: `val fit = if (item.proto.weight <= 0) n else (free / item.proto.weight).coerceAtLeast(0)`.
+         - Otherwise: `val fit = if (item.weight <= free) 1 else 0`.
+         - If `fit < n`, set `capped = true` and `n = fit`. If `n <= 0`, continue. Always continue, never break: a later
+           match may be lighter.
+       - `maxLag = maxOf(maxLag, lag ?: 0)`.
+       - `val moved = w.moveItem(item, ItemLocation.Carried(actor.id), n)`, then `val desc = moved.describe()`.
+       - Send `GET_SELF_FROM` (with a container) or `GET_SELF`, and `GET_ROOM`, with `"item" to desc`.
+       - Dispatch `ON_GET` with `moved`. If `moved.id in w.entities`, call `w.stack(moved)`.
+     - If `capped`, tell `KernelMsg.CANT_CARRY`. Return `maxLag`.
+  8. **Drop (`planDrop` and its action):**
+     - Change the help usage to `"Usage: drop <item|count item|all [item]>"`.
+     - `planDrop`: `val spec = parseItemSpec(c.args) ?: return null.also { c.world.tell(c.actor, KernelMsg.NOT_CARRYING)
+       }`. A blank argument gives `null` and therefore `NOT_CARRYING`, as today.
+     - Delete the existing `veto()` override.
+     - `validate`: if `matchItems(actor.inventory, spec)` is empty, return `w.msg(KernelMsg.NOT_CARRYING)`; else return
+       `null`.
+     - `resolve`: for each `(item, wanted)` in `matchItems(actor.inventory, spec)`:
+       - Skip if `item.location != ItemLocation.Carried(actor.id)`.
+       - Dispatch `BEFORE_DROP` on `item`; if it vetoes, `w.send(actor, veto)` and continue.
+       - Skip if `item.id !in w.entities`; otherwise `val n = minOf(wanted, item.count)`.
+       - `val moved = w.moveItem(item, ItemLocation.InRoom(actor.room.id, actor.trackIndex), n)` and `val desc =
+         moved.describe()`.
+       - Send `DROP_SELF` and `DROP_ROOM` with `"item" to desc`.
+       - Dispatch `ON_DROP` with `moved`. If `moved.id in w.entities`, call `w.stack(moved)`.
+
+     Then return `0`.
 
 ### Test & Documentation Requirements
 
-- In `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`, add tests covering:
-  - `get 5 coins` and `drop 3 coins` splitting a stack and merging at the destination.
-  - Collecting `<count>` across multiple stacks (e.g., two stacks of coins with different custom attributes, `drop 6
-    coins` drops the first stack of 4 and 2 from the second stack).
-  - Collecting `<count>` across multiple non-stackable items (`get 2 sword`, `drop 2 ring`).
-  - `get 50000 coins` and `drop 50000 coins` when only 10 exist caps to the 10 available.
-  - `get 50000 coins` when the actor can only carry 10 more weight units picks up 10 coins in a single
-    `before_get`/`on_get` check and prints `"You get 10 gold coins."` followed by `"You can't carry that much."`.
-  - `get all`, `get all coin`, `drop all`, `drop all coin`.
-  - `get all` skips corpses and `drop all` skips keyring-only keys (`no_all` tag), while `get all corpse` and `drop all
-    iron` include them.
-  - Optional `from` in `get`: `get coin chest`, `get 5 coins chest`, `get all chest`, and disambiguating `get gold coin`
-    (ground item) vs `get coin chest` (container).
+Add these to `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`. Use `doLine`, which queues one line and runs
+three pulses:
+
+- `get 5 coins` from a ground stack of 10 leaves 5 on the ground and 5 in the inventory, and says "You get 5 gold
+  coins.". `drop 3 coins` then leaves 2 carried and merges 3 into the ground stack (8).
+- Two carried coin stacks that differ in a custom attribute (4 and 5): `drop 6 coins` drops all 4 of the first and 2 of
+  the second, with two `DROP_SELF` lines ("You drop 4 gold coins." and "You drop 2 gold coins.").
+- `get 2 ring` with three rings on the ground picks up two.
+- `get 50000 coins` and `drop 50000 coins` with 10 coins move all 10, with no capped message.
+- `get 50000 coins` when only 10 more weight units fit picks up 10 with one `before_get` and one `on_get`, then says
+  "You get 10 gold coins." followed by "You can't carry that much.".
+- `get all`, `get all coin`, `drop all`, and `drop all coin`.
+- `get all` leaves a corpse on the ground and `drop all` keeps the bare `iron` key, while `get corpse` and `drop all
+  iron` move them.
+- Optional `from` and the container rule:
+  - `get coin chest`, `get 5 coins chest`, `get all chest`, and `get all corpse` take from the container.
+  - `get gold coin` takes from the ground.
+  - `get coin chest` with the chest closed says the chest is closed.
+- `get coin from bag` for a carried bag succeeds even when the actor is exactly at the carry limit.
+- A `before_get` hook that vetoes is called once per stack, not twice.
+- `scavenge` still makes a mob pick up an item.
+
+In `docs/CHANGELOG.md`, record the `<what>` syntax, optional `from`, `get all <container>`, carry capping, and that
+`before_get` / `before_drop` now fire once per source stack.
 
 ### Exit Conditions
 
 - [] `./gradlew markdownFormat && ./gradlew check` (with `BypassSandbox: true`) exits `0` with zero warnings.
 - [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns `0` matches.
+- [] `grep -n "override fun veto" core/src/main/kotlin/gups/core/world/KernelCommands.kt` shows no `veto` for get or
+  drop.
 - [] All new and existing `ItemCommandsTest` cases pass.
 
 ---
@@ -600,22 +618,22 @@ needed unless helpful!)*
 ### Objective & Scope
 
 - **In Scope:**
-  - Refactor `planGive` (`GiveAction`) and `planPut` (`PutAction`) in `KernelCommands.kt` to use `ItemSpec`, resolve
-    items at tick-lane execution time (`validate` / `resolve`), support `<count>` and `all` / `all <keyword>`, and
-    support optional `to` and `in`/`into`.
-  - Cap `give` transfers to the receiver's remaining `carry_limit` (emitting `KernelMsg.GIVE_FULL` when capped) and cap
-    `put` transfers to the container's remaining `capacity` and `maxWeight` (emitting `KernelMsg.PUT_FULL` or
-    `KernelMsg.PUT_WONT_FIT` when capped).
-  - Ensure `put` automatically excludes the target container (`item !== box`) when matching candidates.
-  - Mark `### Quantities and all` in `docs/DESIGN_NEEDED.md` as completed (do not delete the entry).
-  - Add the **M16** row to `docs/SPEC.md` `§7.4` and update `§4.9` and `docs/CHANGELOG.md`.
+  - Rewrite `planGive` and `planPut` and their actions to use `ItemSpec` and `matchItems`, to resolve when they run, and
+    to support `<count>`, `all`, `all <keyword>`, an optional `to`, and an optional `in` / `into`.
+  - Cap `give` to the receiver's remaining `carry_limit` (sending `GIVE_FULL` when capped). Cap `put` to the container's
+    free `capacity` and `max_weight` (sending `PUT_WONT_FIT` or `PUT_FULL` when capped).
+  - `put` never moves the target container itself.
+  - Mark ``### Quantities and `all` `` in `docs/DESIGN_NEEDED.md` as completed, without deleting the entry.
+  - Add the **M16** row to `docs/SPEC.md` `§7.4`, and update `§4.9` and `docs/CHANGELOG.md`.
 - **Out of Scope:**
-  - Deleting the `DESIGN_NEEDED.md` entry (reserved for post-implementation maintainer review).
+  - Deleting the `DESIGN_NEEDED.md` entry, which waits for maintainer review.
+  - Adding `before_give`, `before_put` or `on_put` hooks.
 
 ### Context Working Set
 
 - **Read / Reference Only:**
   - `core/src/main/kotlin/gups/core/world/KernelMessages.kt`
+  - `core/src/main/kotlin/gups/core/world/Items.kt` (`World.stack` merge rules)
 - **Files to Modify / Create:**
   - `core/src/main/kotlin/gups/core/world/KernelCommands.kt`
   - `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`
@@ -628,141 +646,119 @@ needed unless helpful!)*
 
 ### Specification & Decision Record Changes
 
-Update `docs/SPEC.md`: - **`§4.9` (`Item and combat command details`):** - Update the `give` bullet: `- **give <what>
-[to] <actor>:** gives one item, a count, or all matching items from the inventory, capping to what is available and what
-the receiver can carry ("<Target> can't carry that much." when capped).` - Update the `put` bullet: `- **put <what>
-[in|into] <container>:** the container is carried, or on the ground within get_lag reach, and open. Moves one item, a
-count, or all matching items (excluding the container itself), capping to the container's remaining item capacity and
-max_weight.` - **`§7.4` (`Implementation Milestones`):** - Add row: `| **M16** | Item quantities, pluralization, and
-all: item(plural=), stack count display, no_all tag, count on move_item/give/destroy (replacing split), and quantities,
-all, optional prepositions, and carry/capacity capping on get, drop, give, and put (§3.3, §4.2, §4.5, §4.9). |`
+Update `docs/SPEC.md`:
 
-Update `docs/DESIGN_NEEDED.md`: - Mark `### Quantities and all` as `### Quantities and all (COMPLETED — M16)` (keep the
-entry text intact).
+- **`§4.9` ("Item and combat command details"):**
+  - Replace the `give` bullet with: "**give <what> [to] <actor>:** gives one item, a count, or all matching items from
+    the inventory. A count is capped to what is there and to what the receiver can carry ("<Target> can't carry that
+    much." when capped). Fires `on_give` once per stack moved."
+  - Replace the `put` bullet with: "**put <what> [in|into] <container>:** the container is carried, or on the ground
+    within `get_lag` reach, and open. Moves one item, a count, or all matching items (never the container itself). A
+    count is capped to the container's free item capacity and `max_weight`."
+- **`§7.4` (Implementation Milestones):** add the row `| **M16** | Item quantities, pluralization, and all:
+  item(plural=), phrase keywords, stack count display, no_all tag, count on move_item/give/destroy (replacing split),
+  and quantities, all, optional prepositions, and carry/capacity capping on get, drop, give, and put (§3.3, §4.2, §4.5,
+  §4.9). |`
+
+Update `docs/DESIGN_NEEDED.md`: rename the heading ``### Quantities and `all` `` to ``### Quantities and `all`
+(COMPLETED — M16) ``, and keep the entry text intact.
 
 ### Implementation Blueprint
 
 - **Algorithmic Steps & Invariants (`KernelCommands.kt`):**
-  1. **Parsing `give <what> [to] <target>` (`planGive` and `GiveAction`):**
-     - Update `give` help string usage to `"Usage: give <item|count item|all [item]> [to] <target>"`.
-     - If `c.args` contains `\s+to\s+` (case-insensitive): split on the last `\s+to\s+` into `whatStr` and `targetStr`.
-     - Otherwise: split on whitespace; if fewer than 2 words, tell `KernelMsg.GIVE_USAGE` and return `null`; `targetStr`
-       is the last word and `whatStr` is the preceding words joined by `" "`.
-     - Parse `val spec = parseItemSpec(whatStr) ?: return null.also { w.tell(c.actor, KernelMsg.GIVE_USAGE) }`.
-     - Return `GiveAction(spec, targetStr)`.
-  2. **Validating and Resolving `GiveAction`:**
-     - In `validate(w, actor)`:
-       - Find `val target = w.findActor(actor, targetWord) ?: return w.msg(KernelMsg.NOT_HERE)`.
-       - If `target === actor`, return `w.msg(KernelMsg.GIVE_ALREADY)`.
-       - `val matches = matchItems(actor.inventory, spec)`
-       - If `matches.isEmpty()`, return `w.msg(KernelMsg.NOT_CARRYING)`.
-       - Check if `target` can carry at least 1 unit of at least one matched item:
-         - `val first = matches.first().first`
-         - `val unitW = if (first.proto.stackable) first.proto.weight else first.weight`
-         - If `matches.none { (i, _) -> val uw = if (i.proto.stackable) i.proto.weight else i.weight;
-           target.carriedWeight() + uw <= w.rules.carryLimit(RulesContext(w, target, item = i)) }`: return
-           `w.msg(KernelMsg.GIVE_FULL, "target" to target.name)`.
-       - Return `null`.
-     - In `resolve(w, actor)`:
-       - Re-resolve `val target = w.findActor(actor, targetWord) ?: return 0`.
-       - Track `var cappedByWeight = false`.
-       - For each `(item, wantedCount)` in `matchItems(actor.inventory, spec)`:
-         - If `item.location != ItemLocation.Carried(actor.id)` continue.
-         - Compute `remWeight = w.rules.carryLimit(RulesContext(w, target, item = item)) - target.carriedWeight()`.
-         - For stackable `item`:
-           - `val fitCount = if (item.proto.weight <= 0) wantedCount else (remWeight /
-             item.proto.weight).coerceAtLeast(0)`
-           - If `fitCount <= 0`: `cappedByWeight = true`; continue.
-           - If `fitCount < wantedCount`: `cappedByWeight = true`.
-           - `val actualCount = minOf(wantedCount, fitCount)`
-         - For non-stackable `item` (`actualCount = 1`):
-           - If `item.weight > remWeight`: `cappedByWeight = true`; continue.
-         - `val moved = w.moveItem(item, ItemLocation.Carried(target.id), actualCount)`
-         - `val desc = moved.describe()`
-         - Send `GIVE_SELF`, `GIVE_TARGET`, and `GIVE_ROOM` using `"item" to desc`.
-         - Dispatch `ON_GIVE` with `moved` and `target`.
-         - If `moved.id in w.entities`, call `w.stack(moved)`.
-       - If `cappedByWeight`, `w.tell(actor, KernelMsg.GIVE_FULL, "target" to target.name)`.
-       - Return `0`.
-  3. **Parsing `put <what> [in|into] <container>` (`planPut` and `PutAction`):**
-     - Update `put` help string usage to `"Usage: put <item|count item|all [item]> [in|into] <container>"`.
-     - If `c.args` contains `\s+(in|into)\s+` (case-insensitive): split on the last `\s+(in|into)\s+` into `whatStr` and
-       `boxStr`.
-     - Otherwise: split on whitespace; if fewer than 2 words, tell `KernelMsg.PUT_USAGE` and return `null`; `boxStr` is
-       the last word and `whatStr` is the preceding words joined by `" "`.
-     - Parse `val spec = parseItemSpec(whatStr) ?: return null.also { w.tell(c.actor, KernelMsg.PUT_USAGE) }`.
-     - Return `PutAction(spec, boxStr)`.
-  4. **Validating and Resolving `PutAction`:**
-     - Helper `canMergeInContainer(item: Item, box: Item): Boolean`: returns `true` if `item.proto.stackable &&
-       item.timers.isEmpty() && item.nameOverride == null && box.contents.any { it.protoLabel == item.protoLabel &&
-       it.timers.isEmpty() && it.nameOverride == null && it.decayAt == item.decayAt && it.customAttributes ==
-       item.customAttributes }`.
-     - In `validate(w, actor)`:
-       - Find `val box = w.findItem(actor, boxWord, inventory = true, ground = true) ?: return
-         w.msg(KernelMsg.DONT_SEE)`.
-       - Check `val matches = matchItems(actor.inventory, spec, exclude = box)`.
-       - If `matches.isEmpty()`:
-         - If `!spec.all && actor.inventory.any { it === box && (spec.keyword == null || it.matches(spec.keyword)) }`:
-           return `w.msg(KernelMsg.PUT_ITSELF)` (preserves `"put chest in chest"` -> `"You can't put something inside
-           itself."`).
-         - Return `w.msg(KernelMsg.NOT_CARRYING)`.
-       - Validate `box`:
-         - `val state = box.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)`
-         - `if (!w.isPresent(box, w.roomOf(actor))) return w.msg(KernelMsg.DONT_SEE)`
-         - `w.reach(actor, box)?.let { return it }`
-         - `if (state.state != DoorState.OPEN) return w.msg(KernelMsg.PUT_CLOSED, "container" to box.name)`
-       - Check capacity and weight for at least 1 unit of the first matched item:
-         - If `matches.none { (i, _) -> box.contents.size < state.capacity || canMergeInContainer(i, box) }`: return
-           `w.msg(KernelMsg.PUT_FULL, "container" to box.name)`.
-         - If `matches.none { (i, _) -> val uw = if (i.proto.stackable) i.proto.weight else i.weight; box.contents.sumOf
-           { it.weight } + uw <= state.maxWeight }`: return `w.msg(KernelMsg.PUT_WONT_FIT, "item" to
-           matches.first().first.name, "container" to box.name)`.
-       - Return `null`.
-     - In `resolve(w, actor)`:
-       - Find `val box = w.findItem(actor, boxWord, inventory = true, ground = true) ?: return 0`.
-       - `val state = box.container ?: return 0`
-       - Track `var cappedFull = false` and `var cappedWeightItem: String? = null`.
-       - For each `(item, wantedCount)` in `matchItems(actor.inventory, spec, exclude = box)`:
-         - If `item.location != ItemLocation.Carried(actor.id)` continue.
-         - Check item slot capacity: if `box.contents.size >= state.capacity && !canMergeInContainer(item, box)`:
-           `cappedFull = true`; continue.
-         - Check weight capacity: `val remWeight = state.maxWeight - box.contents.sumOf { it.weight }`.
-         - For stackable `item`:
-           - `val fitCount = if (item.proto.weight <= 0) wantedCount else (remWeight /
-             item.proto.weight).coerceAtLeast(0)`
-           - If `fitCount <= 0`: `if (cappedWeightItem == null) cappedWeightItem = item.name`; continue.
-           - If `fitCount < wantedCount`: `if (cappedWeightItem == null) cappedWeightItem = item.name`.
-           - `val actualCount = minOf(wantedCount, fitCount)`
-         - For non-stackable `item` (`actualCount = 1`):
-           - If `item.weight > remWeight`: `if (cappedWeightItem == null) cappedWeightItem = item.name`; continue.
-         - `val moved = w.moveItem(item, ItemLocation.Contained(box.id), actualCount)`
-         - `val desc = moved.describe()`
-         - Send `PUT_SELF` and `PUT_ROOM` using `"item" to desc` and `"container" to box.name`.
-         - `w.stack(moved)`
-       - After the loop:
-         - If `cappedWeightItem != null`, `w.tell(actor, KernelMsg.PUT_WONT_FIT, "item" to cappedWeightItem, "container"
-           to box.name)`.
-         - Else if `cappedFull`, `w.tell(actor, KernelMsg.PUT_FULL, "container" to box.name)`.
-       - Return `0`.
+  1. **`planGive(c)`:**
+     - Change the help usage to `"Usage: give <item|count item|all [item]> [to] <target>"`, and update the KDoc above
+       `planGive` to match.
+     - If `Regex("\\s+to\\s+", RegexOption.IGNORE_CASE).findAll(c.args).lastOrNull()` matches, `whatStr` is the text
+       before it and `targetStr` the text after.
+     - Otherwise, split `c.args.trim()` on whitespace. With fewer than 2 words, tell `KernelMsg.GIVE_USAGE` and return
+       `null`. `targetStr` is the last word, and `whatStr` is the words before it joined by `" "`.
+     - `val spec = parseItemSpec(whatStr) ?: return null.also { c.world.tell(c.actor, KernelMsg.GIVE_USAGE) }`.
+     - Return `GiveAction(spec, targetStr.trim())`, a new `private class` next to `GetAction`. It has no `veto()`
+       override.
+  2. **`GiveAction.validate(w, actor)`:**
+     - `val target = w.findActor(actor, targetStr) ?: return w.msg(KernelMsg.NOT_HERE)` (`findActor` already checks
+       presence).
+     - If `target === actor`, return `w.msg(KernelMsg.GIVE_ALREADY)`.
+     - `val matches = matchItems(actor.inventory, spec)`. If it is empty, return `w.msg(KernelMsg.NOT_CARRYING)`.
+     - If no matched item can fit 1 unit within the target's `carry_limit` (unit weight as in Phase 3), return
+       `w.msg(KernelMsg.GIVE_FULL, "target" to target.name)`.
+     - Return `null`.
+  3. **`GiveAction.resolve(w, actor)`:**
+     - `val target = w.findActor(actor, targetStr) ?: return 0`. `var capped = false`.
+     - For each `(item, wanted)` in `matchItems(actor.inventory, spec)`:
+       - Skip if `item.location != ItemLocation.Carried(actor.id)`.
+       - `var n = minOf(wanted, item.count)`, then cap to the target's remaining carry limit exactly as in Phase 3 step
+         7 (always `continue` when 0 fit).
+       - `val moved = w.moveItem(item, ItemLocation.Carried(target.id), n)` and `val desc = moved.describe()`.
+       - Send `GIVE_SELF`, `GIVE_TARGET` and `GIVE_ROOM` with `"item" to desc`.
+       - Dispatch `ON_GIVE` with `moved` and `target`. If `moved.id in w.entities`, call `w.stack(moved)`.
+     - If `capped`, tell `GIVE_FULL` with `"target" to target.name`. Return `0`.
+  4. **`planPut(c)`:**
+     - Change the help usage to `"Usage: put <item|count item|all [item]> [in|into] <container>"`, and update the KDoc
+       above `planPut` to match.
+     - If `Regex("\\s+(in|into)\\s+", RegexOption.IGNORE_CASE).findAll(c.args).lastOrNull()` matches, split there into
+       `whatStr` and `boxStr`.
+     - Otherwise, split on whitespace. With fewer than 2 words, tell `KernelMsg.PUT_USAGE` and return `null`. `boxStr`
+       is the last word, and `whatStr` is the words before it.
+     - `val spec = parseItemSpec(whatStr) ?: return null.also { c.world.tell(c.actor, KernelMsg.PUT_USAGE) }`.
+     - Return `PutAction(spec, boxStr.trim())`, a new `private class`.
+  5. **Merge check helper:** `private fun World.mergesInto(item: Item, box: Item): Boolean`. It is true when `stack`
+     would merge `item` into an existing stack in `box`, so the item takes no new slot. Use the same conditions as
+     `World.stack` in `Items.kt`: `item.proto.stackable`, no timers and no `nameOverride` on either item, and some
+     `box.contents` entry with the same `protoLabel`, `decayAt` and `customAttributes`.
+  6. **`PutAction.validate(w, actor)`:**
+     - `val box = w.findItem(actor, boxStr, inventory = true, ground = true) ?: return w.msg(KernelMsg.DONT_SEE)`.
+     - `val matches = matchItems(actor.inventory, spec, exclude = box)`. If it is empty:
+       - If `!spec.all`, `box` is in `actor.inventory`, and `spec.keyword != null && box.matches(spec.keyword)`, return
+         `w.msg(KernelMsg.PUT_ITSELF)`. This keeps `put chest in chest` saying "You can't put something inside itself."
+       - Otherwise return `w.msg(KernelMsg.NOT_CARRYING)`.
+     - `val state = box.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)`. Then check `isPresent`
+       (`DONT_SEE`), `w.reach(actor, box)?.let { return it }`, and that it is `OPEN` (`PUT_CLOSED`), in the existing
+       order.
+     - If no match has a free slot (`box.contents.size < state.capacity || w.mergesInto(i, box)`), return `PUT_FULL`.
+     - If no match fits 1 unit by weight (`box.contents.sumOf { it.weight } + unitWeight <= state.maxWeight`), return
+       `PUT_WONT_FIT` with `"item" to matches.first().first.name` and `"container" to box.name`.
+     - Return `null`.
+  7. **`PutAction.resolve(w, actor)`:**
+     - `val box = w.findItem(actor, boxStr, inventory = true, ground = true) ?: return 0`. `val state = box.container ?:
+       return 0`. `var full = false` and `var tooHeavy: String? = null`.
+     - For each `(item, wanted)` in `matchItems(actor.inventory, spec, exclude = box)`:
+       - Skip if `item.location != ItemLocation.Carried(actor.id)`.
+       - If `box.contents.size >= state.capacity && !w.mergesInto(item, box)`, set `full = true` and continue.
+       - `var n = minOf(wanted, item.count)`. Cap by `val free = state.maxWeight - box.contents.sumOf { it.weight }`,
+         using the same arithmetic as Phase 3 step 7. When the cap reduces `n`, set `tooHeavy = tooHeavy ?: item.name`;
+         when `n <= 0`, continue.
+       - `val moved = w.moveItem(item, ItemLocation.Contained(box.id), n)` and `val desc = moved.describe()`.
+       - Send `PUT_SELF` and `PUT_ROOM` with `"item" to desc` and `"container" to box.name`.
+       - `w.stack(moved)`.
+     - After the loop: if `tooHeavy != null`, tell `PUT_WONT_FIT` with `"item" to tooHeavy` and `"container" to
+       box.name`; else, if `full`, tell `PUT_FULL`. Return `0`.
 
 ### Test & Documentation Requirements
 
-- In `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`, add tests covering:
-  - `give 5 coins to bob` and `give 5 coins bob` (splitting a stack, formatting `"You give 5 gold coins to Bob."`, and
-    merging into Bob's stack).
-  - `give all bob` and `give all coins bob` (skipping keyring-only keys on bare `give all`).
-  - `give 50000 coins bob` capping to Bob's remaining carry limit and emitting `"Bob can't carry that much."`.
-  - `put 3 coins in chest`, `put 3 coins into chest`, and `put 3 coins chest` (without `in`/`into`).
-  - `put all in chest` and `put all chest` (automatically excluding `chest` itself and `no_all` items).
-  - `put 50000 coins chest` capping to `chest`'s `maxWeight` (moving the coins that fit and emitting `"A gold coin won't
-    fit in a chest."`) and `put all` capping to `chest`'s `capacity` (emitting `"A chest is full."`).
-  - Queued commands in the same tick batch (`get all chest; drop 2 coins; put all chest`) resolving dynamically at
-    execution time.
+Add these to `core/src/test/kotlin/gups/core/world/ItemCommandsTest.kt`:
+
+- `give 5 coins to bob` and `give 5 coins bob` each split the stack, say "You give 5 gold coins to Bob.", and merge into
+  Bob's existing coin stack.
+- `give all bob` hands over everything except the bare `iron` key, and `give all coins bob` hands over only coins.
+- `give 50000 coins bob` gives as many as Bob can carry, then says "Bob can't carry that much.".
+- `put 3 coins in chest`, `put 3 coins into chest`, and `put 3 coins chest` all work.
+- `put all in chest` and `put all chest` never move the chest itself, and skip `no_all` items.
+- The fixture chest has `capacity = 2` and `maxWeight = 5` and starts locked, so unlock and open it first:
+  - `put 50000 coins chest` moves 5 coins and says "A gold coin won't fit in a chest.".
+  - `put all chest` with three different light items moves two and says "A chest is full.".
+- `put chest in chest` still says "You can't put something inside itself.".
+- Late resolution: queue `get all chest`, `drop 2 coins` and `put all chest` with `input(p, ...)` three times, then call
+  `run(...)` once, so all three are queued before the first resolves. Each command acts on the state the previous one
+  left. (There is no `;` separator; each line is its own input.)
+
+In `docs/CHANGELOG.md`, record the `give` and `put` syntax, the capping, and the new usage strings.
 
 ### Exit Conditions
 
-- [] `docs/DESIGN_NEEDED.md` has `### Quantities and all (COMPLETED — M16)`.
-- [] `docs/SPEC.md` `§7.4` includes the **M16** row.
+- [] `docs/DESIGN_NEEDED.md` contains ``### Quantities and `all` (COMPLETED — M16)``.
+- [] `docs/SPEC.md` `§7.4` contains the **M16** row.
 - [] `grep -rnE "§|\bD-[0-9]{3}\b|(//|\*).*\bSPEC\b" */src/main/` returns `0` matches.
 - [] `./gradlew markdownFormat && ./gradlew check` (with `BypassSandbox: true`) exits `0` with zero warnings and all
   tests passing.
