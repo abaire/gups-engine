@@ -1443,8 +1443,12 @@ uses the default names. Every player-facing message here is the default text of 
 - **`kill`:** engages, switches the attacker's primary target, costs no lag, and does not swing immediately: the first
   swing comes at the next combat round. `kill` on the current primary target is a no-op ("You're already fighting
   them!").
-- **`give <item> [to] <actor>`:** gives the whole stack, and fails if the receiver can't carry it.
-- **`put <item> in|into <container>`:** the container is carried, or on the ground within `get_lag` reach, and open.
+- **`give <what> [to] <actor>`:** gives one item, a count, or all matching items from the inventory. A count is capped
+  to what is there and to what the receiver can carry ("<Target> can't carry that much." when capped). Fires `on_give`
+  once per stack moved.
+- **`put <what> [in|into] <container>`:** the container is carried, or on the ground within `get_lag` reach, and open.
+  Moves one item, a count, or all matching items (never the container itself). A count is capped to the container's free
+  item capacity and `max_weight`.
 - **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a door direction here.
 - **Keys:** locking or unlocking a door or container needs its key carried (keyring included) or equipped.
 - **`use <item> [target]`:** the item is carried or worn and must have an `on_use` hook ("You can't use that."
@@ -3494,3 +3498,4 @@ template's `.github/workflows/gates.yml`.
 | **M13**   | Senses and perception: per-channel `senses` for every actor with `sense_deltas` on items, affects and traits; `on_perceive` (was `on_nearby`) with channel, intensity and cost; multi-hop propagation priced by `sense_cost`, listeners by `can_perceive`, distant players by `perceive_message`; `ctx.emit`; door and container hooks with `door_intensity`; `exit.door` as a door view; rules exports spread over several files (§4.6, §5.7, §6.3). |
 | **M14**   | Experience and levels, built in three stages: **M14.1** the reversible level step, `on_level_up`, the gain record, `level_loss` and the template's curve, kill scaling and death loss; **M14.2** `level_mode`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels` and the harness verbs; **M14.3** the `on_level_change` hook, the `score` line and the template examples (§3.9, §4.4, §4.6, §5.4).                       |
 | **M15**   | Specification refactoring and KDoc alignment: high-level architectural spec in SPEC.md with implementation details, constants, entity fields, seams, and limits documented in KDoc.                                                                                                                                                                                                                                                                   |
+| **M16**   | Item quantities, pluralization, and all: item(plural=), phrase keywords, stack count display, no_all tag, count on move_item/give/destroy (replacing split), and quantities, all, optional prepositions, and carry/capacity capping on get, drop, give, and put (§3.3, §4.2, §4.5, §4.9).                                                                                                                                                             |

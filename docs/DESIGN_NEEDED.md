@@ -196,7 +196,7 @@ dropped, or kept until removed? - The slot list is cached today: what is cached 
 and when is it asked again? - What do `item(slot=...)` validation, the lint and the equipment display order check
 against: the union of every possible slot, or something declared separately?
 
-### Quantities and `all`
+### Quantities and `all` (COMPLETED — M16)
 
 **Spec:** §4.9 lists `get`, `drop`, `give` and `put` without argument syntax. **Today:** these commands move one item,
 or a whole stack. There is no `get all`, no `drop 5 coins`, and no `give 3 coins bob`. **Question:** what is the

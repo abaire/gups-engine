@@ -515,8 +515,8 @@ when `leveling` or `track` is off.
   <keyword>`. A keyword may be a phrase. The `from` preposition in `get` is optional: without it, `get <item>
   <container>` takes from the container when the last word names a container that holds a match, and `get all
   <container>` loots it; otherwise the whole phrase is a ground item.
-- Bare `all` in `get` and `drop` skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys; an
-  explicit keyword (`all <keyword>`, `<count> <keyword>`, or a bare `<keyword>`) ignores both exclusions.
+- Bare `all` in `get`, `drop`, `give` and `put` skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only
+  keys; an explicit keyword (`all <keyword>`, `<count> <keyword>`, or a bare `<keyword>`) ignores both exclusions.
 - A requested count is capped to what the source holds and to what the actor can carry. When the carry limit caps the
   transfer, the actor is told "You can't carry that much." A `get` from a container the actor already carries is not
   capped, since the load does not change.
@@ -532,6 +532,12 @@ when `leveling` or `track` is off.
   no `on_spawn`. Moving part of an equipped or non-stackable item is an error.
 - `give(actor, label_or_item, count=None)`: `count` now also bounds how much of an item view is moved (it previously
   only applied to labels). `destroy(item, count=None)` removes the whole item, or `count` of a stack.
+- `give <what> [to] <target>` and `put <what> [in|into] <container>` take the same item specifier `<what>` as `get` and
+  `drop`, and the `to`, `in` and `into` prepositions are optional, so `give 5 coins bob` and `put 3 coins chest` work. A
+  `give` is capped to the receiver's carry limit ("<Target> can't carry that much." when capped) and fires `on_give`
+  once per stack moved; a `put` is capped to the container's free item capacity and `max_weight` ("<Container> is full."
+  and "<Item> won't fit in <container>.") and never moves the target container itself. The usage strings become "Usage:
+  give <item|count item|all [item]> [to] <target>" and "Usage: put <item|count item|all [item]> [in|into] <container>".
 - `ctx.split` is removed; use `move_item(..., count=n)` to move part of a stack.
 
 ```python

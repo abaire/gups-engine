@@ -726,4 +726,178 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     )
     assertNull(parseItemSpec("-1 coins"))
   }
+
+  @Test
+  fun `give with a count splits the stack and merges into the receiver's stack`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val bob = f.player("Bob")
+    f.carry(p, coin, 10)
+    f.carry(bob, coin)
+    assertContains(f.doLine(p, "give 5 coins to bob"), "You give 5 gold coins to Bob.")
+    assertEquals(5, p.inventory.single().count, "Ann keeps 5")
+    assertEquals(6, bob.inventory.single().count, "Bob's stack merged to 6")
+    assertContains(f.doLine(p, "give 5 coins bob"), "You give 5 gold coins to Bob.")
+    assertTrue(p.inventory.isEmpty(), "Ann is empty")
+    assertEquals(11, bob.inventory.single().count, "the rest merged to 11")
+  }
+
+  @Test
+  fun `give all hands over everything except the keyring key, and all coin only the coins`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val bob = f.player("Bob")
+    f.carry(p, coin)
+    val key = f.carry(p, bareKey)
+    assertContains(f.doLine(p, "give all bob"), "You give a gold coin to Bob.")
+    assertEquals(ItemLocation.Carried(p.id), key.location, "the bare key stays on the keyring")
+    assertEquals(1, bob.inventory.count { it.protoLabel == coin })
+    f.carry(p, coin)
+    assertContains(f.doLine(p, "give all coins bob"), "You give a gold coin to Bob.")
+    assertEquals(ItemLocation.Carried(p.id), key.location, "the bare key still stays")
+    assertEquals(
+      2,
+      bob.inventory.single { it.protoLabel == coin }.count,
+      "both coins stacked in Bob's hand",
+    )
+  }
+
+  @Test
+  fun `give capped by the receiver's carry limit gives what fits and says so`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val bob = f.player("Bob")
+    f.carry(bob, pebble, 90) // weight 90, leaving 10 of the 100 limit free
+    f.carry(p, coin, 100)
+    val out = f.doLine(p, "give 50000 coins bob")
+    assertContains(out, "You give 10 gold coins to Bob.")
+    assertContains(out, "Bob can't carry that much.")
+    assertEquals(90, p.inventory.single().count, "Ann keeps the rest")
+    assertEquals(10, bob.inventory.single { it.protoLabel == coin }.count)
+  }
+
+  @Test
+  fun `put with a count works with or without the preposition, and the coins stack`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val bag = f.w.spawnItem(T.BAG, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    f.carry(p, coin, 9)
+    assertContains(f.doLine(p, "put 3 coins in bag"), "You put 3 gold coins in a bag.")
+    assertContains(f.doLine(p, "put 3 coins into bag"), "You put 3 gold coins in a bag.")
+    assertContains(f.doLine(p, "put 3 coins bag"), "You put 3 gold coins in a bag.")
+    assertEquals(9, bag.contents.single().count, "all nine stacked inside")
+    assertTrue(p.inventory.isEmpty())
+  }
+
+  @Test
+  fun `put all never moves the container itself and skips no_all items`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val box = f.carry(p, chest)
+    box.container!!.state = DoorState.OPEN
+    f.carry(p, coin)
+    val corpse = f.carry(p, Prototypes.CORPSE.label)
+    assertContains(f.doLine(p, "put all chest"), "You put a gold coin in a chest.")
+    assertEquals(ItemLocation.Carried(p.id), box.location, "the chest is never moved")
+    assertEquals(ItemLocation.Carried(p.id), corpse.location, "the no_all corpse stays")
+    f.carry(p, coin)
+    assertContains(f.doLine(p, "put all in chest"), "You put a gold coin in a chest.")
+    assertEquals(2, box.contents.single().count, "both coins stacked inside")
+  }
+
+  @Test
+  fun `put capped by the container's max_weight puts what fits and says so`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val box = f.w.spawnItem(chest, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    box.container!!.state = DoorState.OPEN
+    f.carry(p, coin, 10)
+    val out = f.doLine(p, "put 50000 coins chest")
+    assertContains(out, "You put 5 gold coins in a chest.")
+    assertContains(out, "A gold coin won't fit in a chest.")
+    assertEquals(5, box.contents.single().count)
+    assertEquals(5, p.inventory.single().count)
+  }
+
+  @Test
+  fun `put all capped by the container's capacity puts what fits and says so`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val box = f.w.spawnItem(chest, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    box.container!!.state = DoorState.OPEN
+    f.carry(p, coin)
+    f.carry(p, pebble)
+    f.carry(p, loaf)
+    val out = f.doLine(p, "put all chest")
+    assertContains(out, "You put a gold coin in a chest.")
+    assertContains(out, "You put a pebble in a chest.")
+    assertContains(out, "A chest is full.")
+    assertEquals(2, box.contents.size, "two items, no stacking across kinds")
+    assertEquals(ItemLocation.Carried(p.id), p.inventory.single { it.protoLabel == loaf }.location)
+  }
+
+  @Test
+  fun `putting a container inside itself is refused`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.carry(p, chest)
+    assertContains(f.doLine(p, "put chest in chest"), "You can't put something inside itself.")
+  }
+
+  @Test
+  fun `an ordinal counts the target container among the matches`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val first = f.carry(p, ironBox)
+    val second = f.carry(p, ironBox)
+    first.container!!.state = DoorState.OPEN
+    second.container!!.state = DoorState.OPEN
+    assertContains(f.doLine(p, "put 2.coffer in coffer"), "You put a coffer in a coffer.")
+    assertEquals(ItemLocation.Contained(first.id), second.location)
+    assertContains(f.doLine(p, "put coffer in coffer"), "You can't put something inside itself.")
+  }
+
+  @Test
+  fun `give skips a stack an earlier on_give hook destroyed`() {
+    val host = RecordingHost()
+    val f = fixture(host)
+    val p = f.player("Ann")
+    val bob = f.player("Bob")
+    val ring1 = f.carry(p, ring)
+    val ring2 = f.carry(p, ring)
+    host.handlers[HookName.ON_GIVE] = { w, owner, _ ->
+      if (owner === ring1 && ring2.id in w.entities) w.destroy(ring2)
+      null
+    }
+    val out = f.doLine(p, "give all ring bob")
+    assertEquals(1, out.lines().count { "You give a ring to Bob." in it })
+    assertEquals(ItemLocation.Carried(bob.id), ring1.location)
+    assertFalse(ring2.id in f.w.entities)
+    assertTrue(p.inventory.isEmpty())
+  }
+
+  @Test
+  fun `queued get, drop and put each resolve on the state the previous left`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val box = f.w.spawnItem(chest, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    box.container!!.state = DoorState.OPEN
+    f.w.spawnItem(coin, ItemLocation.Contained(box.id), 2)
+    f.carry(p, coin, 2)
+    f.input(p, "get all chest")
+    f.input(p, "drop 2 coins")
+    f.input(p, "put all chest")
+    f.run(3)
+    val out = f.out(p)
+    assertContains(out, "You get 2 gold coins from a chest.")
+    assertContains(out, "You drop 2 gold coins.")
+    assertContains(out, "You put 2 gold coins in a chest.")
+    assertTrue(p.inventory.isEmpty(), "nothing is carried")
+    assertEquals(2, box.contents.single().count, "the put saw only the two left after the drop")
+    assertEquals(
+      2,
+      f.w.room(T.HALL).items.single { it.protoLabel == coin }.count,
+      "the dropped coins stay on the ground",
+    )
+  }
 }

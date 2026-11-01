@@ -147,14 +147,15 @@ internal object KernelCommands {
         "give",
         category = CommandCategory.ITEMS,
         help =
-          "Give an item from your inventory to someone in the room.\nUsage: give <item> to <target>",
+          "Give an item from your inventory to someone in the room.\nUsage: give <item|count item|all [item]> [to] <target>",
       ) {
         planGive(it)
       },
       TickCommand(
         "put",
         category = CommandCategory.ITEMS,
-        help = "Put an item into a container.\nUsage: put <item> in <container>",
+        help =
+          "Put an item into a container.\nUsage: put <item|count item|all [item]> [in|into] <container>",
       ) {
         planPut(it)
       },
@@ -625,112 +626,49 @@ internal object KernelCommands {
   }
 
   /**
-   * `give <item> <actor>` (also `give <item> to <actor>`): hands a carried item over; fires
-   * `on_give`.
+   * `give <what> [to] <target>`: hands one item, a count, or all matching items over; fires
+   * `on_give` once per stack moved. The items are resolved when the action runs, so several queued
+   * gives each act on the state the previous left.
    */
   private fun planGive(c: CommandCall): Action? {
     val w = c.world
-    val words = c.args.split(Regex("\\s+")).filter { it.isNotEmpty() && it != "to" }
-    if (words.size < 2) return null.also { w.tell(c.actor, KernelMsg.GIVE_USAGE) }
-    val item =
-      w.findItem(c.actor, words.dropLast(1).joinToString(" "), inventory = true, ground = false)
-        ?: return null.also { w.tell(c.actor, KernelMsg.NOT_CARRYING) }
-    val target =
-      w.findActor(c.actor, words.last()) ?: return null.also { w.tell(c.actor, KernelMsg.NOT_HERE) }
-    return object : Action {
-      override fun validate(w: World, actor: Actor): String? =
-        when {
-          item.location != ItemLocation.Carried(actor.id) -> w.msg(KernelMsg.NOT_CARRYING)
-          target === actor -> w.msg(KernelMsg.GIVE_ALREADY)
-          !w.isPresent(target, w.roomOf(actor)) -> w.msg(KernelMsg.NOT_HERE)
-          target.carriedWeight() + item.weight >
-            w.rules.carryLimit(RulesContext(w, target, item = item)) ->
-            w.msg(KernelMsg.GIVE_FULL, "target" to target.name)
-          else -> null
-        }
-
-      override fun resolve(w: World, actor: Actor): Int {
-        w.moveItem(item, ItemLocation.Carried(target.id))
-        val desc = item.describe()
-        w.tell(actor, KernelMsg.GIVE_SELF, "item" to desc, "target" to target.name)
-        w.tell(target, KernelMsg.GIVE_TARGET, "actor" to actor.name.cap(), "item" to desc)
-        w.tellSight(
-          actor.room,
-          "give",
-          actor,
-          w.msg(
-            KernelMsg.GIVE_ROOM,
-            "actor" to actor.name.cap(),
-            "item" to desc,
-            "target" to target.name,
-          ),
-          actor,
-          target,
-        )
-        w.dispatch(
-          HookName.ON_GIVE,
-          item,
-          actor.room,
-          HookContext(actor = actor, item = item, target = target),
-        )
-        if (item.id in w.entities) w.stack(item)
-        return 0
-      }
+    val toMatch = Regex("\\s+to\\s+", RegexOption.IGNORE_CASE).findAll(c.args).lastOrNull()
+    val whatStr: String
+    val targetStr: String
+    if (toMatch != null) {
+      whatStr = c.args.substring(0, toMatch.range.first).trim()
+      targetStr = c.args.substring(toMatch.range.last + 1).trim()
+    } else {
+      val words = c.args.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+      if (words.size < 2) return null.also { w.tell(c.actor, KernelMsg.GIVE_USAGE) }
+      targetStr = words.last()
+      whatStr = words.dropLast(1).joinToString(" ")
     }
+    val spec = parseItemSpec(whatStr) ?: return null.also { w.tell(c.actor, KernelMsg.GIVE_USAGE) }
+    return GiveAction(spec, targetStr)
   }
 
   /**
-   * `put <item> in <container>`: the container is carried or within reach on the ground, and open.
+   * `put <what> [in|into] <container>`: the container is carried or on the ground within reach, and
+   * open. Moves one item, a count, or all matching items, never the container itself; the items are
+   * resolved when the action runs, so several queued puts each act on the state the previous left.
    */
   private fun planPut(c: CommandCall): Action? {
     val w = c.world
-    val parts = c.args.split(Regex("\\s+(in|into)\\s+"), limit = 2)
-    if (parts.size < 2 || parts[0].isBlank())
-      return null.also { w.tell(c.actor, KernelMsg.PUT_USAGE) }
-    val item =
-      w.findItem(c.actor, parts[0], inventory = true, ground = false)
-        ?: return null.also { w.tell(c.actor, KernelMsg.NOT_CARRYING) }
-    val box =
-      w.findItem(c.actor, parts[1], inventory = true, ground = true)
-        ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
-    return object : Action {
-      override fun validate(w: World, actor: Actor): String? {
-        if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
-        if (item === box) return w.msg(KernelMsg.PUT_ITSELF)
-        val state = box.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)
-        if (!w.isPresent(box, w.roomOf(actor))) return w.msg(KernelMsg.DONT_SEE)
-        w.reach(actor, box)?.let {
-          return it
-        }
-        if (state.state != DoorState.OPEN)
-          return w.msg(KernelMsg.PUT_CLOSED, "container" to box.name)
-        if (box.contents.size >= state.capacity)
-          return w.msg(KernelMsg.PUT_FULL, "container" to box.name)
-        if (box.contents.sumOf { it.weight } + item.weight > state.maxWeight)
-          return w.msg(KernelMsg.PUT_WONT_FIT, "item" to item.name, "container" to box.name)
-        return null
-      }
-
-      override fun resolve(w: World, actor: Actor): Int {
-        w.moveItem(item, ItemLocation.Contained(box.id))
-        val desc = item.describe()
-        w.tell(actor, KernelMsg.PUT_SELF, "item" to desc, "container" to box.name)
-        w.tellSight(
-          actor.room,
-          "put",
-          actor,
-          w.msg(
-            KernelMsg.PUT_ROOM,
-            "actor" to actor.name.cap(),
-            "item" to desc,
-            "container" to box.name,
-          ),
-          actor,
-        )
-        w.stack(item)
-        return 0
-      }
+    val inMatch = Regex("\\s+(in|into)\\s+", RegexOption.IGNORE_CASE).findAll(c.args).lastOrNull()
+    val whatStr: String
+    val boxStr: String
+    if (inMatch != null) {
+      whatStr = c.args.substring(0, inMatch.range.first).trim()
+      boxStr = c.args.substring(inMatch.range.last + 1).trim()
+    } else {
+      val words = c.args.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+      if (words.size < 2) return null.also { w.tell(c.actor, KernelMsg.PUT_USAGE) }
+      boxStr = words.last()
+      whatStr = words.dropLast(1).joinToString(" ")
     }
+    val spec = parseItemSpec(whatStr) ?: return null.also { w.tell(c.actor, KernelMsg.PUT_USAGE) }
+    return PutAction(spec, boxStr)
   }
 
   /**
@@ -1045,7 +983,8 @@ internal fun parseItemSpec(raw: String): ItemSpec? {
 
 /**
  * The source stacks [spec] names in [pool] and the units wanted from each: every matching stack for
- * `all`, the [ordinal]th for a bare keyword, or enough stacks to fill [count].
+ * `all`, the [ordinal]th for a bare keyword, or enough stacks to fill [count]. [exclude] still
+ * counts toward the ordinal, so `put 2.chest in chest` names the second chest, not the third.
  */
 internal fun matchItems(
   pool: List<Item>,
@@ -1054,10 +993,9 @@ internal fun matchItems(
 ): List<Pair<Item, Int>> {
   val hits =
     pool
-      .filter {
-        it !== exclude && if (spec.keyword == null) it.inBareAll else it.matches(spec.keyword)
-      }
+      .filter { if (spec.keyword == null) it.inBareAll else it.matches(spec.keyword) }
       .drop(spec.ordinal - 1)
+      .filter { it !== exclude }
   if (spec.all) return hits.map { it to it.count }
   if (spec.count == null) return hits.take(1).map { it to it.count }
   var remaining = spec.count
@@ -1209,7 +1147,7 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
     if (matches.isEmpty()) return w.msg(KernelMsg.DONT_SEE)
     if (matches.all { lag(w, actor, it.first) == null })
       return w.msg(KernelMsg.CANT_REACH, "item" to matches.first().first.name)
-    if (!carriedSource && matches.none { carryFit(w, actor, it.first, 1) > 0 })
+    if (!carriedSource && matches.none { w.carryFit(actor, it.first, 1) > 0 })
       return w.msg(KernelMsg.CANT_CARRY)
     return null
   }
@@ -1305,16 +1243,6 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
     return ground.groundIndex?.let { Band.between(w.indexOf(actor), it) } ?: Band.MELEE
   }
 
-  /** How many of the [n] wanted units of [item] fit within the remaining carry limit. */
-  private fun carryFit(w: World, actor: Actor, item: Item, n: Int): Int {
-    val free = w.rules.carryLimit(RulesContext(w, actor, item = item)) - actor.carriedWeight()
-    return if (item.proto.stackable) {
-      if (item.proto.weight <= 0) n else (free / item.proto.weight).coerceAtLeast(0)
-    } else {
-      if (item.weight <= free) 1 else 0
-    }
-  }
-
   override fun resolve(w: World, actor: Actor): Int {
     var maxLag = 0
     var capped = false
@@ -1336,7 +1264,7 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
       if (item.id !in w.entities || !atSource(w, actor, item)) continue
       var n = minOf(wanted, item.count)
       if (!carriedSource) {
-        val fit = carryFit(w, actor, item, n)
+        val fit = w.carryFit(actor, item, n)
         if (fit < n) {
           capped = true
           n = fit
@@ -1363,6 +1291,175 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
     }
     if (capped) w.tell(actor, KernelMsg.CANT_CARRY)
     return maxLag
+  }
+}
+
+/**
+ * `give <what> [to] <target>`: hands one item, a count, or all matching items from the inventory
+ * over; fires `on_give` once per stack moved. The items are resolved when the action runs, so
+ * several queued gives each act on the state the previous left.
+ */
+private class GiveAction(private val spec: ItemSpec, private val targetStr: String) : Action {
+  override fun validate(w: World, actor: Actor): String? {
+    val target = w.findActor(actor, targetStr) ?: return w.msg(KernelMsg.NOT_HERE)
+    if (target === actor) return w.msg(KernelMsg.GIVE_ALREADY)
+    val matches = matchItems(actor.inventory, spec)
+    if (matches.isEmpty()) return w.msg(KernelMsg.NOT_CARRYING)
+    if (matches.none { w.carryFit(target, it.first, 1) > 0 })
+      return w.msg(KernelMsg.GIVE_FULL, "target" to target.name)
+    return null
+  }
+
+  override fun resolve(w: World, actor: Actor): Int {
+    val target = w.findActor(actor, targetStr) ?: return 0
+    var capped = false
+    for ((item, wanted) in matchItems(actor.inventory, spec)) {
+      // An on_give hook for an earlier stack may have destroyed or moved this one.
+      if (item.id !in w.entities || item.location != ItemLocation.Carried(actor.id)) continue
+      var n = minOf(wanted, item.count)
+      val fit = w.carryFit(target, item, n)
+      if (fit < n) {
+        capped = true
+        n = fit
+      }
+      if (n <= 0) continue
+      val moved = w.moveItem(item, ItemLocation.Carried(target.id), n)
+      val desc = moved.describe()
+      w.tell(actor, KernelMsg.GIVE_SELF, "item" to desc, "target" to target.name)
+      w.tell(target, KernelMsg.GIVE_TARGET, "actor" to actor.name.cap(), "item" to desc)
+      w.tellSight(
+        actor.room,
+        "give",
+        actor,
+        w.msg(
+          KernelMsg.GIVE_ROOM,
+          "actor" to actor.name.cap(),
+          "item" to desc,
+          "target" to target.name,
+        ),
+        actor,
+        target,
+      )
+      w.dispatch(
+        HookName.ON_GIVE,
+        moved,
+        actor.room,
+        HookContext(actor = actor, item = moved, target = target),
+      )
+      if (moved.id in w.entities) w.stack(moved)
+    }
+    if (capped) w.tell(actor, KernelMsg.GIVE_FULL, "target" to target.name)
+    return 0
+  }
+}
+
+/**
+ * `put <what> [in|into] <container>`: the container is carried or on the ground within reach, and
+ * open. Moves one item, a count, or all matching items, never the container itself; the items are
+ * resolved when the action runs, so several queued puts each act on the state the previous left.
+ */
+private class PutAction(private val spec: ItemSpec, private val boxStr: String) : Action {
+  override fun validate(w: World, actor: Actor): String? {
+    val box =
+      w.findItem(actor, boxStr, inventory = true, ground = true) ?: return w.msg(KernelMsg.DONT_SEE)
+    val matches = matchItems(actor.inventory, spec, exclude = box)
+    if (matches.isEmpty()) {
+      if (
+        !spec.all &&
+          box.location == ItemLocation.Carried(actor.id) &&
+          spec.keyword != null &&
+          box.matches(spec.keyword)
+      )
+        return w.msg(KernelMsg.PUT_ITSELF)
+      return w.msg(KernelMsg.NOT_CARRYING)
+    }
+    val state = box.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)
+    if (!w.isPresent(box, w.roomOf(actor))) return w.msg(KernelMsg.DONT_SEE)
+    w.reach(actor, box)?.let {
+      return it
+    }
+    if (state.state != DoorState.OPEN) return w.msg(KernelMsg.PUT_CLOSED, "container" to box.name)
+    if (matches.none { w.mergesInto(it.first, box) || box.contents.size < state.capacity })
+      return w.msg(KernelMsg.PUT_FULL, "container" to box.name)
+    val free = state.maxWeight - box.contents.sumOf { it.weight }
+    if (matches.none { fitWithin(free, it.first, 1) > 0 })
+      return w.msg(
+        KernelMsg.PUT_WONT_FIT,
+        "item" to matches.first().first.name,
+        "container" to box.name,
+      )
+    return null
+  }
+
+  override fun resolve(w: World, actor: Actor): Int {
+    val box = w.findItem(actor, boxStr, inventory = true, ground = true) ?: return 0
+    val state = box.container ?: return 0
+    var full = false
+    var tooHeavy: String? = null
+    for ((item, wanted) in matchItems(actor.inventory, spec, exclude = box)) {
+      if (item.location != ItemLocation.Carried(actor.id)) continue
+      if (box.contents.size >= state.capacity && !w.mergesInto(item, box)) {
+        full = true
+        continue
+      }
+      var n = minOf(wanted, item.count)
+      val free = state.maxWeight - box.contents.sumOf { it.weight }
+      val fit = fitWithin(free, item, n)
+      if (fit < n) {
+        tooHeavy = tooHeavy ?: item.name
+        n = fit
+      }
+      if (n <= 0) continue
+      val moved = w.moveItem(item, ItemLocation.Contained(box.id), n)
+      val desc = moved.describe()
+      w.tell(actor, KernelMsg.PUT_SELF, "item" to desc, "container" to box.name)
+      w.tellSight(
+        actor.room,
+        "put",
+        actor,
+        w.msg(
+          KernelMsg.PUT_ROOM,
+          "actor" to actor.name.cap(),
+          "item" to desc,
+          "container" to box.name,
+        ),
+        actor,
+      )
+      w.stack(moved)
+    }
+    if (tooHeavy != null)
+      w.tell(actor, KernelMsg.PUT_WONT_FIT, "item" to tooHeavy, "container" to box.name)
+    else if (full) w.tell(actor, KernelMsg.PUT_FULL, "container" to box.name)
+    return 0
+  }
+}
+
+/** How many of the [n] wanted units of [item] fit within [free] weight units. */
+private fun fitWithin(free: Int, item: Item, n: Int): Int =
+  if (item.proto.stackable) {
+    if (item.proto.weight <= 0) n else (free / item.proto.weight).coerceAtLeast(0)
+  } else {
+    if (item.weight <= free) 1 else 0
+  }
+
+/** How many of the [n] wanted units of [item] fit within [actor]'s remaining carry limit. */
+internal fun World.carryFit(actor: Actor, item: Item, n: Int): Int =
+  fitWithin(
+    rules.carryLimit(RulesContext(this, actor, item = item)) - actor.carriedWeight(),
+    item,
+    n,
+  )
+
+/** True if [item] would merge into a stack in [box], taking no new slot. */
+private fun World.mergesInto(item: Item, box: Item): Boolean {
+  if (!item.proto.stackable || item.timers.isNotEmpty() || item.nameOverride != null) return false
+  return box.contents.any {
+    it !== item &&
+      it.protoLabel == item.protoLabel &&
+      it.timers.isEmpty() &&
+      it.nameOverride == null &&
+      it.decayAt == item.decayAt &&
+      it.customAttributes == item.customAttributes
   }
 }
 
