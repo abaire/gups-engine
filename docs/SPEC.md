@@ -447,7 +447,9 @@ the world graph:
 - **Location hierarchy:** mutually exclusive single containment via `ItemLocation`: in a room (`InRoom` with track
   index), carried in an actor's inventory (`Carried`), equipped in an actor's slot (`Equipped`), or contained in another
   item (`Contained`).
-- **Quantities and decay:** `count` (stackable items), `weight`, and scheduled `decayAt` pulse.
+- **Quantities and decay:** `count` (stackable items), `weight`, and scheduled `decayAt` pulse. An item prototype may
+  declare an optional `plural` display name, used to show stacks of 2 or more as `"<count> <plural>"`. Bare `all` in
+  item commands skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys.
 - **Container properties:** optional `ContainerState` with `capacity`, `maxWeight`, access `state` (`OPEN`, `CLOSED`,
   `LOCKED`), and `keyLabel`.
 - **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, schema
@@ -832,7 +834,7 @@ mob("goblin_scout",
     )
 
 item("short_bow",
-     name="a short bow", kind="ranged", range="far", weight=2,
+     name="a short bow", plural=None, kind="ranged", range="far", weight=2,
      wear="wield", dice="1d6", damage_type="pierce",
      stat_deltas=stats(dex=1),
      sense_deltas={"sight": 1},  # sense score changes while worn (§5.7)
@@ -861,7 +863,9 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   `fn` and `lane` either way. Unknown arguments are errors with a spelling suggestion. A package targeting a different
   `api_version` gets the version-mismatch diagnostic before any unknown-argument error.
 - **Defaults:** the display `name` defaults to the identifier with `_` as spaces. `keywords` default to the display
-  name's words minus articles, or else the identifier.
+  name's words minus articles, or else the identifier. An item may also give `plural` (for example `plural = "gold
+  coins"`), used when showing stacks of 2 or more; a blank `plural` fails to load. Players can name an item by the words
+  of its keywords or of its plural.
 - **Damage type:** an item's `damage_type` is a declared damage type, `DAMAGE.fire` or the plain string, checked at
   load; an item that names none uses the world's `unarmed_damage_type`.
 - **Item slots:** an item's slot is `wear = "<slot>"`; `wield = "<slot>"` is an alias. A slot family such as `wear =
@@ -873,7 +877,8 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   good (§5.4.1).
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
-  part of the prototype, so a reload changes them for every instance.
+  part of the prototype, so a reload changes them for every instance. The tag `no_all` keeps an item out of bare `all`
+  in `get`, `drop`, `give` and `put`; `//engine:corpse` carries it.
 - **Mob traits:** `mob(traits = [...])` names traits the world's plugins define (§4.19), stored sorted without repeats.
   A name no loaded plugin defines fails the package's load with a "did you mean" suggestion, as a skipped plugin's
   builtins do; every tool that loads packages registers the plugins first, so `gups lint` checks it too. The traits'
@@ -1068,7 +1073,7 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 - **Exits:** `exit(dir)`, an exit view with its `tags` and `door`: a door view (`state`, `key`, `tags`), or `None`
   without a door.
 
-**Item view:** `id`, `label`, `name`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
+**Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
 `container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `sense_deltas`, `tags`,
 `in_world`.
 
@@ -1412,6 +1417,11 @@ uses the default names. Every player-facing message here is the default text of 
 
 **Item and combat command details:**
 
+- **Stack display:** `look`, `inventory` and `keyring` show a stack of 2 or more as `"<count> <plural>"` when the
+  prototype declares a `plural` and the item has no name override, and as `"<name> (<count>)"` otherwise.
+- **Keyword phrases:** item commands take a phrase of words, not just one word: every word must match the start of one
+  of the item's keywords, a keyword's words, or its plural words; articles are ignored unless the phrase is only
+  articles. `get 2.coin` picks the second match, as the other item commands do.
 - **`kill`:** engages, switches the attacker's primary target, costs no lag, and does not swing immediately: the first
   swing comes at the next combat round. `kill` on the current primary target is a no-op ("You're already fighting
   them!").
@@ -2019,7 +2029,8 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Schema validation:** Referencing undeclared stats, vitals, or damage types in verbs or trait deltas throws
   `IllegalArgumentException` with spelling suggestions.
 - **Read-only views:** Views wrap entities dynamically (`PluginEntity`, `PluginRoom`, `PluginActor`, `PluginItem`,
-  `PluginSkill`), comparing equal when wrapping the same entity.
+  `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem.plural` exposes the prototype's optional
+  display name for stacks of 2 or more.
 - **Thread bridge:** `PluginViews.world(thread)` and `PluginViews.room/actor/item(value)` bridge Starlark threads and
   facade values. Unqualified attribute writes are disallowed when the calling plugin cannot be determined.
 

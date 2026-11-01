@@ -248,6 +248,9 @@ internal class ItemFacade(val item: Item) : EntityFacade(item), PluginItem {
 
   override val tags: List<String>
     get() = item.proto.tags.sorted()
+
+  override val plural: String?
+    get() = item.proto.plural
 }
 
 internal class SkillFacade(val skill: gups.core.model.SkillProto) : PluginSkill {

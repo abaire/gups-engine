@@ -176,6 +176,7 @@ class HeritagePluginTest {
     override val kind = "armor"
     override val wear = "body"
     override val weight = 10
+    override val plural: String? = null
   }
 
   private class FakeSkill(override val tags: List<String> = emptyList()) : PluginSkill {

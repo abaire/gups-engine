@@ -241,6 +241,9 @@ interface PluginItem : PluginEntity {
   val wear: String?
   val weight: Int
   val tags: List<String>
+
+  /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
+  val plural: String?
 }
 
 interface PluginSkill {

@@ -231,7 +231,19 @@ data class ItemProto(
   val modifiers: Modifiers = emptyMap(),
   /** Content schema version of this item prototype, defaulting to 1. */
   val version: Int = 1,
-)
+  /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
+  val plural: String? = null,
+) {
+  /**
+   * The lowercase words a player can name this item by: each keyword whole and split into words,
+   * plus the words of [plural].
+   */
+  val matchWords: List<String> by lazy {
+    (keywords.flatMap { listOf(it.lowercase()) + keywordWords(it) } +
+        plural?.let(::keywordWords).orEmpty())
+      .distinct()
+  }
+}
 
 /** Target distance ranges supported by skills and spells. */
 enum class SkillRange {
@@ -397,6 +409,7 @@ class Prototypes(
         kind = "corpse",
         weight = 100,
         container = ContainerProto(capacity = 100, maxWeight = 10_000),
+        tags = setOf("no_all"),
       )
 
     private fun <T> unique(kind: String, protos: List<T>, label: (T) -> Label): Map<Label, T> {

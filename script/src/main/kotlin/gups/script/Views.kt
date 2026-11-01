@@ -546,6 +546,14 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
 @StarlarkBuiltin(name = "item", doc = "A read-only view of an item.")
 class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   @StarlarkMethod(
+    name = "plural",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Display name for stacks of 2 or more, or None.",
+  )
+  fun plural(): Any? = read { item.proto.plural }
+
+  @StarlarkMethod(
     name = "kind",
     structField = true,
     doc = "Item category, such as 'misc', 'melee', 'ranged', 'armor' or 'key'.",

@@ -69,6 +69,7 @@ class LoaderTest {
             """
                     mob("rat", name = "a fat rat", vitals = vitals(hp = 5), loot = [loot(":key", chance = 0.5)])
                     item("key", name = "a brass key")
+                    item("loaf", name = "a loaf of bread", plural = "loaves of bread", stackable = True)
                     skill("bite", range = "melee", effect = sequence(damage("1d4", type = "pierce"), stun(2)))
                 """,
         )
@@ -87,7 +88,22 @@ class LoaderTest {
     assertEquals("hall", p.rooms.getValue(Label("//zones/z:hall")).name)
     assertEquals(listOf("fat", "rat"), p.mob(Label("//zones/z:rat")).keywords)
     assertEquals(listOf("brass", "key"), p.item(Label("//zones/z:key")).keywords)
+    val loaf = p.item(Label("//zones/z:loaf"))
+    assertEquals("loaves of bread", loaf.plural)
+    assertEquals(listOf("loaf", "of", "bread"), loaf.keywords)
     assertEquals(600, p.zones.getValue("zones/z").resetPulses)
+  }
+
+  @Test
+  fun `an item's plural can't be blank`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"coin\", plural = \" \", stackable = True)",
+        )
+      )
+    assertContains(only(r).message, "item(plural): can't be blank")
   }
 
   @Test

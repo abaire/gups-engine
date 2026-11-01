@@ -14,6 +14,17 @@ import java.util.TreeMap
 // Live entities. Static data is read through `proto`; everything mutable lives
 // on the instance. Only the world mutates these, on the world thread.
 
+/** Articles ignored when deriving or matching item keywords. */
+val KEYWORD_ARTICLES: Set<String> = setOf("a", "an", "the", "some")
+
+private val WORD_SPLIT = Regex("[^a-z0-9]+")
+
+/** The lowercase words of [text], minus articles. */
+fun keywordWords(text: String): List<String> = allWords(text).filter { it !in KEYWORD_ARTICLES }
+
+private fun allWords(text: String): List<String> =
+  text.lowercase().split(WORD_SPLIT).filter { it.isNotEmpty() }
+
 /**
  * Base class for all live simulation entities.
  *
@@ -731,9 +742,26 @@ class Item(
   val contents: List<Item>
     get() = contentsIndex.values.toList()
 
-  /** True if [keyword] matches any keyword of this item case-insensitively. */
-  fun matches(keyword: String): Boolean {
-    val k = keyword.lowercase()
-    return keywords.any { it.lowercase().startsWith(k) }
+  /**
+   * How players see [amount] of this item (by default the whole stack): [name] for one, `"<amount>
+   * <plural>"` when the prototype has a plural and there is no [nameOverride], else `"<name>
+   * (<amount>)"`.
+   */
+  fun describe(amount: Int = count): String =
+    when {
+      amount <= 1 -> name
+      nameOverride == null && proto.plural != null -> "$amount ${proto.plural}"
+      else -> "$name ($amount)"
+    }
+
+  /**
+   * True if every word of [phrase] is the start of one of this item's keywords, keyword words or
+   * plural words, ignoring case. Articles are dropped unless the phrase is nothing but articles, so
+   * `an` still abbreviates `anvil`.
+   */
+  fun matches(phrase: String): Boolean {
+    val words = keywordWords(phrase).ifEmpty { allWords(phrase) }
+    if (words.isEmpty()) return false
+    return words.all { w -> proto.matchWords.any { it.startsWith(w) } }
   }
 }

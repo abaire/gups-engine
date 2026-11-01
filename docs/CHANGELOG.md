@@ -501,6 +501,20 @@ A plugin that needs features lists their ids in `GupsPlugin.requiredFeatures`; i
 feature" when one is off. `PluginActor.level` and `PluginRoom.size` throw `IllegalStateException` naming the feature
 when `leveling` or `track` is off.
 
+### Item quantities, pluralization, and all
+
+- `item(...)` takes an optional `plural` (for example `plural = "gold coins"`), the display name of a stack of 2 or
+  more. `item.plural` reads it on the item view, and `PluginItem.plural` exposes it to plugins.
+- Item commands match a phrase of keywords instead of one word: every word of the phrase must match the start of one of
+  the item's keywords, the words of a keyword, or its plural words, and articles are ignored unless the phrase is only
+  articles, so `get gold coin`, `get coins` and `get the coin` all find `a gold coin`, and `get an` still finds `an
+  anvil`. `get 2.coin` picks the second match, as the other item commands do.
+- A blank `plural` fails to load.
+- `look`, `inventory` and `keyring` show a stack of 2 or more as `"<count> <plural>"` when the prototype declares a
+  `plural` and the item has no name override, and as `"<name> (<count>)"` otherwise.
+- The engine's corpse prototype carries the `no_all` tag, which keeps an item out of bare `all` in `get`, `drop`, `give`
+  and `put`.
+
 ## api_version 1
 
 Initial (unstable) script API.

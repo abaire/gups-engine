@@ -43,6 +43,9 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
   private val coin = Label("//t:coin")
   private val chest = Label("//t:chest")
   private val anvil = Label("//t:anvil")
+  private val pebble = Label("//t:pebble")
+  private val loaf = Label("//t:loaf")
+  private val blade = Label("//t:blade")
   private val potion = Label("//t:potion")
   private val chainKey = Label("//t:chain_key")
   private val bareKey = Label("//t:bare_key")
@@ -67,7 +70,16 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
         wear = "head",
         equipAffects = listOf(EquipAffect("stunned", pulses = 3), EquipAffect("no_regen")),
       ),
-      ItemProto(coin, "a gold coin", listOf("coin", "gold"), stackable = true),
+      ItemProto(
+        coin,
+        "a gold coin",
+        listOf("coin", "gold"),
+        stackable = true,
+        plural = "gold coins",
+      ),
+      ItemProto(pebble, "a pebble", listOf("pebble"), stackable = true),
+      ItemProto(loaf, "a loaf", listOf("loaf"), plural = "loaves of bread"),
+      ItemProto(blade, "a blade", listOf("long-sword", "gold coin")),
       ItemProto(
         chest,
         "a chest",
@@ -291,5 +303,100 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     f.doLine(p, "drop anvil")
     assertNull(p.encumbrance[fs.agility])
     assertEquals(10, p.stat(fs.agility))
+  }
+
+  @Test
+  fun `describe shows the plural for stacks of 2 and the name otherwise`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    assertEquals("a gold coin", f.carry(p, coin).describe())
+    assertEquals("5 gold coins", f.carry(p, coin, 5).describe())
+    assertEquals("a pebble (5)", f.carry(p, pebble, 5).describe())
+    val marked = f.carry(p, coin, 5)
+    marked.nameOverride = "a lucky coin"
+    assertEquals("a lucky coin (5)", marked.describe())
+    assertEquals("a lucky coin", marked.describe(1))
+  }
+
+  @Test
+  fun `matches accepts phrases of keywords and plural words, dropping articles`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val c = f.carry(p, coin)
+    assertTrue(c.matches("coins"), "plural words match")
+    assertTrue(c.matches("gold coin"))
+    assertTrue(c.matches("the coin"))
+    assertTrue(c.matches("go co"), "prefixes of separate words match")
+    assertFalse(c.matches("silver coin"))
+    assertFalse(c.matches("the"), "an article alone names only keywords starting with it")
+    assertTrue(f.carry(p, anvil).matches("an"), "an article-only phrase still abbreviates")
+    val bread = f.carry(p, loaf)
+    assertTrue(bread.matches("loaves"), "plural-only words match")
+    assertTrue(bread.matches("bread"))
+    val sword = f.carry(p, blade)
+    assertTrue(sword.matches("long-sword"), "a keyword with punctuation matches in full")
+    assertTrue(sword.matches("sword"))
+    assertTrue(sword.matches("gold coin"), "a keyword with a space matches in full")
+  }
+
+  @Test
+  fun `inventory and look show stack quantities`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.carry(p, coin, 5)
+    f.carry(p, pebble, 5)
+    val inv = f.doLine(p, "inventory")
+    assertContains(inv, "5 gold coins")
+    assertContains(inv, "a pebble (5)")
+    f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0), 5)
+    assertContains(f.doLine(p, "look"), "5 gold coins")
+    val box = f.w.spawnItem(chest, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    f.carry(p, T.KEY)
+    f.doLine(p, "unlock chest")
+    f.doLine(p, "open chest")
+    f.w.moveItem(f.carry(p, pebble, 5), ItemLocation.Contained(box.id))
+    assertContains(f.doLine(p, "look chest"), "It contains: a pebble (5).")
+  }
+
+  @Test
+  fun `get, drop, give and put name the whole stack`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.player("Bob")
+    f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0), 5)
+    assertContains(f.doLine(p, "get gold coin"), "You get 5 gold coins.")
+    assertContains(f.doLine(p, "drop coins"), "You drop 5 gold coins.")
+    f.doLine(p, "get coin")
+    assertContains(f.doLine(p, "give gold coin to bob"), "You give 5 gold coins to Bob.")
+    val box = f.w.spawnItem(chest, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    box.container!!.state = DoorState.OPEN
+    f.carry(p, pebble, 5)
+    assertContains(f.doLine(p, "put pebble in chest"), "You put a pebble (5) in a chest.")
+  }
+
+  @Test
+  fun `get picks the nth match with an ordinal prefix`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(potion, hall)
+    f.w.spawnItem(pebble, hall)
+    val second = f.w.spawnItem(potion, hall)
+    assertContains(f.doLine(p, "get 2.the potion"), "You get a potion.")
+    assertEquals(ItemLocation.Carried(p.id), second.location)
+  }
+
+  @Test
+  fun `get finds items by a phrase of keywords`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val ground = f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    assertContains(f.doLine(p, "get gold coin"), "You get a gold coin.")
+    assertEquals(ItemLocation.Carried(p.id), ground.location)
+  }
+
+  @Test
+  fun `the corpse prototype is tagged no_all`() {
+    assertTrue("no_all" in Prototypes.CORPSE.tags)
   }
 }

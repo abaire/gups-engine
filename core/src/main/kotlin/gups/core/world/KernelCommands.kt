@@ -252,7 +252,11 @@ internal object KernelCommands {
       val inside = item.contents
       if (inside.isEmpty()) w.tell(c.actor, KernelMsg.LOOK_EMPTY)
       else
-        w.tell(c.actor, KernelMsg.LOOK_CONTAINS, "items" to inside.joinToString(", ") { it.name })
+        w.tell(
+          c.actor,
+          KernelMsg.LOOK_CONTAINS,
+          "items" to inside.joinToString(", ") { it.describe() },
+        )
     }
   }
 
@@ -383,7 +387,8 @@ internal object KernelCommands {
       else
         w.msg(
           KernelMsg.INVENTORY_LIST,
-          "items" to items.joinToString("\n") { w.msg(KernelMsg.INVENTORY_ITEM, "item" to it.name) },
+          "items" to
+            items.joinToString("\n") { w.msg(KernelMsg.INVENTORY_ITEM, "item" to it.describe()) },
         ),
     )
   }
@@ -397,7 +402,8 @@ internal object KernelCommands {
       else
         w.msg(
           KernelMsg.KEYRING_LIST,
-          "items" to keys.joinToString("\n") { w.msg(KernelMsg.INVENTORY_ITEM, "item" to it.name) },
+          "items" to
+            keys.joinToString("\n") { w.msg(KernelMsg.INVENTORY_ITEM, "item" to it.describe()) },
         ),
     )
   }
@@ -595,12 +601,13 @@ internal object KernelCommands {
 
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.InRoom(actor.room.id, actor.trackIndex))
-        w.tell(actor, KernelMsg.DROP_SELF, "item" to item.name)
+        val desc = item.describe()
+        w.tell(actor, KernelMsg.DROP_SELF, "item" to desc)
         w.tellSight(
           actor.room,
           "drop",
           actor,
-          w.msg(KernelMsg.DROP_ROOM, "actor" to actor.name.cap(), "item" to item.name),
+          w.msg(KernelMsg.DROP_ROOM, "actor" to actor.name.cap(), "item" to desc),
           actor,
         )
         w.dispatch(HookName.ON_DROP, item, actor.room, HookContext(actor = actor, item = item))
@@ -637,8 +644,9 @@ internal object KernelCommands {
 
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.Carried(target.id))
-        w.tell(actor, KernelMsg.GIVE_SELF, "item" to item.name, "target" to target.name)
-        w.tell(target, KernelMsg.GIVE_TARGET, "actor" to actor.name.cap(), "item" to item.name)
+        val desc = item.describe()
+        w.tell(actor, KernelMsg.GIVE_SELF, "item" to desc, "target" to target.name)
+        w.tell(target, KernelMsg.GIVE_TARGET, "actor" to actor.name.cap(), "item" to desc)
         w.tellSight(
           actor.room,
           "give",
@@ -646,7 +654,7 @@ internal object KernelCommands {
           w.msg(
             KernelMsg.GIVE_ROOM,
             "actor" to actor.name.cap(),
-            "item" to item.name,
+            "item" to desc,
             "target" to target.name,
           ),
           actor,
@@ -698,7 +706,8 @@ internal object KernelCommands {
 
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.Contained(box.id))
-        w.tell(actor, KernelMsg.PUT_SELF, "item" to item.name, "container" to box.name)
+        val desc = item.describe()
+        w.tell(actor, KernelMsg.PUT_SELF, "item" to desc, "container" to box.name)
         w.tellSight(
           actor.room,
           "put",
@@ -706,7 +715,7 @@ internal object KernelCommands {
           w.msg(
             KernelMsg.PUT_ROOM,
             "actor" to actor.name.cap(),
-            "item" to item.name,
+            "item" to desc,
             "container" to box.name,
           ),
           actor,
@@ -1107,17 +1116,18 @@ internal class GetAction(
   override fun validate(w: World, actor: Actor): String? {
     val room = w.roomOf(actor)
     val source = container
+    val (n, word) = ordinal(what)
     val found: Item =
       when {
         fixed != null ->
           fixed.takeIf { it.location is ItemLocation.InRoom && w.isPresent(it, room) }
-        source == null -> room.items.firstOrNull { it.matches(what) }
+        source == null -> room.items.filter { it.matches(word) }.getOrNull(n - 1)
         else -> {
           if (!w.isPresent(source, room)) return w.msg(KernelMsg.DONT_SEE)
           val box = source.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to source.name)
           if (box.state != DoorState.OPEN)
             return w.msg(KernelMsg.PUT_CLOSED, "container" to source.name)
-          source.contents.firstOrNull { it.matches(what) }
+          source.contents.filter { it.matches(word) }.getOrNull(n - 1)
         }
       } ?: return w.msg(KernelMsg.DONT_SEE)
     if (Feature.TRACK in w.features) {
@@ -1143,17 +1153,18 @@ internal class GetAction(
   override fun resolve(w: World, actor: Actor): Int {
     val it = item!!
     w.moveItem(it, ItemLocation.Carried(actor.id))
+    val desc = it.describe()
     w.send(
       actor,
       if (container != null)
-        w.msg(KernelMsg.GET_SELF_FROM, "item" to it.name, "container" to container.name)
-      else w.msg(KernelMsg.GET_SELF, "item" to it.name),
+        w.msg(KernelMsg.GET_SELF_FROM, "item" to desc, "container" to container.name)
+      else w.msg(KernelMsg.GET_SELF, "item" to desc),
     )
     w.tellSight(
       actor.room,
       "get",
       actor,
-      w.msg(KernelMsg.GET_ROOM, "actor" to actor.name.cap(), "item" to it.name),
+      w.msg(KernelMsg.GET_ROOM, "actor" to actor.name.cap(), "item" to desc),
       actor,
     )
     w.dispatch(HookName.ON_GET, it, actor.room, HookContext(actor = actor, item = it))
@@ -1276,7 +1287,8 @@ fun World.describeRoom(viewer: Actor): String {
     if (others.isNotEmpty())
       lines += msg(KernelMsg.LOOK_HERE_ACTORS, "list" to others.joinToString(", ") { it.name })
     if (room.items.isNotEmpty())
-      lines += msg(KernelMsg.LOOK_HERE_ITEMS, "list" to room.items.joinToString(", ") { it.name })
+      lines +=
+        msg(KernelMsg.LOOK_HERE_ITEMS, "list" to room.items.joinToString(", ") { it.describe() })
     return lines.joinToString("\n")
   }
   val words =
@@ -1309,7 +1321,7 @@ fun World.describeRoom(viewer: Actor): String {
         msg(
           KernelMsg.LOOK_ITEMS,
           "where" to ground.getValue(band),
-          "list" to list.joinToString(", ") { it.name },
+          "list" to list.joinToString(", ") { it.describe() },
         )
     }
   }

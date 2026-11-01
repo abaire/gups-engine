@@ -268,6 +268,18 @@
           "since": 1
         },
         {
+          "symbol": "item.plural",
+          "name": "plural",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Display name for stacks of 2 or more, such as 'gold coins'.",
+          "since": 1
+        },
+        {
           "symbol": "item.keywords",
           "name": "keywords",
           "type": "list[str]",
@@ -4566,6 +4578,12 @@
           "symbol": "view:item.name",
           "name": "name",
           "doc": "The entity's display name.",
+          "since": 1
+        },
+        {
+          "symbol": "view:item.plural",
+          "name": "plural",
+          "doc": "Display name for stacks of 2 or more, or None.",
           "since": 1
         },
         {

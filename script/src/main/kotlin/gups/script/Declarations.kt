@@ -32,6 +32,7 @@ import gups.core.model.TargetKind
 import gups.core.model.TrackSize
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.model.keywordWords
 import gups.core.world.ActorFilter
 import gups.core.world.Aggressive
 import gups.core.world.Assist
@@ -454,17 +455,11 @@ private fun doorState(v: Any?, what: String): DoorState =
 
 private fun displayName(id: String): String = id.replace('_', ' ')
 
-private val ARTICLES = setOf("a", "an", "the", "some")
-
 /**
  * Keywords default to the words of the display name minus articles, or else the declaration name.
  */
 private fun defaultKeywords(name: String, id: String): List<String> =
-  name
-    .lowercase()
-    .split(Regex("[^a-z0-9]+"))
-    .filter { it.isNotEmpty() && it !in ARTICLES }
-    .ifEmpty { listOf(id.lowercase()) }
+  keywordWords(name).ifEmpty { listOf(id.lowercase()) }
 
 private fun commands(v: Any?, what: String, pkg: String): Map<String, ZoneCommand> {
   if (isNone(v)) return emptyMap()
@@ -902,6 +897,8 @@ internal class DeclarationBuiltins(
       val pkg = ctx.pkg.path
       val label = Label("//$pkg:$id")
       val name = d.str("name") ?: displayName(id)
+      val plural = d.str("plural")
+      if (plural != null && plural.isBlank()) fail("item(plural): can't be blank")
       val wear = d.str("wear")
       val wield = d.str("wield")
       if (wear != null && wield != null) fail("item(): give either wear or wield, not both")
@@ -939,6 +936,7 @@ internal class DeclarationBuiltins(
           equipAffects = equipAffects(d["equip_affects"], d.what("equip_affects")),
           modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
           version = version(d),
+          plural = plural,
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
       if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
@@ -2052,6 +2050,12 @@ internal class DeclarationBuiltins(
               required = true,
             ),
             DeclParam("name", "str", "Display name shown to players.", default = "id with spaces"),
+            DeclParam(
+              "plural",
+              "str",
+              "Display name for stacks of 2 or more, such as 'gold coins'.",
+              default = "None",
+            ),
             DeclParam(
               "keywords",
               "list[str]",

@@ -139,6 +139,7 @@ fun tombstone(was: ItemProto) =
     weight = was.weight,
     stackable = was.stackable,
     container = was.container,
+    plural = was.plural,
   )
 
 private fun World.despawn(m: Mob) {
