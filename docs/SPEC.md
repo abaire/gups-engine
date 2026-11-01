@@ -1424,14 +1424,25 @@ uses the default names. Every player-facing message here is the default text of 
 
 - **Stack display:** `look`, `inventory` and `keyring` show a stack of 2 or more as `"<count> <plural>"` when the
   prototype declares a `plural` and the item has no name override, and as `"<name> (<count>)"` otherwise.
-- **Keyword phrases:** item commands take a phrase of words, not just one word: every word must match the start of one
-  of the item's keywords, a keyword's words, or its plural words; articles are ignored unless the phrase is only
-  articles. `get 2.coin` picks the second match, as the other item commands do.
+- **Item specifiers:** `get`, `drop`, `give` and `put` take a `<what>` specifier instead of a single word: a
+  `<keyword>`, a `<ordinal>.<keyword>`, a `<count> <keyword>`, a `<count> <ordinal>.<keyword>`, `all`, or `all
+  <keyword>`. A keyword may be a phrase, and every word of it must match the start of one of the item's keywords, a
+  keyword's words, or its plural words; articles are ignored unless the phrase is only articles. `get 2.coin` picks the
+  second match, as the other item commands do. Bare `all` skips items tagged `no_all` (such as `//engine:corpse`) and
+  keyring-only keys; an explicit keyword ignores both exclusions.
+- **`get <what> [[from] <container>]`:** the `from` preposition is optional. Without it, `get <item> <container>` takes
+  from the container when the last word names a container that holds a match, and `get all <container>` loots it;
+  otherwise the whole phrase is a ground item. It uses the container's ground band for `get_lag`; a container carried by
+  the actor counts as `MELEE`, and a `get` from one is not capped by the carry limit. The container must be open. A
+  requested count is capped to what the source holds and to what the actor can carry ("You can't carry that much." when
+  the carry limit caps it). Each source stack runs `before_get`, the move, and `on_get` once; a stack that `before_get`
+  destroys or moves away from the source is skipped.
+- **`drop <what>`:** drops one item, a count, or all matching items from the inventory to the ground. A count is capped
+  to what is carried. Each source stack runs `before_drop`, the move, and `on_drop` once; a stack that `before_drop`
+  destroys or moves out of the inventory is skipped. With nothing matching, it says "You aren't carrying that."
 - **`kill`:** engages, switches the attacker's primary target, costs no lag, and does not swing immediately: the first
   swing comes at the next combat round. `kill` on the current primary target is a no-op ("You're already fighting
   them!").
-- **`get X from Y`:** uses the container's ground band for `get_lag`; a container carried by the actor counts as
-  `MELEE`. The container must be open.
 - **`give <item> [to] <actor>`:** gives the whole stack, and fails if the receiver can't carry it.
 - **`put <item> in|into <container>`:** the container is carried, or on the ground within `get_lag` reach, and open.
 - **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a door direction here.

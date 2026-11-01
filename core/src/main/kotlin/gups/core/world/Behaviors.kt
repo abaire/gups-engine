@@ -238,7 +238,7 @@ data object Scavenge : Behavior {
       "${world.commands.nameOf("get")} ${item.keywords.first()}",
       PRIORITY_SCAVENGE,
       "scavenge",
-      GetAction(item.keywords.first(), null, fixed = item),
+      GetAction("", fixed = item),
     )
   }
 }

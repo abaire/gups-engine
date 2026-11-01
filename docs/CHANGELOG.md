@@ -510,6 +510,19 @@ when `leveling` or `track` is off.
   articles, so `get gold coin`, `get coins` and `get the coin` all find `a gold coin`, and `get an` still finds `an
   anvil`. `get 2.coin` picks the second match, as the other item commands do.
 - A blank `plural` fails to load.
+- `get <what> [[from] <container>]` and `drop <what>` take an item specifier `<what>` instead of a single word: a
+  `<keyword>`, a `<ordinal>.<keyword>`, a `<count> <keyword>`, a `<count> <ordinal>.<keyword>`, `all`, or `all
+  <keyword>`. A keyword may be a phrase. The `from` preposition in `get` is optional: without it, `get <item>
+  <container>` takes from the container when the last word names a container that holds a match, and `get all
+  <container>` loots it; otherwise the whole phrase is a ground item.
+- Bare `all` in `get` and `drop` skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys; an
+  explicit keyword (`all <keyword>`, `<count> <keyword>`, or a bare `<keyword>`) ignores both exclusions.
+- A requested count is capped to what the source holds and to what the actor can carry. When the carry limit caps the
+  transfer, the actor is told "You can't carry that much." A `get` from a container the actor already carries is not
+  capped, since the load does not change.
+- Each source stack runs `before_get` / `before_drop`, the move, and `on_get` / `on_drop` once; a single command can
+  collect across several stacks, each with its own message. A stack that the `before_*` hook destroys or moves away is
+  skipped.
 - `look`, `inventory` and `keyring` show a stack of 2 or more as `"<count> <plural>"` when the prototype declares a
   `plural` and the item has no name override, and as `"<name> (<count>)"` otherwise.
 - The engine's corpse prototype carries the `no_all` tag, which keeps an item out of bare `all` in `get`, `drop`, `give`

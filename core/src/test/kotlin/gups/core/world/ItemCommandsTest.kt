@@ -10,6 +10,7 @@ import gups.core.model.EquipAffect
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.MobProto
 import gups.core.model.Prototypes
 import gups.core.rules.RulesContext
 import kotlin.test.Test
@@ -459,5 +460,270 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     val stack = f.w.spawnItem(coin, ItemLocation.InRoom(hall.id, 0), 5)
     f.w.moveItem(stack, ItemLocation.Equipped(p.id, "wield"))
     assertFailsWith<IllegalArgumentException> { f.w.moveItem(stack, ItemLocation.Carried(p.id), 2) }
+  }
+
+  @Test
+  fun `a count splits the stack on get and drop`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(coin, hall, 10)
+    assertContains(f.doLine(p, "get 5 coins"), "You get 5 gold coins.")
+    assertEquals(5, f.w.room(T.HALL).items.single().count, "5 stay on the ground")
+    assertEquals(5, p.inventory.single().count, "5 are carried")
+    assertContains(f.doLine(p, "drop 3 coins"), "You drop 3 gold coins.")
+    assertEquals(2, p.inventory.single().count, "2 are carried")
+    assertEquals(8, f.w.room(T.HALL).items.single().count, "the drop merged into the ground stack")
+  }
+
+  @Test
+  fun `drop across differing stacks drops each with its own message`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.carry(p, coin, 4)
+    val second = f.carry(p, coin, 5)
+    second.customAttributes["t:cursed"] = AttrValue.B(true)
+    val out = f.doLine(p, "drop 6 coins")
+    assertContains(out, "You drop 4 gold coins.")
+    assertContains(out, "You drop 2 gold coins.")
+    assertEquals(3, p.inventory.single { it.protoLabel == coin }.count, "3 of the second stay")
+  }
+
+  @Test
+  fun `a count picks up that many non-stackable items`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    repeat(3) { f.w.spawnItem(ring, hall) }
+    assertContains(f.doLine(p, "get 2 ring"), "You get a ring.")
+    assertEquals(2, p.inventory.count { it.protoLabel == ring })
+    assertEquals(1, f.w.room(T.HALL).items.count { it.protoLabel == ring })
+  }
+
+  @Test
+  fun `an oversized count moves the whole stack without a capped message`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(coin, hall, 10)
+    val got = f.doLine(p, "get 50000 coins")
+    assertContains(got, "You get 10 gold coins.")
+    assertFalse("can't carry" in got, "no capped message when everything fits")
+    assertContains(f.doLine(p, "drop 50000 coins"), "You drop 10 gold coins.")
+  }
+
+  @Test
+  fun `a count capped by the carry limit moves what fits and says so`() {
+    val host = RecordingHost()
+    host.handlers[HookName.BEFORE_GET] = { _, _, _ -> null }
+    host.handlers[HookName.ON_GET] = { _, _, _ -> null }
+    val f = fixture(host)
+    val p = f.player("Ann")
+    f.carry(p, pebble, 90) // weight 90, leaving 10 of the 100 limit free
+    f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0), 100)
+    host.calls.clear()
+    val out = f.doLine(p, "get 50000 coins")
+    assertContains(out, "You get 10 gold coins.")
+    assertContains(out, "You can't carry that much.")
+    assertTrue(
+      out.indexOf("You get 10 gold coins.") < out.indexOf("You can't carry that much."),
+      "the capped message comes once, at the end",
+    )
+    assertEquals(
+      1,
+      host.calls.count { it == "before_get:a gold coin" },
+      "one before_get on the item",
+    )
+    assertTrue(host.calls.contains("on_get:a gold coin"), "on_get fires on the moved item")
+  }
+
+  @Test
+  fun `bare all and all keyword collect every matching stack`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(coin, hall, 4)
+    f.w.spawnItem(coin, hall, 3)
+    f.w.spawnItem(pebble, hall, 2)
+    val gotAll = f.doLine(p, "get all")
+    assertContains(gotAll, "You get 4 gold coins.")
+    assertContains(gotAll, "You get 3 gold coins.")
+    assertContains(gotAll, "You get a pebble (2).")
+    assertContains(f.doLine(p, "drop all coin"), "You drop 7 gold coins.")
+    assertEquals(1, p.inventory.size, "only the pebbles remain")
+    assertEquals("a pebble (2)", p.inventory.single().describe())
+    assertContains(f.doLine(p, "get all coin"), "You get 7 gold coins.")
+    assertTrue(f.w.room(T.HALL).items.none { it.protoLabel == coin }, "every coin was taken")
+    val droppedAll = f.doLine(p, "drop all")
+    assertContains(droppedAll, "You drop 7 gold coins.")
+    assertContains(droppedAll, "You drop a pebble (2).")
+    assertTrue(p.inventory.isEmpty())
+    assertContains(f.doLine(p, "get all pebble"), "You get a pebble (2).")
+    assertEquals(listOf(pebble), p.inventory.map { it.protoLabel }, "all pebble leaves the coins")
+  }
+
+  @Test
+  fun `bare all skips no_all corpses and keyring keys, and explicit keywords move them`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(coin, hall, 3)
+    f.w.spawnItem(Prototypes.CORPSE.label, hall)
+    val key = f.carry(p, bareKey)
+    assertContains(f.doLine(p, "get all"), "You get 3 gold coins.")
+    assertTrue(
+      f.w.room(T.HALL).items.any { it.protoLabel == Prototypes.CORPSE.label },
+      "the corpse stays on the ground",
+    )
+    assertContains(f.doLine(p, "drop all"), "You drop 3 gold coins.")
+    assertEquals(ItemLocation.Carried(p.id), key.location, "the bare key stays on the keyring")
+    assertContains(f.doLine(p, "drop all iron"), "You drop an iron key.")
+    assertEquals(ItemLocation.InRoom(hall.room, hall.trackIndex), key.location)
+    assertContains(f.doLine(p, "get corpse"), "You get a corpse.")
+  }
+
+  @Test
+  fun `get with a container takes from it, and the container-versus-ground rule holds`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    val box = f.w.spawnItem(chest, hall)
+    box.container!!.state = DoorState.OPEN
+    val inBox = ItemLocation.Contained(box.id)
+    f.w.spawnItem(coin, inBox, 5)
+    val groundCoins = f.w.spawnItem(coin, hall, 3)
+    assertContains(f.doLine(p, "get coin chest"), "You get 5 gold coins from a chest.")
+    assertTrue(box.contents.isEmpty(), "the coins came from the chest")
+    f.w.spawnItem(coin, inBox, 8)
+    assertContains(f.doLine(p, "get 5 coins chest"), "You get 5 gold coins from a chest.")
+    assertEquals(3, box.contents.single().count, "3 stay in the chest")
+    f.w.spawnItem(pebble, inBox, 2)
+    val looted = f.doLine(p, "get all chest")
+    assertContains(looted, "You get 3 gold coins from a chest.")
+    assertContains(looted, "You get a pebble (2) from a chest.")
+    assertTrue(box.contents.isEmpty(), "the chest is emptied")
+    assertEquals(hall, groundCoins.location, "the ground coins were never touched")
+    assertEquals(3, groundCoins.count)
+    assertContains(f.doLine(p, "get gold coin"), "You get 3 gold coins.")
+    assertEquals(ItemLocation.InRoom(hall.room, hall.trackIndex), box.location, "the chest stays")
+    assertTrue(
+      f.w.room(T.HALL).items.none { it.protoLabel == coin },
+      "the coins came off the ground",
+    )
+  }
+
+  @Test
+  fun `get from a closed container says it is closed`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    val box = f.w.spawnItem(chest, hall) // the fixture chest starts locked
+    f.w.moveItem(f.carry(p, coin, 5), ItemLocation.Contained(box.id))
+    assertContains(f.doLine(p, "get coin chest"), "A chest is closed.")
+  }
+
+  @Test
+  fun `get all corpse loots the corpse`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    val corpse = f.w.spawnItem(Prototypes.CORPSE.label, hall)
+    f.w.moveItem(f.carry(p, coin, 3), ItemLocation.Contained(corpse.id))
+    assertContains(f.doLine(p, "get all corpse"), "from a corpse.")
+  }
+
+  @Test
+  fun `get from a carried container is not capped by the carry limit`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val bag = f.carry(p, T.BAG)
+    f.w.moveItem(f.carry(p, coin), ItemLocation.Contained(bag.id))
+    f.carry(p, anvil) // weight 95
+    f.carry(p, pebble, 4) // weight 4; with the bag and coin the load is over the limit
+    assertContains(f.doLine(p, "get coin from bag"), "You get a gold coin from a bag.")
+    assertEquals(ItemLocation.Carried(p.id), p.inventory.single { it.protoLabel == coin }.location)
+  }
+
+  @Test
+  fun `a vetoing before_get is called once per stack, not twice`() {
+    val host = RecordingHost()
+    host.handlers[HookName.BEFORE_GET] = { _, _, _ -> HookOutcome.Deny("No.") }
+    val f = fixture(host)
+    val p = f.player("Ann")
+    val hall = ItemLocation.InRoom(f.w.room(T.HALL).id, 0)
+    f.w.spawnItem(coin, hall, 4)
+    f.w.spawnItem(coin, hall, 3)
+    host.calls.clear()
+    f.doLine(p, "get all")
+    assertEquals(
+      2,
+      host.calls.count { it == "before_get:a gold coin" },
+      "once per source stack, not twice",
+    )
+    assertEquals(0, p.inventory.count { it.protoLabel == coin }, "nothing is picked up")
+  }
+
+  @Test
+  fun `scavenge still makes a mob pick up an item`() {
+    val magpie =
+      MobProto(
+        Label("//t:magpie"),
+        "magpie",
+        listOf("magpie"),
+        vitals = mapOf(fs.health to 40),
+        behaviors = listOf(Scavenge),
+      )
+    val f =
+      Fixture(protos = Prototypes(T.rooms, T.mobs + listOf(magpie), T.items + extra, T.skills))
+    val m = f.mob(Label("//t:magpie"))
+    val coin = f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0))
+    f.runTo(10)
+    assertEquals(ItemLocation.Carried(m.id), coin.location)
+  }
+
+  @Test
+  fun `a stack that before_get moves elsewhere is not picked up`() {
+    val host = RecordingHost()
+    val f = fixture(host)
+    host.handlers[HookName.BEFORE_GET] = { w, owner, _ ->
+      (owner as? Item)?.let { w.moveItem(it, ItemLocation.InRoom(w.room(T.YARD).id, 0)) }
+      null
+    }
+    val p = f.player("Ann")
+    val coins = f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0), 5)
+    assertFalse("You get" in f.doLine(p, "get 2 coins"))
+    assertEquals(ItemLocation.InRoom(f.w.room(T.YARD).id, 0), coins.location)
+    assertEquals(5, coins.count, "nothing was split off")
+    assertTrue(p.inventory.isEmpty())
+  }
+
+  @Test
+  fun `a stack that before_drop moves elsewhere is not dropped`() {
+    val host = RecordingHost()
+    val f = fixture(host)
+    val p = f.player("Ann")
+    val bag = f.carry(p, T.BAG)
+    host.handlers[HookName.BEFORE_DROP] = { w, owner, _ ->
+      (owner as? Item)?.let { w.moveItem(it, ItemLocation.Contained(bag.id)) }
+      null
+    }
+    val coins = f.carry(p, coin, 5)
+    assertFalse("You drop" in f.doLine(p, "drop 2 coins"))
+    assertEquals(ItemLocation.Contained(bag.id), coins.location)
+    assertEquals(5, coins.count, "nothing was split off")
+  }
+
+  @Test
+  fun `a count too large for an Int is capped to what is there`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.w.spawnItem(coin, ItemLocation.InRoom(f.w.room(T.HALL).id, 0), 10)
+    assertContains(f.doLine(p, "get 99999999999 coins"), "You get 10 gold coins.")
+    assertContains(f.doLine(p, "drop 99999999999 coins"), "You drop 10 gold coins.")
+    assertEquals(
+      ItemSpec(all = false, count = Int.MAX_VALUE, ordinal = 1, keyword = "coins"),
+      parseItemSpec("99999999999 coins"),
+    )
+    assertNull(parseItemSpec("-1 coins"))
   }
 }
