@@ -179,12 +179,6 @@ the engine never uses an item up (D-114). Scripts call `ctx.destroy` themselves.
 items lose one from the stack automatically after a successful `on_use`? - Should items have charges? - Should items
 have a declarative `use_effect` (an effect primitive) for novices who don't write hooks?
 
-### Effects on items (COMPLETED — M17)
-
-**Spec:** §4.3 (`target = "item"`, effect primitives). **Today:** an item-target skill runs only its `resolve`, because
-every effect primitive acts on actors (D-123). Items have no affects. **Questions:** should items be able to carry
-affects (enchantments, curses)? Should there be item primitives such as `repair` or `identify`?
-
 ### Equipment slots that depend on the actor
 
 **Spec:** §4.6 (`equipment_slots()` gets no ctx, and is asked once and again after each reload), §3.3, §4.9 (`wear`,
@@ -195,12 +189,6 @@ What happens to an item worn in a slot the actor loses, for example after a race
 dropped, or kept until removed? - The slot list is cached today: what is cached when the answer depends on the actor,
 and when is it asked again? - What do `item(slot=...)` validation, the lint and the equipment display order check
 against: the union of every possible slot, or something declared separately?
-
-### Quantities and `all` (COMPLETED — M16)
-
-**Spec:** §4.9 lists `get`, `drop`, `give` and `put` without argument syntax. **Today:** these commands move one item,
-or a whole stack. There is no `get all`, no `drop 5 coins`, and no `give 3 coins bob`. **Question:** what is the
-argument syntax for counts and `all`, and does moving part of a stack split it?
 
 ### Corpses and looting
 
