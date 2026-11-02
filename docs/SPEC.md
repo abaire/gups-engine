@@ -457,7 +457,12 @@ the world graph:
 - **Affects and tags:** per-instance `affects` (timed or permanent) and per-instance tag changes over the prototype's
   `tags`; prototype `affects` are read live from the prototype. Each item affect has an `applies` scope: `worn` reaches
   the holder while the item is equipped, `carried` while it is anywhere in the holder's custody, including nested
-  containers, unless a plugin containment filter blocks it (§4.15). A tombstone contributes nothing.
+  containers, unless a plugin containment filter blocks it (§4.15). A tombstone contributes nothing. Effective `tags`
+  are the prototype's plus those added, minus those removed, so a reload's prototype tag changes still reach instances.
+  `variants` maps free-form names to related item prototypes; `transform` swaps an instance's prototype in place. A
+  container keeps its open or closed state across a transform, and its locked state only when the new prototype has a
+  `key`; otherwise a locked container ends up closed. A container that becomes a non-container drops its contents on the
+  ground of the room it is in, and a stack that becomes a non-stackable item keeps one of its count.
 
 **Affect** ([`Affect`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -885,8 +890,9 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   good (§5.4.1).
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
-  part of the prototype, so a reload changes them for every instance. The tag `no_all` keeps an item out of bare `all`
-  in `get`, `drop`, `give` and `put`; `//engine:corpse` carries it.
+  part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
+  (§4.5). The tag `no_all` keeps an item out of bare `all` in `get`, `drop`, `give` and `put`; `//engine:corpse` carries
+  it.
 - **Mob traits:** `mob(traits = [...])` names traits the world's plugins define (§4.19), stored sorted without repeats.
   A name no loaded plugin defines fails the package's load with a "did you mean" suggestion, as a skipped plugin's
   builtins do; every tool that loads packages registers the plugins first, so `gups lint` checks it too. The traits'
@@ -1099,6 +1105,7 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 | Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`                                                                                                                                |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
+| Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                        |
 | State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                         |
 | Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                            |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                             |
@@ -1134,6 +1141,9 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
   - Verbs never merge stacks. An item with instance affects or tag changes never merges into a stack.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
   door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
+- **Containers:** container verbs print nothing. `open_container` also unlocks; `close_container` leaves a locked
+  container locked; `lock_container` closes the container and fails on one whose prototype has no `key`, since only a
+  container with a key has a lock; `unlock_container` leaves it closed.
 - **Queries:**
   - `here(keyword)` searches the owner's room: actors first, then ground items.
   - `find(label, scope)` counts entities whose location chain ends in the room, so items carried there count. `"zone"`

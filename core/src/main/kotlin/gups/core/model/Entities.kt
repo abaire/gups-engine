@@ -35,8 +35,8 @@ private fun allWords(text: String): List<String> =
 sealed class Entity(
   /** Unique entity identifier within the world simulation. */
   val id: EntityId,
-  /** Canonical prototype label from which this entity was instantiated. */
-  val protoLabel: Label,
+  /** Label of the entity's prototype. */
+  open val protoLabel: Label,
 ) {
   /** Schema version of the prototype at the time this entity was created or migrated. */
   var protoVersion: Int = 1
@@ -707,6 +707,10 @@ class Item(
     protoVersion = proto.version
   }
 
+  /** Label of the current prototype, which `transform` can change. */
+  override val protoLabel: Label
+    get() = proto.label
+
   /**
    * Current authoritative location of this item in the simulation. Changed only through the world's
    * item verbs, which keep every location index consistent.
@@ -731,7 +735,13 @@ class Item(
 
   /** Semantic tags assigned to this item. */
   val tags: Set<String>
-    get() = proto.tags
+    get() = (proto.tags + addedTags) - removedTags
+
+  /** Tags this instance has gained over its prototype's. */
+  val addedTags: MutableSet<String> = sortedSetOf()
+
+  /** Prototype tags this instance has lost. */
+  val removedTags: MutableSet<String> = sortedSetOf()
 
   /** Engagement range band for weapon attacks with this item. */
   val range: Band
@@ -742,7 +752,8 @@ class Item(
     get() = proto.weight * count + contentsIndex.values.sumOf { it.weight }
 
   /** Mutable container state if this item functions as a container, or null. */
-  val container: ContainerState? = proto.container?.let(::ContainerState)
+  var container: ContainerState? = proto.container?.let(::ContainerState)
+    internal set
 
   /** Absolute pulse when this ground item will decay and vanish, or null. */
   var decayAt: Long? = null

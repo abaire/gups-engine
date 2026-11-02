@@ -45,6 +45,7 @@ import gups.core.world.say
 import gups.core.world.send
 import gups.core.world.setActive
 import gups.core.world.setAnchor
+import gups.core.world.setContainerState
 import gups.core.world.setDoor
 import gups.core.world.spawnItem
 import gups.core.world.startCombat
@@ -1250,6 +1251,47 @@ internal constructor(
   )
   fun unlockDoor(room: Any, dir: Any, thread: StarlarkThread): Any =
     door(room, dir, thread, "unlock_door") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
+
+  // ---- Containers ----------------------------------------------------------------------------
+
+  private fun container(item: Any, name: String, to: (DoorState) -> DoorState): Any =
+    verb(name) {
+      val i = itemArg(item, "$name(item)")
+      val box = i.container ?: fail("$name(item): ${i.name} is not a container")
+      world.setContainerState(i, to(box.state))
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "open_container",
+    doc = "Opens the container, even if locked.",
+    parameters = [Param(name = "item", named = true, doc = "Container item to open.")],
+  )
+  fun openContainer(item: Any): Any = container(item, "open_container") { DoorState.OPEN }
+
+  @StarlarkMethod(
+    name = "close_container",
+    doc = "Closes an open container; a locked one stays locked.",
+    parameters = [Param(name = "item", named = true, doc = "Container item to close.")],
+  )
+  fun closeContainer(item: Any): Any =
+    container(item, "close_container") { if (it == DoorState.LOCKED) it else DoorState.CLOSED }
+
+  @StarlarkMethod(
+    name = "lock_container",
+    doc =
+      "Closes and locks the container. Only a container whose prototype names a key has a lock.",
+    parameters = [Param(name = "item", named = true, doc = "Container item to lock.")],
+  )
+  fun lockContainer(item: Any): Any = container(item, "lock_container") { DoorState.LOCKED }
+
+  @StarlarkMethod(
+    name = "unlock_container",
+    doc = "Unlocks the container, leaving it closed.",
+    parameters = [Param(name = "item", named = true, doc = "Container item to unlock.")],
+  )
+  fun unlockContainer(item: Any): Any =
+    container(item, "unlock_container") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
 
   // ---- State ---------------------------------------------------------------------------------
 

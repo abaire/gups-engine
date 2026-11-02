@@ -660,13 +660,18 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   - `script/src/main/kotlin/gups/script/Declarations.kt` (only to replace the private `TAG_REGEX` with the core one)
   - `core/src/test/kotlin/gups/core/world/ItemTagsTest.kt` (new)
   - `docs/SPEC.md`
+  - Added in review: `World.setContainerState` (`Verbs.kt`), the `ctx` container verbs (`Ctx.kt`, tested in
+    `HostTest.kt`), the `### Effects on items` subsection of `docs/CHANGELOG.md`, and the API files.
 - **Do Not Touch:** the rest of `script/`, `persist/`, `plugin-api/`.
 
 ### Specification & Decision Record Changes
 
 - **§3.3, Item, the "Affects and tags" bullet from Phase 2:** append "Effective `tags` are the prototype's plus those
   added, minus those removed, so a reload's prototype tag changes still reach instances. `variants` maps free-form names
-  to related item prototypes; `transform` swaps an instance's prototype in place."
+  to related item prototypes; `transform` swaps an instance's prototype in place." Review added the transform rules for
+  container state, contents and stacks to the same bullet.
+- **§4.5:** review added the `Containers` verb-table row (`open_container`, `close_container`, `lock_container`,
+  `unlock_container`) and its semantics bullet.
 - **§4.2, Tags bullet:** replace "They are part of the prototype, so a reload changes them for every instance." with
   "They are part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per
   instance (§4.5)."
@@ -723,30 +728,33 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   5. **`transformItem`**, in exactly this order:
      1. `require(item.id in entities) { "$item is not in the world" }`. `val newProto = protos.items[label]`, and
         `requireNotNull(newProto) { "transform: $label is not an item" }`.
-     2. Refuse with `require(...)`, before changing anything, when any of these hold:
-        - `item.count > 1 && !newProto.stackable` ("transform: a stack can't become a non-stackable item");
-        - `item.contentsIndex.isNotEmpty() && newProto.container == null` ("transform: a container with contents must
-          stay a container");
-        - `newProto.container != null && (item.contentsIndex.size > newProto.container.capacity ||
-          item.contentsIndex.values.sumOf { it.weight } > newProto.container.maxWeight)` ("transform: the contents don't
-          fit").
+     2. Refuse with `require(...)`, before changing anything, when `newProto.container != null` and the contents exceed
+        its `capacity` or `maxWeight`. The message names the item, the target label, the contents' count and weight, and
+        the target's limits, because a script writer has to work out what went wrong from the log. A stack into a
+        non-stackable prototype and a container with contents into a non-container are **not** refused (steps 5 and 6).
      3. `val loc = item.location as? ItemLocation.Equipped`, `val wearer = loc?.let { actor(it.actor) }`. If `wearer !=
         null`, decide whether the item still fits: `val wear = newProto.wear` and `val fits = wear != null && (loc.slot
         == wear || loc.slot.startsWith("${wear}_"))`.
      4. If `wearer != null && !fits`: call `moveItem(item, ItemLocation.Carried(wearer.id))` **now**, while the old
         prototype is still set, so `unindex` removes the old `equip_affects`.
      5. Else if `wearer != null` (it fits): call `removeEquipAffects(wearer, item)` **now**, while the old prototype is
-        still set.
-     6. Swap: `item.proto = newProto` and `item.protoVersion = newProto.version`.
-     7. Container: `val old = item.container`. Set `item.container = newProto.container?.let { ContainerState(it) }`,
-        then `old?.let { o -> item.container?.state = o.state }` so an open box stays open.
+        still set. Then, worn or not: if `newProto.container == null` and the item has contents, `moveItem` each one to
+        the ground of the room the item is in: where it lies, or where whoever ultimately holds it stands
+        (`InRoom(actor.room.id, actor.trackIndex)`). Work out that location in step 2, so a missing one refuses before
+        anything changes.
+     6. Swap: `item.proto = newProto` and `item.protoVersion = newProto.version`. When `!newProto.stackable`, set
+        `item.count = 1`: the rest of the stack is gone, so a pile of 500 gold can become one lump. `Item.protoLabel`
+        reads `proto.label`, so reloads and saves see the new prototype.
+     7. Container: remember the old state, set `item.container = newProto.container?.let { ContainerState(it) }`, then
+        carry the old state over, except that `LOCKED` becomes `CLOSED` when the new container has no `key`: only a
+        container whose prototype names a key has a lock.
      8. If the item is still equipped (case 5): `applyEquipAffects(wearer, item)`.
      9. `item.dirty = true`. When `custodian(item)` is a `Player` and `!item.debug`, append `ItemEvent(item.id, pulse,
         item.location, item.location, "transform")` to `itemEvents`.
      10. `custodian(item)?.let { refreshHoldings(it) }`. No hooks fire.
 
-     The instance keeps its id, location (unless moved in step 4), count, `customAttributes`, `affects`, `addedTags`,
-     `removedTags`, `nameOverride`, `decayAt` and `timers`.
+     The instance keeps its id, location (unless moved in step 4), count (unless cut to 1 in step 6),
+     `customAttributes`, `affects`, `addedTags`, `removedTags`, `nameOverride`, `decayAt` and `timers`.
 
   6. **`canStack`:** add `&& addedTags.isEmpty() && removedTags.isEmpty()`. `stack` and `mergesInto` pick it up.
 
@@ -768,8 +776,14 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
     gone from the wearer;
   - transform of a worn item to a prototype with the same slot keeps it worn and swaps `equip_affects` (old flag gone,
     new flag present);
-  - transform refuses a non-stackable target for a stack of 2, a non-container target for a container with contents, and
-    a container target too small for the contents; in each case nothing changes;
+  - a stack of 500 transformed into a non-stackable prototype keeps a count of 1 and its tag changes;
+  - a container transformed into a non-container drops its contents on the ground, whether it was carried, nested or on
+    the ground;
+  - transform refuses a container target too small for the contents, with a message naming the counts and limits, and
+    nothing changes;
+  - a lock carries over to a container with a `key` and becomes `CLOSED` on one without; open and closed carry over;
+  - a transformed item keeps its new prototype across a reload;
+  - `setContainerState` refuses to lock a container with no `key`.
   - transform updates the holder's `stat()` at once, and `computeHeld` still matches `heldEffects`;
   - `stack` doesn't merge an item with tag changes, and a part moved off a stack with tag changes has the same changes.
 
@@ -856,6 +870,7 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   - a timed and a permanent instance affect on a carried item round-trip with the same id, `applies`, `expiresAt` and
     deltas, and the restored player's `stat()` includes the `carried` affect without running a pulse;
   - added and removed tags round-trip;
+  - a transformed item restores as its new prototype;
   - an item payload JSON without the new fields decodes, with empty affects and tags.
 - `ToolsTest`: `@stat` on an item with a prototype affect, a timed instance affect and a tag change shows the exact
   `Affects:` and `Tag changes:` lines.
@@ -1171,8 +1186,10 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   - extend the `apply_affect` bullet: "On an item it takes `applies` (`worn` or `carried`, default `worn`) and allows
     `duration=None` (permanent); `applies` on an actor is an error; item affects can't carry `stunned`."
   - add an Items sub-bullet: "`transform(item, label)` keeps the item's id, location, count, attributes, affects, tag
-    changes, name and timers; it refuses a stack into a non-stackable prototype and a container whose contents wouldn't
-    fit; an equipped item that no longer fits its slot moves to the inventory; no hooks fire."
+    changes, name and timers. A stack into a non-stackable prototype keeps one of its count; a container into a
+    non-container drops its contents on the ground; a locked container stays locked only if the new prototype has a
+    `key`, else it is closed. It refuses a container whose contents wouldn't fit. An equipped item that no longer fits
+    its slot moves to the inventory. No hooks fire."
   - add an Items sub-bullet: "`add_tag` and `remove_tag` return whether the effective tags changed."
 - **CHANGELOG:** bullets for each new verb and view field, and one for "`affect.expires_at` and `affect.remaining` are
   `None` for an affect that never expires, including untimed `equip_affects`".

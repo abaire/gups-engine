@@ -494,6 +494,58 @@ class HostTest {
   }
 
   @Test
+  fun `container verbs open, close, lock and unlock`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _go(ctx):
+                    chest = ctx.spawn(":chest", ctx.room)
+                    seen = [chest.container_state]
+                    ctx.unlock_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.open_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.lock_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.close_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.open_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.close_container(chest)
+                    seen.append(chest.container_state)
+                    ctx.send(ctx.actor, "states=" + ",".join(seen))
+
+                def _lock_bag(ctx):
+                    ctx.lock_container(ctx.spawn(":bag", ctx.room))
+
+                def _lock_gem(ctx):
+                    ctx.lock_container(ctx.spawn(":gem", ctx.room))
+
+                room("start", commands = {"go": _go, "lock_bag": _lock_bag, "lock_gem": _lock_gem})
+                item("key")
+                item("chest", container = container(state = "locked", key = ":key"))
+                item("bag", container = container())
+                item("gem")
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "go")
+    f.run()
+    assertContains(f.out(p), "states=locked,closed,open,locked,locked,open,closed")
+    for ((command, why) in
+      listOf("lock_bag" to "has no lock", "lock_gem" to "is not a container")) {
+      val before = f.diagnostics("script_error").size
+      f.input(p, command)
+      f.run()
+      val errors = f.diagnostics("script_error")
+      assertEquals(before + 1, errors.size, "$command should raise one script error")
+      assertContains(errors.last().message, why)
+    }
+  }
+
+  @Test
   fun `mob verbs refuse players and on_load, on_reset fire`() {
     val f =
       ScriptFixture(

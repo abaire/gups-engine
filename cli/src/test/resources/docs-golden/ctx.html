@@ -218,6 +218,16 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.close_container" class="entry">
+<h4><code>close_container(item)</code> <span class="since">since api_version 1</span></h4>
+<p>Closes an open container; a locked one stays locked.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.close_container.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Container item to close.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.close_door" class="entry">
 <h4><code>close_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
 <p>Closes an open door in direction dir.</p>
@@ -402,6 +412,16 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.lock_container" class="entry">
+<h4><code>lock_container(item)</code> <span class="since">since api_version 1</span></h4>
+<p>Closes and locks the container. Only a container whose prototype names a key has a lock.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.lock_container.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Container item to lock.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.lock_door" class="entry">
 <h4><code>lock_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
 <p>Closes and locks the door.</p>
@@ -434,6 +454,16 @@
 <tbody>
 <tr id="ctx.move_toward.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts.</td></tr>
 <tr id="ctx.move_toward.dir_or_target"><td><code>dir_or_target</code></td><td>positional or named</td><td></td><td>Direction, actor, or room (view or label) to head for.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.open_container" class="entry">
+<h4><code>open_container(item)</code> <span class="since">since api_version 1</span></h4>
+<p>Opens the container, even if locked.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.open_container.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Container item to open.</td></tr>
 </tbody>
 </table>
 </article>
@@ -590,6 +620,16 @@
 <tr id="ctx.teleport.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to move.</td></tr>
 <tr id="ctx.teleport.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Destination room or room label.</td></tr>
 <tr id="ctx.teleport.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>None</code></td><td>Track index on arrival, or None for the room's default.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.unlock_container" class="entry">
+<h4><code>unlock_container(item)</code> <span class="since">since api_version 1</span></h4>
+<p>Unlocks the container, leaving it closed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.unlock_container.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Container item to unlock.</td></tr>
 </tbody>
 </table>
 </article>

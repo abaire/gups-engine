@@ -28,6 +28,7 @@ import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.SpawnRule
+import gups.core.model.TAG_REGEX
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
 import gups.core.model.WorldSchema
@@ -497,9 +498,7 @@ private fun flags(v: Any?, what: String): Set<String> =
   strList(v, what).onEach { flag(it, what) }.toSet()
 
 private fun flag(f: String, what: String): String =
-  f.also { if (!Regex("[a-z][a-z0-9_]*").matches(it)) fail("$what: '$it' is not a valid flag") }
-
-private val TAG_REGEX = Regex("[a-z][a-z0-9_]*")
+  f.also { if (!TAG_REGEX.matches(it)) fail("$what: '$it' is not a valid flag") }
 
 private fun parseTags(d: ParsedDecl): Set<String> {
   val tags = d.strList("tags")

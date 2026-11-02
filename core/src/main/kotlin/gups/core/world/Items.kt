@@ -89,6 +89,8 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
       a.senseDeltas,
       a.applies,
     )
+  part.addedTags += item.addedTags
+  part.removedTags += item.removedTags
   part.dirty = true
   item.count -= count
   item.dirty = true
@@ -136,7 +138,12 @@ internal fun World.updateEncumbrance(a: Actor) {
  * True if [item] may merge into a stack at all: no timers, name override, affects or tag changes.
  */
 internal fun Item.canStack(): Boolean =
-  proto.stackable && timers.isEmpty() && nameOverride == null && affects.isEmpty()
+  proto.stackable &&
+    timers.isEmpty() &&
+    nameOverride == null &&
+    affects.isEmpty() &&
+    addedTags.isEmpty() &&
+    removedTags.isEmpty()
 
 /**
  * Merges [item] into a stack of the same prototype at the same location, if there is one with an

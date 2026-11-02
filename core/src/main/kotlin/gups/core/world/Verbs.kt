@@ -4,8 +4,10 @@ import gups.core.ACTION_QUEUE_MAX
 import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Channel
+import gups.core.model.ContainerState
 import gups.core.model.Direction
 import gups.core.model.DoorState
+import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Player
@@ -14,6 +16,7 @@ import gups.core.model.RestrictionPoint
 import gups.core.model.RestrictionRequest
 import gups.core.model.Room
 import gups.core.model.SkillProto
+import gups.core.model.TAG_REGEX
 
 // Engine-validated verbs used by the script host's `ctx` that have no player
 // command of their own. Each is individually atomic and invariant-preserving.
@@ -287,4 +290,96 @@ fun World.removeSkill(actor: Actor, skillLabel: Label): Boolean {
   val removed = actor.skills.remove(skillLabel) != null
   if (removed) actor.dirty = true
   return removed
+}
+
+/** Adds [tag] to [item]'s effective tags; false if it already had it. */
+fun World.addItemTag(item: Item, tag: String): Boolean {
+  require(item.id in entities) { "$item is not in the world" }
+  require(TAG_REGEX.matches(tag)) { "'$tag' is not a valid tag" }
+  if (tag in item.tags) return false
+  if (tag in item.removedTags) item.removedTags.remove(tag) else item.addedTags.add(tag)
+  item.dirty = true
+  custodian(item)?.let { refreshHoldings(it) }
+  return true
+}
+
+/** Removes [tag] from [item]'s effective tags; false if it didn't have it. */
+fun World.removeItemTag(item: Item, tag: String): Boolean {
+  require(item.id in entities) { "$item is not in the world" }
+  require(TAG_REGEX.matches(tag)) { "'$tag' is not a valid tag" }
+  if (tag !in item.tags) return false
+  if (tag in item.addedTags) item.addedTags.remove(tag) else item.removedTags.add(tag)
+  item.dirty = true
+  custodian(item)?.let { refreshHoldings(it) }
+  return true
+}
+
+/**
+ * Swaps [item]'s prototype for [label] in place, keeping everything the instance owns. A stack
+ * turning into a non-stackable item keeps only one of its count. A container turning into a
+ * non-container drops its contents on the ground of the room it is in. A lock the new prototype has
+ * no key for is undone, leaving the container closed.
+ */
+fun World.transformItem(item: Item, label: Label) {
+  require(item.id in entities) { "$item is not in the world" }
+  val newProto = protos.items[label]
+  requireNotNull(newProto) { "transform: $label is not an item" }
+  val box = newProto.container
+  val ground =
+    if (box == null && item.contentsIndex.isNotEmpty())
+      requireNotNull(groundOf(item)) { "transform: $item has nowhere to drop its contents" }
+    else null
+  if (box != null) {
+    val count = item.contentsIndex.size
+    val weight = item.contentsIndex.values.sumOf { it.weight }
+    require(count <= box.capacity && weight <= box.maxWeight) {
+      "transform: $item can't become $label: it holds $count items weighing $weight, but $label " +
+        "holds at most ${box.capacity} items weighing ${box.maxWeight}"
+    }
+  }
+  val loc = item.location as? ItemLocation.Equipped
+  val wearer = loc?.let { actor(it.actor) }
+  if (wearer != null) {
+    val wear = newProto.wear
+    val fits = wear != null && (loc.slot == wear || loc.slot.startsWith("${wear}_"))
+    if (!fits) moveItem(item, ItemLocation.Carried(wearer.id)) else removeEquipAffects(wearer, item)
+  }
+  if (ground != null) for (inner in item.contentsIndex.values.toList()) moveItem(inner, ground)
+  item.proto = newProto
+  item.protoVersion = newProto.version
+  if (!newProto.stackable) item.count = 1
+  val oldState = item.container?.state
+  item.container = box?.let { ContainerState(it) }
+  item.container?.let { c ->
+    if (oldState != null)
+      c.state = if (oldState == DoorState.LOCKED && c.key == null) DoorState.CLOSED else oldState
+  }
+  if (wearer != null && item.location is ItemLocation.Equipped) applyEquipAffects(wearer, item)
+  item.dirty = true
+  if (custodian(item) is Player && !item.debug)
+    itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "transform")
+  custodian(item)?.let { refreshHoldings(it) }
+}
+
+/** The ground under [item]: where it lies, or where whoever ultimately holds it stands. */
+private fun World.groundOf(item: Item): ItemLocation.InRoom? =
+  when (val loc = item.location) {
+    is ItemLocation.InRoom -> loc
+    is ItemLocation.Carried ->
+      actor(loc.actor)?.let { ItemLocation.InRoom(it.room.id, it.trackIndex) }
+    is ItemLocation.Equipped ->
+      actor(loc.actor)?.let { ItemLocation.InRoom(it.room.id, it.trackIndex) }
+    is ItemLocation.Contained -> item(loc.container)?.let { groundOf(it) }
+  }
+
+/**
+ * Sets [item]'s container state. Silent: callers do their own messaging. Only a container whose
+ * prototype names a key can be locked.
+ */
+fun World.setContainerState(item: Item, state: DoorState) {
+  require(item.id in entities) { "$item is not in the world" }
+  val c = requireNotNull(item.container) { "$item is not a container" }
+  require(state != DoorState.LOCKED || c.key != null) { "$item has no lock" }
+  c.state = state
+  item.dirty = true
 }

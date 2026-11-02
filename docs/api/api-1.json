@@ -2940,6 +2940,24 @@
         ]
       },
       {
+        "symbol": "ctx.close_container",
+        "name": "close_container",
+        "doc": "Closes an open container; a locked one stays locked.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.close_container.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Container item to close."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.close_door",
         "name": "close_door",
         "doc": "Closes an open door in direction dir.",
@@ -3473,6 +3491,24 @@
         ]
       },
       {
+        "symbol": "ctx.lock_container",
+        "name": "lock_container",
+        "doc": "Closes and locks the container. Only a container whose prototype names a key has a lock.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.lock_container.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Container item to lock."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.lock_door",
         "name": "lock_door",
         "doc": "Closes and locks the door.",
@@ -3574,6 +3610,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Direction, actor, or room (view or label) to head for."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.open_container",
+        "name": "open_container",
+        "doc": "Opens the container, even if locked.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.open_container.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Container item to open."
           }
         ]
       },
@@ -3995,6 +4049,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Track index on arrival, or None for the room's default."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.unlock_container",
+        "name": "unlock_container",
+        "doc": "Unlocks the container, leaving it closed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.unlock_container.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Container item to unlock."
           }
         ]
       },

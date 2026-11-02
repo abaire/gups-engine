@@ -4,6 +4,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Effects on items
+
+- Added `ctx.open_container(item)`, `ctx.close_container(item)`, `ctx.lock_container(item)` and
+  `ctx.unlock_container(item)`. They mirror the door verbs and print nothing. `lock_container` fails on a container
+  whose prototype has no `key`.
+
 ### Experience and levels
 
 - Added the `on_level_up(ctx)` rules export: called when an actor advances a level, returning `None` or a `struct` with

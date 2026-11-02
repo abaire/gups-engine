@@ -8,6 +8,9 @@ import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
 import gups.core.world.ZoneCommand
 
+/** The pattern every tag, flag-like name and variant name must match. */
+val TAG_REGEX = Regex("[a-z][a-z0-9_]*")
+
 // Immutable prototypes. The `script` module produces them by evaluating
 // packages; Kotlin tests build them directly.
 
@@ -229,6 +232,8 @@ data class ItemProto(
   val equipAffects: List<EquipAffect> = emptyList(),
   /** Affects every instance carries, read live from the prototype. */
   val affects: List<ItemAffect> = emptyList(),
+  /** Free-form variant names to related item prototypes; the engine gives the names no meaning. */
+  val variants: Map<String, Label> = emptyMap(),
   /** Rules modifiers contributed to the bearer while this item is equipped. */
   val modifiers: Modifiers = emptyMap(),
   /** Content schema version of this item prototype, defaulting to 1. */
