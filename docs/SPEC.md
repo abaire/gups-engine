@@ -462,7 +462,7 @@ the world graph:
   `statDeltas` and `senseDeltas` change the wearer's stats and senses; `maxVitalDeltas` (vital name to a change in that
   vital's maximum) and `resistDeltas` (damage type to a change in resistance) work the same way. An equipped item may be
   inactive (§4.6); inactive items contribute nothing as worn items, and this state is worked out again rather than
-  saved.
+  saved. An item with `dice` is a weapon wherever it is worn: an amulet with `dice` attacks from the neck.
 - **Affects and tags:** per-instance `affects` (timed or permanent) and per-instance tag changes over the prototype's
   `tags`; prototype `affects` are read live from the prototype. Each item affect has an `applies` scope: `worn` reaches
   the holder while the item is equipped, `carried` while it is anywhere in the holder's custody, including nested
@@ -2689,15 +2689,19 @@ and work with or without it (§3.10). Combat resolution is implemented in
     none. "Hostile", wherever the track rules use it, means an engaged opponent in the same room.
 - **Auto-attacks:**
   - Every `COMBAT_ROUND_PULSES` ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)), each engaged
-    actor auto-attacks one target: its current primary target, or the lowest-`EntityId` remaining opponent.
+    actor chooses one target: its current primary target, or the lowest-`EntityId` remaining opponent. Each round, every
+    worn, active item with `dice` makes one auto-attack, in the order of the actor's slots, and an actor with a `wield`
+    slot holding nothing makes one unarmed attack. Each attack has its own reach check, `before_attack`, `to_hit` and
+    `damage` chains (with `ctx.weapon` and `ctx.slot` set) and messages. The attacks stop as soon as the attacker or
+    target can no longer fight.
   - Auto-attacks are independent of `waitState` and of queued actions, so active skills weave between swings.
   - A **casting** actor does not auto-attack, unless the skill being cast sets `attack_while_casting = True`.
-- **Range:** An auto-attack happens only if the target's band is within the wielded weapon's `range` (unarmed or melee:
-  `MELEE`; a ranged weapon: up to `FAR`). Otherwise no swing occurs that round, and the actor is told "<target> is out
-  of reach."
+- **Range:** A swing happens only if the target's band is within the swinging weapon's `range` (unarmed or melee:
+  `MELEE`; a ranged weapon: up to `FAR`). Otherwise the swing is skipped, and the actor is told "<target> is out of
+  reach."
 - **Resolution:**
   1. Call `before_attack` (vetoable) on the defender first (§5.6), so defensive wards evaluate before the attacker and
-     its wielded weapon.
+     the swinging weapon.
   2. Roll `rng.int(1,100)` against `to_hit` (through the modifier chain).
   3. On a hit, compute `damage` (chain), then `mitigate` with the weapon's damage type (or the world's
      `unarmed_damage_type`), then subtract the vital losses it returns. Every loss is subtracted, `on_damage` fires

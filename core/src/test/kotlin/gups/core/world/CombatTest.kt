@@ -8,7 +8,9 @@ import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Effect
+import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.Mob
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
@@ -18,6 +20,7 @@ import gups.core.model.SpawnRule
 import gups.core.model.ZoneProto
 import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
+import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -445,5 +448,194 @@ class CombatTest(private val fs: FixtureSchema) {
       lines.any { "rules.damage base=10 → room:hall 15 → affect:empower 18" in it },
       "Expected trace line in: $lines",
     )
+  }
+
+  @Test
+  fun `a sword in wield and a dagger in offhand give two swings per round, with ctx slot wield then offhand`() {
+    val DAGGER = Label("//t:dagger")
+    val daggerProto =
+      ItemProto(
+        DAGGER,
+        "a dagger",
+        listOf("dagger"),
+        kind = "melee",
+        wear = "offhand",
+        dice = Dice(1, 1, 3),
+      )
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + daggerProto, T.skills(fs))
+    val slotsSeen = mutableListOf<String?>()
+    val weaponsSeen = mutableListOf<Item?>()
+    val rules =
+      object : FixedRules(damage = 3) {
+        override fun toHit(c: RulesContext): Int {
+          if (c.actor?.name == "Ann") {
+            slotsSeen += c.slot
+            weaponsSeen += c.weapon
+          }
+          return super.toHit(c)
+        }
+      }
+    val f = Fixture(rules = rules, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    val dagger = f.w.spawnItem(DAGGER, ItemLocation.Equipped(p.id, "offhand"))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf<String?>("wield", "offhand"), slotsSeen)
+    assertEquals(listOf<Item?>(sword, dagger), weaponsSeen)
+    assertEquals(1000 - 6, g.current(fs.health))
+  }
+
+  @Test
+  fun `a shield in offhand without dice gives one swing`() {
+    val SHIELD = Label("//t:shield")
+    val shieldProto =
+      ItemProto(SHIELD, "a wooden shield", listOf("shield"), kind = "armor", wear = "offhand")
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + shieldProto, T.skills(fs))
+    val slotsSeen = mutableListOf<String?>()
+    val rules =
+      object : FixedRules(damage = 3) {
+        override fun toHit(c: RulesContext): Int {
+          if (c.actor?.name == "Ann") slotsSeen += c.slot
+          return super.toHit(c)
+        }
+      }
+    val f = Fixture(rules = rules, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.spawnItem(SHIELD, ItemLocation.Equipped(p.id, "offhand"))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf<String?>("wield"), slotsSeen)
+    assertEquals(1000 - 3, g.current(fs.health))
+  }
+
+  @Test
+  fun `an empty wield gives one unarmed swing with null weapon, and amulet with dice at neck adds swing`() {
+    val AMULET = Label("//t:amulet")
+    val amuletProto =
+      ItemProto(AMULET, "an amulet", listOf("amulet"), wear = "neck", dice = Dice(1, 1, 2))
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + amuletProto, T.skills(fs))
+    val swingsSeen = mutableListOf<Pair<Item?, String?>>()
+    val rules =
+      object : FixedRules(damage = 3) {
+        override fun toHit(c: RulesContext): Int {
+          if (c.actor?.name == "Ann") swingsSeen += c.weapon to c.slot
+          return super.toHit(c)
+        }
+      }
+    val f = Fixture(rules = rules, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    val amulet = f.w.spawnItem(AMULET, ItemLocation.Equipped(p.id, "neck"))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf<Pair<Item?, String?>>(amulet to "neck", null to "wield"), swingsSeen)
+    assertEquals(1000 - 6, g.current(fs.health))
+  }
+
+  @Test
+  fun `an inactive weapon does not swing and suppresses the unarmed swing`() {
+    val DAGGER = Label("//t:dagger")
+    val daggerProto =
+      ItemProto(
+        DAGGER,
+        "a dagger",
+        listOf("dagger"),
+        kind = "melee",
+        wear = "offhand",
+        dice = Dice(1, 1, 3),
+      )
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + daggerProto, T.skills(fs))
+    val slotsSeen = mutableListOf<String?>()
+    val rules =
+      object : FixedRules(damage = 3) {
+        override fun toHit(c: RulesContext): Int {
+          if (c.actor?.name == "Ann") slotsSeen += c.slot
+          return super.toHit(c)
+        }
+
+        override fun slotFamilies(): Map<String, List<String>> =
+          super.slotFamilies() + ("hand" to listOf("wield", "offhand"))
+
+        // The sword costs more than the hand family holds, so the fit check marks it inactive.
+        override fun slotCost(c: RulesContext): Int =
+          if (c.item?.proto?.label == T.SWORD) 3 else super.slotCost(c)
+      }
+    val f = Fixture(rules = rules, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.spawnItem(DAGGER, ItemLocation.Equipped(p.id, "offhand"))
+    assertEquals(setOf("wield"), p.inactiveSlots)
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf<String?>("offhand"), slotsSeen)
+    assertEquals(1000 - 3, g.current(fs.health))
+  }
+
+  @Test
+  fun `if the first swing kills the target, no further swing happens`() {
+    val DAGGER = Label("//t:dagger")
+    val daggerProto =
+      ItemProto(
+        DAGGER,
+        "a dagger",
+        listOf("dagger"),
+        kind = "melee",
+        wear = "offhand",
+        dice = Dice(1, 1, 3),
+      )
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + daggerProto, T.skills(fs))
+    val slotsSeen = mutableListOf<String?>()
+    val rules =
+      object : FixedRules(damage = 50) {
+        override fun toHit(c: RulesContext): Int {
+          if (c.actor?.name == "Ann") slotsSeen += c.slot
+          return super.toHit(c)
+        }
+      }
+    val f = Fixture(rules = rules, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.GOBLIN)
+    f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.spawnItem(DAGGER, ItemLocation.Equipped(p.id, "offhand"))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    assertEquals(listOf<String?>("wield"), slotsSeen)
+    assertEquals(Condition.DEAD, g.condition)
+  }
+
+  @Test
+  fun `a before_attack veto on one swing does not stop the next`() {
+    val DAGGER = Label("//t:dagger")
+    val daggerProto =
+      ItemProto(
+        DAGGER,
+        "a dagger",
+        listOf("dagger"),
+        kind = "melee",
+        wear = "offhand",
+        dice = Dice(1, 1, 3),
+      )
+    val protos = Prototypes(T.rooms, T.mobs(fs), T.items + daggerProto, T.skills(fs))
+    val host = RecordingHost()
+    val f = Fixture(rules = FixedRules(damage = 3), scripts = host, protos = protos)
+    val p = f.player("Ann")
+    val g = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.spawnItem(DAGGER, ItemLocation.Equipped(p.id, "offhand"))
+    host.handlers[HookName.BEFORE_ATTACK] = { _, owner, ctx ->
+      if (owner === sword && ctx.weapon === sword) HookOutcome.Deny("Your sword refuses to strike.")
+      else null
+    }
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    val out = f.out(p)
+    assertContains(out, "Your sword refuses to strike.")
+    assertContains(out, "You hit a training dummy.")
+    assertEquals(1000 - 3, g.current(fs.health))
   }
 }

@@ -85,7 +85,41 @@ internal fun World.autoAttack(a: Actor) {
   val opponents = opponentsOf(a)
   if (opponents.isEmpty()) return
   val target = opponents.firstOrNull { it.id == a.primaryTarget } ?: opponents.first()
-  val weapon = a.equipped("wield")
+
+  val slots = actorSlots(a)
+  val swings = mutableListOf<Pair<Item?, String>>()
+  for (slot in slots) {
+    val item = a.equipped(slot)
+    if (slot == "wield" && item == null) {
+      swings.add(null to "wield")
+    } else if (item != null && a.isActiveSlot(slot) && item.proto.dice != null) {
+      swings.add(item to slot)
+    }
+  }
+  val otherSlots = a.equipment.keys.filter { it !in slots }.sorted()
+  for (slot in otherSlots) {
+    val item = a.equipped(slot) ?: continue
+    if (a.isActiveSlot(slot) && item.proto.dice != null) {
+      swings.add(item to slot)
+    }
+  }
+
+  for ((weapon, slot) in swings) {
+    if (
+      !a.inWorld ||
+        a.isIncapacitated ||
+        !canAct(a) ||
+        target !in opponentsOf(a) ||
+        target.condition == Condition.DEAD
+    ) {
+      break
+    }
+    swing(a, target, weapon, slot)
+  }
+}
+
+/** One auto-attack swing by [a] at [target] with [weapon] (null for unarmed) from [slot]. */
+private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
   val reach = weapon?.range ?: Band.MELEE
   val band = Band.between(indexOf(a), indexOf(target))
   if (!reach.reaches(band)) {
@@ -103,7 +137,7 @@ internal fun World.autoAttack(a: Actor) {
       return
     }
   val type = weapon?.proto?.damageType ?: schema.unarmed
-  val ctx = RulesContext(this, a, target, weapon, band, damageType = type, slot = "wield")
+  val ctx = RulesContext(this, a, target, weapon, band, damageType = type, slot = slot)
   val chance = toHitChain(ctx)
   val roll = rng.int(1, 100)
   traceRules(a, "${chance.text} → roll $roll ${if (roll > chance.value) "MISS" else "HIT"}")

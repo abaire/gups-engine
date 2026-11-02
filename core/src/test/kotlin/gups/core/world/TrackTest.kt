@@ -1,8 +1,11 @@
 package gups.core.world
 
+import gups.core.Label
 import gups.core.model.Band
+import gups.core.model.Dice
 import gups.core.model.DoorState
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.Prototypes
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -237,5 +240,41 @@ class TrackTest {
       ItemLocation.InRoom(hall.id, 0),
       hall.items.first { it.name == "a sword" }.location,
     )
+  }
+
+  @Test
+  fun `a melee dagger out of reach is skipped with out of reach message while a ranged weapon in another slot still swings`() {
+    val DAGGER = Label("//t:dagger")
+    val daggerProto =
+      ItemProto(
+        DAGGER,
+        "a dagger",
+        listOf("dagger"),
+        kind = "melee",
+        wear = "wield",
+        dice = Dice(1, 1, 3),
+      )
+    val bowProto =
+      ItemProto(
+        T.BOW,
+        "a short bow",
+        listOf("bow"),
+        kind = "ranged",
+        range = Band.FAR,
+        wear = "offhand",
+        dice = Dice(1, 1, 2),
+      )
+    val protos = Prototypes(T.rooms, T.mobs, listOf(daggerProto, bowProto), T.skills)
+    val f = Fixture(rules = FixedRules(damage = 3), protos = protos)
+    val p = f.player("Ann", index = 0)
+    val g = f.mob(T.DUMMY, index = 4)
+    f.w.spawnItem(DAGGER, ItemLocation.Equipped(p.id, "wield"))
+    f.w.spawnItem(T.BOW, ItemLocation.Equipped(p.id, "offhand"))
+    f.w.startCombat(p, g)
+    f.runTo(8)
+    val out = f.out(p)
+    assertContains(out, "A training dummy is out of reach.")
+    assertContains(out, "You hit a training dummy.")
+    assertEquals(1000 - 3, g.current("hp"))
   }
 }

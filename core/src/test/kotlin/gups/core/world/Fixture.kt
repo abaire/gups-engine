@@ -185,7 +185,7 @@ object T {
 }
 
 /** Rules with pinned results; anything left null falls back to [FixtureRules]. */
-class FixedRules(
+open class FixedRules(
   fs: FixtureSchema = FixtureSchemas.current,
   var toHit: Int? = 100,
   var damage: Int? = 5,
