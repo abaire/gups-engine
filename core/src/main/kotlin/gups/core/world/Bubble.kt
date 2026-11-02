@@ -238,6 +238,12 @@ internal fun World.wake(room: Room) {
       m.affects.filter { it.expiresAt <= pulse }.sortedWith(compareBy({ it.expiresAt }, { it.id }))
     for (a in expired) guarded("expiry of ${a.name} on $m") { expireAffect(m, a) }
   }
+  val expiredOnItems =
+    sleepers
+      .filterIsInstance<Item>()
+      .flatMap { i -> i.affects.filter { it.expiresAt <= pulse }.map { i to it } }
+      .sortedWith(compareBy({ it.second.expiresAt }, { it.second.id }))
+  for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItemAffect(i, a) }
   if (room.resetMissed) {
     room.resetMissed = false
     for (s in spawnStates) if (s.room === room) guarded("reset of ${room.label}") { fillSpawn(s) }

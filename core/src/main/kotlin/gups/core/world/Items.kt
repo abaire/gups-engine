@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.Label
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Player
@@ -31,8 +32,9 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boole
 /**
  * The `move_item` verb, and the single writer of [Item.location]: moves [count] of [item] (by
  * default the whole stack) to [to] and returns the item now at [to]. Moving part of a stack leaves
- * the rest in place and creates a new item with the same attributes, name override, debug flag and
- * decay deadline. A moved part does not fire `on_spawn`, because no new content was created.
+ * the rest in place and creates a new item with the same attributes, name override, debug flag,
+ * decay deadline and instance affects. A moved part does not fire `on_spawn`, because no new
+ * content was created.
  */
 fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item {
   require(item.id in entities) { "$item is not in the world" }
@@ -69,6 +71,24 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
   part.nameOverride = item.nameOverride
   part.decayAt = item.decayAt
   part.customAttributes.putAll(item.customAttributes)
+  for (a in item.affects) part.affects +=
+    Affect(
+      allocateHandle(),
+      a.name,
+      a.source,
+      a.appliedAt,
+      a.expiresAt,
+      a.statDeltas,
+      a.flags,
+      a.tickEvery,
+      a.onTick,
+      a.onExpire,
+      a.expireMessage,
+      a.modifiers,
+      a.wornFrom,
+      a.senseDeltas,
+      a.applies,
+    )
   part.dirty = true
   item.count -= count
   item.dirty = true
@@ -113,12 +133,18 @@ internal fun World.updateEncumbrance(a: Actor) {
 }
 
 /**
+ * True if [item] may merge into a stack at all: no timers, name override, affects or tag changes.
+ */
+internal fun Item.canStack(): Boolean =
+  proto.stackable && timers.isEmpty() && nameOverride == null && affects.isEmpty()
+
+/**
  * Merges [item] into a stack of the same prototype at the same location, if there is one with an
- * identical delta: the same attributes and decay deadline, and no timers or name override on
- * either. Returns the stack that now holds it.
+ * identical delta: the same attributes and decay deadline, and one that can stack. Returns the
+ * stack that now holds it.
  */
 fun World.stack(item: Item): Item {
-  if (!item.proto.stackable || item.timers.isNotEmpty() || item.nameOverride != null) return item
+  if (!item.canStack()) return item
   val peers =
     when (val loc = item.location) {
       is ItemLocation.InRoom ->
@@ -131,8 +157,7 @@ fun World.stack(item: Item): Item {
     peers.firstOrNull {
       it !== item &&
         it.protoLabel == item.protoLabel &&
-        it.timers.isEmpty() &&
-        it.nameOverride == null &&
+        it.canStack() &&
         it.decayAt == item.decayAt &&
         it.customAttributes == item.customAttributes
     } ?: return item

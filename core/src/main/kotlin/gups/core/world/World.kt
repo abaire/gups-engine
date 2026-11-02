@@ -606,6 +606,22 @@ class World(
         }
       }
     }
+    for (e in entities.values) {
+      if (e !is Item || e.affects.isEmpty() || !isSimulated(e)) continue
+      for (aff in e.affects) {
+        val every = aff.tickEvery
+        when {
+          aff.expiresAt <= pulse -> due += Due(aff.expiresAt, aff.id) { expireItemAffect(e, aff) }
+          every != null && aff.onTick != null && (pulse - aff.appliedAt) % every == 0L ->
+            due +=
+              Due(pulse, aff.id) {
+                // An earlier hook this pulse may have destroyed the item or ended the affect.
+                if (e.id in entities && aff in e.affects)
+                  invokeRef(e, aff.onTick, HookContext(affect = aff))
+              }
+        }
+      }
+    }
     due.sortWith(compareBy<Due>({ it.due }, { it.id }))
     for (d in due) guarded("timer ${d.id}") { d.run() }
   }

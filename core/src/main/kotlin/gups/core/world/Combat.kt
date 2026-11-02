@@ -5,6 +5,7 @@ import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.Affect
+import gups.core.model.AffectScope
 import gups.core.model.Band
 import gups.core.model.CastState
 import gups.core.model.Channel
@@ -366,6 +367,81 @@ private fun World.endAffect(
     disengageAll(a)
     removeActor(a)
   }
+}
+
+/**
+ * Puts instance affect [name] on [item]; [duration] null makes it permanent. A same-name affect is
+ * replaced only by one that expires later.
+ */
+fun World.applyItemAffect(
+  item: Item,
+  name: String,
+  duration: Int?,
+  applies: AffectScope = AffectScope.WORN,
+  statDeltas: Map<String, Int> = emptyMap(),
+  flags: Set<String> = emptySet(),
+  tickEvery: Int? = null,
+  onTick: HookRef? = null,
+  onExpire: HookRef? = null,
+  expireMessage: String = "",
+  source: Actor? = null,
+  modifiers: Modifiers = emptyMap(),
+  senseDeltas: Map<Channel, Int> = emptyMap(),
+): Affect? {
+  if (item.id !in entities) return null
+  require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
+  require("stunned" !in flags) { "apply_affect: item affects can't stun" }
+  val expiresAt = duration?.let { pulse + it } ?: Long.MAX_VALUE
+  item.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
+  item.affects.removeIf { it.name == name }
+  val affect =
+    Affect(
+      allocateHandle(),
+      name,
+      source?.id,
+      pulse,
+      expiresAt,
+      statDeltas,
+      flags,
+      tickEvery,
+      onTick,
+      onExpire,
+      expireMessage,
+      modifiers,
+      null,
+      senseDeltas,
+      applies,
+    )
+  item.affects += affect
+  item.dirty = true
+  custodian(item)?.let { refreshHoldings(it) }
+  return affect
+}
+
+/** Removes instance affect [name] from [item]; true if there was one. */
+fun World.removeItemAffect(item: Item, name: String): Boolean {
+  val gone = item.affects.filter { it.name == name }
+  for (affect in gone) endItemAffect(item, affect, AffectEndReason.REMOVED)
+  return gone.isNotEmpty()
+}
+
+internal fun World.expireItemAffect(item: Item, affect: Affect) =
+  endItemAffect(item, affect, AffectEndReason.EXPIRED)
+
+/**
+ * Takes [affect] off [item] and runs its end: the expire message to the custodian on expiry, and
+ * `on_expire`, whose `ctx.self` is the item. An affect that has reached its expiry pulse counts as
+ * expired however it was taken off. With no custodian the message is dropped. An item that has left
+ * the world took its affects with it, so nothing runs for them.
+ */
+private fun World.endItemAffect(item: Item, affect: Affect, reason: AffectEndReason) {
+  if (item.id !in entities || !item.affects.remove(affect)) return
+  item.dirty = true
+  custodian(item)?.let { refreshHoldings(it) }
+  val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
+  if (why == AffectEndReason.EXPIRED && affect.expireMessage.isNotEmpty())
+    custodian(item)?.let { send(it, affect.expireMessage) }
+  affect.onExpire?.let { invokeRef(item, it, HookContext(affect = affect, affectEndReason = why)) }
 }
 
 /**

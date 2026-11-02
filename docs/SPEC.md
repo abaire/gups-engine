@@ -465,9 +465,11 @@ the world graph:
 - **Mechanics:** schema `statDeltas`, status `flags` (such as `stunned`, `silenced`, or `no_regen`), periodic
   `tickEvery` cadence with `onTick` and `onExpire` hook references, and applied `modifiers`.
 - **Replacement rule:** re-applying an affect with the same name replaces the existing affect only if the new
-  `expiresAt` is strictly later; shorter affects never truncate longer active affects.
+  `expiresAt` is strictly later; shorter affects never truncate longer active affects. A permanent item affect counts as
+  expiring latest.
 - **Scope:** item affects carry `applies` (`worn` or `carried`); an item affect's stat and sense deltas, flags and
-  modifiers count for the item's holder while it reaches it.
+  modifiers count for the item's holder while it reaches it. An item removed from the world mid-pulse takes its
+  remaining affects with it; their hooks don't fire.
 
 **ScriptTimer** ([`ScriptTimer`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -1125,10 +1127,11 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
     non-stackable items, and fires no hooks.
   - `move_item(item, to, index=0, count=None)` moves the item, or `count` of a stack, and returns the moved item's view.
     A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and doesn't
-    fire `on_spawn`. Moving part of an equipped or non-stackable item is an error.
+    fire `on_spawn`. Moving part of an equipped or non-stackable item is an error. A moved part also copies the stack's
+    instance affects and tag changes.
   - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
     count, removes that many from the stack.
-  - Verbs never merge stacks.
+  - Verbs never merge stacks. An item with instance affects or tag changes never merges into a stack.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
   door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
 - **Queries:**
@@ -2908,7 +2911,8 @@ The reality bubble and room simulation lifecycle are implemented in
 - **Waking (lazy catch-up, never simulation),** in this order:
   1. Timers convert back from `remaining` to `due`.
   2. Mobs recover (below).
-  3. Affects that ran out are removed, firing `on_expire` in expiry order, then id.
+  3. Affects that ran out are removed, firing `on_expire` in expiry order, then id: first each mob's own affects, mob by
+     mob, then the affects of every item in the room (on the ground, inside containers, or carried by its mobs).
   4. A missed zone reset is applied to the room: its spawns, then `on_reset`.
   5. Respawns that are due fill.
   6. Items that decayed go.

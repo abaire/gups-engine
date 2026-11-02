@@ -1452,12 +1452,11 @@ internal fun World.carryFit(actor: Actor, item: Item, n: Int): Int =
 
 /** True if [item] would merge into a stack in [box], taking no new slot. */
 private fun World.mergesInto(item: Item, box: Item): Boolean {
-  if (!item.proto.stackable || item.timers.isNotEmpty() || item.nameOverride != null) return false
+  if (!item.canStack()) return false
   return box.contents.any {
     it !== item &&
       it.protoLabel == item.protoLabel &&
-      it.timers.isEmpty() &&
-      it.nameOverride == null &&
+      it.canStack() &&
       it.decayAt == item.decayAt &&
       it.customAttributes == item.customAttributes
   }
