@@ -2,6 +2,7 @@ package gups.script
 
 import gups.core.AttrValue
 import gups.core.model.Actor
+import gups.core.model.AffectScope
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.DamageType
@@ -22,7 +23,9 @@ import gups.core.world.actAttack
 import gups.core.world.actCast
 import gups.core.world.actMove
 import gups.core.world.actRetreat
+import gups.core.world.addItemTag
 import gups.core.world.applyAffect
+import gups.core.world.applyItemAffect
 import gups.core.world.awardXp
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
@@ -40,6 +43,8 @@ import gups.core.world.opponentsOf
 import gups.core.world.pathTo
 import gups.core.world.perceive
 import gups.core.world.removeAffect
+import gups.core.world.removeItemAffect
+import gups.core.world.removeItemTag
 import gups.core.world.roomOfEntity
 import gups.core.world.say
 import gups.core.world.send
@@ -52,6 +57,7 @@ import gups.core.world.startCombat
 import gups.core.world.stopCombat
 import gups.core.world.takeXp
 import gups.core.world.teleport
+import gups.core.world.transformItem
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -287,7 +293,7 @@ internal constructor(
   )
   fun affect(): Any = field {
     val a = hc.affect ?: return@field Starlark.NONE
-    AffectView(frame, owner as? Actor ?: return@field Starlark.NONE, a)
+    AffectView(frame, owner as? Actor ?: owner as? Item ?: return@field Starlark.NONE, a)
   }
 
   @StarlarkMethod(
@@ -912,16 +918,20 @@ internal constructor(
 
   @StarlarkMethod(
     name = "apply_affect",
-    doc = "Attaches a timed buff or debuff; re-applying a name replaces it.",
+    doc = "Attaches a buff or debuff to an actor or item; re-applying a name replaces it.",
     parameters =
       [
-        Param(name = "target", named = true, doc = "Actor to receive the affect."),
+        Param(name = "target", named = true, doc = "Actor or item to receive the affect."),
         Param(
           name = "name",
           named = true,
           doc = "Affect name; applying the same name again replaces the existing affect.",
         ),
-        Param(name = "duration", named = true, doc = "Duration in pulses."),
+        Param(
+          name = "duration",
+          named = true,
+          doc = "Duration in pulses; None makes an item affect permanent.",
+        ),
         Param(
           name = "stat_deltas",
           named = true,
@@ -970,6 +980,12 @@ internal constructor(
           defaultValue = "{}",
           doc = "Sense score changes by channel while the affect lasts.",
         ),
+        Param(
+          name = "applies",
+          named = true,
+          defaultValue = "None",
+          doc = "Item affects only: 'worn' or 'carried'.",
+        ),
       ],
   )
   fun applyAffect(
@@ -984,9 +1000,9 @@ internal constructor(
     expireMsg: Any,
     modifiers: Any,
     senseDeltas: Any,
+    applies: Any,
   ): Any =
     verb("apply_affect") {
-      val t = actorArg(target, "apply_affect(target)")
       val e =
         affectEffect(
           name,
@@ -1002,23 +1018,59 @@ internal constructor(
           "apply_affect",
           world.schema,
           world.features,
+          allowPermanent = true,
         )
-      val a =
-        world.applyAffect(
-          t,
-          e.name,
-          requireNotNull(e.duration) { "apply_affect: duration is required for an actor" },
-          e.statDeltas,
-          e.flags,
-          e.tickEvery,
-          e.onTick,
-          e.onExpire,
-          e.expireMessage,
-          owner as? Actor,
-          e.modifiers,
-          senseDeltas = e.senseDeltas,
-        )
-      a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
+      if (target is ItemView) {
+        val item = itemArg(target, "apply_affect(target)")
+        val scope =
+          if (isNone(applies)) AffectScope.WORN
+          else {
+            val s =
+              choice(
+                str(applies, "apply_affect(applies)"),
+                "apply_affect(applies)",
+                listOf("worn", "carried"),
+              )
+            AffectScope.valueOf(s.uppercase())
+          }
+        val a =
+          world.applyItemAffect(
+            item,
+            e.name,
+            e.duration,
+            scope,
+            e.statDeltas,
+            e.flags,
+            e.tickEvery,
+            e.onTick,
+            e.onExpire,
+            e.expireMessage,
+            owner as? Actor,
+            e.modifiers,
+            e.senseDeltas,
+          )
+        a?.let { AffectView(frame, item, it) } ?: Starlark.NONE
+      } else {
+        val t = actorArg(target, "apply_affect(target)")
+        if (!isNone(applies)) fail("apply_affect(applies): only item affects take applies")
+        val d = e.duration ?: fail("apply_affect(duration): an actor's affect needs a duration")
+        val a =
+          world.applyAffect(
+            t,
+            e.name,
+            d,
+            e.statDeltas,
+            e.flags,
+            e.tickEvery,
+            e.onTick,
+            e.onExpire,
+            e.expireMessage,
+            owner as? Actor,
+            e.modifiers,
+            senseDeltas = e.senseDeltas,
+          )
+        a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
+      }
     }
 
   @StarlarkMethod(
@@ -1026,16 +1078,23 @@ internal constructor(
     doc = "Removes an affect by name; True if there was one.",
     parameters =
       [
-        Param(name = "target", named = true, doc = "Actor carrying the affect."),
+        Param(name = "target", named = true, doc = "Actor or item carrying the affect."),
         Param(name = "name", named = true, doc = "Affect name."),
       ],
   )
   fun removeAffect(target: Any, name: Any): Any =
     verb("remove_affect") {
-      world.removeAffect(
-        actorArg(target, "remove_affect(target)"),
-        str(name, "remove_affect(name)"),
-      )
+      if (target is ItemView) {
+        world.removeItemAffect(
+          itemArg(target, "remove_affect(target)"),
+          str(name, "remove_affect(name)"),
+        )
+      } else {
+        world.removeAffect(
+          actorArg(target, "remove_affect(target)"),
+          str(name, "remove_affect(name)"),
+        )
+      }
     }
 
   // ---- Items ---------------------------------------------------------------------------------
@@ -1180,6 +1239,57 @@ internal constructor(
       val n = intOrNull(count, "destroy(count)") ?: i.count
       if (n !in 1..i.count) fail("destroy(count): must be between 1 and ${i.count}")
       world.destroy(i, n)
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "add_tag",
+    doc = "Adds a tag to an item's effective tags; True if it was not already present.",
+    parameters =
+      [
+        Param(name = "item", named = true, doc = "Item to tag."),
+        Param(name = "tag", named = true, doc = "Tag to add."),
+      ],
+  )
+  fun addTag(item: Any, tag: Any): Any =
+    verb("add_tag") {
+      val i = itemArg(item, "add_tag(item)")
+      val t = str(tag, "add_tag(tag)")
+      world.addItemTag(i, t)
+    }
+
+  @StarlarkMethod(
+    name = "remove_tag",
+    doc = "Removes a tag from an item's effective tags; True if it was present.",
+    parameters =
+      [
+        Param(name = "item", named = true, doc = "Item to untag."),
+        Param(name = "tag", named = true, doc = "Tag to remove."),
+      ],
+  )
+  fun removeTag(item: Any, tag: Any): Any =
+    verb("remove_tag") {
+      val i = itemArg(item, "remove_tag(item)")
+      val t = str(tag, "remove_tag(tag)")
+      world.removeItemTag(i, t)
+    }
+
+  @StarlarkMethod(
+    name = "transform",
+    doc = "Swaps an item's prototype in place, keeping instance attributes, affects and tags.",
+    parameters =
+      [
+        Param(name = "item", named = true, doc = "Item to transform."),
+        Param(name = "label", named = true, doc = "Target item prototype label."),
+      ],
+    useStarlarkThread = true,
+  )
+  fun transform(item: Any, label: Any, thread: StarlarkThread): Any =
+    verb("transform") {
+      val i = itemArg(item, "transform(item)")
+      val l = label(str(label, "transform(label)"), pkgOf(thread), "transform(label)")
+      if (l !in world.protos.items) fail("transform(label): there is no item $l")
+      world.transformItem(i, l)
       Starlark.NONE
     }
 

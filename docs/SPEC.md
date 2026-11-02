@@ -1053,9 +1053,9 @@ each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`, `args`, `event`, `source_room`,
 `via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `proposals`, `elapsed_pulses`, `from_room`, `to_room`,
-`old_level`, `new_level`, `affect` (affect hooks), `reason` (affect `on_expire`: `"expired"` when the affect reached its
-expiry pulse, else `"removed"` for `remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as
-expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
+`old_level`, `new_level`, `affect` (affect hooks; for an item affect's hooks, `self` is the item), `reason` (affect
+`on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"` for `remove_affect` or `dispel`; an
+affect removed on or after its expiry pulse counts as expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 
 - **Commands:** `ctx.args` is the argument text, `ctx.target` the actor in the room matching the first argument word,
   and `ctx.item` the item for item commands. `ctx.self` is the room or item, or the actor for global commands.
@@ -1095,8 +1095,8 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
   without a door.
 
 **Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
-`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `sense_deltas`, `tags`,
-`in_world`.
+`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `sense_deltas`, `affects`,
+`has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are the effective tags.
 
 **Skill view:** includes `cost`, `channels`, `interrupt` and `tags`.
 
@@ -1108,8 +1108,8 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
 | Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                           |
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
-| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)`                                                                                          |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`                                                                                                                                |
+| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor or an item)                                                            |
+| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                                                       |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                        |
@@ -1146,6 +1146,12 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
   - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
     count, removes that many from the stack.
   - Verbs never merge stacks. An item with instance affects or tag changes never merges into a stack.
+  - `transform(item, label)` keeps the item's id, location, count, attributes, affects, tag changes, name and timers. A
+    stack into a non-stackable prototype keeps one of its count; a container into a non-container drops its contents on
+    the ground; a locked container stays locked only if the new prototype has a `key`, else it is closed. It refuses a
+    container whose contents wouldn't fit. An equipped item that no longer fits its slot moves to the inventory. No
+    hooks fire.
+  - `add_tag` and `remove_tag` return whether the effective tags changed.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
   door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
 - **Containers:** container verbs print nothing. `open_container` also unlocks; `close_container` leaves a locked
@@ -1165,7 +1171,9 @@ expired), `targets` (`on_combat_tick`), `pulse`, `rng`.
   - `act_cast` requires the mob to know the skill.
 - **Attributes:** `get_attr` returns a mutable copy.
 - **Simulation verbs:** return `None`. A reason added twice counts once.
-- **`apply_affect`:** takes `modifiers`, as the effect primitive does.
+- **`apply_affect`:** takes `modifiers`, as the effect primitive does. On an item it takes `applies` (`worn` or
+  `carried`, default `worn`) and allows `duration=None` (permanent); `applies` on an actor is an error; item affects
+  can't carry `stunned`.
 
 Verbs without a player command (`say`, `emote`, door and exit-block setters, `path_to`, and the mob actions) are public
 `core` functions, so Kotlin and plugins share them.

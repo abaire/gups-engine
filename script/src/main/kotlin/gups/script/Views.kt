@@ -17,8 +17,10 @@ import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.world.HeldAffect
 import gups.core.world.Proposal
 import gups.core.world.World
+import gups.core.world.heldAffects
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
 import net.starlark.java.annot.Param
@@ -279,7 +281,11 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
       index?.let { Band.between(actor.trackIndex, it).word } ?: Starlark.NONE
     }
 
-  @StarlarkMethod(name = "affects", structField = true, doc = "Active timed affects on this actor.")
+  @StarlarkMethod(
+    name = "affects",
+    structField = true,
+    doc = "Active affects on this actor, including untimed ones from worn items.",
+  )
   fun affects(): Any = read { sList(actor.affects.map { AffectView(scope, actor, it) }) }
 
   @StarlarkMethod(name = "skills", structField = true, doc = "Skill label to proficiency (0-100).")
@@ -344,15 +350,13 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(
     name = "flags",
     structField = true,
-    doc = "Flags from affects and traits, including those worn items apply, sorted.",
+    doc = "Flags from traits, affects and item affects, sorted.",
   )
-  fun flags(): Any = read {
-    sList((actor.traitFlags + actor.affects.flatMap { it.flags }).distinct().sorted())
-  }
+  fun flags(): Any = read { sList(actor.flags.sorted()) }
 
   @StarlarkMethod(
     name = "has_flag",
-    doc = "True if an affect, trait or a worn item gives this flag, such as 'no_regen'.",
+    doc = "True if a trait, an affect or an item affect gives this flag, such as 'no_regen'.",
     parameters = [Param(name = "flag", named = true, doc = "Flag name, such as 'no_regen'.")],
   )
   fun hasFlag(flag: Any): Any = read { actor.hasFlag(str(flag, "has_flag(flag)")) }
@@ -587,8 +591,44 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   @StarlarkMethod(name = "location", structField = true, doc = "Where the item currently is.")
   fun location(): Any = read { LocationView(scope, item.location) }
 
-  @StarlarkMethod(name = "tags", structField = true, doc = "Tags carried by this item, sorted.")
+  @StarlarkMethod(
+    name = "tags",
+    structField = true,
+    doc = "Effective tags: the prototype's plus those added, minus those removed, sorted.",
+  )
   fun tags(): Any = read { sList(item.tags.sorted()) }
+
+  @StarlarkMethod(
+    name = "has_tag",
+    doc = "True if this item has the effective tag.",
+    parameters = [Param(name = "tag", named = true, doc = "Tag name to check.")],
+  )
+  fun hasTag(tag: Any): Any = read { str(tag, "has_tag(tag)") in item.tags }
+
+  @StarlarkMethod(
+    name = "variants",
+    structField = true,
+    doc = "Free-form variant names to related item prototype labels.",
+  )
+  fun variants(): Any = read {
+    sDict(item.proto.variants.entries.associate { it.key to it.value.v })
+  }
+
+  @StarlarkMethod(
+    name = "affects",
+    structField = true,
+    doc =
+      "Affects active on this item: prototype affects, then instance affects. Empty for an item " +
+        "whose prototype was removed.",
+  )
+  fun affects(): Any = read {
+    sList(
+      item.heldAffects().map { ha ->
+        val inst = ha.instance
+        if (inst == null) ProtoAffectView(scope, item, ha) else AffectView(scope, item, inst)
+      }
+    )
+  }
 
   @StarlarkMethod(
     name = "container_state",
@@ -695,7 +735,7 @@ internal constructor(private val scope: ViewScope, private val loc: ItemLocation
 
 @StarlarkBuiltin(name = "affect", doc = "A read-only view of an affect.")
 class AffectView
-internal constructor(private val scope: ViewScope, private val host: Actor, val affect: Affect) :
+internal constructor(private val scope: ViewScope, private val host: Entity, val affect: Affect) :
   StarlarkValue {
   @StarlarkMethod(name = "id", structField = true, doc = "The affect's id on its host.")
   fun id(): Any = sInt(affect.id)
@@ -703,11 +743,24 @@ internal constructor(private val scope: ViewScope, private val host: Actor, val 
   @StarlarkMethod(name = "name", structField = true, doc = "The affect's name.")
   fun name(): Any = affect.name
 
-  @StarlarkMethod(name = "expires_at", structField = true, doc = "The pulse it expires at.")
-  fun expiresAt(): Any = sInt(affect.expiresAt)
+  @StarlarkMethod(
+    name = "expires_at",
+    structField = true,
+    allowReturnNones = true,
+    doc = "The pulse it expires at.",
+  )
+  fun expiresAt(): Any =
+    if (affect.expiresAt == Long.MAX_VALUE) Starlark.NONE else sInt(affect.expiresAt)
 
-  @StarlarkMethod(name = "remaining", structField = true, doc = "Pulses until it expires.")
-  fun remaining(): Any = sInt((affect.expiresAt - scope.world.pulse).coerceAtLeast(0))
+  @StarlarkMethod(
+    name = "remaining",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Pulses until it expires.",
+  )
+  fun remaining(): Any =
+    if (affect.expiresAt == Long.MAX_VALUE) Starlark.NONE
+    else sInt((affect.expiresAt - scope.world.pulse).coerceAtLeast(0))
 
   @StarlarkMethod(name = "flags", structField = true, doc = "Affect flags, sorted.")
   fun flags(): Any = sList(affect.flags.sorted())
@@ -730,17 +783,113 @@ internal constructor(private val scope: ViewScope, private val host: Actor, val 
   @StarlarkMethod(
     name = "source",
     structField = true,
+    allowReturnNones = true,
     doc = "Who applied it, if still in the world.",
   )
   fun source(): Any = view(scope, affect.source?.let { scope.world.actor(it) })
 
-  @StarlarkMethod(name = "host", structField = true, doc = "The actor carrying the affect.")
-  fun hostView(): Any = ActorView(scope, host)
+  @StarlarkMethod(name = "host", structField = true, doc = "The actor or item carrying the affect.")
+  fun hostView(): Any = view(scope, host)
+
+  @StarlarkMethod(
+    name = "applies",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Scope for item affects ('worn' or 'carried'), or None for actor affects.",
+  )
+  fun applies(): Any = affect.applies?.name?.lowercase() ?: Starlark.NONE
+
+  @StarlarkMethod(
+    name = "origin",
+    structField = true,
+    doc = "Always 'instance'; a prototype's affects are proto_affect views.",
+  )
+  fun origin(): Any = "instance"
 
   override fun isImmutable(): Boolean = true
 
   override fun repr(printer: Printer) {
     printer.append("<affect ${affect.name}>")
+  }
+}
+
+@StarlarkBuiltin(
+  name = "proto_affect",
+  doc = "A read-only view of an affect an item's prototype declares.",
+)
+class ProtoAffectView
+internal constructor(private val scope: ViewScope, private val host: Item, val affect: HeldAffect) :
+  StarlarkValue {
+  @StarlarkMethod(
+    name = "id",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Always None: prototype affects have no id.",
+  )
+  fun id(): Any = Starlark.NONE
+
+  @StarlarkMethod(name = "name", structField = true, doc = "The affect's name.")
+  fun name(): Any = affect.name
+
+  @StarlarkMethod(
+    name = "expires_at",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Always None: prototype affects never expire.",
+  )
+  fun expiresAt(): Any = Starlark.NONE
+
+  @StarlarkMethod(
+    name = "remaining",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Always None: prototype affects never expire.",
+  )
+  fun remaining(): Any = Starlark.NONE
+
+  @StarlarkMethod(name = "flags", structField = true, doc = "Affect flags, sorted.")
+  fun flags(): Any = sList(affect.flags.sorted())
+
+  @StarlarkMethod(
+    name = "stat_deltas",
+    structField = true,
+    doc = "Stat adjustments granted by this affect.",
+  )
+  fun statDeltas(): Any = TypedMap(TypedKind.STATS, affect.statDeltas, scope.world.schema.statNames)
+
+  @StarlarkMethod(
+    name = "sense_deltas",
+    structField = true,
+    doc = "Sense score changes by channel granted by this affect.",
+  )
+  fun senseDeltas(): Any =
+    sDict(affect.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
+
+  @StarlarkMethod(
+    name = "source",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Always None: the prototype declares it.",
+  )
+  fun source(): Any = Starlark.NONE
+
+  @StarlarkMethod(name = "host", structField = true, doc = "The item whose prototype declares it.")
+  fun hostView(): Any = ItemView(scope, host)
+
+  @StarlarkMethod(
+    name = "applies",
+    structField = true,
+    doc = "Where it reaches the holder from: 'worn' or 'carried'.",
+  )
+  fun applies(): Any = affect.applies.name.lowercase()
+
+  @StarlarkMethod(name = "origin", structField = true, doc = "Always 'proto'.")
+  fun origin(): Any = "proto"
+
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append("<proto_affect ${affect.name}>")
   }
 }
 

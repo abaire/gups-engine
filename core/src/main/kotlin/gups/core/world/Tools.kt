@@ -649,7 +649,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
         "Count ${e.count}, weight ${e.weight}" + (e.decayAt?.let { ", decays at pulse $it" } ?: "")
       )
       if (e.tags.isNotEmpty()) add("Tags: " + e.tags.sorted().joinToString(", "))
-      val held = e.allAffects()
+      val held = e.adminAffectsList()
       add(
         "Affects: " +
           if (held.isEmpty()) "none"

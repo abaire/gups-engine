@@ -702,6 +702,34 @@
         ]
       },
       {
+        "symbol": "ctx.add_tag",
+        "name": "add_tag",
+        "doc": "Adds a tag to an item's effective tags; True if it was not already present.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.add_tag.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to tag."
+          },
+          {
+            "symbol": "ctx.add_tag.tag",
+            "name": "tag",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tag to add."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.after",
         "name": "after",
         "doc": "Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.",
@@ -773,7 +801,7 @@
       {
         "symbol": "ctx.apply_affect",
         "name": "apply_affect",
-        "doc": "Attaches a timed buff or debuff; re-applying a name replaces it.",
+        "doc": "Attaches a buff or debuff to an actor or item; re-applying a name replaces it.",
         "since": 1,
         "params": [
           {
@@ -784,7 +812,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor to receive the affect."
+            "doc": "Actor or item to receive the affect."
           },
           {
             "symbol": "ctx.apply_affect.name",
@@ -804,7 +832,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Duration in pulses."
+            "doc": "Duration in pulses; None makes an item affect permanent."
           },
           {
             "symbol": "ctx.apply_affect.stat_deltas",
@@ -885,6 +913,16 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Sense score changes by channel while the affect lasts."
+          },
+          {
+            "symbol": "ctx.apply_affect.applies",
+            "name": "applies",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item affects only: 'worn' or 'carried'."
           }
         ]
       },
@@ -1743,7 +1781,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor carrying the affect."
+            "doc": "Actor or item carrying the affect."
           },
           {
             "symbol": "ctx.remove_affect.name",
@@ -1754,6 +1792,34 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Affect name."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.remove_tag",
+        "name": "remove_tag",
+        "doc": "Removes a tag from an item's effective tags; True if it was present.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.remove_tag.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to untag."
+          },
+          {
+            "symbol": "ctx.remove_tag.tag",
+            "name": "tag",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tag to remove."
           }
         ]
       },
@@ -2101,6 +2167,34 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Track index on arrival, or None for the room's default."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.transform",
+        "name": "transform",
+        "doc": "Swaps an item's prototype in place, keeping instance attributes, affects and tags.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.transform.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to transform."
+          },
+          {
+            "symbol": "ctx.transform.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Target item prototype label."
           }
         ]
       },

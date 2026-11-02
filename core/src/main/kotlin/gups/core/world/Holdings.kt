@@ -46,13 +46,15 @@ fun World.refreshHoldings(a: Actor) {
 
 /** Prototype affects in declaration order, then instance affects by id; empty for a tombstone. */
 fun Item.heldAffects(): List<HeldAffect> =
-  if (proto.kind == TOMBSTONE) emptyList() else allAffects()
+  if (proto.kind == TOMBSTONE) emptyList() else adminAffectsList()
 
 /**
  * Prototype affects in declaration order, then instance affects by id, even on a tombstone, whose
- * kept instance affects reach no one but still show what the item was.
+ * kept instance affects reach no one but still show what the item was. For admin display only:
+ * entries may not be in play, so anything that applies, propagates or exposes affects to scripts or
+ * plugins must use [heldAffects].
  */
-internal fun Item.allAffects(): List<HeldAffect> {
+internal fun Item.adminAffectsList(): List<HeldAffect> {
   val out = mutableListOf<HeldAffect>()
   for (a in proto.affects) out +=
     HeldAffect(this, a.name, a.applies, a.statDeltas, a.senseDeltas, a.modifiers, a.flags, null)

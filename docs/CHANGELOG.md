@@ -19,6 +19,19 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - Allowed `duration = None` in `apply_affect(...)` on `item` skills to attach a permanent item affect.
 - An `item` skill's `effect` acts on the target item; it may use `apply_affect`, plugin primitives, and `sequence`
   combining them. Any other primitive fails the load.
+- `ctx.apply_affect(target, ...)` and `ctx.remove_affect(target, name)` accept an item as the target; on an item,
+  `apply_affect` takes `applies = "worn" | "carried"` (default `"worn"`) and allows `duration = None` for permanent
+  affects.
+- Added `ctx.add_tag(item, tag)` and `ctx.remove_tag(item, tag)`, returning whether the effective tags changed.
+- Added `ctx.transform(item, label)` to swap an item's prototype in place, keeping instance attributes, affects and
+  tags.
+- Added `affects`, `has_tag(tag)` and `variants` to the item view; `item.tags` reflects effective tags.
+- Added the `proto_affect` view for read-only views of prototype affects on items.
+- Added `origin` (`"instance"` or `"proto"`) and `applies` (`"worn"` or `"carried"`, or `None` on actor affects) to
+  affect views; `affect.host` is the actor or item carrying it.
+- `affect.expires_at` and `affect.remaining` are `None` for an affect that never expires, including untimed
+  `equip_affects`.
+- `actor.flags` and `actor.has_flag(flag)` include flags from item affects.
 
 ### Experience and levels
 

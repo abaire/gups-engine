@@ -855,10 +855,10 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   5. Confirm the Phase 1 `refreshHoldings` loop at the end of `placeItems` runs after every `applyItem`. The round-trip
      test below fails if it doesn't.
   6. **`@stat <item>`** (`Tools.kt`, the `is Item ->` block): after the existing `Tags:` line, add:
-     - `Affects: none`, or `Affects: ` followed by one entry per `e.allAffects()` (`heldAffects()` without the tombstone
-       check, so a tombstone still lists the instance affects it keeps), joined by `", "`. Each entry is `"<name>
-       (<applies>, <when><flags>)"`, where `<applies>` is `worn` or `carried`; `<when>` is `prototype` for a prototype
-       affect, `permanent` when `expiresAt == Long.MAX_VALUE`, else `"${(expiresAt - pulse).coerceAtLeast(0)
+     - `Affects: none`, or `Affects: ` followed by one entry per `e.adminAffectsList()` (`heldAffects()` without the
+       tombstone check, so a tombstone still lists the instance affects it keeps), joined by `", "`. Each entry is
+       `"<name> (<applies>, <when><flags>)"`, where `<applies>` is `worn` or `carried`; `<when>` is `prototype` for a
+       prototype affect, `permanent` when `expiresAt == Long.MAX_VALUE`, else `"${(expiresAt - pulse).coerceAtLeast(0)
        * PULSE_MS / 1000}s left"` (the actor line's formula); and `<flags>` is `""` or `"; " + flags.sorted()
          .joinToString()`. Example: `Affects: misfortune (carried, prototype), keen (worn, 30s left; glowing)`.
      - when either set is non-empty, `Tag changes: ` followed by `+tag` for each added tag and then `-tag` for each
@@ -1534,7 +1534,9 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
      `custodian = world.custodian(item)?.let { ActorFacade(it, world) }`; `affects =
      item.heldAffects().map(::toPlugin)`, where a private `toPlugin(ha: HeldAffect)` fills `origin` with `"proto"` when
      `ha.instance == null`, else `"instance"`, and `expiresAt` with `ha.instance?.expiresAt?.takeIf { it !=
-     Long.MAX_VALUE }`.
+     Long.MAX_VALUE }`. `affects` must use `heldAffects()`, never `adminAffectsList()`: a tombstone's kept affects are
+     for admin display only, and a plugin that saw them could treat them as live. Document on `PluginItem.affects` that
+     it is empty for an item whose prototype was removed.
   3. **`WorldFacade` verbs** mirror `applyAffect`:
      - a private `itemOf(i: PluginItem, what: String): Item` like `actorOf`: not an `ItemFacade` → "not an item of this
        world"; `world.item(item.id) !== item` → "is no longer in the world";

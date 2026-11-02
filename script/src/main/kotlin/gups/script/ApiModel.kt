@@ -519,6 +519,7 @@ object ScriptApi {
     listOf(
       ActorView::class.java,
       AffectView::class.java,
+      ProtoAffectView::class.java,
       Denial::class.java,
       DoorView::class.java,
       ExitView::class.java,
