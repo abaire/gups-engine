@@ -199,7 +199,7 @@ class FeatureScriptTest {
   fun `modifier points of a feature need it`() {
     refused(
       Feature.COMBAT,
-      "def f(ctx, base):\n    return base\nitem(\"ring\", wear = \"finger\", modifiers = {\"to_hit\": f})",
+      "def f(ctx, base):\n    return base\nitem(\"ring\", wear = \"ring\", modifiers = {\"to_hit\": f})",
       "item(modifiers)[\"to_hit\"]",
     )
     refused(

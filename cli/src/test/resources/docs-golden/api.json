@@ -2565,13 +2565,12 @@
     },
     "exports": [
       {
-        "symbol": "rules:advance_lag",
-        "feature": "track",
-        "name": "advance_lag",
-        "signature": "advance_lag(ctx)",
-        "return_type": "int",
-        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
-        "doc": "Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.",
+        "symbol": "rules:actor_slots",
+        "name": "actor_slots",
+        "signature": "actor_slots(ctx)",
+        "return_type": "list[str]",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "The slots ctx.actor has, a subset of equipment_slots().",
         "since": 1
       }
     ],

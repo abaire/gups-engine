@@ -17,10 +17,23 @@ def _or(value, default):
     return value if value else default
 
 def equipment_slots():
-    # Slot names, in the order the modifier chain visits worn items. An item declares its slot
-    # with wear = "<slot>"; wear = "finger" fits the first free finger_* slot.
+    # Slot names, in the order the modifier chain visits worn items.
     return ["head", "neck", "body", "arms", "hands", "finger_l", "finger_r",
             "waist", "legs", "feet", "wield", "offhand", "held"]
+
+def slot_families():
+    # A family's slots fill in order. wear = "<family>" takes the first free one.
+    return {
+        "ring": ["finger_l", "finger_r"],
+        "hand": ["wield", "offhand"],
+    }
+
+def actor_slots(ctx):
+    # Every actor has every slot. Return fewer (or a race's extras) based on ctx.actor.
+    return equipment_slots()
+
+def slot_cost(ctx):
+    return ctx.item.slot_cost
 
 def starting_stats(ctx):
     # The numbers of a new character or a mob about to spawn (ctx.actor). A player starts with

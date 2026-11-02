@@ -87,6 +87,11 @@ internal class LoadCtx(
     val loc = thread.callerLocation
     pkg.refs += LabelRef(label, kind, loc?.file(), loc?.line(), loc?.column())
   }
+
+  fun wearRef(item: Label, param: String, wear: String, thread: StarlarkThread) {
+    val loc = thread.callerLocation
+    pkg.wearRefs += WearRef(item, param, wear, loc?.file(), loc?.line(), loc?.column())
+  }
 }
 
 /** Kinds of entity a hook can be attached to. */
@@ -938,6 +943,15 @@ internal class DeclarationBuiltins(
       val wear = d.str("wear")
       val wield = d.str("wield")
       if (wear != null && wield != null) fail("item(): give either wear or wield, not both")
+      if (wear != null) ctx.wearRef(label, "wear", wear, thread)
+      if (wield != null) ctx.wearRef(label, "wield", wield, thread)
+      val slotCost = d.int("slot_cost") ?: 1
+      if (slotCost < 1) fail("item(slot_cost): must be at least 1, got $slotCost")
+      if (slotCost != 1 && wear == null && wield == null) {
+        fail(
+          "item(slot_cost): slot_cost = $slotCost needs wear or wield; an item that isn't worn takes up no slots"
+        )
+      }
       val container =
         d["container"]?.let {
           (it as? ContainerDecl)?.proto
@@ -978,6 +992,7 @@ internal class DeclarationBuiltins(
           range = d["range"]?.let { band(it, d.what("range")) } ?: def.range,
           weight = d.int("weight") ?: def.weight,
           wear = wear ?: wield,
+          slotCost = slotCost,
           dice = d["dice"]?.let { dice(it, d.what("dice")) },
           damageType =
             d.str("damage_type")?.let {
@@ -2263,8 +2278,19 @@ internal class DeclarationBuiltins(
               allowedValues = BANDS,
             ),
             DeclParam("weight", "int", "Weight of one item.", default = "1"),
-            DeclParam("wear", "str", "Equipment slot the item is worn in.", default = "None"),
-            DeclParam("wield", "str", "Weapon slot alias for wear.", default = "None"),
+            DeclParam(
+              "wear",
+              "str",
+              "Equipment slot or slot family the item is worn in.",
+              default = "None",
+            ),
+            DeclParam("wield", "str", "Alias for wear, for weapons.", default = "None"),
+            DeclParam(
+              "slot_cost",
+              "int",
+              "How many slots of its family the item takes up; at least 1.",
+              default = "1",
+            ),
             DeclParam("dice", "dice", "Weapon damage dice such as '1d6+1'.", default = "None"),
             DeclParam(
               "damage_type",

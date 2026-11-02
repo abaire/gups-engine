@@ -265,7 +265,7 @@ class LinterTest {
           think = _think,
           version = 1,
       )
-      item("ring", name = "Ring", wear = "finger", modifiers = {"damage": _mod}, commands = {"rub": _cmd}, version = 1)
+      item("ring", name = "Ring", wear = "ring", modifiers = {"damage": _mod}, commands = {"rub": _cmd}, version = 1)
       """
         .trimIndent()
 

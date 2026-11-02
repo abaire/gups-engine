@@ -414,7 +414,128 @@ class RulesTest {
     val messages = result.errors.filter { it.pkg == "rules" }.map { it.message }
     assertTrue(messages.any { "must define damage(...)" in it }, messages.toString())
     assertTrue(messages.any { "must define starting_stats(...)" in it }, messages.toString())
+    assertTrue(messages.any { "must define slot_families(...)" in it }, messages.toString())
+    assertTrue(messages.any { "must define actor_slots(...)" in it }, messages.toString())
+    assertTrue(messages.any { "must define slot_cost(...)" in it }, messages.toString())
     assertTrue(messages.none { "to_hit" in it })
+  }
+
+  private fun slotFamiliesError(families: String): LoadError {
+    val result = loadWith(TestWorlds.rules("def slot_families():\n    return $families\n"))
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.file.orEmpty(), "combat.star")
+    return error
+  }
+
+  @Test
+  fun `the dry run catches a family colliding with a slot`() {
+    assertContains(
+      slotFamiliesError("{'head': ['head']}").message,
+      "rules.slot_families: family 'head' has the name of a slot in equipment_slots()",
+    )
+  }
+
+  @Test
+  fun `the dry run catches an invalid family name`() {
+    assertContains(
+      slotFamiliesError("{'Ring': ['finger_l']}").message,
+      "rules.slot_families: family 'Ring' is not a valid family name",
+    )
+  }
+
+  @Test
+  fun `the dry run catches an unknown slot in a family`() {
+    assertContains(
+      slotFamiliesError("{'ring': ['finger_l', 'finger_rr']}").message,
+      "family 'ring' lists 'finger_rr', which is not in equipment_slots() (did you mean 'finger_r'?)",
+    )
+  }
+
+  @Test
+  fun `the dry run catches a slot listed twice in a family`() {
+    assertContains(
+      slotFamiliesError("{'ring': ['finger_l', 'finger_l']}").message,
+      "family 'ring' lists slot 'finger_l' more than once",
+    )
+  }
+
+  @Test
+  fun `the dry run catches a slot in two families`() {
+    assertContains(
+      slotFamiliesError("{'ring_a': ['finger_l'], 'ring_b': ['finger_l']}").message,
+      "slot 'finger_l' is in both 'ring_a' and 'ring_b'",
+    )
+  }
+
+  @Test
+  fun `the dry run catches an empty family`() {
+    assertContains(slotFamiliesError("{'ring': []}").message, "family 'ring' lists no slots")
+  }
+
+  @Test
+  fun `bad slot families don't blame the items worn in them`() {
+    val root =
+      tempWorld(
+        mapOf(
+          rulesPkg,
+          "rules/combat.star" to
+            TestWorlds.rules("def slot_families():\n    return {'head': ['head']}\n"),
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/items.star" to "item('band', wear = 'ring')\n",
+          "zones/z/rooms.star" to DEFAULT_ROOMS,
+        )
+      )
+    val result = ScriptLoader(WorldDir(root), ScriptLimits.HARNESS).load(listOf("zones/z", "rules"))
+    assertTrue("rules" in result.failed)
+    assertTrue(result.errors.none { it.kind == "slot" }, result.report())
+  }
+
+  @Test
+  fun `the dry run catches actor_slots returning an unknown slot`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          """
+          def actor_slots(ctx):
+              return ['head', 'wings']
+          """
+            .trimIndent()
+        )
+      )
+    assertTrue("rules" in result.failed)
+    val messages = result.errors.filter { it.kind == "rules" }.map { it.message }
+    assertTrue(
+      messages.any {
+        "rules.actor_slots for player Dryrunner returned 'wings', which is not in equipment_slots()" in
+          it
+      },
+      messages.toString(),
+    )
+    assertTrue(
+      messages.any { "rules.actor_slots for mob //zones/z:rat returned 'wings'" in it },
+      messages.toString(),
+    )
+  }
+
+  @Test
+  fun `the dry run reports the first slot_cost failure with its item and actor`() {
+    val root =
+      tempWorld(
+        mapOf(
+          rulesPkg,
+          "rules/combat.star" to TestWorlds.rules("def slot_cost(ctx):\n    return 0\n"),
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/items.star" to "item('sword', wear = 'wield')\nitem('helm', wear = 'head')\n",
+          "zones/z/rooms.star" to DEFAULT_ROOMS,
+        )
+      )
+    val result = ScriptLoader(WorldDir(root), ScriptLimits.HARNESS).load(listOf("zones/z", "rules"))
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "rules.slot_cost must be at least 1, got 0")
+    assertContains(error.message, "worn by player Dryrunner)")
+    assertContains(error.file.orEmpty(), "combat.star")
   }
 
   @Test

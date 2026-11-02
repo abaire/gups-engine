@@ -210,6 +210,8 @@ data class ItemProto(
   val weight: Int = 1,
   /** Equipment slot this item occupies when worn, or null if not wearable. */
   val wear: String? = null,
+  /** How many slots of its family this item takes up when worn; at least 1. */
+  val slotCost: Int = 1,
   /** Weapon damage dice notation, or null for non-weapons. */
   val dice: Dice? = null,
   /** Damage type inflicted by this weapon, or null to inherit unarmed damage. */
@@ -245,6 +247,10 @@ data class ItemProto(
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
   val plural: String? = null,
 ) {
+  init {
+    require(slotCost >= 1) { "slotCost must be >= 1, was $slotCost" }
+  }
+
   /**
    * The lowercase words a player can name this item by: each keyword whole and split into words,
    * plus the words of [plural].

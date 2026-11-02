@@ -121,14 +121,14 @@ class CurseWorldTest {
            name = "a cursed ring",
            desc = "An obsidian ring.",
            keywords = ["ring", "cring", "cursed"],
-           wear = "finger",
+           wear = "ring",
            tags = ["cursed"])
 
       item("plain_ring",
            name = "a plain ring",
            desc = "A silver ring.",
            keywords = ["ring", "pring", "plain"],
-           wear = "finger")
+           wear = "ring")
       """,
     )
 

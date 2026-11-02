@@ -1535,6 +1535,10 @@ internal fun World.reach(actor: Actor, item: Item): String? {
 internal fun World.slotFor(actor: Actor, wanted: String): String? {
   val slots = equipmentSlots()
   if (wanted in slots) return wanted
+  val fam = rules.slotFamilies()[wanted]
+  if (fam != null) {
+    return fam.firstOrNull { actor.equipped(it) == null } ?: fam.firstOrNull()
+  }
   val family = slots.filter { it.startsWith("${wanted}_") }
   return family.firstOrNull { actor.equipped(it) == null } ?: family.firstOrNull()
 }

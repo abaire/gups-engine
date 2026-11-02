@@ -168,6 +168,9 @@ class ScriptPackage internal constructor(val path: String) {
   /** Labels this package refers to, checked once every package has loaded. */
   internal val refs = mutableListOf<LabelRef>()
 
+  /** The slots its items are worn in, checked once the rules have named the slots. */
+  internal val wearRefs = mutableListOf<WearRef>()
+
   val rooms: List<RoomProto>
     get() = roomList
 
@@ -203,6 +206,19 @@ internal enum class RefKind(val word: String) {
 internal data class LabelRef(
   val label: Label,
   val kind: RefKind,
+  val file: String?,
+  val line: Int?,
+  val column: Int?,
+)
+
+/**
+ * The slot or slot family an item declared with [param] (`wear` or `wield`), with where it was
+ * written for error messages.
+ */
+internal data class WearRef(
+  val item: Label,
+  val param: String,
+  val wear: String,
   val file: String?,
   val line: Int?,
   val column: Int?,

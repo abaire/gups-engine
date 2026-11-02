@@ -1,7 +1,9 @@
 package gups.script
 
+import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Condition
 import gups.core.model.DamageType
@@ -9,12 +11,16 @@ import gups.core.model.Direction
 import gups.core.model.DoorProto
 import gups.core.model.ExitProto
 import gups.core.model.Interrupt
+import gups.core.model.Item
+import gups.core.model.ItemLocation
+import gups.core.model.Mob
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
+import gups.core.model.didYouMean
 import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
@@ -394,6 +400,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   internal var world: World? = null
   private val lastAlert = HashMap<String, Long>()
   private var goodSlots: List<String> = emptyList()
+  private var goodFamilies: Map<String, List<String>> = emptyMap()
 
   /**
    * While set, failures are collected here instead of recorded and alerted: the dry run uses it to
@@ -499,6 +506,25 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         }
       }
       ?.also { goodSlots = it } ?: goodSlots
+
+  override fun slotFamilies(): Map<String, List<String>> =
+    run(RulesExport.SLOT_FAMILIES, null, { emptyList() }) { v ->
+        val what = "rules.slot_families return value"
+        dict(v, what).mapValues { (k, item) -> strList(item, "$what[\"$k\"]") }
+      }
+      ?.also { goodFamilies = it } ?: goodFamilies
+
+  override fun actorSlots(c: RulesContext): List<String> =
+    run(RulesExport.ACTOR_SLOTS, c, ctxArgs(c)) { v ->
+      strList(v, "rules.actor_slots return value")
+    } ?: equipmentSlots()
+
+  override fun slotCost(c: RulesContext): Int =
+    run(RulesExport.SLOT_COST, c, ctxArgs(c)) { v ->
+      val n = int(v, "rules.slot_cost return value")
+      if (n < 1) fail("rules.slot_cost must be at least 1, got $n")
+      n
+    } ?: c.item?.proto?.slotCost ?: 1
 
   override fun startingStats(c: RulesContext): StartingStats =
     run(RulesExport.STARTING_STATS, c, ctxArgs(c)) { v ->
@@ -710,6 +736,9 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 /** The functions the files of `//rules` may export. [RULES_EXPORTS] documents each. */
 enum class RulesExport(val scriptName: String) {
   EQUIPMENT_SLOTS("equipment_slots"),
+  SLOT_FAMILIES("slot_families"),
+  ACTOR_SLOTS("actor_slots"),
+  SLOT_COST("slot_cost"),
   STARTING_STATS("starting_stats"),
   CONDITION("condition"),
   TO_HIT("to_hit"),
@@ -748,6 +777,27 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "list[str]",
       ctxFields = emptyList(),
       doc = "Equipment slot names in display and modifier evaluation order.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.SLOT_FAMILIES,
+      signature = "slot_families()",
+      returnType = "dict[str, list[str]]",
+      ctxFields = emptyList(),
+      doc = "Slot families: a family name to its ordered concrete slots.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.ACTOR_SLOTS,
+      signature = "actor_slots(ctx)",
+      returnType = "list[str]",
+      ctxFields = listOf("actor", "room", "pulse", "rng"),
+      doc = "The slots ctx.actor has, a subset of equipment_slots().",
+    ),
+    RulesExportSpec(
+      export = RulesExport.SLOT_COST,
+      signature = "slot_cost(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "item", "room", "pulse", "rng"),
+      doc = "How many slots of its family ctx.item takes up when ctx.actor wears it; at least 1.",
     ),
     RulesExportSpec(
       export = RulesExport.STARTING_STATS,
@@ -1094,6 +1144,11 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *
  * ## Export Verification
  * - Calls `equipment_slots` to ensure slot names are valid lowercase identifiers.
+ * - Verifies `slot_families`: valid family names, no collision with slots, non-empty, no
+ *   duplicates, valid slots, no slot in two families.
+ * - Verifies `actor_slots` returns a subset of `equipment_slots` for each synthetic actor.
+ * - Verifies `slot_cost` for each synthetic actor against wearable item prototypes, stopping at the
+ *   first failure.
  * - If the `leveling` feature is enabled, verifies that `xp_to_level(ctx, level)` strictly
  *   increases for all levels from 1 to 50 for each synthetic actor, stopping at the first actor
  *   whose curve fails, checks `xp_for_kill`, and calls `on_level_up` for each synthetic actor with
@@ -1111,7 +1166,8 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  * - Tests `door_intensity` for `"open"`, `"close"`, `"lock"`, and `"unlock"` actions, both with and
  *   without tags.
  *
- * Returns what went wrong, one line per failed call; empty when the package is sound.
+ * Returns what went wrong, one line per failed call, and the slots and families that items' `wear`
+ * is checked against.
  */
 internal fun dryRunRules(
   result: LoadResult,
@@ -1120,7 +1176,7 @@ internal fun dryRunRules(
   pkg: String = "rules",
   features: Features = Features.ALL,
   wiring: WorldPluginWiring = WorldPluginWiring.NONE,
-): List<String> {
+): RulesDryRun {
   val host = StarlarkHost(result, limits)
   val rules = host.rules(pkg)
   val problems = mutableListOf<String>()
@@ -1140,7 +1196,9 @@ internal fun dryRunRules(
         wiring.install(it)
       }
   val skill = SkillProto(Label("//engine:dry_run_skill"), interrupt = Interrupt(damagePct = 10))
+  var wearSlots: WearSlots? = null
   try {
+    wearSlots = dryRunSlots(rules, problems)
     val at = room.label
     val player = world.spawnPlayer("Dryrunner", at)
     val foe = world.spawnPlayer("Dryrunfoe", at)
@@ -1179,7 +1237,29 @@ internal fun dryRunRules(
       }
     }
     val actors = listOf(player, foe) + mobs
-    rules.equipmentSlots()
+    val slots = rules.equipmentSlots()
+    for (a in actors) {
+      val stray = rules.actorSlots(RulesContext(world, a)).filter { it !in slots }
+      for (slot in stray) {
+        problems +=
+          "rules.actor_slots for ${dryRunActor(a)} returned '$slot', which is not in equipment_slots()${didYouMean(slot, slots)}; equipment_slots() has ${slots.joinToString(", ")}"
+      }
+    }
+    // A slot_cost that fails usually fails for every actor and item alike, so stop at the first.
+    val wearable = result.prototypes().items.values.filter { it.wear != null }
+    costs@ for (a in actors) {
+      for (proto in wearable) {
+        val before = problems.size
+        val item = Item(EntityId(0L), proto, ItemLocation.Carried(a.id))
+        rules.slotCost(RulesContext(world, a, item = item))
+        if (problems.size > before) {
+          for (i in before until problems.size) {
+            problems[i] += " (item ${proto.label}, worn by ${dryRunActor(a)})"
+          }
+          break@costs
+        }
+      }
+    }
     if (Feature.LEVELING in features) {
       // A curve that ignores the actor fails the same way for every actor, so stop at the first.
       curves@ for (a in actors) {
@@ -1281,5 +1361,67 @@ internal fun dryRunRules(
   } finally {
     rules.collected = null
   }
-  return problems.distinct()
+  return RulesDryRun(problems.distinct(), wearSlots)
 }
+
+/** What [dryRunRules] found. */
+internal class RulesDryRun(
+  /** What went wrong, one line per failed call; empty when the package is sound. */
+  val problems: List<String>,
+  /** The slots and families items may be worn in, or null if the rules got them wrong. */
+  val wearSlots: WearSlots?,
+)
+
+/**
+ * The names an item's `wear` may use: [slots] from `equipment_slots()`, [families] from
+ * `slot_families()`.
+ */
+internal class WearSlots(val slots: List<String>, val families: Map<String, List<String>>) {
+  val names: Set<String> = slots.toSet() + families.keys
+}
+
+/**
+ * Checks `equipment_slots()` and `slot_families()` and adds what is wrong to [problems]. Returns
+ * the slots and families, or null if either is wrong, so items aren't blamed for the rules'
+ * mistake.
+ */
+private fun dryRunSlots(rules: StarlarkRules, problems: MutableList<String>): WearSlots? {
+  val before = problems.size
+  val slots = rules.equipmentSlots()
+  val families = rules.slotFamilies()
+  val owner = mutableMapOf<String, String>()
+  for ((name, familySlots) in families) {
+    val what = "rules.slot_families: family '$name'"
+    if (!Regex("[a-z][a-z0-9_]*").matches(name)) {
+      problems +=
+        "$what is not a valid family name; use lowercase letters, digits and underscores, starting with a letter"
+    }
+    if (name in slots) {
+      problems += "$what has the name of a slot in equipment_slots(); give the family its own name"
+    }
+    if (familySlots.isEmpty()) problems += "$what lists no slots"
+    val seen = mutableSetOf<String>()
+    for (slot in familySlots) {
+      if (!seen.add(slot)) {
+        problems += "$what lists slot '$slot' more than once"
+        continue
+      }
+      if (slot !in slots) {
+        problems +=
+          "$what lists '$slot', which is not in equipment_slots()${didYouMean(slot, slots)}"
+      }
+      val earlier = owner.putIfAbsent(slot, name)
+      if (earlier != null) {
+        problems +=
+          "rules.slot_families: slot '$slot' is in both '$earlier' and '$name'; a slot belongs to at most one family"
+      }
+    }
+  }
+  return if (problems.size == before) WearSlots(slots, families) else null
+}
+
+/**
+ * How a dry-run problem names [a]: a mob by its prototype, since that is what an author can find.
+ */
+private fun dryRunActor(a: Actor): String =
+  if (a is Mob) "mob ${a.proto.label}" else "player ${a.name}"

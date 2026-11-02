@@ -107,6 +107,83 @@ class LoaderTest {
   }
 
   @Test
+  fun `item with wear = ring loads with template rules, rign fails with did you mean`() {
+    val filesGood =
+      mapOf(
+        "rules/package.star" to TestWorlds.RULES_PACKAGE,
+        "rules/combat.star" to TestWorlds.rules(),
+        "zones/z/package.star" to zonePkg(),
+        "zones/z/a.star" to "item(\"good_ring\", wear = \"ring\")\n",
+      )
+    val rGood = load(filesGood, "rules", "zones/z")
+    assertTrue(rGood.errors.isEmpty(), rGood.report())
+
+    val filesBad =
+      mapOf(
+        "rules/package.star" to TestWorlds.RULES_PACKAGE,
+        "rules/combat.star" to TestWorlds.rules(),
+        "zones/z/package.star" to zonePkg(),
+        "zones/z/a.star" to "item(\"bad_ring\", wear = \"rign\")\n",
+      )
+    val rBad = load(filesBad, "rules", "zones/z")
+    assertTrue("rules" !in rBad.failed, rBad.report())
+    assertTrue("zones/z" in rBad.failed, rBad.report())
+    val error = rBad.errors.single { it.kind == "slot" }
+    assertEquals("zones/z", error.pkg)
+    assertContains(error.file.orEmpty(), "a.star")
+    assertEquals(1, error.line)
+    assertContains(
+      error.message,
+      "item //zones/z:bad_ring: wear = 'rign' is not an equipment slot or slot family (did you mean 'ring'?)",
+    )
+    assertContains(error.message, "families are ring, hand")
+  }
+
+  @Test
+  fun `a bad wield slot fails the declaring package and names wield`() {
+    val r =
+      load(
+        mapOf(
+          "rules/package.star" to TestWorlds.RULES_PACKAGE,
+          "rules/combat.star" to TestWorlds.rules(),
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"blade\", wield = \"hadn\")\n",
+        ),
+        "rules",
+        "zones/z",
+      )
+    assertTrue("rules" !in r.failed, r.report())
+    assertContains(
+      r.errors.single { it.kind == "slot" }.message,
+      "wield = 'hadn' is not an equipment slot or slot family (did you mean 'hand'?)",
+    )
+  }
+
+  @Test
+  fun `slot_cost below 1 fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"sword\", wear = \"wield\", slot_cost = 0)",
+        )
+      )
+    assertContains(only(r).message, "item(slot_cost): must be at least 1")
+  }
+
+  @Test
+  fun `slot_cost without wear fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"rock\", slot_cost = 2)",
+        )
+      )
+    assertContains(only(r).message, "item(slot_cost): slot_cost = 2 needs wear or wield")
+  }
+
+  @Test
   fun `syntax errors point at the file and line with a caret`() {
     val r =
       load(

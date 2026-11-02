@@ -105,6 +105,17 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   override fun equipmentSlots(): List<String> = SLOTS
 
+  override fun slotFamilies(): Map<String, List<String>> =
+    if ("finger_l" in equipmentSlots() && "finger_r" in equipmentSlots()) {
+      mapOf("finger" to listOf("finger_l", "finger_r"))
+    } else {
+      emptyMap()
+    }
+
+  override fun actorSlots(c: RulesContext): List<String> = equipmentSlots()
+
+  override fun slotCost(c: RulesContext): Int = c.item?.proto?.slotCost ?: 1
+
   override fun startingStats(c: RulesContext): StartingStats {
     startingOf?.let {
       return it(c)

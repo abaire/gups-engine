@@ -130,6 +130,15 @@ interface RulesEngine {
   /** Returns the list of declared equipment slot names valid in this world. */
   fun equipmentSlots(): List<String>
 
+  /** Slot family names mapped to their ordered concrete slots. */
+  fun slotFamilies(): Map<String, List<String>>
+
+  /** The concrete slots `c.actor` has; a subset of [equipmentSlots]. */
+  fun actorSlots(c: RulesContext): List<String>
+
+  /** How many family slots `c.item` takes up when worn by `c.actor`; at least 1. */
+  fun slotCost(c: RulesContext): Int
+
   /**
    * Calculates initial stats, maximum vitals, and base senses for a new character or spawning mob.
    */

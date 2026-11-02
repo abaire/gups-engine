@@ -857,7 +857,7 @@ mob("goblin_scout",
 
 item("short_bow",
      name="a short bow", plural=None, kind="ranged", range="far", weight=2,
-     wear="wield", dice="1d6", damage_type="pierce",
+     wear="wield", slot_cost=1, dice="1d6", damage_type="pierce",
      stat_deltas=stats(dex=1),
      sense_deltas={"sight": 1},  # sense score changes while worn (§5.7)
      tags=["light_weapon"],  # free-form, for plugins (§4.19)
@@ -892,16 +892,18 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   of its keywords or of its plural.
 - **Damage type:** an item's `damage_type` is a declared damage type, `DAMAGE.fire` or the plain string, checked at
   load; an item that names none uses the world's `unarmed_damage_type`.
-- **Item slots:** an item's slot is `wear = "<slot>"`; `wield = "<slot>"` is an alias. A slot family such as `wear =
-  "finger"` fits the first free `finger_*` slot. An item with `equip_affects` or `modifiers` needs a `wear` slot. Each
-  `equip_affects` entry is either an affect flag (for example `no_regen` or `silenced`), which the wearer has while the
-  item is worn, or `{"flag": ..., "pulses": n}`, which is applied for `n` pulses when the item is equipped and runs out
-  even if the item stays on. Equipping applies each entry to the wearer as an affect, through `apply_affect` like a
-  spell's, and removing the item removes the untimed ones. `stunned` must be timed, so an item can't stun its wearer for
-  good (§5.4.1). `item_affect(name, applies = "worn", stat_deltas = stats(), sense_deltas = {}, modifiers = {}, flags =
-  [])` declares a prototype affect. A `worn` affect with `modifiers` needs a `wear` slot; a `carried` one doesn't.
-  `stunned` isn't allowed. `variants` keys match the tag pattern and its values are item labels, checked at load like
-  `loot`.
+- **Item slots:** an item's slot is `wear = "<slot_or_family>"`; `wield = "<slot_or_family>"` is an alias. `wear` names
+  a slot of `equipment_slots()` or a family of `slot_families()`, checked once the rules package has loaded; a name that
+  is neither fails the package that declares the item, not the rules. `slot_cost` (default 1) is how many slots of its
+  family the item takes up when worn, at least 1; a value other than 1 needs `wear`. An item with `equip_affects` or
+  `modifiers` needs a `wear` slot. Each `equip_affects` entry is either an affect flag (for example `no_regen` or
+  `silenced`), which the wearer has while the item is worn, or `{"flag": ..., "pulses": n}`, which is applied for `n`
+  pulses when the item is equipped and runs out even if the item stays on. Equipping applies each entry to the wearer as
+  an affect, through `apply_affect` like a spell's, and removing the item removes the untimed ones. `stunned` must be
+  timed, so an item can't stun its wearer for good (§5.4.1). `item_affect(name, applies = "worn", stat_deltas = stats(),
+  sense_deltas = {}, modifiers = {}, flags = [])` declares a prototype affect. A `worn` affect with `modifiers` needs a
+  `wear` slot; a `carried` one doesn't. `stunned` isn't allowed. `variants` keys match the tag pattern and its values
+  are item labels, checked at load like `loot`.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
@@ -1221,6 +1223,9 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 |                   Function                    |  Feature   |                                                                                                   Returns                                                                                                    |
 |-----------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `equipment_slots()`                           | kernel     | `list[str]`, the equipment slots.                                                                                                                                                                            |
+| `slot_families()`                             | kernel     | `dict[str, list[str]]`, slot families: a family name to its ordered concrete slots.                                                                                                                          |
+| `actor_slots(ctx)`                            | kernel     | `list[str]`, the slots `ctx.actor` has, a subset of `equipment_slots()`.                                                                                                                                     |
+| `slot_cost(ctx)`                              | kernel     | `int >= 1`, how many slots of its family `ctx.item` takes up when `ctx.actor` wears it.                                                                                                                      |
 | `starting_stats(ctx)`                         | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
 | `condition(ctx)`                              | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
 | `mitigate(ctx, amount, type)`                 | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
@@ -1305,26 +1310,37 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 - `get_lag` returns `None` for out of reach.
 - `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` and `get_lag` return pulses, an int of at least 0; a
   negative value is a bad return value. The lag exports set the action's recovery lag, and 0 means none.
-- `equipment_slots` returns lowercase slot names. It is asked once, and again after each reload.
+- `equipment_slots()` and `slot_families()` get no ctx. They are asked once, and again after each reload.
+  `equipment_slots()` lists every slot any actor can have as lowercase names, in the order the modifier chain visits
+  worn items.
+- `slot_families()`: family names are lowercase identifiers that are not slot names; each family lists one or more slots
+  of `equipment_slots()`, with no repeats; no slot belongs to two families. A slot in no family stands alone.
+- `actor_slots(ctx)` returns a subset of `equipment_slots()`. A slot outside it is a bad return value, and the actor
+  then has every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore.
+- `slot_cost(ctx)` gets `ctx.actor` and `ctx.item`. A result below 1 is a bad return value and counts as the item's
+  `slot_cost`.
 
 **The dry run.** Rules functions are pure, so each time the rules package loads (at startup, on reload and on deploy,
 and in `gups lint`), the engine calls every export it defines against synthetic actors built from the schema: a fresh
 actor after `starting_stats`, both as a player and as each mob prototype, and `mitigate` once per declared damage type.
 `on_level_up` runs once for each synthetic actor as if it had just reached level 2, and its result is checked but not
-applied; `xp_to_level` runs for levels 1 to 50 for each actor and must strictly increase for each. The actors live in a
-throwaway world with one room: two players and one mob per loaded mob prototype. Each actor is called against another
-(the first player against the second, everyone else against the first player), unarmed. `get_lag` runs once per band,
-the three track lag exports see the pair's other actor as `ctx.target` at band `melee`, `flee_fail_lag` sees no target,
-and `cast_allowed` and `interrupt_check` get a synthetic skill with `interrupt = {"damage_pct": 10}`. The room has a
-north exit back to itself with a closed door. For every channel, `sense_cost` sees that exit, and `can_perceive` and
-`perceive_message` are each called once as an event in the actor's own room and once as one carried in through the north
-exit at cost 1, with no source room. `door_intensity` is called for each of `open`, `close`, `lock` and `unlock`, with
-and without a tag. With a creation provider (§4.19), `starting_stats` also runs for one synthetic player per option of
-each choice. Its answers are built in choice order: that option for its own choice, and the first available option for
-every other. An option that isn't available on that path, or whose path the provider fails on, is skipped. A mob whose
-own package failed to load isn't checked. Only the package named `rules` is dry-run; a test world that names another
-rules package (§4.12) isn't. An error, a wrong return type or an undeclared name in a result fails the rules package's
-load with the usual diagnostic. A branch the dry run doesn't reach is checked when it first runs.
+applied; `xp_to_level` runs for levels 1 to 50 for each actor and must strictly increase for each. `slot_families()` and
+its rules above are checked; `actor_slots` runs for each synthetic actor and must return a subset of
+`equipment_slots()`; `slot_cost` runs for each synthetic actor against one item of each item prototype that has `wear`,
+stopping at the first failure. The actors live in a throwaway world with one room: two players and one mob per loaded
+mob prototype. Each actor is called against another (the first player against the second, everyone else against the
+first player), unarmed. `get_lag` runs once per band, the three track lag exports see the pair's other actor as
+`ctx.target` at band `melee`, `flee_fail_lag` sees no target, and `cast_allowed` and `interrupt_check` get a synthetic
+skill with `interrupt = {"damage_pct": 10}`. The room has a north exit back to itself with a closed door. For every
+channel, `sense_cost` sees that exit, and `can_perceive` and `perceive_message` are each called once as an event in the
+actor's own room and once as one carried in through the north exit at cost 1, with no source room. `door_intensity` is
+called for each of `open`, `close`, `lock` and `unlock`, with and without a tag. With a creation provider (§4.19),
+`starting_stats` also runs for one synthetic player per option of each choice. Its answers are built in choice order:
+that option for its own choice, and the first available option for every other. An option that isn't available on that
+path, or whose path the provider fails on, is skipped. A mob whose own package failed to load isn't checked. Only the
+package named `rules` is dry-run; a test world that names another rules package (§4.12) isn't. An error, a wrong return
+type or an undeclared name in a result fails the rules package's load with the usual diagnostic. A branch the dry run
+doesn't reach is checked when it first runs.
 
 **Template ruleset.** The template world implements these exports for its default schema (§3.9), serving as the starting
 formulas for custom worlds. See [combat.star](../template-world/rules/combat.star),

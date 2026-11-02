@@ -8,6 +8,15 @@ def _clamp(n, lo, hi):
 def equipment_slots():
     return ["head", "torso", "arms", "legs", "core", "wield"]
 
+def slot_families():
+    return {}
+
+def actor_slots(ctx):
+    return equipment_slots()
+
+def slot_cost(ctx):
+    return ctx.item.slot_cost
+
 def starting_stats(ctx):
     # Players are built with a little variation: each rolls its integrity and sanity.
     a = ctx.actor

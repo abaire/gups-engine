@@ -666,6 +666,13 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   )
   fun wear(): Any = read { item.proto.wear ?: Starlark.NONE }
 
+  @StarlarkMethod(
+    name = "slot_cost",
+    structField = true,
+    doc = "How many slots of its family this item takes up when worn; at least 1.",
+  )
+  fun slotCost(): Any = read { sInt(item.proto.slotCost) }
+
   @StarlarkMethod(name = "stat_deltas", structField = true, doc = "Stat changes while worn.")
   fun statDeltas(): Any = read {
     TypedMap(TypedKind.STATS, item.proto.statDeltas, scope.world.schema.statNames)

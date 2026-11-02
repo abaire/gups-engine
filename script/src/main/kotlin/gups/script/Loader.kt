@@ -7,6 +7,7 @@ import gups.core.model.Direction
 import gups.core.model.Prototypes
 import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
+import gups.core.model.didYouMean
 import gups.core.world.CommandRegistry
 import gups.core.world.Feature
 import gups.core.world.Features
@@ -473,19 +474,43 @@ class ScriptLoader(
         testErrors,
       )
 
-    /** Runs the rules dry run; a rules package that fails it fails, and so do its dependents. */
+    /**
+     * Runs the rules dry run; a rules package that fails it fails, and so do its dependents. Then
+     * checks every item's `wear` against the slots the rules named, failing the item's package.
+     */
     fun dryRun() {
       val rules = states[RULES_PACKAGE]?.takeIf { it.contentDone && !it.failed } ?: return
-      val problems = dryRunRules(result(), schema, limits, features = features, wiring = plugins)
-      if (problems.isEmpty()) return
+      val run = dryRunRules(result(), schema, limits, features = features, wiring = plugins)
       val exports = rules.pkg.rulesExports
       rules.errors +=
-        problems.map { problem ->
+        run.problems.map { problem ->
           // A problem starts with the rules function it came from; point at the file defining it.
           val export = Regex("^rules\\.(\\w+)").find(problem)?.groupValues?.get(1)
           LoadError(RULES_PACKAGE, "rules", "dry run: $problem", exports[export]?.file?.v)
         }
+      run.wearSlots?.let(::checkWear)
       propagate()
+    }
+
+    /** Each item's `wear` names a slot or slot family of [wearSlots]. */
+    fun checkWear(wearSlots: WearSlots) {
+      for (st in live) {
+        for (ref in st.pkg.wearRefs) {
+          if (ref.wear in wearSlots.names) continue
+          val families =
+            if (wearSlots.families.isEmpty()) "none" else wearSlots.families.keys.joinToString(", ")
+          st.errors +=
+            LoadError(
+              st.pkg.path,
+              "slot",
+              "item ${ref.item}: ${ref.param} = '${ref.wear}' is not an equipment slot or slot family${didYouMean(ref.wear, wearSlots.names)}; slots are ${wearSlots.slots.joinToString(", ")}; families are $families",
+              ref.file,
+              ref.line,
+              ref.column,
+              snippet(ref.file, ref.line, ref.column),
+            )
+        }
+      }
     }
 
     val live: List<PkgState>
