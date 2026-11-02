@@ -454,6 +454,10 @@ the world graph:
   `LOCKED`), and `keyLabel`.
 - **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, schema
   `statDeltas`, prototype `tags`, equipment slot `wear`, and worn `modifiers` and `equipAffects`.
+- **Affects and tags:** per-instance `affects` (timed or permanent) and per-instance tag changes over the prototype's
+  `tags`; prototype `affects` are read live from the prototype. Each item affect has an `applies` scope: `worn` reaches
+  the holder while the item is equipped, `carried` while it is anywhere in the holder's custody, including nested
+  containers, unless a plugin containment filter blocks it (§4.15). A tombstone contributes nothing.
 
 **Affect** ([`Affect`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -462,6 +466,8 @@ the world graph:
   `tickEvery` cadence with `onTick` and `onExpire` hook references, and applied `modifiers`.
 - **Replacement rule:** re-applying an affect with the same name replaces the existing affect only if the new
   `expiresAt` is strictly later; shorter affects never truncate longer active affects.
+- **Scope:** item affects carry `applies` (`worn` or `carried`); an item affect's stat and sense deltas, flags and
+  modifiers count for the item's holder while it reaches it.
 
 **ScriptTimer** ([`ScriptTimer`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -1296,10 +1302,13 @@ values; modifier points of a feature that is off can't be named.
 room, and the regions and room are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
-room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its worn
-items (in `equipment_slots()` order, then any other slots by name). Worn items contribute their `item(modifiers=)`;
-affects contribute the `modifiers` given to `apply_affect`; traits contribute the Kotlin modifiers of their plugin.
-Traits have no `cast_allowed` modifiers: the `cast` restriction refuses casts (§4.19).
+room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
+each worn item in `equipment_slots()` order (then any other slots by name) contributes its `item(modifiers=)` and then
+the modifiers of its item affects (prototype affects in declaration order, then instance affects by id); then every
+other held item's `carried` affects, depth first through containers in item-id order. Items contribute their
+`item(modifiers=)` and item affects their `modifiers`; affects contribute the `modifiers` given to `apply_affect`;
+traits contribute the Kotlin modifiers of their plugin. Traits have no `cast_allowed` modifiers: the `cast` restriction
+refuses casts (§4.19).
 
 Each modifier is a top-level function with the signature `fn(ctx, base) -> value`, or returns `ctx.deny(msg)` (only for
 `cast_allowed`):

@@ -213,6 +213,8 @@ class Affect(
   val wornFrom: EntityId? = null,
   /** Perception sense deltas applied to the host actor while active. */
   val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Where an item affect reaches its holder from; null for an actor's own affects. */
+  val applies: AffectScope? = null,
 )
 
 /**
@@ -518,7 +520,7 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   /** True if the actor possesses the trait named [name]. */
   fun hasTrait(name: String): Boolean = traits.any { it.name == name }
 
-  /** All active flags currently on this actor from traits and affects. */
+  /** All active flags currently on this actor from traits, affects and item affects reaching it. */
   val flags: Set<String>
     get() = traitFlags + affects.flatMap { it.flags } + heldEffects.flags
 
@@ -747,6 +749,9 @@ class Item(
 
   /** Saved serialization payload preserved for tombstone items when their prototype was deleted. */
   var savedPayload: String? = null
+
+  /** Instance affects on this item, in application order. */
+  val affects: MutableList<Affect> = mutableListOf()
 
   internal val contentsIndex = TreeMap<EntityId, Item>()
 

@@ -227,6 +227,8 @@ data class ItemProto(
   val commands: Map<String, ZoneCommand> = emptyMap(),
   /** Passive affects applied to the bearer while this item remains equipped. */
   val equipAffects: List<EquipAffect> = emptyList(),
+  /** Affects every instance carries, read live from the prototype. */
+  val affects: List<ItemAffect> = emptyList(),
   /** Rules modifiers contributed to the bearer while this item is equipped. */
   val modifiers: Modifiers = emptyMap(),
   /** Content schema version of this item prototype, defaulting to 1. */
@@ -287,6 +289,22 @@ data class EquipAffect(
   val flag: String,
   /** Optional temporary duration in pulses, or null to last until unequipped. */
   val pulses: Int? = null,
+)
+
+/** An affect a prototype declares; read live, never expires, can't be removed from one instance. */
+data class ItemAffect(
+  /** Name of the affect. */
+  val name: String,
+  /** Where the affect reaches its holder from; [AffectScope.WORN] by default. */
+  val applies: AffectScope = AffectScope.WORN,
+  /** Attribute deltas counted for the holder while the affect reaches it. */
+  val statDeltas: Map<String, Int> = emptyMap(),
+  /** Perception sense deltas counted for the holder while the affect reaches it. */
+  val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Rules modifiers contributed by this affect to the holder. */
+  val modifiers: Modifiers = emptyMap(),
+  /** Status flags counted for the holder while the affect reaches it. */
+  val flags: Set<String> = emptySet(),
 )
 
 /** Interrupt conditions that break an in-progress skill or spell cast. */
