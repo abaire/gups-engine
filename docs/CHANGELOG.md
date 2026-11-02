@@ -11,20 +11,23 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - Added `affects` to `item(...)`: affects every instance carries, built with `item_affect(...)`.
 - Added `variants` to `item(...)`: free-form variant names mapped to related item prototype labels, for `transform`.
 - A key that gains instance affects or tags in play leaves the keyring and shows in `inventory` until they are gone.
-- Added `ctx.open_container(item)`, `ctx.close_container(item)`, `ctx.lock_container(item)` and
-  `ctx.unlock_container(item)`. They mirror the door verbs and print nothing. `lock_container` fails on a container
-  whose prototype has no `key`.
-- Added `applies = "worn"` to `apply_affect(...)`: allowed only on `item` skills, setting whether the affect reaches the
-  holder while worn or carried (`"worn"` or `"carried"`).
+- Added `applies = None` to `apply_affect(...)`: allowed only on `item` skills, setting whether the affect reaches the
+  holder while worn or carried (`"worn"` or `"carried"`; `None` means `"worn"`).
 - Allowed `duration = None` in `apply_affect(...)` on `item` skills to attach a permanent item affect.
 - An `item` skill's `effect` acts on the target item; it may use `apply_affect`, plugin primitives, and `sequence`
   combining them. Any other primitive fails the load.
 - `ctx.apply_affect(target, ...)` and `ctx.remove_affect(target, name)` accept an item as the target; on an item,
-  `apply_affect` takes `applies = "worn" | "carried"` (default `"worn"`) and allows `duration = None` for permanent
-  affects.
+  `apply_affect` takes `applies = "worn" | "carried"` (`None`, the default, means `"worn"`) and allows `duration = None`
+  for permanent affects.
 - Added `ctx.add_tag(item, tag)` and `ctx.remove_tag(item, tag)`, returning whether the effective tags changed.
-- Added `ctx.transform(item, label)` to swap an item's prototype in place, keeping instance attributes, affects and
-  tags.
+- Added `ctx.transform(item, label)` to swap an item's prototype in place, keeping its id, location, attributes,
+  affects, tag changes, name and timers. A stack transformed into a non-stackable prototype keeps a count of 1; a
+  container transformed into a non-container drops its contents on the ground; a locked container stays locked only if
+  the new prototype has a `key`, else it ends up closed; an equipped item that no longer fits its slot moves to the
+  inventory. It fails when the contents wouldn't fit the new container.
+- Added `ctx.open_container(item)`, `ctx.close_container(item)`, `ctx.lock_container(item)` and
+  `ctx.unlock_container(item)`. They mirror the door verbs and print nothing. `lock_container` fails on a container
+  whose prototype has no `key`.
 - Added `affects`, `has_tag(tag)` and `variants` to the item view; `item.tags` reflects effective tags.
 - Added the `proto_affect` view for read-only views of prototype affects on items.
 - Added `origin` (`"instance"` or `"proto"`) and `applies` (`"worn"` or `"carried"`, or `None` on actor affects) to

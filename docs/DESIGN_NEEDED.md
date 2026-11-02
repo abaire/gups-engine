@@ -179,7 +179,7 @@ the engine never uses an item up (D-114). Scripts call `ctx.destroy` themselves.
 items lose one from the stack automatically after a successful `on_use`? - Should items have charges? - Should items
 have a declarative `use_effect` (an effect primitive) for novices who don't write hooks?
 
-### Effects on items
+### Effects on items (COMPLETED — M17)
 
 **Spec:** §4.3 (`target = "item"`, effect primitives). **Today:** an item-target skill runs only its `resolve`, because
 every effect primitive acts on actors (D-123). Items have no affects. **Questions:** should items be able to carry
