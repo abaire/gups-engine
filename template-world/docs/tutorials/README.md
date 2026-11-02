@@ -29,6 +29,7 @@ persistence, and linking to official specifications and generated API references
    * Weapons, armor slots, stat deltas, and item modifiers
    * Interactive items and consumables (`on_use`)
    * Containers, locks, and capacity
+   * Item affects, tags, and prototype transforms
 4. **[04. State, Attributes, and Persistence](04_state_and_attributes.md)**
    * Entity attributes (`ctx.get_attr`, `ctx.set_attr`)
    * Scope: Entity-attached vs room-attached state

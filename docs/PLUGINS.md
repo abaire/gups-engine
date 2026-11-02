@@ -2,8 +2,11 @@
 
 Plugins are `.jar` files that extend the engine with host builtins, commands, effect primitives, GMCP packages and a
 world-start hook (SPEC.md §4.15). This guide uses the sample plugin in `samples/weather-plugin` as its running example:
-deterministic weather by region. For a step-by-step tutorial on building a plugin from scratch, see the
-[Weather Plugin Walkthrough](../samples/weather-plugin/docs/tutorials/README.md).
+deterministic weather by region. For step-by-step tutorials on building plugins from scratch, see the
+[Weather Plugin Walkthrough](../samples/weather-plugin/docs/tutorials/README.md), the
+[Heritage Plugin Walkthrough](../samples/heritage-plugin/docs/tutorials/README.md) (character creation and traits), and
+the [Curse Plugin Walkthrough](../samples/curse-plugin/docs/tutorials/README.md) (item affects, custody propagation,
+item restrictions, prototype transforms, and containment filters).
 
 There are **no compatibility promises**. After the engine's first release, `PluginApi.VERSION` changes whenever the
 plugin interface or the facade changes. Until then, the interface is still being designed and changes stay at version 1
@@ -172,18 +175,12 @@ On an `item` skill, `call.targetItem` is the item and `call.target` is null:
 
 ```kotlin
 r.addEffectPrimitive(
-    name = "enchant",
-    doc = "Enchants an item: dex +1 while worn.",
+    name = "bestow",
+    doc = "Bestows a curse on an item by tagging it cursed.",
     params = emptyList(),
 ) { call ->
     val item = call.targetItem ?: return@addEffectPrimitive
-    call.world.applyItemAffect(
-        item = item,
-        name = "keen",
-        duration = 600,
-        applies = "worn",
-        statDeltas = mapOf("dex" to 1),
-    )
+    call.world.addTag(item, "cursed")
 }
 ```
 
@@ -290,7 +287,8 @@ r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") 
 
 Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
 (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
-change) don't run them.
+change) don't run them. For details on item restrictions and swap validation, see the
+[Item Restriction Points Tutorial](../samples/curse-plugin/docs/tutorials/02_item_restriction_points.md).
 
 #### Modifying choices in play
 
@@ -336,22 +334,22 @@ transforms:
   `world.removeItemAffect(item, name)` apply or remove instance affects. Setting `duration = null` creates a permanent
   affect. `applies` must be `"worn"` or `"carried"`.
 - **Transform:** `world.transform(item, label)` swaps an item's prototype in place, preserving its id, location,
-  attributes, instance affects and tag changes:
+  attributes, instance affects and tag changes. The curse sample's `lift` primitive does this for an item skill's
+  `call.targetItem`, here bound to `item`:
 
 ```kotlin
-fun purify(world: PluginWorld, item: PluginItem) {
-    val clean = item.variants["uncursed"]
-    if (clean != null) {
-        world.transform(item, clean)
-    } else {
-        world.removeTag(item, "cursed")
-    }
+val clean = item.variants["uncursed"]
+if (clean != null) {
+    call.world.transform(item, clean)
+} else {
+    call.world.removeTag(item, "cursed")
 }
 ```
 
 Prefer `transform` over removing a tag when the clean version is its own prototype. Tag changes are kept across a
 `transform`, so removing a prototype tag first would leave the new item with a stray `-cursed` change, and an item with
-tag changes never merges into a stack.
+tag changes never merges into a stack. For an end-to-end example, see the
+[Curse Plugin Walkthrough](../samples/curse-plugin/docs/tutorials/03_item_effects_transform_and_variants.md).
 
 ### Containment filters
 
@@ -359,7 +357,7 @@ Containment filters intercept carried item affects reaching their holder through
 
 ```kotlin
 r.addContainmentFilter("Blocks carried affects behind warded containers.") { call ->
-    call.container.hasTag("warded")
+    call.container.hasTag("warded") && call.item.hasTag("cursed")
 }
 ```
 
@@ -371,7 +369,8 @@ Filters never see worn or directly carried items: only an affect behind at least
 caches the result and recomputes it only when custody, item affects, item tags or prototypes change, so a filter may
 read only the container's and item's label, kind, tags and affects. A filter that reads anything else (attributes, the
 holder's stats, the pulse, randomness) gives answers the cache won't notice changing. Filters must also be fast and
-side-effect free.
+side-effect free. For a detailed guide and testing examples, see the
+[Containment Filters Tutorial](../samples/curse-plugin/docs/tutorials/04_containment_filters.md).
 
 ### World start
 

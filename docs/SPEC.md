@@ -130,8 +130,8 @@ gups-engine/
   cli/         the `gups` binary, the docs renderer (§4.16)
   webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
                as resources
-  samples/     sample plugins: weather-plugin and heritage-plugin, race and class (§4.15);
-               robot-world, a small non-fantasy course world with its own schema and
+  samples/     sample plugins: weather-plugin, heritage-plugin (race and class) and
+               curse-plugin (§4.15); robot-world, a small non-fantasy course world with its own schema and
                features (§3.9, §3.10)
   template-world/  the course world template, including the canonical tutorial zone,
                //lib and //rules (§2.3)
@@ -2156,6 +2156,13 @@ subsystems (`core` or `script`). It consists of three primary components:
   `class` choices, mutual exclusion rules (e.g., dwarf mages disallowed), permanent stat/vital traits, class skill
   assignments on creation (`created`), and restriction checks for `WEAR` (heavy armor), `CAST` (arcane/divine spells),
   `ENTER` (guild rooms), and `LEARN`.
+- **Curse Plugin ([samples/curse-plugin](../samples/curse-plugin/README.md)):** curses as content. It refuses `remove`
+  of a worn item tagged `cursed`, so a cursed item clings and its `worn` affects can't be shed by taking it off;
+  removing a worn container that only holds a cursed item is allowed, because nothing leaves the wearer's custody. It
+  refuses `drop`, `give` and `put` of an item bearing a curse (tagged `cursed`, or a container holding one that isn't
+  behind a `warded` container), `put` only when the destination is outside the actor's custody; adds `curse.lift()` and
+  `curse.bestow()` primitives for item skills; and registers a containment filter that stops cursed items' carried
+  affects behind containers tagged `warded`.
 
 **The guide:** [PLUGINS.md](PLUGINS.md) covers building plugins against `plugin-api` (Gradle setup, `GupsPlugin`,
 `PluginApi.VERSION`, service descriptors), facade operations, extension points with `WeatherPlugin` as a running

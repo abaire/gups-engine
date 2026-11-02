@@ -176,9 +176,135 @@ Items are created and transferred through several mechanisms:
 
 ---
 
+## 7. Item Affects, Tags, and Prototype Transforms
+
+In addition to static item properties, items can host affects and dynamic tags, and swap their underlying prototype in
+place using transforms.
+
+### A. Prototype Affects: `item_affect` and `affects`
+
+Items can define innate affects using `item_affect()`. Unlike actor affects which attach directly to characters, item
+affects live on the item and propagate their bonuses or penalties to the character in custody of the item:
+
+```python
+item("lucky_charm",
+     name="a lucky charm",
+     desc="A polished rabbit's foot on a brass chain.",
+     affects=[
+         item_affect("luck", applies="carried", stat_deltas=stats(dex=1)),
+     ],
+     )
+```
+
+The `applies` parameter determines propagation scope:
+
+* **`applies = "worn"`:** The affect is active only while the item is equipped in a valid equipment slot (such as
+  `wield`, `body`, or `neck`).
+* **`applies = "carried"`:** The affect is active as long as the character has custody of the item, whether carried
+  directly in inventory or stowed inside containers and backpacks.
+
+### B. Dynamic Item Affects: `ctx.apply_affect` and `ctx.remove_affect`
+
+Scripts and spells can apply dynamic affects directly to item instances at runtime using `ctx.apply_affect`:
+
+```python
+# Applies a temporary keen edge (+1 dex while wielded) for 600 pulses (2.5 minutes at 250 ms a pulse)
+ctx.apply_affect(sword, "keen", 600, applies="worn", stat_deltas=stats(dex=1))
+
+# Remove the affect early
+ctx.remove_affect(sword, "keen")
+```
+
+Setting `duration = None` makes the item affect permanent until explicitly removed.
+
+#### Item-Targeting Skills
+
+Skills with `target = "item"` apply their effects directly to the target item. For example, an `enchant_weapon` spell:
+
+```python
+skill("enchant_weapon",
+      kind="spell",
+      target="item",
+      cost=vitals(mana=10),
+      channels=["spell"],
+      effect=apply_affect("keen", 600, applies="worn", stat_deltas=stats(dex=1)),
+      )
+```
+
+When a player types `cast enchant_weapon sword`, the `apply_affect` effect primitive attaches the `"keen"` affect to the
+sword instance.
+
+### C. Per-Instance Tags: `ctx.add_tag` and `ctx.remove_tag`
+
+While prototypes declare default tags via `tags = ["valuable", "fragile"]`, scripts and plugins can modify tags on
+individual item instances:
+
+```python
+# Mark an item instance as blessed
+ctx.add_tag(item, "blessed")
+
+# Strip an existing tag
+ctx.remove_tag(item, "cursed")
+```
+
+An item's effective tags (`item.tags` or `item.has_tag(tag)`) reflect its prototype tags plus any added tags, minus any
+removed tags.
+
+### D. Prototype Variants and In-Place Transforms: `variants` and `ctx.transform`
+
+An item prototype can declare variants linking identifier keys to alternate item prototypes:
+
+```python
+item("cursed_dagger",
+     name="a cursed dagger",
+     desc="A wicked blade inscribed with sinister runes.",
+     kind="melee",
+     wield="wield",
+     dice="1d4",
+     damage_type="pierce",
+     tags=["cursed"],
+     variants={
+         "uncursed": ":silver_dagger",
+     },
+     )
+
+item("silver_dagger",
+     name="a silver dagger",
+     desc="A polished silver blade.",
+     kind="melee",
+     wield="wield",
+     dice="1d4+1",
+     damage_type="pierce",
+     )
+```
+
+When an event or spell purifies the item, `ctx.transform` swaps its prototype in place:
+
+```python
+def _purify_weapon(ctx):
+    clean_proto = ctx.self.variants.get("uncursed")
+    if clean_proto:
+        ctx.transform(ctx.self, clean_proto)
+        ctx.send(ctx.actor, "The sinister runes fade, revealing polished silver.")
+```
+
+#### Why `transform` is Preferred over Tag Deltas
+
+Transforming an item swaps its prototype while preserving its instance entity ID, container or inventory location,
+custom attributes, and per-instance affects. This is preferred over simply removing the `cursed` tag because:
+
+1. **Different Base Properties:** The clean prototype can have distinct names, descriptions, damage dice, stats, and
+   keywords that a tag removal cannot express.
+2. **Clean Stacking:** Items with instance-level tag deltas cannot stack with pristine prototype items. `transform`
+   restores a clean prototype baseline without leaving stray per-instance tag changes behind.
+
+---
+
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/items.star`](../../zones/tutorial/items.star)
+* **Curses and Containment:** For complete plugin examples using item restrictions, containment filters, and transforms,
+  see the [Curse Plugin Walkthrough](../../../samples/curse-plugin/docs/tutorials/README.md).
 * **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L979) and
   [§3.6: Persistence Schema](../../../docs/SPEC.md#L713)
 * **HTML Documentation:** `declarations.html#item` and `declarations.html#container` in `gups docs`.

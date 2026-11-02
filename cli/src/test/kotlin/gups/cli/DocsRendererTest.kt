@@ -146,28 +146,26 @@ class DocsRendererTest {
           "../samples/heritage-plugin/src/main/kotlin/gups/sample/heritage/HeritagePlugin.kt"
         )
         .readText()
+    val curseSource =
+      docsDir
+        .resolve("../samples/curse-plugin/src/main/kotlin/gups/sample/curse/CursePlugin.kt")
+        .readText()
     val guide = docsDir.resolve("PLUGINS.md").readText()
     val blocks =
       Regex("```kotlin\n(.*?)\n```", RegexOption.DOT_MATCHES_ALL)
         .findAll(guide)
         .map { it.groupValues[1] }
         .toList()
-    val fromSample =
-      blocks.filter {
-        "tasks.jar" !in it &&
-          "dependencies {" !in it &&
-          "applyItemAffect" !in it &&
-          "purify" !in it &&
-          "addContainmentFilter" !in it
-      }
+    val fromSample = blocks.filter { "tasks.jar" !in it && "dependencies {" !in it }
     assertTrue(fromSample.size >= 10, "${fromSample.size} sample blocks")
     val weatherDedented = weatherSource.lines().joinToString("\n") { it.trimStart() }
     val heritageDedented = heritageSource.lines().joinToString("\n") { it.trimStart() }
+    val curseDedented = curseSource.lines().joinToString("\n") { it.trimStart() }
     for (b in fromSample) {
       val target = b.lines().joinToString("\n") { it.trimStart() }
       assertTrue(
-        target in weatherDedented || target in heritageDedented,
-        "PLUGINS.md block isn't in WeatherPlugin.kt or HeritagePlugin.kt:\n$b",
+        target in weatherDedented || target in heritageDedented || target in curseDedented,
+        "PLUGINS.md block isn't in WeatherPlugin.kt, HeritagePlugin.kt, or CursePlugin.kt:\n$b",
       )
     }
   }
