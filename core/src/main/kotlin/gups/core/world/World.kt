@@ -192,6 +192,9 @@ class World(
   /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner. */
   var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _ -> }
 
+  /** Plugin containment filters, in plugin id order then registration order. */
+  var containmentFilters: List<ContainmentFilter> = emptyList()
+
   /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's. */
   val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 

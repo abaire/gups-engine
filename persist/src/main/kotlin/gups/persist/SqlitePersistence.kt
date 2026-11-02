@@ -20,10 +20,12 @@ import gups.core.world.SavedCharacter
 import gups.core.world.World
 import gups.core.world.bindSpawn
 import gups.core.world.clearInputs
+import gups.core.world.custodian
 import gups.core.world.drainItemEvents
 import gups.core.world.drainRemoved
 import gups.core.world.fillMissingSpawns
 import gups.core.world.recentInputs
+import gups.core.world.refreshHoldings
 import gups.core.world.respawnDeadlines
 import gups.core.world.restoreItem
 import gups.core.world.restoreMob
@@ -686,5 +688,6 @@ internal fun placeItems(
     deleted += row.id
     notes += "item ${row.protoLabel} #${row.id} dropped: its container is gone"
   }
+  for (holder in out.mapNotNull { world.custodian(it) }.distinct()) world.refreshHoldings(holder)
   return out
 }

@@ -120,6 +120,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   graphChanged()
   inboundCache = null
   slotCache = null
+  for (a in actorIndex.values) refreshHoldings(a)
   coverage.keys.retainAll(roomsByLabel.values.toSet())
   recomputeBubble()
   return ReconcileReport(created, notes)

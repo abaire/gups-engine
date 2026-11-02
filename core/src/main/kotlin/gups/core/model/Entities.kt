@@ -7,6 +7,7 @@ import gups.core.Label
 import gups.core.Role
 import gups.core.SessionId
 import gups.core.world.Action
+import gups.core.world.HeldEffects
 import gups.core.world.SpawnState
 import gups.core.world.TickCommand
 import java.util.TreeMap
@@ -166,6 +167,12 @@ class Room(id: EntityId, proto: RoomProto, private val singleSlot: Boolean = fal
 
   /** True if this room's prototype declares the specified behavioral [flag]. */
   fun hasFlag(flag: String): Boolean = flag in proto.flags
+}
+
+/** Where an item affect reaches its holder from. */
+enum class AffectScope {
+  WORN,
+  CARRIED,
 }
 
 /**
@@ -440,15 +447,19 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var encumbrance: Map<String, Int> = emptyMap()
     internal set
 
+  /** What the actor's items contribute; kept current by `refreshHoldings`. */
+  var heldEffects: HeldEffects = HeldEffects.EMPTY
+    internal set
+
   /**
    * Computes the effective value of stat [name]: base value plus trait deltas, active affect
-   * deltas, worn equipment deltas, and encumbrance penalties.
+   * deltas, item deltas, and encumbrance penalties.
    */
   fun stat(name: String): Int =
     (baseStats[name] ?: 0) +
       (traitStatDeltas[name] ?: 0) +
       affects.sumOf { it.statDeltas[name] ?: 0 } +
-      equipmentIndex.values.sumOf { it.proto.statDeltas[name] ?: 0 } +
+      (heldEffects.statDeltas[name] ?: 0) +
       (encumbrance[name] ?: 0)
 
   /** Returns the unmodified base value of stat [name]. */
@@ -456,13 +467,13 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   /**
    * Computes the effective perception score on [channel]: base sense plus trait deltas, affect
-   * deltas, and worn equipment deltas, clamped to at least 0.
+   * deltas, and item deltas, clamped to at least 0.
    */
   fun sense(channel: Channel): Int =
     ((baseSenses[channel] ?: 0) +
         (traitSenseDeltas[channel] ?: 0) +
         affects.sumOf { it.senseDeltas[channel] ?: 0 } +
-        equipmentIndex.values.sumOf { it.proto.senseDeltas[channel] ?: 0 })
+        (heldEffects.senseDeltas[channel] ?: 0))
       .coerceAtLeast(0)
 
   /** Returns effective perception scores across all provided [allChannels]. */
@@ -509,10 +520,11 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   /** All active flags currently on this actor from traits and affects. */
   val flags: Set<String>
-    get() = traitFlags + affects.flatMap { it.flags }
+    get() = traitFlags + affects.flatMap { it.flags } + heldEffects.flags
 
-  /** True if a trait or active affect carries [flag], including those applied by worn equipment. */
-  fun hasFlag(flag: String): Boolean = flag in traitFlags || affects.any { flag in it.flags }
+  /** True if a trait, an active affect or an item affect reaching the actor carries [flag]. */
+  fun hasFlag(flag: String): Boolean =
+    flag in traitFlags || affects.any { flag in it.flags } || flag in heldEffects.flags
 
   /** True if the actor is suffering a stun effect. */
   val isStunned: Boolean

@@ -23,7 +23,7 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boole
   // Debug items are never saved, so they have no audit trail.
   if (custodian(item) is Player && !debug)
     itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
-  custodian(item)?.let { updateEncumbrance(it) }
+  custodian(item)?.let { refreshHoldings(it) }
   invokeOn(item, HookName.ON_SPAWN, HookContext(item = item))
   return item
 }
@@ -53,8 +53,8 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
       // An item changing hands between players is saved at once, both sides together.
       if (before != null && after != null) requestImmediate("transfer")
     }
-    holderOf(from)?.let { updateEncumbrance(it) }
-    custodian(item)?.let { updateEncumbrance(it) }
+    holderOf(from)?.let { refreshHoldings(it) }
+    custodian(item)?.let { refreshHoldings(it) }
     return item
   }
   require(item.proto.stackable) { "${item.name} is not stackable" }
@@ -79,8 +79,8 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
   if ((before != null || after != null) && !part.debug)
     itemEvents += ItemEvent(part.id, pulse, from, to, "split")
   if (before != null && after != null && before !== after) requestImmediate("transfer")
-  holderOf(from)?.let { updateEncumbrance(it) }
-  custodian(part)?.let { updateEncumbrance(it) }
+  holderOf(from)?.let { refreshHoldings(it) }
+  custodian(part)?.let { refreshHoldings(it) }
   return part
 }
 
@@ -97,7 +97,7 @@ private fun World.holderOf(loc: ItemLocation): Actor? =
  * Applies `rules.encumbrance` while [a] carries more than `rules.carry_limit`, and lifts it once
  * they don't. The limit is worked out without the current encumbrance.
  */
-fun World.updateEncumbrance(a: Actor) {
+internal fun World.updateEncumbrance(a: Actor) {
   if (!a.inWorld) return
   val was = a.encumbrance
   guarded("encumbrance of $a") {
@@ -158,7 +158,7 @@ fun World.destroy(item: Item, count: Int = item.count) {
     unindex(item)
     markRemoved(item)
     forgetItemTree(item)
-    holder?.let { updateEncumbrance(it) }
+    holder?.let { refreshHoldings(it) }
     return
   }
   val holder = custodian(item)
@@ -166,7 +166,7 @@ fun World.destroy(item: Item, count: Int = item.count) {
     itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "reduce")
   item.count -= count
   item.dirty = true
-  holder?.let { updateEncumbrance(it) }
+  holder?.let { refreshHoldings(it) }
 }
 
 /** The actor whose custody [item] ends in, following containers; null for items on the ground. */

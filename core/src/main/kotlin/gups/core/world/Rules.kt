@@ -56,10 +56,8 @@ private fun World.chainSteps(point: ModifierPoint, actor: Actor): List<ChainStep
   for (a in actor.affects.sortedBy { it.id }) a.modifiers[point]?.let {
     out += ChainStep.Script("affect:${a.name}", it)
   }
-  val slots = equipmentSlots()
-  for (slot in slots + (actor.equipmentIndex.keys - slots.toSet()).sorted()) {
-    val item = actor.equipmentIndex[slot] ?: continue
-    item.proto.modifiers[point]?.let { out += ChainStep.Script("item:${item.protoLabel.name}", it) }
+  for ((label, mods) in actor.heldEffects.modifierSteps) mods[point]?.let {
+    out += ChainStep.Script(label, it)
   }
   return out
 }
