@@ -296,6 +296,24 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
   }
 
   @Test
+  fun `use reaches items on the ground, but not out of reach`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_USE] = { w, _, ctx ->
+      w.send(ctx.actor!!, "You pull ${ctx.item?.name}.")
+      null
+    }
+    val f = fixture(host)
+    val p = f.player("Ann")
+    val hall = f.w.room(T.HALL)
+    val near = f.w.spawnItem(potion, ItemLocation.InRoom(hall.id, 0))
+    assertContains(f.doLine(p, "use potion"), "You pull a potion.")
+    assertEquals(ItemLocation.InRoom(hall.id, 0), near.location)
+    f.w.moveItem(near, ItemLocation.InRoom(hall.id, 4))
+    assertContains(f.doLine(p, "use potion"), "You can't reach a potion from here.")
+    assertContains(f.doLine(p, "use lever"), "You don't see that here.")
+  }
+
+  @Test
   fun `carrying too much applies the rules' encumbrance until the load is lightened`() {
     val f = fixture()
     val p = f.player("Ann")

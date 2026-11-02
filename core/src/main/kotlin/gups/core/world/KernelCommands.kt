@@ -185,7 +185,7 @@ internal object KernelCommands {
       TickCommand(
         "use",
         category = CommandCategory.ITEMS,
-        help = "Use an item in your inventory or in the room.\nUsage: use <item>",
+        help = "Use an item you carry or wear, or one in the room.\nUsage: use <item> [target]",
       ) {
         planUse(it)
       },
@@ -755,8 +755,9 @@ internal object KernelCommands {
   }
 
   /**
-   * `use <item> [target]`: an item carried or worn whose `before_use` doesn't veto; fires its
-   * `on_use`. The target is an actor in the room, or else an item carried or on the ground.
+   * `use <item> [target]`: an item worn, carried, or on the ground within reach whose `before_use`
+   * doesn't veto; fires its `on_use`. The target is an actor in the room, or else an item carried
+   * or on the ground.
    */
   private fun planUse(c: CommandCall): Action? {
     val w = c.world
@@ -764,8 +765,8 @@ internal object KernelCommands {
     if (words[0].isEmpty()) return null.also { w.tell(c.actor, KernelMsg.USE_WHAT) }
     val item =
       (c.actor.equipment.values.firstOrNull { it.matches(words[0]) }
-        ?: w.findItem(c.actor, words[0], inventory = true, ground = false))
-        ?: return null.also { w.tell(c.actor, KernelMsg.NOT_CARRYING) }
+        ?: w.findItem(c.actor, words[0], inventory = true, ground = true))
+        ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
     val word = words.getOrNull(1)?.trim()?.removePrefix("on ")?.trim()?.ifEmpty { null }
     val target = word?.let { w.findActor(c.actor, it) }
     val targetItem =
@@ -783,7 +784,13 @@ internal object KernelCommands {
         val held =
           item.location == ItemLocation.Carried(actor.id) ||
             (item.location as? ItemLocation.Equipped)?.actor == actor.id
-        if (!held) return w.msg(KernelMsg.NOT_CARRYING)
+        if (!held) {
+          if ((item.location as? ItemLocation.InRoom)?.room != w.roomOf(actor).id)
+            return w.msg(KernelMsg.DONT_SEE)
+          w.reach(actor, item)?.let {
+            return it
+          }
+        }
         if (target != null && !w.isPresent(target, w.roomOf(actor)))
           return w.msg(KernelMsg.NOT_HERE)
         if (!w.scripts.hasHook(item, HookName.ON_USE))

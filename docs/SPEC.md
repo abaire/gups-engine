@@ -1519,9 +1519,9 @@ uses the default names. Every player-facing message here is the default text of 
   item capacity and `max_weight`.
 - **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a door direction here.
 - **Keys:** locking or unlocking a door or container needs its key carried (keyring included) or equipped.
-- **`use <item> [target]`:** the item is carried or worn and must have an `on_use` hook ("You can't use that."
-  otherwise). `before_use` can veto. The target is an actor in the room, else an item. The engine never uses an item up;
-  `on_use` destroys it if it should be.
+- **`use <item> [target]`:** the item is worn, carried, or on the ground within `get_lag` reach (in that order of
+  search), and must have an `on_use` hook ("You can't use that." otherwise). `before_use` can veto. The target is an
+  actor in the room, else an item. The engine never uses an item up; `on_use` destroys it if it should be.
 - **Stacks:** `get`, `drop`, `give` and `put` merge a stackable item into a stack of the same prototype in the same
   place with identical attributes and decay deadline, and no timers or name override on either (§3.8 inv. 8).
 
