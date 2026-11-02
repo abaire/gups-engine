@@ -66,10 +66,7 @@ val checkModuleGraph =
     }
   }
 
-val ktfmtProjects =
-  codeProjects.filter {
-    it.plugins.hasPlugin("gups.ktfmt") || it.plugins.hasPlugin("com.ncorti.ktfmt.gradle")
-  }
+val ktfmtProjects = codeProjects.filter { it.plugins.hasPlugin("gups.ktfmt") }
 
 tasks.named("ktfmtCheck") {
   dependsOn(ktfmtProjects.map { "${it.path}:ktfmtCheck" })
@@ -84,13 +81,13 @@ tasks.named("ktfmtFormat") {
 tasks.register("markdownCheck") {
   group = "verification"
   description = "Verifies that all markdown files comply with formatting rules."
-  dependsOn("spotlessCheck")
+  dependsOn("spotlessFlexmarkCheck")
 }
 
 tasks.register("markdownFormat") {
   group = "formatting"
   description = "Auto-formats all markdown files using Spotless Flexmark."
-  dependsOn("spotlessApply")
+  dependsOn("spotlessFlexmarkApply")
 }
 
 tasks.named("check") {
