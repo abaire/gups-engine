@@ -492,7 +492,7 @@ private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag
 fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: SkillProto? = null) {
   when (effect) {
     is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill) }
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target)
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null)
     is Effect.Summon ->
       repeat(effect.count) {
         val m = spawnMob(effect.label, caster.room, caster.trackIndex)
@@ -526,7 +526,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
           applyAffect(
             t,
             effect.name,
-            effect.duration,
+            requireNotNull(effect.duration) { "apply_affect: duration is required for an actor" },
             effect.statDeltas,
             effect.flags,
             effect.tickEvery,
@@ -558,6 +558,31 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
         is Effect.Plugin -> Unit
       }
     }
+  }
+}
+
+/** Applies an item skill's [effect] from [caster] to [item]. */
+fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item) {
+  when (effect) {
+    is Effect.Sequence -> effect.effects.forEach { applyItemEffect(it, caster, item) }
+    is Effect.ApplyAffect ->
+      applyItemAffect(
+        item,
+        effect.name,
+        effect.duration,
+        effect.applies ?: AffectScope.WORN,
+        effect.statDeltas,
+        effect.flags,
+        effect.tickEvery,
+        effect.onTick,
+        effect.onExpire,
+        effect.expireMessage,
+        caster,
+        effect.modifiers,
+        effect.senseDeltas,
+      )
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item)
+    else -> error("${effect::class.simpleName} can't act on an item")
   }
 }
 

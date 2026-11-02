@@ -5182,7 +5182,7 @@
           "default": null,
           "varargs": false,
           "kwargs": false,
-          "doc": "Duration in pulses."
+          "doc": "Duration in pulses; None makes an item affect permanent."
         },
         {
           "symbol": "apply_affect.stat_deltas",
@@ -5271,6 +5271,17 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Sense score changes by channel while the affect lasts."
+        },
+        {
+          "symbol": "apply_affect.applies",
+          "feature": "skills",
+          "name": "applies",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Item affects only: 'worn' or 'carried'."
         }
       ]
     },

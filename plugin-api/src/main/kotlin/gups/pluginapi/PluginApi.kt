@@ -158,9 +158,11 @@ data class PluginCommandCall(val world: PluginWorld, val actor: PluginActor, val
 data class PluginEffectCall(
   val world: PluginWorld,
   val caster: PluginActor,
-  /** Null for `target = "none"` skills. */
+  /** Null for `target = "none"` and `target = "item"` skills. */
   val target: PluginActor?,
   val args: Map<String, Any?>,
+  /** The target item of an `item` skill, else null. */
+  val targetItem: PluginItem? = null,
 )
 
 fun interface PluginEffect {

@@ -14,6 +14,11 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - Added `ctx.open_container(item)`, `ctx.close_container(item)`, `ctx.lock_container(item)` and
   `ctx.unlock_container(item)`. They mirror the door verbs and print nothing. `lock_container` fails on a container
   whose prototype has no `key`.
+- Added `applies = "worn"` to `apply_affect(...)`: allowed only on `item` skills, setting whether the affect reaches the
+  holder while worn or carried (`"worn"` or `"carried"`).
+- Allowed `duration = None` in `apply_affect(...)` on `item` skills to attach a permanent item affect.
+- An `item` skill's `effect` acts on the target item; it may use `apply_affect`, plugin primitives, and `sequence`
+  combining them. Any other primitive fails the load.
 
 ### Experience and levels
 

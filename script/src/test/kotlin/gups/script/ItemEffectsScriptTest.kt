@@ -148,4 +148,135 @@ class ItemEffectsScriptTest {
     val kr = f.out(p)
     assertContains(kr, "Your keyring is empty.")
   }
+
+  @Test
+  fun `item skill attaches worn affect to item which affects holder when worn and expires`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          room("start")
+          item("sword", wear = "wield")
+          skill("enchant", target = "item", effect = apply_affect("keen", 50, applies = "worn", stat_deltas = stats(dex = 1)))
+          """
+        )
+      )
+    val p = f.player()
+    val baseDex = p.stat("dex")
+    val sword = f.w.spawnItem(Label("//zones/z:sword"), ItemLocation.Carried(p.id))
+    p.skills[Label("//zones/z:enchant")] = 100
+
+    f.input(p, "cast enchant sword")
+    f.run()
+
+    assertEquals(1, sword.affects.size)
+    assertEquals("keen", sword.affects[0].name)
+    assertEquals(baseDex, p.stat("dex"))
+
+    f.input(p, "wield sword")
+    f.run()
+    assertEquals(baseDex + 1, p.stat("dex"))
+
+    f.run(50)
+    assertEquals(baseDex, p.stat("dex"))
+    assertEquals(0, sword.affects.size)
+  }
+
+  @Test
+  fun `permanent item affect with duration None`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          room("start")
+          item("sword", wear = "wield")
+          skill("perma_enchant", target = "item", effect = apply_affect("perma", None, applies = "worn", stat_deltas = stats(dex = 1)))
+          """
+        )
+      )
+    val p = f.player()
+    val sword = f.w.spawnItem(Label("//zones/z:sword"), ItemLocation.Carried(p.id))
+    p.skills[Label("//zones/z:perma_enchant")] = 100
+
+    f.input(p, "cast perma_enchant sword")
+    f.run()
+
+    assertEquals(1, sword.affects.size)
+    assertEquals(Long.MAX_VALUE, sword.affects[0].expiresAt)
+
+    val enemyPerm =
+      load(
+        zone(
+          """
+          room("start")
+          skill("bad_enemy", target = "enemy", effect = apply_affect("perma", None))
+          """
+        )
+      )
+    assertFalse(enemyPerm.ok)
+    assertContains(
+      enemyPerm.report(),
+      "skill(effect): apply_affect(duration) can be None only on an item skill",
+    )
+  }
+
+  @Test
+  fun `disallowed effect primitives on item and enemy skills fail to load`() {
+    val damageOnItem =
+      load(
+        zone(
+          """
+          room("start")
+          skill("bad_item_dmg", target = "item", effect = damage("1d6"))
+          """
+        )
+      )
+    assertFalse(damageOnItem.ok)
+    assertContains(
+      damageOnItem.report(),
+      "skill(effect): damage acts on actors; an item skill's effect may use apply_affect and plugin primitives",
+    )
+
+    val seqDispelOnItem =
+      load(
+        zone(
+          """
+          room("start")
+          skill("bad_seq", target = "item", effect = sequence(apply_affect("keen", 10), dispel(all = True)))
+          """
+        )
+      )
+    assertFalse(seqDispelOnItem.ok)
+    assertContains(
+      seqDispelOnItem.report(),
+      "skill(effect): dispel acts on actors; an item skill's effect may use apply_affect and plugin primitives",
+    )
+
+    val carriedOnEnemy =
+      load(
+        zone(
+          """
+          room("start")
+          skill("bad_enemy_applies", target = "enemy", effect = apply_affect("curse", 10, applies = "carried"))
+          """
+        )
+      )
+    assertFalse(carriedOnEnemy.ok)
+    assertContains(
+      carriedOnEnemy.report(),
+      "skill(effect): apply_affect(applies) is only for item skills",
+    )
+
+    val stunnedOnItem =
+      load(
+        zone(
+          """
+          room("start")
+          skill("stun_item", target = "item", effect = apply_affect("stun", 10, flags = ["stunned"]))
+          """
+        )
+      )
+    assertFalse(stunnedOnItem.ok)
+    assertContains(stunnedOnItem.report(), "skill(effect): item affects can't stun")
+  }
 }

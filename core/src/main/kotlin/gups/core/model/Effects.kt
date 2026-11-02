@@ -42,7 +42,8 @@ sealed interface Effect {
 
   data class ApplyAffect(
     val name: String,
-    val duration: Int,
+    /** Pulses; null only for a permanent item affect. */
+    val duration: Int?,
     val statDeltas: Map<String, Int> = emptyMap(),
     val flags: Set<String> = emptySet(),
     val tickEvery: Int? = null,
@@ -51,6 +52,8 @@ sealed interface Effect {
     val expireMessage: String = "",
     val modifiers: Modifiers = emptyMap(),
     val senseDeltas: Map<Channel, Int> = emptyMap(),
+    /** Set only on an item skill's effect. */
+    val applies: AffectScope? = null,
   ) : Effect
 
   /**

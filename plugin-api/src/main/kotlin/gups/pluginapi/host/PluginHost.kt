@@ -461,7 +461,7 @@ internal constructor(
     }
     val effects =
       plugins.flatMap { p -> p.reg.effects.map { (p.id to it.name) to (p.id to it) } }.toMap()
-    world.pluginEffects = PluginEffectRunner { w, effect, caster, target ->
+    world.pluginEffects = PluginEffectRunner { w, effect, caster, target, targetItem ->
       val (id, e) =
         effects[effect.pluginId to effect.name]
           ?: run {
@@ -481,6 +481,7 @@ internal constructor(
             ActorFacade(caster, w),
             target?.let { ActorFacade(it, w) },
             effect.args,
+            targetItem = targetItem?.let { ItemFacade(it) },
           )
         )
       }

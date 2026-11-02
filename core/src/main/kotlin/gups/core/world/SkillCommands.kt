@@ -225,11 +225,13 @@ internal class CastAction(
       if (skill.range == SkillRange.ROOM)
         actor.room.actors.filter { it !== actor && w.isSimulated(it) }
       else listOf(t)
+    if (onItem != null && onItem.id in w.entities)
+      skill.effect?.let { w.applyItemEffect(it, actor, onItem) }
     for (each in targets) {
       // An enemy skill engages whatever it lands on, whatever its effects do.
       if (skill.target == TargetKind.ENEMY && each != null && each !== actor)
         w.startCombat(actor, each)
-      // Effect primitives act on actors; an item skill's work is its resolve.
+      // An item skill's effect already ran on the item.
       if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill) }
       skill.resolve?.resolve(w, actor, each, onItem)
     }

@@ -115,7 +115,13 @@ class Boot(
 
 /** Applies plugin effect primitives; the plugin host installs one. */
 fun interface PluginEffectRunner {
-  fun apply(world: World, effect: gups.core.model.Effect.Plugin, caster: Actor, target: Actor?)
+  fun apply(
+    world: World,
+    effect: gups.core.model.Effect.Plugin,
+    caster: Actor,
+    target: Actor?,
+    targetItem: Item?,
+  )
 }
 
 class World(
@@ -190,7 +196,7 @@ class World(
   var onPulse: ((Long) -> Unit)? = null
 
   /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner. */
-  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _ -> }
+  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _, _ -> }
 
   /** Plugin containment filters, in plugin id order then registration order. */
   var containmentFilters: List<ContainmentFilter> = emptyList()

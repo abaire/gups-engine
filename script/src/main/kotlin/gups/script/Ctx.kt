@@ -1007,7 +1007,7 @@ internal constructor(
         world.applyAffect(
           t,
           e.name,
-          e.duration,
+          requireNotNull(e.duration) { "apply_affect: duration is required for an actor" },
           e.statDeltas,
           e.flags,
           e.tickEvery,

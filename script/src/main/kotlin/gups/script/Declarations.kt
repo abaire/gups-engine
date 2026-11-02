@@ -1065,10 +1065,56 @@ internal class DeclarationBuiltins(
         )
       if (proto.warmup < 0 || proto.lag < 0) fail("skill(): warmup and lag can't be negative")
       proto.effect?.let { effectRefs(it, ctx, thread) }
+      proto.effect?.let { eff ->
+        val leaves = flattenLeaves(eff)
+        if (proto.target == TargetKind.ITEM) {
+          for (leaf in leaves) {
+            when (leaf) {
+              is Effect.ApplyAffect -> {
+                if ("stunned" in leaf.flags) fail("skill(effect): item affects can't stun")
+              }
+              is Effect.Plugin -> Unit
+              else ->
+                fail(
+                  "skill(effect): ${primitiveName(leaf)} acts on actors; an item skill's effect may use apply_affect and plugin primitives"
+                )
+            }
+          }
+        } else {
+          for (leaf in leaves) {
+            if (leaf is Effect.ApplyAffect) {
+              if (leaf.applies != null)
+                fail("skill(effect): apply_affect(applies) is only for item skills")
+              if (leaf.duration == null)
+                fail("skill(effect): apply_affect(duration) can be None only on an item skill")
+            }
+          }
+        }
+      }
       ctx.pkg.skillList += proto
       Starlark.NONE
     }
   }
+
+  private fun primitiveName(e: Effect): String =
+    when (e) {
+      is Effect.Damage -> "damage"
+      is Effect.Heal -> "heal"
+      is Effect.ApplyAffect -> "apply_affect"
+      is Effect.Dispel -> "dispel"
+      is Effect.Knockback -> "knockback"
+      is Effect.Pull -> "pull"
+      is Effect.Stun -> "stun"
+      is Effect.Summon -> "summon"
+      is Effect.Sequence -> "sequence"
+      is Effect.Plugin -> "${e.pluginId}.${e.name}"
+    }
+
+  private fun flattenLeaves(e: Effect): List<Effect> =
+    when (e) {
+      is Effect.Sequence -> e.effects.flatMap(::flattenLeaves)
+      else -> listOf(e)
+    }
 
   private fun effectRefs(e: Effect, ctx: LoadCtx, thread: StarlarkThread) {
     when (e) {
@@ -1388,7 +1434,11 @@ internal class DeclarationBuiltins(
           named = true,
           doc = "Affect name; applying the same name again replaces the existing affect.",
         ),
-        Param(name = "duration", named = true, doc = "Duration in pulses."),
+        Param(
+          name = "duration",
+          named = true,
+          doc = "Duration in pulses; None makes an item affect permanent.",
+        ),
         Param(
           name = "stat_deltas",
           named = true,
@@ -1437,6 +1487,12 @@ internal class DeclarationBuiltins(
           defaultValue = "{}",
           doc = "Sense score changes by channel while the affect lasts.",
         ),
+        Param(
+          name = "applies",
+          named = true,
+          defaultValue = "None",
+          doc = "Item affects only: 'worn' or 'carried'.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1450,9 +1506,9 @@ internal class DeclarationBuiltins(
     expireMsg: Any,
     modifiers: Any,
     senseDeltas: Any,
-  ): Any =
-    effect(
-      "apply_affect",
+    applies: Any,
+  ): Any {
+    val e =
       affectEffect(
         name,
         duration,
@@ -1467,8 +1523,21 @@ internal class DeclarationBuiltins(
         "apply_affect",
         schema,
         features,
-      ),
-    )
+        allowPermanent = true,
+      )
+    val scope =
+      if (isNone(applies)) null
+      else {
+        val s =
+          choice(
+            str(applies, "apply_affect(applies)"),
+            "apply_affect(applies)",
+            listOf("worn", "carried"),
+          )
+        AffectScope.valueOf(s.uppercase())
+      }
+    return effect("apply_affect", e.copy(applies = scope))
+  }
 
   @StarlarkMethod(
     name = "dispel",
@@ -2478,9 +2547,15 @@ internal fun affectEffect(
   fn: String,
   schema: WorldSchema,
   features: Features = Features.ALL,
+  allowPermanent: Boolean = false,
 ): Effect.ApplyAffect {
-  val d = int(duration, "$fn(duration)")
-  if (d < 1) fail("$fn(duration): must be at least 1")
+  val d =
+    if (allowPermanent && isNone(duration)) null
+    else {
+      val v = int(duration, "$fn(duration)")
+      if (v < 1) fail("$fn(duration): must be at least 1")
+      v
+    }
   val every = intOrNull(tickEvery, "$fn(tick_every)")
   if (every != null && every < 1) fail("$fn(tick_every): must be at least 1")
   return Effect.ApplyAffect(
