@@ -52,6 +52,24 @@ interface PluginWorld {
 
   fun removeAffect(target: PluginActor, name: String): Boolean
 
+  fun applyItemAffect(
+    item: PluginItem,
+    name: String,
+    duration: Int?,
+    applies: String = "worn",
+    statDeltas: Map<String, Int> = emptyMap(),
+    flags: Set<String> = emptySet(),
+    senseDeltas: Map<String, Int> = emptyMap(),
+  )
+
+  fun removeItemAffect(item: PluginItem, name: String): Boolean
+
+  fun addTag(item: PluginItem, tag: String): Boolean
+
+  fun removeTag(item: PluginItem, tag: String): Boolean
+
+  fun transform(item: PluginItem, label: String)
+
   fun teleport(actor: PluginActor, room: PluginRoom)
 
   /** Reads an attribute; a key without `ns:` is in the plugin's own namespace (its id). */
@@ -240,11 +258,45 @@ interface PluginItem : PluginEntity {
   val kind: String
   val wear: String?
   val weight: Int
+
+  /** Effective tags, sorted: the prototype's plus those added, minus those removed. */
   val tags: List<String>
+
+  /** True if [tag] is among the effective [tags]. */
+  fun hasTag(tag: String): Boolean
+
+  /** Variant names to item labels. */
+  val variants: Map<String, String>
+
+  /**
+   * This item's affects: its prototype's in declaration order, then its own instance affects by id;
+   * empty for an item whose prototype was removed (a tombstone).
+   */
+  val affects: List<PluginItemAffect>
+
+  /** Items inside this container, ascending id. */
+  val contents: List<PluginItem>
+
+  /** The actor whose custody this item ends in, following containers; null on the ground. */
+  val custodian: PluginActor?
 
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
   val plural: String?
 }
+
+/** An affect on an item, as a plugin sees it: declared by its prototype or put on the instance. */
+data class PluginItemAffect(
+  val name: String,
+  /** "worn" or "carried". */
+  val applies: String,
+  val flags: List<String>,
+  val statDeltas: Map<String, Int>,
+  val senseDeltas: Map<String, Int>,
+  /** "proto" or "instance". */
+  val origin: String,
+  /** Absolute pulse, or null when permanent or from the prototype. */
+  val expiresAt: Long?,
+)
 
 interface PluginSkill {
   val label: String

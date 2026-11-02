@@ -128,6 +128,16 @@ interface PluginRegistry {
     doc: String,
     check: (PluginRestrictionCall) -> String?,
   )
+
+  /**
+   * A check that can stop a carried item affect from reaching its holder through a container.
+   * [blocks] runs for each container on the path to the affect's item and returns true to stop the
+   * affect there; worn and directly carried items are never filtered. The engine caches the result
+   * and recomputes it only when custody, item affects, item tags or prototypes change, so [blocks]
+   * may read only the container's and item's label, kind, tags and affects, and must be fast and
+   * side-effect free. A filter that throws records a `plugin` diagnostic and doesn't block.
+   */
+  fun addContainmentFilter(doc: String, blocks: (PluginContainmentCall) -> Boolean)
 }
 
 /** Mirrors core's command lanes. */
@@ -255,4 +265,16 @@ data class PluginRestrictionCall(
   val skill: PluginSkill? = null,
   val target: PluginEntity? = null,
   val proficiency: Int? = null,
+)
+
+/**
+ * One containment filter question: does [container] stop [item]'s [affect] from reaching [holder]?
+ * Read only the container's and item's label, kind, tags and affects.
+ */
+data class PluginContainmentCall(
+  val world: PluginWorld,
+  val holder: PluginActor,
+  val container: PluginItem,
+  val item: PluginItem,
+  val affect: PluginItemAffect,
 )

@@ -21,6 +21,7 @@ import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
 import gups.pluginapi.PluginCommandCall
+import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
@@ -58,7 +59,10 @@ data class PluginInfo(
   val traits: List<PluginTraitInfo> = emptyList(),
   val restrictions: List<PluginRestrictionInfo> = emptyList(),
   val choices: List<PluginChoiceInfo> = emptyList(),
+  val containmentFilters: List<PluginFilterInfo> = emptyList(),
 )
+
+data class PluginFilterInfo(val doc: String)
 
 data class PluginTraitInfo(
   val name: String,
@@ -163,6 +167,7 @@ internal class PluginRegistryImpl(
       PluginRestrictionPoint,
       MutableList<Pair<String, (PluginRestrictionCall) -> String?>>,
     >()
+  val filters = mutableListOf<Pair<String, (PluginContainmentCall) -> Boolean>>()
   private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
 
   private fun member(name: String, value: Any) {
@@ -332,6 +337,10 @@ internal class PluginRegistryImpl(
     restrictions.getOrPut(point) { mutableListOf() }.add(doc to check)
   }
 
+  override fun addContainmentFilter(doc: String, blocks: (PluginContainmentCall) -> Boolean) {
+    filters.add(doc to blocks)
+  }
+
   private fun checkParams(name: String, params: List<PluginParam>) {
     val names = params.map { it.name }
     require(names.distinct().size == names.size) { "'$name' has duplicate parameter names" }
@@ -417,6 +426,14 @@ internal constructor(
     }
     world.restrictions = allRestrictions
 
+    val allFilters = mutableListOf<gups.core.world.ContainmentFilter>()
+    for (p in plugins) {
+      for ((_, check) in p.reg.filters) {
+        allFilters.add(containmentFilterAdapter(world, p.id, check))
+      }
+    }
+    world.containmentFilters = allFilters
+
     for (p in plugins) {
       for (cat in p.reg.categories) {
         world.commands.registerCategory(
@@ -481,7 +498,7 @@ internal constructor(
             ActorFacade(caster, w),
             target?.let { ActorFacade(it, w) },
             effect.args,
-            targetItem = targetItem?.let { ItemFacade(it) },
+            targetItem = targetItem?.let { ItemFacade(it, w) },
           )
         )
       }
@@ -529,6 +546,7 @@ internal constructor(
           p.reg.restrictions.flatMap { (point, list) ->
             list.map { (doc, _) -> PluginRestrictionInfo(point.name.lowercase(), doc) }
           },
+        containmentFilters = p.reg.filters.map { (doc, _) -> PluginFilterInfo(doc) },
         choices =
           p.reg.creation?.choices?.map { c ->
             PluginChoiceInfo(

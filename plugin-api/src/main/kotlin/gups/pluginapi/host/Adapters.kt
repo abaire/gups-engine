@@ -11,8 +11,10 @@ import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
 import gups.core.model.Trait
 import gups.core.model.TraitModifier
+import gups.core.world.ContainmentFilter
 import gups.core.world.Diagnostic
 import gups.core.world.World
+import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginModifierCall
 import gups.pluginapi.PluginModifierPoint
@@ -119,7 +121,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               point = PluginModifierPoint.valueOf(point.name),
               actor = ActorFacade(c.requireActor(), w),
               other = c.target?.let { ActorFacade(it, w) },
-              weapon = c.weapon?.let { ItemFacade(it) },
+              weapon = c.weapon?.let { ItemFacade(it, w) },
               room = RoomFacade(c.requireActor().room, w),
             )
           fun refuse(why: String): Any {
@@ -199,7 +201,7 @@ internal fun restrictionAdapter(
         world = facade,
         point = PluginRestrictionPoint.valueOf(corePoint.name),
         actor = ActorFacade(req.actor, w),
-        item = req.item?.let { ItemFacade(it) },
+        item = req.item?.let { ItemFacade(it, w) },
         slot = req.slot,
         room = req.room?.let { RoomFacade(it, w) },
         from = req.from?.let { RoomFacade(it, w) },
@@ -208,7 +210,7 @@ internal fun restrictionAdapter(
         target =
           when (val t = req.target) {
             is gups.core.model.Actor -> ActorFacade(t, w)
-            is gups.core.model.Item -> ItemFacade(t)
+            is gups.core.model.Item -> ItemFacade(t, w)
             is gups.core.model.Room -> RoomFacade(t, w)
             else -> null
           },
@@ -221,6 +223,32 @@ internal fun restrictionAdapter(
         Diagnostic(w.pulse, "plugin", "plugin '$pluginId': restriction $corePoint failed: $e", e)
       )
       null
+    }
+  }
+}
+
+internal fun containmentFilterAdapter(
+  world: World,
+  pluginId: String,
+  filter: (PluginContainmentCall) -> Boolean,
+): ContainmentFilter {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return ContainmentFilter { w, holder, container, item, ha ->
+    val call =
+      PluginContainmentCall(
+        world = facade,
+        holder = ActorFacade(holder, w),
+        container = ItemFacade(container, w),
+        item = ItemFacade(item, w),
+        affect = toPlugin(ha),
+      )
+    try {
+      filter(call)
+    } catch (e: Throwable) {
+      w.record(
+        Diagnostic(w.pulse, "plugin", "plugin '$pluginId': containment filter failed: $e", e)
+      )
+      false
     }
   }
 }

@@ -36,6 +36,8 @@ class ApiSurfaceTest {
       PluginRoom::class,
       PluginActor::class,
       PluginItem::class,
+      PluginItemAffect::class,
+      PluginContainmentCall::class,
       PluginSkill::class,
       PluginViews::class,
     )

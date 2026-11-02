@@ -91,6 +91,11 @@ class WeatherPluginTest {
       check: (PluginRestrictionCall) -> String?,
     ) = TODO()
 
+    override fun addContainmentFilter(
+      doc: String,
+      blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
+    ) = TODO()
+
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) {
       started += fn
     }
@@ -216,6 +221,24 @@ class WeatherPluginTest {
       get() = TODO()
 
     override fun removeAffect(target: PluginActor, name: String): Boolean = TODO()
+
+    override fun applyItemAffect(
+      item: PluginItem,
+      name: String,
+      duration: Int?,
+      applies: String,
+      statDeltas: Map<String, Int>,
+      flags: Set<String>,
+      senseDeltas: Map<String, Int>,
+    ) = TODO()
+
+    override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO()
+
+    override fun addTag(item: PluginItem, tag: String): Boolean = TODO()
+
+    override fun removeTag(item: PluginItem, tag: String): Boolean = TODO()
+
+    override fun transform(item: PluginItem, label: String) = TODO()
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 

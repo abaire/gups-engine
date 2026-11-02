@@ -2030,18 +2030,19 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **`PluginRegistry`:** The registration interface passed to `GupsPlugin.register`. It allows plugins to register
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP package producers, world start callbacks
-  (`onWorldStarted`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), and action restrictions
-  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`). See
-  [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
+  (`onWorldStarted`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), action restrictions
+  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`), and containment filters
+  (`addContainmentFilter`). See [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
   ([Facade.kt](../plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt) and
   [PluginViews.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginViews.kt)) with engine-side wiring in
   [PluginHost.kt](../plugin-api/src/main/kotlin/gups/pluginapi/host/PluginHost.kt). The facade exposes safe mutation
-  verbs (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`, `setAttr`, `delAttr`,
-  `setChoices`, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`),
-  query methods, RNG access, and read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`,
-  `PluginSkill`). All facade mutations execute synchronously on the world thread with invariant checking.
+  verbs (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
+  `addTag`, `removeTag`, `transform`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`,
+  `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and read-only
+  views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations execute
+  synchronously on the world thread with invariant checking.
 
 **Plugin capabilities and lifecycle:**
 
@@ -2054,7 +2055,8 @@ subsystems (`core` or `script`). It consists of three primary components:
   wrapped back into Starlark equivalents. Exceptions become script errors in the calling hook. Builtins can only be
   called while the world runs from a hook or command.
 - **Effect primitives:** Declared via `addEffectPrimitive` (`weather.soak(pulses = 3)`). They bind arguments as builtins
-  do, reject entity arguments, and return an effect value usable in `skill(effect = ...)` or `sequence(...)`.
+  do, reject entity arguments, and return an effect value usable in `skill(effect = ...)` or `sequence(...)`. On an
+  `item` skill, `targetItem` is the item and `target` is null.
 - **Commands:** Integrated into the command registry (§5.2). Names must be lowercase with no whitespace and cannot start
   with `@`. They cannot shadow engine commands or aliases. Role-gated plugin commands are hidden from ineligible
   players.
@@ -2069,8 +2071,13 @@ subsystems (`core` or `script`). It consists of three primary components:
   chain functions (§4.19). Unique across all plugins.
 - **Creation (`setCreation`):** Configures character creation choices, options, availability rules, validation, start
   room selection, and initial setup (`created`) (§4.19). At most one plugin per world may set creation.
-- **Restrictions (`addRestriction`):** Intercepts actions at `WEAR`, `ENTER`, `CAST`, and `LEARN` restriction points
-  (§4.19). Must be fast and side-effect free.
+- **Restrictions (`addRestriction`):** Intercepts actions at `WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`,
+  and `PUT` restriction points (§4.19). Must be fast and side-effect free.
+- **Containment filters (`addContainmentFilter`):** called while the engine works out which carried item affects reach a
+  holder, once per container on the path and affect behind it; returning `true` stops that affect at that container.
+  Filters may read only the container's and item's label, kind, tags and affects (the state whose changes trigger a
+  recompute). They never see worn or directly carried items. A filter that throws records a `plugin` diagnostic and
+  doesn't block. Must be fast and side-effect free.
 
 **Facade operations:**
 
@@ -2103,9 +2110,9 @@ subsystems (`core` or `script`). It consists of three primary components:
   file, and `@eval`), `install(world)` (invoked before the script host installs), and `started(world)` (invoked after
   `World.start()`, §4.11). Every place that builds a world provides wiring (`NONE` by default). `scriptWorld(thread)`
   resolves the running world from a Starlark thread.
-- `WorldPluginWiring.install(world)`: Populates `World.creation`, `World.traits`, and `World.restrictions` (§4.11) with
-  adapters over plugin objects. Adapters convert facade types to `core` types, catch plugin exceptions as specified in
-  §4.19, and validate modifier results.
+- `WorldPluginWiring.install(world)`: Populates `World.creation`, `World.traits`, `World.restrictions`, and
+  `World.containmentFilters` (§4.11) with adapters over plugin objects. Adapters convert facade types to `core` types,
+  catch plugin exceptions as specified in §4.19, and validate modifier results.
 
 **Loading:**
 
@@ -2213,20 +2220,20 @@ file or a `.json` name is a usage error. With `--world` it includes that world's
 after checking its `MODULE.gups` and `MESSAGES.gups`, and leaves out entries of features the world has off; commands
 appear by their renamed names. The files, in order:
 
-|        File         |                                                                                                                                                                                                               Contents                                                                                                                                                                                                                |
-|---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                             |
-| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                          |
-| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                     |
-| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                          |
-| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                        |
-| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                    |
-| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages, traits (label, doc and effects), restrictions (point and doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
-| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                     |
-| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                         |
+|        File         |                                                                                                                                                                                                                             Contents                                                                                                                                                                                                                             |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                     |
+| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                     |
+| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                   |
+| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                                               |
+| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages, traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
+| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 - **Entries** show name, `since`, a `feature: <id>` badge for feature entries, doc, example if any, and parameters,
   fields and methods as tables (declaration parameters with type, positional/keyword, required, default, allowed values

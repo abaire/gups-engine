@@ -168,6 +168,25 @@ r.addEffectPrimitive(
 }
 ```
 
+On an `item` skill, `call.targetItem` is the item and `call.target` is null:
+
+```kotlin
+r.addEffectPrimitive(
+    name = "enchant",
+    doc = "Enchants an item: dex +1 while worn.",
+    params = emptyList(),
+) { call ->
+    val item = call.targetItem ?: return@addEffectPrimitive
+    call.world.applyItemAffect(
+        item = item,
+        name = "keen",
+        duration = 600,
+        applies = "worn",
+        statDeltas = mapOf("dex" to 1),
+    )
+}
+```
+
 ### GMCP packages
 
 A producer runs in phase 7 for each player whose client supports the package, and only changed payloads are sent. Return
@@ -305,6 +324,54 @@ r.addBuiltin(
     world.setChoices(actor, mapOf(choice to option))
 }
 ```
+
+### Item affects, tags and transform
+
+The facade allows plugins to inspect and manipulate items, their effective tags, instance affects, and prototype
+transforms:
+
+- **Tags:** `world.addTag(item, tag)` and `world.removeTag(item, tag)` add or remove per-instance tags. Effective tags
+  (`item.tags`, `item.hasTag(tag)`) reflect prototype tags plus added minus removed tags.
+- **Instance affects:** `world.applyItemAffect(item, name, duration, applies = "worn", ...)` and
+  `world.removeItemAffect(item, name)` apply or remove instance affects. Setting `duration = null` creates a permanent
+  affect. `applies` must be `"worn"` or `"carried"`.
+- **Transform:** `world.transform(item, label)` swaps an item's prototype in place, preserving its id, location,
+  attributes, instance affects and tag changes:
+
+```kotlin
+fun purify(world: PluginWorld, item: PluginItem) {
+    val clean = item.variants["uncursed"]
+    if (clean != null) {
+        world.transform(item, clean)
+    } else {
+        world.removeTag(item, "cursed")
+    }
+}
+```
+
+Prefer `transform` over removing a tag when the clean version is its own prototype. Tag changes are kept across a
+`transform`, so removing a prototype tag first would leave the new item with a stray `-cursed` change, and an item with
+tag changes never merges into a stack.
+
+### Containment filters
+
+Containment filters intercept carried item affects reaching their holder through containers:
+
+```kotlin
+r.addContainmentFilter("Blocks carried affects behind warded containers.") { call ->
+    call.container.hasTag("warded")
+}
+```
+
+When the engine recomputes an actor's holdings, registered containment filters are called for each container along the
+path to a carried item affect. Returning `true` blocks the affect from propagating beyond that container. If a filter
+throws an exception, the exception is logged as a `"plugin"` diagnostic and the affect is not blocked.
+
+Filters never see worn or directly carried items: only an affect behind at least one container is filtered. The engine
+caches the result and recomputes it only when custody, item affects, item tags or prototypes change, so a filter may
+read only the container's and item's label, kind, tags and affects. A filter that reads anything else (attributes, the
+holder's stats, the pulse, randomness) gives answers the cache won't notice changing. Filters must also be fast and
+side-effect free.
 
 ### World start
 

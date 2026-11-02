@@ -79,6 +79,11 @@ class HeritagePluginTest {
       restrictions.getOrPut(point) { mutableListOf() }.add(doc to check)
     }
 
+    override fun addContainmentFilter(
+      doc: String,
+      blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
+    ) = TODO()
+
     override fun addBuiltin(
       name: String,
       doc: String,
@@ -177,6 +182,13 @@ class HeritagePluginTest {
     override val wear = "body"
     override val weight = 10
     override val plural: String? = null
+
+    override fun hasTag(tag: String): Boolean = tag in tags
+
+    override val variants: Map<String, String> = emptyMap()
+    override val affects: List<gups.pluginapi.PluginItemAffect> = emptyList()
+    override val contents: List<PluginItem> = emptyList()
+    override val custodian: PluginActor? = null
   }
 
   private class FakeSkill(override val tags: List<String> = emptyList()) : PluginSkill {
@@ -227,6 +239,24 @@ class HeritagePluginTest {
     ) = TODO()
 
     override fun removeAffect(target: PluginActor, name: String) = TODO()
+
+    override fun applyItemAffect(
+      item: PluginItem,
+      name: String,
+      duration: Int?,
+      applies: String,
+      statDeltas: Map<String, Int>,
+      flags: Set<String>,
+      senseDeltas: Map<String, Int>,
+    ): Unit = TODO("not used")
+
+    override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO("not used")
+
+    override fun addTag(item: PluginItem, tag: String): Boolean = TODO("not used")
+
+    override fun removeTag(item: PluginItem, tag: String): Boolean = TODO("not used")
+
+    override fun transform(item: PluginItem, label: String): Unit = TODO("not used")
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 

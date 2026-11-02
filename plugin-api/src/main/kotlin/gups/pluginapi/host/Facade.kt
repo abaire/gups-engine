@@ -3,6 +3,8 @@ package gups.pluginapi.host
 import gups.core.AttrValue
 import gups.core.Label
 import gups.core.model.Actor
+import gups.core.model.AffectScope
+import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.Item
@@ -12,17 +14,24 @@ import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
+import gups.core.world.HeldAffect
 import gups.core.world.World
+import gups.core.world.addItemTag
 import gups.core.world.applyAffect
+import gups.core.world.applyItemAffect
 import gups.core.world.awardXp
+import gups.core.world.custodian
 import gups.core.world.damage
 import gups.core.world.echo
 import gups.core.world.grantTrait
 import gups.core.world.heal
+import gups.core.world.heldAffects
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.pendingLevels
 import gups.core.world.removeAffect
+import gups.core.world.removeItemAffect
+import gups.core.world.removeItemTag
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.send
@@ -30,9 +39,11 @@ import gups.core.world.setChoices
 import gups.core.world.setSkill
 import gups.core.world.takeXp
 import gups.core.world.teleport
+import gups.core.world.transformItem
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginItem
+import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
@@ -81,7 +92,7 @@ internal object Facades {
   fun item(value: Any?): PluginItem? =
     when (value) {
       is ItemFacade -> value
-      is ItemView -> ItemFacade(value.item)
+      is ItemView -> ItemFacade(value.item, value.scope.world)
       else -> null
     }
 }
@@ -127,7 +138,7 @@ internal class RoomFacade(val room: Room, private val world: World) :
     get() = room.actors.map { ActorFacade(it, world) }
 
   override val items: List<PluginItem>
-    get() = room.items.map(::ItemFacade)
+    get() = room.items.map { ItemFacade(it, world) }
 }
 
 /** Fails with an `IllegalStateException` naming [feature] when [world] has it off. */
@@ -230,7 +241,8 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
     }
 }
 
-internal class ItemFacade(val item: Item) : EntityFacade(item), PluginItem {
+internal class ItemFacade(val item: Item, private val world: World) :
+  EntityFacade(item), PluginItem {
   override val label: String
     get() = item.protoLabel.v
 
@@ -247,11 +259,36 @@ internal class ItemFacade(val item: Item) : EntityFacade(item), PluginItem {
     get() = item.proto.weight
 
   override val tags: List<String>
-    get() = item.proto.tags.sorted()
+    get() = item.tags.sorted()
+
+  override fun hasTag(tag: String): Boolean = tag in item.tags
+
+  override val variants: Map<String, String>
+    get() = item.proto.variants.mapValues { it.value.v }
+
+  override val affects: List<PluginItemAffect>
+    get() = item.heldAffects().map(::toPlugin)
+
+  override val contents: List<PluginItem>
+    get() = item.contents.map { ItemFacade(it, world) }
+
+  override val custodian: PluginActor?
+    get() = world.custodian(item)?.let { ActorFacade(it, world) }
 
   override val plural: String?
     get() = item.proto.plural
 }
+
+internal fun toPlugin(ha: HeldAffect): PluginItemAffect =
+  PluginItemAffect(
+    name = ha.name,
+    applies = ha.applies.name.lowercase(),
+    flags = ha.flags.sorted(),
+    statDeltas = ha.statDeltas,
+    senseDeltas = ha.senseDeltas.mapKeys { it.key.name },
+    origin = if (ha.instance == null) "proto" else "instance",
+    expiresAt = ha.instance?.expiresAt?.takeIf { it != Long.MAX_VALUE },
+  )
 
 internal class SkillFacade(val skill: gups.core.model.SkillProto) : PluginSkill {
   override val label: String
@@ -294,13 +331,17 @@ internal class WorldFacade(
   private fun roomOf(r: PluginRoom, what: String): Room =
     (r as? RoomFacade)?.room ?: throw IllegalArgumentException("$what: not a room of this world")
 
+  private fun itemOf(i: PluginItem, what: String): Item {
+    val item =
+      (i as? ItemFacade)?.item ?: throw IllegalArgumentException("$what: not an item of this world")
+    require(world.item(item.id) === item) { "$what: ${item.name} is no longer in the world" }
+    return item
+  }
+
   private fun entityOf(e: PluginEntity, what: String): Entity =
     when (e) {
       is ActorFacade -> actorOf(e, what)
-      is ItemFacade ->
-        e.item.also {
-          require(world.item(it.id) === it) { "$what: ${it.name} is no longer in the world" }
-        }
+      is ItemFacade -> itemOf(e, what)
       else ->
         (e as? EntityFacade)?.entity
           ?: throw IllegalArgumentException("$what: not an entity of this world")
@@ -364,6 +405,64 @@ internal class WorldFacade(
 
   override fun removeAffect(target: PluginActor, name: String): Boolean =
     world.removeAffect(actorOf(target, "remove_affect(target)"), name)
+
+  override fun applyItemAffect(
+    item: PluginItem,
+    name: String,
+    duration: Int?,
+    applies: String,
+    statDeltas: Map<String, Int>,
+    flags: Set<String>,
+    senseDeltas: Map<String, Int>,
+  ) {
+    val target = itemOf(item, "apply_item_affect(item)")
+    require(name.isNotBlank()) { "apply_item_affect(name): must not be blank" }
+    require(duration == null || duration >= 1) { "apply_item_affect(duration): must be at least 1" }
+    require(applies == "worn" || applies == "carried") {
+      "apply_item_affect(applies): must be 'worn' or 'carried', got '$applies'"
+    }
+    val scope = AffectScope.valueOf(applies.uppercase())
+    for (stat in statDeltas.keys) declared(
+      stat,
+      world.schema.statNames,
+      "stat",
+      "apply_item_affect(statDeltas)",
+    )
+    val channelNames = world.schema.allChannels.map { it.name }
+    for (channel in senseDeltas.keys) declared(
+      channel,
+      channelNames,
+      "channel",
+      "apply_item_affect(senseDeltas)",
+    )
+    world.applyItemAffect(
+      item = target,
+      name = name,
+      duration = duration,
+      applies = scope,
+      statDeltas = statDeltas,
+      flags = flags,
+      senseDeltas = senseDeltas.mapKeys { Channel(it.key) },
+    )
+  }
+
+  override fun removeItemAffect(item: PluginItem, name: String): Boolean =
+    world.removeItemAffect(itemOf(item, "remove_item_affect(item)"), name)
+
+  override fun addTag(item: PluginItem, tag: String): Boolean =
+    world.addItemTag(itemOf(item, "add_tag(item)"), tag)
+
+  override fun removeTag(item: PluginItem, tag: String): Boolean =
+    world.removeItemTag(itemOf(item, "remove_tag(item)"), tag)
+
+  override fun transform(item: PluginItem, label: String) {
+    val target = itemOf(item, "transform(item)")
+    val l =
+      runCatching { Label(label) }.getOrNull()
+        ?: throw IllegalArgumentException("transform(label): '$label' is not an item")
+    require(world.protos.items.containsKey(l)) { "transform(label): '$label' is not an item" }
+    world.transformItem(target, l)
+  }
 
   override fun teleport(actor: PluginActor, room: PluginRoom) =
     world.teleport(actorOf(actor, "teleport(actor)"), roomOf(room, "teleport(room)"))

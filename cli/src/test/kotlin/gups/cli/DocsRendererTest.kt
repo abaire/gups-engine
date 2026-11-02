@@ -152,7 +152,14 @@ class DocsRendererTest {
         .findAll(guide)
         .map { it.groupValues[1] }
         .toList()
-    val fromSample = blocks.filter { "tasks.jar" !in it && "dependencies {" !in it }
+    val fromSample =
+      blocks.filter {
+        "tasks.jar" !in it &&
+          "dependencies {" !in it &&
+          "applyItemAffect" !in it &&
+          "purify" !in it &&
+          "addContainmentFilter" !in it
+      }
     assertTrue(fromSample.size >= 10, "${fromSample.size} sample blocks")
     val weatherDedented = weatherSource.lines().joinToString("\n") { it.trimStart() }
     val heritageDedented = heritageSource.lines().joinToString("\n") { it.trimStart() }
@@ -212,6 +219,27 @@ class DocsRendererTest {
     assertContains(html, "<tr id=\"plugin-heritage.restrict-wear-2\">")
     assertContains(html, "<article id=\"plugin-heritage.choice-race\">")
     assertContains(html, "<tr id=\"plugin-heritage.choice-race.elf\">")
+  }
+
+  @Test
+  fun `plugins html renders containment filters with anchors`() {
+    val plugin =
+      PluginDocSpec(
+        id = "ward",
+        doc = "Warding and containment.",
+        containmentFilters =
+          listOf(
+            PluginFilterDocSpec("Blocks cursed items behind warded containers."),
+            PluginFilterDocSpec("Blocks heat behind insulated containers."),
+          ),
+      )
+    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val html = pages.getValue("plugins.html")
+    assertContains(html, "<h3>Containment filters</h3>")
+    assertContains(html, "<tr id=\"plugin-ward.filter-1\">")
+    assertContains(html, "Blocks cursed items behind warded containers.")
+    assertContains(html, "<tr id=\"plugin-ward.filter-2\">")
+    assertContains(html, "Blocks heat behind insulated containers.")
   }
 
   @Test

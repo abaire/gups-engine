@@ -1614,7 +1614,9 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   - `samples/curse-plugin/src/test/kotlin/gups/sample/curse/CurseWorldTest.kt`
   - `settings.gradle.kts` (add `"samples:curse-plugin",` after `"samples:heritage-plugin",`)
   - `docs/SPEC.md`
-- **Do Not Touch:** engine modules.
+  - `docs/PLUGINS.md` (the three item examples; see step 5)
+  - `cli/src/test/kotlin/gups/cli/DocsRendererTest.kt` (the sample-block check only; see step 5)
+- **Do Not Touch:** engine main sources.
 
 ### Specification & Decision Record Changes
 
@@ -1663,6 +1665,21 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
      - `bestow`: when `call.targetItem != null`, `call.world.addTag(item, "cursed")`.
   4. **Containment filter** (`addContainmentFilter`): block when `call.container.hasTag("warded") &&
      call.item.hasTag("cursed")`. This matches `bearsCurse`: a curse stops at the first ward on its path.
+  5. **`PLUGINS.md` examples come from this plugin.** The `DocsRendererTest` case `plugins html starts with the guide,
+     which index links, and its Kotlin matches the sample` checks that every Kotlin block in `PLUGINS.md` appears,
+     ignoring leading whitespace, in a sample plugin's source. Phase 10 added three blocks that no sample contained yet
+     and exempted them by keyword. Remove that exemption:
+     - In `PLUGINS.md`, replace the three Phase 10 blocks with excerpts copied from `CursePlugin.kt`: the item-skill
+       primitive block (after "On an `item` skill, `call.targetItem` is the item and `call.target` is null:") with the
+       `bestow` or `lift` registration; the `purify` block under `### Item affects, tags and transform` with the `lift`
+       body (transform to `variants["uncursed"]` when present, else remove the tag); and the block under `###
+       Containment filters` with the curse filter registration. Keep the prose around them, adjusting names to match.
+       Write `CursePlugin.kt` so each excerpt is a contiguous run of its lines.
+     - In `DocsRendererTest`, read `samples/curse-plugin/src/main/kotlin/gups/sample/curse/CursePlugin.kt` next to the
+       weather and heritage sources, add it to the sources a block may match (and to the failure message), and delete
+       the `"applyItemAffect"`, `"purify"` and `"addContainmentFilter"` exclusions, leaving only `"tasks.jar"` and
+       `"dependencies {"`.
+     - The test must pass with no item-related exclusions left.
 
 #### Code: `bearsCurse`
 
@@ -1729,6 +1746,8 @@ private fun bearsCurse(item: PluginItem): Boolean =
      worn, `p.dex` 1 above base. Then `remove amulet` works.
   10. **Bestow:** `cast bestow_curse dagger` on a carried dagger makes `drop dagger` refused.
 - README following heritage's structure: purpose, layout, build and pin, extension points used.
+- `DocsRendererTest`'s sample-block check passes with `CursePlugin.kt` as a source and without the Phase 10 keyword
+  exclusions.
 
 ### Exit Conditions
 

@@ -67,6 +67,9 @@ data class PluginChoiceDocSpec(
 /** A restriction a plugin registers, for `plugins.html`. */
 data class PluginRestrictionDocSpec(val point: String, val doc: String)
 
+/** A containment filter a plugin registers, for `plugins.html`. */
+data class PluginFilterDocSpec(val doc: String)
+
 /** What `plugins.html` shows about one plugin. */
 data class PluginDocSpec(
   val id: String,
@@ -78,6 +81,7 @@ data class PluginDocSpec(
   val traits: List<PluginTraitDocSpec> = emptyList(),
   val restrictions: List<PluginRestrictionDocSpec> = emptyList(),
   val choices: List<PluginChoiceDocSpec> = emptyList(),
+  val containmentFilters: List<PluginFilterDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -633,6 +637,24 @@ object DocsRenderer {
               .append(badge)
               .append("</td><td>")
               .append(esc(r.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.containmentFilters.isNotEmpty()) {
+          append(
+            "<h3>Containment filters</h3>\n<table>\n<thead><tr><th>Filter</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for ((i, f) in p.containmentFilters.withIndex()) {
+            val n = i + 1
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".filter-")
+              .append(n)
+              .append("\"><td><code>filter</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(f.doc))
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")

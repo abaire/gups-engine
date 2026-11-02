@@ -15,10 +15,13 @@ import gups.core.world.attach
 import gups.core.world.destroy
 import gups.core.world.flushOutput
 import gups.core.world.handle
+import gups.core.world.moveItem
 import gups.core.world.quit
 import gups.core.world.spawnItem
+import gups.core.world.tombstone
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.ItemFacade
+import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.WorldFacade
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
@@ -70,7 +73,8 @@ class FacadeTest {
         w.spawnItem(
           Label("//zones/z:stick"),
           ItemLocation.InRoom(w.room(Label("//zones/z:a")).id, 0),
-        )
+        ),
+        w,
       )
     assertEquals(listOf("stick", "wood"), stick.keywords)
     assertEquals(listOf("a stick"), glade.items.map { it.name })
@@ -103,7 +107,8 @@ class FacadeTest {
         w.spawnItem(
           Label("//zones/z:stick"),
           ItemLocation.InRoom(w.room(Label("//zones/z:a")).id, 0),
-        )
+        ),
+        w,
       )
     w.quit(ann.actor as Player)
     w.destroy(stick.item)
@@ -366,6 +371,285 @@ class FacadeTest {
     assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)
   }
 
+  @Test
+  fun `containment filter blocks carried affects behind lead container and not elsewhere`() {
+    val plugin = TestFilterPlugin()
+    val testWorld = world(files = ITEM_FILES, plugins = PluginHost.of(plugin))
+    val player =
+      ActorFacade(
+        testWorld.spawnPlayer(
+          "Ann",
+          Label("//zones/z:a"),
+          overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+        ),
+        testWorld,
+      )
+    assertEquals(10, player.stat("dex"))
+
+    // 1. In plain container: affect reaches holder
+    val bag = testWorld.spawnItem(Label("//zones/z:bag"), ItemLocation.Carried(player.actor.id))
+    val charm = testWorld.spawnItem(Label("//zones/z:charm"), ItemLocation.Contained(bag.id))
+    assertEquals(12, player.stat("dex"))
+    assertTrue(plugin.callLog.isNotEmpty())
+    val call = plugin.callLog.last()
+    assertEquals(bag.id.v, call.container.id)
+    assertEquals(charm.id.v, call.item.id)
+    assertEquals("luck", call.affect.name)
+    assertFalse(call.container.hasTag("lead"))
+
+    // 2. Behind container tagged "lead": affect is blocked
+    val leadBox =
+      testWorld.spawnItem(Label("//zones/z:lead_box"), ItemLocation.Carried(player.actor.id))
+    testWorld.moveItem(charm, ItemLocation.Contained(leadBox.id))
+    assertEquals(10, player.stat("dex"))
+    assertTrue(plugin.callLog.last().container.hasTag("lead"))
+
+    // 3. Directly carried: not behind a container, so affect reaches holder and filter is not
+    // called
+    val callsBefore = plugin.callLog.size
+    testWorld.moveItem(charm, ItemLocation.Carried(player.actor.id))
+    assertEquals(12, player.stat("dex"))
+    assertEquals(callsBefore, plugin.callLog.size)
+  }
+
+  @Test
+  fun `throwing containment filter records a plugin diagnostic and does not block`() {
+    val plugin = TestFilterPlugin(throwOnContainer = "lead")
+    val testWorld = world(files = ITEM_FILES, plugins = PluginHost.of(plugin))
+    val player =
+      ActorFacade(
+        testWorld.spawnPlayer(
+          "Ann",
+          Label("//zones/z:a"),
+          overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+        ),
+        testWorld,
+      )
+    val leadBox =
+      testWorld.spawnItem(Label("//zones/z:lead_box"), ItemLocation.Carried(player.actor.id))
+    val charm = testWorld.spawnItem(Label("//zones/z:charm"), ItemLocation.Contained(leadBox.id))
+
+    // Filter threw, so it did not block; carried affect reaches holder
+    assertEquals(12, player.stat("dex"))
+    assertTrue(plugin.callLog.isNotEmpty())
+    assertTrue(
+      testWorld.diagnostics.any {
+        it.kind == "plugin" &&
+          "containment filter failed" in it.message &&
+          "Filter exploded on lead" in it.message
+      }
+    )
+  }
+
+  @Test
+  fun `facade addTag and removeTag on container refresh holder and flip stat`() {
+    val plugin = TestFilterPlugin()
+    val testWorld = world(files = ITEM_FILES, plugins = PluginHost.of(plugin))
+    val testFacade = WorldFacade(testWorld, "filtertest") {}
+    val player =
+      ActorFacade(
+        testWorld.spawnPlayer(
+          "Ann",
+          Label("//zones/z:a"),
+          overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+        ),
+        testWorld,
+      )
+    val bag = testWorld.spawnItem(Label("//zones/z:bag"), ItemLocation.Carried(player.actor.id))
+    val bagItem = ItemFacade(bag, testWorld)
+    val charm = testWorld.spawnItem(Label("//zones/z:charm"), ItemLocation.Contained(bag.id))
+
+    assertEquals(12, player.stat("dex"))
+    assertFalse(bagItem.hasTag("lead"))
+
+    // Add "lead" tag: filter now blocks, holder's dex flips to 10
+    assertTrue(testFacade.addTag(bagItem, "lead"))
+    assertTrue(bagItem.hasTag("lead"))
+    assertContains(bagItem.tags, "lead")
+    assertEquals(10, player.stat("dex"))
+
+    // Adding again returns false and keeps state
+    assertFalse(testFacade.addTag(bagItem, "lead"))
+    assertEquals(10, player.stat("dex"))
+
+    // Remove "lead" tag: filter unblocks, holder's dex flips back to 12
+    assertTrue(testFacade.removeTag(bagItem, "lead"))
+    assertFalse(bagItem.hasTag("lead"))
+    assertEquals(12, player.stat("dex"))
+
+    // Removing again returns false
+    assertFalse(testFacade.removeTag(bagItem, "lead"))
+    assertEquals(12, player.stat("dex"))
+  }
+
+  @Test
+  fun `transform through the facade swaps prototype and keeps id and attributes`() {
+    val testWorld = world(files = ITEM_FILES)
+    val testFacade = WorldFacade(testWorld, "weather") {}
+    val charm =
+      testWorld.spawnItem(
+        Label("//zones/z:charm"),
+        ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+      )
+    val charmItem = ItemFacade(charm, testWorld)
+    val idBefore = charmItem.id
+
+    testFacade.setAttr(charmItem, "enchanted", true)
+    assertEquals("//zones/z:charm", charmItem.label)
+    assertEquals("a lucky charm", charmItem.name)
+
+    testFacade.transform(charmItem, "//zones/z:fancy_charm")
+    assertEquals(idBefore, charmItem.id)
+    assertEquals("//zones/z:fancy_charm", charmItem.label)
+    assertEquals("a fancy charm", charmItem.name)
+    assertEquals(true, testFacade.getAttr(charmItem, "enchanted"))
+
+    assertFailsWith<IllegalArgumentException> {
+      testFacade.transform(charmItem, "//zones/z:nonexistent")
+    }
+  }
+
+  @Test
+  fun `PluginItem affects shows prototype entry and instance entry with right origin`() {
+    val testWorld = world(files = ITEM_FILES)
+    val testFacade = WorldFacade(testWorld, "weather") {}
+    val charm =
+      testWorld.spawnItem(
+        Label("//zones/z:charm"),
+        ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+      )
+    val charmItem = ItemFacade(charm, testWorld)
+
+    // Prototype affect
+    assertEquals(1, charmItem.affects.size)
+    val protoAff = charmItem.affects[0]
+    assertEquals("luck", protoAff.name)
+    assertEquals("carried", protoAff.applies)
+    assertEquals("proto", protoAff.origin)
+    assertNull(protoAff.expiresAt)
+    assertEquals(mapOf("dex" to 2), protoAff.statDeltas)
+
+    // Apply instance affect through facade
+    testFacade.applyItemAffect(
+      charmItem,
+      "keen",
+      duration = 50,
+      applies = "worn",
+      statDeltas = mapOf("str" to 1),
+      flags = setOf("sharp"),
+    )
+    assertEquals(2, charmItem.affects.size)
+    val instAff = charmItem.affects[1]
+    assertEquals("keen", instAff.name)
+    assertEquals("worn", instAff.applies)
+    assertEquals("instance", instAff.origin)
+    assertEquals(testWorld.pulse + 50, instAff.expiresAt)
+    assertEquals(mapOf("str" to 1), instAff.statDeltas)
+    assertEquals(listOf("sharp"), instAff.flags)
+
+    // Permanent instance affect
+    testFacade.applyItemAffect(charmItem, "glow", duration = null, applies = "carried")
+    assertEquals(3, charmItem.affects.size)
+    val permAff = charmItem.affects.last()
+    assertEquals("glow", permAff.name)
+    assertEquals("instance", permAff.origin)
+    assertNull(permAff.expiresAt)
+
+    // Remove instance affect
+    assertTrue(testFacade.removeItemAffect(charmItem, "keen"))
+    assertFalse(testFacade.removeItemAffect(charmItem, "keen"))
+    assertEquals(2, charmItem.affects.size)
+
+    // Tombstone prototype returns empty affects list
+    charm.proto = tombstone(charm.proto)
+    assertTrue(charmItem.affects.isEmpty())
+  }
+
+  @Test
+  fun `PluginItem custodian is null on ground and actor for carried, worn, and nested items`() {
+    val testWorld = world(files = ITEM_FILES)
+    val player =
+      ActorFacade(
+        testWorld.spawnPlayer(
+          "Ann",
+          Label("//zones/z:a"),
+          overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+        ),
+        testWorld,
+      )
+
+    // Ground item
+    val groundStick =
+      ItemFacade(
+        testWorld.spawnItem(
+          Label("//zones/z:stick"),
+          ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+        ),
+        testWorld,
+      )
+    assertNull(groundStick.custodian)
+
+    // Carried item
+    val carriedStick =
+      ItemFacade(
+        testWorld.spawnItem(Label("//zones/z:stick"), ItemLocation.Carried(player.actor.id)),
+        testWorld,
+      )
+    assertEquals(player.id, carriedStick.custodian?.id)
+    assertEquals("Ann", carriedStick.custodian?.name)
+
+    // Worn item
+    val wornBackpack =
+      ItemFacade(
+        testWorld.spawnItem(
+          Label("//zones/z:backpack"),
+          ItemLocation.Equipped(player.actor.id, "held"),
+        ),
+        testWorld,
+      )
+    assertEquals(player.id, wornBackpack.custodian?.id)
+
+    // Nested container inside worn backpack
+    val innerBag =
+      ItemFacade(
+        testWorld.spawnItem(Label("//zones/z:bag"), ItemLocation.Contained(wornBackpack.item.id)),
+        testWorld,
+      )
+    val nestedCharm =
+      ItemFacade(
+        testWorld.spawnItem(Label("//zones/z:charm"), ItemLocation.Contained(innerBag.item.id)),
+        testWorld,
+      )
+    assertEquals(player.id, innerBag.custodian?.id)
+    assertEquals(player.id, nestedCharm.custodian?.id)
+
+    // Contents inspection
+    assertEquals(listOf(innerBag.id), wornBackpack.contents.map { it.id })
+    assertEquals(listOf(nestedCharm.id), innerBag.contents.map { it.id })
+    assertTrue(nestedCharm.contents.isEmpty())
+
+    // Variants and tags inspection
+    assertEquals(mapOf("fancy" to "//zones/z:fancy_charm"), nestedCharm.variants)
+  }
+
+  private class TestFilterPlugin(
+    val throwOnContainer: String? = null,
+    val callLog: MutableList<PluginContainmentCall> = mutableListOf(),
+  ) : GupsPlugin {
+    override val id = "filtertest"
+    override val pluginApiVersion = PluginApi.VERSION
+
+    override fun register(r: PluginRegistry) {
+      r.addContainmentFilter("Blocks carried affects behind lead containers.") { call ->
+        callLog.add(call)
+        if (throwOnContainer != null && call.container.hasTag(throwOnContainer)) {
+          throw RuntimeException("Filter exploded on $throwOnContainer")
+        }
+        call.container.hasTag("lead")
+      }
+    }
+  }
+
   private fun connect(w: World, p: Player): CapturingSink {
     val id = SessionId(1)
     val sink = CapturingSink()
@@ -386,6 +670,19 @@ class FacadeTest {
           "rules/package.star" to TestWorlds.RULES_PACKAGE,
           "rules/combat.star" to
             TestWorlds.rules("def on_level_up(ctx):\n    return struct(max = vitals(hp = 5))\n"),
+        )
+
+    val ITEM_FILES =
+      ZONE +
+        mapOf(
+          "zones/z/items.star" to
+            """
+            item("charm", name = "a lucky charm", keywords = ["charm"], affects = [item_affect("luck", applies = "carried", stat_deltas = stats(dex = 2))], variants = {"fancy": ":fancy_charm"})
+            item("fancy_charm", name = "a fancy charm", keywords = ["charm"])
+            item("bag", name = "a bag", keywords = ["bag"], container = container())
+            item("lead_box", name = "a lead box", keywords = ["box"], tags = ["lead"], container = container())
+            item("backpack", name = "a backpack", keywords = ["backpack"], wear = "held", container = container())
+            """
         )
   }
 }
