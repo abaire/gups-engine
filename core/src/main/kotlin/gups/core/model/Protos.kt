@@ -218,6 +218,10 @@ data class ItemProto(
   val statDeltas: Map<String, Int> = emptyMap(),
   /** Perception sense modifiers applied to the bearer while equipped. */
   val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Vital maximum modifiers applied to the bearer while equipped. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Damage resistance modifiers applied to the bearer while equipped. */
+  val resistDeltas: Map<DamageType, Int> = emptyMap(),
   /** Free-form semantic tags inspected by scripts and rules. */
   val tags: Set<String> = emptySet(),
   /** True if multiple units can merge into a single item stack. */
@@ -306,6 +310,10 @@ data class ItemAffect(
   val statDeltas: Map<String, Int> = emptyMap(),
   /** Perception sense deltas counted for the holder while the affect reaches it. */
   val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Vital maximum deltas counted for the holder while the affect reaches it. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Damage resistance deltas counted for the holder while the affect reaches it. */
+  val resistDeltas: Map<DamageType, Int> = emptyMap(),
   /** Rules modifiers contributed by this affect to the holder. */
   val modifiers: Modifiers = emptyMap(),
   /** Status flags counted for the holder while the affect reaches it. */

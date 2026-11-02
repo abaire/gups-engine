@@ -429,7 +429,12 @@ the world graph:
 - **Spatial position:** current `Room` and `trackIndex` (always `0` when the `track` feature is off).
 - **Schema-keyed attributes:** base stats, vitals (current, base max, and `belowZeroSince` pulse), damage-type resists,
   per-channel base senses, and life `condition` (`OK`, `INCAPACITATED`, `DEAD`). Effective values combine base values
-  with trait, affect, equipment, and encumbrance deltas.
+  with trait, affect, equipment, and encumbrance deltas. Effective maximum vitals and effective resists are base +
+  traits + actor affects + item contributions (worn items and reaching item affects), the maximum clamped at 0; when an
+  effective maximum drops, the current value is lowered to it. A raised maximum never raises the current value, with two
+  exceptions: a mob's vital that is full before its `on_spawn` hook and that the hook leaves alone is filled to the
+  maximum the hook's gear gives it, and a reload refills a mob's vitals that were full once the new traits and item
+  prototypes count.
 - **Progression:** `level`, `xp`, `levelGains` (recorded per level so level loss unwinds exact stat/vital deltas), and
   `skills` proficiency map.
 - **Traits and affects:** permanent `traits` (recomputed and cached whenever choices, prototype traits, or
@@ -452,8 +457,10 @@ the world graph:
   item commands skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys.
 - **Container properties:** optional `ContainerState` with `capacity`, `maxWeight`, access `state` (`OPEN`, `CLOSED`,
   `LOCKED`), and `keyLabel`.
-- **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, schema
-  `statDeltas`, prototype `tags`, equipment slot `wear`, and worn `modifiers` and `equipAffects`.
+- **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, prototype
+  `tags`, equipment slot `wear`, and worn `modifiers` and `equipAffects`. While the item is worn, its schema
+  `statDeltas` and `senseDeltas` change the wearer's stats and senses; `maxVitalDeltas` (vital name to a change in that
+  vital's maximum) and `resistDeltas` (damage type to a change in resistance) work the same way.
 - **Affects and tags:** per-instance `affects` (timed or permanent) and per-instance tag changes over the prototype's
   `tags`; prototype `affects` are read live from the prototype. Each item affect has an `applies` scope: `worn` reaches
   the holder while the item is equipped, `carried` while it is anywhere in the holder's custody, including nested
@@ -467,8 +474,9 @@ the world graph:
 **Affect** ([`Affect`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
 - **Tracking:** unique `id`, source `label`, optional `source` entity ID, and absolute expiration pulse `expiresAt`.
-- **Mechanics:** schema `statDeltas`, status `flags` (such as `stunned`, `silenced`, or `no_regen`), periodic
-  `tickEvery` cadence with `onTick` and `onExpire` hook references, and applied `modifiers`.
+- **Mechanics:** schema `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`, status `flags` (such as
+  `stunned`, `silenced`, or `no_regen`), periodic `tickEvery` cadence with `onTick` and `onExpire` hook references, and
+  applied `modifiers`. The deltas mean the same for actor affects and item affects.
 - **Replacement rule:** re-applying an affect with the same name replaces the existing affect only if the new
   `expiresAt` is strictly later; shorter affects never truncate longer active affects. A permanent item affect counts as
   expiring latest.
@@ -1072,10 +1080,12 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
 - **Identity:** `id`, `name`, `label`, `keywords`, `is_player`, `in_world`.
 - **Schema fields:** (§3.9), generated from the world's schema:
   - `<stat>`, the effective value, for each declared stat (`ctx.actor.dex`), and `base.<stat>` for the base value.
-  - `<vital>` and `max_<vital>` (the effective maximum, traits included, §4.19) for each declared vital (`ctx.actor.hp`,
+  - `<vital>` and `max_<vital>` (the effective maximum: base + traits + actor affects + item contributions, at least 0,
+    §4.19; when an effective maximum drops, the current value is lowered to it) for each declared vital (`ctx.actor.hp`,
     `ctx.actor.max_hp`), `base.max_<vital>` for the base maximum, and `below_zero_since(vital)`, the pulse the vital
     last dropped below 0, or `None`.
-  - `resists.<type>` (effective) and `base.resists.<type>` for each declared damage type.
+  - `resists.<type>` (effective resistance: base + traits + actor affects + item contributions) and
+    `base.resists.<type>` for each declared damage type.
   - `senses` (the effective score on every channel) and `base.senses` (the unmodified scores).
   - An undeclared name is an error with a suggestion.
 - **Creation:** (§4.19): `choices`, a dict of choice id → option id (known answers only; empty for mobs), `traits`, the

@@ -88,6 +88,8 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
       a.wornFrom,
       a.senseDeltas,
       a.applies,
+      a.maxVitalDeltas,
+      a.resistDeltas,
     )
   part.addedTags += item.addedTags
   part.removedTags += item.removedTags

@@ -52,6 +52,10 @@ sealed interface Effect {
     val expireMessage: String = "",
     val modifiers: Modifiers = emptyMap(),
     val senseDeltas: Map<Channel, Int> = emptyMap(),
+    /** Vital name to a change in that vital's maximum while the affect lasts. */
+    val maxVitalDeltas: Map<String, Int> = emptyMap(),
+    /** Damage type to a change in resistance while the affect lasts. */
+    val resistDeltas: Map<DamageType, Int> = emptyMap(),
     /** Set only on an item skill's effect. */
     val applies: AffectScope? = null,
   ) : Effect

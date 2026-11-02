@@ -57,9 +57,8 @@ fun World.restoreMob(id: EntityId, proto: MobProto, room: Room, index: Int): Mob
 
 /**
  * Overwrites [actor]'s numbers with saved ones. A vital or stat the schema no longer declares is
- * not accepted: the startup check keeps a database from meeting a different schema. [actor]'s
- * traits must already be set, so a current value above the base maximum survives when a trait
- * raises it.
+ * not accepted: the startup check keeps a database from meeting a different schema. Current values
+ * are clamped once restore has placed the actor's items.
  */
 fun World.restoreActorNumbers(
   actor: Actor,
@@ -73,7 +72,7 @@ fun World.restoreActorNumbers(
   for ((name, saved) in vitals) {
     val v = requireNotNull(actor.vitalMap[name]) { "${actor.name} has no vital $name" }
     v.max = saved.max
-    v.current = saved.current.coerceAtMost(actor.max(name))
+    v.current = saved.current
     v.belowZeroSince = saved.belowZeroSince
   }
   actor.resists.clear()

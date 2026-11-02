@@ -6,9 +6,11 @@ import gups.core.model.Affect
 import gups.core.model.AffectScope
 import gups.core.model.Channel
 import gups.core.model.ContainerProto
+import gups.core.model.DamageType
 import gups.core.model.ItemAffect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.Mob
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
@@ -457,5 +459,143 @@ class HoldingsTest {
       ),
       host.calls,
     )
+  }
+
+  @Test
+  fun `wearing an item with maxVitalDeltas raises max, and removing it clamps current`() {
+    val proto =
+      ItemProto(
+        ring,
+        "a ring",
+        listOf("ring"),
+        wear = "finger_l",
+        maxVitalDeltas = mapOf("hp" to 10),
+      )
+    val f = fixture(extra = listOf(proto))
+    val p = f.player("Ann")
+    f.assertFresh(p)
+    val baseMax = p.max("hp")
+    val item = f.w.spawnItem(ring, ItemLocation.Equipped(p.id, "finger_l"))
+    assertEquals(baseMax + 10, p.max("hp"))
+    f.assertFresh(p)
+    // Raising max doesn't raise current, but we can heal/fill up to the new max.
+    f.w.changeVital(p, "hp", 10)
+    assertEquals(baseMax + 10, p.current("hp"))
+    // Removing the item lowers max and clamps current.
+    f.w.moveItem(item, ItemLocation.Carried(p.id))
+    assertEquals(baseMax, p.max("hp"))
+    assertEquals(baseMax, p.current("hp"))
+    f.assertFresh(p)
+  }
+
+  @Test
+  fun `a carried item affect with resistDeltas counts from inventory, and a worn one only while equipped`() {
+    val fire = DamageType("fire")
+    val protoCarried =
+      ItemProto(
+        charm,
+        "a charm",
+        listOf("charm"),
+        affects =
+          listOf(
+            ItemAffect("fire_ward", applies = AffectScope.CARRIED, resistDeltas = mapOf(fire to 5))
+          ),
+      )
+    val protoWorn =
+      ItemProto(
+        ring,
+        "a ring",
+        listOf("ring"),
+        wear = "finger_l",
+        affects =
+          listOf(
+            ItemAffect("flame_shield", applies = AffectScope.WORN, resistDeltas = mapOf(fire to 3))
+          ),
+      )
+    val f = fixture(extra = listOf(protoCarried, protoWorn))
+    val p = f.player("Ann")
+    val baseResist = p.effectiveResist(fire)
+
+    // Charm carried in inventory: carried affect reaches holder
+    val charmItem = f.w.spawnItem(charm, ItemLocation.Carried(p.id))
+    assertEquals(baseResist + 5, p.effectiveResist(fire))
+    f.assertFresh(p)
+
+    // Ring in inventory: worn affect does not reach holder
+    val ringItem = f.w.spawnItem(ring, ItemLocation.Carried(p.id))
+    assertEquals(baseResist + 5, p.effectiveResist(fire))
+    f.assertFresh(p)
+
+    // Ring equipped: worn affect now reaches holder
+    f.w.moveItem(ringItem, ItemLocation.Equipped(p.id, "finger_l"))
+    assertEquals(baseResist + 8, p.effectiveResist(fire))
+    f.assertFresh(p)
+
+    // Unequip ring: drops back to charm's contribution
+    f.w.moveItem(ringItem, ItemLocation.Carried(p.id))
+    assertEquals(baseResist + 5, p.effectiveResist(fire))
+    f.assertFresh(p)
+
+    // Drop charm: drops back to base
+    f.w.moveItem(charmItem, ItemLocation.InRoom(p.room.id, p.trackIndex))
+    assertEquals(baseResist, p.effectiveResist(fire))
+    f.assertFresh(p)
+  }
+
+  private fun hpAmulet(hp: Int) =
+    ItemProto(
+      amulet,
+      "an amulet",
+      listOf("amulet"),
+      wear = "neck",
+      maxVitalDeltas = mapOf("hp" to hp),
+    )
+
+  @Test
+  fun `a full mob stays full when a reload raises its gear's maximum`() {
+    val f = fixture(extra = listOf(hpAmulet(5)))
+    val full = f.mob()
+    val hurt = f.mob()
+    for (m in listOf(full, hurt)) f.w.spawnItem(amulet, ItemLocation.Equipped(m.id, "neck"))
+    f.w.changeVital(full, "hp", 5)
+    assertEquals(full.max("hp"), full.current("hp"))
+    val hurtHp = hurt.current("hp")
+
+    f.w.applyPrototypes(Prototypes(T.rooms, T.mobs(fs), T.items + hpAmulet(10), T.skills(fs)))
+
+    assertEquals(full.baseMax("hp") + 10, full.max("hp"))
+    assertEquals(full.max("hp"), full.current("hp"))
+    assertEquals(hurtHp, hurt.current("hp"))
+  }
+
+  @Test
+  fun `a mob geared up by on_spawn starts with full vitals`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_SPAWN] = { w, owner, _ ->
+      if (owner is Mob) w.spawnItem(amulet, ItemLocation.Equipped(owner.id, "neck"))
+      null
+    }
+    val f = fixture(host, extra = listOf(hpAmulet(5)))
+    val m = f.mob()
+    assertEquals(m.baseMax("hp") + 5, m.max("hp"))
+    assertEquals(m.max("hp"), m.current("hp"))
+    assertEquals(emptyList(), f.w.diagnostics)
+  }
+
+  @Test
+  fun `damage dealt by on_spawn is not topped up`() {
+    val host = RecordingHost()
+    host.handlers[HookName.ON_SPAWN] = { w, owner, _ ->
+      if (owner is Mob) {
+        w.spawnItem(amulet, ItemLocation.Equipped(owner.id, "neck"))
+        w.changeVital(owner, "hp", -3)
+      }
+      null
+    }
+    val f = fixture(host, extra = listOf(hpAmulet(5)))
+    val m = f.mob()
+    assertEquals(m.baseMax("hp") + 5, m.max("hp"))
+    assertEquals(m.baseMax("hp") - 3, m.current("hp"))
+    assertEquals(emptyList(), f.w.diagnostics)
   }
 }

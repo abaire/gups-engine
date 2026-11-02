@@ -72,13 +72,14 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
     }
   }
 
+  val refill = mutableMapOf<Mob, Set<String>>()
   for (m in actorIndex.values.filterIsInstance<Mob>()) {
     val p = next.mobs[m.protoLabel]
     if (p == null) {
       notes += "mob ${m.protoLabel} ($m) despawned: its prototype is gone"
       despawn(m)
     } else {
-      rebind(m, p, old.mobs[m.protoLabel] ?: m.proto)
+      refill[m] = rebind(m, p, old.mobs[m.protoLabel] ?: m.proto)
     }
   }
   for (a in actorIndex.values) {
@@ -121,6 +122,11 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   inboundCache = null
   slotCache = null
   for (a in actorIndex.values) refreshHoldings(a)
+  // Refilled only now that the new traits and item prototypes count towards the maxima.
+  for ((m, names) in refill) if (m.inWorld) {
+    for (name in names) m.vitalMap.getValue(name).current = m.max(name)
+    m.dirty = true
+  }
   coverage.keys.retainAll(roomsByLabel.values.toSet())
   recomputeBubble()
   return ReconcileReport(created, notes)
@@ -180,15 +186,15 @@ fun World.upgrade(e: Entity, version: Int) {
 /** A field the instance hasn't changed from its old prototype follows the new one. */
 private fun <T> follow(live: T, was: T, now: T): T = if (live == was) now else live
 
-private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
+/** Rebinds [m] to [p] and returns the vitals that were full, for the caller to refill. */
+private fun World.rebind(m: Mob, p: MobProto, was: MobProto): Set<String> {
   m.proto = p
   upgrade(m, p.version)
   m.level = follow(m.level, was.level, p.level)
-  // Fullness is judged against the old traits, and the new maxima include the new prototype's.
+  // Fullness is judged against the old traits and items.
   val full = m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.keys
   for ((name, v) in m.vitalMap) v.max = follow(v.max, was.vitals[name] ?: 0, p.vitals[name] ?: 0)
   m.recomputeTraits(this)
-  for (name in full) m.vitalMap.getValue(name).current = m.max(name)
   for (stat in p.stats.keys + was.stats.keys) {
     m.baseStats[stat] = follow(m.baseStats[stat], was.stats[stat], p.stats[stat]) ?: 0
   }
@@ -207,6 +213,7 @@ private fun World.rebind(m: Mob, p: MobProto, was: MobProto) {
   m.thinkEvery = follow(m.thinkEvery, was.thinkEvery, p.thinkEvery)
   m.dormantRecovery = follow(m.dormantRecovery, was.dormantRecovery, p.dormantRecovery)
   m.dirty = true
+  return full
 }
 
 /** New spawn states from the rooms' current rules; live mobs carry over by label, in order. */

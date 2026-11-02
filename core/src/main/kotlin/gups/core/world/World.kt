@@ -256,6 +256,8 @@ class World(
   internal var snapshot: TierSnapshot? = null
   internal val deferred = mutableListOf<Deferred>()
   internal val removedThisPhase = HashSet<EntityId>()
+  /** Actors whose death is being processed right now. */
+  internal val dying = HashSet<EntityId>()
   internal var cascadeDepth = 0
 
   // The reality bubble: how many anchors cover each room, and where each anchor was.
@@ -421,6 +423,7 @@ class World(
     settleNewCondition(p, "starting_stats")
     p.lastInputPulse = pulse
     enter(p, room, p.trackIndex)
+    clampVitals(p)
     return p
   }
 
@@ -431,7 +434,21 @@ class World(
     applyStartingStats(m, startingStatsOf(m))
     settleNewCondition(m, "starting_stats")
     enter(m, at, m.trackIndex)
+    clampVitals(m)
+    val full =
+      m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.mapValues { it.value.current }
     invokeOn(m, HookName.ON_SPAWN, HookContext(room = at))
+    // Gear put on by on_spawn raises maxima; a vital that was full and the hook left alone fills
+    // up.
+    if (m.inWorld) {
+      for ((name, was) in full) {
+        val v = m.vitalMap.getValue(name)
+        if (v.current == was && m.max(name) > was) {
+          v.current = m.max(name)
+          m.dirty = true
+        }
+      }
+    }
     return m
   }
 

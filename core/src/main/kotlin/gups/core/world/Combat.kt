@@ -184,6 +184,16 @@ fun World.heal(target: Actor, vital: String, amount: Int) {
 
 /** Engine-owned death. Runs at most once per life. */
 internal fun World.processDeath(victim: Actor) {
+  // Damage dealt while the death runs, as by an on_death hook, must not start it again.
+  if (!dying.add(victim.id)) return
+  try {
+    runDeath(victim)
+  } finally {
+    dying.remove(victim.id)
+  }
+}
+
+private fun World.runDeath(victim: Actor) {
   if (!victim.inWorld || victim.condition != Condition.DEAD) return
   val standing = askCondition(victim)
   if (standing != Condition.DEAD) return setCondition(victim, standing)
@@ -298,6 +308,8 @@ fun World.applyAffect(
   modifiers: Modifiers = emptyMap(),
   wornFrom: EntityId? = null,
   senseDeltas: Map<Channel, Int> = emptyMap(),
+  maxVitalDeltas: Map<String, Int> = emptyMap(),
+  resistDeltas: Map<DamageType, Int> = emptyMap(),
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -322,11 +334,14 @@ fun World.applyAffect(
       modifiers,
       wornFrom,
       senseDeltas,
+      maxVitalDeltas = maxVitalDeltas,
+      resistDeltas = resistDeltas,
     )
   target.affects += affect
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
   disabledChanged(target, wasDisabled)
+  clampVitals(target)
   return affect
 }
 
@@ -358,6 +373,7 @@ private fun World.endAffect(
   if (!a.affects.remove(affect)) return
   a.dirty = true
   disabledChanged(a, wasDisabled)
+  clampVitals(a)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
   if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())
     send(a, affect.expireMessage)
@@ -387,6 +403,8 @@ fun World.applyItemAffect(
   source: Actor? = null,
   modifiers: Modifiers = emptyMap(),
   senseDeltas: Map<Channel, Int> = emptyMap(),
+  maxVitalDeltas: Map<String, Int> = emptyMap(),
+  resistDeltas: Map<DamageType, Int> = emptyMap(),
 ): Affect? {
   if (item.id !in entities) return null
   require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -411,6 +429,8 @@ fun World.applyItemAffect(
       null,
       senseDeltas,
       applies,
+      maxVitalDeltas,
+      resistDeltas,
     )
   item.affects += affect
   item.dirty = true
@@ -536,6 +556,8 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             caster,
             effect.modifiers,
             senseDeltas = effect.senseDeltas,
+            maxVitalDeltas = effect.maxVitalDeltas,
+            resistDeltas = effect.resistDeltas,
           )
         is Effect.Dispel -> {
           val gone = t.affects.filter(effect::matches)
@@ -580,6 +602,8 @@ fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item) {
         caster,
         effect.modifiers,
         effect.senseDeltas,
+        effect.maxVitalDeltas,
+        effect.resistDeltas,
       )
     is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item)
     else -> error("${effect::class.simpleName} can't act on an item")

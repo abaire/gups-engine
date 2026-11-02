@@ -219,6 +219,7 @@ fun World.setChoices(player: Player, changes: Map<String, String?>): String? {
   player.choices.clear()
   player.choices.putAll(newAnswers)
   player.recomputeTraits(this)
+  clampVitals(player)
 
   recheckWornItems(player)
   requestImmediate("choices")
@@ -242,6 +243,7 @@ fun World.grantTrait(actor: Actor, traitName: String): String? {
   if (traitName in actor.grantedTraits) return "Trait '$traitName' already granted"
   actor.grantedTraits = actor.grantedTraits + traitName
   actor.recomputeTraits(this)
+  clampVitals(actor)
   if (actor is Player) {
     recheckWornItems(actor)
     requestImmediate("choices")
@@ -256,6 +258,7 @@ fun World.removeTrait(actor: Actor, traitName: String): String? {
   if (traitName !in actor.grantedTraits) return "Trait '$traitName' was not granted directly"
   actor.grantedTraits = actor.grantedTraits - traitName
   actor.recomputeTraits(this)
+  clampVitals(actor)
   if (actor is Player) {
     recheckWornItems(actor)
     requestImmediate("choices")

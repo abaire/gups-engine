@@ -215,6 +215,10 @@ class Affect(
   val senseDeltas: Map<Channel, Int> = emptyMap(),
   /** Where an item affect reaches its holder from; null for an actor's own affects. */
   val applies: AffectScope? = null,
+  /** Vital maximum deltas applied to the host actor while active. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Damage resistance deltas applied to the host actor while active. */
+  val resistDeltas: Map<DamageType, Int> = emptyMap(),
 )
 
 /**
@@ -353,8 +357,7 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   /**
    * Recomputes active traits from character creation choices, prototype traits, and granted traits.
-   * Caches aggregated trait deltas for stats, senses, vital maximums, resists, and flags, then
-   * clamps all current vitals to their newly calculated effective maxima.
+   * Caches aggregated trait deltas for stats, senses, vital maximums, resists, and flags.
    */
   fun recomputeTraits(world: gups.core.world.World) {
     val traitList = mutableListOf<Trait>()
@@ -389,11 +392,6 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
     traitMaxVitalDeltas = maxVitalDeltas
     traitResistDeltas = resistDeltas
     traitFlags = flags
-
-    for ((name, v) in vitalMap) {
-      val effMax = max(name)
-      if (v.current > effMax) v.current = effMax
-    }
   }
 
   /** Queue of pending player or mob actions waiting to execute in the tick lane. */
@@ -486,24 +484,35 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   fun current(vital: String): Int = vitalMap[vital]?.current ?: 0
 
   /**
-   * Computes the effective maximum for [vital]: base maximum plus trait deltas, clamped to at
-   * least 0.
+   * Computes the effective maximum for [vital]: base maximum plus trait deltas, affect deltas, and
+   * item deltas, clamped to at least 0.
    */
   fun max(vital: String): Int =
-    maxOf(0, (vitalMap[vital]?.max ?: 0) + (traitMaxVitalDeltas[vital] ?: 0))
+    maxOf(
+      0,
+      (vitalMap[vital]?.max ?: 0) +
+        (traitMaxVitalDeltas[vital] ?: 0) +
+        affects.sumOf { it.maxVitalDeltas[vital] ?: 0 } +
+        (heldEffects.maxVitalDeltas[vital] ?: 0),
+    )
 
   /** Returns the unmodified base maximum for [vital]. */
   fun baseMax(vital: String): Int = vitalMap[vital]?.max ?: 0
 
   /**
-   * Computes effective resistance to damage [type] string, combining base resist and trait deltas.
+   * Computes effective resistance to damage [type] string, delegating to the [DamageType] overload.
    */
-  fun effectiveResist(type: String): Int =
-    (resists[DamageType(type)] ?: 0) + (traitResistDeltas[type] ?: 0)
+  fun effectiveResist(type: String): Int = effectiveResist(DamageType(type))
 
-  /** Computes effective resistance to [type], combining base resist and trait deltas. */
+  /**
+   * Computes effective resistance to [type], combining base resist, trait deltas, affect deltas,
+   * and item deltas.
+   */
   fun effectiveResist(type: DamageType): Int =
-    (resists[type] ?: 0) + (traitResistDeltas[type.name] ?: 0)
+    (resists[type] ?: 0) +
+      (traitResistDeltas[type.name] ?: 0) +
+      affects.sumOf { it.resistDeltas[type] ?: 0 } +
+      (heldEffects.resistDeltas[type] ?: 0)
 
   /** Effective resistance to damage [type] string. */
   fun resist(type: String): Int = effectiveResist(type)

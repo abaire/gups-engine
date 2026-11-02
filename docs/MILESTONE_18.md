@@ -178,8 +178,9 @@ Where line numbers below differ after M16/M17, find the symbol by name.
   4. Call `clampVitals(a)`:
      - at the end of `refreshHoldings(a)`;
      - in `applyAffect` after the affect is added, and in `endAffect` after it is removed;
-     - after every in-world `recomputeTraits` call: `Reconcile.kt` (both), `Verbs.kt` (all three), `World.kt` (spawn
-       paths, after the actor is in the world);
+     - after every in-world `recomputeTraits` call: `Verbs.kt` (all three), `World.kt` (spawn paths, after the actor is
+       in the world). Not in `Reconcile.kt`: item prototypes aren't rebound yet there, so the clamp waits for the
+       `refreshHoldings` pass at the end of `applyPrototypes`, and mobs whose vitals were full are refilled after it;
      - after `applyItemAffect`/`removeItemAffect`/`expireItemAffect` (M17 already calls `refreshHoldings` there; no
        extra call needed if so).
   5. **Restore.** `restoreActorNumbers` sets `v.current = saved.current` without clamping. Update its KDoc ("current
@@ -193,8 +194,9 @@ Where line numbers below differ after M16/M17, find the symbol by name.
   7. **Persistence:** `AffectJson` gains `maxVitalDeltas: Map<String, Int> = emptyMap()` and `resistDeltas: Map<String,
      Int> = emptyMap()`. Encode resist keys by `DamageType.name`; decode with `DamageType(k)`. Use the same JSON type
      for M17's item instance affects so both round-trip.
-- **Invariants:** an item or affect that raises a maximum never raises the current value. Removing it lowers the current
-  value only if it is now above the maximum.
+- **Invariants:** an item or affect that raises a maximum never raises the current value, except that a mob's vital that
+  was full before `on_spawn` and untouched by it is filled to the new maximum, and a reload refills mobs' full vitals.
+  Removing it lowers the current value only if it is now above the maximum.
 
 ### Test & Documentation Requirements
 

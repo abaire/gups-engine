@@ -81,6 +81,26 @@ internal fun World.capVitals(actor: Actor): Boolean {
   return changed
 }
 
+/**
+ * Lowers each of [a]'s current vitals to its effective maximum and refreshes its condition. Does
+ * nothing for an actor outside the world or dead, whose vitals stay as they are until it respawns.
+ */
+fun World.clampVitals(a: Actor) {
+  if (!a.inWorld || a.condition == Condition.DEAD) return
+  var changed = false
+  for ((name, v) in a.vitalMap) {
+    val effMax = a.max(name)
+    if (v.current > effMax) {
+      setVital(v, effMax)
+      changed = true
+    }
+  }
+  if (changed) {
+    a.dirty = true
+    refreshCondition(a)
+  }
+}
+
 /** Gives [actor] one [Vital] per declared vital, all at 0, for a new actor. */
 internal fun World.initVitals(actor: Actor) {
   actor.vitalMap.clear()

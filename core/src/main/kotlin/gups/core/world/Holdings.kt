@@ -4,6 +4,7 @@ import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.AffectScope
 import gups.core.model.Channel
+import gups.core.model.DamageType
 import gups.core.model.Item
 import gups.core.model.Modifiers
 
@@ -11,6 +12,10 @@ import gups.core.model.Modifiers
 data class HeldEffects(
   val statDeltas: Map<String, Int> = emptyMap(),
   val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Summed changes to vital maximums, by vital name. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Summed changes to resistances, by damage type. */
+  val resistDeltas: Map<DamageType, Int> = emptyMap(),
   val flags: Set<String> = emptySet(),
   /** Chain-step label to the modifiers it contributes, in modifier-chain order. */
   val modifierSteps: List<Pair<String, Modifiers>> = emptyList(),
@@ -27,6 +32,10 @@ class HeldAffect(
   val applies: AffectScope,
   val statDeltas: Map<String, Int>,
   val senseDeltas: Map<Channel, Int>,
+  /** Changes to the holder's vital maximums, by vital name. */
+  val maxVitalDeltas: Map<String, Int>,
+  /** Changes to the holder's resistances, by damage type. */
+  val resistDeltas: Map<DamageType, Int>,
   val modifiers: Modifiers,
   val flags: Set<String>,
   /** The instance affect, or null for a prototype affect. */
@@ -42,6 +51,7 @@ fun interface ContainmentFilter {
 fun World.refreshHoldings(a: Actor) {
   a.heldEffects = computeHeld(a)
   updateEncumbrance(a)
+  clampVitals(a)
 }
 
 /** Prototype affects in declaration order, then instance affects by id; empty for a tombstone. */
@@ -57,7 +67,18 @@ fun Item.heldAffects(): List<HeldAffect> =
 internal fun Item.adminAffectsList(): List<HeldAffect> {
   val out = mutableListOf<HeldAffect>()
   for (a in proto.affects) out +=
-    HeldAffect(this, a.name, a.applies, a.statDeltas, a.senseDeltas, a.modifiers, a.flags, null)
+    HeldAffect(
+      this,
+      a.name,
+      a.applies,
+      a.statDeltas,
+      a.senseDeltas,
+      a.maxVitalDeltas,
+      a.resistDeltas,
+      a.modifiers,
+      a.flags,
+      null,
+    )
   for (a in affects.sortedBy { it.id }) out +=
     HeldAffect(
       this,
@@ -65,6 +86,8 @@ internal fun Item.adminAffectsList(): List<HeldAffect> {
       a.applies ?: AffectScope.WORN,
       a.statDeltas,
       a.senseDeltas,
+      a.maxVitalDeltas,
+      a.resistDeltas,
       a.modifiers,
       a.flags,
       a,
@@ -76,12 +99,17 @@ internal fun Item.adminAffectsList(): List<HeldAffect> {
 internal fun World.computeHeld(a: Actor): HeldEffects {
   val statDeltas = mutableMapOf<String, Int>()
   val senseDeltas = mutableMapOf<Channel, Int>()
+  val maxVitalDeltas = mutableMapOf<String, Int>()
+  val resistDeltas = mutableMapOf<DamageType, Int>()
   val flags = mutableSetOf<String>()
   val modifierSteps = mutableListOf<Pair<String, Modifiers>>()
   fun add(ha: HeldAffect) {
     for ((stat, delta) in ha.statDeltas) statDeltas[stat] = (statDeltas[stat] ?: 0) + delta
     for ((channel, delta) in ha.senseDeltas) senseDeltas[channel] =
       (senseDeltas[channel] ?: 0) + delta
+    for ((vital, delta) in ha.maxVitalDeltas) maxVitalDeltas[vital] =
+      (maxVitalDeltas[vital] ?: 0) + delta
+    for ((type, delta) in ha.resistDeltas) resistDeltas[type] = (resistDeltas[type] ?: 0) + delta
     flags += ha.flags - "stunned"
     if (ha.modifiers.isNotEmpty())
       modifierSteps += "item:${ha.item.protoLabel.name}:${ha.name}" to ha.modifiers
@@ -95,6 +123,10 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     for ((stat, delta) in item.proto.statDeltas) statDeltas[stat] = (statDeltas[stat] ?: 0) + delta
     for ((channel, delta) in item.proto.senseDeltas) senseDeltas[channel] =
       (senseDeltas[channel] ?: 0) + delta
+    for ((vital, delta) in item.proto.maxVitalDeltas) maxVitalDeltas[vital] =
+      (maxVitalDeltas[vital] ?: 0) + delta
+    for ((type, delta) in item.proto.resistDeltas) resistDeltas[type] =
+      (resistDeltas[type] ?: 0) + delta
     if (item.proto.modifiers.isNotEmpty())
       modifierSteps += "item:${item.protoLabel.name}" to item.proto.modifiers
     for (ha in item.heldAffects()) add(ha)
@@ -118,6 +150,8 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
   return HeldEffects(
     statDeltas = statDeltas.filterValues { it != 0 },
     senseDeltas = senseDeltas.filterValues { it != 0 },
+    maxVitalDeltas = maxVitalDeltas.filterValues { it != 0 },
+    resistDeltas = resistDeltas.filterValues { it != 0 },
     flags = flags,
     modifierSteps = modifierSteps,
   )

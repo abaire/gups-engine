@@ -19,6 +19,7 @@ import gups.core.world.Persistence
 import gups.core.world.SavedCharacter
 import gups.core.world.World
 import gups.core.world.bindSpawn
+import gups.core.world.clampVitals
 import gups.core.world.clearInputs
 import gups.core.world.custodian
 import gups.core.world.drainItemEvents
@@ -260,6 +261,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     val placed =
       placeItems(world, world0.filter { it.kind == "item" }, tombstones = false, deleted, notes)
     restored += placed.size
+    for (a in world.actors) world.clampVitals(a)
     for ((pkg, json) in zoneRows) {
       if (json.isEmpty()) continue
       val zone = pkg in world.protos.zones
@@ -309,6 +311,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       deleted,
       notes,
     )
+    world.clampVitals(player)
     pendingDeletes += deleted
     notes.forEach(log)
     player.dirty = room.label.v != p.room

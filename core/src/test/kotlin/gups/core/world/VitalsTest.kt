@@ -499,4 +499,35 @@ class VitalsTest(private val fs: FixtureSchema) {
     f.w.changeVital(g, fs.health, -100_000)
     assertEquals(1, f.w.diagnostics.count { "below -65535" in it.message })
   }
+
+  @Test
+  fun `an actor affect with maxVitalDeltas raises the max and clamps on expiry`() {
+    val f = Fixture(rules = rules { regenOf = { emptyMap() } })
+    val p = f.player("Ann")
+    val baseMax = p.max(fs.health)
+    val aff = f.w.applyAffect(p, "endurance", 10, maxVitalDeltas = mapOf(fs.health to 15))
+    assertEquals(baseMax + 15, p.max(fs.health))
+    f.w.changeVital(p, fs.health, 15)
+    assertEquals(baseMax + 15, p.current(fs.health))
+
+    f.runTo(aff!!.expiresAt)
+    assertNull(p.affects.firstOrNull { it.name == "endurance" })
+    assertEquals(baseMax, p.max(fs.health))
+    assertEquals(baseMax, p.current(fs.health), "current was clamped to effective max upon expiry")
+  }
+
+  @Test
+  fun `an actor affect with resistDeltas changes effectiveResist`() {
+    val f = Fixture(rules = rules())
+    val p = f.player("Ann")
+    val type = DamageType(fs.schema.damageTypes.first())
+    val baseResist = p.effectiveResist(type)
+    val aff = f.w.applyAffect(p, "ward", 10, resistDeltas = mapOf(type to 7))
+    assertEquals(baseResist + 7, p.effectiveResist(type))
+    assertEquals(baseResist + 7, p.effectiveResist(type.name))
+
+    f.runTo(aff!!.expiresAt)
+    assertEquals(baseResist, p.effectiveResist(type))
+    assertEquals(baseResist, p.effectiveResist(type.name))
+  }
 }

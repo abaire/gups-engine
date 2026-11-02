@@ -143,6 +143,10 @@ data class AffectJson(
   val senseDeltas: Map<String, Int> = emptyMap(),
   /** "worn" or "carried" for an item affect; null for an actor's own affects. */
   val applies: String? = null,
+  /** Vital name to a change in its maximum. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Damage type name to a change in resistance. */
+  val resistDeltas: Map<String, Int> = emptyMap(),
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -357,6 +361,8 @@ internal fun affectJson(a: Affect): AffectJson =
     a.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
     a.senseDeltas.entries.associate { (k, v) -> k.name to v },
     a.applies?.name?.lowercase(),
+    maxVitalDeltas = a.maxVitalDeltas,
+    resistDeltas = a.resistDeltas.entries.associate { (k, v) -> k.name to v },
   )
 
 internal fun affectsJson(a: Actor) =
@@ -381,6 +387,8 @@ internal fun affectFromJson(x: AffectJson): Affect =
       .toMap(),
     senseDeltas = x.senseDeltas.mapKeys { Channel(it.key) },
     applies = x.applies?.let { AffectScope.valueOf(it.uppercase()) },
+    maxVitalDeltas = x.maxVitalDeltas,
+    resistDeltas = x.resistDeltas.mapKeys { DamageType(it.key) },
   )
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {

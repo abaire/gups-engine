@@ -4,6 +4,7 @@ import gups.core.HookRef
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
@@ -123,6 +124,36 @@ class CombatTest(private val fs: FixtureSchema) {
     f.runTo(8)
     assertTrue(p.isCasting)
     assertEquals(1000, g.current(fs.health))
+  }
+
+  @Test
+  fun `damage dealt to a victim while its death is processed doesn't run the death again`() {
+    val host = RecordingHost()
+    var deaths = 0
+    host.handlers[HookName.ON_DEATH] = { w, owner, ctx ->
+      if (owner === ctx.target) {
+        deaths++
+        w.damage(ctx.target, mapOf(fs.health to 1), DamageType("fire"))
+      }
+      null
+    }
+    val f = Fixture(scripts = host)
+    val g = f.mob()
+    f.w.damage(g, mapOf(fs.health to g.current(fs.health) + 1), DamageType("fire"))
+    assertFalse(g.inWorld)
+    assertEquals(1, deaths)
+    assertEquals(1, f.w.room(T.HALL).items.count { it.name == "the corpse of a goblin" })
+  }
+
+  @Test
+  fun `a player killed again right after respawning dies again`() {
+    val f = Fixture()
+    val p = f.player("Ann")
+    repeat(2) {
+      f.w.damage(p, mapOf(fs.health to p.current(fs.health) + 1), DamageType("fire"))
+      assertEquals(Condition.OK, p.condition)
+      assertTrue(p.current(fs.health) > 0)
+    }
   }
 
   @Test
