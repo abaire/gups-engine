@@ -57,6 +57,7 @@ object P {
     ratHp: Int = 10,
     ratVersion: Int = 1,
     withGem: Boolean = true,
+    withBag: Boolean = true,
     withRat: Boolean = true,
     ratTraits: Set<String> = emptySet(),
   ) =
@@ -78,7 +79,7 @@ object P {
       items =
         listOfNotNull(
           ItemProto(COIN, "a coin", listOf("coin"), stackable = true),
-          ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto()),
+          ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto()).takeIf { withBag },
           ItemProto(GEM, "a gem", listOf("gem")).takeIf { withGem },
           ItemProto(
             HAT,

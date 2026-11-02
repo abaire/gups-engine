@@ -526,8 +526,9 @@ the world graph:
   - Mobs from a deleted prototype are despawned, and so are items that aren't in a player's custody.
   - Items in player inventories, equipment, or player-owned containers become inert **tombstone** items: kind
     `tombstone`, the original name and label, and the payload they had when their prototype vanished. Tombstones can be
-    inspected and dropped, but they have no hooks, commands or stats. A tombstone keeps its container state, so the
-    contents survive. Saved items become tombstones when their owner logs in.
+    inspected and dropped, but they have no hooks, commands or stats. A tombstone keeps its weight, stackability, plural
+    name and container (its capacity, weight limit, key and open, closed or locked state), so the contents survive, and
+    it keeps them when it is restored from storage. Saved items become tombstones when their owner logs in.
   - A deleted room sends its players to their recall room, or else the first room.
 
 ### 3.5 Accounts and Roles

@@ -855,9 +855,10 @@ for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItem
   5. Confirm the Phase 1 `refreshHoldings` loop at the end of `placeItems` runs after every `applyItem`. The round-trip
      test below fails if it doesn't.
   6. **`@stat <item>`** (`Tools.kt`, the `is Item ->` block): after the existing `Tags:` line, add:
-     - `Affects: none`, or `Affects: ` followed by one entry per `e.heldAffects()`, joined by `", "`. Each entry is
-       `"<name> (<applies>, <when><flags>)"`, where `<applies>` is `worn` or `carried`; `<when>` is `prototype` for a
-       prototype affect, `permanent` when `expiresAt == Long.MAX_VALUE`, else `"${(expiresAt - pulse).coerceAtLeast(0)
+     - `Affects: none`, or `Affects: ` followed by one entry per `e.allAffects()` (`heldAffects()` without the tombstone
+       check, so a tombstone still lists the instance affects it keeps), joined by `", "`. Each entry is `"<name>
+       (<applies>, <when><flags>)"`, where `<applies>` is `worn` or `carried`; `<when>` is `prototype` for a prototype
+       affect, `permanent` when `expiresAt == Long.MAX_VALUE`, else `"${(expiresAt - pulse).coerceAtLeast(0)
        * PULSE_MS / 1000}s left"` (the actor line's formula); and `<flags>` is `""` or `"; " + flags.sorted()
          .joinToString()`. Example: `Affects: misfortune (carried, prototype), keen (worn, 30s left; glowing)`.
      - when either set is non-empty, `Tag changes: ` followed by `+tag` for each added tag and then `-tag` for each

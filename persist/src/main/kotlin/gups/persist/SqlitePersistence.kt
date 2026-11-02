@@ -656,7 +656,11 @@ internal fun placeItems(
                   keywords =
                     payload.name.lowercase().split(' ').filter { w ->
                       w.isNotEmpty() && w !in setOf("a", "an", "the")
-                    }
+                    },
+                  weight = payload.weight,
+                  stackable = payload.stackable,
+                  container = payload.container?.let(::containerFromJson),
+                  plural = payload.plural,
                 )
               }
             )

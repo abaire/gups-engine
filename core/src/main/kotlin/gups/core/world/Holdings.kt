@@ -45,8 +45,14 @@ fun World.refreshHoldings(a: Actor) {
 }
 
 /** Prototype affects in declaration order, then instance affects by id; empty for a tombstone. */
-fun Item.heldAffects(): List<HeldAffect> {
-  if (proto.kind == TOMBSTONE) return emptyList()
+fun Item.heldAffects(): List<HeldAffect> =
+  if (proto.kind == TOMBSTONE) emptyList() else allAffects()
+
+/**
+ * Prototype affects in declaration order, then instance affects by id, even on a tombstone, whose
+ * kept instance affects reach no one but still show what the item was.
+ */
+internal fun Item.allAffects(): List<HeldAffect> {
   val out = mutableListOf<HeldAffect>()
   for (a in proto.affects) out +=
     HeldAffect(this, a.name, a.applies, a.statDeltas, a.senseDeltas, a.modifiers, a.flags, null)

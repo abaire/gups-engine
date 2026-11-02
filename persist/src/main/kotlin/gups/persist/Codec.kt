@@ -9,8 +9,10 @@ import gups.core.Label
 import gups.core.Role
 import gups.core.model.Actor
 import gups.core.model.Affect
+import gups.core.model.AffectScope
 import gups.core.model.Channel
 import gups.core.model.Condition
+import gups.core.model.ContainerProto
 import gups.core.model.DamageType
 import gups.core.model.DoorState
 import gups.core.model.DormantRecovery
@@ -69,11 +71,14 @@ import kotlinx.serialization.json.longOrNull
  *   only runtime `grantedTraits` are. `levelGains` is stored only when not empty. Active/anchor
  *   reasons, custom attributes, timers, and active affects are also stored.
  * - **Items ([ItemPayload]):** Persists count, decay deadline pulse, display name override,
- *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons, and
- *   prototype name.
+ *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons,
+ *   instance affects, added and removed tags, and the prototype's name, unit weight, stackability,
+ *   plural and container settings.
  * - **Tombstones:** When an item's prototype is deleted or modified in course scripts, the item
  *   becomes a tombstone. The `tombstone` field retains the raw JSON payload the item held when its
- *   prototype vanished, preserving its state for inspection.
+ *   prototype vanished, preserving its state for inspection. A tombstone restored from storage is
+ *   rebuilt with the saved weight, stackability, plural and container settings, so it weighs what
+ *   it did and whatever it held is restored inside it.
  * - **Players ([PlayerPayload]):** Persists full state: room label, track index, recall room label,
  *   assigned role, level, xp, vitals, condition, base stats, base senses, base resists, skill
  *   proficiencies, creation choices, granted traits, `levelGains`, custom attributes, timers,
@@ -136,6 +141,8 @@ data class AffectJson(
   /** Modifier functions by point name. */
   val modifiers: Map<String, RefJson> = emptyMap(),
   val senseDeltas: Map<String, Int> = emptyMap(),
+  /** "worn" or "carried" for an item affect; null for an actor's own affects. */
+  val applies: String? = null,
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -205,6 +212,16 @@ data class MobPayload(
   val anchor: List<String> = emptyList(),
 )
 
+/** A container prototype's settings, kept so a tombstone can still hold what it held. */
+@Serializable
+data class ContainerJson(
+  val capacity: Int,
+  val maxWeight: Int,
+  /** The initial state: "open", "closed" or "locked". */
+  val state: String,
+  val key: String? = null,
+)
+
 @Serializable
 data class ItemPayload(
   @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
@@ -220,6 +237,20 @@ data class ItemPayload(
   val tombstone: String? = null,
   val active: List<String> = emptyList(),
   val anchor: List<String> = emptyList(),
+  /** Instance affects on this item, with their applies scope. */
+  val affects: List<AffectJson> = emptyList(),
+  /** Tags this instance has gained over its prototype's. */
+  val addedTags: List<String> = emptyList(),
+  /** Prototype tags this instance has lost. */
+  val removedTags: List<String> = emptyList(),
+  /** The prototype's container settings, if it is a container. */
+  val container: ContainerJson? = null,
+  /** The prototype's unit weight, kept so a tombstone weighs what the item did. */
+  val weight: Int = 1,
+  /** Whether the prototype stacks, kept so a tombstone stack still merges and splits. */
+  val stackable: Boolean = false,
+  /** The prototype's plural name, kept so a tombstone stack still reads the same. */
+  val plural: String? = null,
 )
 
 @Serializable
@@ -310,27 +341,47 @@ internal fun restoreTimers(e: Entity, timers: List<TimerJson>) {
   for (t in timers) e.timers += ScriptTimer(t.id, t.fn.ref(), t.args.toAttrs(), t.due, t.remaining)
 }
 
+internal fun affectJson(a: Affect): AffectJson =
+  AffectJson(
+    a.id,
+    a.name,
+    a.source?.v,
+    a.appliedAt,
+    a.expiresAt,
+    a.statDeltas,
+    a.flags.sorted(),
+    a.tickEvery,
+    a.onTick?.json(),
+    a.onExpire?.json(),
+    a.expireMessage,
+    a.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
+    a.senseDeltas.entries.associate { (k, v) -> k.name to v },
+    a.applies?.name?.lowercase(),
+  )
+
 internal fun affectsJson(a: Actor) =
   // Worn items' affects are rebuilt when the item is restored, not saved.
-  a.affects
-    .filter { it.wornFrom == null }
-    .map {
-      AffectJson(
-        it.id,
-        it.name,
-        it.source?.v,
-        it.appliedAt,
-        it.expiresAt,
-        it.statDeltas,
-        it.flags.sorted(),
-        it.tickEvery,
-        it.onTick?.json(),
-        it.onExpire?.json(),
-        it.expireMessage,
-        it.modifiers.entries.associate { (k, v) -> k.scriptName to v.json() },
-        it.senseDeltas.entries.associate { (k, v) -> k.name to v },
-      )
-    }
+  a.affects.filter { it.wornFrom == null }.map(::affectJson)
+
+internal fun affectFromJson(x: AffectJson): Affect =
+  Affect(
+    x.id,
+    x.name,
+    x.source?.let(::EntityId),
+    x.appliedAt,
+    x.expiresAt,
+    x.statDeltas,
+    x.flags.toSet(),
+    x.tickEvery,
+    x.onTick?.ref(),
+    x.onExpire?.ref(),
+    x.expireMessage,
+    x.modifiers.entries
+      .mapNotNull { (k, v) -> ModifierPoint.byName(k)?.let { it to v.ref() } }
+      .toMap(),
+    senseDeltas = x.senseDeltas.mapKeys { Channel(it.key) },
+    applies = x.applies?.let { AffectScope.valueOf(it.uppercase()) },
+  )
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {
   e.activeReasons.clear()
@@ -341,26 +392,7 @@ internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String
 
 internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
   a.affects.removeIf { it.wornFrom == null }
-  for (x in affects) {
-    a.affects +=
-      Affect(
-        x.id,
-        x.name,
-        x.source?.let(::EntityId),
-        x.appliedAt,
-        x.expiresAt,
-        x.statDeltas,
-        x.flags.toSet(),
-        x.tickEvery,
-        x.onTick?.ref(),
-        x.onExpire?.ref(),
-        x.expireMessage,
-        x.modifiers.entries
-          .mapNotNull { (k, v) -> ModifierPoint.byName(k)?.let { it to v.ref() } }
-          .toMap(),
-        senseDeltas = x.senseDeltas.mapKeys { Channel(it.key) },
-      )
-  }
+  for (x in affects) a.affects += affectFromJson(x)
 }
 
 // ---- Encoding (world thread) -------------------------------------------------------------------
@@ -466,6 +498,13 @@ internal fun World.encode(e: Entity): EntityRow? =
             tombstone = e.savedPayload,
             active = e.activeReasons.toList(),
             anchor = e.anchorReasons.toList(),
+            affects = e.affects.map(::affectJson),
+            addedTags = e.addedTags.toList(),
+            removedTags = e.removedTags.toList(),
+            container = e.proto.container?.let(::containerJson),
+            weight = e.proto.weight,
+            stackable = e.proto.stackable,
+            plural = e.proto.plural,
           )
         EntityRow(
           e.id.v,
@@ -564,6 +603,17 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   restoreReasons(m, p.active, p.anchor)
 }
 
+internal fun containerJson(c: ContainerProto) =
+  ContainerJson(c.capacity, c.maxWeight, c.state.name.lowercase(), c.key?.v)
+
+internal fun containerFromJson(c: ContainerJson) =
+  ContainerProto(
+    c.capacity,
+    c.maxWeight,
+    DoorState.valueOf(c.state.uppercase()),
+    c.key?.let(::Label),
+  )
+
 internal fun applyItem(item: Item, p: ItemPayload) {
   p.decayAt?.let { item.decayAt = it }
   item.nameOverride = p.nameOverride
@@ -572,6 +622,12 @@ internal fun applyItem(item: Item, p: ItemPayload) {
   item.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(item, p.timers)
   restoreReasons(item, p.active, p.anchor)
+  item.affects.clear()
+  item.affects += p.affects.map(::affectFromJson)
+  item.addedTags.clear()
+  item.addedTags += p.addedTags
+  item.removedTags.clear()
+  item.removedTags += p.removedTags
 }
 
 internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {

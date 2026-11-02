@@ -5,8 +5,13 @@ import gups.core.Label
 import gups.core.Restriction
 import gups.core.Role
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.AffectScope
 import gups.core.model.Item
+import gups.core.model.ItemAffect
+import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.Mob
+import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -141,6 +146,62 @@ class ToolsTest {
     assertTrue(left.inWorld)
     f.run(240)
     assertFalse(left.inWorld, "gone after 30 minutes")
+  }
+
+  @Test
+  fun `stat on an item shows its affects and tag changes`() {
+    val charm =
+      ItemProto(
+        Label("//t:charm"),
+        "a charm",
+        listOf("charm"),
+        tags = setOf("shiny"),
+        affects =
+          listOf(ItemAffect("misfortune", AffectScope.CARRIED, statDeltas = mapOf("str" to -2))),
+      )
+    val f = Fixture(protos = Prototypes(T.rooms, T.mobs, T.items + charm, T.skills))
+    val b = f.builder()
+    val item = f.w.spawnItem(Label("//t:charm"), ItemLocation.Carried(b.id))
+    f.w.applyItemAffect(item, "keen", 500, applies = AffectScope.WORN, flags = setOf("glowing"))
+    assertTrue(f.w.addItemTag(item, "cursed"))
+    assertTrue(f.w.removeItemTag(item, "shiny"))
+    f.input(b, "@stat charm")
+    val out = f.out(b)
+    assertContains(out, "Tags: cursed")
+    assertContains(out, "Affects: misfortune (carried, prototype), keen (worn, 125s left; glowing)")
+    assertContains(out, "Tag changes: +cursed, -shiny")
+  }
+
+  @Test
+  fun `stat on an item without affects or tag changes says so`() {
+    val f = fixture()
+    val b = f.builder()
+    f.w.spawnItem(T.KEY, ItemLocation.Carried(b.id))
+    f.input(b, "@stat key")
+    val out = f.out(b)
+    assertContains(out, "Affects: none")
+    assertFalse("Tag changes:" in out)
+  }
+
+  @Test
+  fun `stat on a tombstone lists the instance affects it keeps`() {
+    val charm =
+      ItemProto(
+        Label("//t:charm"),
+        "a charm",
+        listOf("charm"),
+        affects =
+          listOf(ItemAffect("misfortune", AffectScope.CARRIED, statDeltas = mapOf("str" to -2))),
+      )
+    val f = Fixture(protos = Prototypes(T.rooms, T.mobs, T.items + charm, T.skills))
+    val b = f.builder()
+    val item = f.w.spawnItem(Label("//t:charm"), ItemLocation.Carried(b.id))
+    f.w.applyItemAffect(item, "ward", null, applies = AffectScope.CARRIED)
+    item.proto = tombstone(item.proto)
+    f.input(b, "@stat charm")
+    val out = f.out(b)
+    assertContains(out, "Affects: ward (carried, permanent)\n")
+    assertFalse("misfortune" in out, "a tombstone has no prototype affects")
   }
 
   @Test

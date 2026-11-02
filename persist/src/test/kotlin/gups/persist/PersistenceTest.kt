@@ -5,13 +5,16 @@ import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.ContainerProto
 import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.LevelGain
 import gups.core.model.Mob
+import gups.core.model.Prototypes
 import gups.core.model.Trait
 import gups.core.world.Diagnostic
 import gups.core.world.ScriptHost
@@ -175,6 +178,76 @@ class PersistenceTest {
     )
     assertEquals("a gem", c.login("Ann").inventory.single().name)
     c.close()
+  }
+
+  @Test
+  fun `a container whose prototype is gone comes back as a tombstone holding its contents`() {
+    val file = tempDb()
+    val a = PersistWorld(file)
+    val ann = a.login("Ann")
+    val bag = a.w.spawnItem(P.BAG, ItemLocation.Carried(ann.id))
+    val gem = a.w.spawnItem(P.GEM, ItemLocation.Contained(bag.id))
+    bag.container!!.state = DoorState.CLOSED
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    // Ann was offline when the bag's prototype was deleted.
+    val b = PersistWorld(file, P.protos(withBag = false))
+    val stone = b.login("Ann").inventory.single()
+    assertEquals(TOMBSTONE, stone.kind)
+    assertEquals(ContainerProto(), stone.proto.container)
+    assertEquals(DoorState.CLOSED, stone.container?.state)
+    assertEquals(listOf(gem.id), stone.contents.map { it.id })
+    b.save()
+    b.close()
+
+    // Saved again as a tombstone, it still holds the gem.
+    val c = PersistWorld(file, P.protos(withBag = false))
+    val stone2 = c.login("Ann").inventory.single()
+    assertEquals(TOMBSTONE, stone2.kind)
+    assertEquals(DoorState.CLOSED, stone2.container?.state)
+    assertEquals(listOf(gem.id), stone2.contents.map { it.id })
+    c.close()
+  }
+
+  @Test
+  fun `a restored tombstone stack keeps its weight, stackability and plural`() {
+    val base = P.protos()
+    val coin =
+      ItemProto(
+        P.COIN,
+        "a gold coin",
+        listOf("coin"),
+        weight = 3,
+        stackable = true,
+        plural = "gold coins",
+      )
+    fun protos(withCoin: Boolean) =
+      Prototypes(
+        base.rooms.values.toList(),
+        base.mobs.values.toList(),
+        base.items.values.filter { it.label != Prototypes.CORPSE.label && it.label != P.COIN } +
+          listOfNotNull(coin.takeIf { withCoin }),
+        base.skills.values.toList(),
+        base.zones.values.toList(),
+      )
+    val file = tempDb()
+    val a = PersistWorld(file, protos(withCoin = true))
+    val ann = a.login("Ann")
+    a.w.spawnItem(P.COIN, ItemLocation.Carried(ann.id), 5)
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    val b = PersistWorld(file, protos(withCoin = false))
+    val stone = b.login("Ann").inventory.single()
+    assertEquals(TOMBSTONE, stone.kind)
+    assertEquals(5, stone.count)
+    assertEquals(15, stone.weight)
+    assertTrue(stone.proto.stackable)
+    assertEquals("5 gold coins", stone.describe())
+    b.close()
   }
 
   @Test

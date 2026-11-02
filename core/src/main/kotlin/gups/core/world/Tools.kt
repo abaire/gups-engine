@@ -649,6 +649,25 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
         "Count ${e.count}, weight ${e.weight}" + (e.decayAt?.let { ", decays at pulse $it" } ?: "")
       )
       if (e.tags.isNotEmpty()) add("Tags: " + e.tags.sorted().joinToString(", "))
+      val held = e.allAffects()
+      add(
+        "Affects: " +
+          if (held.isEmpty()) "none"
+          else
+            held.joinToString(", ") { ha ->
+              val timing =
+                when {
+                  ha.instance == null -> "prototype"
+                  ha.instance.expiresAt == Long.MAX_VALUE -> "permanent"
+                  else ->
+                    "${(ha.instance.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000}s left"
+                }
+              val flags = if (ha.flags.isEmpty()) "" else "; " + ha.flags.sorted().joinToString()
+              "${ha.name} (${ha.applies.name.lowercase()}, $timing$flags)"
+            }
+      )
+      val tagChanges = e.addedTags.map { "+$it" } + e.removedTags.map { "-$it" }
+      if (tagChanges.isNotEmpty()) add("Tag changes: " + tagChanges.joinToString(", "))
       if (e.contents.isNotEmpty())
         add("Contains: " + e.contents.joinToString(", ") { "${it.name} #${it.id.v}" })
     }
