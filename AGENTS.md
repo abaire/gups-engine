@@ -34,6 +34,13 @@ errors.
   markdownFormat` before committing. Markdown formatting is enforced by `./gradlew markdownCheck` (which runs as part of
   `./gradlew check`) and verified in GitHub CI.
 
+- **Code blocks in Markdown lists:** the formatter caps indentation inside a fenced code block that sits in a list at 4
+  spaces, so any line indented more deeply is silently flattened (nested Kotlin loses its structure). The cap counts
+  from the start of the line, so code under a top-level bullet can nest one level and code under a nested list item
+  can't nest at all. Keep code in a list within that limit, or move longer snippets out of the list into their own
+  section with the fence at column 0 and refer to that section from the list item. After running `markdownFormat`, check
+  that code blocks kept their indentation.
+
 - **Java environment:** The build requires JDK 21.
 
 - **Sandbox execution:** Gradle commands (including `./gradlew check`, `./gradlew markdownCheck`, and `./gradlew
