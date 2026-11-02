@@ -485,6 +485,30 @@
           "since": 1
         },
         {
+          "symbol": "item.affects",
+          "name": "affects",
+          "type": "list[item_affect]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Affects every instance carries, built with item_affect(...).",
+          "since": 1
+        },
+        {
+          "symbol": "item.variants",
+          "name": "variants",
+          "type": "dict[str, str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Related item prototypes by free-form name, for transform.",
+          "since": 1
+        },
+        {
           "symbol": "item.modifiers",
           "name": "modifiers",
           "type": "dict[str, function]",
@@ -506,6 +530,88 @@
           "default": "1",
           "allowed_values": [],
           "doc": "Prototype schema version for persisted state migration.",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "symbol": "item_affect",
+      "name": "item_affect",
+      "doc": "An affect an item carries, for item(affects=[...]).",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "item_affect.name",
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "keyword": false,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The affect's name.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.applies",
+          "name": "applies",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'worn'",
+          "allowed_values": ["worn", "carried"],
+          "doc": "Where the affect reaches its holder: 'worn' or 'carried'.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.stat_deltas",
+          "name": "stat_deltas",
+          "type": "stats",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "stats()",
+          "allowed_values": [],
+          "doc": "Stat adjustments applied while the affect reaches the holder, built with stats(...).",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.sense_deltas",
+          "name": "sense_deltas",
+          "type": "dict[str, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Sense score changes by channel while the affect reaches the holder.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.modifiers",
+          "name": "modifiers",
+          "type": "dict[str, function]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "doc": "Rules modifiers active while the affect reaches the holder.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.flags",
+          "name": "flags",
+          "type": "list[str]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Status flags applied to the holder while the affect reaches it.",
           "since": 1
         }
       ]

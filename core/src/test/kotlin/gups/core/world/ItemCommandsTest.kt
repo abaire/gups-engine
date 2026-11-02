@@ -4,6 +4,7 @@ import gups.core.AttrValue
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.AffectScope
 import gups.core.model.ContainerProto
 import gups.core.model.DoorState
 import gups.core.model.EquipAffect
@@ -96,7 +97,7 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
       ItemProto(anvil, "an anvil", listOf("anvil"), weight = 95),
       ItemProto(potion, "a potion", listOf("potion")),
       ItemProto(chainKey, "a key on a chain", listOf("chain"), wear = "neck"),
-      ItemProto(bareKey, "an iron key", listOf("iron"), kind = "key"),
+      ItemProto(bareKey, "an iron key", listOf("iron", "key"), kind = "key"),
       ItemProto(
         chainBox,
         "a strongbox",
@@ -899,5 +900,36 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
       f.w.room(T.HALL).items.single { it.protoLabel == coin }.count,
       "the dropped coins stay on the ground",
     )
+  }
+
+  @Test
+  fun `a key that gains a tag leaves the keyring until the tag is removed`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val key = f.carry(p, bareKey)
+    assertTrue(f.w.addItemTag(key, "cursed"))
+    val inv = f.doLine(p, "inventory")
+    assertContains(inv, "an iron key")
+    val kr = f.doLine(p, "keyring")
+    assertContains(kr, "Your keyring is empty.")
+    assertContains(f.doLine(p, "drop all"), "You drop an iron key.")
+    assertTrue(key.location is ItemLocation.InRoom)
+    assertContains(f.doLine(p, "get key"), "You get an iron key.")
+    assertTrue(f.w.removeItemTag(key, "cursed"))
+    val kr2 = f.doLine(p, "keyring")
+    assertContains(kr2, "Your keyring holds:\n  an iron key")
+    val inv2 = f.doLine(p, "inventory")
+    assertFalse("an iron key" in inv2, inv2)
+  }
+
+  @Test
+  fun `a key that gains an affect leaves the keyring until it expires`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val key = f.carry(p, bareKey)
+    f.w.applyItemAffect(key, "glow", duration = 1, applies = AffectScope.CARRIED)
+    assertContains(f.doLine(p, "keyring"), "Your keyring is empty.")
+    f.run(2)
+    assertContains(f.doLine(p, "keyring"), "Your keyring holds:\n  an iron key")
   }
 }

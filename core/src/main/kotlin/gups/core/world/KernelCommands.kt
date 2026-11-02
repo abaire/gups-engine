@@ -382,7 +382,7 @@ internal object KernelCommands {
 
   private fun inventory(c: CommandCall) {
     // Keys live on the keyring, so they don't clutter the inventory.
-    val items = c.actor.inventory.filterNot { it.proto.isKeyOnly }
+    val items = c.actor.inventory.filterNot { it.onKeyring }
     val w = c.world
     w.send(
       c.actor,
@@ -397,7 +397,7 @@ internal object KernelCommands {
   }
 
   private fun keyring(c: CommandCall) {
-    val keys = c.actor.inventory.filter { it.proto.isKeyOnly }
+    val keys = c.actor.inventory.filter { it.onKeyring }
     val w = c.world
     w.send(
       c.actor,
@@ -958,7 +958,7 @@ internal data class ItemSpec(
 
 /** True if bare `all` may pick [this] up: not tagged `no_all` and not a keyring-only key. */
 internal val Item.inBareAll: Boolean
-  get() = "no_all" !in tags && !proto.isKeyOnly
+  get() = "no_all" !in tags && !onKeyring
 
 /** Parses `<what>` into an [ItemSpec], or null when it is not a valid item specifier. */
 internal fun parseItemSpec(raw: String): ItemSpec? {
@@ -1489,7 +1489,7 @@ internal fun World.slotFor(actor: Actor, wanted: String): String? {
 
 /**
  * True if this item does nothing but open locks: `kind = "key"` and no slot, container, commands,
- * dice or wear effects. Such keys go on the keyring instead of the inventory listing.
+ * dice, wear effects or affects. Such keys go on the keyring instead of the inventory listing.
  */
 internal val ItemProto.isKeyOnly: Boolean
   get() =
@@ -1501,7 +1501,15 @@ internal val ItemProto.isKeyOnly: Boolean
       statDeltas.isEmpty() &&
       senseDeltas.isEmpty() &&
       equipAffects.isEmpty() &&
+      affects.isEmpty() &&
       modifiers.isEmpty()
+
+/**
+ * True if [this] goes on the keyring: its prototype is key-only and this instance has gained no
+ * affects or tags of its own.
+ */
+internal val Item.onKeyring: Boolean
+  get() = proto.isKeyOnly && affects.isEmpty() && addedTags.isEmpty()
 
 /** True if [this] carries or wears an item of prototype [key], keyring keys included. */
 internal fun Actor.hasKey(key: Label): Boolean =

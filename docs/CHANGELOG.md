@@ -6,6 +6,11 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ### Effects on items
 
+- Added the `item_affect(name, applies = "worn", stat_deltas = stats(), sense_deltas = {}, modifiers = {}, flags = [])`
+  declaration builtin for declaring prototype affects an item carries.
+- Added `affects` to `item(...)`: affects every instance carries, built with `item_affect(...)`.
+- Added `variants` to `item(...)`: free-form variant names mapped to related item prototype labels, for `transform`.
+- A key that gains instance affects or tags in play leaves the keyring and shows in `inventory` until they are gone.
 - Added `ctx.open_container(item)`, `ctx.close_container(item)`, `ctx.lock_container(item)` and
   `ctx.unlock_container(item)`. They mirror the door verbs and print nothing. `lock_container` fails on a container
   whose prototype has no `key`.

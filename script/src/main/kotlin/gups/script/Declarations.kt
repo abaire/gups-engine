@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
+import gups.core.model.AffectScope
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.ContainerProto
@@ -18,6 +19,7 @@ import gups.core.model.Effect
 import gups.core.model.EquipAffect
 import gups.core.model.ExitProto
 import gups.core.model.Interrupt
+import gups.core.model.ItemAffect
 import gups.core.model.ItemProto
 import gups.core.model.LootRule
 import gups.core.model.MobProto
@@ -365,6 +367,8 @@ internal class SpawnDecl(val rule: SpawnRule) : DeclValue("spawn")
 internal class LootDecl(val rule: LootRule) : DeclValue("loot")
 
 internal class ContainerDecl(val proto: ContainerProto) : DeclValue("container")
+
+internal class ItemAffectDecl(val affect: ItemAffect) : DeclValue("item_affect")
 
 internal class EffectDecl(val effect: Effect) : DeclValue("effect")
 
@@ -815,6 +819,39 @@ internal class DeclarationBuiltins(
   }
 
   @StarlarkMethod(
+    name = "item_affect",
+    doc = "An affect an item carries, for item(affects=[...]).",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun itemAffect(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    contentCtx(thread, "item_affect")
+    return ITEM_AFFECT_SPEC.bind(args, kwargs, features = features) { d ->
+      val name = d.reqStr("name", "item_affect() name")
+      if (name.isBlank()) fail("item_affect(name): can't be blank")
+      val applies =
+        d.choice("applies")?.let { AffectScope.valueOf(it.uppercase()) } ?: AffectScope.WORN
+      val statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas"))
+      val senseDeltas = senses(d["sense_deltas"], d.what("sense_deltas"), schema, true)
+      val modifiers = modifiers(d["modifiers"], d.what("modifiers"), features)
+      val rawFlags = d.strList("flags").map { flag(it, d.what("flags")) }
+      if ("stunned" in rawFlags)
+        fail("item_affect(flags): 'stunned' isn't allowed; item affects can't stun")
+      ItemAffectDecl(
+        ItemAffect(
+          name = name,
+          applies = applies,
+          statDeltas = statDeltas,
+          senseDeltas = senseDeltas,
+          modifiers = modifiers,
+          flags = rawFlags.toSortedSet(),
+        )
+      )
+    }
+  }
+
+  @StarlarkMethod(
     name = "mob",
     doc = "Declares a mob prototype.",
     extraPositionals = Param(name = "args"),
@@ -907,6 +944,29 @@ internal class DeclarationBuiltins(
             ?: fail("item(container): expected container(...), got ${typeName(it)}")
         }
       container?.key?.let { ctx.ref(it, RefKind.ITEM, thread) }
+      val affects = run {
+        val raw = d.list("affects")
+        val seen = mutableSetOf<String>()
+        raw.map { elem ->
+          val decl =
+            elem as? ItemAffectDecl
+              ?: fail("item(affects): expected item_affect(...), got ${typeName(elem)}")
+          val aff = decl.affect
+          if (!seen.add(aff.name)) fail("item(affects): '${aff.name}' appears twice")
+          aff
+        }
+      }
+      val variants = run {
+        val raw = d.dict("variants")
+        val out = LinkedHashMap<String, Label>(raw.size)
+        for ((k, v) in raw) {
+          if (!TAG_REGEX.matches(k)) fail("item(variants): '$k' is not a valid variant name")
+          val targetLabel = label(str(v, d.what("variants")), pkg, d.what("variants"))
+          ctx.ref(targetLabel, RefKind.ITEM, thread)
+          out[k] = targetLabel
+        }
+        out
+      }
       val def = ItemProto(label, name, emptyList())
       val proto =
         ItemProto(
@@ -933,6 +993,8 @@ internal class DeclarationBuiltins(
           container = container,
           commands = commands(d["commands"], d.what("commands"), pkg),
           equipAffects = equipAffects(d["equip_affects"], d.what("equip_affects")),
+          affects = affects,
+          variants = variants,
           modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
           version = version(d),
           plural = plural,
@@ -943,6 +1005,12 @@ internal class DeclarationBuiltins(
         fail(
           "item(): equip_affects and modifiers apply while the item is worn, so it needs a wear slot"
         )
+      }
+      if (
+        proto.wear == null &&
+          proto.affects.any { it.applies == AffectScope.WORN && it.modifiers.isNotEmpty() }
+      ) {
+        fail("item(): a worn item_affect with modifiers needs a wear slot")
       }
       ctx.pkg.itemList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
@@ -1936,6 +2004,56 @@ internal class DeclarationBuiltins(
           ),
       )
 
+    val ITEM_AFFECT_SPEC =
+      DeclSpec(
+        name = "item_affect",
+        doc = "An affect an item carries, for item(affects=[...]).",
+        positionalError = "item_affect() takes the affect name as its only positional argument",
+        params =
+          listOf(
+            DeclParam(
+              "name",
+              "str",
+              "The affect's name.",
+              positional = true,
+              keyword = false,
+              required = true,
+            ),
+            DeclParam(
+              "applies",
+              "str",
+              "Where the affect reaches its holder: 'worn' or 'carried'.",
+              default = "'worn'",
+              allowedValues = listOf("worn", "carried"),
+            ),
+            DeclParam(
+              "stat_deltas",
+              "stats",
+              "Stat adjustments applied while the affect reaches the holder, built with stats(...).",
+              default = "stats()",
+            ),
+            DeclParam(
+              "sense_deltas",
+              "dict[str, int]",
+              "Sense score changes by channel while the affect reaches the holder.",
+              default = "{}",
+            ),
+            DeclParam(
+              "modifiers",
+              "dict[str, function]",
+              "Rules modifiers active while the affect reaches the holder.",
+              default = "{}",
+              allowedValues = POINTS,
+            ),
+            DeclParam(
+              "flags",
+              "list[str]",
+              "Status flags applied to the holder while the affect reaches it.",
+              default = "[]",
+            ),
+          ),
+      )
+
     val MOB_SPEC =
       DeclSpec(
         name = "mob",
@@ -2135,6 +2253,18 @@ internal class DeclarationBuiltins(
               default = "[]",
             ),
             DeclParam(
+              "affects",
+              "list[item_affect]",
+              "Affects every instance carries, built with item_affect(...).",
+              default = "[]",
+            ),
+            DeclParam(
+              "variants",
+              "dict[str, str]",
+              "Related item prototypes by free-form name, for transform.",
+              default = "{}",
+            ),
+            DeclParam(
               "modifiers",
               "dict[str, function]",
               "Rules modifiers active while the item is worn.",
@@ -2322,6 +2452,7 @@ internal class DeclarationBuiltins(
         SPAWN_SPEC,
         LOOT_SPEC,
         CONTAINER_SPEC,
+        ITEM_AFFECT_SPEC,
         MOB_SPEC,
         ITEM_SPEC,
         SKILL_SPEC,

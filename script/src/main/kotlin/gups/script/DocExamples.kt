@@ -146,6 +146,24 @@ object DocExamples {
                 t.contains(p.do("wield sword"), "You wield a short sword.")
             """,
         ),
+      "item_affect" to
+        ex(
+          pkg =
+            """
+                item("charm",
+                    name = "a lucky charm",
+                    affects = [item_affect("luck", applies = "carried", stat_deltas = stats(dex = 1))],
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":start")
+                base = p.dex
+                w.spawn(":charm", at = p)
+                t.eq(p.dex, base + 1)
+            """,
+        ),
       "loot" to
         ex(
           pkg =

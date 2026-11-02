@@ -234,6 +234,10 @@ class ApiModelTest {
         Case(zone, { "item(\"i\", container = container(${it.only()}))" }) {
           it.pkg(zone).itemList.single().container
         },
+      "item_affect" to
+        Case(zone, { "item(\"i\", affects = [item_affect(\"a\"${it.after()})])" }) {
+          it.pkg(zone).itemList.single().affects.single()
+        },
       "mob" to Case(zone, { "mob(\"m\"${it.after()})" }) { it.pkg(zone).mobList.single() },
       "item" to Case(zone, { "item(\"i\"${it.after()})" }) { it.pkg(zone).itemList.single() },
       "skill" to Case(zone, { "skill(\"s\"${it.after()})" }) { it.pkg(zone).skillList.single() },

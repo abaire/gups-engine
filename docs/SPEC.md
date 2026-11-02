@@ -745,13 +745,13 @@ The engine is a kernel plus four feature modules. A world lists the features it 
 ["combat", "track", "skills", "leveling"]`; leaving `features` out turns all four on, and listing all four is the same
 as leaving it out.
 
-|      Feature       |                                                                                                                                                                                                                             Owns                                                                                                                                                                                                                              | Requires |
-|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                              | —        |
-| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                        | `combat` |
-| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status`                                                                                                  | —        |
-| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                | —        |
+|      Feature       |                                                                                                                                                                                                                                                            Owns                                                                                                                                                                                                                                                            | Requires |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                           | —        |
+| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                     | `combat` |
+| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status`                                                                                                                                                               | —        |
+| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                                                                             | —        |
 
 - **A feature that is off doesn't exist** for the world:
   - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
@@ -854,6 +854,8 @@ item("short_bow",
      sense_deltas={"sight": 1},  # sense score changes while worn (§5.7)
      tags=["light_weapon"],  # free-form, for plugins (§4.19)
      modifiers={}, equip_affects=[],  # apply while worn (§4.6)
+     affects=[],  # item_affect(...) entries (§3.3)
+     variants={},  # related prototypes, for transform (§4.5)
      stackable=False, decay_pulses=None,
      commands={}, on_use=None,
      )
@@ -888,7 +890,10 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   item is worn, or `{"flag": ..., "pulses": n}`, which is applied for `n` pulses when the item is equipped and runs out
   even if the item stays on. Equipping applies each entry to the wearer as an affect, through `apply_affect` like a
   spell's, and removing the item removes the untimed ones. `stunned` must be timed, so an item can't stun its wearer for
-  good (§5.4.1).
+  good (§5.4.1). `item_affect(name, applies = "worn", stat_deltas = stats(), sense_deltas = {}, modifiers = {}, flags =
+  [])` declares a prototype affect. A `worn` affect with `modifiers` needs a `wear` slot; a `carried` one doesn't.
+  `stunned` isn't allowed. `variants` keys match the tag pattern and its values are item labels, checked at load like
+  `loot`.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
@@ -1417,7 +1422,8 @@ uses the default names. Every player-facing message here is the default text of 
   `rules.perceive_message`, so a deaf player doesn't. The speaker is told directly.
 - **`whisper`** shows bystanders "X whispers something to Y."
 - **`keyring`** lists the keys on the keyring: carried items with `kind = "key"` and no other purpose (no `wear` slot,
-  `container`, `commands`, `dice`, `stat_deltas`, `equip_affects` or `modifiers`). `inventory` leaves them out; item
+  `container`, `commands`, `dice`, `stat_deltas`, `sense_deltas`, `equip_affects`, `affects` or `modifiers`), and that
+  haven't gained instance affects or tags (a key cursed in play shows in `inventory`). `inventory` leaves them out; item
   commands still find them by keyword.
 - **`gossip`** goes to every player, including link-dead ones (who see nothing).
 - A `silenced` speaker can't use `say`, `tell`, `gossip`, `shout` or `whisper`: it is told "You can't get the words
