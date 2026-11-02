@@ -237,6 +237,10 @@ enum class PluginRestrictionPoint {
   ENTER,
   CAST,
   LEARN,
+  REMOVE,
+  DROP,
+  GIVE,
+  PUT,
 }
 
 data class PluginRestrictionCall(

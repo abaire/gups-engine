@@ -84,7 +84,7 @@ compatibility promises.
 | Condition       | An actor's life state, `ok`, `incapacitated` or `dead`, decided by the rules (§4.6).                                                                                                                         |
 | Choice          | A question a new character answers at creation, such as race or class, with a fixed set of options. Declared by a plugin, the world's creation provider (§4.19).                                             |
 | Trait           | A named, permanent bundle of stat, max-vital and resist deltas, flags and modifiers that an actor carries: a player from its choices, a mob from its prototype, and either when granted by a plugin (§4.19). |
-| Restriction     | A plugin check that can refuse wearing, entering, casting or learning (§4.19).                                                                                                                               |
+| Restriction     | A plugin check that can refuse wearing, removing, dropping, giving or putting an item, entering, casting or learning (§4.19).                                                                                |
 | Tag             | A free-form word on a room, item or skill that plugins and scripts read; the engine gives it no meaning (§4.2).                                                                                              |
 
 ### 1.7 Out of Scope for v0 (Deferred)
@@ -2031,7 +2031,7 @@ subsystems (`core` or `script`). It consists of three primary components:
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP package producers, world start callbacks
   (`onWorldStarted`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), and action restrictions
-  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`). See
+  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`). See
   [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
@@ -2387,17 +2387,30 @@ no traits and no restrictions, and players see nothing new.
     failure is a `plugin` diagnostic.
   - **Schema names:** Stats, vitals, and damage types named in a trait are checked when the plugin registers it (§4.15).
 
-**Restrictions** are checks that plugins register at four points. Each gets the actor and what it is about to do, and
+**Restrictions** are checks that plugins register at eight points. Each gets the actor and what it is about to do, and
 either allows it or refuses with a message.
 
-|  Point  |                            Checked                             |                                     Subject                                      | Feature  |
-|---------|----------------------------------------------------------------|----------------------------------------------------------------------------------|----------|
-| `wear`  | `wear` and `wield` (and their renames), before the item moves  | the item and the slot it would fill                                              | kernel   |
-| `enter` | every room transition that runs `before_enter`, just before it | the destination room, the room being left, the direction (`None` for `teleport`) | kernel   |
-| `cast`  | wherever `rules.cast_allowed` is asked, just before it         | the skill and its target                                                         | `skills` |
-| `learn` | a plugin setting a skill on an actor (§4.15)                   | the skill and the proficiency                                                    | `skills` |
+|  Point   |                                                        Checked                                                         |                                     Subject                                      | Feature  |
+|----------|------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|----------|
+| `wear`   | `wear` and `wield` (and their renames), before the item moves                                                          | the item and the slot it would fill                                              | kernel   |
+| `enter`  | every room transition that runs `before_enter`, just before it                                                         | the destination room, the room being left, the direction (`None` for `teleport`) | kernel   |
+| `cast`   | wherever `rules.cast_allowed` is asked, just before it                                                                 | the skill and its target                                                         | `skills` |
+| `learn`  | a plugin setting a skill on an actor (§4.15)                                                                           | the skill and the proficiency                                                    | `skills` |
+| `remove` | `remove` (and its renames), and every item `wear` or `wield` (and their renames) would swap out, before anything moves | the item and its slot                                                            | kernel   |
+| `drop`   | `drop`, per stack, before `before_drop` and before the item moves                                                      | the item                                                                         | kernel   |
+| `give`   | `give`, per stack, before the item moves                                                                               | the item and the receiver                                                        | kernel   |
+| `put`    | `put`, per stack, before the item moves                                                                                | the item and the container                                                       | kernel   |
 
 - Checks apply to every actor, players and mobs alike; a check that only cares about players allows mobs.
+- `remove` runs wherever a command would take a worn item off, so no command can swap out an item the check refuses:
+  `remove` itself, and `wear` or `wield` into an occupied slot, including a slot family whose slots are all full, where
+  the item that would be swapped out is checked. A refusal there refuses the whole `wear`, and nothing moves. `drop`,
+  `give` and `put` only ever take carried items, so a worn item must pass `remove` before any of them can move it. When
+  `drop`, `give` or `put` names several stacks (a count or `all`), each stack is checked on its own, and a refused stack
+  is skipped with the refusal message while the others move.
+- Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
+  (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
+  change) don't run them.
 - An `enter` refusal stops the move as a `before_enter` veto does: walking costs no lag; a `flee` through that exit is a
   failed flee (the refusal and the failed-flee lag); a mob's `wander` or `pursue` step just fails. `teleport`, and so
   `@goto`, is refused before anything moves.

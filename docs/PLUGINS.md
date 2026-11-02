@@ -256,7 +256,8 @@ r.setCreation(
 
 #### Restrictions
 
-Restrictions intercept operations (`WEAR`, `ENTER`, `CAST`, `LEARN`) and can refuse them:
+Restrictions intercept operations (`WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`) and can refuse
+them:
 
 ```kotlin
 r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") { call ->
@@ -267,6 +268,10 @@ r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") 
     } else null
 }
 ```
+
+Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
+(`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
+change) don't run them.
 
 #### Modifying choices in play
 

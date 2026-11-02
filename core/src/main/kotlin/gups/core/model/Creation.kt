@@ -100,6 +100,22 @@ enum class RestrictionPoint {
 
   /** Learning or upgrading a skill. */
   LEARN,
+
+  /**
+   * Taking a worn item off by command: `remove`, and the item a `wear` or `wield` would swap out of
+   * an occupied slot (including a full slot family). Trusted moves (verbs, death, the re-check
+   * after a choice change, `transform`) don't run it.
+   */
+  REMOVE,
+
+  /** Dropping a carried item by command. Trusted moves (verbs, death, decay) don't run it. */
+  DROP,
+
+  /** Giving a carried item by command to another actor. Trusted moves (verbs) don't run it. */
+  GIVE,
+
+  /** Putting a carried item by command into a container. Trusted moves (verbs) don't run it. */
+  PUT,
 }
 
 /** Interception context passed when evaluating a gameplay [Restriction]. */
@@ -108,7 +124,7 @@ data class RestrictionRequest(
   val point: RestrictionPoint,
   /** Actor attempting the restricted action. */
   val actor: Actor,
-  /** Item being equipped, or null. */
+  /** Item being equipped, removed, dropped, given or put, or null. */
   val item: Item? = null,
   /** Equipment slot target, or null. */
   val slot: String? = null,
@@ -120,7 +136,9 @@ data class RestrictionRequest(
   val direction: Direction? = null,
   /** Skill or spell being cast or learned, or null. */
   val skill: SkillProto? = null,
-  /** Target entity of the skill or action, or null. */
+  /**
+   * Target entity of the skill or action (the receiver of a give, the container of a put), or null.
+   */
   val target: Entity? = null,
   /** Proficiency rating when learning a skill, or null. */
   val proficiency: Int? = null,

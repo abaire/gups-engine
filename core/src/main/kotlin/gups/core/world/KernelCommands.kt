@@ -12,6 +12,8 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Player
+import gups.core.model.RestrictionPoint
+import gups.core.model.RestrictionRequest
 import gups.core.rules.RulesContext
 
 /** The commands every world has. Their aliases come from the world. */
@@ -593,6 +595,15 @@ internal object KernelCommands {
       override fun resolve(w: World, actor: Actor): Int {
         for ((item, wanted) in matchItems(actor.inventory, spec)) {
           if (item.location != ItemLocation.Carried(actor.id)) continue
+          val refusal =
+            w.restrictionRefusal(
+              RestrictionPoint.DROP,
+              RestrictionRequest(point = RestrictionPoint.DROP, actor = actor, item = item),
+            )
+          if (refusal != null) {
+            w.send(actor, refusal)
+            continue
+          }
           val veto =
             w.dispatch(
               HookName.BEFORE_DROP,
@@ -695,14 +706,21 @@ internal object KernelCommands {
         if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
         val slot =
           w.slotFor(actor, wanted) ?: return w.msg(KernelMsg.WEAR_CANT_WEAR, "item" to item.name)
+        val occupant = actor.equipped(slot)
+        if (occupant != null) {
+          val removeReq =
+            RestrictionRequest(
+              point = RestrictionPoint.REMOVE,
+              actor = actor,
+              item = occupant,
+              slot = slot,
+            )
+          val refusal = w.restrictionRefusal(RestrictionPoint.REMOVE, removeReq)
+          if (refusal != null) return refusal
+        }
         val req =
-          gups.core.model.RestrictionRequest(
-            point = gups.core.model.RestrictionPoint.WEAR,
-            actor = actor,
-            item = item,
-            slot = slot,
-          )
-        val refusal = w.restrictionRefusal(gups.core.model.RestrictionPoint.WEAR, req)
+          RestrictionRequest(point = RestrictionPoint.WEAR, actor = actor, item = item, slot = slot)
+        val refusal = w.restrictionRefusal(RestrictionPoint.WEAR, req)
         if (refusal != null) return refusal
         return null
       }
@@ -789,9 +807,20 @@ internal object KernelCommands {
       c.actor.equipment.values.firstOrNull { it.matches(c.args) }
         ?: return null.also { w.tell(c.actor, KernelMsg.NOT_USING) }
     return object : Action {
-      override fun validate(w: World, actor: Actor): String? =
-        if ((item.location as? ItemLocation.Equipped)?.actor != actor.id) w.msg(KernelMsg.NOT_USING)
-        else null
+      override fun validate(w: World, actor: Actor): String? {
+        if ((item.location as? ItemLocation.Equipped)?.actor != actor.id)
+          return w.msg(KernelMsg.NOT_USING)
+        val req =
+          RestrictionRequest(
+            point = RestrictionPoint.REMOVE,
+            actor = actor,
+            item = item,
+            slot = (item.location as ItemLocation.Equipped).slot,
+          )
+        val refusal = w.restrictionRefusal(RestrictionPoint.REMOVE, req)
+        if (refusal != null) return refusal
+        return null
+      }
 
       override fun resolve(w: World, actor: Actor): Int {
         w.moveItem(item, ItemLocation.Carried(actor.id))
@@ -1316,6 +1345,20 @@ private class GiveAction(private val spec: ItemSpec, private val targetStr: Stri
     for ((item, wanted) in matchItems(actor.inventory, spec)) {
       // An on_give hook for an earlier stack may have destroyed or moved this one.
       if (item.id !in w.entities || item.location != ItemLocation.Carried(actor.id)) continue
+      val refusal =
+        w.restrictionRefusal(
+          RestrictionPoint.GIVE,
+          RestrictionRequest(
+            point = RestrictionPoint.GIVE,
+            actor = actor,
+            item = item,
+            target = target,
+          ),
+        )
+      if (refusal != null) {
+        w.send(actor, refusal)
+        continue
+      }
       var n = minOf(wanted, item.count)
       val fit = w.carryFit(target, item, n)
       if (fit < n) {
@@ -1398,6 +1441,15 @@ private class PutAction(private val spec: ItemSpec, private val boxStr: String) 
     var tooHeavy: String? = null
     for ((item, wanted) in matchItems(actor.inventory, spec, exclude = box)) {
       if (item.location != ItemLocation.Carried(actor.id)) continue
+      val refusal =
+        w.restrictionRefusal(
+          RestrictionPoint.PUT,
+          RestrictionRequest(point = RestrictionPoint.PUT, actor = actor, item = item, target = box),
+        )
+      if (refusal != null) {
+        w.send(actor, refusal)
+        continue
+      }
       if (box.contents.size >= state.capacity && !w.mergesInto(item, box)) {
         full = true
         continue

@@ -1,7 +1,9 @@
 package gups.core.world
 
+import gups.core.Label
 import gups.core.Role
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
@@ -11,12 +13,26 @@ import gups.core.model.RestrictionRequest
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RestrictionsTest {
   private val host = RecordingHost()
   private val rules = FixedRules(flee = 100)
+
+  private val HELM = Label("//t:helm")
+  private val DAGGER = Label("//t:dagger")
+  private val RING = Label("//t:ring")
+
+  private val testItems =
+    T.items +
+      listOf(
+        ItemProto(HELM, "a helmet", listOf("helmet"), wear = "head"),
+        ItemProto(DAGGER, "a dagger", listOf("dagger"), wear = "wield"),
+        ItemProto(RING, "a ring", listOf("ring"), wear = "finger"),
+      )
+
   private val f =
     Fixture(
       rules = rules,
@@ -26,7 +42,7 @@ class RestrictionsTest {
           listOf(T.rooms[0].copy(modifiers = mapOf(ModifierPoint.CAST_ALLOWED to mod("allowed")))) +
             T.rooms.drop(1),
           T.mobs,
-          T.items,
+          testItems,
           T.skills,
         ),
     )
@@ -230,5 +246,233 @@ class RestrictionsTest {
     assertContains(out, "Second.")
     assertTrue("Third." !in out)
     assertEquals(2, order.size)
+  }
+
+  @Test
+  fun `each of remove, drop, give and put of a tagged item is refused, nothing moves, and waitState stays 0`() {
+    val tagCheck = Restriction { _, r -> if ("t" in r.item?.tags.orEmpty()) "Nope." else null }
+    val p = f.player("Ann")
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.addItemTag(sword, "t")
+
+    // remove
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    restrict(RestrictionPoint.REMOVE, tagCheck)
+    f.input(p, "remove sword")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), sword.location)
+    assertEquals(0, p.waitState)
+
+    // drop
+    f.w.moveItem(sword, ItemLocation.Carried(p.id))
+    restrict(RestrictionPoint.DROP, tagCheck)
+    f.input(p, "drop sword")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Carried(p.id), sword.location)
+    assertEquals(0, p.waitState)
+
+    // give
+    f.mob()
+    restrict(RestrictionPoint.GIVE, tagCheck)
+    f.input(p, "give sword to goblin")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Carried(p.id), sword.location)
+    assertEquals(0, p.waitState)
+
+    // put
+    f.w.spawnItem(T.BAG, ItemLocation.Carried(p.id))
+    restrict(RestrictionPoint.PUT, tagCheck)
+    f.input(p, "put sword bag")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Carried(p.id), sword.location)
+    assertEquals(0, p.waitState)
+  }
+
+  @Test
+  fun `wear of a new helmet into a head slot holding a tagged helmet is refused at REMOVE, and nothing moves`() {
+    val tagCheck = Restriction { _, r -> if ("t" in r.item?.tags.orEmpty()) "Nope." else null }
+    restrict(RestrictionPoint.REMOVE, tagCheck)
+    val p = f.player("Ann")
+    val oldHelm = f.w.spawnItem(HELM, ItemLocation.Carried(p.id))
+    f.w.addItemTag(oldHelm, "t")
+    f.w.moveItem(oldHelm, ItemLocation.Equipped(p.id, "head"))
+    val newHelm = f.w.spawnItem(HELM, ItemLocation.Carried(p.id))
+    f.input(p, "wear helmet")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "head"), oldHelm.location)
+    assertEquals(ItemLocation.Carried(p.id), newHelm.location)
+    assertEquals(0, p.waitState)
+  }
+
+  @Test
+  fun `wield of a dagger while a tagged sword is wielded is refused`() {
+    val tagCheck = Restriction { _, r -> if ("t" in r.item?.tags.orEmpty()) "Nope." else null }
+    restrict(RestrictionPoint.REMOVE, tagCheck)
+    val p = f.player("Ann")
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.addItemTag(sword, "t")
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    val dagger = f.w.spawnItem(DAGGER, ItemLocation.Carried(p.id))
+    f.input(p, "wield dagger")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), sword.location)
+    assertEquals(ItemLocation.Carried(p.id), dagger.location)
+    assertEquals(0, p.waitState)
+  }
+
+  @Test
+  fun `remove restriction works through renamed command and mob act`() {
+    val tagCheck = check("Nope.") { "t" in it.item?.tags.orEmpty() }
+    val fRename =
+      Fixture(
+        rules = rules,
+        scripts = host,
+        protos = Prototypes(T.rooms, T.mobs, testItems, T.skills),
+        rename = mapOf("remove" to "doff"),
+      )
+    fRename.w.restrictions = mapOf(RestrictionPoint.REMOVE to listOf(tagCheck))
+    val p = fRename.player("Ann")
+    val sword = fRename.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    fRename.w.addItemTag(sword, "t")
+    fRename.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    fRename.input(p, "doff sword")
+    fRename.run()
+    assertContains(fRename.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), sword.location)
+    assertEquals(listOf("restrict:remove:sword"), order)
+    order.clear()
+
+    // mob's f.w.act(mob, "wield dagger")
+    val mob = f.mob()
+    val mobSword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(mob.id))
+    f.w.addItemTag(mobSword, "t")
+    f.w.moveItem(mobSword, ItemLocation.Equipped(mob.id, "wield"))
+    val mobDagger = f.w.spawnItem(DAGGER, ItemLocation.Carried(mob.id))
+    restrict(RestrictionPoint.REMOVE, tagCheck)
+    f.w.act(mob, "wield dagger")
+    f.run()
+    assertEquals(listOf("restrict:remove:sword"), order)
+    assertEquals(ItemLocation.Equipped(mob.id, "wield"), mobSword.location)
+    assertEquals(ItemLocation.Carried(mob.id), mobDagger.location)
+  }
+
+  @Test
+  fun `slot family wears into free slot but refuses when occupant is restricted`() {
+    val tagCheck = Restriction { _, r -> if ("t" in r.item?.tags.orEmpty()) "Nope." else null }
+    restrict(RestrictionPoint.REMOVE, tagCheck)
+    val p = f.player("Ann")
+    val ring1 = f.w.spawnItem(RING, ItemLocation.Carried(p.id))
+    f.w.addItemTag(ring1, "t")
+    f.w.moveItem(ring1, ItemLocation.Equipped(p.id, "finger_l"))
+
+    val ring2 = f.w.spawnItem(RING, ItemLocation.Carried(p.id))
+    f.input(p, "wear ring")
+    f.run()
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), ring1.location)
+    assertEquals(ItemLocation.Equipped(p.id, "finger_r"), ring2.location)
+
+    val ring3 = f.w.spawnItem(RING, ItemLocation.Carried(p.id))
+    f.input(p, "wear ring")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), ring1.location)
+    assertEquals(ItemLocation.Equipped(p.id, "finger_r"), ring2.location)
+    assertEquals(ItemLocation.Carried(p.id), ring3.location)
+  }
+
+  @Test
+  fun `drop all with a tagged and an untagged item drops untagged and reports refusal`() {
+    val tagCheck = Restriction { _, r -> if ("t" in r.item?.tags.orEmpty()) "Nope." else null }
+    restrict(RestrictionPoint.DROP, tagCheck)
+    val p = f.player("Ann")
+    val tagged = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.addItemTag(tagged, "t")
+    val plain = f.w.spawnItem(DAGGER, ItemLocation.Carried(p.id))
+    f.input(p, "drop all")
+    f.run()
+    val out = f.out(p)
+    assertContains(out, "Nope.")
+    assertContains(out, "You drop a dagger.")
+    assertEquals(ItemLocation.Carried(p.id), tagged.location)
+    assertEquals(ItemLocation.InRoom(p.room.id, p.trackIndex), plain.location)
+  }
+
+  @Test
+  fun `drop, give and put of an equipped item fail with not-carrying and do not call restriction`() {
+    var called = false
+    val check = Restriction { _, _ ->
+      called = true
+      "Nope."
+    }
+    restrict(RestrictionPoint.DROP, check)
+    restrict(RestrictionPoint.GIVE, check)
+    restrict(RestrictionPoint.PUT, check)
+
+    val p = f.player("Ann")
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    f.mob()
+    f.w.spawnItem(T.BAG, ItemLocation.Carried(p.id))
+
+    f.input(p, "drop sword")
+    f.run()
+    assertContains(f.out(p), "You aren't carrying that.")
+    assertFalse(called)
+
+    f.input(p, "give sword to goblin")
+    f.run()
+    assertContains(f.out(p), "You aren't carrying that.")
+    assertFalse(called)
+
+    f.input(p, "put sword bag")
+    f.run()
+    assertContains(f.out(p), "You aren't carrying that.")
+    assertFalse(called)
+  }
+
+  @Test
+  fun `a mob drop command is refused by restriction`() {
+    restrict(RestrictionPoint.DROP, check("Nope.") { "t" in it.item?.tags.orEmpty() })
+    val mob = f.mob()
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(mob.id))
+    f.w.addItemTag(sword, "t")
+    f.w.act(mob, "drop sword")
+    f.run()
+    assertEquals(listOf("restrict:drop:sword"), order)
+    assertEquals(ItemLocation.Carried(mob.id), sword.location)
+  }
+
+  @Test
+  fun `moveItem and destroy bypass item restrictions`() {
+    val refuseAll = check("Nope.") { true }
+    restrict(RestrictionPoint.REMOVE, refuseAll)
+    restrict(RestrictionPoint.DROP, refuseAll)
+    restrict(RestrictionPoint.GIVE, refuseAll)
+    restrict(RestrictionPoint.PUT, refuseAll)
+
+    val p = f.player("Ann")
+    val mob = f.mob()
+    val bag = f.w.spawnItem(T.BAG, ItemLocation.Carried(p.id))
+    val item = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.addItemTag(item, "t")
+
+    f.w.moveItem(item, ItemLocation.Carried(p.id))
+    assertEquals(ItemLocation.Carried(p.id), item.location)
+    f.w.moveItem(item, ItemLocation.Contained(bag.id))
+    assertEquals(ItemLocation.Contained(bag.id), item.location)
+    f.w.moveItem(item, ItemLocation.Carried(mob.id))
+    assertEquals(ItemLocation.Carried(mob.id), item.location)
+    f.w.moveItem(item, ItemLocation.InRoom(p.room.id, p.trackIndex))
+    assertEquals(ItemLocation.InRoom(p.room.id, p.trackIndex), item.location)
+
+    f.w.destroy(item)
+    assertFalse(item.id in f.w.entities)
+    assertEquals(emptyList(), order)
   }
 }

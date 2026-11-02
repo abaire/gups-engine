@@ -1,10 +1,13 @@
 package gups.pluginapi
 
 import gups.core.Label
+import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.World
+import gups.core.world.spawnItem
+import gups.core.world.submit
 import gups.core.world.teleport
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.PluginHost
@@ -311,6 +314,28 @@ class CreationRegistrationTest {
       },
       "${w.diagnostics}",
     )
+  }
+
+  @Test
+  fun `a plugin restriction registered at PluginRestrictionPoint DROP is reached by drop`() {
+    var reached = false
+    val host =
+      PluginHost.of(
+        plugin("heavy") {
+          it.addRestriction(PluginRestrictionPoint.DROP, "Doc.") {
+            reached = true
+            "Cannot drop."
+          }
+        },
+        schema = schema,
+      )
+    val w = world(plugins = host)
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    val item = w.spawnItem(Label("//zones/z:stick"), ItemLocation.Carried(ann.id))
+    w.submit(ann, "drop stick")
+    w.runPulse()
+    assertTrue(reached)
+    assertEquals(ItemLocation.Carried(ann.id), item.location)
   }
 }
 
