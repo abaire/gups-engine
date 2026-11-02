@@ -119,9 +119,10 @@ private fun World.holderOf(loc: ItemLocation): Actor? =
 
 /**
  * Applies `rules.encumbrance` while [a] carries more than `rules.carry_limit`, and lifts it once
- * they don't. The limit is worked out without the current encumbrance.
+ * they don't. The limit is worked out without the current encumbrance. A change reruns the fit
+ * check, which tells the wearer about items that stop or start fitting only if [announceFit].
  */
-internal fun World.updateEncumbrance(a: Actor) {
+internal fun World.updateEncumbrance(a: Actor, announceFit: Boolean = true) {
   if (!a.inWorld) return
   val was = a.encumbrance
   guarded("encumbrance of $a") {
@@ -133,6 +134,7 @@ internal fun World.updateEncumbrance(a: Actor) {
     a.dirty = true
     if (was.isEmpty()) tell(a, KernelMsg.ENCUMBERED)
     else if (a.encumbrance.isEmpty()) tell(a, KernelMsg.UNENCUMBERED)
+    refreshFit(a, announceFit)
   }
 }
 
@@ -262,7 +264,9 @@ private fun World.index(item: Item, at: ItemLocation) {
     is ItemLocation.Equipped -> {
       val wearer = actor(at.actor)!!
       wearer.equipmentIndex[at.slot] = item
-      applyEquipAffects(wearer, item)
+      if (wearer.isActiveSlot(at.slot)) {
+        applyEquipAffects(wearer, item)
+      }
     }
     is ItemLocation.Contained -> item(at.container)!!.contentsIndex[item.id] = item
   }
@@ -274,8 +278,14 @@ private fun World.unindex(item: Item) {
     is ItemLocation.Carried -> actor(at.actor)?.inventoryIndex?.remove(item.id)
     is ItemLocation.Equipped ->
       actor(at.actor)?.let { wearer ->
+        val active = wearer.isActiveSlot(at.slot)
         wearer.equipmentIndex.remove(at.slot)
-        removeEquipAffects(wearer, item)
+        wearer.wearRefusals -= at.slot
+        if (active) {
+          removeEquipAffects(wearer, item)
+        } else {
+          wearer.inactiveSlots = wearer.inactiveSlots - at.slot
+        }
       }
     is ItemLocation.Contained -> item(at.container)?.contentsIndex?.remove(item.id)
   }

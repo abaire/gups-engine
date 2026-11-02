@@ -460,7 +460,9 @@ the world graph:
 - **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, prototype
   `tags`, equipment slot `wear`, and worn `modifiers` and `equipAffects`. While the item is worn, its schema
   `statDeltas` and `senseDeltas` change the wearer's stats and senses; `maxVitalDeltas` (vital name to a change in that
-  vital's maximum) and `resistDeltas` (damage type to a change in resistance) work the same way.
+  vital's maximum) and `resistDeltas` (damage type to a change in resistance) work the same way. An equipped item may be
+  inactive (§4.6); inactive items contribute nothing as worn items, and this state is worked out again rather than
+  saved.
 - **Affects and tags:** per-instance `affects` (timed or permanent) and per-instance tag changes over the prototype's
   `tags`; prototype `affects` are read live from the prototype. Each item affect has an `applies` scope: `worn` reaches
   the holder while the item is equipped, `carried` while it is anywhere in the holder's custody, including nested
@@ -1159,8 +1161,9 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
   - `transform(item, label)` keeps the item's id, location, count, attributes, affects, tag changes, name and timers. A
     stack into a non-stackable prototype keeps one of its count; a container into a non-container drops its contents on
     the ground; a locked container stays locked only if the new prototype has a `key`, else it is closed. It refuses a
-    container whose contents wouldn't fit. An equipped item that no longer fits its slot moves to the inventory. No
-    hooks fire.
+    container whose contents wouldn't fit. An equipped item whose new `wear` is neither its slot nor the family that
+    slot belongs to moves to the inventory; one that still goes in its slot stays, inactive if it no longer fits (§4.6).
+    No hooks fire.
   - `add_tag` and `remove_tag` return whether the effective tags changed.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
   door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
@@ -1408,7 +1411,15 @@ take off different items, the wear is refused with no list ("There's no room"), 
 An item that costs more than its family holds can't be worn. `wield` takes items whose `wear` is `wield`, the family
 that contains `wield`, or another slot of that family; `wear` takes any item with `wear`; `remove` (`unwield` in the
 template world) takes off an item in any slot, worn or wielded. The `wear` restriction (§4.19) runs once the slot is
-known and before anything moves, so a refused item swaps nothing out.
+known and before anything moves, so a refused item swaps nothing out. When an actor's slots or costs change so a worn
+item no longer fits (a slot it lost, or a family over capacity, walked in slot order), nothing is taken off. The item
+becomes inactive: it stays worn and keeps its weight, but adds nothing as a worn item (no deltas, modifiers, `worn` item
+affects or `equip_affects`) and does not attack. Its `carried` item affects still reach the holder. It works again as
+soon as it fits. The wearer is told when an item stops and starts working, and `equipment` marks it. When working this
+out takes several passes (an item going inactive changes what the rules read), only the net change is told. Restore
+works it out once every item is placed, and tells nothing. A worn item that the `wear` restriction refuses when it is
+asked again (after a change of choices or traits, a reload or a restore, §4.19) is inactive the same way, and the wearer
+is sent the refusal instead; it works again when a later re-check allows it.
 
 ### 4.7 Behaviors (built in, implemented in Kotlin)
 
@@ -2471,8 +2482,8 @@ either allows it or refuses with a message.
   stacks (a count or `all`), each stack is checked on its own, and a refused stack is skipped with the refusal message
   while the others move.
 - Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
-  (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
-  change) don't run them.
+  (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The one
+  exception is the `wear` re-check of worn items after a change of choices or traits (below), which moves nothing.
 - An `enter` refusal stops the move as a `before_enter` veto does: walking costs no lag; a `flee` through that exit is a
   failed flee (the refusal and the failed-flee lag); a mob's `wander` or `pursue` step just fails. `teleport`, and so
   `@goto`, is refused before anything moves.
@@ -2494,8 +2505,9 @@ that changes your race, a trainer who lets you change class) are plugin features
    validates the whole set. A refusal changes nothing.
 2. Sets the answers and works out the traits again. Effective values follow at once; `current` vitals are capped at the
    new maxima.
-3. Checks every worn item against `wear` again. Each refused item is moved to the inventory, and a player is sent the
-   refusal message.
+3. Asks the `wear` restriction again about every worn item. A refused item stays worn but becomes inactive (§4.6) until
+   a later re-check allows it, and the wearer is sent the refusal. The same re-check runs after a reload and, silently,
+   on restore.
 4. Doesn't run `rules.starting_stats` again: base stats, base maxima and skills stay.
 5. Triggers an immediate capture (§5.11).
 
@@ -3300,10 +3312,10 @@ Authentication and session management are implemented in
 - **Missing choices:** a saved character with a missing choice (§4.19) is taken through just those steps, then the
   confirmation, when the player chooses it at the menu: "Ann has choices to make before playing." On `yes` the answers
   are checked as a change (§4.19 step 1); a refusal is shown and the player returns to the menu. Otherwise the character
-  enters the world as usual, the answers are set as a change (steps 2 to 5, so a worn item the new answers refuse is
-  moved to the inventory with its message), and `created` runs with `newCharacter = false`. An earlier answer to a
-  choice the steps skipped is removed; answers to choices the provider no longer defines are kept (§4.19). `cancel` goes
-  back to the menu without entering. A character taken over while already in the world isn't asked.
+  enters the world as usual, the answers are set as a change (steps 2 to 5, so a worn item the new answers refuse
+  becomes inactive, with its message), and `created` runs with `newCharacter = false`. An earlier answer to a choice the
+  steps skipped is removed; answers to choices the provider no longer defines are kept (§4.19). `cancel` goes back to
+  the menu without entering. A character taken over while already in the world isn't asked.
   - **One character at a time:** an account plays one character at a time, across every transport. Choosing a different
     character while one is in the world (link-dead included) is refused with "You're already playing Ann." Instructors
     are bound by this too (only `--dev` is exempt).

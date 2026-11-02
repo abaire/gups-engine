@@ -19,6 +19,7 @@ import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.TrackSize
 import gups.core.model.ZoneProto
+import gups.core.rules.RulesEngine
 import gups.core.world.DevLogin
 import gups.core.world.ScriptHost
 import gups.core.world.World
@@ -102,6 +103,7 @@ class PersistWorld(
   checkpointPulses: Long = gups.core.world.DEFAULT_CHECKPOINT_PULSES,
   val fs: gups.core.fixtures.FixtureSchema = FixtureSchemas.current,
   traits: Map<String, gups.core.model.Trait> = emptyMap(),
+  rules: RulesEngine = FixtureRules(fs),
 ) {
   val persistence = SqlitePersistence.open(file)
   val boot = persistence.boot(protos, fresh)
@@ -109,7 +111,7 @@ class PersistWorld(
     World(
         protos,
         fs.schema,
-        FixtureRules(fs),
+        rules,
         scripts,
         WorldConfig(
           seed = 1,

@@ -143,11 +143,7 @@ class ChoiceChangesTest {
     assertTrue(f.w.invariantViolations().isEmpty())
   }
 
-  @Test
-  fun `a change moves worn items the new answers refuse to the inventory with the message`() {
-    val p = dwarf()
-    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
-    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+  private fun refuseSwordsToMages() {
     f.w.restrictions =
       mapOf(
         RestrictionPoint.WEAR to
@@ -159,12 +155,92 @@ class ChoiceChangesTest {
             }
           )
       )
+  }
+
+  @Test
+  fun `a change makes worn items the new answers refuse inactive, with the message`() {
+    val p = dwarf()
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    refuseSwordsToMages()
     f.out(p)
     assertNull(f.w.setChoices(p, mapOf("race" to "elf", "class" to "mage")))
-    assertNull(p.equipped("wield"))
-    assertEquals(ItemLocation.Carried(p.id), sword.location)
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), sword.location)
+    assertEquals(setOf("wield"), p.inactiveSlots)
     f.run()
-    assertContains(f.out(p), "Mages can't use swords.")
+    val out = f.out(p)
+    assertContains(out, "Mages can't use swords.")
+    assertFalse(out.contains("no longer fits"))
+    assertTrue(f.w.invariantViolations().isEmpty())
+  }
+
+  @Test
+  fun `a wear refusal holds until a later change allows the item`() {
+    val p = dwarf()
+    f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    refuseSwordsToMages()
+    assertNull(f.w.setChoices(p, mapOf("race" to "elf", "class" to "mage")))
+    assertEquals(setOf("wield"), p.inactiveSlots)
+
+    // An unrelated refresh doesn't ask the restriction again.
+    f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id))
+    assertEquals(setOf("wield"), p.inactiveSlots)
+
+    f.out(p)
+    assertNull(f.w.setChoices(p, mapOf("race" to "dwarf", "class" to "warrior")))
+    assertTrue(p.inactiveSlots.isEmpty())
+    f.run()
+    assertContains(f.out(p), "fits you again")
+  }
+
+  @Test
+  fun `taking off a refused item and wearing another clears the refusal for that slot`() {
+    val p = dwarf()
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    refuseSwordsToMages()
+    assertNull(f.w.setChoices(p, mapOf("race" to "elf", "class" to "mage")))
+    f.w.moveItem(sword, ItemLocation.Carried(p.id))
+    assertTrue(p.inactiveSlots.isEmpty())
+    f.w.restrictions = emptyMap()
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    assertTrue(p.inactiveSlots.isEmpty())
+  }
+
+  @Test
+  fun `granting a mob a trait the wear restriction reads makes its refused gear inactive`() {
+    val m = f.mob()
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(m.id, "wield"))
+    refuseSwordsToMages()
+    assertNull(f.w.grantTrait(m, "mage"))
+    assertEquals(ItemLocation.Equipped(m.id, "wield"), sword.location)
+    assertEquals(setOf("wield"), m.inactiveSlots)
+    assertNull(f.w.removeTrait(m, "mage"))
+    assertTrue(m.inactiveSlots.isEmpty())
+  }
+
+  @Test
+  fun `a reload asks the wear restriction again`() {
+    val p = dwarf()
+    f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    f.w.restrictions =
+      mapOf(RestrictionPoint.WEAR to listOf(Restriction { _, _ -> "Swords are banned." }))
+    assertTrue(p.inactiveSlots.isEmpty())
+    f.out(p)
+    f.w.applyPrototypes(f.w.protos)
+    assertEquals(setOf("wield"), p.inactiveSlots)
+    f.run()
+    assertContains(f.out(p), "Swords are banned.")
+  }
+
+  @Test
+  fun `a cursed item the wear restriction refuses stays worn`() {
+    val p = dwarf()
+    val sword = f.w.spawnItem(T.SWORD, ItemLocation.Equipped(p.id, "wield"))
+    refuseSwordsToMages()
+    f.w.restrictions =
+      f.w.restrictions + (RestrictionPoint.REMOVE to listOf(Restriction { _, _ -> "It clings." }))
+    assertNull(f.w.setChoices(p, mapOf("race" to "elf", "class" to "mage")))
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), sword.location)
+    assertEquals(setOf("wield"), p.inactiveSlots)
   }
 
   @Test

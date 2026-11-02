@@ -433,8 +433,11 @@ internal object KernelCommands {
         w.msg(
           KernelMsg.EQUIPMENT_LIST,
           "items" to
-            entries.joinToString("\n") {
-              w.msg(KernelMsg.EQUIPMENT_ITEM, "slot" to it.first, "item" to it.second.name)
+            entries.joinToString("\n") { (slot, item) ->
+              val msg =
+                if (actor.isActiveSlot(slot)) KernelMsg.EQUIPMENT_ITEM
+                else KernelMsg.EQUIPMENT_INACTIVE
+              w.msg(msg, "slot" to slot, "item" to item.name)
             },
         ),
     )

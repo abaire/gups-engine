@@ -8548,6 +8548,14 @@
       "since": 1
     },
     {
+      "symbol": "message:equipment.inactive",
+      "id": "equipment.inactive",
+      "placeholders": ["slot", "item"],
+      "required": ["item"],
+      "default": "  <{slot}> {item} (inactive)",
+      "since": 1
+    },
+    {
       "symbol": "message:equipment.item",
       "id": "equipment.item",
       "placeholders": ["slot", "item"],
@@ -9829,6 +9837,14 @@
       "since": 1
     },
     {
+      "symbol": "message:wear.active",
+      "id": "wear.active",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "{item} fits you again.",
+      "since": 1
+    },
+    {
       "symbol": "message:wear.cant_wear",
       "id": "wear.cant_wear",
       "placeholders": ["item"],
@@ -9842,6 +9858,14 @@
       "placeholders": ["item"],
       "required": [],
       "default": "You can't wield {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.inactive",
+      "id": "wear.inactive",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "{item} no longer fits you, and stops working.",
       "since": 1
     },
     {

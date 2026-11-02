@@ -286,9 +286,10 @@ r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") 
 ```
 
 Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
-(`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
-change) don't run them. For details on item restrictions and swap validation, see the
-[Item Restriction Points Tutorial](../samples/curse-plugin/docs/tutorials/02_item_restriction_points.md).
+(`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The `WEAR`
+restriction is also asked again about worn items after a change of choices or traits; a refused item stays worn but is
+inactive, contributing nothing, until a later re-check allows it. For details on item restrictions and swap validation,
+see the [Item Restriction Points Tutorial](../samples/curse-plugin/docs/tutorials/02_item_restriction_points.md).
 
 #### Modifying choices in play
 

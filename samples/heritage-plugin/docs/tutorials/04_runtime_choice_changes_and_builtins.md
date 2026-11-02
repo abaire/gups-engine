@@ -51,8 +51,8 @@ validation and state updates:
                                  ▼
    4. Automatic Equipment Re-Validation
       - Runs WEAR restrictions on all currently worn items
-      - Incompatible items moved from equipment to inventory!
-      - Sends player refusal explanation for each unequipped item
+      - Incompatible items stay worn but become inactive
+      - Sends player refusal explanation for each one
                                  │
                                  ▼
    5. Immediate State Capture
@@ -65,10 +65,11 @@ validation and state updates:
    existing choices and traits.
 2. **Current Vital Clamping:** If a player switches from a Warrior (+10 Max HP) to a fragile Mage, their maximum HP
    drops. If their current HP was 105 out of 110, their current HP is immediately clamped to the new maximum (100).
-3. **Automatic Equipment De-Equipping:** If a Warrior wearing heavy plate armor changes class to a Mage, the engine
-   re-evaluates their worn gear against the `WEAR` restrictions. Because mages cannot wear heavy armor, the plate armor
-   is automatically unequipped into the character's backpack, and the player is notified: `"Your spellcraft can't work
-   through that much metal."`
+3. **Inactive Equipment:** If a Warrior wearing heavy plate armor changes class to a Mage, the engine re-evaluates their
+   worn gear against the `WEAR` restrictions. Because mages cannot wear heavy armor, the plate armor stays worn but
+   becomes inactive: it adds nothing (no armor, no affects) and shows as `(inactive)` in `equipment`. The player is
+   notified: `"Your spellcraft can't work through that much metal."` Nothing is taken off, so a cursed item stays put.
+   The armor works again if a later change makes the restriction allow it.
 4. **Base Stats and Skills Remain:** `rules.starting_stats` is **not** re-run during a change. Base attributes and
    previously learned skills remain untouched.
 
@@ -142,7 +143,7 @@ def on_talk(ctx):
 
 If a dwarf attempts to become a mage, `heritage.choose` returns `"Dwarves cannot be mages."`, and the script prints the
 archmage's refusal. If a human warrior attempts it, `heritage.choose` returns `None`, their class switches to Mage,
-their traits update, and any worn heavy armor drops into their inventory.
+their traits update, and any worn heavy armor stays on but stops working.
 
 ---
 

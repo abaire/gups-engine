@@ -234,7 +234,7 @@ class ModifierChainTest {
     val dagger = f.w.spawnItem(daggerLabel, ItemLocation.Carried(p.id))
     f.w.moveItem(dagger, ItemLocation.Equipped(p.id, "offhand"))
     val ring = f.w.spawnItem(ringLabel, ItemLocation.Carried(p.id))
-    f.w.moveItem(ring, ItemLocation.Equipped(p.id, "finger"))
+    f.w.moveItem(ring, ItemLocation.Equipped(p.id, "finger_l"))
 
     // 1. Sword's own swing (slot = "wield", weapon = sword) -> both sword and ring apply
     val swordSwingCtx = RulesContext(f.w, p, d, weapon = sword, slot = "wield")

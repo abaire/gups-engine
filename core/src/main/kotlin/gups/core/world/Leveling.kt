@@ -95,6 +95,7 @@ fun World.levelUp(a: Actor): Boolean {
 
   a.level += 1
   forgetActorSlots(a)
+  refreshFit(a)
 
   val result =
     try {
@@ -228,6 +229,7 @@ fun World.levelDownStep(a: Actor) {
 
   a.level -= 1
   forgetActorSlots(a)
+  refreshFit(a)
 
   val capped = capVitals(a)
 

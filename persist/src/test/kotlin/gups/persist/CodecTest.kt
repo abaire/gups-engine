@@ -2,12 +2,18 @@ package gups.persist
 
 import gups.core.EntityId
 import gups.core.Label
+import gups.core.fixtures.FixtureRules
+import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Affect
 import gups.core.model.AffectScope
 import gups.core.model.DamageType
+import gups.core.model.EquipAffect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Prototypes
+import gups.core.model.Restriction
+import gups.core.model.RestrictionPoint
+import gups.core.rules.RulesContext
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
 import gups.core.world.changeVital
@@ -15,6 +21,8 @@ import gups.core.world.quit
 import gups.core.world.spawnItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CodecTest {
   @Test
@@ -136,6 +144,123 @@ class CodecTest {
       ann2.current("hp"),
       "the boosted hp survived restore without being clamped",
     )
+    b.close()
+  }
+
+  private fun vestProtos(vest: ItemProto): Prototypes {
+    val base = P.protos()
+    return Prototypes(
+      rooms = base.rooms.values.toList(),
+      mobs = base.mobs.values.toList(),
+      items = base.items.values.filter { it.label != Prototypes.CORPSE.label } + vest,
+      zones = base.zones.values.toList(),
+      regions = base.regions.values.toList(),
+    )
+  }
+
+  @Test
+  fun `restore keeps boosted hp and the timed equip affect when the +hp item has equip affects`() {
+    val file = tempDb()
+    val vest = Label("//t:warm_vest")
+    val protos =
+      vestProtos(
+        ItemProto(
+          vest,
+          "a warm vest",
+          listOf("vest"),
+          wear = "body",
+          maxVitalDeltas = mapOf("hp" to 20),
+          equipAffects = listOf(EquipAffect("warm"), EquipAffect("hasted", pulses = 1000)),
+        )
+      )
+    val a = PersistWorld(file, protos)
+    val ann = a.login("Ann")
+    val baseMax = ann.baseMax("hp")
+    a.w.spawnItem(vest, ItemLocation.Equipped(ann.id, "body"))
+    a.w.changeVital(ann, "hp", 20)
+    assertEquals(baseMax + 20, ann.current("hp"))
+    val hastedUntil = ann.affects.single { "hasted" in it.flags }.expiresAt
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    val b = PersistWorld(file, protos)
+    val ann2 = b.login("Ann")
+    assertEquals(baseMax + 20, ann2.current("hp"))
+    assertTrue(ann2.hasFlag("warm"))
+    assertEquals(hastedUntil, ann2.affects.single { "hasted" in it.flags }.expiresAt)
+    b.close()
+  }
+
+  @Test
+  fun `an item that no longer fits is inactive after restore, without telling the player`() {
+    val file = tempDb()
+    val vest = Label("//t:warm_vest")
+    val protos =
+      vestProtos(
+        ItemProto(
+          vest,
+          "a warm vest",
+          listOf("vest"),
+          wear = "body",
+          maxVitalDeltas = mapOf("hp" to 20),
+          equipAffects = listOf(EquipAffect("warm")),
+        )
+      )
+    val a = PersistWorld(file, protos)
+    val ann = a.login("Ann")
+    val baseMax = ann.baseMax("hp")
+    a.w.spawnItem(vest, ItemLocation.Equipped(ann.id, "body"))
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    val bodiless =
+      object : FixtureRules(FixtureSchemas.current) {
+        override fun actorSlots(c: RulesContext): List<String> = equipmentSlots() - "body"
+      }
+    val b = PersistWorld(file, protos, rules = bodiless)
+    val ann2 = b.login("Ann")
+    b.run(2)
+    assertEquals(setOf("body"), ann2.inactiveSlots)
+    assertEquals(vest, ann2.equipped("body")?.protoLabel)
+    assertEquals(baseMax, ann2.max("hp"))
+    assertFalse(ann2.hasFlag("warm"))
+    val out = b.sinks.getValue("Ann").drain()
+    assertFalse(out.contains("no longer fits"), out)
+    b.close()
+  }
+
+  @Test
+  fun `restore asks the wear restriction again, quietly`() {
+    val file = tempDb()
+    val vest = Label("//t:warm_vest")
+    val protos =
+      vestProtos(
+        ItemProto(
+          vest,
+          "a warm vest",
+          listOf("vest"),
+          wear = "body",
+          equipAffects = listOf(EquipAffect("warm")),
+        )
+      )
+    val a = PersistWorld(file, protos)
+    val ann = a.login("Ann")
+    a.w.spawnItem(vest, ItemLocation.Equipped(ann.id, "body"))
+    a.w.quit(ann)
+    a.save()
+    a.close()
+
+    val b = PersistWorld(file, protos)
+    b.w.restrictions =
+      mapOf(RestrictionPoint.WEAR to listOf(Restriction { _, _ -> "Vests are banned." }))
+    val ann2 = b.login("Ann")
+    b.run(2)
+    assertEquals(setOf("body"), ann2.inactiveSlots)
+    assertFalse(ann2.hasFlag("warm"))
+    val out = b.sinks.getValue("Ann").drain()
+    assertFalse(out.contains("Vests are banned."), out)
     b.close()
   }
 }

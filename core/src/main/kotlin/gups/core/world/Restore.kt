@@ -83,6 +83,29 @@ fun World.restoreActorNumbers(
 /** A saved vital: its current value, maximum and `belowZeroSince`. */
 data class VitalState(val current: Int, val max: Int, val belowZeroSince: Long? = null)
 
+/**
+ * Works out what restored actor [a] gets from its items, once restore has placed all of them: item
+ * contributions, encumbrance, which worn items fit and which the `wear` restriction allows, the
+ * untimed equip affects of those that count (timed ones were saved with the actor's affects), and
+ * vitals clamped to the result. Nothing is announced, since the wearer was never told these items
+ * worked.
+ */
+fun World.settleRestoredHoldings(a: Actor) {
+  forgetActorSlots(a)
+  askWearRestriction(a)
+  refreshHoldings(a, announceFit = false)
+  // Held off so each affect doesn't rerun the fit check against a partial set of equip affects.
+  a.refittingSlots = true
+  try {
+    for ((slot, item) in a.equipmentIndex.toList()) {
+      if (a.isActiveSlot(slot)) applyEquipAffects(a, item, untimedOnly = true)
+    }
+  } finally {
+    a.refittingSlots = false
+  }
+  refreshFit(a, announce = false)
+}
+
 /** An item at [at], whose holder must already exist (restore holders and containers first). */
 fun World.restoreItem(id: EntityId, proto: ItemProto, at: ItemLocation, count: Int): Item {
   claim(id)
@@ -102,9 +125,8 @@ fun World.restoreItem(id: EntityId, proto: ItemProto, at: ItemLocation, count: I
       require(a.equipmentIndex[at.slot] == null) {
         "${a.name} already wears something in ${at.slot}"
       }
+      // Untimed equip affects are rebuilt by settleRestoredHoldings once every item is placed.
       a.equipmentIndex[at.slot] = item
-      // Untimed equip affects aren't saved; they are rebuilt from what is worn.
-      applyEquipAffects(a, item)
     }
     is ItemLocation.Contained -> {
       val c = requireNotNull(item(at.container)) { "No container ${at.container}" }

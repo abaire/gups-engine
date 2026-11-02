@@ -248,4 +248,4 @@ To ensure server stability, the engine wraps every restriction check in an excep
 * Refusals cancel actions without lag; unhandled exceptions fail open and log diagnostics.
 
 In **[Tutorial 04: Runtime Choice Changes, Builtins & Commands](04_runtime_choice_changes_and_builtins.md)**, we will
-see what happens when choices change in play and how invalid equipment is automatically unequipped.
+see what happens when choices change in play and how invalid equipment stops working.

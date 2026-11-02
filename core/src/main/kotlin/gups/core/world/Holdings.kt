@@ -50,11 +50,20 @@ fun interface ContainmentFilter {
   fun blocks(world: World, holder: Actor, container: Item, item: Item, affect: HeldAffect): Boolean
 }
 
-/** Recomputes everything [a] derives from what it holds: item contributions, then encumbrance. */
-fun World.refreshHoldings(a: Actor) {
+/** Recomputes what [a]'s held items contribute to it. */
+fun World.refreshHeld(a: Actor) {
   a.heldEffects = computeHeld(a)
-  updateEncumbrance(a)
+}
+
+/**
+ * Recomputes everything [a] derives from what it holds: item contributions, encumbrance, and fit.
+ * The wearer is told about items that stop or start fitting only if [announceFit].
+ */
+fun World.refreshHoldings(a: Actor, announceFit: Boolean = true) {
+  refreshHeld(a)
+  updateEncumbrance(a, announceFit)
   clampVitals(a)
+  refreshFit(a, announceFit)
 }
 
 /** Prototype affects in declaration order, then instance affects by id; empty for a tombstone. */
@@ -121,19 +130,22 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
   val slots = equipmentSlots()
   val worn =
     (slots + (a.equipmentIndex.keys - slots.toSet()).sorted()).mapNotNull { slot ->
-      a.equipmentIndex[slot]
+      a.equipmentIndex[slot]?.let { slot to it }
     }
-  for (item in worn) {
-    for ((stat, delta) in item.proto.statDeltas) statDeltas[stat] = (statDeltas[stat] ?: 0) + delta
-    for ((channel, delta) in item.proto.senseDeltas) senseDeltas[channel] =
-      (senseDeltas[channel] ?: 0) + delta
-    for ((vital, delta) in item.proto.maxVitalDeltas) maxVitalDeltas[vital] =
-      (maxVitalDeltas[vital] ?: 0) + delta
-    for ((type, delta) in item.proto.resistDeltas) resistDeltas[type] =
-      (resistDeltas[type] ?: 0) + delta
-    if (item.proto.modifiers.isNotEmpty())
-      modifierSteps += HeldModifiers("item:${item.protoLabel.name}", item, item.proto.modifiers)
-    for (ha in item.heldAffects()) add(ha)
+  for ((slot, item) in worn) {
+    if (a.isActiveSlot(slot)) {
+      for ((stat, delta) in item.proto.statDeltas) statDeltas[stat] =
+        (statDeltas[stat] ?: 0) + delta
+      for ((channel, delta) in item.proto.senseDeltas) senseDeltas[channel] =
+        (senseDeltas[channel] ?: 0) + delta
+      for ((vital, delta) in item.proto.maxVitalDeltas) maxVitalDeltas[vital] =
+        (maxVitalDeltas[vital] ?: 0) + delta
+      for ((type, delta) in item.proto.resistDeltas) resistDeltas[type] =
+        (resistDeltas[type] ?: 0) + delta
+      if (item.proto.modifiers.isNotEmpty())
+        modifierSteps += HeldModifiers("item:${item.protoLabel.name}", item, item.proto.modifiers)
+      for (ha in item.heldAffects()) add(ha)
+    }
   }
   fun blocks(f: ContainmentFilter, container: Item, inner: Item, ha: HeldAffect): Boolean =
     runCatching { f.blocks(this, a, container, inner, ha) }
@@ -150,7 +162,13 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     for (inner in item.contentsIndex.values) visit(inner, path + item)
   }
   for (item in a.inventoryIndex.values) visit(item, emptyList())
-  for (item in worn) for (inner in item.contentsIndex.values) visit(inner, listOf(item))
+  for ((slot, item) in worn) {
+    if (a.isActiveSlot(slot)) {
+      for (inner in item.contentsIndex.values) visit(inner, listOf(item))
+    } else {
+      visit(item, emptyList())
+    }
+  }
   return HeldEffects(
     statDeltas = statDeltas.filterValues { it != 0 },
     senseDeltas = senseDeltas.filterValues { it != 0 },

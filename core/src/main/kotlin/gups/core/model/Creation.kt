@@ -89,7 +89,10 @@ fun interface TraitModifier {
 
 /** Interception points where world restrictions can prevent gameplay actions. */
 enum class RestrictionPoint {
-  /** Equipping an item into an equipment slot. */
+  /**
+   * Equipping an item into an equipment slot, and the re-check of worn items after a change of
+   * choices or traits, a reload or a restore, where a refusal makes the item inactive.
+   */
   WEAR,
 
   /** Entering a room through an exit. */
@@ -103,8 +106,8 @@ enum class RestrictionPoint {
 
   /**
    * Taking a worn item off by command: `remove`, and the item a `wear` or `wield` would swap out of
-   * an occupied slot (including a full slot family). Trusted moves (verbs, death, the re-check
-   * after a choice change, `transform`) don't run it.
+   * an occupied slot (including a full slot family). Trusted moves (verbs, death, `transform`)
+   * don't run it.
    */
   REMOVE,
 

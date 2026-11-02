@@ -220,23 +220,11 @@ fun World.setChoices(player: Player, changes: Map<String, String?>): String? {
   player.choices.putAll(newAnswers)
   player.recomputeTraits(this)
   forgetActorSlots(player)
+  recheckWornItems(player)
   clampVitals(player)
 
-  recheckWornItems(player)
   requestImmediate("choices")
   return null
-}
-
-private fun World.recheckWornItems(player: Player) {
-  for ((slot, item) in player.equipmentIndex.toList()) {
-    val req =
-      RestrictionRequest(point = RestrictionPoint.WEAR, actor = player, item = item, slot = slot)
-    val refused = restrictionRefusal(RestrictionPoint.WEAR, req)
-    if (refused != null) {
-      moveItem(item, ItemLocation.Carried(player.id))
-      send(player, refused)
-    }
-  }
 }
 
 fun World.grantTrait(actor: Actor, traitName: String): String? {
@@ -245,9 +233,9 @@ fun World.grantTrait(actor: Actor, traitName: String): String? {
   actor.grantedTraits = actor.grantedTraits + traitName
   actor.recomputeTraits(this)
   forgetActorSlots(actor)
+  recheckWornItems(actor)
   clampVitals(actor)
   if (actor is Player) {
-    recheckWornItems(actor)
     requestImmediate("choices")
   } else {
     actor.dirty = true
@@ -261,9 +249,9 @@ fun World.removeTrait(actor: Actor, traitName: String): String? {
   actor.grantedTraits = actor.grantedTraits - traitName
   actor.recomputeTraits(this)
   forgetActorSlots(actor)
+  recheckWornItems(actor)
   clampVitals(actor)
   if (actor is Player) {
-    recheckWornItems(actor)
     requestImmediate("choices")
   } else {
     actor.dirty = true
@@ -324,7 +312,8 @@ fun World.removeItemTag(item: Item, tag: String): Boolean {
  * Swaps [item]'s prototype for [label] in place, keeping everything the instance owns. A stack
  * turning into a non-stackable item keeps only one of its count. A container turning into a
  * non-container drops its contents on the ground of the room it is in. A lock the new prototype has
- * no key for is undone, leaving the container closed.
+ * no key for is undone, leaving the container closed. A worn item whose new prototype can't go in
+ * its slot is taken off.
  */
 fun World.transformItem(item: Item, label: Label) {
   require(item.id in entities) { "$item is not in the world" }
@@ -347,8 +336,9 @@ fun World.transformItem(item: Item, label: Label) {
   val wearer = loc?.let { actor(it.actor) }
   if (wearer != null) {
     val wear = newProto.wear
-    val fits = wear != null && (loc.slot == wear || loc.slot.startsWith("${wear}_"))
-    if (!fits) moveItem(item, ItemLocation.Carried(wearer.id)) else removeEquipAffects(wearer, item)
+    val fits = wear != null && wearFits(wear, loc.slot)
+    if (!fits) moveItem(item, ItemLocation.Carried(wearer.id))
+    else if (wearer.isActiveSlot(loc.slot)) removeEquipAffects(wearer, item)
   }
   if (ground != null) for (inner in item.contentsIndex.values.toList()) moveItem(inner, ground)
   item.proto = newProto
@@ -360,7 +350,9 @@ fun World.transformItem(item: Item, label: Label) {
     if (oldState != null)
       c.state = if (oldState == DoorState.LOCKED && c.key == null) DoorState.CLOSED else oldState
   }
-  if (wearer != null && item.location is ItemLocation.Equipped) applyEquipAffects(wearer, item)
+  val worn = item.location as? ItemLocation.Equipped
+  if (wearer != null && worn != null && wearer.isActiveSlot(worn.slot))
+    applyEquipAffects(wearer, item)
   item.dirty = true
   if (custodian(item) is Player && !item.debug)
     itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "transform")

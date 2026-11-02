@@ -75,6 +75,8 @@ object KernelMsg : MsgGroup(null) {
   val EQUIPMENT_EMPTY = msg("equipment.empty", "You are using nothing.")
   val EQUIPMENT_LIST = msg("equipment.list", "You are using:\n{items}", "items", "items")
   val EQUIPMENT_ITEM = msg("equipment.item", "  <{slot}> {item}", "slot,item", "item")
+  val EQUIPMENT_INACTIVE =
+    msg("equipment.inactive", "  <{slot}> {item} (inactive)", "slot,item", "item")
   val WHO_LIST = msg("who.list", "Players:\n{players}", "players", "players")
   val WHO_PLAYER = msg("who.player", "  {name}", "name", "name")
   val WHO_LINKDEAD = msg("who.linkdead", "  {name} (link-dead)", "name", "name")
@@ -114,6 +116,8 @@ object KernelMsg : MsgGroup(null) {
   val WEAR_STOP = msg("wear.stop", "You stop using {item}.", "item")
   val WEAR_SELF = msg("wear.self", "You wear {item}.", "item")
   val WEAR_ROOM = msg("wear.room", "{actor} wears {item}.", "actor,item")
+  val ITEM_INACTIVE = msg("wear.inactive", "{item} no longer fits you, and stops working.", "item")
+  val ITEM_ACTIVE = msg("wear.active", "{item} fits you again.", "item")
   val WIELD_SELF = msg("wield.self", "You wield {item}.", "item")
   val WIELD_ROOM = msg("wield.room", "{actor} wields {item}.", "actor,item")
   val USE_WHAT = msg("use.what", "Use what?")

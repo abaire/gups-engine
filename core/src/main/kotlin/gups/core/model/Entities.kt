@@ -433,6 +433,23 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   internal val equipmentIndex = LinkedHashMap<String, Item>()
   internal var slotCache: List<String>? = null
 
+  /**
+   * Worn slots whose items don't fit the actor's current slots or capacity; worked out, not saved.
+   */
+  var inactiveSlots: Set<String> = emptySet()
+    internal set
+
+  internal var refittingSlots = false
+
+  /**
+   * Worn slots whose items the `wear` restriction refused at the last re-check, with the refusal;
+   * those items are inactive until a later re-check allows them. Worked out, not saved.
+   */
+  internal var wearRefusals: Map<String, String> = emptyMap()
+
+  /** False if [slot] holds an inactive item; true otherwise, including for an empty slot. */
+  fun isActiveSlot(slot: String): Boolean = slot !in inactiveSlots
+
   /** List of all items carried in inventory, ordered by entity ID. */
   val inventory: List<Item>
     get() = inventoryIndex.values.toList()

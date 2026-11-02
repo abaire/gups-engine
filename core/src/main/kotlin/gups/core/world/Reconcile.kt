@@ -124,6 +124,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   slotFamilyCache = null
   for (a in actorIndex.values) {
     forgetActorSlots(a)
+    askWearRestriction(a)
     refreshHoldings(a)
   }
   // Refilled only now that the new traits and item prototypes count towards the maxima.

@@ -425,6 +425,7 @@ class World(
     p.lastInputPulse = pulse
     enter(p, room, p.trackIndex)
     forgetActorSlots(p)
+    refreshFit(p)
     clampVitals(p)
     return p
   }
@@ -437,6 +438,7 @@ class World(
     settleNewCondition(m, "starting_stats")
     enter(m, at, m.trackIndex)
     forgetActorSlots(m)
+    refreshFit(m)
     clampVitals(m)
     val full =
       m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.mapValues { it.value.current }

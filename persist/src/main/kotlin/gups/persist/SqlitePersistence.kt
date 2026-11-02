@@ -27,13 +27,13 @@ import gups.core.world.drainRemoved
 import gups.core.world.fillMissingSpawns
 import gups.core.world.forgetActorSlots
 import gups.core.world.recentInputs
-import gups.core.world.refreshHoldings
 import gups.core.world.respawnDeadlines
 import gups.core.world.restoreItem
 import gups.core.world.restoreMob
 import gups.core.world.restorePlayer
 import gups.core.world.setRespawn
 import gups.core.world.setZoneReset
+import gups.core.world.settleRestoredHoldings
 import gups.core.world.tombstone
 import gups.core.world.upgrade
 import gups.core.world.zoneResetDeadlines
@@ -700,6 +700,8 @@ internal fun placeItems(
     deleted += row.id
     notes += "item ${row.protoLabel} #${row.id} dropped: its container is gone"
   }
-  for (holder in out.mapNotNull { world.custodian(it) }.distinct()) world.refreshHoldings(holder)
+  for (holder in out.mapNotNull { world.custodian(it) }.distinct()) world.settleRestoredHoldings(
+    holder
+  )
   return out
 }

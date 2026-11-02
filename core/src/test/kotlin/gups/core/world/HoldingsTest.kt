@@ -598,4 +598,35 @@ class HoldingsTest {
     assertEquals(m.baseMax("hp") - 3, m.current("hp"))
     assertEquals(emptyList(), f.w.diagnostics)
   }
+
+  @Test
+  fun `an inactive item contributes no statDeltas, maxVitalDeltas, modifiers or worn-scope affects`() {
+    val stat = fs.toughness
+    val testProto =
+      ItemProto(
+        ring,
+        "a ring",
+        listOf("ring"),
+        wear = "finger_l",
+        statDeltas = mapOf(stat to 5),
+        maxVitalDeltas = mapOf("hp" to 10),
+        modifiers = mapOf(ModifierPoint.DAMAGE to mod("ring_mod")),
+        affects =
+          listOf(ItemAffect("worn_glow", applies = AffectScope.WORN, statDeltas = mapOf(stat to 3))),
+      )
+    val f = fixture(extra = listOf(testProto))
+    val p = f.player("Ann")
+    f.w.spawnItem(ring, ItemLocation.Equipped(p.id, "finger_l"))
+
+    assertEquals(5 + 3, p.heldEffects.statDeltas[stat])
+    assertEquals(10, p.heldEffects.maxVitalDeltas["hp"])
+    assertTrue(p.heldEffects.modifierSteps.isNotEmpty())
+
+    p.inactiveSlots = setOf("finger_l")
+    f.w.refreshHeld(p)
+
+    assertEquals(null, p.heldEffects.statDeltas[stat])
+    assertEquals(null, p.heldEffects.maxVitalDeltas["hp"])
+    assertTrue(p.heldEffects.modifierSteps.isEmpty())
+  }
 }

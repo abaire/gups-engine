@@ -342,6 +342,7 @@ fun World.applyAffect(
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
   disabledChanged(target, wasDisabled)
   forgetActorSlots(target)
+  refreshFit(target)
   clampVitals(target)
   return affect
 }
@@ -375,6 +376,7 @@ private fun World.endAffect(
   a.dirty = true
   disabledChanged(a, wasDisabled)
   forgetActorSlots(a)
+  refreshFit(a)
   clampVitals(a)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
   if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())
@@ -489,10 +491,13 @@ internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
 
 /**
  * Applies [item]'s `equip_affects` to [wearer] as it is equipped, through [applyAffect] like any
- * other affect. Untimed entries last until [removeEquipAffects]; timed ones count down.
+ * other affect. Untimed entries last until [removeEquipAffects]; timed ones count down. If
+ * [untimedOnly] is true, timed entries are skipped (used when an inactive item becomes active
+ * again).
  */
-internal fun World.applyEquipAffects(wearer: Actor, item: Item) {
+internal fun World.applyEquipAffects(wearer: Actor, item: Item, untimedOnly: Boolean = false) {
   for (e in item.proto.equipAffects) {
+    if (untimedOnly && e.pulses != null) continue
     val name = equipAffectName(item, e.flag)
     if (e.pulses != null) applyAffect(wearer, name, e.pulses, flags = setOf(e.flag))
     else applyAffect(wearer, name, 1, flags = setOf(e.flag), wornFrom = item.id)
