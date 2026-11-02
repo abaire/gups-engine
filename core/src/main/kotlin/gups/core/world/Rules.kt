@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.HookRef
 import gups.core.model.Actor
+import gups.core.model.ItemLocation
 import gups.core.model.ModifierPoint
 import gups.core.model.Trait
 import gups.core.model.TraitModifier
@@ -38,8 +39,11 @@ private sealed interface ChainStep {
   }
 }
 
-/** The modifiers that apply to [actor] at [point], in chain order, with where each comes from. */
-private fun World.chainSteps(point: ModifierPoint, actor: Actor): List<ChainStep> {
+/**
+ * The modifiers that apply to [c]'s actor at [point], in chain order, with where each comes from.
+ */
+private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainStep> {
+  val actor = c.requireActor()
   val room = actor.room
   val out = mutableListOf<ChainStep>()
   protos.zones[room.label.pkg]?.modifiers?.get(point)?.let {
@@ -56,8 +60,17 @@ private fun World.chainSteps(point: ModifierPoint, actor: Actor): List<ChainStep
   for (a in actor.affects.sortedBy { it.id }) a.modifiers[point]?.let {
     out += ChainStep.Script("affect:${a.name}", it)
   }
-  for ((label, mods) in actor.heldEffects.modifierSteps) mods[point]?.let {
-    out += ChainStep.Script(label, it)
+  for (step in actor.heldEffects.modifierSteps) {
+    if (
+      (point == ModifierPoint.TO_HIT || point == ModifierPoint.DAMAGE) &&
+        c.slot != null &&
+        step.item.proto.dice != null &&
+        step.item.location is ItemLocation.Equipped &&
+        step.item !== c.weapon
+    ) {
+      continue
+    }
+    step.modifiers[point]?.let { out += ChainStep.Script(step.source, it) }
   }
   return out
 }
@@ -82,7 +95,7 @@ private fun <T> World.chain(
   base: T,
   show: (T) -> String,
 ): ChainResult<T> {
-  val steps = chainSteps(point, c.requireActor())
+  val steps = chainSteps(point, c)
   val text = StringBuilder("rules.${point.scriptName} base=${show(base)}")
   var v = base
   for (step in steps) {
@@ -107,8 +120,8 @@ private fun <T> World.traced(c: RulesContext, r: ChainResult<T>): T {
 fun World.toHitChain(c: RulesContext): ChainResult<Int> =
   chain(ModifierPoint.TO_HIT, c, rules.toHit(c)) { "$it" }
 
-fun World.damageChain(c: RulesContext): ChainResult<Int> =
-  chain(ModifierPoint.DAMAGE, c, rules.damage(c)) { "$it" }
+fun World.damageChain(c: RulesContext, base: Int = rules.damage(c)): ChainResult<Int> =
+  chain(ModifierPoint.DAMAGE, c, base) { "$it" }
 
 fun World.initiativeOf(c: RulesContext): Int =
   traced(c, chain(ModifierPoint.INITIATIVE, c, rules.initiative(c)) { "$it" })

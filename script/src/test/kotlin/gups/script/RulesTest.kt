@@ -83,6 +83,42 @@ class RulesTest {
   }
 
   @Test
+  fun `ctx damage_type is readable in damage and mitigate and ctx slot is wield in to_hit`() {
+    val f =
+      world(
+        """
+            def to_hit(ctx):
+                if ctx.slot == "wield" and ctx.damage_type == "bludgeon":
+                    return 100
+                return 0
+
+            def damage(ctx):
+                if ctx.damage_type == "bludgeon" and ctx.slot == "wield":
+                    return 15
+                return 0
+
+            def mitigate(ctx, amount, type):
+                if ctx.damage_type == type:
+                    return vitals(hp = amount)
+                return vitals(hp = 0)
+            """
+      )
+    val p = f.player()
+    val rat = f.mob("//zones/z:rat")
+    f.w.startCombat(p, rat)
+    f.run(8)
+    assertEquals(100 - 15, rat.current("hp"))
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+
+    val fire = DamageType("fire")
+    assertEquals(
+      mapOf("hp" to 7),
+      f.w.rules.mitigate(RulesContext(f.w, p, rat, damageType = fire), 7, fire),
+    )
+    assertEquals(mapOf("hp" to 0), f.w.rules.mitigate(RulesContext(f.w, p, rat), 7, fire))
+  }
+
+  @Test
   fun `a failing export gives its neutral result, a script_error and one rules_error alert`() {
     val f =
       world(

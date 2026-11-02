@@ -17,13 +17,16 @@ data class HeldEffects(
   /** Summed changes to resistances, by damage type. */
   val resistDeltas: Map<DamageType, Int> = emptyMap(),
   val flags: Set<String> = emptySet(),
-  /** Chain-step label to the modifiers it contributes, in modifier-chain order. */
-  val modifierSteps: List<Pair<String, Modifiers>> = emptyList(),
+  /** The modifiers each held item contributes, in modifier-chain order. */
+  val modifierSteps: List<HeldModifiers> = emptyList(),
 ) {
   companion object {
     val EMPTY = HeldEffects()
   }
 }
+
+/** Modifiers one held item contributes, with the item they come from. */
+data class HeldModifiers(val source: String, val item: Item, val modifiers: Modifiers)
 
 /** One item affect as seen by the holder: from the prototype or from the instance. */
 class HeldAffect(
@@ -102,7 +105,7 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
   val maxVitalDeltas = mutableMapOf<String, Int>()
   val resistDeltas = mutableMapOf<DamageType, Int>()
   val flags = mutableSetOf<String>()
-  val modifierSteps = mutableListOf<Pair<String, Modifiers>>()
+  val modifierSteps = mutableListOf<HeldModifiers>()
   fun add(ha: HeldAffect) {
     for ((stat, delta) in ha.statDeltas) statDeltas[stat] = (statDeltas[stat] ?: 0) + delta
     for ((channel, delta) in ha.senseDeltas) senseDeltas[channel] =
@@ -112,7 +115,8 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     for ((type, delta) in ha.resistDeltas) resistDeltas[type] = (resistDeltas[type] ?: 0) + delta
     flags += ha.flags - "stunned"
     if (ha.modifiers.isNotEmpty())
-      modifierSteps += "item:${ha.item.protoLabel.name}:${ha.name}" to ha.modifiers
+      modifierSteps +=
+        HeldModifiers("item:${ha.item.protoLabel.name}:${ha.name}", ha.item, ha.modifiers)
   }
   val slots = equipmentSlots()
   val worn =
@@ -128,7 +132,7 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     for ((type, delta) in item.proto.resistDeltas) resistDeltas[type] =
       (resistDeltas[type] ?: 0) + delta
     if (item.proto.modifiers.isNotEmpty())
-      modifierSteps += "item:${item.protoLabel.name}" to item.proto.modifiers
+      modifierSteps += HeldModifiers("item:${item.protoLabel.name}", item, item.proto.modifiers)
     for (ha in item.heldAffects()) add(ha)
   }
   fun blocks(f: ContainmentFilter, container: Item, inner: Item, ha: HeldAffect): Boolean =

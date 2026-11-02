@@ -38,6 +38,7 @@
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
 <tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
 <tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
+<tr id="rules_ctx.damage_type"><td><code>damage_type</code></td><td>1</td><td>The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
 <tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.</td></tr>
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
@@ -47,6 +48,7 @@
 <tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>
 <tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
+<tr id="rules_ctx.slot"><td><code>slot</code></td><td>1</td><td>The slot of the swinging item in an auto-attack swing, 'wield' for an unarmed swing, otherwise None.</td></tr>
 <tr id="rules_ctx.source"><td><code>source</code></td><td>1</td><td>For can_perceive and perceive_message: the actor who caused the event, or None.</td></tr>
 <tr id="rules_ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For can_perceive and perceive_message: the room the event happened in.</td></tr>
 <tr id="rules_ctx.tags"><td><code>tags</code></td><td>1</td><td>For door_intensity: the door's or container's tags, sorted.</td></tr>

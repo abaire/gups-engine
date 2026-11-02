@@ -102,7 +102,8 @@ internal fun World.autoAttack(a: Actor) {
       send(a, it)
       return
     }
-  val ctx = RulesContext(this, a, target, weapon, band)
+  val type = weapon?.proto?.damageType ?: schema.unarmed
+  val ctx = RulesContext(this, a, target, weapon, band, damageType = type, slot = "wield")
   val chance = toHitChain(ctx)
   val roll = rng.int(1, 100)
   traceRules(a, "${chance.text} → roll $roll ${if (roll > chance.value) "MISS" else "HIT"}")
@@ -122,9 +123,8 @@ internal fun World.autoAttack(a: Actor) {
     )
     return
   }
-  val type = weapon?.proto?.damageType ?: schema.unarmed
   val raw = damageChain(ctx)
-  val losses = rules.mitigate(ctx, raw.value, type)
+  val losses = rules.mitigate(ctx, raw.value.coerceAtLeast(0), type)
   traceRules(
     a,
     "${raw.text} → mitigate ${losses.entries.joinToString { "${it.key} ${it.value}" }} $type",
@@ -533,12 +533,10 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
       if (hostile && t !== caster) startCombat(caster, t)
       when (effect) {
         is Effect.Damage -> {
-          val losses =
-            rules.mitigate(
-              RulesContext(this, caster, t, skill = skill),
-              effect.dice.roll(rng),
-              effect.type,
-            )
+          val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
+          val raw = damageChain(c, effect.dice.roll(rng))
+          traceRules(caster, raw.text)
+          val losses = rules.mitigate(c, raw.value.coerceAtLeast(0), effect.type)
           damage(t, losses, effect.type, caster)
         }
         is Effect.Heal -> heal(t, effect.vital, effect.dice.roll(rng))

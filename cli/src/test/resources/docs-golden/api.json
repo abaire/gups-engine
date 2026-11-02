@@ -2416,6 +2416,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.damage_type",
+          "name": "damage_type",
+          "doc": "The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.defender",
           "name": "defender",
           "doc": "For attack calls, the one attacked; also the one taking damage in mitigate.",
@@ -2467,6 +2473,12 @@
           "symbol": "rules_ctx.skill",
           "name": "skill",
           "doc": "The skill being cast or evaluated, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.slot",
+          "name": "slot",
+          "doc": "The slot of the swinging item in an auto-attack swing, 'wield' for an unarmed swing, otherwise None.",
           "since": 1
         },
         {

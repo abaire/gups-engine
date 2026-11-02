@@ -1,6 +1,10 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.model.AffectScope
+import gups.core.model.DamageType
+import gups.core.model.Dice
+import gups.core.model.ItemAffect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.ModifierPoint
@@ -177,5 +181,131 @@ class ModifierChainTest {
     f.input(p, "north")
     f.run()
     assertEquals(100 - 5, p.current("move"))
+  }
+
+  @Test
+  fun `worn weapon modifiers apply to its own swing and spell damage but not other weapon swings, ring applies to all`() {
+    val swordLabel = Label("//t:custom_sword")
+    val daggerLabel = Label("//t:custom_dagger")
+    val ringLabel = Label("//t:custom_ring")
+    val host = RecordingHost()
+    host.modifiers["sword_boost"] = { _, _, base -> (base as Int) + 10 }
+    host.modifiers["ring_boost"] = { _, _, base -> (base as Int) + 1 }
+    val f =
+      Fixture(
+        scripts = host,
+        protos =
+          Prototypes(
+            T.rooms,
+            T.mobs,
+            T.items +
+              listOf(
+                ItemProto(
+                  swordLabel,
+                  "sword",
+                  listOf("sword"),
+                  wear = "wield",
+                  dice = Dice(1, 6),
+                  modifiers = mapOf(ModifierPoint.DAMAGE to mod("sword_boost")),
+                ),
+                ItemProto(
+                  daggerLabel,
+                  "dagger",
+                  listOf("dagger"),
+                  wear = "offhand",
+                  dice = Dice(1, 4),
+                ),
+                ItemProto(
+                  ringLabel,
+                  "ring",
+                  listOf("ring"),
+                  wear = "finger",
+                  modifiers = mapOf(ModifierPoint.DAMAGE to mod("ring_boost")),
+                ),
+              ),
+            T.skills,
+            zones = listOf(ZoneProto("t")),
+          ),
+      )
+    val p = f.player("Ann")
+    val d = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(swordLabel, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    val dagger = f.w.spawnItem(daggerLabel, ItemLocation.Carried(p.id))
+    f.w.moveItem(dagger, ItemLocation.Equipped(p.id, "offhand"))
+    val ring = f.w.spawnItem(ringLabel, ItemLocation.Carried(p.id))
+    f.w.moveItem(ring, ItemLocation.Equipped(p.id, "finger"))
+
+    // 1. Sword's own swing (slot = "wield", weapon = sword) -> both sword and ring apply
+    val swordSwingCtx = RulesContext(f.w, p, d, weapon = sword, slot = "wield")
+    assertEquals(21, f.w.damageChain(swordSwingCtx, base = 10).value)
+
+    // 2. Offhand dagger swing (slot = "offhand", weapon = dagger) -> sword skipped, ring applies
+    val daggerSwingCtx = RulesContext(f.w, p, d, weapon = dagger, slot = "offhand")
+    assertEquals(11, f.w.damageChain(daggerSwingCtx, base = 10).value)
+
+    // 3. Spell damage (slot = null) -> outside swings, sword and ring both apply
+    val spellCtx = RulesContext(f.w, p, d, skill = T.skills[0], damageType = DamageType(f.fs.magic))
+    assertEquals(21, f.w.damageChain(spellCtx, base = 10).value)
+  }
+
+  @Test
+  fun `a worn weapon's to_hit modifiers and item affect modifiers apply only to its own swing`() {
+    val swordLabel = Label("//t:custom_sword")
+    val daggerLabel = Label("//t:custom_dagger")
+    val host = RecordingHost()
+    host.modifiers["sword_aim"] = { _, _, base -> (base as Int) + 10 }
+    host.modifiers["sword_glow"] = { _, _, base -> (base as Int) + 3 }
+    val f =
+      Fixture(
+        scripts = host,
+        protos =
+          Prototypes(
+            T.rooms,
+            T.mobs,
+            T.items +
+              listOf(
+                ItemProto(
+                  swordLabel,
+                  "sword",
+                  listOf("sword"),
+                  wear = "wield",
+                  dice = Dice(1, 6),
+                  modifiers = mapOf(ModifierPoint.TO_HIT to mod("sword_aim")),
+                  affects =
+                    listOf(
+                      ItemAffect(
+                        "glow",
+                        AffectScope.CARRIED,
+                        modifiers = mapOf(ModifierPoint.DAMAGE to mod("sword_glow")),
+                      )
+                    ),
+                ),
+                ItemProto(
+                  daggerLabel,
+                  "dagger",
+                  listOf("dagger"),
+                  wear = "offhand",
+                  dice = Dice(1, 4),
+                ),
+              ),
+            T.skills,
+            zones = listOf(ZoneProto("t")),
+          ),
+      )
+    val p = f.player("Ann")
+    val d = f.mob(T.DUMMY)
+    val sword = f.w.spawnItem(swordLabel, ItemLocation.Carried(p.id))
+    f.w.moveItem(sword, ItemLocation.Equipped(p.id, "wield"))
+    val dagger = f.w.spawnItem(daggerLabel, ItemLocation.Carried(p.id))
+    f.w.moveItem(dagger, ItemLocation.Equipped(p.id, "offhand"))
+
+    val swordSwing = RulesContext(f.w, p, d, weapon = sword, slot = "wield")
+    assertEquals(f.w.rules.toHit(swordSwing) + 10, f.w.toHitChain(swordSwing).value)
+    assertEquals(13, f.w.damageChain(swordSwing, base = 10).value)
+
+    val daggerSwing = RulesContext(f.w, p, d, weapon = dagger, slot = "offhand")
+    assertEquals(f.w.rules.toHit(daggerSwing), f.w.toHitChain(daggerSwing).value)
+    assertEquals(10, f.w.damageChain(daggerSwing, base = 10).value)
   }
 }

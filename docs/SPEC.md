@@ -978,7 +978,7 @@ from `ctx.actor.skills`.
 
 |                                                                                Primitive                                                                                 |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
 |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `damage(dice, type)`                                                                                                                                                     | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The roll goes through `rules.mitigate`, which returns the vital losses (§4.6).                                                                                                                                                                                                                                                                                                                |
+| `damage(dice, type)`                                                                                                                                                     | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and then `mitigate`. A negative chain result counts as 0.                                                                                                                                                                                                                         |
 | `heal(dice, vital)`                                                                                                                                                      | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, applies=None)` | Attach a timed buff or debuff. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one.                                                                                                                                                                                                                                                                   |
 | `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                    | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
@@ -987,8 +987,6 @@ from `ctx.actor.skills`.
 | `stun(pulses)`                                                                                                                                                           | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `summon(label, count=1, duration=None)`                                                                                                                                  | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
 | `sequence(*effects)`                                                                                                                                                     | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
-
-Spell `damage(...)` effects don't go through the `damage` modifier point; only auto-attacks do (§4.6).
 
 ### 4.4 Hook Catalog
 
@@ -1214,9 +1212,11 @@ silently ignored; helpers take a `_` prefix.
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the other actor, if any: the
 defender, the pinner, the killed or the killer, or the actor advanced on or retreated from), `weapon`, `item`, `band` (a
 word in the calls that set one, such as `get_lag` and the track lag exports; otherwise `None`, and always `None` without
-the `track` feature), `skill`, `room` (the actor's, or the room the call is about), `pulse`, `rng`, `roll(dice)`, and
-`deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of
-§4.5, and `choices`, `traits` and `has_trait` (§4.19).
+the `track` feature), `skill`, `room` (the actor's, or the room the call is about), `damage_type` (the damage type as a
+string in auto-attack `to_hit` and `damage` calls, `damage` chains and `mitigate`, otherwise `None`), `slot` (the slot
+of the swinging item in an auto-attack swing, `"wield"` for an unarmed swing, otherwise `None`), `pulse`, `rng`,
+`roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the
+schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 
 |                   Function                    |  Feature   |                                                                                                   Returns                                                                                                    |
 |-----------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -1229,8 +1229,8 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
 | `carry_limit(ctx)`                            | kernel     | Weight.                                                                                                                                                                                                      |
 | `encumbrance(ctx)`                            | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
 | `on_player_death(ctx)`                        | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int, "level_loss": int}`                                                                                                                               |
-| `to_hit(ctx)`                                 | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`.                                                                                                                                |
-| `damage(ctx)`                                 | `combat`   | Raw auto-attack damage, an int.                                                                                                                                                                              |
+| `to_hit(ctx)`                                 | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`, `damage_type`, `slot`.                                                                                                         |
+| `damage(ctx)`                                 | `combat`   | Raw auto-attack damage, an int; every auto-attack and `damage(...)` effect then runs the `damage` modifier chain.                                                                                            |
 | `initiative(ctx)`                             | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
 | `flee_chance(ctx)`                            | `combat`   | Percent.                                                                                                                                                                                                     |
 | `retreat_check(ctx)`                          | `track`    | Success chance in percent, used when pinned.                                                                                                                                                                 |
@@ -1263,9 +1263,10 @@ the `track` feature), `skill`, `room` (the actor's, or the room the call is abou
 
 **Signatures and results:**
 
-- `mitigate(ctx, amount, type)` gets the damage type as a string, `get_lag(ctx, band)` the band as a word, and
-  `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill` and the total of the damage event's losses as
-  `amount`. `equipment_slots()` gets no ctx, and `xp_to_level(ctx, level)` gets the level it is asked about as `level`.
+- `mitigate(ctx, amount, type)` gets the damage type as a string (and as `ctx.damage_type`), `get_lag(ctx, band)` the
+  band as a word, and `interrupt_check(ctx, amount)` the spell being cast as `ctx.skill` and the total of the damage
+  event's losses as `amount`. `equipment_slots()` gets no ctx, and `xp_to_level(ctx, level)` gets the level it is asked
+  about as `level`.
 - `mitigate` is called for auto-attacks and the `damage(...)` effect primitive, never for the raw `ctx.damage` verb. Its
   result may name any vitals, so a world can send psychic damage to `sanity` or let a `shield` vital soak damage first.
   Each loss is subtracted with no floor.
@@ -1335,9 +1336,9 @@ formulas.
 `api_version`. `mitigate` is not a modifier point. Modifiers of `move_cost` and `regen` take and return `vitals(...)`
 values; modifier points of a feature that is off can't be named.
 
-**Whose chain:** the attacker's for `to_hit` and `damage`, the caster's for `cast_allowed`, the mover's for `move_cost`
-(from the room being left), and the actor's own for `regen` and `initiative`. "Zone" means the package of that actor's
-room, and the regions and room are those of that room too.
+**Whose chain:** the attacker's for `to_hit` and `damage` (the caster is the attacker for spell damage), the caster's
+for `cast_allowed`, the mover's for `move_cost` (from the room being left), and the actor's own for `regen` and
+`initiative`. "Zone" means the package of that actor's room, and the regions and room are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
 room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
@@ -1347,6 +1348,9 @@ other held item's `carried` affects, depth first through containers in item-id o
 `item(modifiers=)` and item affects their `modifiers`; affects contribute the `modifiers` given to `apply_affect`;
 traits contribute the Kotlin modifiers of their plugin. Traits have no `cast_allowed` modifiers: the `cast` restriction
 refuses casts (§4.19).
+
+**Weapons in swings:** during an auto-attack swing (`ctx.slot` is set), the modifiers of a worn item with `dice`, and of
+its item affects, apply only when that item is `ctx.weapon`. Outside swings, worn weapons contribute like any worn item.
 
 Each modifier is a top-level function with the signature `fn(ctx, base) -> value`, or returns `ctx.deny(msg)` (only for
 `cast_allowed`):

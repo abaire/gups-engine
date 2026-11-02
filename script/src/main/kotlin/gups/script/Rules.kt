@@ -123,6 +123,22 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   fun skill(): Any = field { c.skill?.let { SkillView(it, c.world.schema) } ?: Starlark.NONE }
 
   @StarlarkMethod(
+    name = "damage_type",
+    structField = true,
+    doc =
+      "The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.",
+  )
+  fun damageType(): Any = field { c.damageType?.name ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "slot",
+    structField = true,
+    doc =
+      "The slot of the swinging item in an auto-attack swing, 'wield' for an unarmed swing, otherwise None.",
+  )
+  fun slot(): Any = field { c.slot ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "room",
     structField = true,
     doc = "The actor's room; for sense_cost, the room the signal enters.",
@@ -1219,7 +1235,10 @@ internal fun dryRunRules(
         rules.interruptCheck(withSkill, 1)
       }
       if (Feature.LEVELING in features) rules.xpForKill(c)
-      for (type in schema.damageTypes) rules.mitigate(c, 5, DamageType(type))
+      for (type in schema.damageTypes) {
+        val damageType = DamageType(type)
+        rules.mitigate(RulesContext(world, a, other, damageType = damageType), 5, damageType)
+      }
       if (Feature.TRACK in features)
         for (band in Band.entries) rules.getLag(
           RulesContext(world, a, item = null, band = band),

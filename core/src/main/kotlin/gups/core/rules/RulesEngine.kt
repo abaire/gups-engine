@@ -57,6 +57,10 @@ class RulesContext(
   val tags: Set<String> = emptySet(),
   /** The actor who originated the perceived event, or null if environmental. */
   val source: Actor? = null,
+  /** Damage type of the attack or damage being rolled, modified or mitigated, or null. */
+  val damageType: DamageType? = null,
+  /** Equipment slot of the swinging item in an auto-attack swing, or null outside swings. */
+  val slot: String? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }

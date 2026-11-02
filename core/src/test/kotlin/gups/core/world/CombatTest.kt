@@ -6,12 +6,16 @@ import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Condition
 import gups.core.model.DamageType
+import gups.core.model.Dice
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.ModifierPoint
 import gups.core.model.Player
+import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
+import gups.core.model.ZoneProto
 import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import kotlin.test.Test
@@ -404,5 +408,42 @@ class CombatTest(private val fs: FixtureSchema) {
     f.w.startCombat(p, f.mob(T.DUMMY))
     f.runTo(8)
     assertEquals(listOf(p.name) + listOf(bow, sword).sortedBy { it.id }.map { it.name }, seen)
+  }
+
+  @Test
+  fun `spell damage goes through damage modifier chain with room and caster affect modifiers and traces`() {
+    val host = RecordingHost()
+    host.modifiers["room_boost"] = { _, _, base -> (base as Int) + 5 }
+    host.modifiers["affect_boost"] = { _, _, base -> (base as Int) + 3 }
+    val f =
+      Fixture(
+        fs = fs,
+        scripts = host,
+        protos =
+          Prototypes(
+            listOf(T.rooms[0].copy(modifiers = mapOf(ModifierPoint.DAMAGE to mod("room_boost")))) +
+              T.rooms.drop(1),
+            T.mobs,
+            T.items,
+            T.skills,
+            zones = listOf(ZoneProto("t")),
+          ),
+      )
+    val lines = mutableListOf<String>()
+    f.w.onRules = { _, line -> lines += line }
+    val p = f.player("Ann")
+    val d = f.mob(T.DUMMY)
+    f.w.applyAffect(
+      p,
+      "empower",
+      duration = 100,
+      modifiers = mapOf(ModifierPoint.DAMAGE to mod("affect_boost")),
+    )
+    f.w.applyEffect(Effect.Damage(Dice(1, 1, 9), DamageType(fs.magic)), p, d, skill = T.skills[0])
+    assertEquals(1000 - 18, d.current(fs.health))
+    assertTrue(
+      lines.any { "rules.damage base=10 → room:hall 15 → affect:empower 18" in it },
+      "Expected trace line in: $lines",
+    )
   }
 }
