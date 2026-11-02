@@ -341,6 +341,7 @@ fun World.applyAffect(
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
   disabledChanged(target, wasDisabled)
+  forgetActorSlots(target)
   clampVitals(target)
   return affect
 }
@@ -373,6 +374,7 @@ private fun World.endAffect(
   if (!a.affects.remove(affect)) return
   a.dirty = true
   disabledChanged(a, wasDisabled)
+  forgetActorSlots(a)
   clampVitals(a)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
   if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())

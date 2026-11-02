@@ -94,6 +94,7 @@ fun World.levelUp(a: Actor): Boolean {
   if (countPendingLevels(a, 1) <= 0) return false
 
   a.level += 1
+  forgetActorSlots(a)
 
   val result =
     try {
@@ -226,6 +227,7 @@ fun World.levelDownStep(a: Actor) {
   }
 
   a.level -= 1
+  forgetActorSlots(a)
 
   val capped = capVitals(a)
 

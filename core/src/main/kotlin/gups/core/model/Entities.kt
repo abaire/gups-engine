@@ -431,6 +431,7 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   internal val inventoryIndex = TreeMap<EntityId, Item>()
   internal val equipmentIndex = LinkedHashMap<String, Item>()
+  internal var slotCache: List<String>? = null
 
   /** List of all items carried in inventory, ordered by entity ID. */
   val inventory: List<Item>

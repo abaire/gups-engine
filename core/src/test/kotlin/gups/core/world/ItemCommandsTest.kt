@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.AttrValue
 import gups.core.Label
+import gups.core.fixtures.FixtureRules
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.AffectScope
@@ -13,7 +14,10 @@ import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Prototypes
+import gups.core.model.Restriction
+import gups.core.model.RestrictionPoint
 import gups.core.rules.RulesContext
+import gups.core.rules.RulesEngine
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -112,8 +116,16 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
       ),
     )
 
-  private fun fixture(host: ScriptHost = ScriptHost.NONE) =
-    Fixture(scripts = host, protos = Prototypes(T.rooms, T.mobs, T.items + extra, T.skills))
+  private fun fixture(
+    host: ScriptHost = ScriptHost.NONE,
+    rules: RulesEngine = FixedRules(fs),
+    extraItems: List<ItemProto> = emptyList(),
+  ) =
+    Fixture(
+      rules = rules,
+      scripts = host,
+      protos = Prototypes(T.rooms, T.mobs, T.items + extra + extraItems, T.skills),
+    )
 
   private fun Fixture.carry(p: gups.core.model.Player, label: Label, count: Int = 1) =
     w.spawnItem(label, ItemLocation.Carried(p.id), count)
@@ -142,7 +154,7 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
   }
 
   @Test
-  fun `wear fills a slot family in order, then swaps, and worn items add flags and stats`() {
+  fun `wear fills a slot family in order, then refuses when full, and worn items add flags and stats`() {
     val f = fixture()
     val p = f.player("Ann")
     val a = f.carry(p, ring)
@@ -152,9 +164,15 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     f.doLine(p, "wear ring")
     assertEquals(ItemLocation.Equipped(p.id, "finger_l"), a.location)
     assertEquals(ItemLocation.Equipped(p.id, "finger_r"), b.location)
-    assertContains(f.doLine(p, "wear ring"), "You stop using a ring.")
-    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), c.location)
+    assertContains(f.doLine(p, "wear ring"), "There's no room for a ring. Remove something first.")
+    assertEquals(ItemLocation.Carried(p.id), c.location)
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), a.location)
+    assertEquals(ItemLocation.Equipped(p.id, "finger_r"), b.location)
+    assertContains(f.doLine(p, "remove ring"), "You stop using a ring.")
     assertEquals(ItemLocation.Carried(p.id), a.location)
+    assertContains(f.doLine(p, "wear ring"), "You wear a ring.")
+    val equipped = p.equipped("finger_l")
+    assertTrue(equipped === a || equipped === c)
     f.carry(p, cap)
     assertContains(f.doLine(p, "wield cap"), "You can't wield a cursed cap.")
     f.doLine(p, "wear cap")
@@ -162,6 +180,62 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
     assertEquals(12, p.stat(fs.toughness))
     f.doLine(p, "remove cap")
     assertFalse(p.hasFlag("no_regen"))
+  }
+
+  @Test
+  fun `a REMOVE restriction refusing a worn helmet makes wear of another helmet fail and leaves both items where they were`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    val h1 = f.carry(p, helm)
+    val h2 = f.carry(p, helm)
+    f.doLine(p, "wear helm")
+    assertEquals(ItemLocation.Equipped(p.id, "head"), h1.location)
+    assertEquals(ItemLocation.Carried(p.id), h2.location)
+    f.w.restrictions =
+      mapOf(
+        RestrictionPoint.REMOVE to
+          listOf(
+            Restriction { _, r -> if (r.item === h1) "The helm is bound to your head!" else null }
+          )
+      )
+    val out = f.doLine(p, "wear helm")
+    assertContains(out, "The helm is bound to your head!")
+    assertEquals(ItemLocation.Equipped(p.id, "head"), h1.location)
+    assertEquals(ItemLocation.Carried(p.id), h2.location)
+  }
+
+  @Test
+  fun `wield of a wear = hand item uses the wield messages`() {
+    val handProto =
+      ItemProto(Label("//t:hand_blade"), "a hand blade", listOf("blade"), wear = "hand")
+    val handRules =
+      object : FixtureRules(fs) {
+        override fun slotFamilies(): Map<String, List<String>> =
+          mapOf("finger" to listOf("finger_l", "finger_r"), "hand" to listOf("wield", "offhand"))
+      }
+    val f = fixture(rules = handRules, extraItems = listOf(handProto))
+    val p = f.player("Ann")
+    f.carry(p, handProto.label)
+    val out = f.doLine(p, "wield blade")
+    assertContains(out, "You wield a hand blade.")
+  }
+
+  @Test
+  fun `equipment order follows actorSlots`() {
+    val f = fixture()
+    val p = f.player("Ann")
+    f.carry(p, cap)
+    f.carry(p, T.SWORD)
+    f.carry(p, ring)
+    f.doLine(p, "wear cap")
+    f.doLine(p, "wield sword")
+    f.doLine(p, "wear ring")
+    val out = f.doLine(p, "equipment")
+    val headIdx = out.indexOf("<head>")
+    val fingerIdx = out.indexOf("<finger_l>")
+    val wieldIdx = out.indexOf("<wield>")
+    assertTrue(headIdx != -1 && fingerIdx != -1 && wieldIdx != -1)
+    assertTrue(headIdx < fingerIdx && fingerIdx < wieldIdx)
   }
 
   @Test

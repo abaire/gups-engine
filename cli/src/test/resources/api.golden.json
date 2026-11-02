@@ -9845,6 +9845,22 @@
       "since": 1
     },
     {
+      "symbol": "message:wear.no_room",
+      "id": "wear.no_room",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "There's no room for {item}. Remove something first.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.remove_first",
+      "id": "wear.remove_first",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "You'd need to remove {items} first.",
+      "since": 1
+    },
+    {
       "symbol": "message:wear.room",
       "id": "wear.room",
       "placeholders": ["actor", "item"],

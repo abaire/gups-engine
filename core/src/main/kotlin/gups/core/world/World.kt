@@ -222,6 +222,7 @@ class World(
   var quarantineWindowPulses: Long = MINUTE_PULSES
 
   internal var slotCache: List<String>? = null
+  internal var slotFamilyCache: Map<String, List<String>>? = null
 
   val rng = Rng(config.seed)
   val features: Features
@@ -423,6 +424,7 @@ class World(
     settleNewCondition(p, "starting_stats")
     p.lastInputPulse = pulse
     enter(p, room, p.trackIndex)
+    forgetActorSlots(p)
     clampVitals(p)
     return p
   }
@@ -434,6 +436,7 @@ class World(
     applyStartingStats(m, startingStatsOf(m))
     settleNewCondition(m, "starting_stats")
     enter(m, at, m.trackIndex)
+    forgetActorSlots(m)
     clampVitals(m)
     val full =
       m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.mapValues { it.value.current }

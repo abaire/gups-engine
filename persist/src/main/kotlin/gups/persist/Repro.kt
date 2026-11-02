@@ -9,6 +9,7 @@ import gups.core.world.Diagnostic
 import gups.core.world.InputRecord
 import gups.core.world.World
 import gups.core.world.clampVitals
+import gups.core.world.forgetActorSlots
 import gups.core.world.recentInputs
 import gups.core.world.restoreMob
 import gups.core.world.restorePlayer
@@ -109,7 +110,10 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
     applyPlayer(world, world.restorePlayer(EntityId(pl.id), pl.name, room, p.index, room.label), p)
   }
   placeItems(world, rows.filter { it.kind == "item" }, tombstones = true, LinkedHashSet(), notes)
-  for (a in world.actors) world.clampVitals(a)
+  for (a in world.actors) {
+    world.forgetActorSlots(a)
+    world.clampVitals(a)
+  }
   return notes
 }
 

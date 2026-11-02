@@ -107,6 +107,10 @@ object KernelMsg : MsgGroup(null) {
   val PUT_ROOM = msg("put.room", "{actor} puts {item} in {container}.", "actor,item,container")
   val WEAR_CANT_WEAR = msg("wear.cant_wear", "You can't wear {item}.", "item")
   val WEAR_CANT_WIELD = msg("wear.cant_wield", "You can't wield {item}.", "item")
+  val WEAR_REMOVE_FIRST =
+    msg("wear.remove_first", "You'd need to remove {items} first.", "items", "items")
+  val WEAR_NO_ROOM =
+    msg("wear.no_room", "There's no room for {item}. Remove something first.", "item")
   val WEAR_STOP = msg("wear.stop", "You stop using {item}.", "item")
   val WEAR_SELF = msg("wear.self", "You wear {item}.", "item")
   val WEAR_ROOM = msg("wear.room", "{actor} wears {item}.", "actor,item")

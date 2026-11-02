@@ -24,6 +24,7 @@ class RestrictionsTest {
   private val HELM = Label("//t:helm")
   private val DAGGER = Label("//t:dagger")
   private val RING = Label("//t:ring")
+  private val RING_L = Label("//t:ring_l")
 
   private val testItems =
     T.items +
@@ -31,6 +32,7 @@ class RestrictionsTest {
         ItemProto(HELM, "a helmet", listOf("helmet"), wear = "head"),
         ItemProto(DAGGER, "a dagger", listOf("dagger"), wear = "wield"),
         ItemProto(RING, "a ring", listOf("ring"), wear = "finger"),
+        ItemProto(RING_L, "a signet ring", listOf("signet"), wear = "finger_l"),
       )
 
   private val f =
@@ -380,10 +382,18 @@ class RestrictionsTest {
     val ring3 = f.w.spawnItem(RING, ItemLocation.Carried(p.id))
     f.input(p, "wear ring")
     f.run()
-    assertContains(f.out(p), "Nope.")
+    assertContains(f.out(p), "There's no room for a ring. Remove something first.")
     assertEquals(ItemLocation.Equipped(p.id, "finger_l"), ring1.location)
     assertEquals(ItemLocation.Equipped(p.id, "finger_r"), ring2.location)
     assertEquals(ItemLocation.Carried(p.id), ring3.location)
+
+    val ringL = f.w.spawnItem(RING_L, ItemLocation.Carried(p.id))
+    f.input(p, "wear signet")
+    f.run()
+    assertContains(f.out(p), "Nope.")
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), ring1.location)
+    assertEquals(ItemLocation.Equipped(p.id, "finger_r"), ring2.location)
+    assertEquals(ItemLocation.Carried(p.id), ringL.location)
   }
 
   @Test

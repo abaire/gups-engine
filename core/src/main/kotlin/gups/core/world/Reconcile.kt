@@ -121,7 +121,11 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   graphChanged()
   inboundCache = null
   slotCache = null
-  for (a in actorIndex.values) refreshHoldings(a)
+  slotFamilyCache = null
+  for (a in actorIndex.values) {
+    forgetActorSlots(a)
+    refreshHoldings(a)
+  }
   // Refilled only now that the new traits and item prototypes count towards the maxima.
   for ((m, names) in refill) if (m.inWorld) {
     for (name in names) m.vitalMap.getValue(name).current = m.max(name)

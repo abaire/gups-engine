@@ -1315,8 +1315,9 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
   worn items.
 - `slot_families()`: family names are lowercase identifiers that are not slot names; each family lists one or more slots
   of `equipment_slots()`, with no repeats; no slot belongs to two families. A slot in no family stands alone.
-- `actor_slots(ctx)` returns a subset of `equipment_slots()`. A slot outside it is a bad return value, and the actor
-  then has every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore.
+- `actor_slots(ctx)` returns a subset of `equipment_slots()`. A slot outside it is a bad return value: it is reported
+  and dropped, and the actor keeps the rest. If every slot it returns is outside `equipment_slots()`, the actor has
+  every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore.
 - `slot_cost(ctx)` gets `ctx.actor` and `ctx.item`. A result below 1 is a bad return value and counts as the item's
   `slot_cost`.
 
@@ -1397,11 +1398,17 @@ without the current encumbrance). It is recomputed when an actor's custody chang
 world tick, since stats can change the limit. The actor is told when it starts and when it lifts. The carry-limit check
 counts a container's contents.
 
-**Equipment:** Slots come from `rules.equipment_slots()`. Wearing into an occupied slot moves the old item back to the
-inventory; a slot family whose slots are all full swaps out the first. `wield` only takes items whose slot is `wield`;
-`wear` takes any slotted item; `remove` (`unwield` in the template world) takes off an item in any slot, worn or
-wielded. The `wear` restriction (§4.19) runs once the slot is known and before anything moves, so a refused item swaps
-nothing out.
+**Equipment:** Slots come from `rules.equipment_slots()`, the slots an actor has from `rules.actor_slots(ctx)`, and slot
+families from `rules.slot_families()`. An item's `wear` names a slot or a family; a family's slots that the actor has
+are tried in order, and the first free one is used. An item takes up `rules.slot_cost(ctx)` of its family's slots, and a
+family holds as much as the number of its slots the actor has. Wearing works out which worn items would have to come off
+for the item to fit: if none, the item is worn; if exactly one, it is taken off first, unless the `remove` restriction
+refuses, which refuses the wear; if more than one, the wear is refused and names them. If equally good choices would
+take off different items, the wear is refused with no list ("There's no room"), and the player removes what they choose.
+An item that costs more than its family holds can't be worn. `wield` takes items whose `wear` is `wield`, the family
+that contains `wield`, or another slot of that family; `wear` takes any item with `wear`; `remove` (`unwield` in the
+template world) takes off an item in any slot, worn or wielded. The `wear` restriction (§4.19) runs once the slot is
+known and before anything moves, so a refused item swaps nothing out.
 
 ### 4.7 Behaviors (built in, implemented in Kotlin)
 
@@ -1519,6 +1526,17 @@ uses the default names. Every player-facing message here is the default text of 
   item capacity and `max_weight`.
 - **Containers:** `open`, `close`, `lock` and `unlock` take a container when the word isn't a door direction here.
 - **Keys:** locking or unlocking a door or container needs its key carried (keyring included) or equipped.
+- **`wear <item>` and `wield <item>`:** equip a carried item. `wield` takes items whose `wear` is `wield`, the family
+  that contains `wield`, or another slot of that family; `wear` takes any item with `wear`. An item's `wear` names a
+  slot or a family; a family's slots that the actor has are tried in order, and the first free one is used. An item
+  takes up `rules.slot_cost(ctx)` of its family's slots, and a family holds as much as the number of its slots the actor
+  has. Wearing works out which worn items would have to come off for the item to fit: if none, the item is worn; if
+  exactly one, it is taken off first (swapped to inventory), unless the `remove` restriction refuses, which refuses the
+  wear; if more than one, the wear is refused and names them. If equally good choices would take off different items,
+  the wear is refused with no list ("There's no room"), and the player removes what they choose. An item that costs more
+  than its family holds can't be worn.
+- **`remove <item>`:** takes off an item in any slot, moving it to the inventory, unless the `remove` restriction
+  refuses.
 - **`use <item> [target]`:** the item is worn, carried, or on the ground within `get_lag` reach (in that order of
   search), and must have an `on_use` hook ("You can't use that." otherwise). `before_use` can veto. The target is an
   actor in the room, else an item. The engine never uses an item up; `on_use` destroys it if it should be.
@@ -2447,11 +2465,11 @@ either allows it or refuses with a message.
 
 - Checks apply to every actor, players and mobs alike; a check that only cares about players allows mobs.
 - `remove` runs wherever a command would take a worn item off, so no command can swap out an item the check refuses:
-  `remove` itself, and `wear` or `wield` into an occupied slot, including a slot family whose slots are all full, where
-  the item that would be swapped out is checked. A refusal there refuses the whole `wear`, and nothing moves. `drop`,
-  `give` and `put` only ever take carried items, so a worn item must pass `remove` before any of them can move it. When
-  `drop`, `give` or `put` names several stacks (a count or `all`), each stack is checked on its own, and a refused stack
-  is skipped with the refusal message while the others move.
+  `remove` itself, and a `wear` or `wield` that would take exactly one worn item off to make room, where that item is
+  checked. A refusal there refuses the whole `wear`, and nothing moves. `drop`, `give` and `put` only ever take carried
+  items, so a worn item must pass `remove` before any of them can move it. When `drop`, `give` or `put` names several
+  stacks (a count or `all`), each stack is checked on its own, and a refused stack is skipped with the refusal message
+  while the others move.
 - Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
   (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay, the re-check after a choice
   change) don't run them.

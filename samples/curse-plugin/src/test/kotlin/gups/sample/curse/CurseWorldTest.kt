@@ -337,10 +337,13 @@ class CurseWorldTest {
           t.true(worn == first.id or worn == second.id)
 
           out = p.do("wear pring")
-          t.contains(out, "It won't budge. It must be cursed!")
+          t.contains(out, "There's no room for a plain ring. Remove something first.")
           t.eq(p.equipped("finger_l").id, cursed.id)
           t.eq(p.equipped("finger_r").id, worn)
           t.eq([i.id for i in p.inventory()], [second.id if worn == first.id else first.id])
+
+          out = p.do("remove cring")
+          t.contains(out, "It won't budge. It must be cursed!")
 
       def test_lift_transforms_item(t):
           w = t.world(packages = ["//skills", "//zones/curse_zone"])

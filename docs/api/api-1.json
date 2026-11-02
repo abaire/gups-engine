@@ -349,7 +349,7 @@
           "required": false,
           "default": "None",
           "allowed_values": [],
-          "doc": "Equipment slot the item is worn in.",
+          "doc": "Equipment slot or slot family the item is worn in.",
           "since": 1
         },
         {
@@ -361,7 +361,19 @@
           "required": false,
           "default": "None",
           "allowed_values": [],
-          "doc": "Weapon slot alias for wear.",
+          "doc": "Alias for wear, for weapons.",
+          "since": 1
+        },
+        {
+          "symbol": "item.slot_cost",
+          "name": "slot_cost",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "1",
+          "allowed_values": [],
+          "doc": "How many slots of its family the item takes up; at least 1.",
           "since": 1
         },
         {
@@ -4882,6 +4894,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.slot_cost",
+          "name": "slot_cost",
+          "doc": "How many slots of its family this item takes up when worn; at least 1.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.stat_deltas",
           "name": "stat_deltas",
           "doc": "Stat changes while worn.",
@@ -6109,6 +6127,15 @@
     },
     "exports": [
       {
+        "symbol": "rules:actor_slots",
+        "name": "actor_slots",
+        "signature": "actor_slots(ctx)",
+        "return_type": "list[str]",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "The slots ctx.actor has, a subset of equipment_slots().",
+        "since": 1
+      },
+      {
         "symbol": "rules:advance_lag",
         "feature": "track",
         "name": "advance_lag",
@@ -6334,6 +6361,24 @@
         "return_type": "int",
         "ctx_fields": ["room", "exit", "channel", "pulse", "rng"],
         "doc": "What a perceivable event on ctx.channel loses crossing ctx.exit into ctx.room, one hop toward the listeners. The price is added to the event's cost; a negative price blocks the hop. ctx.actor is None.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:slot_cost",
+        "name": "slot_cost",
+        "signature": "slot_cost(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "item", "room", "pulse", "rng"],
+        "doc": "How many slots of its family ctx.item takes up when ctx.actor wears it; at least 1.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:slot_families",
+        "name": "slot_families",
+        "signature": "slot_families()",
+        "return_type": "dict[str, list[str]]",
+        "ctx_fields": [],
+        "doc": "Slot families: a family name to its ordered concrete slots.",
         "since": 1
       },
       {
@@ -9797,6 +9842,22 @@
       "placeholders": ["item"],
       "required": [],
       "default": "You can't wield {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.no_room",
+      "id": "wear.no_room",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "There's no room for {item}. Remove something first.",
+      "since": 1
+    },
+    {
+      "symbol": "message:wear.remove_first",
+      "id": "wear.remove_first",
+      "placeholders": ["items"],
+      "required": ["items"],
+      "default": "You'd need to remove {items} first.",
       "since": 1
     },
     {

@@ -416,15 +416,25 @@ internal object KernelCommands {
   private fun equipment(c: CommandCall) {
     val eq = c.actor.equipment
     val w = c.world
+    val actor = c.actor
+    val slots = w.actorSlots(actor)
+    val entries = mutableListOf<Pair<String, Item>>()
+    for (s in slots) {
+      actor.equipped(s)?.let { entries.add(s to it) }
+    }
+    val otherOccupied = eq.filterKeys { it !in slots }.entries.sortedBy { it.key }
+    for (entry in otherOccupied) {
+      entries.add(entry.key to entry.value)
+    }
     w.send(
-      c.actor,
-      if (eq.isEmpty()) w.msg(KernelMsg.EQUIPMENT_EMPTY)
+      actor,
+      if (entries.isEmpty()) w.msg(KernelMsg.EQUIPMENT_EMPTY)
       else
         w.msg(
           KernelMsg.EQUIPMENT_LIST,
           "items" to
-            eq.entries.joinToString("\n") {
-              w.msg(KernelMsg.EQUIPMENT_ITEM, "slot" to it.key, "item" to it.value.name)
+            entries.joinToString("\n") {
+              w.msg(KernelMsg.EQUIPMENT_ITEM, "slot" to it.first, "item" to it.second.name)
             },
         ),
     )
@@ -683,9 +693,10 @@ internal object KernelCommands {
   }
 
   /**
-   * `wear <item>` and `wield <item>`: equips a carried item in its slot, swapping out whatever was
-   * there. An item's `wear` slot may name a family such as `finger`, which fits the first free
-   * `finger_*` slot of the rules' `equipment_slots()`.
+   * `wear <item>` and `wield <item>`: equips a carried item. `wield` accepts items whose `wear` is
+   * `wield`, the family that contains `wield`, or another slot of that family. `wear` accepts any
+   * slotted item. Slot choice and displacement follow slot families, per-actor slots, and slot
+   * costs. Swapping out a single item checks the REMOVE restriction point.
    */
   private fun planWear(c: CommandCall, wield: Boolean): Action? {
     val w = c.world
@@ -693,7 +704,7 @@ internal object KernelCommands {
       w.findItem(c.actor, c.args, inventory = true, ground = false)
         ?: return null.also { w.tell(c.actor, KernelMsg.NOT_CARRYING) }
     val wanted = item.proto.wear
-    if (wanted == null || (wield && wanted != "wield"))
+    if (wanted == null) {
       return null.also {
         w.tell(
           c.actor,
@@ -701,38 +712,92 @@ internal object KernelCommands {
           "item" to item.name,
         )
       }
+    }
+    if (wield) {
+      val wieldFamily = w.familyOfSlot("wield")
+      val wearFamily = w.familyOfWear(wanted)
+      val canWield = (wieldFamily != null && wearFamily == wieldFamily) || wanted == "wield"
+      if (!canWield) {
+        return null.also { w.tell(c.actor, KernelMsg.WEAR_CANT_WIELD, "item" to item.name) }
+      }
+    }
     return object : Action {
-      override fun validate(w: World, actor: Actor): String? {
-        if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
-        val slot =
-          w.slotFor(actor, wanted) ?: return w.msg(KernelMsg.WEAR_CANT_WEAR, "item" to item.name)
-        val occupant = actor.equipped(slot)
-        if (occupant != null) {
-          val removeReq =
-            RestrictionRequest(
-              point = RestrictionPoint.REMOVE,
-              actor = actor,
-              item = occupant,
-              slot = slot,
-            )
-          val refusal = w.restrictionRefusal(RestrictionPoint.REMOVE, removeReq)
-          if (refusal != null) return refusal
+      private var validatedPlan: SlotPlan? = null
+
+      /** Why [plan] can't go ahead, or null if it can. */
+      private fun refusal(w: World, actor: Actor, plan: SlotPlan?): String? {
+        if (plan == null)
+          return w.msg(
+            if (wield) KernelMsg.WEAR_CANT_WIELD else KernelMsg.WEAR_CANT_WEAR,
+            "item" to item.name,
+          )
+        if (plan.ambiguous) return w.msg(KernelMsg.WEAR_NO_ROOM, "item" to item.name)
+        if (plan.displaced.size >= 2) {
+          return w.msg(
+            KernelMsg.WEAR_REMOVE_FIRST,
+            "items" to plan.displaced.joinToString(", ") { it.name },
+          )
         }
         val req =
-          RestrictionRequest(point = RestrictionPoint.WEAR, actor = actor, item = item, slot = slot)
-        val refusal = w.restrictionRefusal(RestrictionPoint.WEAR, req)
-        if (refusal != null) return refusal
+          RestrictionRequest(
+            point = RestrictionPoint.WEAR,
+            actor = actor,
+            item = item,
+            slot = plan.slot,
+          )
+        w.restrictionRefusal(RestrictionPoint.WEAR, req)?.let {
+          return it
+        }
+        val occupant = plan.displaced.singleOrNull() ?: return null
+        val removeReq =
+          RestrictionRequest(
+            point = RestrictionPoint.REMOVE,
+            actor = actor,
+            item = occupant,
+            slot = (occupant.location as ItemLocation.Equipped).slot,
+          )
+        return w.restrictionRefusal(RestrictionPoint.REMOVE, removeReq)
+      }
+
+      override fun validate(w: World, actor: Actor): String? {
+        if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
+        val plan = w.planSlot(actor, item)
+        refusal(w, actor, plan)?.let {
+          return it
+        }
+        validatedPlan = plan
         return null
       }
 
       override fun resolve(w: World, actor: Actor): Int {
-        val slot = w.slotFor(actor, wanted)!!
-        actor.equipped(slot)?.let {
-          w.moveItem(it, ItemLocation.Carried(actor.id))
-          w.tell(actor, KernelMsg.WEAR_STOP, "item" to it.name)
+        if (item.location != ItemLocation.Carried(actor.id)) {
+          w.tell(actor, KernelMsg.NOT_CARRYING)
+          return 0
         }
-        w.moveItem(item, ItemLocation.Equipped(actor.id, slot))
-        val wielded = slot == "wield"
+        val plan = w.planSlot(actor, item)
+        val validated = validatedPlan
+        // Hooks between validate and resolve can change what is worn; a different plan is checked
+        // in full again, so it never skips a restriction.
+        val changed =
+          plan == null ||
+            validated == null ||
+            plan.slot != validated.slot ||
+            plan.displaced != validated.displaced
+        if (changed) {
+          refusal(w, actor, plan)?.let {
+            w.send(actor, it)
+            return 0
+          }
+        }
+        if (plan == null) return 0
+        for (displaced in plan.displaced) {
+          w.moveItem(displaced, ItemLocation.Carried(actor.id))
+          w.tell(actor, KernelMsg.WEAR_STOP, "item" to displaced.name)
+        }
+        w.moveItem(item, ItemLocation.Equipped(actor.id, plan.slot))
+        val wieldFamily = w.familyOfSlot("wield")
+        val wielded =
+          plan.slot == "wield" || (wieldFamily != null && w.familyOfSlot(plan.slot) == wieldFamily)
         w.tell(
           actor,
           if (wielded) KernelMsg.WIELD_SELF else KernelMsg.WEAR_SELF,
@@ -1532,22 +1597,6 @@ internal fun World.reach(actor: Actor, item: Item): String? {
   return if (rules.getLag(RulesContext(this, actor, item = item, band = band), band) == null)
     msg(KernelMsg.CANT_REACH, "item" to item.name)
   else null
-}
-
-/**
- * The equipment slot [wanted] fits for [actor]: the slot itself, or for a family such as `finger`,
- * the first free `finger_*` slot (else the first one, to swap). Null if the rules have no such
- * slot.
- */
-internal fun World.slotFor(actor: Actor, wanted: String): String? {
-  val slots = equipmentSlots()
-  if (wanted in slots) return wanted
-  val fam = rules.slotFamilies()[wanted]
-  if (fam != null) {
-    return fam.firstOrNull { actor.equipped(it) == null } ?: fam.firstOrNull()
-  }
-  val family = slots.filter { it.startsWith("${wanted}_") }
-  return family.firstOrNull { actor.equipped(it) == null } ?: family.firstOrNull()
 }
 
 /**
