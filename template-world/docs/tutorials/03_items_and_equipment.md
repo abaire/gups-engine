@@ -97,6 +97,32 @@ item("spiked_gauntlets",
   modifiers), evaluated in `equipment_slots()` order.
 * **Inspecting:** Just like room modifiers, equipped item modifiers can be traced during combat with `@trace rules`.
 
+Modifiers can also change recovery lag (`MODIFIER.advance_lag`, `MODIFIER.retreat_lag`, `MODIFIER.retreat_fail_lag`, and
+`MODIFIER.flee_fail_lag`). Like other modifiers, they receive the rules export's `ctx` (such as `ctx.room`), and while
+intermediate steps may go below 0, the final lag value is clamped so it is never below 0. For example, the tar pit's
+slow footwork comes from the rules module doubling the lag in rooms with the `sticky_floor` tag (tutorial 02 §7); these
+boots inspect `ctx.room` to cancel that extra lag:
+
+```python
+def _sure_footed(ctx, base):
+    # Modifiers see the same ctx as the rules export, so the boots can check the room.
+    # In a sticky room they cancel the rules' doubled footwork lag; elsewhere they change nothing.
+    return base // 2 if "sticky_floor" in ctx.room.tags else base
+
+item("tar_walker_boots",
+     name="a pair of tar-walker boots",
+     keywords=["boots"],
+     desc="Broad, flat-soled boots that spread your weight over the muck.",
+     kind="armor",
+     wear="feet",
+     # Lag modifiers take the pulses the rules export returned and return new pulses.
+     modifiers={
+         MODIFIER.advance_lag: _sure_footed,
+         MODIFIER.retreat_lag: _sure_footed,
+     },
+     )
+```
+
 ---
 
 ## 4. Consumables and Item Hooks

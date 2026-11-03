@@ -26,7 +26,7 @@ persistence, and linking to official specifications and generated API references
 3. **[03. Items, Equipment, and Containers](03_items_and_equipment.md)**
    * Declaring items with `item()`
    * Keywords and player item matching
-   * Weapons, armor slots, stat deltas, and item modifiers
+   * Weapons, armor slots, stat deltas, and item modifiers (including lag modifiers)
    * Interactive items and consumables (`on_use`)
    * Containers, locks, and capacity
    * Item affects, tags, and prototype transforms

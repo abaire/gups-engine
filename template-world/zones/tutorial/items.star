@@ -38,6 +38,24 @@ item("leather_cap",
     stat_deltas = stats(con = 1),
 )
 
+def _sure_footed(ctx, base):
+    # Modifiers see the same ctx as the rules export, so the boots can check the room.
+    # In a sticky room they cancel the rules' doubled footwork lag; elsewhere they change nothing.
+    return base // 2 if "sticky_floor" in ctx.room.tags else base
+
+item("tar_walker_boots",
+    name = "a pair of tar-walker boots",
+    keywords = ["boots"],
+    desc = "Broad, flat-soled boots that spread your weight over the muck.",
+    kind = "armor",
+    wear = "feet",
+    # Lag modifiers take the pulses the rules export returned and return new pulses.
+    modifiers = {
+        MODIFIER.advance_lag: _sure_footed,
+        MODIFIER.retreat_lag: _sure_footed,
+    },
+)
+
 def _drink(ctx):
     # on_use runs for `use draught`. Return ctx.deny(msg) from a before_use hook to refuse.
     # The engine doesn't use items up by itself: the hook destroys the draught.

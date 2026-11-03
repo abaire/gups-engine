@@ -80,15 +80,6 @@ flat damage)? - Should there be distinct modifier points such as `defend_hit` / 
 defender's affects and equipment be appended to the existing `to_hit` and `damage` chains? - If appended, in what order
 do attacker and defender modifiers apply?
 
-### Track-lag modifier points
-
-**Spec:** §4.6 (modifier points, chain order), §5.5. **Today:** `advance_lag`, `retreat_lag`, `retreat_fail_lag` and
-`flee_fail_lag` are plain rules exports. Rooms, gear and affects change them only through the rules module reading the
-ctx (for example `ctx.room.tags`). **Questions:** - Should they become modifier points, so `room(modifiers=)`,
-`item(modifiers=)` and affects can change them directly? - One `track_lag` point with an action word, or one point per
-export? - Does `flee_fail_lag` get a point without `track`? - How does this relate to encumbrance changing lag
-("Encumbrance beyond stats")?
-
 ### Cross-room projectiles and ranged combat between rooms
 
 **Spec:** §3.3 (item `range`, `kind = "ranged"`), §5.5. **Today:** all combat is strictly self-contained within a single
@@ -169,9 +160,15 @@ be able to recover their corpse after logging out?
 
 ### Encumbrance beyond stats
 
-**Spec:** §4.6 (`carry_limit`, and `encumbrance` returning a "modifiers dict"). **Today:** encumbrance is a set of stat
-deltas only (D-115). It doesn't affect move cost, lag or the ability to move. **Question:** should `encumbrance` also be
-able to return move-cost or lag changes, or forbid movement past a hard limit?
+**Spec:** §4.6 (`carry_limit`, `encumbrance`, the modifier chain). **Today:** encumbrance is a set of stat deltas only
+(D-115). It doesn't affect move cost, lag or the ability to move. Since M19, recovery lag has modifier points
+(`advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`) alongside `move_cost`, but nothing lets encumbrance
+reach them: rules and modifiers can't tell that an actor is over its carry limit (there is no `encumbered` actor view
+field), and `encumbrance(ctx)` can only return stats. **Questions:** - Should actors expose a read-only `encumbered`
+view field, so rules exports and modifiers can add lag or move cost while it is set? - Or should being over the limit
+apply an engine-managed affect that carries `modifiers` (and its stat deltas), so encumbrance uses the ordinary chain? -
+Or should `encumbrance` return move-cost and lag changes directly? - Should movement be forbidden past a hard limit, and
+is that a second rules export or part of the same result?
 
 ## Perception and the world
 
