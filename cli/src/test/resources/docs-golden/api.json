@@ -5028,6 +5028,14 @@
       "since": 1
     },
     {
+      "symbol": "message:use.empty",
+      "id": "use.empty",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "There are no charges left in {item}.",
+      "since": 1
+    },
+    {
       "symbol": "message:use.what",
       "id": "use.what",
       "placeholders": [],

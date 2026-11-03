@@ -863,6 +863,7 @@ internal object KernelCommands {
           return w.msg(KernelMsg.NOT_HERE)
         if (!w.scripts.hasHook(item, HookName.ON_USE))
           return w.msg(KernelMsg.USE_CANT, "item" to item.name)
+        if (item.charges == 0) return w.msg(KernelMsg.USE_EMPTY, "item" to item.name)
         return null
       }
 
@@ -871,6 +872,7 @@ internal object KernelCommands {
 
       override fun resolve(w: World, actor: Actor): Int {
         w.dispatch(HookName.ON_USE, item, actor.room, ctx(actor))
+        if (w.item(item.id) === item) w.spendCharge(item)
         return 0
       }
     }
@@ -1585,6 +1587,7 @@ private fun World.mergesInto(item: Item, box: Item): Boolean {
       it.protoLabel == item.protoLabel &&
       it.canStack() &&
       it.decayAt == item.decayAt &&
+      it.charges == item.charges &&
       it.customAttributes == item.customAttributes
   }
 }

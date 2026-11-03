@@ -6,6 +6,10 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ### Consumables and charges
 
+- An item with `charges` and none left is refused ("There are no charges left in {item}."). After `on_use`, if the item
+  is still in the world, the use spends one charge, or one item of a stack; the last charge runs the item's `empty`
+  action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without `charges` is never
+  used up; `on_use` destroys it if it should be.
 - The effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence` no longer need the
   `skills` feature; `knockback` and `pull` still need `track`.
 

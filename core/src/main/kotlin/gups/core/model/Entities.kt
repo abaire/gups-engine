@@ -735,6 +735,9 @@ class Item(
     protoVersion = proto.version
   }
 
+  /** Uses this instance has left, or null when its prototype has unlimited uses. */
+  var charges: Int? = proto.charges
+
   /** Label of the current prototype, which `transform` can change. */
   override val protoLabel: Label
     get() = proto.label

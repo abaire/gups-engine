@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Affect
+import gups.core.model.EmptyAction
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Player
@@ -70,6 +71,7 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
   part.debug = item.debug
   part.nameOverride = item.nameOverride
   part.decayAt = item.decayAt
+  part.charges = item.charges
   part.customAttributes.putAll(item.customAttributes)
   for (a in item.affects) part.affects +=
     Affect(
@@ -170,6 +172,7 @@ fun World.stack(item: Item): Item {
         it.protoLabel == item.protoLabel &&
         it.canStack() &&
         it.decayAt == item.decayAt &&
+        it.charges == item.charges &&
         it.customAttributes == item.customAttributes
     } ?: return item
   into.count += item.count
@@ -203,6 +206,47 @@ fun World.destroy(item: Item, count: Int = item.count) {
   item.count -= count
   item.dirty = true
   holder?.let { refreshHoldings(it) }
+}
+
+/**
+ * The `set_charges` verb: sets [item]'s remaining uses to [charges], between 0 and its prototype's
+ * charges. Refuses unlimited and stackable items. Setting 0 doesn't run the empty action.
+ */
+fun World.setCharges(item: Item, charges: Int) {
+  require(item.id in entities) { "$item is not in the world" }
+  val max = requireNotNull(item.proto.charges) { "set_charges: ${item.name} has unlimited uses" }
+  require(!item.proto.stackable) { "set_charges: ${item.name} is stackable" }
+  require(charges in 0..max) { "set_charges: charges must be between 0 and $max, got $charges" }
+  item.charges = charges
+  item.dirty = true
+}
+
+/** Spends one use of [item] after a `use`, running its empty action when that was the last. */
+internal fun World.spendCharge(item: Item) {
+  if (item.id !in entities || item.charges == null) return
+  if (!item.proto.stackable) {
+    item.charges = item.charges!! - 1
+    item.dirty = true
+    if (item.charges!! > 0) return
+  }
+  when (val empty = item.proto.empty) {
+    EmptyAction.Destroy -> destroy(item, 1)
+    EmptyAction.Keep -> Unit
+    is EmptyAction.Variant -> {
+      val label = item.proto.variants.getValue(empty.name)
+      if (item.count == 1) {
+        transformItem(item, label)
+      } else {
+        val loc = item.location
+        val thatLocation =
+          (loc as? ItemLocation.Equipped)?.let { ItemLocation.Carried(it.actor) } ?: loc
+        destroy(item, 1)
+        val part = spawnItem(label, thatLocation, debug = item.debug)
+        part.customAttributes.putAll(item.customAttributes)
+        stack(part)
+      }
+    }
+  }
 }
 
 /** The actor whose custody [item] ends in, following containers; null for items on the ground. */

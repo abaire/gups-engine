@@ -232,6 +232,7 @@ data class ItemPayload(
   /** Kept so a tombstone can show what the item was. */
   val name: String,
   val count: Int = 1,
+  val charges: Int? = null,
   val decayAt: Long? = null,
   val nameOverride: String? = null,
   val containerState: String? = null,
@@ -497,6 +498,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           ItemPayload(
             name = e.proto.name,
             count = e.count,
+            charges = e.charges,
             decayAt = e.decayAt,
             nameOverride = e.nameOverride,
             containerState =
@@ -623,6 +625,14 @@ internal fun containerFromJson(c: ContainerJson) =
   )
 
 internal fun applyItem(item: Item, p: ItemPayload) {
+  val max = item.proto.charges
+  // The prototype may have changed since the save, so a restore follows the same rules as a reload.
+  item.charges =
+    when {
+      max == null -> null
+      item.proto.stackable -> max
+      else -> minOf(p.charges ?: max, max)
+    }
   p.decayAt?.let { item.decayAt = it }
   item.nameOverride = p.nameOverride
   p.containerState?.let { s -> item.container?.state = DoorState.valueOf(s.uppercase()) }

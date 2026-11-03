@@ -92,6 +92,17 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
     val p = next.items[item.protoLabel]
     when {
       p != null -> {
+        val nextCharges =
+          when {
+            p.charges == null -> null
+            p.stackable -> p.charges
+            item.proto.charges == null -> p.charges
+            else -> minOf(item.charges ?: p.charges, p.charges)
+          }
+        if (item.charges != nextCharges) {
+          item.charges = nextCharges
+          item.dirty = true
+        }
         item.proto = p
         upgrade(item, p.version)
       }

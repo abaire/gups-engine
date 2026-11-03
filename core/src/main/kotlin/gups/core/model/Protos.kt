@@ -201,6 +201,18 @@ data class ContainerProto(
   val key: Label? = null,
 )
 
+/** What happens to an item when its last charge is spent. */
+sealed interface EmptyAction {
+  /** Removes the item, or one item of a stack. */
+  data object Destroy : EmptyAction
+
+  /** Leaves the item at 0 charges until it is recharged. */
+  data object Keep : EmptyAction
+
+  /** Transforms the item into its variant named [name]. */
+  data class Variant(val name: String) : EmptyAction
+}
+
 /** Immutable prototype defining the static properties of an item. */
 data class ItemProto(
   /** Canonical label of the item prototype (e.g. `//zones/forest:iron_sword`). */
@@ -258,6 +270,10 @@ data class ItemProto(
   val version: Int = 1,
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
   val plural: String? = null,
+  /** Uses before the item is spent, or null for unlimited. */
+  val charges: Int? = null,
+  /** What happens when the last charge is spent; ignored without [charges]. */
+  val empty: EmptyAction = EmptyAction.Destroy,
 ) {
   init {
     require(slotCost >= 1) { "slotCost must be >= 1, was $slotCost" }

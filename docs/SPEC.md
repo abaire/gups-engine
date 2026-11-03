@@ -454,7 +454,12 @@ the world graph:
   item (`Contained`).
 - **Quantities and decay:** `count` (stackable items), `weight`, and scheduled `decayAt` pulse. An item prototype may
   declare an optional `plural` display name, used to show stacks of 2 or more as `"<count> <plural>"`. Bare `all` in
-  item commands skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys.
+  item commands skips items tagged `no_all` (such as `//engine:corpse`) and keyring-only keys. An item whose prototype
+  has `charges` carries its own `charges`, the uses it has left, starting at the prototype's value; a split stack's new
+  part copies it, and stacks merge only with equal charges. `transform` gives the item the new prototype's `charges`. A
+  reload that adds `charges` to a prototype fills its instances, one that removes them makes them unlimited, and one
+  that changes the number caps each instance at the new value; restoring a saved item does the same against the
+  prototype it loads with.
 - **Container properties:** optional `ContainerState` with `capacity`, `maxWeight`, access `state` (`OPEN`, `CLOSED`,
   `LOCKED`), and `keyLabel`.
 - **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, prototype
@@ -1568,7 +1573,10 @@ uses the default names. Every player-facing message here is the default text of 
   inactive items (§4.6).
 - **`use <item> [target]`:** the item is worn, carried, or on the ground within `get_lag` reach (in that order of
   search), and must have an `on_use` hook ("You can't use that." otherwise). `before_use` can veto. The target is an
-  actor in the room, else an item. The engine never uses an item up; `on_use` destroys it if it should be.
+  actor in the room, else an item. An item with `charges` and none left is refused ("There are no charges left in
+  {item}."). After `on_use`, if the item is still in the world, the use spends one charge, or one item of a stack; the
+  last charge runs the item's `empty` action: destroy it, keep it at 0 charges, or `transform` it into the named
+  variant. An item without `charges` is never used up; `on_use` destroys it if it should be.
 - **Stacks:** `get`, `drop`, `give` and `put` merge a stackable item into a stack of the same prototype in the same
   place with identical attributes and decay deadline, and no timers or name override on either (§3.8 inv. 8).
 

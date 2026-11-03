@@ -344,6 +344,7 @@ fun World.transformItem(item: Item, label: Label) {
   item.proto = newProto
   item.protoVersion = newProto.version
   if (!newProto.stackable) item.count = 1
+  item.charges = newProto.charges
   val oldState = item.container?.state
   item.container = box?.let { ContainerState(it) }
   item.container?.let { c ->

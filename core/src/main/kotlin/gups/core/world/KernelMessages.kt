@@ -122,6 +122,7 @@ object KernelMsg : MsgGroup(null) {
   val WIELD_ROOM = msg("wield.room", "{actor} wields {item}.", "actor,item")
   val USE_WHAT = msg("use.what", "Use what?")
   val USE_CANT = msg("use.cant", "You can't use {item}.", "item")
+  val USE_EMPTY = msg("use.empty", "There are no charges left in {item}.", "item")
 
   private val verbs = DoorVerb.entries
 
