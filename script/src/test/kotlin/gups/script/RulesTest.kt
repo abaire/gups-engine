@@ -1256,6 +1256,16 @@ class RulesTest {
   }
 
   @Test
+  fun `template world off-hand swings take a to_hit penalty`() {
+    val w = loadTemplateWorld()
+    val a = w.spawnPlayer("Ann", Label("//zones/tutorial:hall"))
+    val b = w.spawnPlayer("Bob", Label("//zones/tutorial:hall"))
+    val wield = w.rules.toHit(RulesContext(w, a, b, slot = "wield"))
+    assertEquals(wield, w.rules.toHit(RulesContext(w, a, b)))
+    assertEquals(wield - 10, w.rules.toHit(RulesContext(w, a, b, slot = "offhand")))
+  }
+
+  @Test
   fun `template world kill XP scales with level difference`() {
     val w = loadTemplateWorld()
     val killer3 = w.spawnPlayer("Killer3", Label("//zones/tutorial:hall"), level = 3)

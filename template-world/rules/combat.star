@@ -33,6 +33,9 @@ def actor_slots(ctx):
     return equipment_slots()
 
 def slot_cost(ctx):
+    # Mighty warriors (str >= 18) can wield two-handed items in one hand.
+    if ctx.actor.str >= 18 and ctx.item.slot_cost == 2:
+        return 1
     return ctx.item.slot_cost
 
 def starting_stats(ctx):
@@ -70,7 +73,11 @@ def to_hit(ctx):
     # Percent chance that ctx.attacker's swing hits ctx.defender.
     a = ctx.attacker
     d = ctx.defender
-    return _clamp(60 + (a.dex - d.dex) * 2 + (a.level - d.level) * 3, 5, 95)
+    chance = 60 + (a.dex - d.dex) * 2 + (a.level - d.level) * 3
+    # Off-hand attacks are clumsy and take a -10 penalty to hit.
+    if ctx.slot == "offhand":
+        chance -= 10
+    return _clamp(chance, 5, 95)
 
 def damage(ctx):
     # Raw damage of one auto-attack, before mitigate.

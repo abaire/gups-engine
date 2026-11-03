@@ -51,3 +51,44 @@ item("healing_draught",
     kind = "consumable",
     on_use = _drink,
 )
+
+item("copper_ring",
+    name = "a copper ring",
+    desc = "A simple copper band that feels warm to the touch.",
+    wear = "ring",
+    resist_deltas = resists(fire = 2),
+)
+
+item("wooden_shield",
+    name = "a wooden shield",
+    desc = "A round wooden buckler bound in iron.",
+    kind = "armor",
+    wear = "offhand",
+    stat_deltas = stats(armor = 2),
+)
+
+item("dagger",
+    name = "a dagger",
+    desc = "A sharp iron dagger with a leather-wrapped hilt.",
+    kind = "melee",
+    wear = "hand",
+    dice = "1d4",
+    damage_type = "pierce",
+)
+
+item("greatsword",
+    name = "a greatsword",
+    desc = "A massive two-handed sword with a broad double-edged blade.",
+    kind = "melee",
+    wear = "hand",
+    slot_cost = 2,
+    dice = "2d6",
+    damage_type = "slash",
+)
+
+item("amulet",
+    name = "an amulet",
+    desc = "A carved stone amulet humming with vitality.",
+    wear = "neck",
+    max_vital_deltas = vitals(hp = 5),
+)

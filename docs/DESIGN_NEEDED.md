@@ -69,15 +69,6 @@ an owner's kill credit the pet? - How is the award split: equal shares, or weigh
 sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
 below the victim's level, excluded from the split?
 
-### Armor from equipment, shields and off-hand weapons
-
-**Spec:** §3.3 (Item `kind = "armor"`, `statDeltas`), §3.9, §4.6 slots (`offhand`, `held`), §5.4. **Today (after M9):**
-- `armor` is an ordinary declared stat, so worn items and affects change it through `stat_deltas`. Resists are a
-per-actor map that nothing worn can change; after M11 only a player's traits add to it (§4.19). - Only the `wield` slot
-attacks. `offhand` and `held` are inert. - Nothing models two-handed weapons. **Questions:** - Should items and affects
-carry `resist_deltas`? - Do off-hand weapons swing? Do shields add to `armor` or to a block chance? - Do two-handed
-weapons fill or block the `offhand` slot?
-
 ### Defender-side modifiers in combat
 
 **Spec:** §4.6 (Rules Module and the Modifier Chain: `to_hit`, `damage`, chain order). **Today:** the modifier chain for
@@ -88,16 +79,6 @@ affects contribute to combat resolution (e.g. an evasion cloak reducing hit chan
 flat damage)? - Should there be distinct modifier points such as `defend_hit` / `incoming_damage`, or should the
 defender's affects and equipment be appended to the existing `to_hit` and `damage` chains? - If appended, in what order
 do attacker and defender modifiers apply?
-
-### Spell damage modifiers
-
-**Spec:** §4.3 (effect primitives, `damage`), §4.6 (Modifier points: `damage`). **Today:** spell `damage(...)` effects
-roll their dice and pass the amount directly to `rules.mitigate(ctx, amount, type)`, completely bypassing the `damage`
-modifier point (D-111). Only auto-attacks evaluate `damageChain`. A room, zone, or item cannot scale or modify spell
-damage (e.g. elemental sanctums or spellpower bonuses). **Questions:** - Should spell damage evaluate a modifier chain
-(either a dedicated `spell_damage` modifier point or the existing `damage` modifier point with `ctx.skill` populated)? -
-If using the existing `damage` modifier point, how do we distinguish general damage buffs from weapon-only physical
-damage bonuses?
 
 ### Track-lag modifier points
 
@@ -178,17 +159,6 @@ during expensive state evaluations?
 the engine never uses an item up (D-114). Scripts call `ctx.destroy` themselves. **Questions:** - Should `consumable`
 items lose one from the stack automatically after a successful `on_use`? - Should items have charges? - Should items
 have a declarative `use_effect` (an effect primitive) for novices who don't write hooks?
-
-### Equipment slots that depend on the actor
-
-**Spec:** §4.6 (`equipment_slots()` gets no ctx, and is asked once and again after each reload), §3.3, §4.9 (`wear`,
-`remove`). **Today:** every actor has the same slot list. A world can't give a centaur no `feet` slot, a four-armed race
-two extra `hand` slots, or a mob a `saddle` slot. **Questions:** - Does `equipment_slots` take a ctx with the actor, or
-does a race or trait add and remove slots on top of one global list? - Can mob prototypes declare their own slots? -
-What happens to an item worn in a slot the actor loses, for example after a race change: is it moved to the inventory,
-dropped, or kept until removed? - The slot list is cached today: what is cached when the answer depends on the actor,
-and when is it asked again? - What do `item(slot=...)` validation, the lint and the equipment display order check
-against: the union of every possible slot, or something declared separately?
 
 ### Corpses and looting
 

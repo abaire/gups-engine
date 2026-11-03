@@ -1327,8 +1327,10 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
   of `equipment_slots()`, with no repeats; no slot belongs to two families. A slot in no family stands alone.
 - `actor_slots(ctx)` returns a subset of `equipment_slots()`. A slot outside it is a bad return value: it is reported
   and dropped, and the actor keeps the rest. If every slot it returns is outside `equipment_slots()`, the actor has
-  every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore. While
-  `actor_slots` runs for an actor, `ctx.actor.slots` on that actor reads as every slot of `equipment_slots()`.
+  every slot. Mob prototypes declare no slots: `actor_slots` reads `ctx.actor` (its label, traits or tags) to give a
+  race or a mob more or fewer. The answer is kept until the actor's traits, affects or level change, a reload or a
+  restore. While `actor_slots` runs for an actor, `ctx.actor.slots` on that actor reads as every slot of
+  `equipment_slots()`.
 - `slot_cost(ctx)` gets `ctx.actor` and `ctx.item`. A result below 1 is a bad return value and counts as the item's
   `slot_cost`.
 
@@ -1556,6 +1558,8 @@ uses the default names. Every player-facing message here is the default text of 
   than its family holds can't be worn.
 - **`remove <item>`:** takes off an item in any slot, moving it to the inventory, unless the `remove` restriction
   refuses.
+- **`equipment`:** lists worn items in the order of the actor's slots, then any other occupied slot by name, marking
+  inactive items (§4.6).
 - **`use <item> [target]`:** the item is worn, carried, or on the ground within `get_lag` reach (in that order of
   search), and must have an `on_use` hook ("You can't use that." otherwise). `before_use` can veto. The target is an
   actor in the room, else an item. The engine never uses an item up; `on_use` destroys it if it should be.
@@ -2564,7 +2568,7 @@ Pulse boundaries come from `System.nanoTime()`.
      - Otherwise, if the actor is a mob whose think cadence is due, run the think cycle (§5.8).
   3. **Combat round** (`pulse % COMBAT_ROUND_PULSES == 0`,
      [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)): Roll initiative for the new round
-     (§5.4.1). Then, for each engaged active actor in initiative order, resolve one auto-attack (§5.4) and fire
+     (§5.4.1). Then, for each engaged active actor in initiative order, resolve its auto-attacks (§5.4) and fire
      `on_combat_tick` on the actor, then on each item it has equipped that declares the hook, in ascending `EntityId`
      order (§4.4).
 
@@ -2704,7 +2708,8 @@ and work with or without it (§3.10). Combat resolution is implemented in
     worn, active item with `dice` makes one auto-attack, in the order of the actor's slots, and an actor with a `wield`
     slot holding nothing makes one unarmed attack. Each attack has its own reach check, `before_attack`, `to_hit` and
     `damage` chains (with `ctx.weapon` and `ctx.slot` set) and messages. The attacks stop as soon as the attacker or
-    target can no longer fight.
+    target can no longer fight. A shield is an ordinary worn item with `stat_deltas(armor = ...)` and no `dice`;
+    off-hand penalties and block chances are world rules that read `ctx.slot`.
   - Auto-attacks are independent of `waitState` and of queued actions, so active skills weave between swings.
   - A **casting** actor does not auto-attack, unless the skill being cast sets `attack_while_casting = True`.
 - **Range:** A swing happens only if the target's band is within the swinging weapon's `range` (unarmed or melee:
@@ -3641,3 +3646,4 @@ template's `.github/workflows/gates.yml`.
 | **M15**   | Specification refactoring and KDoc alignment: high-level architectural spec in SPEC.md with implementation details, constants, entity fields, seams, and limits documented in KDoc.                                                                                                                                                                                                                                                                   |
 | **M16**   | Item quantities, pluralization, and all: item(plural=), phrase keywords, stack count display, no_all tag, count on move_item/give/destroy (replacing split), and quantities, all, optional prepositions, and carry/capacity capping on get, drop, give, and put (§3.3, §4.2, §4.5, §4.9).                                                                                                                                                             |
 | **M17**   | Effects on items: item affects with `worn`/`carried` scope through the custody tree, the per-actor held-effects cache, per-instance item tags, `variants` and `transform`, item-target skill effects, the `remove`, `drop`, `give` and `put` restriction points, plugin containment filters and item facade verbs, `samples/curse-plugin` (§3.3, §4.2, §4.3, §4.5, §4.6, §4.15, §4.19).                                                               |
+| **M18**   | Slot families (`slot_families()`), per-actor slots (`actor_slots(ctx)`), slot cost (`slot_cost(ctx)`, `item(slot_cost=)`), the fit check and inactive items, auto-attacks from every active equipped item with `dice`, spell damage through the caster's `damage` modifier chain, `ctx.damage_type` and `ctx.slot`, `max_vital_deltas` and `resist_deltas` on items and affects (§3.3, §4.2, §4.3, §4.5, §4.6, §4.9, §4.15, §5.4).                    |

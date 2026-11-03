@@ -198,3 +198,91 @@ def test_the_guide_congratulates_on_level_up(t):
     w.award_xp(guide, 55000)
     t.eq(guide.level, 11)
     t.not_contains(p.output(), "Well done")
+
+def _swings_in_one_round(w, p):
+    # Drops earlier output, then runs to the next combat round (every 8 pulses) and counts
+    # the player's swings in it.
+    p.output()
+    w.run(pulses = 8 - w.pulse % 8)
+    return len([line for line in p.output().split("\n") if "You hit" in line or "You miss" in line])
+
+def test_dual_wield_gives_two_attacks(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena")
+    w.spawn(":practice_sword", at = p)
+    p.do("wield sword")
+    p.do("kill dummy")
+    t.eq(_swings_in_one_round(w, p), 1)
+
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena")
+    w.spawn(":dagger", at = p)
+    w.spawn(":practice_sword", at = p)
+    p.do("wield sword")
+    t.contains(p.do("wield dagger"), "You wield a dagger.")
+    t.eq(p.equipped("wield").label, "//zones/tutorial:practice_sword")
+    t.eq(p.equipped("offhand").label, "//zones/tutorial:dagger")
+    p.do("kill dummy")
+    t.eq(_swings_in_one_round(w, p), 2)
+
+def _carried(p):
+    return [i.label for i in p.inventory()]
+
+def test_greatsword_swap_behaviour(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena")
+    w.spawn(":greatsword", at = p)
+    w.spawn(":wooden_shield", at = p)
+    p.do("wield greatsword")
+    t.eq(p.equipped("wield").label, "//zones/tutorial:greatsword")
+    # The greatsword fills both hands, so the shield swaps it out.
+    t.contains(p.do("wear shield"), "You stop using a greatsword.")
+    t.eq(p.equipped("offhand").label, "//zones/tutorial:wooden_shield")
+    t.eq(p.equipped("wield"), None)
+    t.true("//zones/tutorial:greatsword" in _carried(p))
+
+    strong = w.spawn_player("Hercules", at = ":arena", stats = stats(str = 18))
+    w.spawn(":greatsword", at = strong)
+    w.spawn(":wooden_shield", at = strong)
+    strong.do("wield greatsword")
+    strong.do("wear shield")
+    t.eq(strong.equipped("wield").label, "//zones/tutorial:greatsword")
+    t.eq(strong.equipped("offhand").label, "//zones/tutorial:wooden_shield")
+
+def test_greatsword_wont_take_off_two_items(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena")
+    w.spawn(":practice_sword", at = p)
+    w.spawn(":wooden_shield", at = p)
+    w.spawn(":greatsword", at = p)
+    p.do("wield sword")
+    p.do("wear shield")
+    out = p.do("wield greatsword")
+    t.contains(out, "You'd need to remove")
+    t.contains(out, "a practice sword")
+    t.contains(out, "a wooden shield")
+    t.eq(p.equipped("wield").label, "//zones/tutorial:practice_sword")
+    t.eq(p.equipped("offhand").label, "//zones/tutorial:wooden_shield")
+    t.true("//zones/tutorial:greatsword" in _carried(p))
+
+def test_ring_fire_resist(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":hall")
+    w.spawn(":copper_ring", at = p)
+    t.eq(p.resists.fire, 0)
+    p.do("wear ring")
+    t.eq(p.equipped("finger_l").label, "//zones/tutorial:copper_ring")
+    t.eq(p.resists.fire, 2)
+    p.do("remove ring")
+    t.eq(p.resists.fire, 0)
+
+def test_amulet_max_hp(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":hall")
+    w.spawn(":amulet", at = p)
+    t.eq(p.max_hp, 20)
+    p.do("wear amulet")
+    t.eq(p.equipped("neck").label, "//zones/tutorial:amulet")
+    t.eq(p.max_hp, 25)
+    p.do("remove amulet")
+    t.eq(p.max_hp, 20)

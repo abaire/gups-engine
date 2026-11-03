@@ -119,6 +119,13 @@ def _arena_enter(ctx):
         ctx.give(ctx.actor, ":healing_draught")
         ctx.send(ctx.actor, "The guide calls from the hall: 'Well done! Take these, you've earned them.'")
 
+def _stock_arena(ctx):
+    # Keep demonstration equipment on the arena benches.
+    for label in (":copper_ring", ":wooden_shield", ":dagger", ":greatsword", ":amulet"):
+        on_floor = [i for i in ctx.self.items() if i.label.endswith(label)]
+        if not on_floor:
+            ctx.spawn(label, ctx.self)
+
 room("arena",
     name = "The Practice Arena",
     desc = "Sand, a few benches, and a battered training dummy at the far end.",
@@ -127,4 +134,6 @@ room("arena",
     exits = [exit(DIR.south, to = ":hall")],
     spawns = [spawn(":training_dummy", at_index = 0)],
     on_enter = _arena_enter,
+    on_load = _stock_arena,
+    on_reset = _stock_arena,
 )
