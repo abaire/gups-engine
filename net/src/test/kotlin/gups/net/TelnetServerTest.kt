@@ -1,5 +1,6 @@
 package gups.net
 
+import gups.core.ClientGmcpEvent
 import gups.core.ClientInputEvent
 import gups.core.WorldControlEvent
 import gups.core.WorldInbox
@@ -9,15 +10,24 @@ import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 class TelnetServerTest {
+  private fun raw(vararg ints: Int): ByteArray = ByteArray(ints.size) { ints[it].toByte() }
+
   private class Inbox : WorldInbox {
     val events = LinkedBlockingQueue<Any>()
 
     override fun submit(event: ClientInputEvent) {
+      events += event
+    }
+
+    override fun submit(event: ClientGmcpEvent) {
       events += event
     }
 
@@ -81,6 +91,56 @@ class TelnetServerTest {
         val chunk = "z".repeat(64 * 1024)
         repeat(200) { connect.sink.send(chunk) }
         assertIs<WorldControlEvent.Disconnect>(inbox.next())
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  @Test
+  fun `non-Core GMCP is submitted to the inbox in order with lines`() {
+    val inbox = Inbox()
+    val server = TelnetServer(inbox, port = 0)
+    val port = runBlocking { server.start() }
+    try {
+      Socket("127.0.0.1", port).use { s ->
+        assertIs<WorldControlEvent.Connect>(inbox.next())
+        s.getOutputStream().write(raw(255, 253, 201))
+        s.getOutputStream().flush()
+        s.getOutputStream().write("look\r\n".toByteArray())
+        s.getOutputStream().flush()
+        s.getOutputStream()
+          .write(raw(255, 250, 201) + "Shop.Buy {\"item\":\"sword\"}".toByteArray() + raw(255, 240))
+        s.getOutputStream().flush()
+        assertEquals("look", assertIs<ClientInputEvent>(inbox.next()).line)
+        val gmcpEvent = assertIs<ClientGmcpEvent>(inbox.next())
+        assertEquals("Shop.Buy", gmcpEvent.pkg)
+        assertEquals(mapOf("item" to "sword"), gmcpEvent.data)
+        assertFalse(gmcpEvent.malformed)
+      }
+    } finally {
+      server.stop()
+    }
+  }
+
+  @Test
+  fun `a malformed GMCP body arrives marked malformed and the connection stays open`() {
+    val inbox = Inbox()
+    val server = TelnetServer(inbox, port = 0)
+    val port = runBlocking { server.start() }
+    try {
+      Socket("127.0.0.1", port).use { s ->
+        val connect = assertIs<WorldControlEvent.Connect>(inbox.next())
+        s.getOutputStream().write(raw(255, 253, 201))
+        s.getOutputStream().flush()
+        s.getOutputStream()
+          .write(raw(255, 250, 201) + "Shop.Buy {bad".toByteArray() + raw(255, 240))
+        s.getOutputStream().flush()
+        val gmcpEvent = assertIs<ClientGmcpEvent>(inbox.next())
+        assertTrue(gmcpEvent.malformed)
+        assertNull(gmcpEvent.data)
+        connect.sink.send("still here")
+        assertContains(s.readAll(), "still here")
       }
     } finally {
       server.stop()

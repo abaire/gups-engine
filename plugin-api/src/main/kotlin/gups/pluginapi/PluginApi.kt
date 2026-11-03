@@ -117,6 +117,16 @@ interface PluginRegistry {
   /** A GMCP state package (at least two dot-separated parts), sent in phase 7 when it changes. */
   fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?)
 
+  /** A GMCP event package (at least two dot-separated parts), sent with PluginWorld.gmcp. */
+  fun addGmcpEvent(pkg: String, doc: String)
+
+  /**
+   * Receives client GMCP messages for exactly [pkg] (ignoring case). An input package may not use
+   * the reserved `Core` root or overlap an engine package or another plugin's package; it may share
+   * this plugin's own state and event tree.
+   */
+  fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit)
+
   fun onWorldStarted(fn: (PluginWorld) -> Unit)
 
   fun addTrait(trait: PluginTrait)
@@ -164,6 +174,22 @@ data class PluginParam(
 )
 
 data class PluginCommandCall(val world: PluginWorld, val actor: PluginActor, val args: String)
+
+/** One GMCP message from a player's client. */
+interface PluginGmcpCall {
+  val world: PluginGmcpWorld
+  val actor: PluginActor
+  /** The package as registered. */
+  val pkg: String
+  /** The body as plain values: String, Long, Double, Boolean, List, Map<String, Any?> or null. */
+  val data: Any?
+
+  /**
+   * Runs [line] as if the player typed it, and returns whether it was accepted. May be called at
+   * most once per message.
+   */
+  fun command(line: String): Boolean
+}
 
 data class PluginEffectCall(
   val world: PluginWorld,

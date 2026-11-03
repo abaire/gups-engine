@@ -2,12 +2,12 @@ package gups.sample.weather
 
 import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginApi
+import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
-import gups.pluginapi.PluginWorld
 
 /**
  * The sample plugin: deterministic weather by region, using every extension point. A room is
@@ -42,6 +42,7 @@ class WeatherPlugin : GupsPlugin {
         if (room.regions.isEmpty()) "You are indoors."
         else "The weather here is ${stateFor(call.world, room)}.",
       )
+      call.world.gmcp(call.actor, "Gups.Forecast", forecast(call.world, room))
     }
     r.addEffectPrimitive(
       name = "soak",
@@ -64,6 +65,17 @@ class WeatherPlugin : GupsPlugin {
     r.addGmcp("Gups.Weather", "The weather where the player stands.") { world, actor ->
       mapOf("state" to stateFor(world, actor.room), "region" to actor.room.regions.minOrNull())
     }
+    r.addGmcpEvent(
+      "Gups.Forecast",
+      "The weather now and in the next minute where the player stands.",
+    )
+    r.onGmcp(
+      "Gups.Weather.Get",
+      "Sends Gups.Forecast, or with {\"describe\": true} runs `weather`.",
+    ) { call ->
+      if ((call.data as? Map<*, *>)?.get("describe") == true) call.command("weather")
+      else call.world.gmcp(call.actor, "Gups.Forecast", forecast(call.world, call.actor.room))
+    }
     r.onWorldStarted { world ->
       val regions = world.regions()
       world.log("weather: tracking ${regions.size} region(s): ${regions.joinToString(", ")}")
@@ -73,15 +85,21 @@ class WeatherPlugin : GupsPlugin {
   companion object {
     private val STATES = listOf("clear", "rain", "storm")
 
-    /** A pure function of the seed, the one-minute window and the room's region. */
-    fun stateFor(world: PluginWorld, room: PluginRoom): String {
+    /** Pulses in one weather window: a minute. */
+    private const val WINDOW = 240L
+
+    /** A pure function of the seed, the one-minute window of [pulse] and the room's region. */
+    fun stateFor(world: PluginGmcpWorld, room: PluginRoom, pulse: Long = world.pulse): String {
       val region = room.regions.minOrNull() ?: return "clear"
-      var z =
-        world.seed xor (world.pulse / 240L) * -0x61c8864680b583ebL xor region.hashCode().toLong()
+      var z = world.seed xor (pulse / WINDOW) * -0x61c8864680b583ebL xor region.hashCode().toLong()
       z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
       z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
       z = z xor (z ushr 31)
       return STATES[((z ushr 1) % STATES.size).toInt()]
     }
+
+    /** The weather in [room] now and in the next window. */
+    fun forecast(world: PluginGmcpWorld, room: PluginRoom): Map<String, String> =
+      mapOf("now" to stateFor(world, room), "next" to stateFor(world, room, world.pulse + WINDOW))
   }
 }

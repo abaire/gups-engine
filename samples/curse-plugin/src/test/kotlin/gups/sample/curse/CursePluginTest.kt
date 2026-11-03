@@ -7,6 +7,7 @@ import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginLane
@@ -83,6 +84,10 @@ class CursePluginTest {
 
     override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) =
       TODO()
+
+    override fun addGmcpEvent(pkg: String, doc: String) = TODO()
+
+    override fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit) = TODO()
 
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) = TODO()
   }
@@ -165,6 +170,8 @@ class CursePluginTest {
       get() = TODO()
 
     override fun send(target: PluginActor, text: String) = TODO()
+
+    override fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean = TODO()
 
     override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) = TODO()
 

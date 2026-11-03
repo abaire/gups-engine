@@ -800,7 +800,7 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
       p.commands.map {
         PluginCommandDocSpec(it.name, it.lane.name.lowercase(), it.role.name.lowercase(), it.doc)
       },
-    gmcp = p.gmcp.map { PluginGmcpDocSpec(it.pkg, it.doc) },
+    gmcp = p.gmcp.map { PluginGmcpDocSpec(it.pkg, it.doc, it.kind) },
     traits =
       p.traits.map {
         PluginTraitDocSpec(

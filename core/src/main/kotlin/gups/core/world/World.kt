@@ -204,6 +204,9 @@ class World(
   /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's. */
   val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 
+  /** Inbound GMCP packages, keyed by lowercase name. */
+  val pluginGmcpIn: MutableMap<String, GmcpInput> = LinkedHashMap()
+
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
 

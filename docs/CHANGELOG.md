@@ -4,6 +4,25 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Plugin GMCP input and events
+
+- `PluginRegistry.addGmcpEvent(pkg, doc)` declares a GMCP event package, sent with `PluginWorld.gmcp`.
+- `PluginWorld.gmcp(actor, pkg, data)` sends one GMCP message with a plain payload to the actor's session, queued with
+  the session's text and never cached. It returns false, sending nothing, for a mob, a link-dead player or a client that
+  doesn't support the package.
+- `PluginWorld` extends a new `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`,
+  `diagnose` and `log`; it is what GMCP input handlers receive.
+- GMCP package name checks are tightened: names are compared ignoring case, the reserved `Core` root is refused, and a
+  plugin's state and event packages may not equal, contain or nest in an engine package, another plugin's package, or
+  each other.
+- `PluginRegistry.onGmcp(pkg, doc, handle)` receives client GMCP messages for exactly `pkg` (ignoring case). The handler
+  gets the sending player, the data as plain values, and a `PluginGmcpWorld`; it acts by calling `call.command(line)`
+  once, which runs the line as if the player typed it, through the normal lanes, lag, restrictions and repro recording.
+  An input package may not use the `Core` root or overlap an engine package or another plugin's package, but may share
+  the plugin's own state and event tree.
+- `plugins.html` lists each plugin GMCP package with its kind (`state`, `event` or `input`), anchored
+  `plugin-<id>.<pkg>.<kind>`.
+
 ### Consumables and charges
 
 - `item(use_effect=..., use_target=..., use_lag=...)` allows items to apply declarative effect primitives on use with

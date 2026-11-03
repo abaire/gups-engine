@@ -1780,8 +1780,9 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   - Color depth: MTTS bits decide (8 = 256 colors, 1 = ANSI). Without MTTS, terminal types decide: 256 for `*256COLOR*`,
     `*TRUECOLOR*`, Mudlet and TinTin; 16 for ANSI, XTERM, VT100 and the like. Otherwise there is no color.
   - Engine messages don't use color yet.
-- **GMCP packages (v0):** the client sends `Core.Hello` and `Core.Supports.Set`/`Add`/ `Remove`; GMCP input other than
-  `Core.*` is ignored in v0. The server sends these, with lowercase field names:
+- **GMCP packages (v0):** the client sends `Core.Hello` and `Core.Supports.Set`/`Add`/ `Remove`; other packages go to
+  the world, which hands each to the plugin that registered it (§4.15) and ignores the rest. The server sends these,
+  with lowercase field names:
 
   |       Package       |                                                                                                                              Payload                                                                                                                              |                                               Sent                                               |
   |---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
@@ -1797,7 +1798,7 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                     | When changed; only in worlds with a creation provider or a trait                                 |
 
   `Room.Bands` entries carry entity ids, only ever for the viewer's own room, so clients can key their band view and
-  tell identical mobs apart. Plugins may add packages (§4.15).
+  tell identical mobs apart. Plugins may add state and event packages, and receive GMCP input (§4.15).
 
 - **GMCP values:** `core` builds payloads as plain values (`String`, `Long`, `Boolean`, `List`, `Map<String, *>`,
   `null`), since it has no kotlinx.serialization dependency; `net` encodes them as JSON. The seam is
@@ -1816,6 +1817,13 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     character, so a reconnect gets everything again. Events (`Comm.Channel.Text`, `Gups.Trace`, `Char.Creation`) are
     never cached. `Char.Creation` is the one package sent to a session without a character.
   - IAC bytes in a payload are doubled.
+- **GMCP input:** a client message for a package other than `Core.*` is parsed into plain values (strings, integers,
+  other numbers, booleans, lists, objects and null) and queued with the session's typed lines, keeping their order. A
+  body over 4096 bytes, nested more than 8 levels deep, or not valid JSON is malformed. Each message takes a token from
+  the session's line limit; a message before the session has a character, or for a package no plugin registered, is then
+  ignored. A malformed message for a registered package counts as dropped input, like a flood. A registered package's
+  message takes a fast-lane token ("Slow down." when there is none) and runs the plugin's handler. Handlers act through
+  ordinary command lines (§4.15). Inbound GMCP is never recorded for repro bundles; the command lines it causes are.
 - **GMCP payloads:**
   - `Char.Schema` is static for the life of the server (§3.9), in declaration order. Its `features` are the enabled
     features (all four ids until a world can turn features off). Clients draw vitals bars and stat labels from it
@@ -1844,7 +1852,7 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
 - **WebSocket framing:** One JSON message per frame: `{"t":"text","d":"..."}` |
   `{"t":"gmcp","p":"Char.Vitals","d":{...}}` | `{"t":"input","d":"..."}`.
   - Also from the server: `prompt`, `hide` (true or false, for password prompts), and `error` before a close. Also from
-    the client: `auth`, and `gmcp` (which only reads `Core.Supports.*`, as over telnet).
+    the client: `auth`, and `gmcp` (`Core.Supports.*` is read as over telnet; other packages are GMCP input).
   - `text` frames carry the color markup unrendered; the client renders it.
   - **Authentication:** the session cookie, or else a first `{"t":"auth","d":token}` frame within 30 seconds. Otherwise
     the server sends `{"t":"error","d":"Please log in first; your session may have expired."}` and closes with code
@@ -1912,16 +1920,16 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
 
 The engine decouples subsystems through explicit Kotlin interfaces and data contracts:
 
-|                          Seam                           |                                                                          Responsibility                                                                           |                                  Source                                  |
-|---------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| `ClientInputEvent` / `WorldControlEvent` / `WorldInbox` | Queues player line input and delivers asynchronous world control events (reload, deploy, connect, disconnect, shutdown, tasks).                                   | [Seams.kt](../core/src/main/kotlin/gups/core/Seams.kt)                   |
-| `ScriptHost`                                            | Executes hook functions, evaluates timer/affect callbacks, checks package quarantine, dispatches modifier chains, and runs package reloads and schema migrations. | [Hooks.kt](../core/src/main/kotlin/gups/core/world/Hooks.kt)             |
-| `RulesEngine`                                           | Evaluates combat math, vitals mitigation, movement costs, regen, leveling calculations, perception propagation, and modifier points via Starlark rules exports.   | [RulesEngine.kt](../core/src/main/kotlin/gups/core/rules/RulesEngine.kt) |
-| `Persistence`                                           | Coordinates non-blocking routine and immediate database checkpoints, entity delta capture, character restoration, diagnostic logging, and account store access.   | [Persistence.kt](../core/src/main/kotlin/gups/core/world/Persistence.kt) |
-| `OutputSink`                                            | Transmits raw text lines, prompt updates, password echo toggling, and GMCP payloads to network sessions.                                                          | [Seams.kt](../core/src/main/kotlin/gups/core/Seams.kt)                   |
-| `LoginHandler`                                          | Drives pre-game authentication, account sign-up, password verification, character selection, and creation state machines for connected sessions.                  | [Login.kt](../core/src/main/kotlin/gups/core/world/Login.kt)             |
-| `WebAccounts`                                           | Bridges web HTTP authentication, setup/invite code validation, token session lifecycle, and web credential management to the account store.                       | [Accounts.kt](../core/src/main/kotlin/gups/core/Accounts.kt)             |
-| `CreationProvider` / `Trait` / `Restriction`            | Defines player character creation steps, permanent stat/vital trait modifiers, and plugin restriction checks (`wear`, `enter`, `cast`, `learn`).                  | [Creation.kt](../core/src/main/kotlin/gups/core/model/Creation.kt)       |
+|                        Seam                        |                                                                                    Responsibility                                                                                    |                                  Source                                  |
+|----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| `ClientEvent` / `WorldControlEvent` / `WorldInbox` | Queues player input (typed lines and inbound GMCP messages, in arrival order) and delivers asynchronous world control events (reload, deploy, connect, disconnect, shutdown, tasks). | [Seams.kt](../core/src/main/kotlin/gups/core/Seams.kt)                   |
+| `ScriptHost`                                       | Executes hook functions, evaluates timer/affect callbacks, checks package quarantine, dispatches modifier chains, and runs package reloads and schema migrations.                    | [Hooks.kt](../core/src/main/kotlin/gups/core/world/Hooks.kt)             |
+| `RulesEngine`                                      | Evaluates combat math, vitals mitigation, movement costs, regen, leveling calculations, perception propagation, and modifier points via Starlark rules exports.                      | [RulesEngine.kt](../core/src/main/kotlin/gups/core/rules/RulesEngine.kt) |
+| `Persistence`                                      | Coordinates non-blocking routine and immediate database checkpoints, entity delta capture, character restoration, diagnostic logging, and account store access.                      | [Persistence.kt](../core/src/main/kotlin/gups/core/world/Persistence.kt) |
+| `OutputSink`                                       | Transmits raw text lines, prompt updates, password echo toggling, and GMCP payloads to network sessions.                                                                             | [Seams.kt](../core/src/main/kotlin/gups/core/Seams.kt)                   |
+| `LoginHandler`                                     | Drives pre-game authentication, account sign-up, password verification, character selection, and creation state machines for connected sessions.                                     | [Login.kt](../core/src/main/kotlin/gups/core/world/Login.kt)             |
+| `WebAccounts`                                      | Bridges web HTTP authentication, setup/invite code validation, token session lifecycle, and web credential management to the account store.                                          | [Accounts.kt](../core/src/main/kotlin/gups/core/Accounts.kt)             |
+| `CreationProvider` / `Trait` / `Restriction`       | Defines player character creation steps, permanent stat/vital trait modifiers, and plugin restriction checks (`wear`, `enter`, `cast`, `learn`).                                     | [Creation.kt](../core/src/main/kotlin/gups/core/model/Creation.kt)       |
 
 The plugin seams (`GupsPlugin`, `PluginRegistry`, the `PluginWorld` facade, and the plugin-agnostic hooks in `core` and
 `script` they fill in) are in §4.15.
@@ -2134,20 +2142,23 @@ subsystems (`core` or `script`). It consists of three primary components:
   [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **`PluginRegistry`:** The registration interface passed to `GupsPlugin.register`. It allows plugins to register
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
-  optional roles and categories), custom effect primitives, GMCP package producers, world start callbacks
-  (`onWorldStarted`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), action restrictions
-  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`), and containment filters
-  (`addContainmentFilter`). See [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
+  optional roles and categories), custom effect primitives, GMCP state packages and event packages, GMCP input handlers
+  (`onGmcp`), world start callbacks (`onWorldStarted`), traits (`PluginTrait`), character creation definitions
+  (`PluginCreation`), action restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`,
+  `GIVE`, `PUT`), and containment filters (`addContainmentFilter`). See
+  [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
   ([Facade.kt](../plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt) and
   [PluginViews.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginViews.kt)) with engine-side wiring in
   [PluginHost.kt](../plugin-api/src/main/kotlin/gups/pluginapi/host/PluginHost.kt). The facade exposes safe mutation
-  verbs (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
+  verbs (`send`, `gmcp`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
   `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`,
   `removeTrait`, `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and
   read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations
-  execute synchronously on the world thread with invariant checking.
+  execute synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which
+  holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers
+  receive.
 
 **Plugin capabilities and lifecycle:**
 
@@ -2168,10 +2179,21 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Categories:** Plugins can declare categories via `addCategory(name, title = name, order = null, help = null)`.
   Category help is displayed when players query `help <category>` if the category defines help text and contains
   accessible commands.
-- **GMCP:** Producers are invoked in phase 7 for sessions supporting the package, sending only changed payloads (§4.10).
-  Names must follow `Name(.Name)+` and must not clash with engine or sibling plugin prefixes.
-- **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, or `onWorldStarted` hooks are
-  caught and logged as `plugin` diagnostics while world execution continues.
+- **GMCP:** `addGmcp(pkg, doc, produce)` declares a state package whose producer runs in phase 7 for sessions supporting
+  it, sending only changed payloads (§4.10). `addGmcpEvent(pkg, doc)` declares an event package; `gmcp(actor, pkg,
+  data)` sends one message under a package the plugin declared (equal or nested), queued with the session's text and
+  never cached, and returns false, sending nothing, for a mob, a link-dead player or a client that doesn't support it.
+  Names have two or more dot-separated parts and are compared ignoring case. No plugin may use the root `Core`. A
+  plugin's state and event packages may not equal, contain or nest in an engine package, another plugin's package, or
+  each other.
+- **GMCP input:** `onGmcp(pkg, doc, handle)` receives client messages for exactly `pkg` (ignoring case, §4.10). An input
+  package may not use the root `Core` or equal, contain or nest in an engine package or another plugin's package; it may
+  share the plugin's own tree (`Shop.Buy` beside `Shop`). The handler gets the sending player, the data as plain values,
+  and a `PluginGmcpWorld`, which can read, send text and send GMCP events but not change the world. To act, it calls
+  `command(line)` once at most, which runs the line as if the player typed it, through the normal lanes, lag,
+  restrictions and repro recording. A handler that throws records a `plugin` diagnostic.
+- **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, or
+  `onWorldStarted` hooks are caught and logged as `plugin` diagnostics while world execution continues.
 - **Traits (`addTrait`):** Declares permanent bundles of stat, max vital, resist, and sense deltas, flags, and modifier
   chain functions (§4.19). Unique across all plugins.
 - **Creation (`setCreation`):** Configures character creation choices, options, availability rules, validation, start
@@ -2336,20 +2358,20 @@ file or a `.json` name is a usage error. With `--world` it includes that world's
 after checking its `MODULE.gups` and `MESSAGES.gups`, and leaves out entries of features the world has off; commands
 appear by their renamed names. The files, in order:
 
-|        File         |                                                                                                                                                                                                                             Contents                                                                                                                                                                                                                             |
-|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                     |
-| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                |
-| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                     |
-| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                   |
-| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                                               |
-| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages, traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
-| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|        File         |                                                                                                                                                                                                                                                 Contents                                                                                                                                                                                                                                                  |
+|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                                                              |
+| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                                                              |
+| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                                                                                        |
+| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
+| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 - **Entries** show name, `since`, a `feature: <id>` badge for feature entries, doc, example if any, and parameters,
   fields and methods as tables (declaration parameters with type, positional/keyword, required, default, allowed values
@@ -2362,7 +2384,8 @@ appear by their renamed names. The files, in order:
 - **Anchors:** every symbol has an element with `id` equal to the symbol with `:` replaced by `-` (`hook:on_enter` →
   `hook-on_enter`). The page a symbol lives on comes from the model list that contains it. Plugin entries are anchored
   `plugin-<id>.<name>` (traits `plugin-<id>.trait-<name>`, choices `plugin-<id>.choice-<choice>`, restrictions
-  `plugin-<id>.restrict-<point>-<n>` counting from 1) and are never part of `api.json`.
+  `plugin-<id>.restrict-<point>-<n>` counting from 1, GMCP packages `plugin-<id>.<pkg>.<kind>` with kind `state`,
+  `event` or `input`) and are never part of `api.json`.
 - **Examples:** an entry may carry a short example, kept in one table keyed by symbol (not in `api.json`, so editing one
   never changes the API or needs a changelog entry). An example has package code, a harness test body, or both. Every
   declaration, constant, effect primitive, behavior and harness type must have one. Each runs as a test in a temporary
@@ -2591,9 +2614,10 @@ The world coroutine in [WorldLoop.kt](../core/src/main/kotlin/gups/core/loop/Wor
 [World.kt](../core/src/main/kotlin/gups/core/world/World.kt) selects over the input channel and the next pulse boundary.
 Pulse boundaries come from `System.nanoTime()`.
 
-- **Between pulses:** Each dequeued `ClientInputEvent` is classified (§5.2). Fast-lane commands execute immediately.
-  Tick-lane commands are appended to the actor's queue. Output produced while handling a session's input between pulses
-  is flushed to that session at once; output caused by anything else waits for phase 7.
+- **Between pulses:** Each dequeued input line is classified (§5.2), and each inbound GMCP message goes to the plugin
+  that registered its package (§4.10). Fast-lane commands execute immediately. Tick-lane commands are appended to the
+  actor's queue. Output produced while handling a session's input between pulses is flushed to that session at once;
+  output caused by anything else waits for phase 7.
 - **At each pulse boundary**, `pulse++` and then these phases run in this exact order:
   1. **Timers:** Fire `ScriptTimer`s and affect ticks/expiries due at this pulse, ordered by `(due, id)`.
   2. **Action pulse:** For each active actor, in **initiative order** (§5.4.1):
@@ -3522,7 +3546,7 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
 | Checkpoint write fails                          | Retry with backoff. The batch stays pending, and later captures merge into it (§5.11). Alert after 3 world ticks. Never block the world thread.                                  |
 | Disk full / database unwritable                 | As above. Also refuse new logins with a maintenance message until a write succeeds.                                                                                              |
 | Slow client                                     | Output buffer over 256 KB disconnects the client. The character goes link-dead.                                                                                                  |
-| Malformed telnet, GMCP or WebSocket frames      | Ignore the bad sequence and continue. Repeated garbage disconnects after 5 errors.                                                                                               |
+| Malformed telnet, GMCP or WebSocket frames      | Ignore the bad sequence and continue. Repeated garbage disconnects after 5 errors. A malformed GMCP message for a package other than `Core.*` is not a protocol error (§4.10).   |
 | Deploy fetch or load failure                    | The old world stays live. The diagnostic goes to the CI response and instructors.                                                                                                |
 | Plugin fails to load                            | Skip the plugin and log it. If the world references its builtins, those packages fail to load (old version kept).                                                                |
 | Built-in behavior throws                        | Log an engine diagnostic; the behavior proposes nothing.                                                                                                                         |
@@ -3685,3 +3709,4 @@ template's `.github/workflows/gates.yml`.
 | **M18**   | Slot families (`slot_families()`), per-actor slots (`actor_slots(ctx)`), slot cost (`slot_cost(ctx)`, `item(slot_cost=)`), the fit check and inactive items, auto-attacks from every active equipped item with `dice`, spell damage through the caster's `damage` modifier chain, `ctx.damage_type` and `ctx.slot`, `max_vital_deltas` and `resist_deltas` on items and affects (§3.3, §4.2, §4.3, §4.5, §4.6, §4.9, §4.15, §5.4).                    |
 | **M19**   | Track-lag modifier points: `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag` as modifier points on the acting actor's chain, the final value clamped to 0; plugin trait modifiers for them; the template's `tar_walker_boots` (§4.6, §4.15, §5.5).                                                                                                                                                                                 |
 | **M20**   | Consumables and charges: per-instance `charges` with `empty` (destroy, keep or a variant) and `set_charges`; declarative `use_effect`, `use_target` and `use_lag`; effect primitives move to the kernel; `use` reaches ground items; plugin facade charges (§3.3, §3.10, §4.2, §4.3, §4.5, §4.9, §4.15).                                                                                                                                              |
+| **M21**   | Plugin GMCP input and events: inbound GMCP routed to the plugin that registered the package (`onGmcp`), with size, depth and rate limits; a read-only `PluginGmcpWorld` whose handlers act through `command`; plugin GMCP event packages (`addGmcpEvent`, `PluginWorld.gmcp`); case-insensitive GMCP name checks and the reserved `Core` root (§4.10, §4.11, §4.15, §4.16, §5.1, §6.4).                                                               |

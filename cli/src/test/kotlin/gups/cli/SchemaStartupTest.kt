@@ -6,6 +6,7 @@ import gups.core.world.spawnItem
 import gups.persist.Database
 import gups.persist.SqlitePersistence
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -16,19 +17,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.io.TempDir
 
 class SchemaStartupTest {
-  private fun copyTemplate(): Path {
-    val from = Path.of(System.getProperty("gups.templateWorld"))
-    val to = Files.createTempDirectory("gups-schema")
-    Files.walk(from).use { paths ->
-      for (p in paths) {
-        val target = to.resolve(from.relativize(p).toString())
-        if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
-      }
-    }
-    return to
-  }
+  @TempDir lateinit var tmp: Path
+
+  private fun copyTemplate(): Path =
+    TestWorlds.copyWorld(to = Files.createTempDirectory(tmp, "world"))
 
   /** Boots a server on [root] and [db]; returns whether it started and what it logged. */
   private fun boot(root: Path, db: Path, wipe: Boolean = false): Pair<Boolean, String> {

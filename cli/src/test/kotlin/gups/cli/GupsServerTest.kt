@@ -2,6 +2,7 @@ package gups.cli
 
 import com.github.ajalt.clikt.testing.test
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.net.Socket
 import java.nio.file.Files
 import java.nio.file.Path
@@ -17,19 +18,13 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.io.TempDir
 
 class GupsServerTest {
-  private fun copyTemplate(): Path {
-    val from = Path.of(System.getProperty("gups.templateWorld"))
-    val to = Files.createTempDirectory("gups-dev")
-    Files.walk(from).use { paths ->
-      for (p in paths) {
-        val target = to.resolve(from.relativize(p).toString())
-        if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
-      }
-    }
-    return to
-  }
+  @TempDir lateinit var tmp: Path
+
+  private fun copyTemplate(): Path =
+    TestWorlds.copyWorld(to = Files.createTempDirectory(tmp, "world"))
 
   /** Reads until [marker] shows up, or fails after a few seconds. */
   private fun Socket.readUntil(marker: String): String {
@@ -360,7 +355,7 @@ class GupsServerTest {
         )
       }
     }
-    val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory("tls"))
+    val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory(tmp, "tls"))
     val logs = StringBuffer()
     val server =
       GupsServer(

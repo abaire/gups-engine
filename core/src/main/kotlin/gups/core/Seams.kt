@@ -1,14 +1,32 @@
 package gups.core
 
+/** Input from a connected client session, in the order it arrived. */
+sealed interface ClientEvent {
+  val session: SessionId
+  val receivedNanos: Long
+}
+
 /** A line of raw text input received from a connected client session. */
 data class ClientInputEvent(
   /** Identifier of the sending client session. */
-  val session: SessionId,
+  override val session: SessionId,
   /** Raw text line submitted by the client (UTF-8, capped at 512 bytes). */
   val line: String,
   /** Monotonic nanosecond timestamp when the input was received by the network listener. */
-  val receivedNanos: Long,
-)
+  override val receivedNanos: Long,
+) : ClientEvent
+
+/** A GMCP message from a client, for a package other than `Core.*`. */
+data class ClientGmcpEvent(
+  override val session: SessionId,
+  /** The package as the client spelled it. */
+  val pkg: String,
+  /** The body as plain values; null when [malformed]. */
+  val data: Any?,
+  /** True when the body was too large, too deep or not JSON. */
+  val malformed: Boolean,
+  override val receivedNanos: Long,
+) : ClientEvent
 
 /**
  * Non-input control events posted from listeners or background tasks to the world simulation loop.
@@ -79,6 +97,9 @@ sealed interface WorldControlEvent {
 interface WorldInbox {
   /** Submits a client command line into the simulation event queue. */
   fun submit(event: ClientInputEvent)
+
+  /** Submits one inbound GMCP message; inboxes that predate it drop them. */
+  fun submit(event: ClientGmcpEvent) = Unit
 
   /** Submits a lifecycle or control event into the simulation event queue. */
   fun submit(event: WorldControlEvent)

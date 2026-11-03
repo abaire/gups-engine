@@ -1,5 +1,7 @@
 package gups.core.loop
 
+import gups.core.ClientEvent
+import gups.core.ClientGmcpEvent
 import gups.core.ClientInputEvent
 import gups.core.PULSE_MS
 import gups.core.WorldControlEvent
@@ -49,7 +51,7 @@ class WorldLoop(
   private val pulseNanos: Long = PULSE_MS * 1_000_000,
   private val nanoTime: () -> Long = System::nanoTime,
 ) : WorldInbox {
-  private val input = Channel<ClientInputEvent>(Channel.UNLIMITED)
+  private val input = Channel<ClientEvent>(Channel.UNLIMITED)
   private val control = Channel<WorldControlEvent>(Channel.UNLIMITED)
   private val wake = Channel<Unit>(Channel.CONFLATED)
   private val waiting = AtomicInteger()
@@ -67,6 +69,11 @@ class WorldLoop(
 
   /** Safe to call from any thread. */
   override fun submit(event: ClientInputEvent) {
+    if (input.trySend(event).isSuccess) waiting.incrementAndGet()
+  }
+
+  /** Safe to call from any thread. */
+  override fun submit(event: ClientGmcpEvent) {
     if (input.trySend(event).isSuccess) waiting.incrementAndGet()
   }
 
@@ -94,7 +101,10 @@ class WorldLoop(
           control.onReceive { world.handle(it, nanoTime()) }
           input.onReceive {
             waiting.decrementAndGet()
-            world.handle(it)
+            when (it) {
+              is ClientInputEvent -> world.handle(it)
+              is ClientGmcpEvent -> world.handle(it)
+            }
           }
           onTimeout(wait.nanoseconds) {}
         }

@@ -10,6 +10,7 @@ import gups.pluginapi.testplugins.TidesPlugin
 import gups.pluginapi.testplugins.WeatherPlugin
 import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -29,8 +30,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.io.TempDir
 
 class OperationsTest {
+  @TempDir lateinit var tmp: Path
+
   private val token = "admin-secret"
   private val gate = Label("//zones/tutorial:gate")
 
@@ -46,20 +50,14 @@ class OperationsTest {
 
   /** A course repository: a bare remote, the server's working tree, and a developer's clone. */
   private inner class Repo(seedChange: (Path) -> Unit = {}) {
-    val root: Path = Files.createTempDirectory("gups-ops")
+    val root: Path = Files.createTempDirectory(tmp, "gups-ops")
     val bare: Path = root.resolve("course.git")
     val world: Path = root.resolve("world")
     val dev: Path = root.resolve("dev")
 
     init {
       val seed = root.resolve("seed")
-      val from = Path.of(System.getProperty("gups.templateWorld"))
-      Files.walk(from).use { paths ->
-        for (p in paths) {
-          val target = seed.resolve(from.relativize(p).toString())
-          if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
-        }
-      }
+      TestWorlds.copyWorld(to = seed)
       seed.resolve(".gitignore").writeText(".gups/\n")
       seedChange(seed)
       git(seed, "init", "--quiet", "-b", "main")

@@ -481,7 +481,15 @@ class WebServer(
             sink.send("Your line was longer than $MAX_LINE_BYTES bytes and was cut short.\n")
           inbox.submit(ClientInputEvent(id, cut, System.nanoTime()))
         }
-        "gmcp" -> supports = updateSupports(supports, o.string("p") ?: return bad(), o["d"])
+        "gmcp" -> {
+          val pkg = o.string("p") ?: return bad()
+          if (isCoreGmcp(pkg)) {
+            supports = updateSupports(supports, pkg, o["d"])
+            return
+          }
+          val body = decodeGmcpElement(o["d"])
+          inbox.submit(gmcpEvent(id, pkg, body))
+        }
         "auth" -> Unit
         else -> bad()
       }

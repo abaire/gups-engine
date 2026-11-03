@@ -1,6 +1,51 @@
 package gups.pluginapi
 
 /**
+ * What a plugin may do without changing the world: reads, messages and GMCP events. GMCP input
+ * handlers get only this view, and act through [PluginGmcpCall.command].
+ */
+interface PluginGmcpWorld {
+  /** The engine features this world has on: `combat`, `track`, `skills`, `leveling`. */
+  val features: Set<String>
+    get() = setOf("combat", "track", "skills", "leveling")
+
+  fun send(target: PluginActor, text: String)
+
+  /**
+   * Sends the GMCP event [pkg] with [data] (plain values) to [actor]. [pkg] must be, or nest in, a
+   * package this plugin declared with addGmcp or addGmcpEvent. Returns false, sending nothing, for
+   * a mob, a link-dead player, or a client that doesn't support [pkg].
+   */
+  fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean
+
+  /** Reads an attribute; a key without `ns:` is in the plugin's own namespace (its id). */
+  fun getAttr(entity: PluginEntity, key: String, default: Any? = null): Any?
+
+  // ---- Reads ----
+
+  /** The names the world declares, in declaration order. */
+  val schema: PluginSchema
+  val pulse: Long
+  val seed: Long
+
+  /** Every room, sorted by label. */
+  fun rooms(): List<PluginRoom>
+
+  fun room(label: String): PluginRoom?
+
+  /** Every region tag a room carries, sorted. */
+  fun regions(): List<String>
+
+  // ---- Diagnostics ----
+
+  /** Records a `"plugin"` diagnostic. */
+  fun diagnose(message: String)
+
+  /** Writes to the server log. */
+  fun log(message: String)
+}
+
+/**
  * Safe facade interface exposing the running simulation world to plugins.
  *
  * ## Facade Verb Guarantees & Invariant Preservation
@@ -20,14 +65,8 @@ package gups.pluginapi
  *   own namespace prefix (`<pluginId>:<key>`), isolating plugin-specific state from core engine
  *   attributes and other plugins.
  */
-interface PluginWorld {
-  /** The engine features this world has on: `combat`, `track`, `skills`, `leveling`. */
-  val features: Set<String>
-    get() = setOf("combat", "track", "skills", "leveling")
-
+interface PluginWorld : PluginGmcpWorld {
   // ---- Verbs ----
-
-  fun send(target: PluginActor, text: String)
 
   fun echo(room: PluginRoom, text: String, exclude: List<PluginActor> = emptyList())
 
@@ -81,9 +120,6 @@ interface PluginWorld {
   fun setCharges(item: PluginItem, charges: Int)
 
   fun teleport(actor: PluginActor, room: PluginRoom)
-
-  /** Reads an attribute; a key without `ns:` is in the plugin's own namespace (its id). */
-  fun getAttr(entity: PluginEntity, key: String, default: Any? = null): Any?
 
   /** Writes an attribute in the plugin's own namespace; `null` deletes it. */
   fun setAttr(entity: PluginEntity, key: String, value: Any?)
@@ -142,30 +178,8 @@ interface PluginWorld {
    */
   fun levelDown(actor: PluginActor, count: Int = 1): Int
 
-  // ---- Reads ----
-
-  /** The names the world declares, in declaration order. */
-  val schema: PluginSchema
-
-  val pulse: Long
-  val seed: Long
+  /** The world's seeded RNG. Draws change the world's repro, so it stays off the read-only view. */
   val rng: PluginRng
-
-  /** Every room, sorted by label. */
-  fun rooms(): List<PluginRoom>
-
-  fun room(label: String): PluginRoom?
-
-  /** Every region tag a room carries, sorted. */
-  fun regions(): List<String>
-
-  // ---- Diagnostics ----
-
-  /** Records a `"plugin"` diagnostic. */
-  fun diagnose(message: String)
-
-  /** Writes to the server log. */
-  fun log(message: String)
 }
 
 /** A declared stat or vital: the name scripts use and the label players see. */

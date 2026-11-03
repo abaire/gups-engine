@@ -26,6 +26,27 @@ private val STATE_PACKAGES =
 val ENGINE_GMCP_PACKAGES: Set<String> =
   (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace", "Char.Creation")).toSortedSet()
 
+/** A GMCP package clients may send, and what handles it. */
+class GmcpInput(
+  /** The package as registered. */
+  val pkg: String,
+  val handle: (Player, Any?) -> Unit,
+)
+
+/** A GMCP package name: two or more dot-separated parts. */
+val GMCP_PACKAGE_NAME = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
+
+/** Roots no plugin or script package may use. */
+val RESERVED_GMCP_ROOTS: Set<String> = setOf("Core")
+
+/** True if [a] and [b] are equal or one nests in the other, ignoring case. */
+fun gmcpOverlaps(a: String, b: String): Boolean =
+  a.equals(b, true) || a.startsWith("$b.", true) || b.startsWith("$a.", true)
+
+/** True if [pkg] is [root] or nests in it, ignoring case. */
+fun gmcpWithin(pkg: String, root: String): Boolean =
+  pkg.equals(root, true) || pkg.startsWith("$root.", true)
+
 /**
  * Queues the GMCP event [pkg] for [p], to go out with the session's next flush after its text.
  * Returns false, sending nothing, when the client doesn't support [pkg].

@@ -8,6 +8,7 @@ import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
@@ -44,6 +45,8 @@ class WeatherPluginTest {
     val commands = mutableMapOf<String, (PluginCommandCall) -> Unit>()
     val effects = mutableMapOf<String, Pair<List<PluginParam>, PluginEffect>>()
     val gmcp = mutableMapOf<String, (PluginWorld, PluginActor) -> Any?>()
+    val gmcpEvents = mutableMapOf<String, String>()
+    val gmcpInputs = mutableMapOf<String, (PluginGmcpCall) -> Unit>()
     val started = mutableListOf<(PluginWorld) -> Unit>()
 
     override fun addBuiltin(name: String, value: StarlarkValue, doc: String) = TODO()
@@ -79,6 +82,14 @@ class WeatherPluginTest {
 
     override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) {
       gmcp[pkg] = produce
+    }
+
+    override fun addGmcpEvent(pkg: String, doc: String) {
+      gmcpEvents[pkg] = doc
+    }
+
+    override fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit) {
+      gmcpInputs[pkg] = handle
     }
 
     override fun addTrait(trait: PluginTrait) = TODO()
@@ -182,11 +193,17 @@ class WeatherPluginTest {
     private val regionList: List<String> = emptyList(),
   ) : PluginWorld {
     val sent = mutableListOf<String>()
+    val gmcpSent = mutableListOf<Pair<String, Any?>>()
     val affects = mutableListOf<List<Any>>()
     val logs = mutableListOf<String>()
 
     override fun send(target: PluginActor, text: String) {
       sent += text
+    }
+
+    override fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean {
+      gmcpSent += pkg to data
+      return true
     }
 
     override fun applyAffect(
@@ -325,6 +342,52 @@ class WeatherPluginTest {
       listOf("You are indoors.", "The weather here is ${WeatherPlugin.stateFor(w, meadow)}."),
       w.sent,
     )
+    assertEquals(
+      listOf<Pair<String, Any?>>(
+        "Gups.Forecast" to WeatherPlugin.forecast(w, cabin),
+        "Gups.Forecast" to WeatherPlugin.forecast(w, meadow),
+      ),
+      w.gmcpSent,
+    )
+  }
+
+  @Test
+  fun `the forecast is the weather now and in the next window`() {
+    val forecast = WeatherPlugin.forecast(FakeWorld(seed = 42, pulse = 10), meadow)
+    assertEquals(WeatherPlugin.stateFor(FakeWorld(seed = 42, pulse = 10), meadow), forecast["now"])
+    assertEquals(
+      WeatherPlugin.stateFor(FakeWorld(seed = 42, pulse = 250), meadow),
+      forecast["next"],
+    )
+  }
+
+  @Test
+  fun `Gups Weather Get sends the forecast or runs the weather command`() {
+    val w = FakeWorld()
+    val commands = mutableListOf<String>()
+    fun call(body: Any?) =
+      object : PluginGmcpCall {
+        override val world = w
+        override val actor = FakeActor(meadow)
+        override val pkg = "Gups.Weather.Get"
+        override val data = body
+
+        override fun command(line: String): Boolean {
+          commands += line
+          return true
+        }
+      }
+    val handle = registry.gmcpInputs.getValue("Gups.Weather.Get")
+    handle(call(null))
+    assertEquals(
+      listOf<Pair<String, Any?>>("Gups.Forecast" to WeatherPlugin.forecast(w, meadow)),
+      w.gmcpSent,
+    )
+    assertEquals(emptyList<String>(), commands)
+    handle(call(mapOf("describe" to true)))
+    assertEquals(listOf("weather"), commands)
+    assertEquals(1, w.gmcpSent.size, "the weather command sends the forecast itself")
+    assertEquals(setOf("Gups.Forecast"), registry.gmcpEvents.keys)
   }
 
   @Test

@@ -14,6 +14,7 @@ import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginCommandCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
@@ -120,6 +121,10 @@ class HeritagePluginTest {
     override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) =
       TODO()
 
+    override fun addGmcpEvent(pkg: String, doc: String) = TODO()
+
+    override fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit) = TODO()
+
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) = TODO()
   }
 
@@ -218,6 +223,8 @@ class HeritagePluginTest {
     override fun send(target: PluginActor, text: String) {
       sent += text
     }
+
+    override fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean = TODO()
 
     override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
       setChoicesCalls += actor to changes

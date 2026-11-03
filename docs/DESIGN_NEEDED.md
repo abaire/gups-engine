@@ -305,7 +305,7 @@ are explicitly unsupported; structured client communication relies entirely on G
 sufficient demand from legacy MUD clients to warrant implementing MSDP and MXP parsers and formatters? - How would MXP
 formatting tags integrate with ANSI rendering and web client pipelines?
 
-### GMCP input packages beyond Core.*
+### GMCP input packages beyond Core.* (COMPLETED — M21)
 
 **Spec:** §4.10, §4.13. **Today:** clients can send only `Core.Hello` and `Core.Supports.Set`/`Add`/`Remove`. All other
 inbound GMCP packages are ignored. **Questions:** - Which client-to-server GMCP packages should be supported (e.g., UI

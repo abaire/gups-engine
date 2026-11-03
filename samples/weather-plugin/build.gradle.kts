@@ -19,6 +19,7 @@ tasks.test {
   inputs.file(jar)
   systemProperty("gups.sample.weatherJar", jar.get().asFile.absolutePath)
   val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
-  inputs.dir(templateWorld)
+  // A developer's local server data (.gups) isn't part of the world the tests use.
+  inputs.files(fileTree(templateWorld) { exclude(".gups/**") }).withPropertyName("templateWorld")
   systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
 }

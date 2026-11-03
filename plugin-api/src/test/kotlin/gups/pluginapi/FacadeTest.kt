@@ -3,6 +3,7 @@ package gups.pluginapi
 import gups.core.CapturingSink
 import gups.core.ClientInputEvent
 import gups.core.Label
+import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.ItemLocation
@@ -20,6 +21,7 @@ import gups.core.world.quit
 import gups.core.world.spawnItem
 import gups.core.world.tombstone
 import gups.pluginapi.host.ActorFacade
+import gups.pluginapi.host.Facades
 import gups.pluginapi.host.ItemFacade
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.WorldFacade
@@ -726,6 +728,68 @@ class FacadeTest {
       assertFailsWith<IllegalArgumentException> { facade.setCharges(wand, 1) }.message!!,
       "no longer in the world",
     )
+  }
+
+  @Test
+  fun `gmcp sends an event under a declared package`() {
+    val sink = gmcpConnect(w, ann.actor as Player, setOf("Gups.Weather.Forecast"))
+    val f = gmcpFacade(listOf("Gups.Weather.Forecast"))
+    assertTrue(f.gmcp(ann, "Gups.Weather.Forecast", mapOf("state" to "rain")))
+    w.flushOutput()
+    assertEquals(1, sink.gmcp.size)
+    assertEquals("Gups.Weather.Forecast", sink.gmcp.single().first)
+    assertEquals(mapOf<String, Any?>("state" to "rain"), sink.gmcp.single().second)
+  }
+
+  @Test
+  fun `gmcp refuses an undeclared package`() {
+    val f = gmcpFacade(listOf("Gups.Weather"))
+    assertFailsWith<IllegalArgumentException> { f.gmcp(ann, "Gups.Tides", mapOf<String, Any?>()) }
+  }
+
+  @Test
+  fun `gmcp returns false for a mob and for an unsupported package`() {
+    gmcpConnect(w, ann.actor as Player, setOf("Char"))
+    val f = gmcpFacade(listOf("Gups.Weather"))
+    assertFalse(f.gmcp(wolf, "Gups.Weather", mapOf<String, Any?>()))
+    assertFalse(f.gmcp(ann, "Gups.Weather", mapOf<String, Any?>()))
+  }
+
+  @Test
+  fun `gmcp rejects non-plain data`() {
+    val f = gmcpFacade(listOf("Gups.Weather"))
+    assertFailsWith<IllegalArgumentException> { f.gmcp(ann, "Gups.Weather", ann) }
+    assertFailsWith<IllegalArgumentException> { f.gmcp(ann, "Gups.Weather", mapOf(7L to "x")) }
+  }
+
+  private fun gmcpFacade(owned: List<String>): WorldFacade {
+    Facades.registerGmcp(w, mapOf("weather" to owned))
+    return WorldFacade(w, "weather") {}
+  }
+
+  private class RecordingSink(val supports: Set<String>) : OutputSink {
+    val gmcp = mutableListOf<Pair<String, Any?>>()
+    val text = mutableListOf<String>()
+
+    override fun send(text: String) {
+      this.text += text
+    }
+
+    override fun gmcp(pkg: String, data: Any?) {
+      gmcp += pkg to data
+    }
+
+    override fun wantsGmcp(pkg: String) = supports.any { pkg == it || pkg.startsWith("$it.") }
+
+    override fun close(reason: String) = Unit
+  }
+
+  private fun gmcpConnect(w: World, p: Player, supports: Set<String>): RecordingSink {
+    val sink = RecordingSink(supports)
+    w.handle(WorldControlEvent.Connect(SessionId(1), sink))
+    w.attach(SessionId(1), p)
+    w.flushOutput()
+    return sink
   }
 
   private class TestFilterPlugin(

@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.ClientGmcpEvent
 import gups.core.ClientInputEvent
 import gups.core.IDLE_QUIT_PULSES
 import gups.core.LINKDEAD_PULSES
@@ -119,6 +120,31 @@ fun World.handle(event: ClientInputEvent) {
     return
   }
   submit(player, event.line)
+  flushImmediate()
+  flush(s)
+}
+
+/** Handles one inbound GMCP message between pulses. */
+fun World.handle(event: ClientGmcpEvent) {
+  val s = sessions[event.session] ?: return
+  if (!s.lines.tryTake(event.receivedNanos)) {
+    dropped(s, event.receivedNanos)
+    return
+  }
+  val player = s.player ?: return
+  val input = pluginGmcpIn[event.pkg.lowercase()] ?: return
+  if (event.malformed) {
+    dropped(s, event.receivedNanos)
+    return
+  }
+  if (!s.bucket.tryTake(event.receivedNanos)) {
+    s.out.append(msg(KernelMsg.SLOW_DOWN)).append('\n')
+    flush(s)
+    dropped(s, event.receivedNanos)
+    return
+  }
+  player.lastInputPulse = pulse
+  guarded("GMCP input '${input.pkg}' of $player") { input.handle(player, event.data) }
   flushImmediate()
   flush(s)
 }

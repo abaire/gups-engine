@@ -108,13 +108,13 @@ r.addBuiltin(
 }
 ```
 
-The weather is a pure function of the seed, the one-minute window and the room's region, so tests are deterministic:
+The weather is a pure function of the seed, the one-minute window (`WINDOW` is 240 pulses) and the room's region, so
+tests are deterministic:
 
 ```kotlin
-fun stateFor(world: PluginWorld, room: PluginRoom): String {
+fun stateFor(world: PluginGmcpWorld, room: PluginRoom, pulse: Long = world.pulse): String {
     val region = room.regions.minOrNull() ?: return "clear"
-    var z =
-        world.seed xor (world.pulse / 240L) * -0x61c8864680b583ebL xor region.hashCode().toLong()
+    var z = world.seed xor (pulse / WINDOW) * -0x61c8864680b583ebL xor region.hashCode().toLong()
     z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
     z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
     z = z xor (z ushr 31)
@@ -140,6 +140,7 @@ r.addCommand(
         if (room.regions.isEmpty()) "You are indoors."
         else "The weather here is ${stateFor(call.world, room)}.",
     )
+    call.world.gmcp(call.actor, "Gups.Forecast", forecast(call.world, room))
 }
 ```
 
@@ -186,15 +187,53 @@ r.addEffectPrimitive(
 
 ### GMCP packages
 
-A producer runs in phase 7 for each player whose client supports the package, and only changed payloads are sent. Return
-plain values. The name has at least two dot-separated parts and must not overlap an engine package (`Char.*`, `Room.*`,
-`Comm.Channel.Text`, `Gups.Trace`).
+A state package's producer runs in phase 7 for each player whose client supports the package, and only changed payloads
+are sent. Return plain values.
 
 ```kotlin
 r.addGmcp("Gups.Weather", "The weather where the player stands.") { world, actor ->
     mapOf("state" to stateFor(world, actor.room), "region" to actor.room.regions.minOrNull())
 }
 ```
+
+An event package sends one message at a time with `world.gmcp`. It is queued with the session's text and never cached;
+it returns `false`, sending nothing, for a mob, a link-dead player, or a client that doesn't support the package. A
+plugin may send only under a package it declared, or one nested in it. The `weather` command above sends the forecast
+after its text.
+
+```kotlin
+r.addGmcpEvent(
+    "Gups.Forecast",
+    "The weather now and in the next minute where the player stands.",
+)
+```
+
+An input package receives GMCP messages from the player's client for exactly that package (ignoring case). The handler
+gets the sending player, the data as plain values (`String`, `Long`, `Double`, `Boolean`, `List`, `Map` or `null`), and
+a read-only `PluginGmcpWorld`, which can read, send text and send GMCP events but not change the world. To act, it calls
+`call.command(line)` at most once, which runs the line as if the player typed it, through the normal lanes, lag,
+restrictions and repro recording.
+
+```kotlin
+r.onGmcp(
+    "Gups.Weather.Get",
+    "Sends Gups.Forecast, or with {\"describe\": true} runs `weather`.",
+) { call ->
+    if ((call.data as? Map<*, *>)?.get("describe") == true) call.command("weather")
+    else call.world.gmcp(call.actor, "Gups.Forecast", forecast(call.world, call.actor.room))
+}
+```
+
+Names have at least two dot-separated parts and are compared ignoring case. No package may use the reserved `Core` root
+or overlap an engine package (`Char.*`, `Room.*`, `Comm.Channel.Text`, `Gups.Trace`) or another plugin's package. An
+input package may share the plugin's own state and event tree, but a plugin's state and event packages may not equal,
+contain or nest in each other. A handler that throws is recorded as a `"plugin"` diagnostic.
+
+Inbound messages are limited. A body over 4096 bytes (UTF-8), nested more than 8 levels deep, or not valid JSON is
+malformed: the handler doesn't run and the message counts as dropped input, like a flood, so a client that keeps sending
+them is disconnected. Each message takes a token from the session's line limit and then one from the fast-lane bucket
+("Slow down." when there is none); `command` charges nothing more. Messages for a package no plugin registered, and
+messages sent before the player has a character, are ignored.
 
 ### Character creation, traits and restrictions
 
@@ -388,8 +427,8 @@ r.onWorldStarted { world ->
 }
 ```
 
-A failure in a command, effect, GMCP producer or start callback is recorded as a `"plugin"` diagnostic and the pulse
-goes on. An exception from a builtin is a script error in the calling hook.
+A failure in a command, effect, GMCP producer, GMCP input handler or start callback is recorded as a `"plugin"`
+diagnostic and the pulse goes on. An exception from a builtin is a script error in the calling hook.
 
 ## Installing a plugin
 

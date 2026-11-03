@@ -124,6 +124,9 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   var errors: Int = 0
     private set
 
+  /** Inbound GMCP for a package other than `Core.*`; set for the duration of each `receive`. */
+  private var onGmcp: (String, GmcpBody) -> Unit = { _, _ -> }
+
   private enum class State {
     DATA,
     IAC,
@@ -131,12 +134,17 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     SB_OPT,
     SB_DATA,
     SB_IAC,
+    SB_SKIP,
+    SB_SKIP_IAC,
   }
 
   private var state = State.DATA
   private var verb = 0
   private var sbOption = 0
   private val sb = ByteArrayOutputStream()
+
+  /** The package of an oversized non-`Core` GMCP message being skipped to its `IAC SE`. */
+  private var skippedGmcp = ""
   private val line = ByteArrayOutputStream()
   private var truncated = false
   private var afterCr = false
@@ -160,8 +168,15 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
     }
   }
 
-  /** Feeds received bytes; [onLine] gets each complete line and whether it was truncated. */
-  fun receive(bytes: ByteArray, onLine: (String, Boolean) -> Unit) {
+  /**
+   * Feeds received bytes; [onGmcp] gets each non-`Core` GMCP message, [onLine] each complete line.
+   */
+  fun receive(
+    bytes: ByteArray,
+    onGmcp: (String, GmcpBody) -> Unit = { _, _ -> },
+    onLine: (String, Boolean) -> Unit,
+  ) {
+    this.onGmcp = onGmcp
     for (raw in bytes) {
       val b = raw.toInt() and 0xff
       when (state) {
@@ -197,10 +212,29 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
           when {
             b == Telnet.IAC -> state = State.SB_IAC
             sb.size() >= MAX_SUBNEGOTIATION -> {
+              val pkg = oversizedGmcpPackage()
+              if (pkg != null) {
+                skippedGmcp = pkg
+                state = State.SB_SKIP
+              } else {
+                errors++
+                state = State.DATA
+              }
+            }
+            else -> sb.write(b)
+          }
+        State.SB_SKIP -> if (b == Telnet.IAC) state = State.SB_SKIP_IAC
+        State.SB_SKIP_IAC ->
+          when (b) {
+            Telnet.SE -> {
+              state = State.DATA
+              onGmcp(skippedGmcp, GmcpBody.Malformed)
+            }
+            Telnet.IAC -> state = State.SB_SKIP
+            else -> {
               errors++
               state = State.DATA
             }
-            else -> sb.write(b)
           }
         State.SB_IAC ->
           when (b) {
@@ -286,6 +320,19 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
         if (opt == Telnet.OPT_GMCP) gmcp = false
       }
     }
+  }
+
+  /**
+   * The package of the GMCP message filling [sb] when it isn't `Core.*`, so the rest can be skipped
+   * and the message forwarded as malformed; null when overflowing is a protocol error.
+   */
+  private fun oversizedGmcpPackage(): String? {
+    if (sbOption != Telnet.OPT_GMCP) return null
+    val text = String(sb.toByteArray(), Charsets.UTF_8)
+    val space = text.indexOf(' ')
+    if (space < 0) return null
+    val pkg = text.substring(0, space)
+    return if (isCoreGmcp(pkg)) null else pkg
   }
 
   private fun subnegotiation(opt: Int, data: ByteArray) {
@@ -385,12 +432,16 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   }
 
   /**
-   * One GMCP message from the client. Only `Core.*` is read; a malformed message counts as a
-   * protocol error.
+   * One GMCP message from the client. Only `Core.*` is read; a malformed `Core.*` message counts as
+   * a protocol error. Other packages go to [onGmcp], never against the error count.
    */
   private fun gmcpIn(message: String) {
     val space = message.indexOf(' ')
     val pkg = if (space < 0) message else message.substring(0, space)
+    if (!isCoreGmcp(pkg)) {
+      onGmcp(pkg, decodeGmcpBody(if (space < 0) null else message.substring(space + 1)))
+      return
+    }
     val body =
       if (space < 0) null
       else

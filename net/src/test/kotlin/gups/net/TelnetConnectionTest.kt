@@ -25,9 +25,11 @@ private fun bytes(vararg parts: Any): ByteArray =
 private class Probe {
   val written = mutableListOf<ByteArray>()
   val lines = mutableListOf<Pair<String, Boolean>>()
+  val gmcp = mutableListOf<Pair<String, GmcpBody>>()
   val conn = TelnetConnection { written += it }
 
-  fun feed(vararg parts: Any) = conn.receive(bytes(*parts)) { l, t -> lines += l to t }
+  fun feed(vararg parts: Any) =
+    conn.receive(bytes(*parts), { pkg, body -> gmcp += pkg to body }) { l, t -> lines += l to t }
 
   fun take(): List<List<Int>> =
     written.map { b -> b.map { it.toInt() and 0xff } }.also { written.clear() }
@@ -225,6 +227,48 @@ class TelnetConnectionTest {
     p.feed(IAC, 7, "ok\n", IAC, SE, IAC, SB, 24, 9, IAC, SE, IAC, SB, 31, 1, IAC, SE)
     assertEquals(listOf("ok" to false), p.lines)
     assertEquals(4, p.conn.errors)
+  }
+
+  @Test
+  fun `malformed JSON on a non-Core package is not a protocol error`() {
+    val p = Probe()
+    p.feed(IAC, SB, 201, "Shop.Buy {bad", IAC, SE)
+    assertEquals(0, p.conn.errors)
+    assertEquals(listOf<Pair<String, GmcpBody>>("Shop.Buy" to GmcpBody.Malformed), p.gmcp)
+  }
+
+  @Test
+  fun `non-Core GMCP goes to onGmcp`() {
+    val p = Probe()
+    p.feed(IAC, SB, 201, "Shop.Buy {\"item\":\"sword\"}", IAC, SE)
+    assertEquals(
+      listOf<Pair<String, GmcpBody>>("Shop.Buy" to GmcpBody.Ok(mapOf("item" to "sword"))),
+      p.gmcp,
+    )
+  }
+
+  @Test
+  fun `a non-Core GMCP message over the subnegotiation limit is forwarded as malformed`() {
+    val p = Probe()
+    p.feed(IAC, SB, 201, "Shop.Buy \"" + "a".repeat(9000) + "\"", IAC, SE, "look\r\n")
+    assertEquals(0, p.conn.errors)
+    assertEquals(listOf<Pair<String, GmcpBody>>("Shop.Buy" to GmcpBody.Malformed), p.gmcp)
+    assertEquals(listOf("look" to false), p.lines)
+  }
+
+  @Test
+  fun `a Core GMCP message over the subnegotiation limit is a protocol error`() {
+    val p = Probe()
+    p.feed(IAC, SB, 201, "Core.Supports.Set [\"" + "a".repeat(9000) + "\"]", IAC, SE)
+    assertTrue(p.conn.errors > 0)
+    assertEquals(emptyList<Pair<String, GmcpBody>>(), p.gmcp)
+  }
+
+  @Test
+  fun `malformed JSON on a Core package is a protocol error`() {
+    val p = Probe()
+    p.feed(IAC, SB, 201, "Core.Supports.Set [", IAC, SE)
+    assertEquals(1, p.conn.errors)
   }
 
   @Test

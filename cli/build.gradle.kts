@@ -43,7 +43,8 @@ tasks.processResources {
 
 tasks.test {
   val templateWorld = rootProject.layout.projectDirectory.dir("template-world")
-  inputs.dir(templateWorld).withPropertyName("templateWorld")
+  // A developer's local server data (.gups) isn't part of the world the tests use.
+  inputs.files(fileTree(templateWorld) { exclude(".gups/**") }).withPropertyName("templateWorld")
   systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
   // The robot sample world, which lint, test and fuzz must pass.
   val robotWorld = rootProject.layout.projectDirectory.dir("samples/robot-world")
@@ -262,7 +263,7 @@ val prepareCourseWorldTemplate =
     val owner = imageOwner
     inputs.property("version", v)
     inputs.property("imageOwner", owner)
-    from(src)
+    from(src) { exclude(".gups/**") }
     into(templateDir)
     // Stamp MODULE.gups with engine version pin
     filesMatching("MODULE.gups") {

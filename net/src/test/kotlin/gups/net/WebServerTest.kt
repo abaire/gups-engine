@@ -1,5 +1,6 @@
 package gups.net
 
+import gups.core.ClientGmcpEvent
 import gups.core.ClientInputEvent
 import gups.core.WebAccounts
 import gups.core.WebLogin
@@ -21,6 +22,7 @@ import javax.net.ssl.X509TrustManager
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -31,6 +33,10 @@ class WebServerTest {
     val events = LinkedBlockingQueue<Any>()
 
     override fun submit(event: ClientInputEvent) {
+      events += event
+    }
+
+    override fun submit(event: ClientGmcpEvent) {
       events += event
     }
 
@@ -310,6 +316,31 @@ class WebServerTest {
       assertEquals(1000, frames.closed.poll(5, TimeUnit.SECONDS))
       assertIs<WorldControlEvent.Disconnect>(inbox.next())
     }
+
+  @Test
+  fun `a gmcp frame for another package is submitted`() = serve { inbox, _, _, base, http ->
+    http.post("$base/api/login", """{"login":"ann","password":"secret"}""")
+    val (ws, _) = http.socket(base, cookie = "token1")
+    assertIs<WorldControlEvent.Connect>(inbox.next())
+    ws.sendText("""{"t":"gmcp","p":"Shop.Buy","d":{"item":"sword"}}""", true)
+    val gmcpEvent = assertIs<ClientGmcpEvent>(inbox.next())
+    assertEquals("Shop.Buy", gmcpEvent.pkg)
+    assertEquals(mapOf("item" to "sword"), gmcpEvent.data)
+    assertFalse(gmcpEvent.malformed)
+    ws.sendText("""{"t":"gmcp","p":"Shop.Buy","d":null}""", true)
+    assertEquals(null, assertIs<ClientGmcpEvent>(inbox.next()).data)
+  }
+
+  @Test
+  fun `Core Supports frames still update supports`() = serve { inbox, _, _, base, http ->
+    http.post("$base/api/login", """{"login":"ann","password":"secret"}""")
+    val (ws, frames) = http.socket(base, cookie = "token1")
+    val connect = assertIs<WorldControlEvent.Connect>(inbox.next())
+    ws.sendText("""{"t":"gmcp","p":"Core.Supports.Set","d":["Char"]}""", true)
+    Thread.sleep(200)
+    connect.sink.gmcp("Char.Vitals", mapOf("hp" to 1))
+    assertEquals("""{"t":"gmcp","p":"Char.Vitals","d":{"hp":1}}""", frames.next())
+  }
 
   @Test
   fun `revoked tokens and logout close live sockets`() =

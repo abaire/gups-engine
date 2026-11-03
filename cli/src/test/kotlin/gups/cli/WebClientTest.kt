@@ -1,6 +1,7 @@
 package gups.cli
 
 import gups.script.WorldDir
+import gups.script.testing.TestWorlds
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -26,6 +27,7 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.condition.EnabledIf
+import org.junit.jupiter.api.io.TempDir
 import org.openqa.selenium.By
 import org.openqa.selenium.Keys
 import org.openqa.selenium.firefox.FirefoxDriver
@@ -36,17 +38,10 @@ import org.openqa.selenium.support.ui.WebDriverWait
 class WebClientTest {
   private val pw = "correct horse"
 
-  private fun copyTemplate(): Path {
-    val from = Path.of(System.getProperty("gups.templateWorld"))
-    val to = Files.createTempDirectory("gups-web")
-    Files.walk(from).use { paths ->
-      for (p in paths) {
-        val target = to.resolve(from.relativize(p).toString())
-        if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
-      }
-    }
-    return to
-  }
+  @TempDir lateinit var tmp: Path
+
+  private fun copyTemplate(): Path =
+    TestWorlds.copyWorld(to = Files.createTempDirectory(tmp, "world"))
 
   /**
    * Runs a --prod server with only HTTPS (self-signed) until [play] returns; [play] also gets an
@@ -68,7 +63,7 @@ class WebClientTest {
           gups.auth.AccountService(store).createInvite(gups.core.Role.PLAYER)
         }
       }
-    val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory("tls"))
+    val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory(tmp, "tls"))
     val logs = StringBuffer()
     val server =
       GupsServer(

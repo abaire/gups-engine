@@ -359,7 +359,12 @@ class DocsRendererTest {
           ),
         effects = listOf(MethodSpec("drench", "Soak the target.", emptyList())),
         commands = listOf(PluginCommandDocSpec("weather", "fast", "player", "Shows the weather.")),
-        gmcp = listOf(PluginGmcpDocSpec("Weather.Now", "The current weather.")),
+        gmcp =
+          listOf(
+            PluginGmcpDocSpec("Weather.Now", "The current weather."),
+            PluginGmcpDocSpec("Weather.Forecast", "The forecast.", kind = "event"),
+            PluginGmcpDocSpec("Weather.Set", "Set the weather.", kind = "input"),
+          ),
       )
     val examples: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
     val guide = "# Writing Plugins\n\nA plugin is a `.jar`.\n"

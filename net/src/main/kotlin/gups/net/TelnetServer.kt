@@ -158,7 +158,9 @@ class TelnetServer(
       try {
         if (!begun || closed.get()) return
         val bytes = ByteArray(buf.readableBytes()).also(buf::readBytes)
-        conn.receive(bytes) { line, truncated ->
+        conn.receive(bytes, { pkg, body -> inbox.submit(gmcpEvent(id, pkg, body)) }) {
+          line,
+          truncated ->
           if (truncated)
             sink.send("Your line was longer than $MAX_LINE_BYTES bytes and was cut short.\n")
           inbox.submit(ClientInputEvent(id, line, System.nanoTime()))

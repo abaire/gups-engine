@@ -13,6 +13,7 @@ import gups.script.StarlarkHost
 import gups.script.WorldDir
 import gups.script.WorldMessages
 import gups.script.WorldModule
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.copyTo
@@ -24,22 +25,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.io.TempDir
 
 class HeritageWorldTest {
+  @TempDir lateinit var tmp: Path
+
   private val hosts = mutableListOf<PluginHost>()
 
   @AfterTest fun close() = hosts.forEach { it.close() }
 
   /** A copy of the template world with `heritage.jar` pinned and [extra] files added. */
   private fun worldDir(extra: Map<String, String> = emptyMap()): WorldDir {
-    val from = Path.of(System.getProperty("gups.templateWorld"))
-    val root = Files.createTempDirectory("gups-heritage-world")
-    Files.walk(from).use { paths ->
-      for (p in paths) {
-        val target = root.resolve(from.relativize(p).toString())
-        if (Files.isDirectory(p)) target.createDirectories() else p.copyTo(target)
-      }
-    }
+    val root = TestWorlds.copyWorld(to = Files.createTempDirectory(tmp, "gups-heritage-world"))
     val jar = root.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.heritageJar")).copyTo(jar)
     val module = root.resolve("MODULE.gups")

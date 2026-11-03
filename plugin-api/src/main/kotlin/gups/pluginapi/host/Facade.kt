@@ -14,6 +14,7 @@ import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
+import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HeldAffect
 import gups.core.world.World
 import gups.core.world.addItemTag
@@ -23,6 +24,8 @@ import gups.core.world.awardXp
 import gups.core.world.custodian
 import gups.core.world.damage
 import gups.core.world.echo
+import gups.core.world.gmcp
+import gups.core.world.gmcpWithin
 import gups.core.world.grantTrait
 import gups.core.world.heal
 import gups.core.world.heldAffects
@@ -44,6 +47,8 @@ import gups.core.world.teleport
 import gups.core.world.transformItem
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginGmcpCall
+import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginNamed
@@ -72,6 +77,16 @@ internal object Facades {
   }
 
   fun logOf(world: World): (String) -> Unit = synchronized(logs) { logs[world] } ?: {}
+
+  private val gmcp = WeakHashMap<World, Map<String, List<String>>>()
+
+  /** Records each plugin's GMCP state and event packages, which its facades may send under. */
+  fun registerGmcp(world: World, owned: Map<String, List<String>>) {
+    synchronized(gmcp) { gmcp[world] = owned }
+  }
+
+  fun gmcpOf(world: World, pluginId: String?): List<String> =
+    pluginId?.let { id -> synchronized(gmcp) { gmcp[world]?.get(id) } } ?: emptyList()
 
   /** The facade for raw builtins, which belong to no plugin namespace. */
   fun world(thread: StarlarkThread): PluginWorld? =
@@ -375,6 +390,40 @@ internal class WorldFacade(
   override fun send(target: PluginActor, text: String) =
     world.send(actorOf(target, "send(target)"), text)
 
+  override fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean {
+    require(GMCP_PACKAGE_NAME.matches(pkg)) {
+      "gmcp(pkg): '$pkg' needs at least two dot-separated parts"
+    }
+    require(Facades.gmcpOf(world, pluginId).any { gmcpWithin(pkg, it) }) {
+      "gmcp: plugin '${pluginId ?: "?"}' didn't declare a GMCP package for '$pkg'"
+    }
+    checkPlainGmcp(data, "gmcp(data)")
+    val a = actorOf(actor, "gmcp")
+    if (a !is Player) return false
+    return world.gmcp(a, pkg, data)
+  }
+
+  /**
+   * [v] must be null, String, Boolean, Int, Long, Double, an iterable or a Map with String keys.
+   */
+  private fun checkPlainGmcp(v: Any?, what: String) {
+    when (v) {
+      null,
+      is String,
+      is Boolean,
+      is Int,
+      is Long,
+      is Double -> Unit
+      is Iterable<*> -> v.forEach { checkPlainGmcp(it, what) }
+      is Map<*, *> -> {
+        require(v.keys.all { it is String }) { "$what: map keys must be strings" }
+        v.values.forEach { checkPlainGmcp(it, what) }
+      }
+      else ->
+        throw IllegalArgumentException("$what: ${v::class.java.name} is not a plain GMCP value")
+    }
+  }
+
   override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) =
     world.echo(
       roomOf(room, "echo(room)"),
@@ -674,6 +723,26 @@ internal class WorldFacade(
 
   override fun log(message: String) =
     logSink(if (pluginId != null) "plugin '$pluginId': $message" else message)
+}
+
+/** A handler's view of the world, so it can't be cast to [PluginWorld] and change anything. */
+internal class GmcpWorldFacade(inner: WorldFacade) : PluginGmcpWorld by inner
+
+/** One inbound GMCP message, as [PluginGmcpCall], with the once-per-message [command]. */
+internal class GmcpInputCall(
+  override val world: PluginGmcpWorld,
+  override val actor: PluginActor,
+  override val pkg: String,
+  override val data: Any?,
+  private val send: (String) -> Boolean,
+) : PluginGmcpCall {
+  private var used = false
+
+  override fun command(line: String): Boolean {
+    check(!used) { "command() runs at most one line per GMCP message" }
+    used = true
+    return send(line)
+  }
 }
 
 /** A plain value as an attribute: Int/Long, String, Boolean, List and Map with String keys. */

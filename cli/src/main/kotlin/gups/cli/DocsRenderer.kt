@@ -33,7 +33,7 @@ data class PluginCommandDocSpec(
 )
 
 /** A GMCP package a plugin adds, for `plugins.html`. */
-data class PluginGmcpDocSpec(val pkg: String, val doc: String)
+data class PluginGmcpDocSpec(val pkg: String, val doc: String, val kind: String = "state")
 
 /** A trait a plugin adds, for `plugins.html`. */
 data class PluginTraitDocSpec(
@@ -573,17 +573,21 @@ object DocsRenderer {
         }
         if (p.gmcp.isNotEmpty()) {
           append(
-            "<h3>GMCP packages</h3>\n<table>\n<thead><tr><th>Package</th><th>Doc</th></tr></thead>\n<tbody>\n"
+            "<h3>GMCP packages</h3>\n<table>\n<thead><tr><th>Package</th><th>Kind</th><th>Doc</th></tr></thead>\n<tbody>\n"
           )
-          for (g in p.gmcp.sortedBy { it.pkg }) {
+          for (g in p.gmcp.sortedWith(compareBy({ it.pkg }, { it.kind }))) {
             append("<tr id=\"plugin-")
               .append(esc(p.id))
               .append('.')
               .append(esc(g.pkg))
+              .append('.')
+              .append(esc(g.kind))
               .append("\"><td><code>")
               .append(esc(g.pkg))
               .append("</code> ")
               .append(badge)
+              .append("</td><td>")
+              .append(esc(g.kind))
               .append("</td><td>")
               .append(esc(g.doc))
               .append("</td></tr>\n")

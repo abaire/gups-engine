@@ -1,6 +1,8 @@
 package gups.script.testing
 
 import gups.script.DocExamples
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * The `MODULE.gups` and rules package that test worlds get unless they bring their own: the
@@ -165,5 +167,29 @@ object TestWorlds {
       out["rules/combat.star"] = rules()
     }
     return out
+  }
+
+  /** The template world's directory, from the `gups.templateWorld` system property. */
+  val templateWorld: Path
+    get() =
+      Path.of(
+        checkNotNull(System.getProperty("gups.templateWorld")) { "gups.templateWorld is unset" }
+      )
+
+  /**
+   * Copies the world at [from] into [to] and returns [to]. A developer's local server data
+   * (`.gups`, where `gups serve` keeps the database) is left out, so a test starts with no database
+   * whatever has been run in the source world.
+   */
+  fun copyWorld(from: Path = templateWorld, to: Path): Path {
+    val local = from.resolve(".gups")
+    Files.walk(from).use { paths ->
+      for (p in paths) {
+        if (p.startsWith(local)) continue
+        val target = to.resolve(from.relativize(p).toString())
+        if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
+      }
+    }
+    return to
   }
 }

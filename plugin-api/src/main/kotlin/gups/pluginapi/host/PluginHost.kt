@@ -14,9 +14,15 @@ import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.FastCommand
 import gups.core.world.Feature
 import gups.core.world.Features
+import gups.core.world.GMCP_PACKAGE_NAME
+import gups.core.world.GmcpInput
 import gups.core.world.PluginEffectRunner
+import gups.core.world.RESERVED_GMCP_ROOTS
 import gups.core.world.TickCommand
 import gups.core.world.World
+import gups.core.world.gmcpOverlaps
+import gups.core.world.gmcpWithin
+import gups.core.world.submit
 import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
@@ -25,6 +31,7 @@ import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
+import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginParam
@@ -108,7 +115,7 @@ data class PluginCommandInfo(
   val category: String? = null,
 )
 
-data class PluginGmcpInfo(val pkg: String, val doc: String)
+data class PluginGmcpInfo(val pkg: String, val doc: String, val kind: String)
 
 internal class CategoryReg(val name: String, val title: String, val order: Int?, val help: String?)
 
@@ -133,6 +140,10 @@ internal class GmcpReg(
   val doc: String,
   val produce: (PluginWorld, PluginActor) -> Any?,
 )
+
+internal class GmcpEventReg(val pkg: String, val doc: String)
+
+internal class GmcpInputReg(val pkg: String, val doc: String, val handle: (PluginGmcpCall) -> Unit)
 
 /** The feature a trait modifier point needs; points not listed need none. */
 private val MODIFIER_POINT_FEATURES =
@@ -168,6 +179,8 @@ internal class PluginRegistryImpl(
   val categories = mutableListOf<CategoryReg>()
   val commands = mutableListOf<CommandReg>()
   val gmcp = mutableListOf<GmcpReg>()
+  val gmcpEvents = mutableListOf<GmcpEventReg>()
+  val gmcpInputs = mutableListOf<GmcpInputReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
   val traits = mutableMapOf<String, PluginTrait>()
   private var _creation: PluginCreation? = null
@@ -269,25 +282,59 @@ internal class PluginRegistryImpl(
   }
 
   override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) {
-    require(GMCP.matches(pkg)) {
+    checkOutbound(pkg)
+    gmcp += GmcpReg(pkg, doc, produce)
+  }
+
+  override fun addGmcpEvent(pkg: String, doc: String) {
+    checkOutbound(pkg)
+    gmcpEvents += GmcpEventReg(pkg, doc)
+  }
+
+  override fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit) {
+    require(GMCP_PACKAGE_NAME.matches(pkg)) {
+      "GMCP package '$pkg' needs at least two dot-separated parts, such as Gups.Weather"
+    }
+    RESERVED_GMCP_ROOTS.firstOrNull { gmcpWithin(pkg, it) || gmcpWithin(it, pkg) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' uses the reserved root Core") }
+    ENGINE_GMCP_PACKAGES.firstOrNull { gmcpOverlaps(pkg, it) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps the engine's $it") }
+    takenGmcp
+      .firstOrNull { it.equals(pkg, true) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' is already registered") }
+    takenGmcp
+      .firstOrNull { gmcpOverlaps(pkg, it) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps another plugin's $it") }
+    require(gmcpInputs.none { it.pkg.equals(pkg, true) }) {
+      "GMCP package '$pkg' is already registered"
+    }
+    gmcpInputs += GmcpInputReg(pkg, doc, handle)
+  }
+
+  /** Every check on an outbound GMCP package name, shared by [addGmcp] and [addGmcpEvent]. */
+  private fun checkOutbound(pkg: String) {
+    require(GMCP_PACKAGE_NAME.matches(pkg)) {
       "GMCP package '$pkg' needs at least two dot-separated parts, such as Gups.Weather"
     }
     // Clients subscribe by prefix, so a package may not equal, contain or nest in a taken one.
-    fun overlaps(t: String) = pkg == t || pkg.startsWith("$t.") || t.startsWith("$pkg.")
-    ENGINE_GMCP_PACKAGES.firstOrNull { overlaps(it) }
+    RESERVED_GMCP_ROOTS.firstOrNull { gmcpWithin(pkg, it) || gmcpWithin(it, pkg) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' uses the reserved root Core") }
+    ENGINE_GMCP_PACKAGES.firstOrNull { gmcpOverlaps(pkg, it) }
       ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps the engine's $it") }
-    require(pkg !in takenGmcp && gmcp.none { it.pkg == pkg }) {
+    require(
+      gmcp.none { it.pkg.equals(pkg, true) } && gmcpEvents.none { it.pkg.equals(pkg, true) }
+    ) {
       "GMCP package '$pkg' is already registered"
     }
     takenGmcp
-      .firstOrNull { overlaps(it) }
+      .firstOrNull { it.equals(pkg, true) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' is already registered") }
+    takenGmcp
+      .firstOrNull { gmcpOverlaps(pkg, it) }
       ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps another plugin's $it") }
-    gmcp
-      .firstOrNull { overlaps(it.pkg) }
-      ?.let {
-        throw IllegalArgumentException("GMCP package '$pkg' overlaps this plugin's ${it.pkg}")
-      }
-    gmcp += GmcpReg(pkg, doc, produce)
+    (gmcp.map { it.pkg } + gmcpEvents.map { it.pkg })
+      .firstOrNull { gmcpOverlaps(pkg, it) }
+      ?.let { throw IllegalArgumentException("GMCP package '$pkg' overlaps this plugin's $it") }
   }
 
   override fun onWorldStarted(fn: (PluginWorld) -> Unit) {
@@ -355,7 +402,6 @@ internal class PluginRegistryImpl(
 
   companion object {
     val MEMBER = Regex("[a-z][a-z0-9_]*")
-    private val GMCP = Regex("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+")
   }
 }
 
@@ -407,6 +453,10 @@ internal constructor(
 
   override fun install(world: World) {
     Facades.registerLog(world, log)
+    Facades.registerGmcp(
+      world,
+      plugins.associate { p -> p.id to p.reg.gmcp.map { it.pkg } + p.reg.gmcpEvents.map { it.pkg } },
+    )
 
     val creationPlugin = plugins.firstOrNull { it.reg.creation != null }
     world.creation =
@@ -479,6 +529,23 @@ internal constructor(
           g.produce(facade(world, p.id), ActorFacade(player, world))
         }
       }
+      for (g in p.reg.gmcpInputs) {
+        world.pluginGmcpIn[g.pkg.lowercase()] =
+          GmcpInput(g.pkg) { player, data ->
+            guard(world, p.id, "GMCP input '${g.pkg}'") {
+              g.handle(
+                GmcpInputCall(
+                  GmcpWorldFacade(facade(world, p.id)),
+                  ActorFacade(player, world),
+                  g.pkg,
+                  data,
+                ) {
+                  world.submit(player, it)
+                }
+              )
+            }
+          }
+      }
     }
     val effects =
       plugins.flatMap { p -> p.reg.effects.map { (p.id to it.name) to (p.id to it) } }.toMap()
@@ -529,7 +596,11 @@ internal constructor(
           p.reg.commands
             .map { PluginCommandInfo(it.name, it.lane, it.role, it.doc, it.category) }
             .sortedBy { it.name },
-        gmcp = p.reg.gmcp.map { PluginGmcpInfo(it.pkg, it.doc) }.sortedBy { it.pkg },
+        gmcp =
+          (p.reg.gmcp.map { PluginGmcpInfo(it.pkg, it.doc, "state") } +
+              p.reg.gmcpEvents.map { PluginGmcpInfo(it.pkg, it.doc, "event") } +
+              p.reg.gmcpInputs.map { PluginGmcpInfo(it.pkg, it.doc, "input") })
+            .sortedWith(compareBy({ it.pkg }, { it.kind })),
         traits =
           p.reg.traits.values
             .map {
@@ -680,7 +751,14 @@ object PluginLoader {
         PluginRegistryImpl(
           plugin.id,
           takenCommands = loaded.flatMap { p -> p.reg.commands.map { FastCommand(it.name) {} } },
-          takenGmcp = loaded.flatMap { p -> p.reg.gmcp.map { it.pkg } }.toSet(),
+          takenGmcp =
+            loaded
+              .flatMap { p ->
+                p.reg.gmcp.map { it.pkg } +
+                  p.reg.gmcpEvents.map { it.pkg } +
+                  p.reg.gmcpInputs.map { it.pkg }
+              }
+              .toSet(),
           takenTraits = loaded.flatMap { p -> p.reg.traits.keys }.toSet(),
           hasCreation = loaded.any { it.reg.creation != null },
           schema = schema,

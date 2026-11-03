@@ -3,10 +3,19 @@ package gups.pluginapi
 import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginNamespace
 import gups.pluginapi.host.PluginRegistryImpl
+import gups.pluginapi.testplugins.CoreEventPlugin
+import gups.pluginapi.testplugins.CoreGmcpPlugin
 import gups.pluginapi.testplugins.LookPlugin
 import gups.pluginapi.testplugins.MisnamedPlugin
+import gups.pluginapi.testplugins.ShopEventClashPlugin
+import gups.pluginapi.testplugins.ShopGmcpPlugin
+import gups.pluginapi.testplugins.ShopInputRepeatPlugin
+import gups.pluginapi.testplugins.SkyEventGmcpPlugin
 import gups.pluginapi.testplugins.ThrowingPlugin
 import gups.pluginapi.testplugins.TidesPlugin
+import gups.pluginapi.testplugins.WeatherCaseGmcpPlugin
+import gups.pluginapi.testplugins.WeatherEventClashPlugin
+import gups.pluginapi.testplugins.WeatherInputClashPlugin
 import gups.pluginapi.testplugins.WeatherPlugin
 import gups.pluginapi.testplugins.WrongVersionPlugin
 import gups.pluginapi.testplugins.buildPluginJar
@@ -74,6 +83,127 @@ class PluginLoaderTest {
   @Test
   fun `no plugins, no warnings`() {
     PluginLoader.load(WorldDir(root), WorldModule()).use { assertEquals(emptyMap(), it.globals) }
+  }
+
+  @Test
+  fun `GMCP names are compared ignoring case`() {
+    val pins =
+      linkedMapOf(
+        "weather" to buildPluginJar(plugins.resolve("weather.jar"), WeatherPlugin::class),
+        "zweathercase" to
+          buildPluginJar(plugins.resolve("zweathercase.jar"), WeatherCaseGmcpPlugin::class),
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(listOf("weather"), host.ids)
+      assertTrue(host.warnings.any { "GMCP package 'Gups.weather' is already registered" in it })
+    }
+  }
+
+  @Test
+  fun `no plugin may use the Core root`() {
+    val pins =
+      linkedMapOf(
+        "zcore" to buildPluginJar(plugins.resolve("zcore.jar"), CoreGmcpPlugin::class),
+        "zcoreevent" to buildPluginJar(plugins.resolve("zcoreevent.jar"), CoreEventPlugin::class),
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(emptyList(), host.ids)
+      assertTrue(host.warnings.any { "GMCP package 'Core.Shop' uses the reserved root Core" in it })
+      assertTrue(
+        host.warnings.any { "GMCP package 'Core.Weather' uses the reserved root Core" in it }
+      )
+    }
+  }
+
+  @Test
+  fun `an event package may not overlap another plugin's state package`() {
+    val pins =
+      linkedMapOf(
+        "weather" to buildPluginJar(plugins.resolve("weather.jar"), WeatherPlugin::class),
+        "zweatherevent" to
+          buildPluginJar(plugins.resolve("zweatherevent.jar"), WeatherEventClashPlugin::class),
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(listOf("weather"), host.ids)
+      assertTrue(
+        host.warnings.any {
+          "GMCP package 'Gups.Weather.Forecast' overlaps another plugin's Gups.Weather" in it
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `a plugin's event and state packages may not nest`() {
+    val pins =
+      linkedMapOf(
+        "zskyevent" to buildPluginJar(plugins.resolve("zskyevent.jar"), SkyEventGmcpPlugin::class)
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(emptyList(), host.ids)
+      assertTrue(
+        host.warnings.any { "GMCP package 'Gups.Sky.Moon' overlaps this plugin's Gups.Sky" in it }
+      )
+    }
+  }
+
+  @Test
+  fun `an input package may nest in the plugin's own tree`() {
+    val pins =
+      linkedMapOf("shop" to buildPluginJar(plugins.resolve("shop.jar"), ShopGmcpPlugin::class))
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(listOf("shop"), host.ids)
+      assertEquals(emptyList(), host.warnings)
+    }
+  }
+
+  @Test
+  fun `an input package may not nest in another plugin's package`() {
+    val pins =
+      linkedMapOf(
+        "weather" to buildPluginJar(plugins.resolve("weather.jar"), WeatherPlugin::class),
+        "zweatherinput" to
+          buildPluginJar(plugins.resolve("zweatherinput.jar"), WeatherInputClashPlugin::class),
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(listOf("weather"), host.ids)
+      assertTrue(
+        host.warnings.any {
+          "GMCP package 'Gups.Weather.Buy' overlaps another plugin's Gups.Weather" in it
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `an outbound package may not overlap another plugin's input package`() {
+    val pins =
+      linkedMapOf(
+        "shop" to buildPluginJar(plugins.resolve("shop.jar"), ShopGmcpPlugin::class),
+        "zshopevent" to
+          buildPluginJar(plugins.resolve("zshopevent.jar"), ShopEventClashPlugin::class),
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(listOf("shop"), host.ids)
+      assertTrue(
+        host.warnings.any {
+          "GMCP package 'Shop.Buy.Done' overlaps another plugin's Shop.Buy" in it
+        }
+      )
+    }
+  }
+
+  @Test
+  fun `an input package may not repeat`() {
+    val pins =
+      linkedMapOf(
+        "zshoprepeat" to
+          buildPluginJar(plugins.resolve("zshoprepeat.jar"), ShopInputRepeatPlugin::class)
+      )
+    PluginLoader.load(WorldDir(root), WorldModule(plugins = pins), log = {}).use { host ->
+      assertEquals(emptyList(), host.ids)
+      assertTrue(host.warnings.any { "GMCP package 'Shop.Buy' is already registered" in it })
+    }
   }
 
   @Test

@@ -2,6 +2,7 @@ package gups.pluginapi.testplugins
 
 import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginApi
+import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
@@ -167,8 +168,41 @@ class CharPlugin : GmcpClashPlugin("zchar", "Char")
 
 class WeatherGmcpPlugin : GmcpClashPlugin("zweather", "Gups.Weather")
 
-/** Nests a package inside the weather plugin's `Gups.Weather`. */
+/** Registers `Gups.Weather.Rain`, which nests in the weather plugin's package. */
 class WeatherRainGmcpPlugin : GmcpClashPlugin("zrain", "Gups.Weather.Rain")
+
+/** Registers `Gups.weather`, which clashes with `Gups.Weather` ignoring case. */
+class WeatherCaseGmcpPlugin : GmcpClashPlugin("zweathercase", "Gups.weather")
+
+/** Registers `Core.Shop`, which may never be used. */
+class CoreGmcpPlugin : GmcpClashPlugin("zcore", "Core.Shop")
+
+/** Declares a `Core.Weather` event package, which may never be used. */
+class CoreEventPlugin : GupsPlugin {
+  override val id = "zcoreevent"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.addGmcpEvent("Core.Weather", "Clash.")
+}
+
+/** Declares an event package that nests in the weather plugin's state package. */
+class WeatherEventClashPlugin : GupsPlugin {
+  override val id = "zweatherevent"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.addGmcpEvent("Gups.Weather.Forecast", "Clash.")
+}
+
+/** Registers `Gups.Sky` and then a `Gups.Sky.Moon` event, which nests in its own package. */
+class SkyEventGmcpPlugin : GupsPlugin {
+  override val id = "zskyevent"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) {
+    r.addGmcp("Gups.Sky", "Sky.") { _, _ -> null }
+    r.addGmcpEvent("Gups.Sky.Moon", "Clash.")
+  }
+}
 
 /** Registers `Gups.Sky` and then `Gups.Sky.Moon`, which nests in its own first package. */
 class SkyGmcpPlugin : GupsPlugin {
@@ -187,6 +221,73 @@ class MisnamedPlugin : GupsPlugin {
   override val pluginApiVersion = PluginApi.VERSION
 
   override fun register(r: PluginRegistry) = Unit
+}
+
+/** Registers a Shop state package, a `Shop.Buy` input handler, a `Shop.Stock` event and a `buy`. */
+class ShopGmcpPlugin : GupsPlugin {
+  override val id = "shop"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  companion object {
+    val calls = mutableListOf<Pair<String, Any?>>()
+    var lastCall: PluginGmcpCall? = null
+    var twiceError: IllegalStateException? = null
+  }
+
+  override fun register(r: PluginRegistry) {
+    r.addGmcp("Shop.Stocks", "Shop stocks.") { _, _ -> null }
+    r.addGmcpEvent("Shop.Stock", "A purchase happened.")
+    r.onGmcp("Shop.Buy", "Buy an item.") { call ->
+      calls += call.pkg to call.data
+      when (call.data) {
+        "cmd" -> call.command("buy")
+        "twice" -> {
+          call.command("buy")
+          try {
+            call.command("buy")
+          } catch (e: IllegalStateException) {
+            twiceError = e
+          }
+        }
+        "reply" -> call.world.gmcp(call.actor, "Shop.Stock", mapOf("item" to "sword"))
+        "expose" -> lastCall = call
+        "throw" -> error("gmcp handler exploded")
+        else -> Unit
+      }
+    }
+    // An input package may share the plugin's own state tree.
+    r.onGmcp("Shop.Stocks.Buy", "Buy a stock item.") {}
+    r.addCommand("buy", PluginLane.TICK, doc = "Buys.") { call ->
+      call.world.echo(call.actor.room, "Bought.")
+    }
+  }
+}
+
+/** Declares an input package that nests in the weather plugin's state package. */
+class WeatherInputClashPlugin : GupsPlugin {
+  override val id = "zweatherinput"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.onGmcp("Gups.Weather.Buy", "Clash.") {}
+}
+
+/** Declares an event package that nests in the shop plugin's `Shop.Buy` input package. */
+class ShopEventClashPlugin : GupsPlugin {
+  override val id = "zshopevent"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.addGmcpEvent("Shop.Buy.Done", "Clash.")
+}
+
+/** Declares the same input package twice. */
+class ShopInputRepeatPlugin : GupsPlugin {
+  override val id = "zshoprepeat"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) {
+    r.onGmcp("Shop.Buy", "Clash.") {}
+    r.onGmcp("Shop.Buy", "Clash again.") {}
+  }
 }
 
 /**
