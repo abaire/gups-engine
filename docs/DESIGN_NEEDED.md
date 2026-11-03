@@ -394,6 +394,17 @@ built-in player command, trainer, or shrine mechanic to alter character choices 
 **Questions:** - Should the engine or standard sample plugins provide a canonical respec flow (e.g. shrines, guild
 trainers)? - What restrictions, cooldowns, or currency costs should govern resetting choices or traits?
 
+### Plugins calling custom hooks
+
+**Spec:** §4.4, §4.5, §4.15. **Today (after the shops milestone):** rooms, mobs and items can declare custom hooks
+(`hooks = {...}`), scripts run them with `ctx.call_hook(entity, name, **args)`, and plugins can join a hook's handler
+chain with `r.addHook(name, doc)`. Kotlin plugin code can't *call* a custom hook: a plugin-run feature (for example a
+plugin shop asking a keeper's `shop_price`) has no `PluginWorld.callHook`. **Questions:** - Should the facade gain
+`callHook(entity, name, args): Any?`, running the same chain as `ctx.call_hook`? - How are Starlark return values
+converted to plain values for Kotlin, and plugin arguments to Starlark values? - Can a plugin's `callHook` run from
+inside a GMCP input handler or a hook handler (read-only contexts), given that the Starlark hook may change the world? -
+Should a plugin be able to call a hook that its own handler is part of, and how is recursion bounded?
+
 ## Operations, scalability and testing
 
 ### Multi-server sharding, distributed tracing, and external log aggregation

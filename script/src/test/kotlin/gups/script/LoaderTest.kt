@@ -724,4 +724,116 @@ class LoaderTest {
     assertEquals(null, lamp.charges)
     assertEquals(EmptyAction.Destroy, lamp.empty)
   }
+
+  @Test
+  fun `item use_target without use_effect fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"wand\", use_target = \"enemy\")",
+        )
+      )
+    assertContains(only(r).message, "item(use_target): needs use_effect")
+  }
+
+  @Test
+  fun `item use_target self without use_effect loads`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"lamp\", use_target = \"self\")",
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val lamp = r.prototypes().item(Label("//zones/z:lamp"))
+    assertEquals(gups.core.model.TargetKind.SELF, lamp.useTarget)
+  }
+
+  @Test
+  fun `item negative use_lag fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"wand\", use_lag = -1)",
+        )
+      )
+    assertContains(only(r).message, "item(use_lag): can't be negative")
+  }
+
+  @Test
+  fun `item use_target item with heal fails load naming heal`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            "item(\"potion\", use_effect = heal(dice = \"1d4\", vital = \"hp\"), use_target = \"item\")",
+        )
+      )
+    val msg = only(r).message
+    assertContains(msg, "item(use_effect):")
+    assertContains(msg, "heal")
+    assertContains(
+      msg,
+      "acts on actors; an item use_effect may use apply_affect and plugin primitives",
+    )
+  }
+
+  @Test
+  fun `item use_target self with apply_affect worn fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            "item(\"wand\", use_effect = apply_affect(\"glow\", 10, applies = \"worn\"), use_target = \"self\")",
+        )
+      )
+    assertContains(
+      only(r).message,
+      "item(use_effect): apply_affect(applies) is only for use_target = 'item'",
+    )
+  }
+
+  @Test
+  fun `item use_target self with apply_affect without duration fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            "item(\"wand\", use_effect = apply_affect(\"glow\", None))",
+        )
+      )
+    assertContains(
+      only(r).message,
+      "item(use_effect): apply_affect(duration) can be None only with use_target = 'item'",
+    )
+  }
+
+  @Test
+  fun `item with valid use_effect sequence loads`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            item(
+              "salve",
+              use_effect = sequence(heal(dice = "1d4", vital = "hp"), apply_affect("bless", 10)),
+              use_lag = 2,
+            )
+            """,
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val salve = r.prototypes().item(Label("//zones/z:salve"))
+    assertNotNull(salve.useEffect)
+    assertEquals(gups.core.model.TargetKind.SELF, salve.useTarget)
+    assertEquals(2, salve.useLag)
+  }
 }

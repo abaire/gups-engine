@@ -1,10 +1,14 @@
 package gups.script
 
+import gups.core.Label
 import gups.core.model.Band
+import gups.core.model.ItemLocation
 import gups.core.rules.RulesContext
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.awardXp
+import gups.core.world.changeVital
+import gups.core.world.spawnItem
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -560,5 +564,38 @@ class FeatureScriptTest {
     assertTrue(r.errors.none { it.pkg == "zones/z" }, "loading without skills: ${r.report()}")
 
     refused(Feature.TRACK, "K = knockback(steps = 1)\nroom(\"start\")", "knockback()")
+  }
+
+  @Test
+  fun `a knockback use_effect needs track`() {
+    refused(
+      Feature.TRACK,
+      "room(\"start\")\nitem(\"club\", use_target = \"enemy\", use_effect = knockback(1))",
+      "knockback()",
+    )
+  }
+
+  @Test
+  fun `use_effect works in a kernel-only world without skills`() {
+    val f =
+      ScriptFixture(
+        world(
+          Features(emptySet()),
+          "zones/z/a.star" to
+            """
+            room("start")
+            item("potion", name = "a potion", charges = 1, use_effect = heal(dice = "1d1+4", vital = "hp"))
+            """,
+        )
+      )
+    val p = f.player()
+    f.w.changeVital(p, "hp", -10)
+    val startHp = p.current("hp")
+    f.w.spawnItem(Label("//zones/z:potion"), ItemLocation.Carried(p.id))
+
+    f.input(p, "use potion")
+    f.run()
+    assertContains(f.out(p), "You use a potion.")
+    assertEquals(startHp + 5, p.current("hp"))
   }
 }

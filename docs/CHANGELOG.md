@@ -6,6 +6,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ### Consumables and charges
 
+- `item(use_effect=..., use_target=..., use_lag=...)` allows items to apply declarative effect primitives on use with
+  the user as caster, resolve targets (`self`, `ally`, `enemy`, `item` or `none`), and set recovery lag in pulses.
 - `item(charges=N, empty=...)` declares the uses an item has before being spent (`charges`, at least 1, or `None` for
   unlimited) and what happens when the last is spent (`empty`: `"destroy"`, `"keep"`, or the name of a variant). A
   stackable item may only have `charges = 1` and cannot `keep`.

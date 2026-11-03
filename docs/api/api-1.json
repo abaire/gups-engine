@@ -569,6 +569,42 @@
           "since": 1
         },
         {
+          "symbol": "item.use_effect",
+          "name": "use_effect",
+          "type": "effect",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Effect primitive that use applies, with the user as caster.",
+          "since": 1
+        },
+        {
+          "symbol": "item.use_target",
+          "name": "use_target",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'self'",
+          "allowed_values": ["enemy", "ally", "self", "item", "none"],
+          "doc": "Whom use_effect acts on: 'enemy', 'ally', 'self', 'item' or 'none'.",
+          "since": 1
+        },
+        {
+          "symbol": "item.use_lag",
+          "name": "use_lag",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "0",
+          "allowed_values": [],
+          "doc": "Recovery lag in pulses after a use; at least 0.",
+          "since": 1
+        },
+        {
           "symbol": "item.modifiers",
           "name": "modifiers",
           "type": "dict[str, function]",

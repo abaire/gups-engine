@@ -1011,6 +1011,24 @@ internal class DeclarationBuiltins(
           "keep" -> EmptyAction.Keep
           else -> EmptyAction.Variant(empty)
         }
+      val useEffect = d["use_effect"]?.let { effectValue(it, d.what("use_effect")) }
+      useEffect?.let { effectRefs(it, ctx, thread) }
+      val useTarget = d.choice("use_target")?.let { TargetKind.valueOf(it.uppercase()) }
+      val useLag = d.int("use_lag") ?: 0
+      if (useTarget != null && useTarget != TargetKind.SELF && useEffect == null) {
+        fail("item(use_target): needs use_effect")
+      }
+      if (useLag < 0) fail("item(use_lag): can't be negative")
+      if (useEffect != null) {
+        checkEffectTarget(
+          useEffect,
+          useTarget ?: TargetKind.SELF,
+          "item(use_effect)",
+          "an item use_effect",
+          "for use_target = 'item'",
+          "with use_target = 'item'",
+        )
+      }
       val def = ItemProto(label, name, emptyList())
       val proto =
         ItemProto(
@@ -1052,6 +1070,9 @@ internal class DeclarationBuiltins(
           plural = plural,
           charges = charges,
           empty = emptyAction,
+          useEffect = useEffect,
+          useTarget = useTarget ?: TargetKind.SELF,
+          useLag = useLag,
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
       if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
@@ -1126,33 +1147,55 @@ internal class DeclarationBuiltins(
       if (proto.warmup < 0 || proto.lag < 0) fail("skill(): warmup and lag can't be negative")
       proto.effect?.let { effectRefs(it, ctx, thread) }
       proto.effect?.let { eff ->
-        val leaves = flattenLeaves(eff)
-        if (proto.target == TargetKind.ITEM) {
-          for (leaf in leaves) {
-            when (leaf) {
-              is Effect.ApplyAffect -> {
-                if ("stunned" in leaf.flags) fail("skill(effect): item affects can't stun")
-              }
-              is Effect.Plugin -> Unit
-              else ->
-                fail(
-                  "skill(effect): ${primitiveName(leaf)} acts on actors; an item skill's effect may use apply_affect and plugin primitives"
-                )
-            }
-          }
-        } else {
-          for (leaf in leaves) {
-            if (leaf is Effect.ApplyAffect) {
-              if (leaf.applies != null)
-                fail("skill(effect): apply_affect(applies) is only for item skills")
-              if (leaf.duration == null)
-                fail("skill(effect): apply_affect(duration) can be None only on an item skill")
-            }
-          }
-        }
+        checkEffectTarget(
+          eff,
+          proto.target,
+          "skill(effect)",
+          "an item skill's effect",
+          "for item skills",
+          "on an item skill",
+        )
       }
       ctx.pkg.skillList += proto
       Starlark.NONE
+    }
+  }
+
+  /**
+   * Fails the load if [effect]'s primitives don't fit [target]; [what] prefixes the message,
+   * [subject] names the effect in the item-target message, and [appliesOnly] and [noneOnly] end
+   * the messages refusing `apply_affect(applies)` and a `None` duration on an actor target.
+   */
+  private fun checkEffectTarget(
+    effect: Effect,
+    target: TargetKind,
+    what: String,
+    subject: String,
+    appliesOnly: String,
+    noneOnly: String,
+  ) {
+    val leaves = flattenLeaves(effect)
+    if (target == TargetKind.ITEM) {
+      for (leaf in leaves) {
+        when (leaf) {
+          is Effect.ApplyAffect -> {
+            if ("stunned" in leaf.flags) fail("$what: item affects can't stun")
+          }
+          is Effect.Plugin -> Unit
+          else ->
+            fail(
+              "$what: ${primitiveName(leaf)} acts on actors; $subject may use apply_affect and plugin primitives"
+            )
+        }
+      }
+    } else {
+      for (leaf in leaves) {
+        if (leaf is Effect.ApplyAffect) {
+          if (leaf.applies != null) fail("$what: apply_affect(applies) is only $appliesOnly")
+          if (leaf.duration == null)
+            fail("$what: apply_affect(duration) can be None only $noneOnly")
+        }
+      }
     }
   }
 
@@ -2455,6 +2498,25 @@ internal class DeclarationBuiltins(
               "str",
               "After the last charge: 'destroy', 'keep', or the name of one of the item's variants.",
               default = "'destroy'",
+            ),
+            DeclParam(
+              "use_effect",
+              "effect",
+              "Effect primitive that use applies, with the user as caster.",
+              default = "None",
+            ),
+            DeclParam(
+              "use_target",
+              "str",
+              "Whom use_effect acts on: 'enemy', 'ally', 'self', 'item' or 'none'.",
+              default = "'self'",
+              allowedValues = TARGET_KINDS,
+            ),
+            DeclParam(
+              "use_lag",
+              "int",
+              "Recovery lag in pulses after a use; at least 0.",
+              default = "0",
             ),
             DeclParam(
               "modifiers",

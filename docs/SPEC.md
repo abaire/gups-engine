@@ -782,7 +782,8 @@ as leaving it out.
 - **Without `combat`,** nobody engages. Damage from skills and verbs still lowers vitals and can still kill through
   `condition` (§5.4), with the last actor who damaged the victim as its killer. `quit` is never refused for fighting.
 - **Without `skills`,** `use` and item `on_use` hooks are the way to act on things, and the effect primitives still
-  work; affects still come from `ctx.apply_affect`, effect primitives and `equip_affects`.
+  work, in hooks and in `item(use_effect=...)`; affects still come from `ctx.apply_affect`, effect primitives and
+  `equip_affects`.
 - **Without `leveling`,** no XP is awarded and nothing levels up; `on_player_death`'s `xp_loss` and `level_loss` are
   refused.
 - **Renaming commands:** `rename = {"cast": "invoke", "kill": "attack"}` renames non-`@` engine commands, of the kernel
@@ -875,6 +876,7 @@ item("short_bow",
      stackable=False, decay_pulses=None,
      commands={}, on_use=None,
      charges=None, empty="destroy",  # uses, and what the last one does (§4.9)
+     use_effect=None, use_target="self", use_lag=0,  # declarative use (§4.9)
      )
 
 item("satchel", container=container(capacity=10, max_weight=20,
@@ -918,6 +920,10 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   happens when the last is spent: `"destroy"` (the default), `"keep"` (the item stays at 0 charges), or the name of one
   of the item's `variants`, which it is transformed into. An `empty` other than `"destroy"` needs `charges`. A stackable
   item may only have `charges = 1` and can't `keep`.
+- **Use:** `use_effect` is an effect primitive (§4.3) that `use` applies with the user as caster. `use_target` (`enemy`,
+  `ally`, `self`, `item` or `none`; `self` by default) other than `self` needs a `use_effect`; an `item` target allows
+  only `apply_affect` (without `stunned`), plugin primitives and `sequence`, as for item skills, and only it may give
+  `apply_affect` an `applies` or a `None` duration. `use_lag` is the recovery lag in pulses after a use, at least 0.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
