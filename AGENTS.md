@@ -25,6 +25,10 @@ comments, as they may become outdated or invalid as the specification evolves. C
 done directly without linking back to spec sections or decision documents. Assume the reader is familiar with Kotlin and
 avoid obvious comments.
 
+## Writing code
+
+- Follow test driven development practices. Write tests first, verify that they fail, then write code to pass the tests.
+
 ## Building and testing
 
 See [README.md](README.md). `./gradlew check` must pass, including the module-graph check. All Kotlin warnings are
