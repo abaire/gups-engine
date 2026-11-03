@@ -125,33 +125,80 @@ item("tar_walker_boots",
 
 ---
 
-## 4. Consumables and Item Hooks
+## 4. Consumables, Charges, and Declarative Use
 
-You can attach logic to items using lifecycle hooks. In item hooks, `ctx.self` is the item entity, and `ctx.actor` is
-the character interacting with it:
+Items can have limited uses or trigger effects when used. The `use` command finds items worn, carried, or on the ground
+within reach.
+
+### A. Declarative Use: `charges` and `use_effect`
+
+Simple consumables (like potions) or charged magical items (like wands) can be declared without writing custom hook
+functions:
 
 ```python
-def _drink(ctx):
-    # ctx.heal restores vital pools (e.g. "hp", "mana")
-    ctx.heal(ctx.actor, 10, "hp")
-    ctx.send(ctx.actor, "You drink the draught. Warmth spreads through you.")
-
-    # Consumables do not disappear automatically: destroy it explicitly
-    ctx.destroy(ctx.self)
-
-
 item("healing_draught",
      name="a healing draught",
      keywords=["draught", "potion"],
-     desc="A ceramic vial filled with glowing green liquid.",
-     on_use=_drink,
+     kind="consumable",
+     charges=1,
+     use_effect=heal(dice="2d4+6", vital="hp"),
      )
 ```
 
-### Common Item Hooks:
+* **`charges`:** The number of uses the item has (at least 1), or `None` for unlimited uses. Each completed `use` spends
+  one charge (or one item from a stack). An item with 0 charges left cannot be used.
+* **`empty`:** What happens when the last charge is spent. Defaults to `"destroy"`, which removes the item (or one item
+  from a stack). Setting `empty = "keep"` leaves the item in inventory at 0 charges until recharged. Any other string
+  names one of the item's `variants`, transforming the item into that variant when exhausted:
 
-* `on_use`: Runs when a player types `use <item>` or `drink <item>`.
-* `before_use`: Can return `ctx.deny("Reason")` to prevent usage (e.g., if already at full health).
+```python
+# A wand that stays in inventory when empty
+item("wand",
+     name="a wand",
+     charges=3,
+     empty="keep",
+     use_effect=damage(dice="1d4", type=DAMAGE.fire),
+     use_target="enemy",
+     )
+
+# A flask that becomes an empty flask once it has been drunk twice
+item("empty_flask",
+     name="an empty flask",
+     keywords=["flask"],
+     )
+
+item("flask",
+     name="a flask of elixir",
+     keywords=["flask", "elixir"],
+     charges=2,
+     empty="spent",
+     variants={"spent": ":empty_flask"},
+     use_effect=heal(dice="1d6", vital="hp"),
+     )
+```
+
+* **`use_effect`:** An effect primitive (`heal`, `damage`, `apply_affect`, `dispel`, `stun`, `summon`, or `sequence`)
+  applied when the item is used, with the user as caster. When an item has a `use_effect` and no `on_use` hook, the
+  engine automatically narrates the action (`"You use {item}."` to the user, `"{actor} uses {item}."` to onlookers).
+* **`use_target`:** Specifies who or what `use_effect` acts on (defaults to `"self"`):
+  * `"self"`: The user. Specifying a target word is refused.
+  * `"ally"`: The named actor in the room, or the user if no target is specified.
+  * `"enemy"`: The named actor in the room, or the user's primary combat target. With neither, the use is refused ("Use
+    {item} on whom?").
+  * `"item"`: A named item worn, carried, or on the ground in the room.
+  * `"none"`: The effect runs without a target (e.g. for `summon`).
+* **`use_lag`:** Recovery lag in pulses (at least 0, default 0) applied to the user after a successful use.
+
+### B. Custom Item Hooks
+
+For complex behaviors, you can attach lifecycle hooks. In item hooks, `ctx.self` is the item entity, and `ctx.actor` is
+the character interacting with it. Verbs such as `ctx.heal(ctx.actor, 10, "hp")` or `ctx.destroy(ctx.self)` act on them
+directly.
+
+* `on_use`: Runs when a player types `use <item>`. If the item also has a `use_effect`, the effect runs first, then
+  `on_use`.
+* `before_use`: Can return `ctx.deny("Reason")` to prevent usage (e.g., if already at full health). A denied use costs
+  zero charges and zero lag.
 * `on_get`: Fires when a player picks up the item from a room or container.
 * `on_drop`: Fires when a player drops the item into a room.
 

@@ -37,7 +37,37 @@ def _guide_blocks(ctx):
 
 ---
 
-## 3. Dialogue and Conversation: `on_say`
+## 3. Ground Items and Environmental Interactivity: `on_use`
+
+The `use` command searches items worn, carried, or on the ground in the room within reach. An item with no `charges` is
+never consumed by the engine, making it ideal for interactive fixtures such as levers or switches:
+
+```python
+def _pull_lever(ctx):
+    ctx.open_door(ctx.room, "east")
+    ctx.echo(ctx.room, "%s pulls the rusty iron lever." % ctx.actor.name)
+
+
+def _lever_stays(ctx):
+    return ctx.deny("The lever is set firmly into the wall.")
+
+
+item("rusty_lever",
+     name="a rusty lever",
+     keywords=["lever"],
+     desc="A heavy iron lever set into the wall.",
+     on_use=_pull_lever,
+     before_get=_lever_stays,
+     )
+```
+
+Spawn the lever in its room from the room's `on_reset` hook (`ctx.spawn(":rusty_lever", ctx.self)`), as the template's
+armory does with its practice sword. A player standing in the room can then type `use lever` to pull it and open the
+door, and `before_get` keeps anyone from carrying it off.
+
+---
+
+## 4. Dialogue and Conversation: `on_say`
 
 When any actor speaks (using `say` or `"`), the `on_say` hook fires on all other actors in the room:
 
@@ -63,7 +93,7 @@ def _guide_hears(ctx):
 
 ---
 
-## 4. Sensory Perception: `on_perceive`
+## 5. Sensory Perception: `on_perceive`
 
 Events happen on a **channel**: `sight` (movement, emotes) or `sound` (speech, combat, shouts, doors), or any channel
 your world declares in `MODULE.gups`. An event starts in a room with an **intensity** and spreads through the exits,
@@ -144,7 +174,7 @@ effective score is never below 0; read it with `ctx.actor.senses["sight"]`, or t
 
 ---
 
-## 5. Reacting to Level Changes: `on_level_change`
+## 6. Reacting to Level Changes: `on_level_change`
 
 In a world with the `leveling` feature, `on_level_change` fires once for every level an actor gains or loses, whether
 from a kill, `ctx.award_xp`, `ctx.level_up`, `ctx.level_down` or a level lost at death. `ctx.actor` is the actor whose
@@ -170,7 +200,7 @@ An item's hook fires when the actor carrying or wearing it changes level, and wh
 
 ---
 
-## 6. Delayed Execution: Timers (`ctx.after()`)
+## 7. Delayed Execution: Timers (`ctx.after()`)
 
 To schedule an action in the future without blocking the server loop, use `ctx.after()`:
 

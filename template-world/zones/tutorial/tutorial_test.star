@@ -103,8 +103,8 @@ def test_a_draught_heals_and_is_used_up(t):
     p = w.spawn_player("Tess", at = ":gate", vitals = vitals(hp = 30))
     w.damage(p, "hp", amount = 15)
     w.spawn(":healing_draught", at = p)
-    t.contains(p.do("use draught"), "Warmth spreads through you.")
-    t.eq(p.hp, 25)
+    t.contains(p.do("use draught"), "You use a healing draught.")
+    t.true(p.hp >= 23 and p.hp <= 29)
     t.false(p.has_item(":healing_draught"))
 
 def test_the_guide_hears_sparring_next_door(t):

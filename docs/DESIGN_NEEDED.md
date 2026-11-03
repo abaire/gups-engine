@@ -144,13 +144,6 @@ during expensive state evaluations?
 
 ## Items
 
-### Consumables and charges
-
-**Spec:** §3.3 (`kind`, for example `consumable`), §4.4 (`before_use`/`on_use`). **Today:** `use` fires the hooks, and
-the engine never uses an item up (D-114). Scripts call `ctx.destroy` themselves. **Questions:** - Should `consumable`
-items lose one from the stack automatically after a successful `on_use`? - Should items have charges? - Should items
-have a declarative `use_effect` (an effect primitive) for novices who don't write hooks?
-
 ### Corpses and looting
 
 **Spec:** §5.4 (a mob corpse holds inventory and loot; a player corpse is left behind). **Today:** anyone can loot any

@@ -56,18 +56,12 @@ item("tar_walker_boots",
     },
 )
 
-def _drink(ctx):
-    # on_use runs for `use draught`. Return ctx.deny(msg) from a before_use hook to refuse.
-    # The engine doesn't use items up by itself: the hook destroys the draught.
-    ctx.heal(ctx.actor, 10, "hp")
-    ctx.send(ctx.actor, "You drink the draught. Warmth spreads through you.")
-    ctx.destroy(ctx.self)
-
 item("healing_draught",
     name = "a healing draught",
     keywords = ["draught", "potion"],
-    kind = "consumable",
-    on_use = _drink,
+    kind = "consumable",     # free-form: the engine gives kind no meaning
+    charges = 1,             # used up after one drink; empty = "destroy" is the default
+    use_effect = heal(dice = "2d4+6", vital = "hp"),
 )
 
 item("copper_ring",
