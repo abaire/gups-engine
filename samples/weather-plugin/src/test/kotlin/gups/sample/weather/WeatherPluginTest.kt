@@ -244,6 +244,8 @@ class WeatherPluginTest {
 
     override fun transform(item: PluginItem, label: String) = TODO()
 
+    override fun setCharges(item: PluginItem, charges: Int) = TODO()
+
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 
     override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? = TODO()

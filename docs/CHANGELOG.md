@@ -15,6 +15,9 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   unlimited.
 - `ctx.set_charges(item, charges)` sets an item's remaining uses, from 0 to its prototype's charges; unlimited and
   stackable items are refused, and 0 does not run `empty`.
+- `PluginItem.charges` and `PluginItem.maxCharges` expose uses left and the prototype's charges, or `null` when
+  unlimited. `Facade.setCharges(item, charges)` sets an item's remaining uses, from 0 to its prototype's charges;
+  unlimited and stackable items are refused, and 0 does not run `empty`.
 - An item with `charges` and none left is refused ("There are no charges left in {item}."). After `on_use`, if the item
   is still in the world, the use spends one charge, or one item of a stack; the last charge runs the item's `empty`
   action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without `charges` is never

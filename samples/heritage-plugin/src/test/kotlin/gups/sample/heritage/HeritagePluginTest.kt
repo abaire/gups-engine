@@ -186,6 +186,8 @@ class HeritagePluginTest {
     override val resistDeltas = emptyMap<String, Int>()
     override val inactive = false
     override val plural: String? = null
+    override val charges: Int? = null
+    override val maxCharges: Int? = null
 
     override fun hasTag(tag: String): Boolean = tag in tags
 
@@ -265,6 +267,8 @@ class HeritagePluginTest {
     override fun removeTag(item: PluginItem, tag: String): Boolean = TODO("not used")
 
     override fun transform(item: PluginItem, label: String): Unit = TODO("not used")
+
+    override fun setCharges(item: PluginItem, charges: Int): Unit = TODO("not used")
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 

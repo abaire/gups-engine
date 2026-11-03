@@ -804,8 +804,7 @@ class LoaderTest {
       load(
         mapOf(
           "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to
-            "item(\"wand\", use_effect = apply_affect(\"glow\", None))",
+          "zones/z/a.star" to "item(\"wand\", use_effect = apply_affect(\"glow\", None))",
         )
       )
     assertContains(

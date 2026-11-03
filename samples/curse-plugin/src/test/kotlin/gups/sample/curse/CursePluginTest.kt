@@ -110,6 +110,8 @@ class CursePluginTest {
 
     override val affects: List<PluginItemAffect> = emptyList()
     override val plural: String? = null
+    override val charges: Int? = null
+    override val maxCharges: Int? = null
   }
 
   private class FakeActor(override val id: Long = 100L, override val name: String = "Tester") :
@@ -215,6 +217,8 @@ class CursePluginTest {
     override fun transform(item: PluginItem, label: String) {
       transformCalls.add(item to label)
     }
+
+    override fun setCharges(item: PluginItem, charges: Int) = TODO()
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 

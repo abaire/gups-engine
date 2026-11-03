@@ -36,6 +36,7 @@ import gups.core.world.removeItemTag
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.send
+import gups.core.world.setCharges
 import gups.core.world.setChoices
 import gups.core.world.setSkill
 import gups.core.world.takeXp
@@ -279,6 +280,12 @@ internal class ItemFacade(val item: Item, private val world: World) :
   override val variants: Map<String, String>
     get() = item.proto.variants.mapValues { it.value.v }
 
+  override val charges: Int?
+    get() = item.charges
+
+  override val maxCharges: Int?
+    get() = item.proto.charges
+
   override val affects: List<PluginItemAffect>
     get() = item.heldAffects().map(::toPlugin)
 
@@ -515,6 +522,10 @@ internal class WorldFacade(
         ?: throw IllegalArgumentException("transform(label): '$label' is not an item")
     require(world.protos.items.containsKey(l)) { "transform(label): '$label' is not an item" }
     world.transformItem(target, l)
+  }
+
+  override fun setCharges(item: PluginItem, charges: Int) {
+    world.setCharges(itemOf(item, "set_charges(item)"), charges)
   }
 
   override fun teleport(actor: PluginActor, room: PluginRoom) =

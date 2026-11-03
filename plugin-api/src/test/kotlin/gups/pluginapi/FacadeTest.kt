@@ -664,6 +664,70 @@ class FacadeTest {
     assertEquals(mapOf("fancy" to "//zones/z:fancy_charm"), nestedCharm.variants)
   }
 
+  @Test
+  fun `PluginItem charges and maxCharges, and setCharges`() {
+    val testWorld = world(files = ITEM_FILES)
+    val facade = WorldFacade(testWorld, "test") {}
+    val stick =
+      ItemFacade(
+        testWorld.spawnItem(
+          Label("//zones/z:stick"),
+          ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+        ),
+        testWorld,
+      )
+    val wand =
+      ItemFacade(
+        testWorld.spawnItem(
+          Label("//zones/z:wand"),
+          ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+        ),
+        testWorld,
+      )
+    val potion =
+      ItemFacade(
+        testWorld.spawnItem(
+          Label("//zones/z:potion"),
+          ItemLocation.InRoom(testWorld.room(Label("//zones/z:a")).id, 0),
+        ),
+        testWorld,
+      )
+
+    assertNull(stick.charges)
+    assertNull(stick.maxCharges)
+    assertEquals(3, wand.charges)
+    assertEquals(3, wand.maxCharges)
+    assertEquals(1, potion.charges)
+    assertEquals(1, potion.maxCharges)
+
+    facade.setCharges(wand, 1)
+    assertEquals(1, wand.charges)
+    facade.setCharges(wand, 0)
+    assertEquals(0, wand.charges)
+    facade.setCharges(wand, 3)
+    assertEquals(3, wand.charges)
+
+    for (n in listOf(-1, 4)) {
+      assertContains(
+        assertFailsWith<IllegalArgumentException> { facade.setCharges(wand, n) }.message!!,
+        "between 0 and 3",
+      )
+    }
+    assertContains(
+      assertFailsWith<IllegalArgumentException> { facade.setCharges(stick, 1) }.message!!,
+      "unlimited",
+    )
+    assertContains(
+      assertFailsWith<IllegalArgumentException> { facade.setCharges(potion, 1) }.message!!,
+      "stackable",
+    )
+    testWorld.destroy(wand.item)
+    assertContains(
+      assertFailsWith<IllegalArgumentException> { facade.setCharges(wand, 1) }.message!!,
+      "no longer in the world",
+    )
+  }
+
   private class TestFilterPlugin(
     val throwOnContainer: String? = null,
     val callLog: MutableList<PluginContainmentCall> = mutableListOf(),
@@ -714,6 +778,8 @@ class FacadeTest {
             item("bag", name = "a bag", keywords = ["bag"], container = container())
             item("lead_box", name = "a lead box", keywords = ["box"], tags = ["lead"], container = container())
             item("backpack", name = "a backpack", keywords = ["backpack"], wear = "held", container = container())
+            item("wand", name = "a wand", keywords = ["wand"], charges = 3, empty = "keep")
+            item("potion", name = "a potion", keywords = ["potion"], charges = 1, stackable = True)
             """
         )
   }

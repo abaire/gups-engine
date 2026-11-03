@@ -2144,10 +2144,10 @@ subsystems (`core` or `script`). It consists of three primary components:
   [PluginViews.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginViews.kt)) with engine-side wiring in
   [PluginHost.kt](../plugin-api/src/main/kotlin/gups/pluginapi/host/PluginHost.kt). The facade exposes safe mutation
   verbs (`send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
-  `addTag`, `removeTag`, `transform`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`,
-  `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and read-only
-  views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations execute
-  synchronously on the world thread with invariant checking.
+  `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`,
+  `removeTrait`, `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and
+  read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations
+  execute synchronously on the world thread with invariant checking.
 
 **Plugin capabilities and lifecycle:**
 
@@ -2202,8 +2202,9 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Read-only views:** Views wrap entities dynamically (`PluginEntity`, `PluginRoom`, `PluginActor`, `PluginItem`,
   `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem` exposes `keywords`, `kind`, `wear`,
   `slotCost`, `weight`, `maxVitalDeltas`, `resistDeltas`, `inactive`, `tags`, `variants`, `affects` (each a
-  `PluginItemAffect` with its `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`), `contents`, `custodian`
-  and `plural`. `PluginItem.plural` exposes the prototype's optional display name for stacks of 2 or more.
+  `PluginItemAffect` with its `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`), `contents`,
+  `custodian`, `plural`, and `charges` and `maxCharges` (`null` when unlimited). `PluginItem.plural` exposes the
+  prototype's optional display name for stacks of 2 or more.
 - **Thread bridge:** `PluginViews.world(thread)` and `PluginViews.room/actor/item(value)` bridge Starlark threads and
   facade values. Unqualified attribute writes are disallowed when the calling plugin cannot be determined.
 

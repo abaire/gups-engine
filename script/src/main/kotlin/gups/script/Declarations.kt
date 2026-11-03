@@ -1163,8 +1163,8 @@ internal class DeclarationBuiltins(
 
   /**
    * Fails the load if [effect]'s primitives don't fit [target]; [what] prefixes the message,
-   * [subject] names the effect in the item-target message, and [appliesOnly] and [noneOnly] end
-   * the messages refusing `apply_affect(applies)` and a `None` duration on an actor target.
+   * [subject] names the effect in the item-target message, and [appliesOnly] and [noneOnly] end the
+   * messages refusing `apply_affect(applies)` and a `None` duration on an actor target.
    */
   private fun checkEffectTarget(
     effect: Effect,

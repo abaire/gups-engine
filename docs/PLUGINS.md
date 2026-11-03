@@ -331,6 +331,10 @@ transforms:
 
 - **Tags:** `world.addTag(item, tag)` and `world.removeTag(item, tag)` add or remove per-instance tags. Effective tags
   (`item.tags`, `item.hasTag(tag)`) reflect prototype tags plus added minus removed tags.
+- **Charges:** `world.setCharges(item, charges)` sets an item's remaining uses, from 0 to its prototype's charges
+  (`item.maxCharges`); setting 0 does not run its `empty` action. Refuses unlimited and stackable items. `item.charges`
+  reads uses left (`null` when unlimited), so `if (item.charges == 0) call.world.setCharges(item, item.maxCharges!!)`
+  recharges an empty item.
 - **Instance affects:** `world.applyItemAffect(item, name, duration, applies = "worn", ...)` and
   `world.removeItemAffect(item, name)` apply or remove instance affects. Setting `duration = null` creates a permanent
   affect. `applies` must be `"worn"` or `"carried"`.

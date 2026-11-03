@@ -74,6 +74,12 @@ interface PluginWorld {
 
   fun transform(item: PluginItem, label: String)
 
+  /**
+   * Sets [item]'s remaining uses, from 0 to its prototype's charges; 0 doesn't run its empty
+   * action.
+   */
+  fun setCharges(item: PluginItem, charges: Int)
+
   fun teleport(actor: PluginActor, room: PluginRoom)
 
   /** Reads an attribute; a key without `ns:` is in the plugin's own namespace (its id). */
@@ -283,6 +289,12 @@ interface PluginItem : PluginEntity {
 
   /** Variant names to item labels. */
   val variants: Map<String, String>
+
+  /** Uses left, or null when the item has unlimited uses. */
+  val charges: Int?
+
+  /** The prototype's charges, or null when unlimited. */
+  val maxCharges: Int?
 
   /**
    * This item's affects: its prototype's in declaration order, then its own instance affects by id;
