@@ -945,6 +945,78 @@ class RulesTest {
     assertEquals(8, p.waitState)
   }
 
+  @Test
+  fun `an item's advance_lag and retreat_lag modifiers change the lag`() {
+    val f =
+      world(
+        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n"),
+        """
+        def _quick(ctx, base):
+            return base - 3
+
+        room("start", size = SIZE.large)
+        mob("rat", vitals = vitals(hp = 100))
+        item("boots", wear = "wield", modifiers = {"advance_lag": _quick, "retreat_lag": _quick})
+        """,
+      )
+    val p = f.player()
+    val boots = f.w.spawnItem(Label("//zones/z:boots"), ItemLocation.Carried(p.id))
+    f.w.moveItem(boots, ItemLocation.Equipped(p.id, "wield"))
+    f.rat(index = 2)
+    f.act(p, "advance rat")
+    assertEquals(1, p.trackIndex)
+    assertEquals(7 - 3, p.waitState)
+    f.run(10)
+    f.act(p, "retreat from rat")
+    assertEquals(0, p.trackIndex)
+    assertEquals(5 - 3, p.waitState)
+  }
+
+  @Test
+  fun `a room's flee_fail_lag modifier changes a failed flee's lag`() {
+    val f =
+      world(
+        (listOf(quietCombat(fleeChance = 0)) + DISTINCT_LAGS).joinToString("\n\n"),
+        """
+        def _slow(ctx, base):
+            return base + 2
+
+        room("start", size = SIZE.large, exits = [exit("north", ":hall")], modifiers = {"flee_fail_lag": _slow})
+        room("hall")
+        mob("rat", vitals = vitals(hp = 100))
+        """,
+      )
+    val p = f.player()
+    f.w.startCombat(p, f.rat())
+    f.act(p, "flee")
+    assertEquals(11 + 2, p.waitState)
+  }
+
+  @Test
+  fun `a lag chain that goes below 0 leaves no recovery`() {
+    val f =
+      world(
+        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n"),
+        """
+        def _quick(ctx, base):
+            return base - 100
+
+        def _boost(ctx):
+            ctx.apply_affect(ctx.actor, "speed", 100, modifiers = {"retreat_fail_lag": _quick})
+
+        room("start", size = SIZE.large, commands = {"boost": _boost})
+        mob("rat", vitals = vitals(hp = 100))
+        """,
+      )
+    val p = f.player()
+    f.act(p, "boost")
+    f.w.startCombat(p, f.rat())
+    f.act(p, "retreat")
+    assertEquals(0, p.trackIndex)
+    assertEquals(0, p.waitState)
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+  }
+
   /** Sets up and triggers the action that calls [export], returning the actor. */
   private fun triggerLag(f: ScriptFixture, export: String): gups.core.model.Player {
     val p = f.player()

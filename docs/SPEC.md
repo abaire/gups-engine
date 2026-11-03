@@ -758,8 +758,8 @@ as leaving it out.
 |      Feature       |                                                                                                                                                                                                                                                            Owns                                                                                                                                                                                                                                                            | Requires |
 |--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag`; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                           | —        |
-| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                     | `combat` |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `damage`, `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                       | —        |
+| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                             | `combat` |
 | `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`, `casting` in `Char.Status`                                                                                                                                                               | —        |
 | `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                                                                             | —        |
 
@@ -1319,7 +1319,8 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
   actor; a value that is not is a bad return value, and no level is owed past it (§5.4).
 - `get_lag` returns `None` for out of reach.
 - `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag` and `get_lag` return pulses, an int of at least 0; a
-  negative value is a bad return value. The lag exports set the action's recovery lag, and 0 means none.
+  negative value is a bad return value. The lag exports' results go through their modifier chains, and the chain's
+  result sets the action's recovery lag; 0 means none. `get_lag` sets the pickup lag directly.
 - `equipment_slots()` and `slot_families()` get no ctx. They are asked once, and again after each reload.
   `equipment_slots()` lists every slot any actor can have as lowercase names, in the order the modifier chain visits
   worn items.
@@ -1362,13 +1363,17 @@ formulas for custom worlds. See [combat.star](../template-world/rules/combat.sta
 [manipulation.star](../template-world/rules/manipulation.star) in `template-world/rules/` for the complete reference
 formulas.
 
-**Modifier points (v0):** `to_hit`, `damage`, `initiative`, `cast_allowed`, `move_cost`, `regen`. The list grows with
-`api_version`. `mitigate` is not a modifier point. Modifiers of `move_cost` and `regen` take and return `vitals(...)`
-values; modifier points of a feature that is off can't be named.
+**Modifier points (v0):** `to_hit`, `damage`, `initiative`, `cast_allowed`, `move_cost`, `regen`, `advance_lag`,
+`retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`. The list grows with `api_version`. `mitigate` and `get_lag` are not
+modifier points. Modifiers of `move_cost` and `regen` take and return `vitals(...)` values; modifiers of the four lag
+points take and return pulses as ints, and may go below 0 along the chain, but the chain's final value is clamped to 0.
+Modifier points of a feature that is off can't be named: the lag points belong to the feature of the export of the same
+name.
 
 **Whose chain:** the attacker's for `to_hit` and `damage` (the caster is the attacker for spell damage), the caster's
-for `cast_allowed`, the mover's for `move_cost` (from the room being left), and the actor's own for `regen` and
-`initiative`. "Zone" means the package of that actor's room, and the regions and room are those of that room too.
+for `cast_allowed`, the mover's for `move_cost` (from the room being left), and the actor's own for `regen`,
+`initiative` and the four lag points (the actor that advanced, retreated or failed to flee). "Zone" means the package of
+that actor's room, and the regions and room are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
 room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
@@ -1404,7 +1409,7 @@ room("antimagic_vault", modifiers={
 ```
 
 The harness and `@trace` print the full chain, for example `rules.to_hit base=62 → region:null_field ×0.5 → 31 → roll 44
-MISS`.
+MISS`. A lag chain that ends below 0 prints a final `→ clamp 0` step.
 
 **Encumbrance:** `rules.encumbrance` applies while the carried and worn weight exceeds `rules.carry_limit` (computed
 without the current encumbrance). It is recomputed when an actor's custody changes (spawn, move, destroy) and at every
@@ -2832,15 +2837,16 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **Bands:** Viewers never see raw indices (except builders, via `@where`). `look` and `Room.Bands` group actors and
   items by band: `|X−Y| = 0` is `MELEE`, `1` is `NEAR`, `≥ 2` is `FAR`.
 - **`advance <target>`:** Steps 1 index toward the target. It's a normal tick-lane action, with lag from
-  `rules.advance_lag`. It's a no-op with a message if the actor is already at the target's index. With no target, only
-  hostiles are considered.
+  `rules.advance_lag` and its modifier chain (§4.6). It's a no-op with a message if the actor is already at the target's
+  index. With no target, only hostiles are considered.
 - **`retreat [from <target>]`:**
-  - Steps 1 index away from the target, with lag from `rules.retreat_lag`. With no target, the threat is the nearest
-    hostile by track distance, then lowest id; with none, "You have nothing to retreat from." and no lag.
+  - Steps 1 index away from the target, with lag from `rules.retreat_lag` and its modifier chain (§4.6). With no target,
+    the threat is the nearest hostile by track distance, then lowest id; with none, "You have nothing to retreat from."
+    and no lag.
   - On a shared index the actor steps toward the side with more room; a tie goes toward the back (higher index).
   - It's impossible at a track edge, and the actor is told so with no lag.
   - **When pinned** (a hostile shares the actor's index), it requires a `retreat_check` roll against the first opponent
-    at the actor's index. Failure applies `rules.retreat_fail_lag` lag and no movement.
+    at the actor's index. Failure applies the lag of `rules.retreat_fail_lag` and its modifier chain and no movement.
 - **Room transitions:**
   - Non-combat movement costs one action plus the vitals `rules.move_cost` returns (§4.6). The action is the action
     pulse itself: walking leaves no recovery lag.
@@ -2855,7 +2861,7 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
     checked like a walk: guards (§4.7), then `before_exit` and `before_enter`. If they allow it, the actor leaves
     through it and engagement ends; a denial shows its message and counts as a failure, so combat can't be used to slip
     past them.
-  - **On failure:** lag from `rules.flee_fail_lag`.
+  - **On failure:** lag from `rules.flee_fail_lag` and its modifier chain (§4.6).
 - **Items on the ground:**
   - Items sit at the dropper's index.
   - `get` uses `rules.get_lag(band)`. The default is 0 for `MELEE`, 2 for `NEAR`, and not allowed at `FAR`.

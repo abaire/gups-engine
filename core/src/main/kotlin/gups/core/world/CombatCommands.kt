@@ -86,12 +86,12 @@ internal object FleeAction : Action {
   override fun resolve(w: World, actor: Actor): Int {
     if (w.rng.int(1, 100) > w.rules.fleeChance(RulesContext(w, actor))) {
       w.tell(actor, CombatMsg.FLEE_FAILED)
-      return w.rules.fleeFailLag(RulesContext(w, actor))
+      return w.fleeFailLagOf(RulesContext(w, actor))
     }
     val exit = w.rng.choice(actor.room.exits.values.filter { it.passable })
     w.exitDenial(actor, exit.direction)?.let {
       w.send(actor, it)
-      return w.rules.fleeFailLag(RulesContext(w, actor))
+      return w.fleeFailLagOf(RulesContext(w, actor))
     }
     w.tell(actor, CombatMsg.FLEE_SELF, "direction" to exit.direction)
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) {

@@ -207,6 +207,31 @@ class FeatureScriptTest {
       "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"cast_allowed\": f})",
       "room(modifiers)[\"cast_allowed\"]",
     )
+    refused(
+      Feature.COMBAT,
+      "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"flee_fail_lag\": f})",
+      "room(modifiers)[\"flee_fail_lag\"]",
+    )
+  }
+
+  @Test
+  fun `the track lag modifier points need the track, flee_fail_lag doesn't`() {
+    for (point in listOf("advance_lag", "retreat_lag", "retreat_fail_lag")) {
+      refused(
+        Feature.TRACK,
+        "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"$point\": f})",
+        "room(modifiers)[\"$point\"]",
+      )
+    }
+    val r =
+      load(
+        world(
+          without(Feature.TRACK),
+          "zones/z/a.star" to
+            "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"flee_fail_lag\": f})",
+        )
+      )
+    assertTrue(r.errors.none { it.pkg == "zones/z" }, r.report())
   }
 
   @Test

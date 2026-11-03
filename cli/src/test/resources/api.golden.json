@@ -552,7 +552,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the item is worn.",
           "since": 1
         },
@@ -658,7 +658,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the affect reaches the holder.",
           "since": 1
         },
@@ -1014,7 +1014,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Zone-wide rules modifiers by modifier point name.",
           "since": 1
         },
@@ -1072,7 +1072,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active in rooms carrying this region tag.",
           "since": 1
         }
@@ -1224,7 +1224,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen"],
+          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Room rules modifiers by modifier point name.",
           "since": 1
         },
@@ -2059,7 +2059,7 @@
       "symbol": "MODIFIER",
       "name": "MODIFIER",
       "type": "struct",
-      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\")",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
       "since": 1
     },
@@ -6561,6 +6561,16 @@
     ],
     "modifier_points": [
       {
+        "symbol": "modifier:advance_lag",
+        "feature": "track",
+        "name": "advance_lag",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Adjusts the recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step. The final result is clamped to 0.",
+        "since": 1
+      },
+      {
         "symbol": "modifier:cast_allowed",
         "feature": "skills",
         "name": "cast_allowed",
@@ -6578,6 +6588,16 @@
         "value_type": "int",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
         "doc": "Adjusts raw damage before mitigation.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:flee_fail_lag",
+        "feature": "combat",
+        "name": "flee_fail_lag",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "room", "pulse", "rng"],
+        "doc": "Adjusts the recovery lag after a failed flee. ctx.target and ctx.band are None. The final result is clamped to 0.",
         "since": 1
       },
       {
@@ -6606,6 +6626,26 @@
         "value_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
         "doc": "Adjusts the per-tick regeneration of each vital.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:retreat_fail_lag",
+        "feature": "track",
+        "name": "retreat_fail_lag",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Adjusts the recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is \"melee\". The final result is clamped to 0.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:retreat_lag",
+        "feature": "track",
+        "name": "retreat_lag",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
+        "doc": "Adjusts the recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step. The final result is clamped to 0.",
         "since": 1
       },
       {

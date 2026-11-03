@@ -4,6 +4,17 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Lag modifier points: advance_lag, retreat_lag, retreat_fail_lag and flee_fail_lag
+
+- Added four modifier points (`advance_lag`, `retreat_lag`, `retreat_fail_lag`, and `flee_fail_lag`, accessible via
+  `MODIFIER.advance_lag`, etc.) allowing zone, region, room, affect, and item modifiers to adjust recovery lag.
+- Lag modifier points run on the acting actor's modifier chain with the corresponding rules export's context
+  (`ctx.target` and `ctx.band` for track lag points; `ctx.target == None` and `ctx.band == None` for `flee_fail_lag`).
+- Intermediate steps in a lag modifier chain may go below 0, but the chain's final value is clamped to 0.
+- Feature gating follows the exports: `advance_lag`, `retreat_lag`, and `retreat_fail_lag` require the `track` feature,
+  while `flee_fail_lag` requires only `combat`.
+- `get_lag` is not a modifier point and sets pickup lag directly.
+
 ### Equipment slots, slot families, item attacks, and vital and resist deltas
 
 - Added `slot_families()`, `actor_slots(ctx)` and `slot_cost(ctx)` rules exports, `item(slot_cost=)`, `max_vital_deltas`

@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.Label
 import gups.core.model.AffectScope
+import gups.core.model.Band
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.ItemAffect
@@ -307,5 +308,38 @@ class ModifierChainTest {
     val daggerSwing = RulesContext(f.w, p, d, weapon = dagger, slot = "offhand")
     assertEquals(f.w.rules.toHit(daggerSwing), f.w.toHitChain(daggerSwing).value)
     assertEquals(10, f.w.damageChain(daggerSwing, base = 10).value)
+  }
+
+  @Test
+  fun `lag chains run through the actor's modifiers and clamp at 0`() {
+    val host = RecordingHost()
+    var delta = -10
+    host.modifiers["mod_lag"] = { _, _, base -> (base as Int) + delta }
+    val f = Fixture(scripts = host)
+    val p = f.player("Ann")
+    val other = f.mob(T.DUMMY)
+    val lines = mutableListOf<String>()
+    f.w.onRules = { _, line -> lines += line }
+    f.w.applyAffect(
+      p,
+      "slow_advance",
+      10_000,
+      modifiers = mapOf(ModifierPoint.ADVANCE_LAG to mod("mod_lag")),
+    )
+    val ctx = RulesContext(f.w, p, other, band = Band.NEAR)
+    assertEquals(0, f.w.advanceLagOf(ctx))
+    assertTrue(
+      "rules.advance_lag base=2 → affect:slow_advance -8 → clamp 0" in lines,
+      lines.toString(),
+    )
+
+    lines.clear()
+    delta = 3
+    assertEquals(5, f.w.advanceLagOf(ctx))
+    assertTrue(lines.none { "clamp" in it }, lines.toString())
+    assertTrue(
+      lines.any { it.contains("rules.advance_lag base=2 → affect:slow_advance 5") },
+      lines.toString(),
+    )
   }
 }

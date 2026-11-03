@@ -35,7 +35,19 @@ enum class ModifierPoint(
   MOVE_COST("move_cost"),
 
   /** Modifies vital recovery or loss applied during periodic world ticks. */
-  REGEN("regen");
+  REGEN("regen"),
+
+  /** Modifies the recovery lag after `advance`. */
+  ADVANCE_LAG("advance_lag"),
+
+  /** Modifies the recovery lag after a successful `retreat`. */
+  RETREAT_LAG("retreat_lag"),
+
+  /** Modifies the recovery lag after a failed retreat check. */
+  RETREAT_FAIL_LAG("retreat_fail_lag"),
+
+  /** Modifies the recovery lag after a failed `flee`. */
+  FLEE_FAIL_LAG("flee_fail_lag");
 
   companion object {
     /** Finds a [ModifierPoint] by its script hook name, or returns null if not recognized. */

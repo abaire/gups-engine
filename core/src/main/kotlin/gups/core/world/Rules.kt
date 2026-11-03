@@ -126,6 +126,30 @@ fun World.damageChain(c: RulesContext, base: Int = rules.damage(c)): ChainResult
 fun World.initiativeOf(c: RulesContext): Int =
   traced(c, chain(ModifierPoint.INITIATIVE, c, rules.initiative(c)) { "$it" })
 
+fun World.advanceLagOf(c: RulesContext): Int =
+  lagOf(ModifierPoint.ADVANCE_LAG, c, rules.advanceLag(c))
+
+fun World.retreatLagOf(c: RulesContext): Int =
+  lagOf(ModifierPoint.RETREAT_LAG, c, rules.retreatLag(c))
+
+fun World.retreatFailLagOf(c: RulesContext): Int =
+  lagOf(ModifierPoint.RETREAT_FAIL_LAG, c, rules.retreatFailLag(c))
+
+fun World.fleeFailLagOf(c: RulesContext): Int =
+  lagOf(ModifierPoint.FLEE_FAIL_LAG, c, rules.fleeFailLag(c))
+
+/** Runs a recovery lag through [point]'s chain. Steps may go below 0; the result is at least 0. */
+private fun World.lagOf(point: ModifierPoint, c: RulesContext, base: Int): Int {
+  val r = chain(point, c, base) { "$it" }
+  return if (r.value < 0) {
+    traceRules(c.actor, "${r.text} → clamp 0")
+    0
+  } else {
+    traceRules(c.actor, r.text)
+    r.value
+  }
+}
+
 /** Null to allow, or the denial message. */
 fun World.castAllowed(c: RulesContext): String? {
   val req =

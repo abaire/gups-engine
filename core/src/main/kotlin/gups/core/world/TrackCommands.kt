@@ -85,7 +85,7 @@ internal class AdvanceAction(private val target: Actor) : Action {
     )
     // The live positions: indexOf would still report where the step began.
     val band = Band.between(actor.trackIndex, target.trackIndex)
-    return w.rules.advanceLag(RulesContext(w, actor, target, band = band))
+    return w.advanceLagOf(RulesContext(w, actor, target, band = band))
   }
 }
 
@@ -108,7 +108,7 @@ internal class RetreatAction(private val from: Actor?) : Action {
       pinner != null && w.rng.int(1, 100) > w.rules.retreatCheck(RulesContext(w, actor, pinner))
     ) {
       w.tell(actor, TrackMsg.RETREAT_FAILED)
-      return w.rules.retreatFailLag(RulesContext(w, actor, pinner, band = Band.MELEE))
+      return w.retreatFailLagOf(RulesContext(w, actor, pinner, band = Band.MELEE))
     }
     val dir = step(actor.trackIndex, t.trackIndex, actor.room.trackSize) ?: return 0
     w.placeActor(actor, actor.room, actor.trackIndex + dir)
@@ -121,7 +121,7 @@ internal class RetreatAction(private val from: Actor?) : Action {
       actor,
     )
     val band = Band.between(actor.trackIndex, t.trackIndex)
-    return w.rules.retreatLag(RulesContext(w, actor, t, band = band))
+    return w.retreatLagOf(RulesContext(w, actor, t, band = band))
   }
 
   companion object {

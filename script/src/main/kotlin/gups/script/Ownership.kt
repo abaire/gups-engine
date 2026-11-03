@@ -30,7 +30,13 @@ object FeatureOwnership {
       "rules:flee_chance",
       "rules:flee_fail_lag",
     )
-    owns(Feature.COMBAT, "modifier:to_hit", "modifier:damage", "modifier:initiative")
+    owns(
+      Feature.COMBAT,
+      "modifier:to_hit",
+      "modifier:damage",
+      "modifier:initiative",
+      "modifier:flee_fail_lag",
+    )
     owns(Feature.COMBAT, "view:actor.fighting")
     owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
     owns(Feature.TRACK, "SIZE")
@@ -38,6 +44,7 @@ object FeatureOwnership {
     owns(Feature.TRACK, "ctx.teleport.index", "ctx.spawn.index", "ctx.move_item.index")
     owns(Feature.TRACK, "rules:retreat_check", "rules:get_lag", "rules_ctx.band")
     owns(Feature.TRACK, "rules:advance_lag", "rules:retreat_lag", "rules:retreat_fail_lag")
+    owns(Feature.TRACK, "modifier:advance_lag", "modifier:retreat_lag", "modifier:retreat_fail_lag")
     owns(Feature.TRACK, "view:actor.track_index", "view:actor.band_of")
     owns(Feature.TRACK, "view:room.size", "view:room.track_size", "view:exit.entry_index")
     owns(Feature.TRACK, "view:item.range", "view:location.index")

@@ -1126,6 +1126,38 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
       ctxFields = listOf("actor", "room", "pulse", "rng"),
       doc = "Adjusts the per-tick regeneration of each vital.",
     ),
+    ModifierPointSpec(
+      point = ModifierPoint.ADVANCE_LAG,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Adjusts the recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step. The final result is clamped to 0.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.RETREAT_LAG,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Adjusts the recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step. The final result is clamped to 0.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.RETREAT_FAIL_LAG,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "target", "band", "room", "pulse", "rng"),
+      doc =
+        "Adjusts the recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is \"melee\". The final result is clamped to 0.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.FLEE_FAIL_LAG,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "room", "pulse", "rng"),
+      doc =
+        "Adjusts the recovery lag after a failed flee. ctx.target and ctx.band are None. The final result is clamped to 0.",
+    ),
   )
 
 /**

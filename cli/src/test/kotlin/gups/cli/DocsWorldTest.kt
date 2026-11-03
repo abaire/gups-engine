@@ -74,8 +74,12 @@ class DocsWorldTest {
     for (lag in listOf("advance_lag", "retreat_lag", "retreat_fail_lag")) {
       assertFalse("id=\"rules-$lag\"" in robotDocs.getValue("rules.html"), lag)
       assertContains(all.getValue("rules.html"), "id=\"rules-$lag\"")
+      assertFalse("id=\"modifier-$lag\"" in robotDocs.getValue("rules.html"), lag)
+      assertContains(all.getValue("rules.html"), "id=\"modifier-$lag\"")
     }
     assertContains(robotDocs.getValue("rules.html"), "id=\"rules-flee_fail_lag\"")
+    assertContains(robotDocs.getValue("rules.html"), "id=\"modifier-flee_fail_lag\"")
+    assertContains(all.getValue("rules.html"), "id=\"modifier-flee_fail_lag\"")
     assertFalse("hook-on_combat_tick" !in robotDocs.getValue("hooks.html"))
     assertFalse("hook-on_level_change" in robotDocs.getValue("hooks.html"))
     assertContains(all.getValue("hooks.html"), "hook-on_level_change")
