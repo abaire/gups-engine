@@ -54,7 +54,6 @@ object FeatureOwnership {
   private val subtrees: Map<String, Feature> = buildMap {
     fun owns(feature: Feature, vararg symbols: String) = symbols.forEach { put(it, feature) }
     owns(Feature.SKILLS, "skill", "view:skill")
-    owns(Feature.SKILLS, "damage", "heal", "apply_affect", "dispel", "stun", "summon", "sequence")
     owns(Feature.COMBAT, "aggressive", "assist", "flee")
     owns(Feature.COMBAT, "ctx.start_combat", "ctx.stop_combat", "ctx.act_attack")
     owns(Feature.COMBAT, "ctx.enemies_near", "ctx.allies_near")

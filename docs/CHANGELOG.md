@@ -4,6 +4,11 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Consumables and charges
+
+- The effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence` no longer need the
+  `skills` feature; `knockback` and `pull` still need `track`.
+
 ### Lag modifier points: advance_lag, retreat_lag, retreat_fail_lag and flee_fail_lag
 
 - Added four modifier points (`advance_lag`, `retreat_lag`, `retreat_fail_lag`, and `flee_fail_lag`, accessible via

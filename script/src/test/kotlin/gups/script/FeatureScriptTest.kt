@@ -235,9 +235,7 @@ class FeatureScriptTest {
   }
 
   @Test
-  fun `effect primitives need skills, and knockback and pull need the track`() {
-    refused(Feature.SKILLS, "x = stun(3)", "stun()")
-    refused(Feature.SKILLS, "x = sequence()", "sequence()")
+  fun `knockback and pull need the track`() {
     refused(Feature.TRACK, "x = knockback(1)", "knockback()")
     refused(Feature.TRACK, "x = pull(1)", "pull()")
   }
@@ -534,5 +532,33 @@ class FeatureScriptTest {
     fAuto.input(pAuto, "check")
     fAuto.run(1)
     assertContains(fAuto.out(pAuto), "pending: 0")
+  }
+
+  @Test
+  fun `effect primitives work in a world without skills`() {
+    val files =
+      world(
+        Features(setOf(Feature.COMBAT)),
+        "zones/z/a.star" to
+          """
+          H = heal(dice = "1d4", vital = "hp")
+          S = stun(3)
+          W = summon(label = ":wisp", count = 1)
+          Q = sequence(H, S)
+
+          mob("wisp", name = "a wisp")
+
+          def _use(ctx):
+              pass
+
+          item("potion", on_use = _use)
+          room("start")
+          """
+            .trimIndent(),
+      )
+    val r = load(files)
+    assertTrue(r.errors.none { it.pkg == "zones/z" }, "loading without skills: ${r.report()}")
+
+    refused(Feature.TRACK, "K = knockback(steps = 1)\nroom(\"start\")", "knockback()")
   }
 }

@@ -5503,14 +5503,12 @@
   "effects": [
     {
       "symbol": "apply_affect",
-      "feature": "skills",
       "name": "apply_affect",
       "doc": "Attach a timed buff or debuff.",
       "since": 1,
       "params": [
         {
           "symbol": "apply_affect.name",
-          "feature": "skills",
           "name": "name",
           "positional": true,
           "named": true,
@@ -5521,7 +5519,6 @@
         },
         {
           "symbol": "apply_affect.duration",
-          "feature": "skills",
           "name": "duration",
           "positional": true,
           "named": true,
@@ -5532,7 +5529,6 @@
         },
         {
           "symbol": "apply_affect.stat_deltas",
-          "feature": "skills",
           "name": "stat_deltas",
           "positional": true,
           "named": true,
@@ -5543,7 +5539,6 @@
         },
         {
           "symbol": "apply_affect.flags",
-          "feature": "skills",
           "name": "flags",
           "positional": true,
           "named": true,
@@ -5554,7 +5549,6 @@
         },
         {
           "symbol": "apply_affect.tick_every",
-          "feature": "skills",
           "name": "tick_every",
           "positional": true,
           "named": true,
@@ -5565,7 +5559,6 @@
         },
         {
           "symbol": "apply_affect.on_tick",
-          "feature": "skills",
           "name": "on_tick",
           "positional": true,
           "named": true,
@@ -5576,7 +5569,6 @@
         },
         {
           "symbol": "apply_affect.on_expire",
-          "feature": "skills",
           "name": "on_expire",
           "positional": true,
           "named": true,
@@ -5587,7 +5579,6 @@
         },
         {
           "symbol": "apply_affect.expire_msg",
-          "feature": "skills",
           "name": "expire_msg",
           "positional": true,
           "named": true,
@@ -5598,7 +5589,6 @@
         },
         {
           "symbol": "apply_affect.modifiers",
-          "feature": "skills",
           "name": "modifiers",
           "positional": true,
           "named": true,
@@ -5609,7 +5599,6 @@
         },
         {
           "symbol": "apply_affect.sense_deltas",
-          "feature": "skills",
           "name": "sense_deltas",
           "positional": true,
           "named": true,
@@ -5620,7 +5609,6 @@
         },
         {
           "symbol": "apply_affect.max_vital_deltas",
-          "feature": "skills",
           "name": "max_vital_deltas",
           "positional": true,
           "named": true,
@@ -5631,7 +5619,6 @@
         },
         {
           "symbol": "apply_affect.resist_deltas",
-          "feature": "skills",
           "name": "resist_deltas",
           "positional": true,
           "named": true,
@@ -5642,7 +5629,6 @@
         },
         {
           "symbol": "apply_affect.applies",
-          "feature": "skills",
           "name": "applies",
           "positional": true,
           "named": true,
@@ -5655,14 +5641,12 @@
     },
     {
       "symbol": "damage",
-      "feature": "skills",
       "name": "damage",
       "doc": "Deal damage.",
       "since": 1,
       "params": [
         {
           "symbol": "damage.dice",
-          "feature": "skills",
           "name": "dice",
           "positional": true,
           "named": true,
@@ -5673,7 +5657,6 @@
         },
         {
           "symbol": "damage.type",
-          "feature": "skills",
           "name": "type",
           "positional": true,
           "named": true,
@@ -5686,14 +5669,12 @@
     },
     {
       "symbol": "dispel",
-      "feature": "skills",
       "name": "dispel",
       "doc": "Remove the target's affects that match every given criterion. Affects flagged 'intrinsic' are never removed.",
       "since": 1,
       "params": [
         {
           "symbol": "dispel.name",
-          "feature": "skills",
           "name": "name",
           "positional": true,
           "named": true,
@@ -5704,7 +5685,6 @@
         },
         {
           "symbol": "dispel.flag",
-          "feature": "skills",
           "name": "flag",
           "positional": true,
           "named": true,
@@ -5715,7 +5695,6 @@
         },
         {
           "symbol": "dispel.all",
-          "feature": "skills",
           "name": "all",
           "positional": true,
           "named": true,
@@ -5726,7 +5705,6 @@
         },
         {
           "symbol": "dispel.count",
-          "feature": "skills",
           "name": "count",
           "positional": true,
           "named": true,
@@ -5739,14 +5717,12 @@
     },
     {
       "symbol": "heal",
-      "feature": "skills",
       "name": "heal",
       "doc": "Restore a vital, up to its maximum.",
       "since": 1,
       "params": [
         {
           "symbol": "heal.dice",
-          "feature": "skills",
           "name": "dice",
           "positional": true,
           "named": true,
@@ -5757,7 +5733,6 @@
         },
         {
           "symbol": "heal.vital",
-          "feature": "skills",
           "name": "vital",
           "positional": true,
           "named": true,
@@ -5810,14 +5785,12 @@
     },
     {
       "symbol": "sequence",
-      "feature": "skills",
       "name": "sequence",
       "doc": "Combine several effects.",
       "since": 1,
       "params": [
         {
           "symbol": "sequence.effects",
-          "feature": "skills",
           "name": "effects",
           "positional": true,
           "named": false,
@@ -5830,14 +5803,12 @@
     },
     {
       "symbol": "stun",
-      "feature": "skills",
       "name": "stun",
       "doc": "Stun the target.",
       "since": 1,
       "params": [
         {
           "symbol": "stun.pulses",
-          "feature": "skills",
           "name": "pulses",
           "positional": true,
           "named": true,
@@ -5850,14 +5821,12 @@
     },
     {
       "symbol": "summon",
-      "feature": "skills",
       "name": "summon",
       "doc": "Spawn mobs beside the caster.",
       "since": 1,
       "params": [
         {
           "symbol": "summon.label",
-          "feature": "skills",
           "name": "label",
           "positional": true,
           "named": true,
@@ -5868,7 +5837,6 @@
         },
         {
           "symbol": "summon.count",
-          "feature": "skills",
           "name": "count",
           "positional": true,
           "named": true,
@@ -5879,7 +5847,6 @@
         },
         {
           "symbol": "summon.duration",
-          "feature": "skills",
           "name": "duration",
           "positional": true,
           "named": true,

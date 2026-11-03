@@ -2330,14 +2330,12 @@
   "effects": [
     {
       "symbol": "heal",
-      "feature": "skills",
       "name": "heal",
       "doc": "Restore a vital, up to its maximum.",
       "since": 1,
       "params": [
         {
           "symbol": "heal.dice",
-          "feature": "skills",
           "name": "dice",
           "positional": true,
           "named": true,
@@ -2348,7 +2346,6 @@
         },
         {
           "symbol": "heal.vital",
-          "feature": "skills",
           "name": "vital",
           "positional": true,
           "named": true,

@@ -382,7 +382,7 @@ object DocsRenderer {
     }
 
     fun StringBuilder.effects() {
-      h2("Effect primitives", "Declarative effects for skill(effect=...).")
+      h2("Effect primitives", "Declarative effects for skill(effect=...), item(use_effect=...) and hooks.")
       for (e in model.effects) method(e, e.name, "section")
       h2("Behaviors", "Built-in mob behaviors for mob(behaviors=[...]).")
       for (b in model.behaviors) method(b, b.name, "section")
