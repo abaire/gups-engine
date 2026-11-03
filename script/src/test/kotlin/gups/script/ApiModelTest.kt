@@ -247,6 +247,10 @@ class ApiModelTest {
         Case("lib", { "def _f(ctx):\n    pass\n\nglobal_command(\"wave\", _f${it.after()})" }) {
           it.pkg("lib").commandList.single()
         },
+      "gmcp_package" to
+        Case("lib", { "gmcp_package(\"Shop.Stock\"${it.after()})" }) {
+          it.pkg("lib").gmcpPackages.single()
+        },
       "struct" to Case(zone, { "S = struct(${it.only()})" }) { null },
       "vitals" to Case(zone, { "S = vitals(${it.only()})" }) { null },
       "stats" to Case(zone, { "S = stats(${it.only()})" }) { null },

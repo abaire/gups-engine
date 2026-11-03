@@ -4,6 +4,25 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Starlark GMCP events
+
+- Added `gmcp_package(name, doc)` for `lib` and `rules` packages, declaring a GMCP package the package sends with
+  `ctx.gmcp`. A name has two or more dot-separated parts, may not use the roots `Core`, `Char`, `Room`, `Comm` or
+  `Gups`, and may not overlap an engine package, a plugin's package, or another declared name.
+- Added `ctx.gmcp(player, package, data)`: sends the GMCP event `package` with `data` to `player`, after its pending
+  text and before the prompt, returning whether it was sent. `package` must be, or nest in, a GMCP package the calling
+  package declared. It returns `False` for a mob, a link-dead player, or a client that didn't ask for the package.
+  `data` may hold `None`, ints, strings, bools, lists and dicts with string keys, nested at most 8 deep; its compact
+  JSON form is at most 16 KB (`alloc_limit` beyond).
+- Attribute values, timer arguments and each key of a `migrate` result may nest lists and dicts at most 8 deep and be at
+  most 64 KB as compact JSON; a deeper or larger value raises `alloc_limit`. A value that shares one list many times or
+  contains itself now fails at these caps instead of exhausting memory or the stack.
+- The test harness accepts `w.spawn_player(..., gmcp = [...])`, the GMCP packages the test client supports (none by
+  default), and `p.gmcp(package = None)`, which returns the GMCP messages received since the last call as `{"package",
+  "data"}` dicts, optionally only those in `package`'s tree, and drains them.
+- `gups docs --world` and the server's built-in docs list the GMCP packages the world's `lib` and `rules` packages
+  declare, with each package's doc and declaring package.
+
 ### Plugin GMCP input and events
 
 - `PluginRegistry.addGmcpEvent(pkg, doc)` declares a GMCP event package, sent with `PluginWorld.gmcp`.

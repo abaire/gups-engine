@@ -236,6 +236,40 @@
       ]
     },
     {
+      "symbol": "gmcp_package",
+      "name": "gmcp_package",
+      "doc": "Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "gmcp_package.name",
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "keyword": false,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The GMCP package name, two or more dot-separated parts.",
+          "since": 1
+        },
+        {
+          "symbol": "gmcp_package.doc",
+          "name": "doc",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "\"\"",
+          "allowed_values": [],
+          "doc": "Shown in the docs.",
+          "since": 1
+        }
+      ]
+    },
+    {
       "symbol": "item",
       "name": "item",
       "doc": "Declares an item prototype.",
@@ -3671,6 +3705,44 @@
         ]
       },
       {
+        "symbol": "ctx.gmcp",
+        "name": "gmcp",
+        "doc": "Sends a GMCP event to a player's client. Returns whether it was sent.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.gmcp.player",
+            "name": "player",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who receives the event; mobs receive nothing."
+          },
+          {
+            "symbol": "ctx.gmcp.package",
+            "name": "package",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "A GMCP package this package declared, or one nested in it."
+          },
+          {
+            "symbol": "ctx.gmcp.data",
+            "name": "data",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "None, int, str, bool, list or dict (16 KB of JSON at most)."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.heal",
         "name": "heal",
         "doc": "Restores a vital of target, up to its maximum.",
@@ -6790,7 +6862,7 @@
       "symbol": "p",
       "name": "p",
       "builtin_type": "player",
-      "doc": "A test player: its view fields plus do(line) and output().",
+      "doc": "A test player: its view fields plus do(line), output() and gmcp().",
       "since": 1,
       "fields": [
         {
@@ -7041,6 +7113,24 @@
           "doc": "Actors engaged with this one.",
           "since": 1,
           "params": []
+        },
+        {
+          "symbol": "p.gmcp",
+          "name": "gmcp",
+          "doc": "GMCP messages received since the last call, as {'package', 'data'} dicts.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "p.gmcp.package",
+              "name": "package",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "A GMCP package name, or None for every message."
+            }
+          ]
         },
         {
           "symbol": "p.has_flag",
@@ -7889,6 +7979,16 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Character creation answers, or None."
+            },
+            {
+              "symbol": "w.spawn_player.gmcp",
+              "name": "gmcp",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "GMCP packages this test client supports, or None for none."
             }
           ]
         },

@@ -124,30 +124,134 @@ internal fun hookRefOrNull(v: Any?, what: String): HookRef? =
 
 // ---- Script-compatible values -------------------------------------------------------------------
 
+/**
+ * Bounds one value's conversion: its nesting and its JSON size, charged before descending into each
+ * part, so a value that shares one list many times, or contains itself, fails at the cap instead of
+ * being expanded.
+ */
+private class ConversionBudget(
+  private val what: String,
+  private val limits: ScriptLimits,
+  /** What the value is called in the size error, such as "payload". */
+  private val noun: String,
+  private val maxBytes: Int,
+) {
+  private var size = 0
+  private var depth = 0
+
+  fun charge(bytes: Int) {
+    size += bytes
+    if (size > maxBytes)
+      limitFail(
+        "alloc_limit",
+        "$what: $noun of at least $size bytes is over the ${maxBytes / 1024} KB limit",
+      )
+  }
+
+  /** Converts a list or dict of [n] elements with [block], one level deeper. */
+  fun <T> collection(n: Int, block: () -> T): T {
+    checkSize(n, what, limits)
+    if (depth >= limits.maxNesting)
+      limitFail("alloc_limit", "$what: lists and dicts may nest at most ${limits.maxNesting} deep")
+    charge(2 + (n - 1).coerceAtLeast(0))
+    depth++
+    try {
+      return block()
+    } finally {
+      depth--
+    }
+  }
+}
+
 /** Converts a script value for storage. `None` maps to null ("absent"). */
 internal fun toAttr(v: Any?, what: String, limits: ScriptLimits): AttrValue? =
+  toAttr(v, what, limits, ConversionBudget(what, limits, "value", limits.maxAttrBytes))
+
+private fun toAttr(v: Any?, what: String, limits: ScriptLimits, b: ConversionBudget): AttrValue? =
   when (v) {
     null,
     Starlark.NONE -> null
-    is StarlarkInt -> AttrValue.I(v.toLong(what))
-    is String -> AttrValue.S(checkString(v, what, limits))
-    is Boolean -> AttrValue.B(v)
-    is Sequence<*> -> {
-      checkSize(v.size, what, limits)
-      AttrValue.L(v.map { toAttr(it, what, limits) ?: fail("$what: lists can't hold None") })
-    }
-    is Dict<*, *> -> {
-      checkSize(v.size, what, limits)
-      AttrValue.M(
-        v.entries.associate { (k, value) ->
-          (k as? String ?: fail("$what: dict keys must be strings, got ${typeName(k)}")) to
-            (toAttr(value, what, limits) ?: fail("$what: dicts can't hold None"))
-        }
-      )
-    }
+    is StarlarkInt -> AttrValue.I(v.toLong(what)).also { b.charge(it.v.toString().length) }
+    is String -> AttrValue.S(checkString(v, what, limits)).also { b.charge(jsonStringSize(v)) }
+    is Boolean -> AttrValue.B(v).also { b.charge(if (v) 4 else 5) }
+    is Sequence<*> ->
+      b.collection(v.size) {
+        AttrValue.L(v.map { toAttr(it, what, limits, b) ?: fail("$what: lists can't hold None") })
+      }
+    is Dict<*, *> ->
+      b.collection(v.size) {
+        AttrValue.M(
+          v.entries.associate { (k, value) ->
+            val key = k as? String ?: fail("$what: dict keys must be strings, got ${typeName(k)}")
+            b.charge(jsonStringSize(key) + 1)
+            key to (toAttr(value, what, limits, b) ?: fail("$what: dicts can't hold None"))
+          }
+        )
+      }
     is StarlarkFloat -> fail("$what: floats can't be stored; use an int (for example, tenths)")
     else -> fail("$what: a ${typeName(v)} can't be stored; use an int, string, bool, list or dict")
   }
+
+/** Largest GMCP payload a script may send, as compact UTF-8 JSON. */
+internal const val MAX_GMCP_PAYLOAD_BYTES = 16_384
+
+/**
+ * [v] as a plain GMCP value (null, Long, String, Boolean, List, Map<String, Any?>). `None` is
+ * allowed anywhere. Raises `alloc_limit` when the JSON form is over [MAX_GMCP_PAYLOAD_BYTES].
+ */
+internal fun toGmcp(v: Any?, what: String, limits: ScriptLimits): Any? =
+  toGmcp(v, what, limits, ConversionBudget(what, limits, "payload", MAX_GMCP_PAYLOAD_BYTES))
+
+private fun toGmcp(v: Any?, what: String, limits: ScriptLimits, b: ConversionBudget): Any? =
+  when (v) {
+    null,
+    Starlark.NONE -> null.also { b.charge(4) }
+    is StarlarkInt -> v.toLong(what).also { b.charge(it.toString().length) }
+    is String -> checkString(v, what, limits).also { b.charge(gmcpStringSize(it)) }
+    is Boolean -> v.also { b.charge(if (it) 4 else 5) }
+    is Sequence<*> -> b.collection(v.size) { v.map { toGmcp(it, what, limits, b) } }
+    is Dict<*, *> ->
+      b.collection(v.size) {
+        v.entries.associate { (k, value) ->
+          val key = k as? String ?: fail("$what: dict keys must be strings, got ${typeName(k)}")
+          b.charge(gmcpStringSize(key) + 1)
+          key to toGmcp(value, what, limits, b)
+        }
+      }
+    is StarlarkFloat -> fail("$what: floats can't be sent; use an int (for example, tenths)")
+    else ->
+      fail("$what: a ${typeName(v)} can't be sent; use an int, string, bool, list, dict or None")
+  }
+
+/** The UTF-8 size of [v]'s compact JSON form. */
+internal fun gmcpJsonSize(v: Any?): Int =
+  when (v) {
+    null -> 4
+    is Boolean -> if (v) 4 else 5
+    is Long -> v.toString().length
+    is String -> gmcpStringSize(v)
+    is List<*> -> 2 + v.sumOf { gmcpJsonSize(it) } + (v.size - 1).coerceAtLeast(0)
+    is Map<*, *> ->
+      2 +
+        v.entries.sumOf { gmcpStringSize(it.key as String) + 1 + gmcpJsonSize(it.value) } +
+        (v.size - 1).coerceAtLeast(0)
+    else -> error("gmcpJsonSize: unexpected value ${typeName(v)}")
+  }
+
+/** A string's JSON size, quotes and escapes included. */
+private fun gmcpStringSize(s: String): Int =
+  2 +
+    s.sumOf { c ->
+      when {
+        c == '"' || c == '\\' -> 2
+        c == '\n' || c == '\t' || c == '\r' || c == '\b' || c.code == 0x0C -> 2
+        c.code < 0x20 -> 6
+        c.code < 0x80 -> 1
+        c.code < 0x800 -> 2
+        c.isSurrogate() -> 2
+        else -> 3
+      }
+    }
 
 /** A fresh, mutable Starlark copy of [v] owned by [mu]. */
 internal fun fromAttr(v: AttrValue, mu: Mutability?): Any =
@@ -227,3 +331,25 @@ fun storableValue(v: Any?, what: String): AttrValue? = toAttr(v, what, ScriptLim
 
 /** An immutable Starlark value for a stored attribute. */
 fun starlarkValue(v: AttrValue): Any = fromAttr(v, null)
+
+/**
+ * An immutable Starlark copy of a plain GMCP payload, as the listener would encode it: integral
+ * numbers become ints, other numbers floats, collections lists, maps dicts with string keys, and
+ * anything else its string form.
+ */
+fun gmcpValue(v: Any?): Any =
+  when (v) {
+    null -> Starlark.NONE
+    is String -> v
+    is Boolean -> v
+    is Long -> StarlarkInt.of(v)
+    is Int,
+    is Short,
+    is Byte -> StarlarkInt.of((v as Number).toLong())
+    is Number -> StarlarkFloat.of(v.toDouble())
+    is Map<*, *> ->
+      Dict.immutableCopyOf(v.entries.associate { (k, value) -> k.toString() to gmcpValue(value) })
+    is Iterable<*> -> StarlarkList.immutableCopyOf(v.map(::gmcpValue))
+    is Array<*> -> StarlarkList.immutableCopyOf(v.map(::gmcpValue))
+    else -> v.toString()
+  }

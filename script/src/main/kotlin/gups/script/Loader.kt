@@ -12,6 +12,7 @@ import gups.core.world.CommandRegistry
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.HookName
+import gups.core.world.gmcpOverlaps
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 import net.starlark.java.eval.EvalException
@@ -117,6 +118,8 @@ class ScriptLoader(
   /** Plugin namespaces by id, predeclared in every package and test file. */
   val pluginGlobals: Map<String, Any> = plugins.globals,
   val knownTraits: () -> Set<String> = { plugins.traits },
+  /** GMCP packages plugins registered, which script packages may not overlap. */
+  val knownGmcp: () -> Set<String> = { plugins.gmcpPackages },
 ) {
   /** The world's `MODULE.gups`; a world without a valid one has an empty schema. */
   val module: WorldModule by lazy { WorldModule.read(dir).first }
@@ -459,6 +462,7 @@ class ScriptLoader(
       propagate()
       checkNamespaces()
       checkRegions()
+      checkGmcp()
       checkCommands()
       propagate()
       dryRun()
@@ -613,6 +617,37 @@ class ScriptLoader(
               "region",
               "region '$name' is declared by more than one package: ${pkgs.joinToString(", ") { "//$it" }}",
             )
+        }
+      }
+    }
+
+    /** Declared GMCP packages may not overlap across packages or with a plugin's. */
+    fun checkGmcp() {
+      val decls = live.flatMap { st -> st.pkg.gmcpPackages.map { it.name to st.pkg.path } }
+      for (i in decls.indices) {
+        for (j in (i + 1) until decls.size) {
+          val (a, pa) = decls[i]
+          val (b, pb) = decls[j]
+          if (pa == pb || !gmcpOverlaps(a, b)) continue
+          states.getValue(pa).errors +=
+            LoadError(pa, "gmcp", "GMCP package '$a' of //$pa overlaps '$b' of //$pb")
+          states.getValue(pb).errors +=
+            LoadError(pb, "gmcp", "GMCP package '$b' of //$pb overlaps '$a' of //$pa")
+        }
+      }
+      val plugin = knownGmcp()
+      for (st in live) {
+        for (decl in st.pkg.gmcpPackages) {
+          plugin
+            .firstOrNull { gmcpOverlaps(decl.name, it) }
+            ?.let {
+              st.errors +=
+                LoadError(
+                  st.pkg.path,
+                  "gmcp",
+                  "GMCP package '${decl.name}' overlaps the plugin package '$it'",
+                )
+            }
         }
       }
     }

@@ -218,17 +218,23 @@ class GupsServer(
     if (messages.problems().isNotEmpty()) return false
     messages.warnings(module.features).forEach { log("warning: $it") }
     val plugins = loadPlugins(dir, module) { log("warning: $it") }.also { plugins = it }
+    // Packages that use a skipped plugin fail to load and are left out, as any failed package is.
+    val loader =
+      ScriptLoader(
+        dir,
+        ScriptLimits(),
+        pluginGlobals = plugins.globals,
+        knownGmcp = { plugins.gmcpPackages },
+      )
+    val result = loader.load(packages)
+    for (e in result.errors) log("load error: ${e.render()}")
     docs =
       DocsRenderer.render(
           ScriptApi.model(HarnessApi.specs()),
           plugins = plugins.describe().map(::toDocSpec),
-          world = worldDocSpec(module, messages),
+          world = worldDocSpec(module, messages, scriptGmcpPackages(result)),
         )
         .mapValues { it.value.toByteArray(Charsets.UTF_8) }
-    // Packages that use a skipped plugin fail to load and are left out, as any failed package is.
-    val loader = ScriptLoader(dir, ScriptLimits(), pluginGlobals = plugins.globals)
-    val result = loader.load(packages)
-    for (e in result.errors) log("load error: ${e.render()}")
     val protos = result.prototypes()
     if (protos.rooms.isEmpty()) {
       log("No package loaded any rooms; nothing to play.")

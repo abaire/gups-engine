@@ -43,7 +43,13 @@ class ReproRunner(
     matches: (Diagnostic) -> Boolean,
   ): Outcome {
     val notes = mutableListOf<String>()
-    val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+    val loader =
+      ScriptLoader(
+        dir,
+        ScriptLimits.HARNESS,
+        pluginGlobals = plugins.globals,
+        knownGmcp = { plugins.gmcpPackages },
+      )
     val result = loader.load(dir.packages())
     result.errors.forEach { notes += "load error: ${it.render()}" }
     val host = StarlarkHost(result, ScriptLimits.HARNESS, loader)

@@ -383,6 +383,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.gmcp" class="entry">
+<h4><code>gmcp(player, package, data)</code> <span class="since">since api_version 1</span></h4>
+<p>Sends a GMCP event to a player's client. Returns whether it was sent.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.gmcp.player"><td><code>player</code></td><td>positional or named</td><td></td><td>Actor who receives the event; mobs receive nothing.</td></tr>
+<tr id="ctx.gmcp.package"><td><code>package</code></td><td>positional or named</td><td></td><td>A GMCP package this package declared, or one nested in it.</td></tr>
+<tr id="ctx.gmcp.data"><td><code>data</code></td><td>positional or named</td><td></td><td>None, int, str, bool, list or dict (16 KB of JSON at most).</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.heal" class="entry">
 <h4><code>heal(target, amount, vital)</code> <span class="since">since api_version 1</span></h4>
 <p>Restores a vital of target, up to its maximum.</p>

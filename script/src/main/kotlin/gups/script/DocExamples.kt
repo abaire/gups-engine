@@ -38,7 +38,7 @@ object DocExamples {
    * Symbols whose example package is a `lib` package rather than a `zone`, because the declaration
    * is only allowed there.
    */
-  val LIB_SYMBOLS: Set<String> = setOf("global_command")
+  val LIB_SYMBOLS: Set<String> = setOf("global_command", "gmcp_package")
 
   private fun ex(pkg: String = "", test: String = "", module: String = ""): DocExample =
     DocExample(
@@ -123,6 +123,14 @@ object DocExamples {
                 p = w.spawn_player("Tess", at = ":start")
                 t.contains(p.do("pulse"), "It is pulse")
             """,
+        ),
+      "gmcp_package" to
+        ex(
+          pkg =
+            """
+                # Only lib and rules packages may declare GMCP packages.
+                gmcp_package("Shop.Stock", doc = "Items for sale where the player stands.")
+            """
         ),
       "item" to
         ex(

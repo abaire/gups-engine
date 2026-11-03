@@ -1,5 +1,7 @@
 package gups.core
 
+import gups.core.world.gmcpWithin
+
 /** Input from a connected client session, in the order it arrived. */
 sealed interface ClientEvent {
   val session: SessionId
@@ -140,9 +142,13 @@ interface OutputSink {
 /**
  * An [OutputSink] that records all delivered output in memory, used for tests and headless worlds.
  */
-class CapturingSink : OutputSink {
+class CapturingSink(
+  /** GMCP packages this sink supports, as a client's `Core.Supports` would list them. */
+  private val supports: Set<String> = emptySet()
+) : OutputSink {
   private val buffer = StringBuilder()
   private val all = StringBuilder()
+  private val gmcpMessages = mutableListOf<Pair<String, Any?>>()
 
   /** Reason provided when the session was closed, or null while still open. */
   var closedReason: String? = null
@@ -152,6 +158,12 @@ class CapturingSink : OutputSink {
     buffer.append(text)
     all.append(text)
   }
+
+  override fun gmcp(pkg: String, data: Any?) {
+    gmcpMessages += pkg to data
+  }
+
+  override fun wantsGmcp(pkg: String): Boolean = supports.any { gmcpWithin(pkg, it) }
 
   override fun close(reason: String) {
     closedReason = reason
@@ -163,4 +175,7 @@ class CapturingSink : OutputSink {
   /** Complete historical transcript of all text sent to this sink. */
   val transcript: String
     get() = all.toString()
+
+  /** Drains and returns the GMCP messages received since the previous call. */
+  fun drainGmcp(): List<Pair<String, Any?>> = gmcpMessages.toList().also { gmcpMessages.clear() }
 }

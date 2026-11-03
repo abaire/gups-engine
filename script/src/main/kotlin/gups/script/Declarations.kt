@@ -41,10 +41,12 @@ import gups.core.world.ActorFilter
 import gups.core.world.Aggressive
 import gups.core.world.Assist
 import gups.core.world.Behavior
+import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.Flee
 import gups.core.world.Follow
+import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.Guard
 import gups.core.world.HookName
 import gups.core.world.Lane
@@ -53,6 +55,8 @@ import gups.core.world.Scavenge
 import gups.core.world.Sentinel
 import gups.core.world.Wander
 import gups.core.world.ZoneCommand
+import gups.core.world.gmcpOverlaps
+import gups.core.world.gmcpWithin
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Dict
@@ -579,6 +583,9 @@ private fun actorFilter(v: Any?, what: String, pkg: String): ActorFilter {
 private fun effectValue(v: Any?, what: String): Effect =
   (v as? EffectDecl)?.effect
     ?: fail("$what: expected an effect such as damage(...), got ${typeName(v)}")
+
+/** Roots script packages may not send under: engine trees the bundled client subscribes to. */
+internal val SCRIPT_RESERVED_GMCP_ROOTS = setOf("Core", "Char", "Room", "Comm", "Gups")
 
 /**
  * The declaration builtins, plus the effect primitives and constants. Effect primitives work
@@ -1459,6 +1466,33 @@ internal class DeclarationBuiltins(
         fail("global_command(): '$verb' is already registered")
       ctx.pkg.commandList +=
         GlobalCommandDecl(verb, hookRef(d["fn"], "global_command(fn)"), l, ctx.pkg.path)
+      Starlark.NONE
+    }
+  }
+
+  @StarlarkMethod(
+    name = "gmcp_package",
+    doc = "Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun gmcpPackage(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    val ctx = contentCtx(thread, "gmcp_package")
+    return GMCP_PACKAGE_SPEC.bind(args, kwargs, features = features) { d ->
+      if (!ctx.pkg.kind.privileged)
+        fail("gmcp_package(): only lib and rules packages may declare GMCP packages")
+      val name = d.reqStr("name", "gmcp_package() name")
+      if (!GMCP_PACKAGE_NAME.matches(name))
+        fail("gmcp_package(): '$name' needs at least two dot-separated parts, such as Shop.Stock")
+      SCRIPT_RESERVED_GMCP_ROOTS.firstOrNull { gmcpWithin(name, it) }
+        ?.let { fail("gmcp_package(): '$name' uses the reserved root $it") }
+      ENGINE_GMCP_PACKAGES.firstOrNull { gmcpOverlaps(name, it) }
+        ?.let { fail("gmcp_package(): '$name' overlaps the engine's $it") }
+      ctx.pkg.gmcpList
+        .firstOrNull { gmcpOverlaps(name, it.name) }
+        ?.let { fail("gmcp_package(): '$name' overlaps '${it.name}', already declared here") }
+      ctx.pkg.gmcpList += GmcpPackageDecl(name, d.str("doc") ?: "", ctx.pkg.path)
       Starlark.NONE
     }
   }
@@ -2653,6 +2687,26 @@ internal class DeclarationBuiltins(
           ),
       )
 
+    val GMCP_PACKAGE_SPEC =
+      DeclSpec(
+        name = "gmcp_package",
+        doc =
+          "Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.",
+        positionalError = "gmcp_package() takes the package name as its only positional argument",
+        params =
+          listOf(
+            DeclParam(
+              "name",
+              "str",
+              "The GMCP package name, two or more dot-separated parts.",
+              positional = true,
+              keyword = false,
+              required = true,
+            ),
+            DeclParam("doc", "str", "Shown in the docs.", default = "\"\""),
+          ),
+      )
+
     val GLOBAL_COMMAND_SPEC =
       DeclSpec(
         name = "global_command",
@@ -2711,6 +2765,7 @@ internal class DeclarationBuiltins(
         ITEM_SPEC,
         SKILL_SPEC,
         REGION_SPEC,
+        GMCP_PACKAGE_SPEC,
         GLOBAL_COMMAND_SPEC,
         STRUCT_SPEC,
       ) + SCHEMA_SPECS

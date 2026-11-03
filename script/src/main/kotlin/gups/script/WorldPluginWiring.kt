@@ -11,6 +11,10 @@ interface WorldPluginWiring {
   val traits: Set<String>
     get() = emptySet()
 
+  /** Every GMCP package plugins registered: state, event and input. */
+  val gmcpPackages: Set<String>
+    get() = emptySet()
+
   /** Registers plugin commands, effects and GMCP producers. Call before StarlarkHost.install. */
   fun install(world: World)
 

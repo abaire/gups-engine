@@ -1497,6 +1497,44 @@
         ]
       },
       {
+        "symbol": "ctx.gmcp",
+        "name": "gmcp",
+        "doc": "Sends a GMCP event to a player's client. Returns whether it was sent.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.gmcp.player",
+            "name": "player",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who receives the event; mobs receive nothing."
+          },
+          {
+            "symbol": "ctx.gmcp.package",
+            "name": "package",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "A GMCP package this package declared, or one nested in it."
+          },
+          {
+            "symbol": "ctx.gmcp.data",
+            "name": "data",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "None, int, str, bool, list or dict (16 KB of JSON at most)."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.heal",
         "name": "heal",
         "doc": "Restores a vital of target, up to its maximum.",

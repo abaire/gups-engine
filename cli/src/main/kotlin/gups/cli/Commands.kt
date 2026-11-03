@@ -49,6 +49,7 @@ import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginMemberInfo
 import gups.script.ApiDiff
 import gups.script.Linter
+import gups.script.LoadResult
 import gups.script.MethodSpec
 import gups.script.ParamSpec
 import gups.script.ScriptApi
@@ -507,7 +508,13 @@ class Lint : CliktCommand(name = "lint") {
         try {
           git.run("worktree", "add", "--detach", "--quiet", staging.toString(), commit)
           val baseDir = WorldDir(staging)
-          val baseLoader = ScriptLoader(baseDir, ScriptLimits(), pluginGlobals = plugins.globals)
+          val baseLoader =
+            ScriptLoader(
+              baseDir,
+              ScriptLimits(),
+              pluginGlobals = plugins.globals,
+              knownGmcp = { plugins.gmcpPackages },
+            )
           val baseResult = baseLoader.load(baseDir.packages())
           if (!baseResult.ok) {
             val errs = baseResult.errors.joinToString("\n") { it.render() }
@@ -724,9 +731,13 @@ class Docs : CliktCommand(name = "docs") {
           val (messages, messagesError) = WorldMessages.read(worldDir)
           if (messagesError != null) throw UsageError("--world: ${messagesError.render()}")
           messages.problems().firstOrNull()?.let { throw UsageError("--world: $it") }
-          spec = worldDocSpec(module, messages)
           loadPlugins(worldDir, module) { echo("warning: $it", err = true) }
-            .use { it.describe().map(::toDocSpec) }
+            .use { host ->
+              val result =
+                ScriptLoader(worldDir, ScriptLimits(), plugins = host).load(worldDir.packages())
+              spec = worldDocSpec(module, messages, scriptGmcpPackages(result))
+              host.describe().map(::toDocSpec)
+            }
         }
         .orEmpty()
     val files =
@@ -1098,12 +1109,25 @@ class ImportRoster : CliktCommand(name = "import-roster") {
   }
 }
 
+/** GMCP packages declared by the packages that loaded, for `world.html`. */
+internal fun scriptGmcpPackages(result: LoadResult): List<ScriptGmcpDocSpec> =
+  result.packages
+    .filterKeys { it !in result.failed }
+    .values
+    .flatMap { it.gmcpPackages }
+    .map { ScriptGmcpDocSpec(it.name, it.doc, it.pkg) }
+
 /** What `world.html` and the feature filter of `gups docs --world` need from a world. */
-fun worldDocSpec(module: WorldModule, messages: WorldMessages): WorldDocSpec =
+fun worldDocSpec(
+  module: WorldModule,
+  messages: WorldMessages,
+  gmcp: List<ScriptGmcpDocSpec> = emptyList(),
+): WorldDocSpec =
   WorldDocSpec(
     module.schema,
     module.features,
     module.rename,
     CommandRegistry.describe(module.features, module.rename),
     messages.texts,
+    gmcp,
   )

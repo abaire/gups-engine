@@ -440,7 +440,13 @@ class StarlarkHost(
   fun stage(dir: WorldDir): StagedWorld {
     val packages = dir.packages()
     val next =
-      ScriptLoader(dir, limits, pluginGlobals = loader?.pluginGlobals.orEmpty()).load(packages)
+      ScriptLoader(
+          dir,
+          limits,
+          pluginGlobals = loader?.pluginGlobals.orEmpty(),
+          knownGmcp = loader?.knownGmcp ?: { emptySet() },
+        )
+        .load(packages)
     val errors =
       when {
         !next.ok -> next.errors.map { it.render() }

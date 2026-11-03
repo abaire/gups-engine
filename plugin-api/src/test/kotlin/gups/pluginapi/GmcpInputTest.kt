@@ -61,6 +61,15 @@ class GmcpInputTest {
     w.handle(ClientGmcpEvent(p.session!!, "shop.buy", data, false, 1_000_000_000))
 
   @Test
+  fun `the wiring lists a plugin's state, event and input packages`() {
+    val host = PluginHost.of(ShopGmcpPlugin())
+    assertEquals(
+      setOf("Shop.Stocks", "Shop.Stock", "Shop.Buy", "Shop.Stocks.Buy"),
+      host.gmcpPackages,
+    )
+  }
+
+  @Test
   fun `a client message runs the handler with plain data`() {
     val (p, _) = connect()
     message(p, mapOf("item" to "sword"))

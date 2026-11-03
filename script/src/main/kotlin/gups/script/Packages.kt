@@ -114,6 +114,9 @@ internal data class FileInfo(val label: Label, val pkg: String, val test: Boolea
 /** A `global_command` registered by a privileged package. */
 data class GlobalCommandDecl(val name: String, val fn: HookRef, val lane: Lane, val pkg: String)
 
+/** A GMCP package a lib or rules package sends with `ctx.gmcp`. */
+data class GmcpPackageDecl(val name: String, val doc: String, val pkg: String)
+
 /** Everything one package declared. Built while the package evaluates, then read-only. */
 class ScriptPackage internal constructor(val path: String) {
   var kind: PackageKind = PackageKind.ZONE
@@ -147,6 +150,7 @@ class ScriptPackage internal constructor(val path: String) {
   internal val itemList = mutableListOf<ItemProto>()
   internal val skillList = mutableListOf<SkillProto>()
   internal val regionList = mutableListOf<RegionProto>()
+  internal val gmcpList = mutableListOf<GmcpPackageDecl>()
   internal val commandList = mutableListOf<GlobalCommandDecl>()
   internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
 
@@ -185,6 +189,9 @@ class ScriptPackage internal constructor(val path: String) {
 
   val regions: List<RegionProto>
     get() = regionList
+
+  val gmcpPackages: List<GmcpPackageDecl>
+    get() = gmcpList
 
   val globalCommands: List<GlobalCommandDecl>
     get() = commandList

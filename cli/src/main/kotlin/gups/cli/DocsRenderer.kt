@@ -35,6 +35,9 @@ data class PluginCommandDocSpec(
 /** A GMCP package a plugin adds, for `plugins.html`. */
 data class PluginGmcpDocSpec(val pkg: String, val doc: String, val kind: String = "state")
 
+/** A GMCP package a script package declares, for `world.html`. */
+data class ScriptGmcpDocSpec(val pkg: String, val doc: String, val declaredBy: String)
+
 /** A trait a plugin adds, for `plugins.html`. */
 data class PluginTraitDocSpec(
   val name: String,
@@ -92,6 +95,8 @@ data class WorldDocSpec(
   val commands: List<CommandInfo>,
   /** `MESSAGES.gups` overrides by message id. */
   val messages: Map<String, String> = emptyMap(),
+  /** GMCP packages the world's `lib` and `rules` packages declare. */
+  val gmcp: List<ScriptGmcpDocSpec> = emptyList(),
 )
 
 /**
@@ -480,6 +485,22 @@ object DocsRenderer {
           .append(c.feature?.let { esc(it.id) } ?: "")
           .append("</td></tr>\n")
         append("</tbody>\n</table>\n")
+        if (w.gmcp.isNotEmpty()) {
+          h2("GMCP packages", "The GMCP packages this world's lib and rules packages declare.")
+          append(
+            "<table>\n<thead><tr><th>Package</th><th>Doc</th><th>Declared by</th></tr></thead>\n<tbody>\n"
+          )
+          for (g in w.gmcp.sortedBy { it.pkg }) {
+            append("<tr><td><code>")
+              .append(esc(g.pkg))
+              .append("</code></td><td>")
+              .append(esc(g.doc))
+              .append("</td><td><code>")
+              .append(esc(g.declaredBy))
+              .append("</code></td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
       }
       h2("Messages", "Every player-facing line of the engine; MESSAGES.gups overrides them by id.")
       append(

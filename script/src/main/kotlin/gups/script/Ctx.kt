@@ -13,7 +13,9 @@ import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HookContext
 import gups.core.world.InvariantViolation
 import gups.core.world.Proposal
@@ -34,6 +36,8 @@ import gups.core.world.destroy
 import gups.core.world.echo
 import gups.core.world.emote
 import gups.core.world.findActor
+import gups.core.world.gmcp
+import gups.core.world.gmcpWithin
 import gups.core.world.heal
 import gups.core.world.isSimulated
 import gups.core.world.levelDown
@@ -432,6 +436,50 @@ internal constructor(
     verb("send") {
       world.send(actorArg(target, "send(target)"), text(text, "send(text)"))
       Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "gmcp",
+    doc = "Sends a GMCP event to a player's client. Returns whether it was sent.",
+    parameters =
+      [
+        Param(
+          name = "player",
+          named = true,
+          doc = "Actor who receives the event; mobs receive nothing.",
+        ),
+        Param(
+          name = "package",
+          named = true,
+          doc = "A GMCP package this package declared, or one nested in it.",
+        ),
+        Param(
+          name = "data",
+          named = true,
+          doc = "None, int, str, bool, list or dict (16 KB of JSON at most).",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun gmcp(player: Any, pkg: Any, data: Any, thread: StarlarkThread): Any =
+    verb("gmcp", "$pkg") {
+      val a = actorArg(player, "gmcp(player)")
+      val pkgName = str(pkg, "gmcp(package)")
+      require(GMCP_PACKAGE_NAME.matches(pkgName)) { "'$pkgName' is not a GMCP package name" }
+      val caller = pkgOf(thread)
+      val declared = frame.host.scripts.packages[caller]?.gmcpPackages.orEmpty()
+      if (declared.none { gmcpWithin(pkgName, it.name) }) {
+        val declarer =
+          frame.host.scripts.packages.values.firstOrNull {
+            it.gmcpPackages.any { d -> gmcpWithin(pkgName, d.name) }
+          }
+        fail(
+          "gmcp(package): code in //$caller didn't declare a GMCP package for '$pkgName'" +
+            (declarer?.let { " (use the helpers exported by //${it.path})" } ?: "")
+        )
+      }
+      val payload = toGmcp(data, "gmcp(data)", frame.host.limits)
+      if (a !is Player) false else world.gmcp(a, pkgName, payload)
     }
 
   @StarlarkMethod(

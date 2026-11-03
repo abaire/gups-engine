@@ -117,6 +117,24 @@ class DocsWorldTest {
   }
 
   @Test
+  fun `world html lists the gmcp packages the lib declares`() {
+    val dir =
+      tempWorld(
+        mapOf(
+          "lib/package.star" to "package(api_version = 1, kind = \"lib\")",
+          "lib/a.star" to "gmcp_package(\"Shop.Stock\", doc = \"Items for sale\")",
+          "zones/z/package.star" to "package(api_version = 1, kind = \"zone\")",
+          "zones/z/rooms.star" to "room(\"start\")",
+        )
+      )
+    val world = docs("--world", dir.toString()).getValue("world.html")
+    assertContains(world, "<h2>GMCP packages")
+    assertContains(world, "<code>Shop.Stock</code>")
+    assertContains(world, "Items for sale")
+    assertContains(world, "<code>lib</code>")
+  }
+
+  @Test
   fun `a MESSAGES gups with a problem stops docs --world`() {
     val copy = Files.createTempDirectory("gups-docs-world")
     java.io.File(robot).copyRecursively(copy.toFile())

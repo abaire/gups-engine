@@ -17,6 +17,7 @@ import gups.core.world.attach
 import gups.core.world.awardXp
 import gups.core.world.damage
 import gups.core.world.flushOutput
+import gups.core.world.gmcpWithin
 import gups.core.world.grantTrait
 import gups.core.world.handle
 import gups.core.world.levelDown
@@ -37,6 +38,7 @@ import gups.script.ViewScope
 import gups.script.callerPackage
 import gups.script.damageTypeName
 import gups.script.describeBuiltin
+import gups.script.gmcpValue
 import gups.script.starlarkValue
 import gups.script.statsValue
 import gups.script.storableValue
@@ -168,6 +170,12 @@ internal constructor(
           defaultValue = "None",
           doc = "Character creation answers, or None.",
         ),
+        Param(
+          name = "gmcp",
+          named = true,
+          defaultValue = "None",
+          doc = "GMCP packages this test client supports, or None for none.",
+        ),
       ],
     useStarlarkThread = true,
   )
@@ -180,11 +188,18 @@ internal constructor(
     skills: Any,
     index: Any,
     choices: Any,
+    gmcp: Any,
     thread: StarlarkThread,
   ): Any {
     val room = roomArg(at, "spawn_player(at)", thread)
     val overrideVitals = vitalsValue(vitals, "spawn_player(vitals)")
     val overrideStats = statsValue(stats, "spawn_player(stats)")
+    val supports: Set<String> =
+      if (isNone(gmcp)) emptySet()
+      else
+        (gmcp as? List<*> ?: evalFail("spawn_player(gmcp): expected a list of GMCP package names"))
+          .map { str(it, "spawn_player(gmcp)") }
+          .toSet()
     val choicesMap = LinkedHashMap<String, String>()
     if (!isNone(choices)) {
       val dict = choices as? Dict<*, *> ?: evalFail("spawn_player(choices): expected a dict")
@@ -247,7 +262,7 @@ internal constructor(
         p.skills[skill] = int(v, "spawn_player(skills)")
       }
     }
-    val sink = CapturingSink()
+    val sink = CapturingSink(supports)
     val id = SessionId(nextSession++)
     world.handle(WorldControlEvent.Connect(id, sink))
     world.attach(id, p)
@@ -603,10 +618,10 @@ internal constructor(
     }
 }
 
-/** A connected player in a test world: an actor view plus `do` and `output`. */
+/** A connected player in a test world: an actor view plus `do`, `output` and `gmcp`. */
 @StarlarkBuiltin(
   name = "player",
-  doc = "A test player: its view fields plus do(line) and output().",
+  doc = "A test player: its view fields plus do(line), output() and gmcp().",
 )
 class PlayerHandle
 internal constructor(
@@ -638,6 +653,30 @@ internal constructor(
   fun output(): Any {
     w.world.flushOutput()
     return sink.drain()
+  }
+
+  @StarlarkMethod(
+    name = "gmcp",
+    doc = "GMCP messages received since the last call, as {'package', 'data'} dicts.",
+    parameters =
+      [
+        Param(
+          name = "package",
+          named = true,
+          defaultValue = "None",
+          doc = "A GMCP package name, or None for every message.",
+        )
+      ],
+  )
+  fun gmcp(pkg: Any): Any {
+    w.world.flushOutput()
+    val filter = if (isNone(pkg)) null else str(pkg, "gmcp(package)")
+    val msgs = sink.drainGmcp().filter { filter == null || gmcpWithin(it.first, filter) }
+    return StarlarkList.immutableCopyOf(
+      msgs.map { (name, data) ->
+        Dict.immutableCopyOf(mapOf("package" to name, "data" to gmcpValue(data)))
+      }
+    )
   }
 }
 

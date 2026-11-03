@@ -47,7 +47,13 @@ class MigrationChecker(
   private val json = Json { ignoreUnknownKeys = true }
 
   fun check(): Outcome {
-    val loader = ScriptLoader(worldDir, ScriptLimits(), pluginGlobals = plugins.globals)
+    val loader =
+      ScriptLoader(
+        worldDir,
+        ScriptLimits(),
+        pluginGlobals = plugins.globals,
+        knownGmcp = { plugins.gmcpPackages },
+      )
     val loadResult = loader.load(worldDir.packages())
     if (!loadResult.ok) {
       return Outcome(ok = false, problems = loadResult.errors.map { it.render() })

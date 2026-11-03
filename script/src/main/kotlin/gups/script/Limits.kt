@@ -90,6 +90,11 @@ data class ScriptLimits(
    */
   val maxAttrBytes: Int = 64 * 1024,
   /**
+   * Lists and dicts nested more than this deep (8) are rejected where they reach the engine, as
+   * attribute values, timer arguments and GMCP payloads.
+   */
+  val maxNesting: Int = 8,
+  /**
    * More than this many errors (20) from one package within [quarantineWindowPulses] quarantines
    * it.
    */

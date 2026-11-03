@@ -216,7 +216,7 @@ gups-engine/
     (§7.3).
   - It uses no plugins.
 - **Package kinds:** `zone`, `lib`, `rules`, `skills`. Only `lib` and `rules` packages are *privileged*. They may
-  declare shared attribute namespaces and global commands (§4.9).
+  declare shared attribute namespaces, global commands (§4.9) and GMCP packages (§4.10).
 - **Load labels vs target labels:** `load("//lib:quest.star", "quest")` addresses a *file*. `//zones/forest:clearing`
   addresses a *declaration* named `clearing` in any non-test `.star` file of package `zones/forest`. Declaration names
   are unique per package.
@@ -372,6 +372,8 @@ conversion rules in [Values.kt](../script/src/main/kotlin/gups/script/Values.kt)
 - `None` means "absent": setting an attribute to `None` deletes it.
 - Floats, functions, and host objects cannot be stored and produce errors when assigned.
 - An entity's serialized custom attributes are limited to 64 KB, measured as compact JSON.
+- Lists and dicts may nest at most 8 deep, and one value (an attribute, a timer argument, or one key of a `migrate`
+  result) may be at most 64 KB as compact JSON. A deeper or larger value raises `alloc_limit` (§6.1).
 - `core` stays free of `kotlinx.serialization`. Custom attribute values are serialized directly to JSON in the `persist`
   module: ints and booleans as JSON numbers and booleans, strings as strings, lists as arrays, and dicts as objects.
 
@@ -883,6 +885,7 @@ item("satchel", container=container(capacity=10, max_weight=20,
                                     state="closed", key=None))
 
 region("null_field", modifiers={...})  # region-wide modifiers (§4.6)
+gmcp_package("Shop.Stock", doc="Items for sale where the player stands.")  # lib and rules only (§4.10)
 
 
 def migrate(old_version, attrs):  # optional, per package (§3.4)
@@ -938,6 +941,10 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
 - **Regions:** `region(name, modifiers = {...})` declares a region's modifiers. Region names are lowercase words and
   world-wide: one package declares each, and two packages declaring the same name both fail to load. A room may carry a
   region nobody declares; it is then only a tag.
+- **GMCP packages:** `gmcp_package(name, doc = "")` declares a GMCP package the package sends with `ctx.gmcp`. Only
+  `lib` and `rules` packages may declare one. A name has two or more dot-separated parts, may not use the roots `Core`,
+  `Char`, `Room`, `Comm` or `Gups`, and may not equal, contain or nest in an engine package, a plugin's package, or
+  another declared name, compared ignoring case. Two packages whose names overlap both fail to load.
 - **Loot:** a loot `chance` is a probability between 0 and 1.
 - **Mob numbers:** a mob's `stats`, `vitals` (maxima) and `resists` are its prototype's declared values, the input
   `rules.starting_stats` sees at each spawn (§4.6). There are no `hp` or `armor` arguments; those are schema names.
@@ -1140,7 +1147,7 @@ when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`,
 
 |       Group       |                                                                                                                                         Verbs                                                                                                                                          |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Messaging         | `say(speaker, text)`, `emote(actor, text)`, `send(target, text)` (one recipient), `echo(room, text, exclude=[])`                                                                                                                                                                       |
+| Messaging         | `say(speaker, text)`, `emote(actor, text)`, `send(target, text)` (one recipient), `echo(room, text, exclude=[])`, `gmcp(player, package, data)`                                                                                                                                        |
 | Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                           |
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
@@ -1160,6 +1167,11 @@ when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`,
 
 - **Errors:** a bad verb argument raises a script error at once. Invalid-argument and invalid-state errors from the
   engine become script errors too.
+- **`gmcp`:** sends the GMCP event `package` with `data` to `player`, after its pending text and before the prompt, and
+  returns whether it was sent. `package` must be, or nest in, a GMCP package the calling package declared (§4.2); zones
+  send through `lib` helpers. It returns `False` for a mob, a link-dead player, or a client that didn't ask for the
+  package. `data` may hold `None`, ints, strings, bools, lists and dicts with string keys; lists and dicts may nest at
+  most 8 deep, and its JSON may be at most 16 KB.
 - **`deny`:** raises unless the running hook is a `before_*` hook (or a `cast_allowed` modifier).
 - **Timers:** callbacks are called as `fn(ctx, **args)` and also see the arguments as `ctx.args`. The timer's owner is
   the scheduling hook's `ctx.self`.
@@ -1798,7 +1810,8 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                     | When changed; only in worlds with a creation provider or a trait                                 |
 
   `Room.Bands` entries carry entity ids, only ever for the viewer's own room, so clients can key their band view and
-  tell identical mobs apart. Plugins may add state and event packages, and receive GMCP input (§4.15).
+  tell identical mobs apart. Plugins may add state and event packages, and receive GMCP input (§4.15). `lib` and `rules`
+  packages may declare event packages (§4.2) and send them with `ctx.gmcp` (§4.5).
 
 - **GMCP values:** `core` builds payloads as plain values (`String`, `Long`, `Boolean`, `List`, `Map<String, *>`,
   `null`), since it has no kotlinx.serialization dependency; `net` encodes them as JSON. The seam is
@@ -2004,11 +2017,11 @@ maximum, with `type` defaulting to the unarmed damage type.
   mob from `w.spawn` carries its prototype's traits.
 - Player handles have `choices`, `traits` and `has_trait` as view fields.
 
-|      Object       |                                                                                                                                                                                                                        API                                                                                                                                                                                                                         |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                  |
-| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
-| player handle `p` | `do(line) -> output`, `output()`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                 |
+|      Object       |                                                                                                                                                                                                                              API                                                                                                                                                                                                                              |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                             |
+| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                      |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use instead of `//rules`.
   `bubble=True` keeps a reality bubble; without it every room is always simulated, so a mob can flee with no player
@@ -2016,6 +2029,10 @@ maximum, with `type` defaulting to the unarmed damage type.
 - **`p.do(line)`** submits the line directly, bypassing the session rate limiter. It runs pulses until the player's
   queue is empty and it isn't casting (at most 1000; more is an error), and returns all output since the last `do()` or
   `output()`.
+- `spawn_player(..., gmcp=[...])` lists the GMCP packages the test client supports; a client with no `gmcp` supports
+  none, so scripts send it nothing. `p.gmcp(package=None)` returns the GMCP messages received since the last call as
+  `{"package", "data"}` dicts, optionally only those in `package`'s tree, and drains them; messages filtered out are
+  still removed.
 - Harness players are exempt from the idle auto-quit. Worlds run in strict mode with the invariant check after every
   pulse, and with the wall-clock backstop off, so results never depend on machine speed.
 - A test function's own code may spend 10,000,000 steps; pulses it runs don't count.
@@ -2307,7 +2324,7 @@ and JSON documentation by [DocsRenderer.kt](../cli/src/main/kotlin/gups/cli/Docs
 **The model.** One machine-readable description of the script API drives the docs, the changelog check and plugin docs,
 so they can't drift apart:
 
-- **Declarations:** Each declaration (the 13 package declarations, plus `module` and `server`) has a `DeclSpec` listing
+- **Declarations:** Each declaration (the 14 package declarations, plus `module` and `server`) has a `DeclSpec` listing
   its parameters with type, default, allowed values, doc and `since`. The builtins parse their arguments through the
   spec (§4.2), so unknown-argument errors, spelling suggestions and docs share one source. After parsing, every
   parameter of the spec must have been read, so a parameter a builtin ignores can't be accepted and silently dropped. A
@@ -2368,7 +2385,7 @@ appear by their renamed names. The files, in order:
 | `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands. Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                                                                                        |
+| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands, and the GMCP packages its `lib` and `rules` packages declare (name, doc and declaring package). Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                        |
 | `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
 | `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -3474,7 +3491,10 @@ Resource bounds, deterministic step accounting, wall-clock backstops, and bounda
   commands charge to their declaring or registering package.
 - **Boundary allocation caps:** Values crossing from Starlark into the engine (strings, lists, dicts, timer arguments,
   and serialized entity `customAttributes`) are checked against boundary size caps to prevent memory exhaustion, raising
-  an `alloc_limit` error when exceeded.
+  an `alloc_limit` error when exceeded. A GMCP payload is the same kind of boundary value: a `ctx.gmcp` payload whose
+  compact JSON form exceeds 16 KiB raises `alloc_limit`. Lists and dicts nested more than 8 deep, and a storable value
+  over 64 KB of JSON (§3.2), raise `alloc_limit` too. Sizes and depth are checked while a value converts, so a value
+  that shares one list many times or contains itself fails at the cap instead of being expanded.
 - Starlark's language invariants guarantee frozen module globals, no I/O access, and no unbounded recursion.
 
 ### 6.2 Script Error Handling
@@ -3710,3 +3730,4 @@ template's `.github/workflows/gates.yml`.
 | **M19**   | Track-lag modifier points: `advance_lag`, `retreat_lag`, `retreat_fail_lag` and `flee_fail_lag` as modifier points on the acting actor's chain, the final value clamped to 0; plugin trait modifiers for them; the template's `tar_walker_boots` (§4.6, §4.15, §5.5).                                                                                                                                                                                 |
 | **M20**   | Consumables and charges: per-instance `charges` with `empty` (destroy, keep or a variant) and `set_charges`; declarative `use_effect`, `use_target` and `use_lag`; effect primitives move to the kernel; `use` reaches ground items; plugin facade charges (§3.3, §3.10, §4.2, §4.3, §4.5, §4.9, §4.15).                                                                                                                                              |
 | **M21**   | Plugin GMCP input and events: inbound GMCP routed to the plugin that registered the package (`onGmcp`), with size, depth and rate limits; a read-only `PluginGmcpWorld` whose handlers act through `command`; plugin GMCP event packages (`addGmcpEvent`, `PluginWorld.gmcp`); case-insensitive GMCP name checks and the reserved `Core` root (§4.10, §4.11, §4.15, §4.16, §5.1, §6.4).                                                               |
+| **M22**   | Starlark GMCP events: `gmcp_package()` for `lib` and `rules` packages with reserved roots and world-wide overlap checks, `ctx.gmcp(player, package, data)`, GMCP payload values and the 16 KB cap, harness `spawn_player(gmcp=)` and `p.gmcp()`, `world.html` listing (§2.3, §4.2, §4.5, §4.10, §4.12, §4.16, §6.1).                                                                                                                                  |

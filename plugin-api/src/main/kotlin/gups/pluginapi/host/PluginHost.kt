@@ -437,6 +437,16 @@ internal constructor(
   override val traits: Set<String>
     get() = plugins.flatMap { it.reg.traits.keys }.toSet()
 
+  override val gmcpPackages: Set<String>
+    get() =
+      plugins
+        .flatMap { p ->
+          p.reg.gmcp.map { it.pkg } +
+            p.reg.gmcpEvents.map { it.pkg } +
+            p.reg.gmcpInputs.map { it.pkg }
+        }
+        .toSet()
+
   /** The ids that loaded, sorted. */
   val ids: List<String>
     get() = plugins.map { it.id }
