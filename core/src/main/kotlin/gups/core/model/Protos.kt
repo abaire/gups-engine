@@ -274,6 +274,12 @@ data class ItemProto(
   val charges: Int? = null,
   /** What happens when the last charge is spent; ignored without [charges]. */
   val empty: EmptyAction = EmptyAction.Destroy,
+  /** Effect a `use` applies, with the user as caster, or null. */
+  val useEffect: Effect? = null,
+  /** Whom [useEffect] acts on, chosen as for a skill's target. */
+  val useTarget: TargetKind = TargetKind.SELF,
+  /** Recovery lag in pulses after a use. */
+  val useLag: Int = 0,
 ) {
   init {
     require(slotCost >= 1) { "slotCost must be >= 1, was $slotCost" }

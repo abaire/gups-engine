@@ -17,6 +17,10 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   is still in the world, the use spends one charge, or one item of a stack; the last charge runs the item's `empty`
   action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without `charges` is never
   used up; `on_use` destroys it if it should be.
+- Added kernel messages `use.self_only` ("You can only use {item} on yourself."), `use.at_whom` ("Use {item} on whom?"),
+  `use.on_what` ("Use {item} on what?"), `use.done` ("You use {item}."), and `use.done.room` ("{actor} uses {item}.").
+- `use <item> <target item>` now refuses a target item on the ground that is out of `get_lag` reach, even for items
+  without a `use_effect`.
 - The effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence` no longer need the
   `skills` feature; `knockback` and `pull` still need `track`.
 

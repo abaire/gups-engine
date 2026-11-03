@@ -1579,11 +1579,18 @@ uses the default names. Every player-facing message here is the default text of 
 - **`equipment`:** lists worn items in the order of the actor's slots, then any other occupied slot by name, marking
   inactive items (§4.6).
 - **`use <item> [target]`:** the item is worn, carried, or on the ground within `get_lag` reach (in that order of
-  search), and must have an `on_use` hook ("You can't use that." otherwise). `before_use` can veto. The target is an
-  actor in the room, else an item. An item with `charges` and none left is refused ("There are no charges left in
-  {item}."). After `on_use`, if the item is still in the world, the use spends one charge, or one item of a stack; the
-  last charge runs the item's `empty` action: destroy it, keep it at 0 charges, or `transform` it into the named
-  variant. An item without `charges` is never used up; `on_use` destroys it if it should be.
+  search), and must have an `on_use` hook or a `use_effect` (§4.2) ("You can't use that." otherwise). An item with
+  `charges` and none left is refused ("There are no charges left in {item}."). Without a `use_effect`, the target is an
+  actor in the room, else an item. With one, `use_target` picks it as for skills (§4.3) without a range check: `self` is
+  the user (a target word is refused: "You can only use {item} on yourself."); `ally` the named actor or the user;
+  `enemy` the named actor or the user's primary target ("Use {item} on whom?"); `item` a named item worn, carried or on
+  the ground ("Use {item} on what?"); `none` nothing. A target item on the ground, with or without a `use_effect`, must
+  also be within `get_lag` reach. The order is: `before_use` (can veto), the `use_effect` with the user as caster,
+  `on_use`, then, if the item is still in the world, one charge spent (or one item of a stack) and on the last, the
+  item's `empty` action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without
+  `charges` is never used up; `on_use` destroys it if it should be. A use that isn't refused or vetoed sets the user's
+  recovery lag to `use_lag`. When the item has a `use_effect` and no `on_use` hook, the user sees "You use {item}." and
+  onlookers "{actor} uses {item}." before the effect.
 - **Stacks:** `get`, `drop`, `give` and `put` merge a stackable item into a stack of the same prototype in the same
   place with identical attributes and decay deadline, and no timers or name override on either (§3.8 inv. 8).
 

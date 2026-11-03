@@ -14,6 +14,7 @@ import gups.core.model.ItemProto
 import gups.core.model.Player
 import gups.core.model.RestrictionPoint
 import gups.core.model.RestrictionRequest
+import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 
 /** The commands every world has. Their aliases come from the world. */
@@ -824,8 +825,8 @@ internal object KernelCommands {
 
   /**
    * `use <item> [target]`: an item worn, carried, or on the ground within reach whose `before_use`
-   * doesn't veto; fires its `on_use`. The target is an actor in the room, or else an item carried
-   * or on the ground.
+   * doesn't veto. Resolves target by `useTarget` when `useEffect` is present, applies the effect,
+   * fires `on_use`, spends a charge, and applies recovery lag.
    */
   private fun planUse(c: CommandCall): Action? {
     val w = c.world
@@ -835,15 +836,65 @@ internal object KernelCommands {
       (c.actor.equipment.values.firstOrNull { it.matches(words[0]) }
         ?: w.findItem(c.actor, words[0], inventory = true, ground = true))
         ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
+    // Checked before the target too, so an empty item isn't answered with a target prompt.
+    if (item.charges == 0)
+      return null.also { w.tell(c.actor, KernelMsg.USE_EMPTY, "item" to item.name) }
     val word = words.getOrNull(1)?.trim()?.removePrefix("on ")?.trim()?.ifEmpty { null }
-    val target = word?.let { w.findActor(c.actor, it) }
-    val targetItem =
-      if (word != null && target == null) {
-        w.findItem(c.actor, word, inventory = true, ground = true)
-          ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
-      } else {
-        null
+    val target: Actor?
+    val targetItem: Item?
+    if (item.proto.useEffect == null) {
+      target = word?.let { w.findActor(c.actor, it) }
+      targetItem =
+        if (word != null && target == null) {
+          w.findItem(c.actor, word, inventory = true, ground = true)
+            ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
+        } else {
+          null
+        }
+    } else {
+      when (item.proto.useTarget) {
+        TargetKind.SELF -> {
+          if (word != null) {
+            return null.also { w.tell(c.actor, KernelMsg.USE_SELF_ONLY, "item" to item.name) }
+          }
+          target = c.actor
+          targetItem = null
+        }
+        TargetKind.ALLY -> {
+          target =
+            word?.let {
+              w.findActor(c.actor, it) ?: return null.also { w.tell(c.actor, KernelMsg.NOT_HERE) }
+            } ?: c.actor
+          targetItem = null
+        }
+        TargetKind.ENEMY -> {
+          target =
+            word?.let {
+              w.findActor(c.actor, it) ?: return null.also { w.tell(c.actor, KernelMsg.NOT_HERE) }
+            }
+              ?: c.actor.primaryTarget?.let(w::actor)
+              ?: return null.also { w.tell(c.actor, KernelMsg.USE_AT_WHOM, "item" to item.name) }
+          targetItem = null
+        }
+        TargetKind.ITEM -> {
+          val itemWord =
+            word ?: return null.also { w.tell(c.actor, KernelMsg.USE_ON_WHAT, "item" to item.name) }
+          targetItem =
+            c.actor.equipment.values.firstOrNull { it.matches(itemWord) }
+              ?: w.findItem(c.actor, itemWord, inventory = true, ground = true)
+              ?: return null.also { w.tell(c.actor, KernelMsg.DONT_SEE) }
+          target = null
+        }
+        TargetKind.NONE -> {
+          target = null
+          targetItem = null
+        }
       }
+    }
+    val lag = item.proto.useLag
+    val announce = item.proto.useEffect != null && !w.scripts.hasHook(item, HookName.ON_USE)
+    val effect = item.proto.useEffect
+    val useTarget = item.proto.useTarget
     val ctx = { actor: Actor ->
       HookContext(actor = actor, item = item, target = target, targetItem = targetItem)
     }
@@ -861,7 +912,14 @@ internal object KernelCommands {
         }
         if (target != null && !w.isPresent(target, w.roomOf(actor)))
           return w.msg(KernelMsg.NOT_HERE)
-        if (!w.scripts.hasHook(item, HookName.ON_USE))
+        if (targetItem != null) {
+          if (w.item(targetItem.id) !== targetItem || !w.isPresent(targetItem, w.roomOf(actor)))
+            return w.msg(KernelMsg.DONT_SEE)
+          w.reach(actor, targetItem)?.let {
+            return it
+          }
+        }
+        if (!w.scripts.hasHook(item, HookName.ON_USE) && item.proto.useEffect == null)
           return w.msg(KernelMsg.USE_CANT, "item" to item.name)
         if (item.charges == 0) return w.msg(KernelMsg.USE_EMPTY, "item" to item.name)
         return null
@@ -871,9 +929,26 @@ internal object KernelCommands {
         w.dispatch(HookName.BEFORE_USE, item, actor.room, ctx(actor))
 
       override fun resolve(w: World, actor: Actor): Int {
+        if (announce) {
+          w.tell(actor, KernelMsg.USE_DONE, "item" to item.name)
+          w.tellSight(
+            actor.room,
+            "use",
+            actor,
+            w.msg(KernelMsg.USE_DONE_ROOM, "actor" to actor.name.cap(), "item" to item.name),
+            actor,
+          )
+        }
+        if (effect != null) {
+          if (useTarget == TargetKind.ITEM) {
+            targetItem?.let { w.applyItemEffect(effect, actor, it) }
+          } else {
+            w.applyEffect(effect, actor, target)
+          }
+        }
         w.dispatch(HookName.ON_USE, item, actor.room, ctx(actor))
         if (w.item(item.id) === item) w.spendCharge(item)
-        return 0
+        return lag
       }
     }
   }

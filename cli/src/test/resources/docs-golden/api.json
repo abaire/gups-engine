@@ -5048,6 +5048,14 @@
       "since": 1
     },
     {
+      "symbol": "message:use.at_whom",
+      "id": "use.at_whom",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "Use {item} on whom?",
+      "since": 1
+    },
+    {
       "symbol": "message:use.cant",
       "id": "use.cant",
       "placeholders": ["item"],
@@ -5056,11 +5064,43 @@
       "since": 1
     },
     {
+      "symbol": "message:use.done",
+      "id": "use.done",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You use {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:use.done.room",
+      "id": "use.done.room",
+      "placeholders": ["actor", "item"],
+      "required": [],
+      "default": "{actor} uses {item}.",
+      "since": 1
+    },
+    {
       "symbol": "message:use.empty",
       "id": "use.empty",
       "placeholders": ["item"],
       "required": [],
       "default": "There are no charges left in {item}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:use.on_what",
+      "id": "use.on_what",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "Use {item} on what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:use.self_only",
+      "id": "use.self_only",
+      "placeholders": ["item"],
+      "required": [],
+      "default": "You can only use {item} on yourself.",
       "since": 1
     },
     {

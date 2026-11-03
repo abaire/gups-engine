@@ -237,13 +237,23 @@ moderation, quotas, and cross-character delivery handled?
 
 ## Economy and crafting
 
-### Shops and crafting
+### Shops
 
 **Spec:** §5.11 (item custody log notes shops and banks do not exist yet). **Today:** items can be moved between
-inventories, dropped, or given, but the engine has no merchant behaviors, currency transaction mechanics, or crafting
-recipes. **Questions:** - Should shops and crafting ship as standard `//lib` libraries or require engine primitives? -
-How should shop inventories handle infinite vs. limited stock, restocking cadences, and currency types? - How should
-crafting recipes define material requirements, skill checks, failure results, and item quality variations?
+inventories, dropped, or given, but the engine has no merchant behaviors or currency transaction mechanics.
+**Questions:** - Should shops ship as a standard `//lib` library or require engine primitives? - How should shop
+inventories handle infinite vs. limited stock, restocking cadences, and currency types?
+
+### Crafting
+
+**Spec:** §3.3 (items, `variants`), §4.3 (skills and proficiency). **Today:** the engine has no crafting recipes. Items
+can be transformed into variants, spawned and destroyed by scripts, but nothing turns materials into a product. Split
+from the shops design because it is much more involved; it depends on "Skill proficiency" for skill checks.
+**Questions:** - Should crafting ship as a standard `//lib` library or require engine primitives? - How should recipes
+define material requirements, tools, workstations and skill checks? - What happens on failure (materials lost, a flawed
+product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
+overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
+feature?
 
 ## World building and administration
 

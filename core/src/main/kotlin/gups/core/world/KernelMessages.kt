@@ -123,6 +123,11 @@ object KernelMsg : MsgGroup(null) {
   val USE_WHAT = msg("use.what", "Use what?")
   val USE_CANT = msg("use.cant", "You can't use {item}.", "item")
   val USE_EMPTY = msg("use.empty", "There are no charges left in {item}.", "item")
+  val USE_SELF_ONLY = msg("use.self_only", "You can only use {item} on yourself.", "item")
+  val USE_AT_WHOM = msg("use.at_whom", "Use {item} on whom?", "item")
+  val USE_ON_WHAT = msg("use.on_what", "Use {item} on what?", "item")
+  val USE_DONE = msg("use.done", "You use {item}.", "item")
+  val USE_DONE_ROOM = msg("use.done.room", "{actor} uses {item}.", "actor,item")
 
   private val verbs = DoorVerb.entries
 
