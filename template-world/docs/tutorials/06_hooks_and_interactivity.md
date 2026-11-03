@@ -232,9 +232,59 @@ mob("training_dummy",
 
 ---
 
+## 8. Custom Hooks: `hooks = {...}` and `ctx.call_hook()`
+
+The catalog hooks above are fired by the engine. Sometimes one script needs to ask another entity a question of your
+own: "what does this shopkeeper charge?", "what does this guard say to this visitor?". Rooms, mobs and items take `hooks
+= {"name": fn}` for that, and any script runs them with `ctx.call_hook(entity, name, **args)`:
+
+```python
+def _greeting(ctx, visitor):
+    # ctx.self is the mob whose hook this is
+    if visitor.level < 3:
+        return "Welcome, newcomer."
+    return "Back again, %s?" % visitor.name
+
+
+mob("innkeeper",
+    name="the innkeeper",
+    hooks={"greeting": _greeting},
+    )
+
+
+def _ask(ctx):
+    keeper = ctx.here("innkeeper")
+    if keeper == None:
+        ctx.send(ctx.actor, "There's no one here to ask.")
+        return
+    text = ctx.call_hook(keeper, "greeting", visitor=ctx.actor)
+    ctx.send(ctx.actor, text or "The innkeeper ignores you.")
+
+
+room("inn",
+    name="The Inn",
+    commands={"ask": _ask},
+    )
+```
+
+* **Never fired by the engine:** a custom hook runs only when a script calls it. Names follow the tag rules (`a-z`,
+  digits and `_`) and can't reuse a catalog name such as `on_use`.
+* **Arguments** are keyword arguments: `None`, ints, strings, bools, lists, dicts, and actor, item and room views. The
+  hook gets fresh views of the same entities (or `None` if one has left the world).
+* **Results** may be `None`, ints, strings, bools, lists and dicts, but not views. The caller gets its own copy.
+* **`None` back** (not `None` passed in, which is an error) means the entity is gone, has no such hook, its package is
+  quarantined or the hook failed. A failing hook is reported in the diagnostics; it doesn't fail the caller, so always
+  handle `None`.
+* **Its own package:** the hook runs with its own package's attributes and limits, and shares the caller's step budget.
+  Hooks may call other custom hooks, up to 8 deep.
+* **Plugins** can add handlers for the same name (`addHook`). They run after the entity's hook and can change its
+  result.
+
+---
+
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star)
 * **Specification:** [SPEC.md §4.4: Hook Catalog](../../../docs/SPEC.md#L993) and
   [§5.7: Perception](../../../docs/SPEC.md#L2853)
-* **HTML Documentation:** `hooks.html` and `ctx.html#after` in `gups docs`.
+* **HTML Documentation:** `hooks.html`, `ctx.html#ctx.after` and `ctx.html#ctx.call_hook` in `gups docs`.

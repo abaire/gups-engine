@@ -16,6 +16,11 @@ def test_the_sign_can_be_read(t):
     t.contains(p.do("read sign"), "Go north to meet the guide.")
     t.contains(p.do("read wall"), "nothing like that")
 
+def test_new_players_have_charisma(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":gate")
+    t.eq(p.cha, 10)
+
 def test_the_guide_greets_once(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":gate")

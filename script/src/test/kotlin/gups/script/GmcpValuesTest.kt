@@ -1,5 +1,7 @@
 package gups.script
 
+import gups.core.world.EntityRef
+import gups.core.world.World
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -149,5 +151,51 @@ class GmcpValuesTest {
     val e = assertFailsWith<EvalException> { toGmcp(nest(9), "data", limits) }
     assertEquals("alloc_limit", (e.cause as LimitExceeded).kind)
     assertContains(e.message!!, "nest at most 8 deep")
+  }
+
+  @Test
+  fun `toPlain converts views to entity refs`() {
+    val f =
+      ScriptFixture(
+        mapOf("zones/z/package.star" to zonePkg(), "zones/z/content.star" to "room(\"start\")")
+      )
+    val p = f.player()
+    val scope =
+      object : ViewScope {
+        override val world: World
+          get() = f.w
+
+        override val pkg: String? = null
+
+        override fun check() = Unit
+      }
+    val v = view(scope, p)
+    assertEquals(EntityRef(p.id), toPlain(v, "arg", limits, views = true))
+    val dict =
+      toPlain(Dict.immutableCopyOf(mapOf("who" to v)), "arg", limits, views = true) as Map<*, *>
+    assertEquals(EntityRef(p.id), dict["who"])
+    val list =
+      toPlain(StarlarkList.immutableCopyOf(listOf(v)), "arg", limits, views = true) as List<*>
+    assertEquals(EntityRef(p.id), list[0])
+  }
+
+  @Test
+  fun `toPlain without views refuses views`() {
+    val f =
+      ScriptFixture(
+        mapOf("zones/z/package.star" to zonePkg(), "zones/z/content.star" to "room(\"start\")")
+      )
+    val p = f.player()
+    val scope =
+      object : ViewScope {
+        override val world: World
+          get() = f.w
+
+        override val pkg: String? = null
+
+        override fun check() = Unit
+      }
+    val e = assertFailsWith<EvalException> { toPlain(view(scope, p), "arg", limits) }
+    assertContains(e.message!!, "can't be sent")
   }
 }

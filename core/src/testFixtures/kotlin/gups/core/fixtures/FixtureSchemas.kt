@@ -58,6 +58,7 @@ object FixtureSchemas {
               SchemaName("con", "Constitution"),
               SchemaName("int", "Intelligence"),
               SchemaName("wis", "Wisdom"),
+              SchemaName("cha", "Charisma"),
               SchemaName("armor", "Armor"),
             ),
           vitals =

@@ -8,6 +8,8 @@ import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginGmcpCall
+import gups.pluginapi.PluginGmcpWorld
+import gups.pluginapi.PluginHookCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginLane
@@ -38,6 +40,7 @@ class CursePluginTest {
       >()
     val effectPrimitives = mutableMapOf<String, Pair<List<PluginParam>, PluginEffect>>()
     val containmentFilters = mutableListOf<Pair<String, (PluginContainmentCall) -> Boolean>>()
+    val hooks = mutableListOf<Pair<String, (PluginHookCall) -> Any?>>()
 
     override fun addRestriction(
       point: PluginRestrictionPoint,
@@ -58,6 +61,10 @@ class CursePluginTest {
 
     override fun addContainmentFilter(doc: String, blocks: (PluginContainmentCall) -> Boolean) {
       containmentFilters.add(doc to blocks)
+    }
+
+    override fun addHook(name: String, doc: String, handle: (PluginHookCall) -> Any?) {
+      hooks.add(name to handle)
     }
 
     override fun addTrait(trait: PluginTrait) = TODO()
@@ -106,6 +113,7 @@ class CursePluginTest {
     override val wear: String? = null
     override val slotCost: Int = 1
     override val weight: Int = 1
+    override val value: Int = 0
     override val maxVitalDeltas: Map<String, Int> = emptyMap()
     override val resistDeltas: Map<String, Int> = emptyMap()
     override val inactive: Boolean = false
@@ -627,5 +635,48 @@ class CursePluginTest {
     val call = PluginContainmentCall(world, actor, container, item, affect)
 
     assertFalse(containmentFilter(call))
+  }
+
+  // ---- The shop_price hook handler ------------------------------------------------------------
+
+  private val shopPriceHandler = registry.hooks.single().second
+
+  @Test
+  fun `the plugin registers one shop_price hook`() {
+    assertEquals(1, registry.hooks.size)
+    assertEquals("shop_price", registry.hooks.single().first)
+  }
+
+  /** A `shop_price` call on the keeper [actor], as the shop library makes it. */
+  private fun hookCall(action: String, item: PluginItem?, price: Long?, result: Any?) =
+    object : PluginHookCall {
+      override val world: PluginGmcpWorld = this@CursePluginTest.world
+      override val entity = actor
+      override val name = "shop_price"
+      override val args: Map<String, Any?> =
+        mapOf("action" to action, "item" to item, "price" to price, "refusal" to null)
+      override val result = result
+    }
+
+  @Test
+  fun `shop_price surcharges buying a cursed item`() {
+    val cursed = FakeItem(listOf("cursed"))
+    assertEquals(35L, shopPriceHandler(hookCall("buy", cursed, 10L, null)))
+    assertEquals(35L, shopPriceHandler(hookCall("list", cursed, 10L, null)))
+  }
+
+  @Test
+  fun `shop_price surcharges the keeper's own price`() {
+    assertEquals(37L, shopPriceHandler(hookCall("buy", FakeItem(listOf("cursed")), 10L, 12L)))
+  }
+
+  @Test
+  fun `shop_price leaves clean items, sales and refusals alone`() {
+    val cursed = FakeItem(listOf("cursed"))
+    assertNull(shopPriceHandler(hookCall("buy", FakeItem(listOf()), 10L, null)))
+    assertNull(shopPriceHandler(hookCall("sell", cursed, 10L, null)))
+    assertNull(shopPriceHandler(hookCall("buy", null, 10L, null)))
+    assertNull(shopPriceHandler(hookCall("buy", cursed, null, null)))
+    assertEquals("Not you.", shopPriceHandler(hookCall("buy", cursed, 10L, "Not you.")))
   }
 }

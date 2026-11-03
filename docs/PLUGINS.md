@@ -235,6 +235,33 @@ them is disconnected. Each message takes a token from the session's line limit a
 ("Slow down." when there is none); `command` charges nothing more. Messages for a package no plugin registered, and
 messages sent before the player has a character, are ignored.
 
+### Custom hook handlers
+
+Scripts declare custom hooks on rooms, mobs and items (`hooks = {"name": fn}`) and run them with `ctx.call_hook(entity,
+name, **args)`. A plugin joins the chain of a custom hook name with `addHook`, and its handler runs after the entity's
+own hook, in plugin-id order. The handler gets a read-only `PluginGmcpWorld`, the entity, the arguments and the result
+so far — all as plain values, with entities as plugin entity views — and returns the new result as plain values only. A
+handler that throws is recorded as a `"plugin"` diagnostic and leaves the result unchanged. Names match
+`[a-z][a-z0-9_]*` and may not be a catalog hook name; one plugin registers a name once, and several plugins may share
+it.
+
+The hook runs on the entity the script names (for a shop, the keeper), so anything else the handler needs arrives in
+`call.args`. A `null` result means "keep the default", so a handler that adjusts a price starts from the result so far
+when there is one and from the default otherwise. From `samples/curse-plugin`, where `bearsCurse` checks the item and
+what it holds for the `cursed` tag:
+
+```kotlin
+r.addHook("shop_price", "Charges 25 more to buy a cursed item.") { call ->
+    val item = call.args["item"] as? PluginItem
+    val buying = call.args["action"] == "buy" || call.args["action"] == "list"
+    val price = if (call.result == null) call.args["price"] as? Long else call.result as? Long
+    if (buying && price != null && item?.let(::bearsCurse) == true) price + 25L else call.result
+}
+```
+
+Script ints arrive as `Long`. A handler may return `Int`s and any `Iterable`; they reach the next handler and the script
+as `Long`s and lists. Floats and other types are refused like a throw.
+
 ### Character creation, traits and restrictions
 
 Plugins can define traits, character creation choices and operational restrictions (`samples/heritage-plugin`):

@@ -92,6 +92,12 @@ class WeatherPluginTest {
       gmcpInputs[pkg] = handle
     }
 
+    override fun addHook(
+      name: String,
+      doc: String,
+      handle: (gups.pluginapi.PluginHookCall) -> Any?,
+    ) = TODO()
+
     override fun addTrait(trait: PluginTrait) = TODO()
 
     override fun setCreation(creation: PluginCreation) = TODO()

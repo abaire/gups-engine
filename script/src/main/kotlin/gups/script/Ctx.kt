@@ -15,6 +15,7 @@ import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.model.TAG_REGEX
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HookContext
 import gups.core.world.InvariantViolation
@@ -29,6 +30,7 @@ import gups.core.world.addItemTag
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
 import gups.core.world.awardXp
+import gups.core.world.callHook
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
 import gups.core.world.damage
@@ -377,6 +379,15 @@ internal constructor(
       else -> fail("$what: expected an actor, room or item, got ${typeName(x)}")
     }
 
+  /** An actor, item or room view whose entity is still in the world; null for a stale view. */
+  private fun hookOwner(x: Any?, what: String): Entity? =
+    when (x) {
+      is ActorView -> if (x.actor.inWorld) x.actor else null
+      is ItemView -> world.item(x.item.id)
+      is RoomView -> x.room
+      else -> fail("$what: expected an actor, item or room, got ${typeName(x)}")
+    }
+
   private fun text(x: Any?, what: String): String =
     checkString(str(x, what), what, frame.host.limits)
 
@@ -480,6 +491,41 @@ internal constructor(
       }
       val payload = toGmcp(data, "gmcp(data)", frame.host.limits)
       if (a !is Player) false else world.gmcp(a, pkgName, payload)
+    }
+
+  @StarlarkMethod(
+    name = "call_hook",
+    doc =
+      "Runs entity's custom hook name as fn(ctx, **args) with ctx.self the entity, then the plugin handlers for name, and returns their result as a fresh copy.",
+    parameters =
+      [
+        Param(name = "entity", named = true, doc = "Actor, item or room whose hook runs."),
+        Param(name = "name", named = true, doc = "Custom hook name."),
+      ],
+    extraKeywords =
+      Param(
+        name = "args",
+        doc =
+          "Keyword arguments for the hook: int, str, bool, list, dict or actor, item and room views.",
+      ),
+    useStarlarkThread = true,
+  )
+  fun callHook(entity: Any, name: Any, args: Dict<String, Any>, thread: StarlarkThread): Any =
+    verb("call_hook", "$name") {
+      val hookName = str(name, "call_hook(name)")
+      if (!TAG_REGEX.matches(hookName))
+        fail("call_hook(name): '$hookName' is not a valid hook name")
+      val plain =
+        args.entries.associate { (k, x) ->
+          k to toPlain(x, "call_hook($k)", frame.host.limits, views = true)
+        }
+      val e = hookOwner(entity, "call_hook(entity)") ?: return@verb Starlark.NONE
+      frame.host.beginCustomHook()
+      try {
+        fromPlain(world.callHook(e, hookName, plain), thread.mutability(), frame)
+      } finally {
+        frame.host.endCustomHook()
+      }
     }
 
   @StarlarkMethod(

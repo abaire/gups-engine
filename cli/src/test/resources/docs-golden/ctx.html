@@ -200,6 +200,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.call_hook" class="entry">
+<h4><code>call_hook(entity, name, **args)</code> <span class="since">since api_version 1</span></h4>
+<p>Runs entity's custom hook name as fn(ctx, **args) with ctx.self the entity, then the plugin handlers for name, and returns their result as a fresh copy.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.call_hook.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room whose hook runs.</td></tr>
+<tr id="ctx.call_hook.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Custom hook name.</td></tr>
+<tr id="ctx.call_hook.args"><td><code>**args</code></td><td>extra named</td><td></td><td>Keyword arguments for the hook: int, str, bool, list, dict or actor, item and room views.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.cancel" class="entry">
 <h4><code>cancel(timer_id)</code> <span class="since">since api_version 1</span></h4>
 <p>Cancels one of this owner's timers; True if it was pending.</p>

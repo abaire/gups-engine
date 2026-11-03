@@ -81,6 +81,9 @@ internal constructor(
   private val hookIndex: Map<Label, Map<HookName, HookRef>> =
     packages.values.flatMap { it.hooks.entries }.associate { it.key to it.value }
 
+  private val customHookIndex: Map<Label, Map<String, HookRef>> =
+    packages.values.flatMap { it.customHooks.entries }.associate { it.key to it.value }
+
   /** The frozen prototype table of every package that loaded. */
   fun prototypes(): Prototypes {
     val ps = packages.values
@@ -95,6 +98,9 @@ internal constructor(
   }
 
   fun hooks(label: Label): Map<HookName, HookRef> = hookIndex[label].orEmpty()
+
+  /** Custom hooks per prototype label, run with `ctx.call_hook`. */
+  fun customHooks(label: Label): Map<String, HookRef> = customHookIndex[label].orEmpty()
 
   /** The function a [HookRef] names now, or null if its file or function is gone. */
   internal fun function(ref: HookRef): StarlarkFunction? =

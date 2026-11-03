@@ -3,6 +3,7 @@ package gups.script
 import com.google.common.collect.ImmutableCollection
 import com.google.common.collect.ImmutableList
 import gups.core.EngineInfo
+import gups.core.HookRef
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.AffectScope
@@ -485,6 +486,18 @@ private fun commands(v: Any?, what: String, pkg: String): Map<String, ZoneComman
   }
 }
 
+/** A `hooks` dict: a custom hook name to a top-level function. */
+private fun customHooks(v: Any?, what: String): Map<String, HookRef> {
+  if (isNone(v)) return emptyMap()
+  val catalog = HookCatalog.specs.mapTo(HashSet()) { it.hook.scriptName }
+  return dict(v, what).entries.associate { (k, fn) ->
+    val name = k.lowercase()
+    if (!TAG_REGEX.matches(name)) fail("$what: '$name' is not a valid hook name")
+    if (name in catalog) fail("$what: '$name' is a catalog hook; pass it as $name=... instead")
+    name to hookRef(fn, "$what[\"$k\"]")
+  }
+}
+
 private fun version(d: ParsedDecl): Int {
   val v = d.int("version") ?: 1
   if (v < 1) fail("${d.fn}(version): must be at least 1")
@@ -706,6 +719,8 @@ internal class DeclarationBuiltins(
         fail("room(regions): '$r' is not a valid region name")
       ctx.pkg.roomList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
+      val hooks = customHooks(d["hooks"], d.what("hooks"))
+      if (hooks.isNotEmpty()) ctx.pkg.customHookMap[label] = hooks
       Starlark.NONE
     }
   }
@@ -936,6 +951,8 @@ internal class DeclarationBuiltins(
       if (proto.keywords.isEmpty()) fail("mob(keywords): a mob needs at least one keyword")
       ctx.pkg.mobList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
+      val hooks = customHooks(d["hooks"], d.what("hooks"))
+      if (hooks.isNotEmpty()) ctx.pkg.customHookMap[label] = hooks
       Starlark.NONE
     }
   }
@@ -1046,6 +1063,7 @@ internal class DeclarationBuiltins(
           kind = d.str("kind")?.lowercase() ?: def.kind,
           range = d["range"]?.let { band(it, d.what("range")) } ?: def.range,
           weight = d.int("weight") ?: def.weight,
+          value = d.int("value") ?: def.value,
           wear = wear ?: wield,
           slotCost = slotCost,
           dice = d["dice"]?.let { dice(it, d.what("dice")) },
@@ -1082,6 +1100,7 @@ internal class DeclarationBuiltins(
           useLag = useLag,
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
+      if (proto.value < 0) fail("item(value): must be at least 0")
       if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
       if (
         proto.wear == null &&
@@ -1102,6 +1121,8 @@ internal class DeclarationBuiltins(
       }
       ctx.pkg.itemList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
+      val hooks = customHooks(d["hooks"], d.what("hooks"))
+      if (hooks.isNotEmpty()) ctx.pkg.customHookMap[label] = hooks
       Starlark.NONE
     }
   }
@@ -2038,6 +2059,12 @@ internal class DeclarationBuiltins(
               default = "{}",
             ),
             DeclParam(
+              "hooks",
+              "dict[str, function]",
+              "Custom hooks, by name, run with ctx.call_hook.",
+              default = "{}",
+            ),
+            DeclParam(
               "modifiers",
               "dict[str, function]",
               "Room rules modifiers by modifier point name.",
@@ -2351,6 +2378,12 @@ internal class DeclarationBuiltins(
             ),
             DeclParam("think_every", "int", "Pulses between AI think cycles.", default = "4"),
             DeclParam(
+              "hooks",
+              "dict[str, function]",
+              "Custom hooks, by name, run with ctx.call_hook.",
+              default = "{}",
+            ),
+            DeclParam(
               "behaviors",
               "list[behavior]",
               "Built-in behaviors such as wander(...) or aggressive(...).",
@@ -2428,6 +2461,7 @@ internal class DeclarationBuiltins(
               allowedValues = BANDS,
             ),
             DeclParam("weight", "int", "Weight of one item.", default = "1"),
+            DeclParam("value", "int", "Base price of one item; 0 by default.", default = "0"),
             DeclParam(
               "wear",
               "str",
@@ -2500,6 +2534,12 @@ internal class DeclarationBuiltins(
               "commands",
               "dict[str, function]",
               "Item-local commands mapping verb name to fn(ctx).",
+              default = "{}",
+            ),
+            DeclParam(
+              "hooks",
+              "dict[str, function]",
+              "Custom hooks, by name, run with ctx.call_hook.",
               default = "{}",
             ),
             DeclParam(

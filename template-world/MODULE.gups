@@ -18,6 +18,7 @@ module(
         stat("con", label = "Constitution"),
         stat("int", label = "Intelligence"),
         stat("wis", label = "Wisdom"),
+        stat("cha", label = "Charisma"),
         "armor",
     ],
 

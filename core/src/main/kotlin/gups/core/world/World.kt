@@ -207,6 +207,9 @@ class World(
   /** Inbound GMCP packages, keyed by lowercase name. */
   val pluginGmcpIn: MutableMap<String, GmcpInput> = LinkedHashMap()
 
+  /** Plugin handlers per custom hook name, in plugin-id order. */
+  val pluginHooks: MutableMap<String, MutableList<CustomHookHandler>> = LinkedHashMap()
+
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
 
@@ -870,6 +873,14 @@ class World(
       is ItemLocation.Equipped -> actor(loc.actor)?.let { isPresent(it, room) } ?: false
       is ItemLocation.Contained -> item(loc.container)?.let { isPresent(it, room) } ?: false
     }
+}
+
+/** Runs [entity]'s custom hook [name], then the plugin handlers for it, and returns the result. */
+fun World.callHook(entity: Entity, name: String, args: Map<String, Any?>): Any? {
+  if (entity.id !in entities) return null
+  var result = scripts.invokeCustom(this, entity, name, args)
+  for (handler in pluginHooks[name].orEmpty()) result = handler.handle(this, entity, args, result)
+  return result
 }
 
 /**

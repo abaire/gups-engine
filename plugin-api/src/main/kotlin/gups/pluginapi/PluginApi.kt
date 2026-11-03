@@ -127,6 +127,16 @@ interface PluginRegistry {
    */
   fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit)
 
+  /**
+   * Joins the handler chain of custom hook [name]: after the entity's own hook, `ctx.call_hook`
+   * runs every plugin's handler for the name in plugin-id order. A handler gets a read-only
+   * [PluginGmcpWorld], the entity, the arguments and the result so far, all as plain values
+   * (entities as entity views), and returns the new result as plain values. A handler that throws
+   * records a `plugin` diagnostic and leaves the result unchanged. Names follow the custom hook
+   * rules; a plugin registers a name once.
+   */
+  fun addHook(name: String, doc: String, handle: (PluginHookCall) -> Any?)
+
   fun onWorldStarted(fn: (PluginWorld) -> Unit)
 
   fun addTrait(trait: PluginTrait)
@@ -189,6 +199,18 @@ interface PluginGmcpCall {
    * most once per message.
    */
   fun command(line: String): Boolean
+}
+
+/** One run of a plugin's handler for a custom hook. */
+interface PluginHookCall {
+  val world: PluginGmcpWorld
+  /** The room, actor or item whose hook is running. */
+  val entity: PluginEntity
+  val name: String
+  /** Arguments as plain values; entities appear as PluginRoom, PluginActor or PluginItem. */
+  val args: Map<String, Any?>
+  /** The result so far: the entity's own hook's, or the previous handler's. */
+  val result: Any?
 }
 
 data class PluginEffectCall(

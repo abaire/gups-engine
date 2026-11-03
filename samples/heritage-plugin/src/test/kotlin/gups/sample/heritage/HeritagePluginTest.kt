@@ -85,6 +85,12 @@ class HeritagePluginTest {
       blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
     ) = TODO()
 
+    override fun addHook(
+      name: String,
+      doc: String,
+      handle: (gups.pluginapi.PluginHookCall) -> Any?,
+    ) = TODO()
+
     override fun addBuiltin(
       name: String,
       doc: String,
@@ -187,6 +193,7 @@ class HeritagePluginTest {
     override val wear = "body"
     override val slotCost = 1
     override val weight = 10
+    override val value = 0
     override val maxVitalDeltas = emptyMap<String, Int>()
     override val resistDeltas = emptyMap<String, Int>()
     override val inactive = false

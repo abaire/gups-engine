@@ -108,6 +108,28 @@ class LoaderTest {
   }
 
   @Test
+  fun `item value defaults to 0 and must not be negative`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"bow\", value = 30)\nitem(\"coin\")",
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val p = r.prototypes()
+    assertEquals(30, p.item(Label("//zones/z:bow")).value)
+    assertEquals(0, p.item(Label("//zones/z:coin")).value)
+    assertEquals(0, p.item(Label("//engine:corpse")).value)
+
+    val bad =
+      load(
+        mapOf("zones/z/package.star" to zonePkg(), "zones/z/a.star" to "item(\"neg\", value = -1)")
+      )
+    assertContains(only(bad).message, "item(value): must be at least 0")
+  }
+
+  @Test
   fun `item with wear = ring loads with template rules, rign fails with did you mean`() {
     val filesGood =
       mapOf(

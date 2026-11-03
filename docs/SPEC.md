@@ -461,7 +461,8 @@ the world graph:
   part copies it, and stacks merge only with equal charges. `transform` gives the item the new prototype's `charges`. A
   reload that adds `charges` to a prototype fills its instances, one that removes them makes them unlimited, and one
   that changes the number caps each instance at the new value; restoring a saved item does the same against the
-  prototype it loads with.
+  prototype it loads with. An item prototype's `value` (default 0) is the base price of one item; the engine gives it no
+  other meaning.
 - **Container properties:** optional `ContainerState` with `capacity`, `maxWeight`, access `state` (`OPEN`, `CLOSED`,
   `LOCKED`), and `keyLabel`.
 - **Equipment and combat:** item `kind` (e.g. `melee`, `ranged`, `armor`, `consumable`), weapon `range` band, prototype
@@ -677,7 +678,7 @@ module(
   stats=[
     stat("str", label="Strength"), stat("dex", label="Dexterity"),
     stat("con", label="Constitution"), stat("int", label="Intelligence"),
-    stat("wis", label="Wisdom"), "armor",
+    stat("wis", label="Wisdom"), stat("cha", label="Charisma"), "armor",
   ],
   vitals=[vital("hp", label="Hit points"), "mana", vital("move", label="Movement")],
   damage_types=["bludgeon", "slash", "pierce", "fire"],
@@ -859,6 +860,7 @@ mob("goblin_scout",
     behaviors=[wander(radius=4, chance=0.1), aggressive(toward="players"),
                assist(allies=["goblin_*"]), flee(below=vitals(hp=20))],
     think=_scout_think, think_every=4,
+    hooks={},  # custom hooks, run with ctx.call_hook (§4.4)
     traits=[],  # plugin-defined traits, e.g. ["mage"] (§4.19)
     dormant_recovery="full",  # full | regen | none (§5.9)
     loot=[loot(":rusty_key", chance=0.25)],
@@ -866,7 +868,7 @@ mob("goblin_scout",
     )
 
 item("short_bow",
-     name="a short bow", plural=None, kind="ranged", range="far", weight=2,
+     name="a short bow", plural=None, kind="ranged", range="far", weight=2, value=30,
      wear="wield", slot_cost=1, dice="1d6", damage_type="pierce",
      stat_deltas=stats(dex=1),
      sense_deltas={"sight": 1},  # sense score changes while worn (§5.7)
@@ -876,7 +878,7 @@ item("short_bow",
      affects=[],  # item_affect(...) entries (§3.3)
      variants={},  # related prototypes, for transform (§4.5)
      stackable=False, decay_pulses=None,
-     commands={}, on_use=None,
+     commands={}, hooks={}, on_use=None,
      charges=None, empty="destroy",  # uses, and what the last one does (§4.9)
      use_effect=None, use_target="self", use_lag=0,  # declarative use (§4.9)
      )
@@ -923,6 +925,8 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   happens when the last is spent: `"destroy"` (the default), `"keep"` (the item stays at 0 charges), or the name of one
   of the item's `variants`, which it is transformed into. An `empty` other than `"destroy"` needs `charges`. A stackable
   item may only have `charges = 1` and can't `keep`.
+- **Value:** `value` is an item's base price, an int of at least 0 (default 0). The engine gives it no meaning;
+  libraries such as shops read it. `//engine:corpse` has 0.
 - **Use:** `use_effect` is an effect primitive (§4.3) that `use` applies with the user as caster. `use_target` (`enemy`,
   `ally`, `self`, `item` or `none`; `self` by default) other than `self` needs a `use_effect`; an `item` target allows
   only `apply_affect` (without `stunned`), plugin primitives and `sequence`, as for item skills, and only it may give
@@ -1063,6 +1067,10 @@ the fields the engine may set for that hook, and every other context field is `N
 and must be attachable to that kind of entity per the "Attach to" column. `before_attack` and `on_combat_tick` need the
 `combat` feature, and the cast hooks need `skills` (§3.10).
 
+**Custom hooks:** `room`, `mob` and `item` take `hooks = {"name": fn}`, hooks of the builder's own naming. Names match
+`[a-z][a-z0-9_]*` and may not be catalog names; each value is a top-level function. The engine never fires them: scripts
+run them with `ctx.call_hook` (§4.5), which also runs any plugin handlers for the name (§4.15).
+
 **`on_damage`:** `ctx.amount` is the total of the vital losses and `ctx.losses` the losses themselves, a `vitals(...)`
 value (§3.9); `ctx.type` is the damage type. It fires once per damage event, after the losses are applied.
 
@@ -1134,9 +1142,9 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
   without a door.
 
 **Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `charges` and `max_charges` (`None`
-when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`,
-`slot_cost`, `stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `inactive`, `affects`, `has_tag(tag)`,
-`variants`, `tags`, `in_world`. `tags` are the effective tags.
+when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`,
+`range`, `wear`, `slot_cost`, `stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `inactive`, `affects`,
+`has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are the effective tags.
 
 **Affect view:** `id`, `name`, `host`, `expires_at`, `remaining`, `flags`, `stat_deltas`, `sense_deltas`,
 `max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`.
@@ -1157,6 +1165,7 @@ when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`,
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                        |
 | State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                         |
+| Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                      |
 | Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                            |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                             |
 | Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`                                                                                                                                 |
@@ -1221,6 +1230,12 @@ when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`,
     `path_to`. It returns `False` when there is no way.
   - `act_cast` requires the mob to know the skill.
 - **Attributes:** `get_attr` returns a mutable copy.
+- **`call_hook`:** runs `entity`'s custom hook `name` (§4.4) as `fn(ctx, **args)` with `ctx.self` the entity, in the
+  hook's own package, then every plugin handler for `name` (§4.15), and returns the result: a fresh copy of `None`,
+  ints, strings, bools, lists and dicts. Arguments may also hold actor, item and room views, which the hook receives as
+  its own views (`None` if the entity left the world). It returns `None` when the entity is gone, nothing handles the
+  name, the package is quarantined or the hook fails; a failing hook is recorded as usual and doesn't fail the caller. A
+  hook that returns a view fails. More than 8 nested `call_hook`s is an error.
 - **Simulation verbs:** return `None`. A reason added twice counts once.
 - **`apply_affect`:** takes `modifiers`, `sense_deltas`, `max_vital_deltas` and `resist_deltas`, as the effect primitive
   does. On an item it takes `applies` (`worn` or `carried`, default `worn`) and allows `duration=None` (permanent);
@@ -2160,9 +2175,9 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **`PluginRegistry`:** The registration interface passed to `GupsPlugin.register`. It allows plugins to register
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP state packages and event packages, GMCP input handlers
-  (`onGmcp`), world start callbacks (`onWorldStarted`), traits (`PluginTrait`), character creation definitions
-  (`PluginCreation`), action restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`,
-  `GIVE`, `PUT`), and containment filters (`addContainmentFilter`). See
+  (`onGmcp`), custom hook handlers (`addHook`), world start callbacks (`onWorldStarted`), traits (`PluginTrait`),
+  character creation definitions (`PluginCreation`), action restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`,
+  `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`), and containment filters (`addContainmentFilter`). See
   [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
@@ -2209,8 +2224,15 @@ subsystems (`core` or `script`). It consists of three primary components:
   and a `PluginGmcpWorld`, which can read, send text and send GMCP events but not change the world. To act, it calls
   `command(line)` once at most, which runs the line as if the player typed it, through the normal lanes, lag,
   restrictions and repro recording. A handler that throws records a `plugin` diagnostic.
-- **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, or
-  `onWorldStarted` hooks are caught and logged as `plugin` diagnostics while world execution continues.
+- **Custom hook handlers:** `addHook(name, doc, handle)` joins the chain for a custom hook name (§4.4): after the
+  entity's own hook, `ctx.call_hook` runs every plugin's handler for the name in plugin-id order. A handler gets a
+  read-only `PluginGmcpWorld`, the entity, the arguments and the result so far, all as plain values (entities as entity
+  views), and returns the new result as plain values. Ints in the arguments and the result so far are `Long`s. A
+  returned `Int` becomes a `Long` and an iterable a list; a float or any other value counts as a throw. A handler that
+  throws records a `plugin` diagnostic and leaves the result unchanged. Names follow the custom hook rules; a plugin
+  registers a name once.
+- **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, custom hook
+  handlers, or `onWorldStarted` hooks are caught and logged as `plugin` diagnostics while world execution continues.
 - **Traits (`addTrait`):** Declares permanent bundles of stat, max vital, resist, and sense deltas, flags, and modifier
   chain functions (§4.19). Unique across all plugins.
 - **Creation (`setCreation`):** Configures character creation choices, options, availability rules, validation, start
@@ -2240,7 +2262,7 @@ subsystems (`core` or `script`). It consists of three primary components:
   `IllegalArgumentException` with spelling suggestions.
 - **Read-only views:** Views wrap entities dynamically (`PluginEntity`, `PluginRoom`, `PluginActor`, `PluginItem`,
   `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem` exposes `keywords`, `kind`, `wear`,
-  `slotCost`, `weight`, `maxVitalDeltas`, `resistDeltas`, `inactive`, `tags`, `variants`, `affects` (each a
+  `slotCost`, `weight`, `value`, `maxVitalDeltas`, `resistDeltas`, `inactive`, `tags`, `variants`, `affects` (each a
   `PluginItemAffect` with its `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`), `contents`,
   `custodian`, `plural`, and `charges` and `maxCharges` (`null` when unlimited). `PluginItem.plural` exposes the
   prototype's optional display name for stacks of 2 or more.
@@ -2375,20 +2397,20 @@ file or a `.json` name is a usage error. With `--world` it includes that world's
 after checking its `MODULE.gups` and `MESSAGES.gups`, and leaves out entries of features the world has off; commands
 appear by their renamed names. The files, in order:
 
-|        File         |                                                                                                                                                                                                                                                 Contents                                                                                                                                                                                                                                                  |
-|---------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                                                              |
-| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                                                              |
-| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands, and the GMCP packages its `lib` and `rules` packages declare (name, doc and declaring package). Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                        |
-| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
-| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+|        File         |                                                                                                                                                                                                                                                                    Contents                                                                                                                                                                                                                                                                    |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                                                                                                   |
+| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands, and the GMCP packages its `lib` and `rules` packages declare (name, doc and declaring package). Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                             |
+| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), custom hook handlers (name and doc), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
+| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 - **Entries** show name, `since`, a `feature: <id>` badge for feature entries, doc, example if any, and parameters,
   fields and methods as tables (declaration parameters with type, positional/keyword, required, default, allowed values
@@ -3731,3 +3753,4 @@ template's `.github/workflows/gates.yml`.
 | **M20**   | Consumables and charges: per-instance `charges` with `empty` (destroy, keep or a variant) and `set_charges`; declarative `use_effect`, `use_target` and `use_lag`; effect primitives move to the kernel; `use` reaches ground items; plugin facade charges (§3.3, §3.10, §4.2, §4.3, §4.5, §4.9, §4.15).                                                                                                                                              |
 | **M21**   | Plugin GMCP input and events: inbound GMCP routed to the plugin that registered the package (`onGmcp`), with size, depth and rate limits; a read-only `PluginGmcpWorld` whose handlers act through `command`; plugin GMCP event packages (`addGmcpEvent`, `PluginWorld.gmcp`); case-insensitive GMCP name checks and the reserved `Core` root (§4.10, §4.11, §4.15, §4.16, §5.1, §6.4).                                                               |
 | **M22**   | Starlark GMCP events: `gmcp_package()` for `lib` and `rules` packages with reserved roots and world-wide overlap checks, `ctx.gmcp(player, package, data)`, GMCP payload values and the 16 KB cap, harness `spawn_player(gmcp=)` and `p.gmcp()`, `world.html` listing (§2.3, §4.2, §4.5, §4.10, §4.12, §4.16, §6.1).                                                                                                                                  |
+| **M23**   | Item value and custom hooks: `item(value=)`, `hooks = {...}` on rooms, mobs and items, `ctx.call_hook` with plain-value arguments and results, the plugin handler chain (`addHook`, `PluginHookCall`), `cha` in the template schema (§3.3, §3.9, §4.2, §4.4, §4.5, §4.15, §4.16).                                                                                                                                                                     |

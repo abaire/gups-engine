@@ -2,6 +2,9 @@ package gups.pluginapi.host
 
 import gups.core.Role
 import gups.core.model.Actor
+import gups.core.model.Entity
+import gups.core.model.Item
+import gups.core.model.Room
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.world.Action
@@ -9,13 +12,16 @@ import gups.core.world.CategoryDef
 import gups.core.world.CommandCategory
 import gups.core.world.CommandDef
 import gups.core.world.CommandRegistry
+import gups.core.world.CustomHookHandler
 import gups.core.world.Diagnostic
 import gups.core.world.ENGINE_GMCP_PACKAGES
+import gups.core.world.EntityRef
 import gups.core.world.FastCommand
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.GmcpInput
+import gups.core.world.HookName
 import gups.core.world.PluginEffectRunner
 import gups.core.world.RESERVED_GMCP_ROOTS
 import gups.core.world.TickCommand
@@ -31,7 +37,10 @@ import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
+import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginGmcpCall
+import gups.pluginapi.PluginGmcpWorld
+import gups.pluginapi.PluginHookCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginParam
@@ -63,6 +72,7 @@ data class PluginInfo(
   val effects: List<PluginMemberInfo>,
   val commands: List<PluginCommandInfo>,
   val gmcp: List<PluginGmcpInfo>,
+  val hooks: List<PluginHookInfo> = emptyList(),
   val traits: List<PluginTraitInfo> = emptyList(),
   val restrictions: List<PluginRestrictionInfo> = emptyList(),
   val choices: List<PluginChoiceInfo> = emptyList(),
@@ -117,6 +127,8 @@ data class PluginCommandInfo(
 
 data class PluginGmcpInfo(val pkg: String, val doc: String, val kind: String)
 
+data class PluginHookInfo(val name: String, val doc: String)
+
 internal class CategoryReg(val name: String, val title: String, val order: Int?, val help: String?)
 
 internal class CommandReg(
@@ -144,6 +156,16 @@ internal class GmcpReg(
 internal class GmcpEventReg(val pkg: String, val doc: String)
 
 internal class GmcpInputReg(val pkg: String, val doc: String, val handle: (PluginGmcpCall) -> Unit)
+
+internal class HookReg(val name: String, val doc: String, val handle: (PluginHookCall) -> Any?)
+
+internal class HookCall(
+  override val world: PluginGmcpWorld,
+  override val entity: PluginEntity,
+  override val name: String,
+  override val args: Map<String, Any?>,
+  override val result: Any?,
+) : PluginHookCall
 
 /** The feature a trait modifier point needs; points not listed need none. */
 private val MODIFIER_POINT_FEATURES =
@@ -181,6 +203,7 @@ internal class PluginRegistryImpl(
   val gmcp = mutableListOf<GmcpReg>()
   val gmcpEvents = mutableListOf<GmcpEventReg>()
   val gmcpInputs = mutableListOf<GmcpInputReg>()
+  val hooks = mutableListOf<HookReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
   val traits = mutableMapOf<String, PluginTrait>()
   private var _creation: PluginCreation? = null
@@ -311,6 +334,13 @@ internal class PluginRegistryImpl(
     gmcpInputs += GmcpInputReg(pkg, doc, handle)
   }
 
+  override fun addHook(name: String, doc: String, handle: (PluginHookCall) -> Any?) {
+    require(MEMBER.matches(name)) { "hook name '$name' must match [a-z][a-z0-9_]*" }
+    if (name in CATALOG_HOOKS) throw IllegalArgumentException("'$name' is a catalog hook")
+    require(hooks.none { it.name == name }) { "hook '$name' is already registered" }
+    hooks += HookReg(name, doc, handle)
+  }
+
   /** Every check on an outbound GMCP package name, shared by [addGmcp] and [addGmcpEvent]. */
   private fun checkOutbound(pkg: String) {
     require(GMCP_PACKAGE_NAME.matches(pkg)) {
@@ -402,6 +432,9 @@ internal class PluginRegistryImpl(
 
   companion object {
     val MEMBER = Regex("[a-z][a-z0-9_]*")
+
+    /** The script names the engine fires itself; a custom hook may not use one. */
+    val CATALOG_HOOKS = HookName.entries.mapTo(HashSet()) { it.scriptName }
   }
 }
 
@@ -460,6 +493,39 @@ internal constructor(
       world.record(Diagnostic(world.pulse, "plugin", "plugin '$id': $what failed: $e", e))
     }
   }
+
+  /** One handler run: read-only world, wrapped entity, plain arguments (views as facades). */
+  private fun hookCall(
+    w: World,
+    id: String,
+    entity: Entity,
+    name: String,
+    args: Map<String, Any?>,
+    result: Any?,
+  ): PluginHookCall =
+    HookCall(
+      GmcpWorldFacade(facade(w, id)),
+      wrap(w, entity),
+      name,
+      args.mapValues { (k, v) -> plainEntity(w, v) },
+      result,
+    )
+
+  private fun wrap(w: World, e: Entity): PluginEntity =
+    when (e) {
+      is Room -> RoomFacade(e, w)
+      is Item -> ItemFacade(e, w)
+      else -> ActorFacade(e as Actor, w)
+    }
+
+  /** [v] with every [EntityRef], nested, replaced by the entity's facade, or null if gone. */
+  private fun plainEntity(w: World, v: Any?): Any? =
+    when (v) {
+      is EntityRef -> w.entity(v.id)?.let { wrap(w, it) }
+      is List<*> -> v.map { plainEntity(w, it) }
+      is Map<*, *> -> v.entries.associate { (k, x) -> (k as String) to plainEntity(w, x) }
+      else -> v
+    }
 
   override fun install(world: World) {
     Facades.registerLog(world, log)
@@ -557,6 +623,23 @@ internal constructor(
           }
       }
     }
+    world.pluginHooks.clear()
+    for (p in plugins) {
+      for (h in p.reg.hooks) {
+        world.pluginHooks.getOrPut(h.name) { mutableListOf() } +=
+          CustomHookHandler { w, entity, args, result ->
+            var out = result
+            guard(w, p.id, "hook '${h.name}'") {
+              out =
+                toHookResult(
+                  h.handle(hookCall(w, p.id, entity, h.name, args, result)),
+                  "hook '${h.name}'(result)",
+                )
+            }
+            out
+          }
+      }
+    }
     val effects =
       plugins.flatMap { p -> p.reg.effects.map { (p.id to it.name) to (p.id to it) } }.toMap()
     world.pluginEffects = PluginEffectRunner { w, effect, caster, target, targetItem ->
@@ -611,6 +694,7 @@ internal constructor(
               p.reg.gmcpEvents.map { PluginGmcpInfo(it.pkg, it.doc, "event") } +
               p.reg.gmcpInputs.map { PluginGmcpInfo(it.pkg, it.doc, "input") })
             .sortedWith(compareBy({ it.pkg }, { it.kind })),
+        hooks = p.reg.hooks.map { PluginHookInfo(it.name, it.doc) }.sortedBy { it.name },
         traits =
           p.reg.traits.values
             .map {

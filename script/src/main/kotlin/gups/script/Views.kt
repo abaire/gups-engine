@@ -607,6 +607,13 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun weight(): Any = read { sInt(item.weight) }
 
   @StarlarkMethod(
+    name = "value",
+    structField = true,
+    doc = "Base price of one item, from its prototype.",
+  )
+  fun value(): Any = read { sInt(item.proto.value) }
+
+  @StarlarkMethod(
     name = "in_world",
     structField = true,
     doc = "False once the item has been destroyed or decayed.",

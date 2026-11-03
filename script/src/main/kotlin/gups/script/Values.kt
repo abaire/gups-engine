@@ -3,6 +3,7 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.world.EntityRef
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Module
@@ -196,29 +197,53 @@ private fun toAttr(v: Any?, what: String, limits: ScriptLimits, b: ConversionBud
 internal const val MAX_GMCP_PAYLOAD_BYTES = 16_384
 
 /**
+ * [v] as a plain value (null, Long, String, Boolean, List, Map<String, Any?>). `None` is allowed
+ * anywhere. With [views] on, an actor, item or room view becomes an [EntityRef]; otherwise a view
+ * is a script error. Only the per-string, per-collection and nesting limits apply.
+ */
+internal fun toPlain(v: Any?, what: String, limits: ScriptLimits, views: Boolean = false): Any? =
+  toPlain(v, what, limits, views, ConversionBudget(what, limits, "payload", Int.MAX_VALUE))
+
+/**
  * [v] as a plain GMCP value (null, Long, String, Boolean, List, Map<String, Any?>). `None` is
  * allowed anywhere. Raises `alloc_limit` when the JSON form is over [MAX_GMCP_PAYLOAD_BYTES].
  */
 internal fun toGmcp(v: Any?, what: String, limits: ScriptLimits): Any? =
-  toGmcp(v, what, limits, ConversionBudget(what, limits, "payload", MAX_GMCP_PAYLOAD_BYTES))
+  toPlain(
+    v,
+    what,
+    limits,
+    views = false,
+    ConversionBudget(what, limits, "payload", MAX_GMCP_PAYLOAD_BYTES),
+  )
 
-private fun toGmcp(v: Any?, what: String, limits: ScriptLimits, b: ConversionBudget): Any? =
+private fun toPlain(
+  v: Any?,
+  what: String,
+  limits: ScriptLimits,
+  views: Boolean,
+  b: ConversionBudget,
+): Any? =
   when (v) {
     null,
     Starlark.NONE -> null.also { b.charge(4) }
     is StarlarkInt -> v.toLong(what).also { b.charge(it.toString().length) }
     is String -> checkString(v, what, limits).also { b.charge(gmcpStringSize(it)) }
     is Boolean -> v.also { b.charge(if (it) 4 else 5) }
-    is Sequence<*> -> b.collection(v.size) { v.map { toGmcp(it, what, limits, b) } }
+    is Sequence<*> -> b.collection(v.size) { v.map { toPlain(it, what, limits, views, b) } }
     is Dict<*, *> ->
       b.collection(v.size) {
         v.entries.associate { (k, value) ->
           val key = k as? String ?: fail("$what: dict keys must be strings, got ${typeName(k)}")
           b.charge(gmcpStringSize(key) + 1)
-          key to toGmcp(value, what, limits, b)
+          key to toPlain(value, what, limits, views, b)
         }
       }
     is StarlarkFloat -> fail("$what: floats can't be sent; use an int (for example, tenths)")
+    is EntityView ->
+      if (views) EntityRef(v.entity.id)
+      else
+        fail("$what: a ${typeName(v)} can't be sent; use an int, string, bool, list, dict or None")
     else ->
       fail("$what: a ${typeName(v)} can't be sent; use an int, string, bool, list, dict or None")
   }
@@ -267,6 +292,30 @@ internal fun fromAttr(v: AttrValue, mu: Mutability?): Any =
       v.v
         .mapValues { fromAttr(it.value, mu) }
         .let { if (mu == null) Dict.immutableCopyOf(it) else Dict.copyOf(mu, it) }
+  }
+
+/**
+ * A fresh Starlark copy of a plain custom hook value, owned by [mu]: null is `None`, an [EntityRef]
+ * is the entity's view, or `None` if the entity left the world.
+ */
+internal fun fromPlain(v: Any?, mu: Mutability?, frame: Frame?): Any =
+  when (v) {
+    null -> Starlark.NONE
+    is Long -> StarlarkInt.of(v)
+    is String -> v
+    is Boolean -> v
+    is List<*> ->
+      v.map { fromPlain(it, mu, frame) }
+        .let { if (mu == null) StarlarkList.immutableCopyOf(it) else StarlarkList.copyOf(mu, it) }
+    is Map<*, *> ->
+      v.entries
+        .associate { (k, value) ->
+          (k as? String ?: error("fromPlain: dict keys must be strings, got ${typeName(k)}")) to
+            fromPlain(value, mu, frame)
+        }
+        .let { if (mu == null) Dict.immutableCopyOf(it) else Dict.copyOf(mu, it) }
+    is EntityRef -> if (frame == null) Starlark.NONE else view(frame, frame.world.entity(v.id))
+    else -> error("fromPlain: unexpected value ${typeName(v)}")
   }
 
 internal fun checkString(s: String, what: String, limits: ScriptLimits): String {

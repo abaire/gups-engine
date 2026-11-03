@@ -885,4 +885,27 @@ class ItemEffectsScriptTest {
     assertFalse("neck" in slots)
     assertTrue("wield" in slots)
   }
+
+  @Test
+  fun `item views show value`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _value(ctx):
+              ctx.send(ctx.actor, "value is %s" % ctx.item.value)
+
+          room("start")
+          item("arrow", stackable = True, value = 30, commands = {"value": _value})
+          """
+        )
+      )
+    val p = f.player()
+    val arrows = f.w.spawnItem(Label("//zones/z:arrow"), ItemLocation.Carried(p.id), count = 2)
+    assertEquals(2, arrows.count)
+
+    f.input(p, "value arrow")
+    f.run()
+    assertContains(f.out(p), "value is 30")
+  }
 }

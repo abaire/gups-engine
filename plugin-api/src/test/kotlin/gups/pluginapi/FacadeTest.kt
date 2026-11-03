@@ -83,6 +83,30 @@ class FacadeTest {
   }
 
   @Test
+  fun `PluginItem shows value`() {
+    val w2 =
+      world(
+        mapOf(
+          "zones/z/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Z\")",
+          "zones/z/rooms.star" to
+            """
+            room("a", exits = [exit(DIR.north, ":b")])
+            room("b", flags = ["dead_end_ok"])
+            item("stick", value = 12)
+            item("penny")
+        """,
+        )
+      )
+    val roomA = w2.room(Label("//zones/z:a"))
+    val stick =
+      ItemFacade(w2.spawnItem(Label("//zones/z:stick"), ItemLocation.InRoom(roomA.id, 0)), w2)
+    assertEquals(12, stick.value)
+    val penny =
+      ItemFacade(w2.spawnItem(Label("//zones/z:penny"), ItemLocation.InRoom(roomA.id, 0)), w2)
+    assertEquals(0, penny.value)
+  }
+
+  @Test
   fun `verbs`() {
     f.send(ann, "Hello.")
     f.echo(glade, "Thunder.", exclude = listOf(wolf))
@@ -390,7 +414,7 @@ class FacadeTest {
   @Test
   fun `the schema lists names and labels in declaration order`() {
     val s = f.schema
-    assertEquals(listOf("str", "dex", "con", "int", "wis", "armor"), s.stats.map { it.name })
+    assertEquals(listOf("str", "dex", "con", "int", "wis", "cha", "armor"), s.stats.map { it.name })
     assertEquals(PluginNamed("hp", "Hit points"), s.vitals.first())
     assertEquals(listOf("hp", "mana", "move"), s.vitals.map { it.name })
     assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)

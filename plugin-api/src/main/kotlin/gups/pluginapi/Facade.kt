@@ -286,6 +286,9 @@ interface PluginItem : PluginEntity {
   val slotCost: Int
   val weight: Int
 
+  /** Base price of one item, from its prototype. */
+  val value: Int
+
   /** Vital maximum adjustments while equipped, by vital name. */
   val maxVitalDeltas: Map<String, Int>
 

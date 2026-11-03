@@ -375,6 +375,18 @@
           "since": 1
         },
         {
+          "symbol": "item.value",
+          "name": "value",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "0",
+          "allowed_values": [],
+          "doc": "Base price of one item; 0 by default.",
+          "since": 1
+        },
+        {
           "symbol": "item.wear",
           "name": "wear",
           "type": "str",
@@ -540,6 +552,18 @@
           "default": "{}",
           "allowed_values": [],
           "doc": "Item-local commands mapping verb name to fn(ctx).",
+          "since": 1
+        },
+        {
+          "symbol": "item.hooks",
+          "name": "hooks",
+          "type": "dict[str, function]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Custom hooks, by name, run with ctx.call_hook.",
           "since": 1
         },
         {
@@ -971,6 +995,18 @@
           "since": 1
         },
         {
+          "symbol": "mob.hooks",
+          "name": "hooks",
+          "type": "dict[str, function]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Custom hooks, by name, run with ctx.call_hook.",
+          "since": 1
+        },
+        {
           "symbol": "mob.behaviors",
           "name": "behaviors",
           "type": "list[behavior]",
@@ -1308,6 +1344,18 @@
           "default": "{}",
           "allowed_values": [],
           "doc": "Room-local commands mapping verb name to fn(ctx).",
+          "since": 1
+        },
+        {
+          "symbol": "room.hooks",
+          "name": "hooks",
+          "type": "dict[str, function]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "{}",
+          "allowed_values": [],
+          "doc": "Custom hooks, by name, run with ctx.call_hook.",
           "since": 1
         },
         {
@@ -3180,6 +3228,44 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Points to award; must be at least 1."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.call_hook",
+        "name": "call_hook",
+        "doc": "Runs entity's custom hook name as fn(ctx, **args) with ctx.self the entity, then the plugin handlers for name, and returns their result as a fresh copy.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.call_hook.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room whose hook runs."
+          },
+          {
+            "symbol": "ctx.call_hook.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Custom hook name."
+          },
+          {
+            "symbol": "ctx.call_hook.args",
+            "name": "args",
+            "positional": false,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": true,
+            "doc": "Keyword arguments for the hook: int, str, bool, list, dict or actor, item and room views."
           }
         ]
       },
@@ -5185,6 +5271,12 @@
           "symbol": "view:item.tags",
           "name": "tags",
           "doc": "Effective tags: the prototype's plus those added, minus those removed, sorted.",
+          "since": 1
+        },
+        {
+          "symbol": "view:item.value",
+          "name": "value",
+          "doc": "Base price of one item, from its prototype.",
           "since": 1
         },
         {

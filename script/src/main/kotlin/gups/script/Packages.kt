@@ -153,6 +153,7 @@ class ScriptPackage internal constructor(val path: String) {
   internal val gmcpList = mutableListOf<GmcpPackageDecl>()
   internal val commandList = mutableListOf<GlobalCommandDecl>()
   internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
+  internal val customHookMap = HashMap<Label, Map<String, HookRef>>()
 
   /** Declaration names, unique across kinds within the package. */
   internal val names = HashSet<String>()
@@ -199,6 +200,10 @@ class ScriptPackage internal constructor(val path: String) {
   /** Hooks per prototype label. */
   val hooks: Map<Label, Map<HookName, HookRef>>
     get() = hookMap
+
+  /** Custom hooks per prototype label. */
+  val customHooks: Map<Label, Map<String, HookRef>>
+    get() = customHookMap
 }
 
 /** What a referenced label must name. */

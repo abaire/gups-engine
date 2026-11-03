@@ -976,6 +976,44 @@
         ]
       },
       {
+        "symbol": "ctx.call_hook",
+        "name": "call_hook",
+        "doc": "Runs entity's custom hook name as fn(ctx, **args) with ctx.self the entity, then the plugin handlers for name, and returns their result as a fresh copy.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.call_hook.entity",
+            "name": "entity",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor, item or room whose hook runs."
+          },
+          {
+            "symbol": "ctx.call_hook.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Custom hook name."
+          },
+          {
+            "symbol": "ctx.call_hook.args",
+            "name": "args",
+            "positional": false,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": true,
+            "doc": "Keyword arguments for the hook: int, str, bool, list, dict or actor, item and room views."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.cancel",
         "name": "cancel",
         "doc": "Cancels one of this owner's timers; True if it was pending.",

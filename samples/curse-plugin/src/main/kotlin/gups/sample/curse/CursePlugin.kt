@@ -84,6 +84,17 @@ class CursePlugin : GupsPlugin {
     r.addContainmentFilter("Blocks carried affects behind warded containers.") { call ->
       call.container.hasTag("warded") && call.item.hasTag("cursed")
     }
+
+    // ---- Custom Hook Handlers ------------------------------------------------------------
+
+    // The hook runs on the shopkeeper; the item is an argument. A null result keeps the default
+    // price, so the surcharge applies to the keeper's own price if it gave one, else the default.
+    r.addHook("shop_price", "Charges 25 more to buy a cursed item.") { call ->
+      val item = call.args["item"] as? PluginItem
+      val buying = call.args["action"] == "buy" || call.args["action"] == "list"
+      val price = if (call.result == null) call.args["price"] as? Long else call.result as? Long
+      if (buying && price != null && item?.let(::bearsCurse) == true) price + 25L else call.result
+    }
   }
 }
 

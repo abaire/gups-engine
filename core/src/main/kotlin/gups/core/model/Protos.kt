@@ -232,6 +232,8 @@ data class ItemProto(
   val range: Band = Band.MELEE,
   /** Weight of a single unit of this item, defaulting to 1. */
   val weight: Int = 1,
+  /** Base price of one item; the engine gives it no other meaning. */
+  val value: Int = 0,
   /** Equipment slot this item occupies when worn, or null if not wearable. */
   val wear: String? = null,
   /** How many slots of its family this item takes up when worn; at least 1. */

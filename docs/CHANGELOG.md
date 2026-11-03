@@ -4,6 +4,32 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Item value and custom hooks
+
+- Added `item(value = N)`, an item's base price, an int of at least 0 (default 0). The engine gives it no other meaning
+  and shows it nowhere in `look`, `inventory` or `examine`; libraries such as shops read it. It is a prototype field, so
+  a reload changes it for every instance and nothing is saved per instance.
+- `item.value` on item views and `PluginItem.value` on plugin item views expose the per-item base price.
+  `//engine:corpse` has 0.
+- The template world declares `cha` (Charisma): `stat("cha", label = "Charisma")` in `MODULE.gups`, with
+  `starting_stats` giving players 10 and mobs their declared value or 10, like the other ability stats. Existing
+  template-based worlds need `--wipe` to pick it up.
+- Added `hooks = {"name": fn}` to `room`, `mob` and `item`: custom hooks of the builder's own naming, never fired by the
+  engine. Names match `[a-z][a-z0-9_]*` and may not be catalog hook names (the error suggests passing the catalog hook
+  as its keyword instead); each value is a top-level function. Scripts run them with `ctx.call_hook`.
+- Added `ctx.call_hook(entity, name, **args)`: runs `entity`'s custom hook `name` as `fn(ctx, **args)` with `ctx.self`
+  the entity, in the hook's own package, then every plugin handler for `name`, and returns the result as a fresh copy.
+  Arguments may hold None, ints, strings, bools, lists, dicts and actor, item and room views (which the hook receives as
+  its own views, or `None` if the entity left the world); results may not hold views. It returns `None` when the entity
+  is gone, nothing handles the name, the package is quarantined or the hook fails, and more than 8 nested `call_hook`s
+  is a script error.
+- `PluginRegistry.addHook(name, doc, handle)` registers a plugin handler for a custom hook name: after the entity's own
+  hook, the plugin's handlers run in plugin-id order, each with a read-only `PluginGmcpWorld`, the entity, the arguments
+  and the result so far as plain values, returning the new result as plain values (a `PluginHookCall`). A handler that
+  throws records a `plugin` diagnostic and leaves the result unchanged. Names follow the custom hook rules; one plugin
+  registers a name once, and several plugins may share it. A handler's `Int`s become `Long`s and its iterables lists;
+  floats are refused.
+
 ### Starlark GMCP events
 
 - Added `gmcp_package(name, doc)` for `lib` and `rules` packages, declaring a GMCP package the package sends with

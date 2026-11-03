@@ -278,6 +278,9 @@ internal class ItemFacade(val item: Item, private val world: World) :
   override val weight: Int
     get() = item.proto.weight
 
+  override val value: Int
+    get() = item.proto.value
+
   override val maxVitalDeltas: Map<String, Int>
     get() = item.proto.maxVitalDeltas
 
@@ -397,31 +400,10 @@ internal class WorldFacade(
     require(Facades.gmcpOf(world, pluginId).any { gmcpWithin(pkg, it) }) {
       "gmcp: plugin '${pluginId ?: "?"}' didn't declare a GMCP package for '$pkg'"
     }
-    checkPlainGmcp(data, "gmcp(data)")
+    checkPlain(data, "gmcp(data)")
     val a = actorOf(actor, "gmcp")
     if (a !is Player) return false
     return world.gmcp(a, pkg, data)
-  }
-
-  /**
-   * [v] must be null, String, Boolean, Int, Long, Double, an iterable or a Map with String keys.
-   */
-  private fun checkPlainGmcp(v: Any?, what: String) {
-    when (v) {
-      null,
-      is String,
-      is Boolean,
-      is Int,
-      is Long,
-      is Double -> Unit
-      is Iterable<*> -> v.forEach { checkPlainGmcp(it, what) }
-      is Map<*, *> -> {
-        require(v.keys.all { it is String }) { "$what: map keys must be strings" }
-        v.values.forEach { checkPlainGmcp(it, what) }
-      }
-      else ->
-        throw IllegalArgumentException("$what: ${v::class.java.name} is not a plain GMCP value")
-    }
   }
 
   override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) =
@@ -744,6 +726,48 @@ internal class GmcpInputCall(
     return send(line)
   }
 }
+
+/**
+ * [v] must be null, String, Boolean, Int, Long, Double, an iterable or a Map with String keys. A
+ * GMCP payload or a custom hook handler's result.
+ */
+internal fun checkPlain(v: Any?, what: String) {
+  when (v) {
+    null,
+    is String,
+    is Boolean,
+    is Int,
+    is Long,
+    is Double -> Unit
+    is Iterable<*> -> v.forEach { checkPlain(it, what) }
+    is Map<*, *> -> {
+      require(v.keys.all { it is String }) { "$what: map keys must be strings" }
+      v.values.forEach { checkPlain(it, what) }
+    }
+    else -> throw IllegalArgumentException("$what: ${v::class.java.name} is not a plain value")
+  }
+}
+
+/**
+ * A custom hook handler's result in the form scripts read: null, Long, String, Boolean, List or a
+ * Map with String keys. Ints widen to Long and any iterable becomes a list; floats and anything
+ * else are refused, since scripts can't receive them.
+ */
+internal fun toHookResult(v: Any?, what: String): Any? =
+  when (v) {
+    null,
+    is String,
+    is Boolean,
+    is Long -> v
+    is Int -> v.toLong()
+    is Iterable<*> -> v.map { toHookResult(it, what) }
+    is Map<*, *> ->
+      v.entries.associate { (k, x) ->
+        require(k is String) { "$what: map keys must be strings" }
+        k to toHookResult(x, what)
+      }
+    else -> throw IllegalArgumentException("$what: ${v::class.java.name} is not a plain value")
+  }
 
 /** A plain value as an attribute: Int/Long, String, Boolean, List and Map with String keys. */
 internal fun toAttr(v: Any, what: String): AttrValue =

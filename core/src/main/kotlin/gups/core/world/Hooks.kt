@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.AttrValue
 import gups.core.CASCADE_MAX_DEPTH
+import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.model.Actor
 import gups.core.model.Affect
@@ -218,6 +219,14 @@ sealed interface HookOutcome {
   data class Deny(val message: String) : HookOutcome
 }
 
+/** A plain value standing for an entity in custom hook arguments. */
+data class EntityRef(val id: EntityId)
+
+/** One plugin handler for a custom hook: (entity, args, result so far) -> new result. */
+fun interface CustomHookHandler {
+  fun handle(world: World, entity: Entity, args: Map<String, Any?>, result: Any?): Any?
+}
+
 /**
  * Script execution engine seam connecting the world loop to Starlark script environments.
  *
@@ -230,6 +239,12 @@ interface ScriptHost {
    * [HookOutcome.Deny].
    */
   fun invokeHook(world: World, owner: Entity, hook: HookName, ctx: HookContext): HookOutcome
+
+  /**
+   * Runs [owner]'s custom hook [name] with [args] (plain values and [EntityRef]s) and returns its
+   * result as plain values, or null when it has none, is quarantined or fails.
+   */
+  fun invokeCustom(world: World, owner: Entity, name: String, args: Map<String, Any?>): Any? = null
 
   /** Runs a scheduled timer callback or affect tick/expiration [ref] on [owner]. */
   fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext)

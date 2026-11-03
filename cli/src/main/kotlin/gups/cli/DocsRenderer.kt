@@ -35,6 +35,9 @@ data class PluginCommandDocSpec(
 /** A GMCP package a plugin adds, for `plugins.html`. */
 data class PluginGmcpDocSpec(val pkg: String, val doc: String, val kind: String = "state")
 
+/** A custom hook a plugin registers a handler for, for `plugins.html`. */
+data class PluginHookDocSpec(val name: String, val doc: String)
+
 /** A GMCP package a script package declares, for `world.html`. */
 data class ScriptGmcpDocSpec(val pkg: String, val doc: String, val declaredBy: String)
 
@@ -81,6 +84,7 @@ data class PluginDocSpec(
   val effects: List<MethodSpec> = emptyList(),
   val commands: List<PluginCommandDocSpec> = emptyList(),
   val gmcp: List<PluginGmcpDocSpec> = emptyList(),
+  val hooks: List<PluginHookDocSpec> = emptyList(),
   val traits: List<PluginTraitDocSpec> = emptyList(),
   val restrictions: List<PluginRestrictionDocSpec> = emptyList(),
   val choices: List<PluginChoiceDocSpec> = emptyList(),
@@ -611,6 +615,25 @@ object DocsRenderer {
               .append(esc(g.kind))
               .append("</td><td>")
               .append(esc(g.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.hooks.isNotEmpty()) {
+          append(
+            "<h3>Custom hook handlers</h3>\n<table>\n<thead><tr><th>Hook</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for (h in p.hooks.sortedBy { it.name }) {
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".hook-")
+              .append(esc(h.name))
+              .append("\"><td><code>")
+              .append(esc(h.name))
+              .append("</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(h.doc))
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")

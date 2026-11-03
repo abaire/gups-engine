@@ -298,6 +298,32 @@ class StarlarkHost(
     )
   }
 
+  override fun invokeCustom(
+    world: World,
+    owner: Entity,
+    name: String,
+    args: Map<String, Any?>,
+  ): Any? {
+    val ref = scripts.customHooks(owner.protoLabel)[name] ?: return null
+    val site =
+      Site(owner.protoLabel.pkg, owner.protoLabel, "hook $name", vetoable = false, owner.id)
+    val result =
+      call(
+        world,
+        site,
+        ref,
+        { Ctx(it, owner, HookContext(), CtxExtras()) },
+        kwargs = { f -> args.mapValues { fromPlain(it.value, f.thread.mutability(), f) } },
+      )
+    val value = (result as? CallResult.Ok)?.value ?: return null
+    return try {
+      toPlain(value, "hook $name return value", limits)
+    } catch (e: EvalException) {
+      report(world, site, classify(e), e.message ?: e.toString(), e, null)
+      null
+    }
+  }
+
   override fun isSuspended(owner: Entity, ref: HookRef): Boolean =
     chargeTo(owner, ref) in quarantinedSet
 
@@ -602,6 +628,19 @@ class StarlarkHost(
   }
 
   // ---- Calling Starlark ----------------------------------------------------------------------
+
+  /** `ctx.call_hook` depth: more than 8 nested calls is a script error. */
+  private var customDepth = 0
+
+  /** Enters one `ctx.call_hook` level; pair every successful call with [endCustomHook]. */
+  internal fun beginCustomHook() {
+    if (customDepth >= 8) fail("call_hook is nested too deeply")
+    customDepth++
+  }
+
+  internal fun endCustomHook() {
+    customDepth--
+  }
 
   /**
    * Runs [ref] with a ctx built by [ctxOf] and keyword arguments from [kwargs]. Charges steps to

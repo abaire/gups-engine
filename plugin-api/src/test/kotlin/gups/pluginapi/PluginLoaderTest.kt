@@ -1,5 +1,6 @@
 package gups.pluginapi
 
+import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginNamespace
 import gups.pluginapi.host.PluginRegistryImpl
@@ -217,6 +218,40 @@ class PluginLoaderTest {
       "command name '@weather' can't start with @: those are engine tool commands",
       e.message,
     )
+  }
+
+  @Test
+  fun `custom hook names are validated`() {
+    val r = PluginRegistryImpl("weather", emptyList(), emptySet()) { {} }
+    assertEquals(
+      "hook name 'Bad-Name' must match [a-z][a-z0-9_]*",
+      assertFailsWith<IllegalArgumentException> { r.addHook("Bad-Name", "d.") {} }.message,
+    )
+    assertEquals(
+      "'on_use' is a catalog hook",
+      assertFailsWith<IllegalArgumentException> { r.addHook("on_use", "d.") {} }.message,
+    )
+    r.addHook("shop_price", "d.") {}
+    assertEquals(
+      "hook 'shop_price' is already registered",
+      assertFailsWith<IllegalArgumentException> { r.addHook("shop_price", "d.") {} }.message,
+    )
+  }
+
+  @Test
+  fun `two plugins may register the same custom hook name`() {
+    fun plugin(id: String) =
+      object : GupsPlugin {
+        override val id = id
+        override val pluginApiVersion = PluginApi.VERSION
+
+        override fun register(r: PluginRegistry) {
+          r.addHook("shop_price", "d.") {}
+        }
+      }
+    val host = PluginHost.of(plugin("aaa"), plugin("zzz"))
+    assertEquals(listOf("aaa", "zzz"), host.ids)
+    assertEquals(2, host.describe().count { p -> p.hooks.any { it.name == "shop_price" } })
   }
 }
 

@@ -365,6 +365,7 @@ class DocsRendererTest {
             PluginGmcpDocSpec("Weather.Forecast", "The forecast.", kind = "event"),
             PluginGmcpDocSpec("Weather.Set", "Set the weather.", kind = "input"),
           ),
+        hooks = listOf(PluginHookDocSpec("shop_price", "Raises prices for the plugin's wares.")),
       )
     val examples: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
     val guide = "# Writing Plugins\n\nA plugin is a `.jar`.\n"

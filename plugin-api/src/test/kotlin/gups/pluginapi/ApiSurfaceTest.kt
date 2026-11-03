@@ -20,6 +20,7 @@ class ApiSurfaceTest {
       PluginParam::class,
       PluginCommandCall::class,
       PluginGmcpCall::class,
+      PluginHookCall::class,
       PluginEffectCall::class,
       PluginEffect::class,
       PluginOption::class,
