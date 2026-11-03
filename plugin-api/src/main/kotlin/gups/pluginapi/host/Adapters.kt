@@ -138,7 +138,11 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
             when (point) {
               ModifierPoint.TO_HIT,
               ModifierPoint.DAMAGE,
-              ModifierPoint.INITIATIVE -> {
+              ModifierPoint.INITIATIVE,
+              ModifierPoint.ADVANCE_LAG,
+              ModifierPoint.RETREAT_LAG,
+              ModifierPoint.RETREAT_FAIL_LAG,
+              ModifierPoint.FLEE_FAIL_LAG -> {
                 val res = mod.modify(call, (base as Int).toLong())
                 if (res is Long)
                   res.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()

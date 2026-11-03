@@ -1,9 +1,12 @@
 package gups.pluginapi
 
+import gups.core.model.Band
 import gups.core.model.Player
 import gups.core.rules.RulesContext
 import gups.core.world.World
+import gups.core.world.advanceLagOf
 import gups.core.world.regenOf
+import gups.core.world.retreatLagOf
 import gups.core.world.toHitChain
 import gups.pluginapi.host.traitAdapter
 import kotlin.test.Test
@@ -94,5 +97,57 @@ class TraitModifierTest {
     val plugin = w.diagnostics.filter { it.kind == "plugin" }.map { it.message }
     assertTrue(plugin.any { "trait 'odd'" in it }, "$plugin")
     assertTrue(plugin.any { "trait 'broken'" in it }, "$plugin")
+  }
+
+  @Test
+  fun `an advance_lag trait modifier sees and returns Long, and wrong return is refused`() {
+    val p =
+      player(
+        PluginTrait(
+          "quick",
+          modifiers =
+            mapOf(
+              PluginModifierPoint.ADVANCE_LAG to PluginModifier { _, base -> (base as Long) + 3L }
+            ),
+        ),
+        PluginTrait(
+          "bad_lag",
+          modifiers =
+            mapOf(PluginModifierPoint.RETREAT_LAG to PluginModifier { _, _ -> "not_a_long" }),
+        ),
+      )
+    val other = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val ctx = RulesContext(w, p, other, band = Band.NEAR)
+    val baseAdvance = w.rules.advanceLag(ctx)
+    val lag = w.advanceLagOf(ctx)
+    assertEquals(baseAdvance + 3, lag)
+
+    val baseRetreat = w.rules.retreatLag(ctx)
+    val retreatLag = w.retreatLagOf(ctx)
+    assertEquals(baseRetreat, retreatLag)
+    val plugin = w.diagnostics.filter { it.kind == "plugin" }.map { it.message }
+    assertTrue(
+      plugin.any { "trait 'bad_lag'" in it && "returned String, expected Long" in it },
+      "$plugin",
+    )
+  }
+
+  @Test
+  fun `a negative lag from a trait modifier is clamped to 0 by the chain`() {
+    val p =
+      player(
+        PluginTrait(
+          "featherfoot",
+          modifiers =
+            mapOf(
+              PluginModifierPoint.ADVANCE_LAG to PluginModifier { _, base -> (base as Long) - 100L }
+            ),
+        )
+      )
+    val other = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val lines = mutableListOf<String>()
+    w.onRules = { _, line -> lines += line }
+    assertEquals(0, w.advanceLagOf(RulesContext(w, p, other, band = Band.NEAR)))
+    assertTrue(lines.single().endsWith("→ clamp 0"), "$lines")
   }
 }

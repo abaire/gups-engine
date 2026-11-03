@@ -140,6 +140,7 @@ class CreationRegistrationTest {
         PluginModifierPoint.TO_HIT,
         PluginModifierPoint.DAMAGE,
         PluginModifierPoint.INITIATIVE,
+        PluginModifierPoint.FLEE_FAIL_LAG,
       )) {
       assertEquals(
         "trait 'keen': modifier point $point needs the combat feature",
@@ -162,6 +163,40 @@ class CreationRegistrationTest {
         features = noCombat,
       )
     assertEquals(listOf("ok"), host.ids, "regen needs no feature")
+  }
+
+  @Test
+  fun `a track lag modifier point needs the track feature`() {
+    val noTrack = Features(Feature.entries.toSet() - Feature.TRACK)
+    for (point in
+      listOf(
+        PluginModifierPoint.ADVANCE_LAG,
+        PluginModifierPoint.RETREAT_LAG,
+        PluginModifierPoint.RETREAT_FAIL_LAG,
+      )) {
+      assertEquals(
+        "trait 'nimble': modifier point $point needs the track feature",
+        refusal(noTrack) {
+          it.addTrait(
+            PluginTrait("nimble", modifiers = mapOf(point to PluginModifier { _, b -> b }))
+          )
+        },
+      )
+    }
+    val host =
+      PluginHost.of(
+        plugin("ok") {
+          it.addTrait(
+            PluginTrait(
+              "fleeing",
+              modifiers = mapOf(PluginModifierPoint.FLEE_FAIL_LAG to PluginModifier { _, b -> b }),
+            )
+          )
+        },
+        schema = schema,
+        features = noTrack,
+      )
+    assertEquals(listOf("ok"), host.ids, "flee_fail_lag needs only combat")
   }
 
   @Test

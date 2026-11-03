@@ -134,6 +134,18 @@ internal class GmcpReg(
   val produce: (PluginWorld, PluginActor) -> Any?,
 )
 
+/** The feature a trait modifier point needs; points not listed need none. */
+private val MODIFIER_POINT_FEATURES =
+  mapOf(
+    PluginModifierPoint.TO_HIT to Feature.COMBAT,
+    PluginModifierPoint.DAMAGE to Feature.COMBAT,
+    PluginModifierPoint.INITIATIVE to Feature.COMBAT,
+    PluginModifierPoint.FLEE_FAIL_LAG to Feature.COMBAT,
+    PluginModifierPoint.ADVANCE_LAG to Feature.TRACK,
+    PluginModifierPoint.RETREAT_LAG to Feature.TRACK,
+    PluginModifierPoint.RETREAT_FAIL_LAG to Feature.TRACK,
+  )
+
 /**
  * Collects one plugin's registrations, validating each as it comes. Any violation throws, so a
  * failed `register` adds nothing. [takenCommands] and [takenGmcp] are the earlier plugins' names.
@@ -304,17 +316,9 @@ internal class PluginRegistryImpl(
     }
     require("stunned" !in trait.flags) { "trait '${trait.name}': flags cannot contain 'stunned'" }
     for (p in trait.modifiers.keys) {
-      if (
-        p in
-          setOf(
-            PluginModifierPoint.TO_HIT,
-            PluginModifierPoint.DAMAGE,
-            PluginModifierPoint.INITIATIVE,
-          )
-      ) {
-        require(Feature.COMBAT in features) {
-          "trait '${trait.name}': modifier point $p needs the combat feature"
-        }
+      val needed = MODIFIER_POINT_FEATURES[p] ?: continue
+      require(needed in features) {
+        "trait '${trait.name}': modifier point $p needs the ${needed.id} feature"
       }
     }
     traits[trait.name] = trait

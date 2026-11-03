@@ -227,6 +227,10 @@ enum class PluginModifierPoint {
   INITIATIVE,
   MOVE_COST,
   REGEN,
+  ADVANCE_LAG,
+  RETREAT_LAG,
+  RETREAT_FAIL_LAG,
+  FLEE_FAIL_LAG,
 }
 
 data class PluginModifierCall(
