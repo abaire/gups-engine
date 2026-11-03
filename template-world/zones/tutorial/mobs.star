@@ -1,6 +1,7 @@
 # Mobs, and the hooks that give them personality.
 
 load("//lib:quest.star", "quest")
+load("//lib:shop.star", "shop")
 load(":helpers.star", "FIRST_STEPS", "READY_WORD", "said")
 
 def _guide_hears(ctx):
@@ -83,4 +84,53 @@ mob("training_dummy",
     desc = "A straw dummy on a post. It has seen better days.",
     vitals = vitals(hp = 30),
     on_damage = _dummy_hit,
+)
+
+# The shopkeeper. A shop is a keeper bound to a stock container and a set of prices, all
+# described by one shop.define call. The stock lines say what to keep and how it restocks
+# over time; the till is the coins the keeper has to pay out with.
+
+SHOP = shop.define(
+    id = "shopkeeper",
+    stock = [
+        shop.stock("//zones/tutorial:copper_ring", count = 3, every = 600),
+        shop.stock("//zones/tutorial:wooden_shield", count = 2, every = 600),
+        shop.stock("//zones/tutorial:healing_draught"),   # no count: unlimited, spawned on demand
+    ],
+    till = shop.till(count = 100, every = 60, amount = 10),
+    buy_markup = 120,    # the shop sells at 120% of item value
+    sell_rate = 50,      # and buys at 50%
+)
+
+def _shop_price(ctx, action, customer, item, label, count, price, refusal):
+    # The keeper's custom hook, fired by the shop library before it settles any price.
+    # Returning an int overrides the price, returning a string refuses the transaction,
+    # and returning None keeps the library's default. `action` is "list", "buy" or "sell";
+    # `customer` is the acting player, `item` the item (None for an unlimited stock line),
+    # and `price` the library's default for this customer (None when it would refuse).
+    #
+    # A customer whose charisma is above 10 is flattered and gets a discount on buying; the
+    # keeper pays them more for selling. Each point of charisma above 10 is worth 2%.
+    if action == "sell" and item != None and item.has_tag("stolen"):
+        return "I don't deal in stolen goods."
+    if price == None:
+        return None     # keep the library's refusal
+    bonus = max(0, customer.cha - 10) * 2
+    if action in ("list", "buy"):
+        return max(1, price * (100 - bonus) // 100)
+    return price * (100 + bonus) // 100
+
+def _shop_open(ctx):
+    # A shop opens when its keeper spawns: the library fills a locked chest in the keeper's
+    # room and gives the keeper the key. Re-spawning a keeper reuses the chest and catches
+    # the stock up to where the time has brought it.
+    shop.open(ctx, ctx.self, SHOP)
+
+mob("shopkeeper",
+    name = "the shopkeeper",
+    desc = "A brisk merchant with ink-stained fingers and a chest full of wares.",
+    vitals = vitals(hp = 60),
+    behaviors = [sentinel()],
+    hooks = {"shop_price": _shop_price},
+    on_spawn = _shop_open,
 )

@@ -1,6 +1,7 @@
 # Instructor-owned shared libraries. Any package can load() these files:
 #
-#     load("//lib:quest.star", "quest")
+#     load("//lib:quest.star", "quest")    # quests
+#     load("//lib:shop.star", "shop")      # shops, currency and stock containers
 #
 # lib is a privileged package kind: it may register global commands, such as `quests`.
 

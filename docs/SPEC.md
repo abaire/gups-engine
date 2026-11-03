@@ -1160,7 +1160,7 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
 | Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor or an item)                                                            |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                         |
+| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`    |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                        |
@@ -1204,7 +1204,10 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
     count, removes that many from the stack.
   - `set_charges(item, charges)` sets an item's remaining uses, from 0 to its prototype's `charges`; unlimited and
     stackable items are refused, and 0 doesn't run `empty`.
-  - Verbs never merge stacks. An item with instance affects or tag changes never merges into a stack.
+  - Verbs never merge stacks, except `merge_stack(item)`, which merges the item into a stack of the same prototype in
+    the same place with identical attributes, decay deadline and charges, as `get` does, and returns the view of the
+    stack that now holds it (the item itself if nothing matched). An item with instance affects or tag changes never
+    merges into a stack.
   - `transform(item, label)` keeps the item's id, location, count, attributes, affects, tag changes, name and timers. A
     stack into a non-stackable prototype keeps one of its count; a container into a non-container drops its contents on
     the ground; a locked container stays locked only if the new prototype has a `key`, else it is closed. It refuses a
@@ -1637,6 +1640,13 @@ saying the exit name is a reserved keyword.
 **`//lib:quest.star`:** `quest.define(id, title, steps)` returns a quest description. `start`, `advance(...,
 from_step=None)`, `complete`, `step`, `is_active` and `is_done` take `(ctx, actor, quest)`. Progress is a `quests` dict
 in the lib's own `lib` namespace on the player, so only the library writes it (§3.7).
+
+**`//lib:shop.star`:** `shop.define(id, stock, ...)` describes a shop and `shop.open(ctx, keeper, shop)` (from the
+keeper's `on_spawn`) binds a keeper to a stock container: a locked chest in its room or a pack it carries. Stock and the
+till (coins of the shop's currency, `//lib:gold_coin` by default) are real items in the container, restocked lazily over
+time while a keeper is present. Players use `list`, `buy`, `sell` and `value`. Prices start from `item(value=)`; the
+keeper's custom hook `shop_price` (§4.4) may change any price or refuse any customer, and plugin handlers for it join in
+(§4.15). `list` also sends the GMCP event `Shop.Stock`.
 
 **Roles and gating:** A command can require a role. To players without it the command doesn't exist: they get "Huh?",
 and `help` leaves it out. This applies to engine `@` tools and plugin commands alike. `@` commands registered from
@@ -3256,9 +3266,8 @@ State persistence, checkpoints, and crash consistency are implemented in
   next periodic checkpoint (or the final one at shutdown).
   - A cascade ends after each input line, after each actor's action in a tier, after the timer phase, and after the
     action phase.
-  - Triggers: an item moving from one player's custody to another's, a shop purchase, a bank deposit, a level-up, a
-    level lost, character creation or deletion, a change of choices or granted traits (§4.19), and logout or quit.
-    (Shops and banks don't exist yet.)
+  - Triggers: an item moving from one player's custody to another's, a level-up, a level lost, character creation or
+    deletion, a change of choices or granted traits (§4.19), and logout or quit.
   - The receive and the give are always captured at the same moment and land in the same transaction, which closes the
     classic give-then-crash duplication exploit.
 - **The writer:**
@@ -3754,3 +3763,4 @@ template's `.github/workflows/gates.yml`.
 | **M21**   | Plugin GMCP input and events: inbound GMCP routed to the plugin that registered the package (`onGmcp`), with size, depth and rate limits; a read-only `PluginGmcpWorld` whose handlers act through `command`; plugin GMCP event packages (`addGmcpEvent`, `PluginWorld.gmcp`); case-insensitive GMCP name checks and the reserved `Core` root (§4.10, §4.11, §4.15, §4.16, §5.1, §6.4).                                                               |
 | **M22**   | Starlark GMCP events: `gmcp_package()` for `lib` and `rules` packages with reserved roots and world-wide overlap checks, `ctx.gmcp(player, package, data)`, GMCP payload values and the 16 KB cap, harness `spawn_player(gmcp=)` and `p.gmcp()`, `world.html` listing (§2.3, §4.2, §4.5, §4.10, §4.12, §4.16, §6.1).                                                                                                                                  |
 | **M23**   | Item value and custom hooks: `item(value=)`, `hooks = {...}` on rooms, mobs and items, `ctx.call_hook` with plain-value arguments and results, the plugin handler chain (`addHook`, `PluginHookCall`), `cha` in the template schema (§3.3, §3.9, §4.2, §4.4, §4.5, §4.15, §4.16).                                                                                                                                                                     |
+| **M24**   | The shop library: `//lib:shop.star` with coin currency, stock containers (chest or pack) holding real stock and the till, lazy partial restocking, `list`/`buy`/`sell`/`value`, the `shop_price` custom hook, `Shop.Stock` GMCP, `ctx.merge_stack`; the tutorial shop (§4.5, §4.9, §5.11).                                                                                                                                                            |

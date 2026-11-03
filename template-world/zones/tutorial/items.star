@@ -62,6 +62,7 @@ item("healing_draught",
     kind = "consumable",     # free-form: the engine gives kind no meaning
     charges = 1,             # used up after one drink; empty = "destroy" is the default
     use_effect = heal(dice = "2d4+6", vital = "hp"),
+    value = 30,              # the shop's base price, before its margins
 )
 
 item("copper_ring",
@@ -69,6 +70,7 @@ item("copper_ring",
     desc = "A simple copper band that feels warm to the touch.",
     wear = "ring",
     resist_deltas = resists(fire = 2),
+    value = 15,              # the shop buys and sells it
 )
 
 item("wooden_shield",
@@ -77,6 +79,7 @@ item("wooden_shield",
     kind = "armor",
     wear = "offhand",
     stat_deltas = stats(armor = 2),
+    value = 20,              # the shop buys and sells it
 )
 
 item("dagger",

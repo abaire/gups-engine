@@ -60,6 +60,7 @@ import gups.core.world.setCharges
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
 import gups.core.world.spawnItem
+import gups.core.world.stack
 import gups.core.world.startCombat
 import gups.core.world.stopCombat
 import gups.core.world.takeXp
@@ -1356,6 +1357,15 @@ internal constructor(
       world.destroy(i, n)
       Starlark.NONE
     }
+
+  @StarlarkMethod(
+    name = "merge_stack",
+    doc =
+      "Merges an item into an identical stack in the same place; returns the stack that holds it.",
+    parameters = [Param(name = "item", named = true, doc = "Item to merge.")],
+  )
+  fun mergeStack(item: Any): Any =
+    verb("merge_stack") { v(world.stack(itemArg(item, "merge_stack(item)"))) }
 
   @StarlarkMethod(
     name = "set_charges",

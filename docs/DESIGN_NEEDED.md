@@ -230,12 +230,23 @@ moderation, quotas, and cross-character delivery handled?
 
 ## Economy and crafting
 
-### Shops
+### Shops (COMPLETED — M24)
 
 **Spec:** §5.11 (item custody log notes shops and banks do not exist yet). **Today:** items can be moved between
 inventories, dropped, or given, but the engine has no merchant behaviors or currency transaction mechanics.
 **Questions:** - Should shops ship as a standard `//lib` library or require engine primitives? - How should shop
 inventories handle infinite vs. limited stock, restocking cadences, and currency types?
+
+### Shopkeepers in combat
+
+**Spec:** §4.9 (`//lib:shop.star`), §4.5 (actor views), §4.16 (feature ownership). **Today:** a shop closes when its
+keeper's condition isn't `ok`, and a stunned keeper refuses to trade, but a keeper that is fighting keeps serving every
+customer, including the one attacking it. The `combat` feature owns `actor.fighting`, which fails when the feature is
+off, and scripts can't test whether a feature is enabled, so the library can't check for a fight in a portable way.
+**Questions:** - Should a fighting keeper refuse everyone, refuse only its attackers, or keep trading? - Do scripts need
+a way to test whether a feature is enabled, or should `actor.fighting` read as empty when combat is off? - Should a
+keeper remember customers who attacked it, for example by refusing them service or raising their prices? - Should
+restocking pause while the keeper is fighting?
 
 ### Crafting
 

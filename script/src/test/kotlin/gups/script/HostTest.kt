@@ -494,6 +494,85 @@ class HostTest {
   }
 
   @Test
+  fun `merge_stack joins an identical stack`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _go(ctx):
+                    a = ctx.actor
+                    ctx.give(a, ":coin", count = 5)
+                    first = a.inventory()[0]
+                    ctx.give(a, ":coin", count = 3)
+                    second = a.inventory()[1]
+                    merged = ctx.merge_stack(second)
+                    ctx.send(a, "count=%d stacks=%d same_id=%s" % (
+                        merged.count, len(a.inventory()), merged.id == first.id))
+
+                room("start", commands = {"go": _go})
+                item("coin", stackable = True)
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "go")
+    f.run()
+    assertContains(f.out(p), "count=8 stacks=1 same_id=True")
+  }
+
+  @Test
+  fun `merge_stack leaves different stacks apart`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _go(ctx):
+                    a = ctx.actor
+                    ctx.give(a, ":coin", count = 2)
+                    first = a.inventory()[0]
+                    ctx.give(a, ":coin", count = 2)
+                    second = a.inventory()[1]
+                    ctx.set_attr(second, "serial", 7)
+                    merged = ctx.merge_stack(second)
+                    ctx.send(a, "stacks=%d merged_is_second=%s first_count=%d" % (
+                        len(a.inventory()), merged.id == second.id, first.count))
+
+                room("start", commands = {"go": _go})
+                item("coin", stackable = True)
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "go")
+    f.run()
+    assertContains(f.out(p), "stacks=2 merged_is_second=True first_count=2")
+  }
+
+  @Test
+  fun `merge_stack returns the item when nothing matches`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _go(ctx):
+                    a = ctx.actor
+                    ctx.give(a, ":gem")
+                    gem = a.inventory()[0]
+                    back = ctx.merge_stack(gem)
+                    ctx.send(a, "same=%s" % (back.id == gem.id))
+
+                room("start", commands = {"go": _go})
+                item("gem")
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "go")
+    f.run()
+    assertContains(f.out(p), "same=True")
+  }
+
+  @Test
   fun `container verbs open, close, lock and unlock`() {
     val f =
       ScriptFixture(

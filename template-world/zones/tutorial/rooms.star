@@ -2,7 +2,7 @@
 #
 #                      arena (LARGE)
 #                        |
-#  gravel - tar_pit ---- hall (LARGE) ==== armory     (the guide waits in the hall)
+#  gravel - tar_pit ---- hall (LARGE) ==== armory == shop   (the guide waits in the hall)
 #  (crunchy)  (sticky floor)  |   (locked, creaky door)
 #                           gate  <- start here
 #
@@ -91,11 +91,22 @@ def _stock_armory(ctx):
 
 room("armory",
     name = "The Armory",
-    desc = "A cramped closet of racks, mostly empty.",
+    desc = "A cramped closet of racks, mostly empty. A passage leads east to a shop.",
     size = SIZE.cramped,
-    exits = [exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"]))],
+    exits = [
+        exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"])),
+        exit(DIR.east, to = ":shop"),
+    ],
     on_load = _stock_armory,
     on_reset = _stock_armory,
+)
+
+room("shop",
+    name = "The Shop",
+    desc = "A tidy stall of wares. A stout chest sits by the door and the shopkeeper keeps a close watch on it.",
+    size = SIZE.normal,
+    exits = [exit(DIR.west, to = ":armory")],
+    spawns = [spawn(":shopkeeper")],
 )
 
 def _blunted(ctx, base):

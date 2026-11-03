@@ -649,6 +649,33 @@ object DocExamples {
                 t.not_contains(p.do("score"), "You are ready to advance.")
             """,
         ),
+      "ctx.merge_stack" to
+        ex(
+          pkg =
+            """
+                def _merge(ctx):
+                    a = ctx.actor
+                    ctx.give(a, ":coin", count = 5)
+                    first = a.inventory()[0]
+                    ctx.give(a, ":coin", count = 3)
+                    second = a.inventory()[1]
+                    merged = ctx.merge_stack(second)
+                    ctx.send(a, "count=%d stacks=%d" % (merged.count, len(a.inventory())))
+
+                room("vault",
+                    desc = "A strongbox vault.",
+                    flags = ["dead_end_ok"],
+                    commands = {"merge": _merge},
+                )
+                item("coin", name = "a coin", plural = "coins", stackable = True)
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":vault")
+                t.contains(p.do("merge"), "count=8 stacks=1")
+            """,
+        ),
 
       // ---- Behaviors ----------------------------------------------------------------------
       "aggressive" to

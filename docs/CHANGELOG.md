@@ -4,6 +4,31 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Shops
+
+- Added `//lib:shop.star` to the template world: `shop.define(id, stock, ...)` describes a shop — stock lines with
+  `count`/`every`/`amount` (`count` `None` is unlimited, `0` is sell-only), a `till`, `buy_markup` (120 by default) and
+  `sell_rate` (50) — and the keeper's `on_spawn` calls `shop.open(ctx, keeper, shop)`, which fills and locks a chest in
+  the keeper's room (or gives the keeper a carried pack) and gives it the key. Stock and till are real items in the
+  container, restocked lazily over time while a keeper is present: the catch-up runs when the container opens or wakes
+  and before every `buy`, `sell` and `value`; `list` projects the same arithmetic without applying it.
+- The library registers the global commands `list` (fast lane), `buy`, `sell` and `value` (tick lane) and the GMCP
+  package `Shop.Stock`, which `list` sends with the keeper's name, the currency label, and one entry per line with the
+  item's name, label, price and count (`null` for unlimited stock). Prices start from `item(value = N)`: the customer
+  pays `value * buy_markup / 100`, rounded up, at least 1, and the shop pays `value * sell_rate / 100`. The keeper's
+  custom hook `shop_price` (M23's `hooks = {...}`) may return an int to change any price or a string to refuse any
+  customer, and plugin handlers registered for the name join the chain.
+- A shop is closed ("The shop is closed.") when its keeper's condition isn't `ok` or its container is missing, and a
+  stunned keeper answers "<Keeper> is in no state to trade." while still restocking. A fighting keeper still trades.
+- Added the library's items: `//lib:gold_coin` (a stackable currency, `value = 1`), `//lib:shop_chest` and
+  `//lib:shop_pack` (stock containers whose `on_open`/`on_wake` run the library's catch-up) and `//lib:shop_chest_key`.
+- The tutorial zone has a shopkeeper in a new shop room off the armory: it sells copper rings and wooden shields from a
+  locked chest and healing draughts without limit, and its `shop_price` hook discounts buying and pays more for selling
+  to customers with charisma above 10 and refuses items tagged `"stolen"`.
+- Added `ctx.merge_stack(item)`: merges the item into a stack of the same prototype in the same place with identical
+  attributes, decay deadline and charges (as `get` already did), and returns the view of the stack that now holds it
+  (the item itself if nothing matched). Equipped items and items that can't stack are returned unchanged.
+
 ### Item value and custom hooks
 
 - Added `item(value = N)`, an item's base price, an int of at least 0 (default 0). The engine gives it no other meaning

@@ -53,6 +53,12 @@ persistence, and linking to official specifications and generated API references
    * Spawning virtual players and executing simulated commands
    * Fast-forwarding world time and asserting outcomes
    * Running tests (`gups test`) and static checks (`gups lint`)
+8. **[08. Shops: The `//lib:shop.star` Library](08_shops.md)**
+   * Defining a shop with `shop.define`: stock lines, the till, and prices from `item(value=)`
+   * The stock container: locked chests, burglary, and time-based restocking
+   * Peddlers: carried packs that drop on death
+   * The `shop_price` custom hook: charisma discounts and stolen-goods refusals
+   * The `Shop.Stock` GMCP event and plugin handlers joining the hook
 
 ---
 
