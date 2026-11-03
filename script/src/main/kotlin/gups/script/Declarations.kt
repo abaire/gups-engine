@@ -839,6 +839,12 @@ internal class DeclarationBuiltins(
         d.choice("applies")?.let { AffectScope.valueOf(it.uppercase()) } ?: AffectScope.WORN
       val statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas"))
       val senseDeltas = senses(d["sense_deltas"], d.what("sense_deltas"), schema, true)
+      val maxVitalDeltas =
+        typed(d["max_vital_deltas"], TypedKind.VITALS, d.what("max_vital_deltas"))
+      val resistDeltas =
+        typed(d["resist_deltas"], TypedKind.RESISTS, d.what("resist_deltas")).mapKeys { (k, _) ->
+          DamageType(k)
+        }
       val modifiers = modifiers(d["modifiers"], d.what("modifiers"), features)
       val rawFlags = d.strList("flags").map { flag(it, d.what("flags")) }
       if ("stunned" in rawFlags)
@@ -849,6 +855,8 @@ internal class DeclarationBuiltins(
           applies = applies,
           statDeltas = statDeltas,
           senseDeltas = senseDeltas,
+          maxVitalDeltas = maxVitalDeltas,
+          resistDeltas = resistDeltas,
           modifiers = modifiers,
           flags = rawFlags.toSortedSet(),
         )
@@ -1002,6 +1010,13 @@ internal class DeclarationBuiltins(
             },
           statDeltas = typed(d["stat_deltas"], TypedKind.STATS, d.what("stat_deltas")),
           senseDeltas = senses(d["sense_deltas"], d.what("sense_deltas"), schema, true),
+          maxVitalDeltas =
+            typed(d["max_vital_deltas"], TypedKind.VITALS, d.what("max_vital_deltas")),
+          resistDeltas =
+            typed(d["resist_deltas"], TypedKind.RESISTS, d.what("resist_deltas")).mapKeys { (k, _)
+              ->
+              DamageType(k)
+            },
           tags = parseTags(d),
           stackable = d.bool("stackable") ?: false,
           decayPulses = d.int("decay_pulses"),
@@ -1016,9 +1031,15 @@ internal class DeclarationBuiltins(
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
       if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
-      if (proto.wear == null && (proto.equipAffects.isNotEmpty() || proto.modifiers.isNotEmpty())) {
+      if (
+        proto.wear == null &&
+          (proto.equipAffects.isNotEmpty() ||
+            proto.modifiers.isNotEmpty() ||
+            proto.maxVitalDeltas.isNotEmpty() ||
+            proto.resistDeltas.isNotEmpty())
+      ) {
         fail(
-          "item(): equip_affects and modifiers apply while the item is worn, so it needs a wear slot"
+          "item(): equip_affects, modifiers, max_vital_deltas and resist_deltas apply while the item is worn, so it needs a wear slot"
         )
       }
       if (
@@ -1503,6 +1524,18 @@ internal class DeclarationBuiltins(
           doc = "Sense score changes by channel while the affect lasts.",
         ),
         Param(
+          name = "max_vital_deltas",
+          named = true,
+          defaultValue = "None",
+          doc = "Vital maximum adjustments while the affect lasts, built with vitals(...).",
+        ),
+        Param(
+          name = "resist_deltas",
+          named = true,
+          defaultValue = "None",
+          doc = "Damage resistance adjustments while the affect lasts, built with resists(...).",
+        ),
+        Param(
           name = "applies",
           named = true,
           defaultValue = "None",
@@ -1521,6 +1554,8 @@ internal class DeclarationBuiltins(
     expireMsg: Any,
     modifiers: Any,
     senseDeltas: Any,
+    maxVitalDeltas: Any,
+    resistDeltas: Any,
     applies: Any,
   ): Any {
     val e =
@@ -1535,6 +1570,8 @@ internal class DeclarationBuiltins(
         expireMsg,
         modifiers,
         senseDeltas,
+        maxVitalDeltas,
+        resistDeltas,
         "apply_affect",
         schema,
         features,
@@ -2123,6 +2160,18 @@ internal class DeclarationBuiltins(
               default = "{}",
             ),
             DeclParam(
+              "max_vital_deltas",
+              "vitals",
+              "Vital maximum adjustments applied while the affect reaches the holder, built with vitals(...).",
+              default = "vitals()",
+            ),
+            DeclParam(
+              "resist_deltas",
+              "resists",
+              "Damage resistance adjustments applied while the affect reaches the holder, built with resists(...).",
+              default = "resists()",
+            ),
+            DeclParam(
               "modifiers",
               "dict[str, function]",
               "Rules modifiers active while the affect reaches the holder.",
@@ -2309,6 +2358,18 @@ internal class DeclarationBuiltins(
               "dict[str, int]",
               "Sense score changes by channel while the item is worn.",
               default = "{}",
+            ),
+            DeclParam(
+              "max_vital_deltas",
+              "vitals",
+              "Vital maximum adjustments applied while the item is worn, built with vitals(...).",
+              default = "vitals()",
+            ),
+            DeclParam(
+              "resist_deltas",
+              "resists",
+              "Damage resistance adjustments applied while the item is worn, built with resists(...).",
+              default = "resists()",
             ),
             DeclParam(
               "tags",
@@ -2570,6 +2631,8 @@ internal fun affectEffect(
   expireMsg: Any,
   mods: Any,
   senseDeltas: Any,
+  maxVitalDeltas: Any,
+  resistDeltas: Any,
   fn: String,
   schema: WorldSchema,
   features: Features = Features.ALL,
@@ -2595,6 +2658,11 @@ internal fun affectEffect(
     expireMessage = str(expireMsg, "$fn(expire_msg)"),
     modifiers = modifiers(mods, "$fn(modifiers)", features),
     senseDeltas = senses(senseDeltas, "$fn(sense_deltas)", schema, allowNegative = true),
+    maxVitalDeltas = typed(maxVitalDeltas, TypedKind.VITALS, "$fn(max_vital_deltas)"),
+    resistDeltas =
+      typed(resistDeltas, TypedKind.RESISTS, "$fn(resist_deltas)").mapKeys { (k, _) ->
+        DamageType(k)
+      },
   )
 }
 

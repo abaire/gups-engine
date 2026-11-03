@@ -981,6 +981,18 @@ internal constructor(
           doc = "Sense score changes by channel while the affect lasts.",
         ),
         Param(
+          name = "max_vital_deltas",
+          named = true,
+          defaultValue = "None",
+          doc = "Vital maximum adjustments while the affect lasts, built with vitals(...).",
+        ),
+        Param(
+          name = "resist_deltas",
+          named = true,
+          defaultValue = "None",
+          doc = "Damage resistance adjustments while the affect lasts, built with resists(...).",
+        ),
+        Param(
           name = "applies",
           named = true,
           defaultValue = "None",
@@ -1000,6 +1012,8 @@ internal constructor(
     expireMsg: Any,
     modifiers: Any,
     senseDeltas: Any,
+    maxVitalDeltas: Any,
+    resistDeltas: Any,
     applies: Any,
   ): Any =
     verb("apply_affect") {
@@ -1015,6 +1029,8 @@ internal constructor(
           expireMsg,
           modifiers,
           senseDeltas,
+          maxVitalDeltas,
+          resistDeltas,
           "apply_affect",
           world.schema,
           world.features,
@@ -1048,6 +1064,8 @@ internal constructor(
             owner as? Actor,
             e.modifiers,
             e.senseDeltas,
+            maxVitalDeltas = e.maxVitalDeltas,
+            resistDeltas = e.resistDeltas,
           )
         a?.let { AffectView(frame, item, it) } ?: Starlark.NONE
       } else {
@@ -1068,6 +1086,8 @@ internal constructor(
             owner as? Actor,
             e.modifiers,
             senseDeltas = e.senseDeltas,
+            maxVitalDeltas = e.maxVitalDeltas,
+            resistDeltas = e.resistDeltas,
           )
         a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
       }

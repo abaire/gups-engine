@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.model.Actor
 import gups.core.model.Item
+import gups.core.model.ItemLocation
 import gups.core.model.RestrictionPoint
 import gups.core.model.RestrictionRequest
 import gups.core.rules.RulesContext
@@ -33,8 +34,16 @@ fun World.actorSlots(a: Actor): List<String> {
     return it
   }
   val allSlots = equipmentSlots()
+  // The rules may read the actor's slots while working them out; that read sees every slot
+  // instead of asking the rules again without end.
+  if (a.askingSlots) return allSlots
   var raw: List<String>? = null
-  guarded("actor_slots of ${a.name}") { raw = rules.actorSlots(RulesContext(this, a)) }
+  a.askingSlots = true
+  try {
+    guarded("actor_slots of ${a.name}") { raw = rules.actorSlots(RulesContext(this, a)) }
+  } finally {
+    a.askingSlots = false
+  }
   val stray = raw?.filter { it !in allSlots }.orEmpty()
   for (slot in stray) {
     diagnose("rules", "actor_slots of ${a.name} returned unknown slot '$slot'")
@@ -48,6 +57,13 @@ fun World.actorSlots(a: Actor): List<String> {
     }
   a.slotCache = result
   return result
+}
+
+/** True if [item] is equipped in a slot that doesn't currently fit its wearer. */
+fun World.isInactive(item: Item): Boolean {
+  val loc = item.location as? ItemLocation.Equipped ?: return false
+  val wearer = actor(loc.actor) ?: return false
+  return !wearer.isActiveSlot(loc.slot)
 }
 
 /** Forgets [a]'s cached slots, so the next [actorSlots] asks the rules again. */

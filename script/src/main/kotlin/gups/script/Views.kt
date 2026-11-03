@@ -20,7 +20,9 @@ import gups.core.model.didYouMean
 import gups.core.world.HeldAffect
 import gups.core.world.Proposal
 import gups.core.world.World
+import gups.core.world.actorSlots
 import gups.core.world.heldAffects
+import gups.core.world.isInactive
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
 import net.starlark.java.annot.Param
@@ -291,6 +293,13 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(name = "skills", structField = true, doc = "Skill label to proficiency (0-100).")
   fun skills(): Any =
     read("actor.skills") { sDict(actor.skills.entries.associate { it.key.v to sInt(it.value) }) }
+
+  @StarlarkMethod(
+    name = "slots",
+    structField = true,
+    doc = "Equipment slots this actor currently has, a subset of equipment_slots().",
+  )
+  fun slots(): Any = read { sList(scope.world.actorSlots(actor)) }
 
   @StarlarkMethod(
     name = "equipped",
@@ -686,6 +695,35 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun senseDeltas(): Any = read {
     sDict(item.proto.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
   }
+
+  @StarlarkMethod(
+    name = "max_vital_deltas",
+    structField = true,
+    doc = "Vital maximum changes while worn.",
+  )
+  fun maxVitalDeltas(): Any = read {
+    TypedMap(TypedKind.VITALS, item.proto.maxVitalDeltas, scope.world.schema.vitalNames)
+  }
+
+  @StarlarkMethod(
+    name = "resist_deltas",
+    structField = true,
+    doc = "Resistance changes while worn.",
+  )
+  fun resistDeltas(): Any = read {
+    TypedMap(
+      TypedKind.RESISTS,
+      item.proto.resistDeltas.mapKeys { it.key.name },
+      scope.world.schema.damageTypes,
+    )
+  }
+
+  @StarlarkMethod(
+    name = "inactive",
+    structField = true,
+    doc = "True if equipped in a slot that does not currently fit its wearer.",
+  )
+  fun inactive(): Any = read { scope.world.isInactive(item) }
 }
 
 /** Where an item is. */
@@ -788,6 +826,26 @@ internal constructor(private val scope: ViewScope, private val host: Entity, val
     sDict(affect.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
 
   @StarlarkMethod(
+    name = "max_vital_deltas",
+    structField = true,
+    doc = "Vital maximum adjustments granted by this affect.",
+  )
+  fun maxVitalDeltas(): Any =
+    TypedMap(TypedKind.VITALS, affect.maxVitalDeltas, scope.world.schema.vitalNames)
+
+  @StarlarkMethod(
+    name = "resist_deltas",
+    structField = true,
+    doc = "Damage resistance adjustments granted by this affect.",
+  )
+  fun resistDeltas(): Any =
+    TypedMap(
+      TypedKind.RESISTS,
+      affect.resistDeltas.mapKeys { it.key.name },
+      scope.world.schema.damageTypes,
+    )
+
+  @StarlarkMethod(
     name = "source",
     structField = true,
     allowReturnNones = true,
@@ -871,6 +929,26 @@ internal constructor(private val scope: ViewScope, private val host: Item, val a
   )
   fun senseDeltas(): Any =
     sDict(affect.senseDeltas.entries.associate { it.key.name to sInt(it.value) })
+
+  @StarlarkMethod(
+    name = "max_vital_deltas",
+    structField = true,
+    doc = "Vital maximum adjustments granted by this affect.",
+  )
+  fun maxVitalDeltas(): Any =
+    TypedMap(TypedKind.VITALS, affect.maxVitalDeltas, scope.world.schema.vitalNames)
+
+  @StarlarkMethod(
+    name = "resist_deltas",
+    structField = true,
+    doc = "Damage resistance adjustments granted by this affect.",
+  )
+  fun resistDeltas(): Any =
+    TypedMap(
+      TypedKind.RESISTS,
+      affect.resistDeltas.mapKeys { it.key.name },
+      scope.world.schema.damageTypes,
+    )
 
   @StarlarkMethod(
     name = "source",

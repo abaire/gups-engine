@@ -334,6 +334,15 @@ class FacadeTest {
     assertEquals(20, ann.vital("hp"))
     assertEquals(20, ann.maxVital("mana"))
     assertEquals(0, ann.resist("fire"))
+    f.applyAffect(
+      ann,
+      "fireproof",
+      10,
+      resistDeltas = mapOf("fire" to 25),
+      maxVitalDeltas = mapOf("hp" to 5),
+    )
+    assertEquals(25, ann.resist("fire"))
+    assertEquals(25, ann.maxVital("hp"))
   }
 
   @Test
@@ -359,6 +368,20 @@ class FacadeTest {
         }
         .message!!,
       "unknown stat 'strength'",
+    )
+    assertContains(
+      assertFailsWith<IllegalArgumentException> {
+          f.applyAffect(ann, "bad_vital", 5, maxVitalDeltas = mapOf("hpp" to 5))
+        }
+        .message!!,
+      "unknown vital 'hpp'",
+    )
+    assertContains(
+      assertFailsWith<IllegalArgumentException> {
+          f.applyAffect(ann, "bad_resist", 5, resistDeltas = mapOf("fier" to 5))
+        }
+        .message!!,
+      "unknown damage type 'fier'",
     )
   }
 
@@ -529,6 +552,11 @@ class FacadeTest {
     assertNull(protoAff.expiresAt)
     assertEquals(mapOf("dex" to 2), protoAff.statDeltas)
 
+    assertEquals(1, charmItem.slotCost)
+    assertEquals(emptyMap(), charmItem.maxVitalDeltas)
+    assertEquals(emptyMap(), charmItem.resistDeltas)
+    assertEquals(false, charmItem.inactive)
+
     // Apply instance affect through facade
     testFacade.applyItemAffect(
       charmItem,
@@ -537,6 +565,8 @@ class FacadeTest {
       applies = "worn",
       statDeltas = mapOf("str" to 1),
       flags = setOf("sharp"),
+      maxVitalDeltas = mapOf("hp" to 10),
+      resistDeltas = mapOf("fire" to 15),
     )
     assertEquals(2, charmItem.affects.size)
     val instAff = charmItem.affects[1]
@@ -546,6 +576,8 @@ class FacadeTest {
     assertEquals(testWorld.pulse + 50, instAff.expiresAt)
     assertEquals(mapOf("str" to 1), instAff.statDeltas)
     assertEquals(listOf("sharp"), instAff.flags)
+    assertEquals(mapOf("hp" to 10), instAff.maxVitalDeltas)
+    assertEquals(mapOf("fire" to 15), instAff.resistDeltas)
 
     // Permanent instance affect
     testFacade.applyItemAffect(charmItem, "glow", duration = null, applies = "carried")

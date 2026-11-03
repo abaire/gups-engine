@@ -4,6 +4,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Equipment slots, slot families, item attacks, and vital and resist deltas
+
+- Added `slot_families()`, `actor_slots(ctx)` and `slot_cost(ctx)` rules exports, `item(slot_cost=)`, `max_vital_deltas`
+  and `resist_deltas` on items and affects, `ctx.damage_type` and `ctx.slot`, item view `inactive`, actor view `slots`,
+  spell damage through the `damage` chain, and attacks from every item with `dice`.
+
 ### Effects on items
 
 - Added the `item_affect(name, applies = "worn", stat_deltas = stats(), sense_deltas = {}, modifiers = {}, flags = [])`

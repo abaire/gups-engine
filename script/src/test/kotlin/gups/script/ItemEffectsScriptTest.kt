@@ -3,6 +3,7 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.Label
 import gups.core.model.ItemLocation
+import gups.core.world.actorSlots
 import gups.core.world.moveItem
 import gups.core.world.spawnItem
 import kotlin.test.Test
@@ -625,5 +626,263 @@ class ItemEffectsScriptTest {
     assertEquals(AttrValue.S("None"), blade.customAttributes["z:exp"])
     assertEquals(AttrValue.S("None"), blade.customAttributes["z:left"])
     assertEquals(AttrValue.S("None"), blade.customAttributes["z:applies"])
+  }
+
+  @Test
+  fun `vital and resist deltas on affects and views, and inactive flag flipping`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to
+            """
+            def _buff(ctx):
+                ctx.apply_affect(ctx.actor, "boost", 10, max_vital_deltas = vitals(hp = 5), resist_deltas = resists(fire = 10))
+
+            def _debuff(ctx):
+                ctx.apply_affect(ctx.actor, "weakness", 10, stat_deltas = stats(str = -5))
+
+            def _clean(ctx):
+                ctx.remove_affect(ctx.actor, "weakness")
+
+            def _inspect(ctx):
+                ctx.set_attr(ctx.self, "max_hp", str(ctx.actor.max_hp))
+                ctx.set_attr(ctx.self, "fire_res", str(ctx.actor.resists.fire))
+                ctx.set_attr(ctx.self, "has_wield", str("wield" in ctx.actor.slots))
+
+                aff = [x for x in ctx.actor.affects if x.name == "boost"][0]
+                ctx.set_attr(ctx.self, "aff_hp", str(aff.max_vital_deltas.hp))
+                ctx.set_attr(ctx.self, "aff_fire", str(aff.resist_deltas.fire))
+
+                ring = ctx.actor.equipped("finger_l")
+                ctx.set_attr(ctx.self, "ring_hp", str(ring.max_vital_deltas.hp))
+                ctx.set_attr(ctx.self, "ring_slash", str(ring.resist_deltas.slash))
+                ctx.set_attr(ctx.self, "ring_inactive", str(ring.inactive))
+
+                shield = ctx.actor.equipped("offhand")
+                ctx.set_attr(ctx.self, "shield_inactive", str(shield.inactive))
+
+            room("start")
+            item("ring", wear = "finger_l", max_vital_deltas = vitals(hp = 10), resist_deltas = resists(slash = 20))
+            item("greatsword", wear = "hand", tags = ["heavy"])
+            item("shield", wear = "offhand")
+            item("tester", commands = {"buff": _buff, "debuff": _debuff, "clean": _clean, "inspect": _inspect})
+            """,
+          "rules/package.star" to gups.script.testing.TestWorlds.RULES_PACKAGE,
+          "rules/combat.star" to
+            gups.script.testing.TestWorlds.rules(
+              """
+              def slot_cost(ctx):
+                  if ctx.item.has_tag("heavy"):
+                      return 2 if ctx.actor.str < 10 else 1
+                  return ctx.item.slot_cost
+              """
+            ),
+        )
+      )
+    val p = f.player(hp = 50)
+    val tester = f.w.spawnItem(Label("//zones/z:tester"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:ring"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:greatsword"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:shield"), ItemLocation.Carried(p.id))
+
+    f.input(p, "wear ring")
+    f.run()
+    f.input(p, "wield greatsword")
+    f.run()
+    f.input(p, "wear shield")
+    f.run()
+    f.input(p, "buff")
+    f.run()
+    f.input(p, "inspect")
+    f.run()
+
+    // 50 (base max) + 10 (ring) + 5 (boost affect) = 65
+    assertEquals(AttrValue.S("65"), tester.customAttributes["z:max_hp"])
+    assertEquals(AttrValue.S("10"), tester.customAttributes["z:fire_res"])
+    assertEquals(AttrValue.S("True"), tester.customAttributes["z:has_wield"])
+    assertEquals(AttrValue.S("5"), tester.customAttributes["z:aff_hp"])
+    assertEquals(AttrValue.S("10"), tester.customAttributes["z:aff_fire"])
+    assertEquals(AttrValue.S("10"), tester.customAttributes["z:ring_hp"])
+    assertEquals(AttrValue.S("20"), tester.customAttributes["z:ring_slash"])
+    assertEquals(AttrValue.S("False"), tester.customAttributes["z:ring_inactive"])
+    assertEquals(AttrValue.S("False"), tester.customAttributes["z:shield_inactive"])
+
+    // Apply weakness debuff: str drops to 5 < 10, greatsword cost becomes 2, shield becomes
+    // inactive
+    f.input(p, "debuff")
+    f.run()
+    f.input(p, "inspect")
+    f.run()
+
+    assertEquals(AttrValue.S("True"), tester.customAttributes["z:shield_inactive"])
+
+    // Clean weakness: str returns to 10, shield becomes active again
+    f.input(p, "clean")
+    f.run()
+    f.input(p, "inspect")
+    f.run()
+
+    assertEquals(AttrValue.S("False"), tester.customAttributes["z:shield_inactive"])
+  }
+
+  @Test
+  fun `item_affect vital and resist deltas reach the holder by scope and show in affect views`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _inspect(ctx):
+              aff = ctx.self.affects[0]
+              ctx.set_attr(ctx.self, "aff_hp", aff.max_vital_deltas.hp)
+              ctx.set_attr(ctx.self, "aff_fire", aff.resist_deltas.fire)
+
+          room("start")
+          item("charm", commands = {"inspect": _inspect}, affects = [item_affect(
+              "warmth", applies = "carried", max_vital_deltas = vitals(hp = 7), resist_deltas = resists(fire = 4))])
+          item("ring", wear = "finger_l", affects = [item_affect(
+              "ward", max_vital_deltas = vitals(hp = 3), resist_deltas = resists(pierce = 6))])
+          """
+        )
+      )
+    val p = f.player()
+    val charm = f.w.spawnItem(Label("//zones/z:charm"), ItemLocation.Carried(p.id))
+    f.w.spawnItem(Label("//zones/z:ring"), ItemLocation.Carried(p.id))
+
+    assertEquals(57, p.max("hp"))
+    assertEquals(4, p.effectiveResist("fire"))
+    assertEquals(0, p.effectiveResist("pierce"))
+
+    f.input(p, "wear ring")
+    f.run()
+    assertEquals(60, p.max("hp"))
+    assertEquals(6, p.effectiveResist("pierce"))
+
+    f.input(p, "inspect")
+    f.run()
+    assertEquals(AttrValue.I(7), charm.customAttributes["z:aff_hp"])
+    assertEquals(AttrValue.I(4), charm.customAttributes["z:aff_fire"])
+  }
+
+  @Test
+  fun `apply_affect effect primitive carries vital and resist deltas to actors and items`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          room("start")
+          item("sword", wear = "wield")
+          skill("ward", target = "self", effect = apply_affect(
+              "ward", 20, max_vital_deltas = vitals(hp = 5), resist_deltas = resists(fire = 10)))
+          skill("temper", target = "item", effect = apply_affect(
+              "tempered", 50, applies = "worn", max_vital_deltas = vitals(hp = 2), resist_deltas = resists(pierce = 3)))
+          """
+        )
+      )
+    val p = f.player()
+    val sword = f.w.spawnItem(Label("//zones/z:sword"), ItemLocation.Carried(p.id))
+    p.skills[Label("//zones/z:ward")] = 100
+    p.skills[Label("//zones/z:temper")] = 100
+
+    f.input(p, "cast ward")
+    f.run()
+    assertEquals(55, p.max("hp"))
+    assertEquals(10, p.effectiveResist("fire"))
+
+    f.input(p, "cast temper sword")
+    f.run()
+    assertEquals(1, sword.affects.size)
+    assertEquals(0, p.effectiveResist("pierce"))
+
+    f.input(p, "wield sword")
+    f.run()
+    assertEquals(57, p.max("hp"))
+    assertEquals(3, p.effectiveResist("pierce"))
+  }
+
+  @Test
+  fun `ctx apply_affect on an item carries vital and resist deltas`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _test(ctx):
+              ctx.apply_affect(ctx.self, "glow", None, applies = "carried",
+                  max_vital_deltas = vitals(hp = 4), resist_deltas = resists(fire = 8))
+
+          room("start")
+          item("wand", commands = {"test": _test})
+          """
+        )
+      )
+    val p = f.player()
+    val wand = f.w.spawnItem(Label("//zones/z:wand"), ItemLocation.Carried(p.id))
+
+    f.input(p, "test")
+    f.run()
+    assertEquals(mapOf("hp" to 4), wand.affects.single().maxVitalDeltas)
+    assertEquals(54, p.max("hp"))
+    assertEquals(8, p.effectiveResist("fire"))
+  }
+
+  @Test
+  fun `misspelled vitals and damage types in item_affect and apply_affect fail to load`() {
+    val badAffectVital =
+      load(
+        zone(
+          """
+          room("start")
+          item("charm", affects = [item_affect("x", applies = "carried", max_vital_deltas = vitals(hpo = 1))])
+          """
+        )
+      )
+    assertFalse(badAffectVital.ok)
+    assertContains(badAffectVital.report(), "unknown vital 'hpo' (did you mean 'hp'?)")
+
+    val badEffectResist =
+      load(
+        zone(
+          """
+          room("start")
+          skill("ward", target = "self", effect = apply_affect("ward", 5, resist_deltas = resists(frie = 1)))
+          """
+        )
+      )
+    assertFalse(badEffectResist.ok)
+    assertContains(badEffectResist.report(), "unknown damage type 'frie' (did you mean 'fire'?)")
+
+    val plainDict =
+      load(
+        zone(
+          """
+          room("start")
+          skill("ward", target = "self", effect = apply_affect("ward", 5, max_vital_deltas = {"hp": 1}))
+          """
+        )
+      )
+    assertFalse(plainDict.ok)
+    assertContains(plainDict.report(), "use vitals(...) instead of a dict")
+  }
+
+  @Test
+  fun `actor_slots reading actor slots sees every slot instead of recursing`() {
+    val f =
+      ScriptFixture(
+        zone("room(\"start\")") +
+          mapOf(
+            "rules/package.star" to gups.script.testing.TestWorlds.RULES_PACKAGE,
+            "rules/combat.star" to
+              gups.script.testing.TestWorlds.rules(
+                """
+                def actor_slots(ctx):
+                    return [s for s in ctx.actor.slots if s != "neck"]
+                """
+              ),
+          )
+      )
+    val p = f.player()
+    val slots = f.w.actorSlots(p)
+    assertFalse("neck" in slots)
+    assertTrue("wield" in slots)
   }
 }

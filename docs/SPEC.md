@@ -725,11 +725,11 @@ module(
   its keywords against the schema, with a suggestion for a misspelling. A plain dict in their place is an error that
   names the constructor.
 
-  |  Constructor   |         Keys          |                                                      Used for                                                      |
-  |----------------|-----------------------|--------------------------------------------------------------------------------------------------------------------|
-  | `vitals(**n)`  | declared vitals       | skill `cost`, mob `vitals`, and the results of `mitigate`, `move_cost`, `regen` and `starting_stats`               |
-  | `stats(**n)`   | declared stats        | `stat_deltas` on items, affects and `apply_affect`; mob `stats`; the results of `encumbrance` and `starting_stats` |
-  | `resists(**n)` | declared damage types | mob `resists`                                                                                                      |
+  |  Constructor   |         Keys          |                                                                           Used for                                                                            |
+  |----------------|-----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | `vitals(**n)`  | declared vitals       | skill `cost`, mob `vitals`, `max_vital_deltas` on items, affects and `apply_affect`, and the results of `mitigate`, `move_cost`, `regen` and `starting_stats` |
+  | `stats(**n)`   | declared stats        | `stat_deltas` on items, affects and `apply_affect`; mob `stats`; the results of `encumbrance` and `starting_stats`                                            |
+  | `resists(**n)` | declared damage types | mob `resists`; `resist_deltas` on items, affects and `apply_affect`                                                                                           |
 
   Their values are ints, and they read back like structs (`cost.mana`). `DAMAGE` is a struct of the declared damage
   types (`DAMAGE.fire == "fire"`), so a misspelling fails at that line; plain strings are accepted wherever a damage
@@ -737,8 +737,8 @@ module(
 
 - **Where names are checked:**
 
-  - At package load: `stat_deltas`, `cost`, mob `stats`/`vitals`/`resists`, item `damage_type`, the `damage(...)` and
-    `heal(...)` primitives, `flee(below = ...)` and skill `channels`.
+  - At package load: `stat_deltas`, `max_vital_deltas`, `resist_deltas`, `cost`, mob `stats`/`vitals`/`resists`, item
+    `damage_type`, the `damage(...)` and `heal(...)` primitives, `flee(below = ...)` and skill `channels`.
   - When the rules package loads: the dry run (§4.6).
   - At run time: actor view fields (`ctx.actor.lfe` is an error suggesting `life`), and the `type` and `vital` arguments
     of verbs.
@@ -862,6 +862,7 @@ item("short_bow",
      wear="wield", slot_cost=1, dice="1d6", damage_type="pierce",
      stat_deltas=stats(dex=1),
      sense_deltas={"sight": 1},  # sense score changes while worn (§5.7)
+     max_vital_deltas=vitals(), resist_deltas=resists(),  # while worn
      tags=["light_weapon"],  # free-form, for plugins (§4.19)
      modifiers={}, equip_affects=[],  # apply while worn (§4.6)
      affects=[],  # item_affect(...) entries (§3.3)
@@ -897,15 +898,16 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
 - **Item slots:** an item's slot is `wear = "<slot_or_family>"`; `wield = "<slot_or_family>"` is an alias. `wear` names
   a slot of `equipment_slots()` or a family of `slot_families()`, checked once the rules package has loaded; a name that
   is neither fails the package that declares the item, not the rules. `slot_cost` (default 1) is how many slots of its
-  family the item takes up when worn, at least 1; a value other than 1 needs `wear`. An item with `equip_affects` or
-  `modifiers` needs a `wear` slot. Each `equip_affects` entry is either an affect flag (for example `no_regen` or
-  `silenced`), which the wearer has while the item is worn, or `{"flag": ..., "pulses": n}`, which is applied for `n`
-  pulses when the item is equipped and runs out even if the item stays on. Equipping applies each entry to the wearer as
-  an affect, through `apply_affect` like a spell's, and removing the item removes the untimed ones. `stunned` must be
-  timed, so an item can't stun its wearer for good (§5.4.1). `item_affect(name, applies = "worn", stat_deltas = stats(),
-  sense_deltas = {}, modifiers = {}, flags = [])` declares a prototype affect. A `worn` affect with `modifiers` needs a
-  `wear` slot; a `carried` one doesn't. `stunned` isn't allowed. `variants` keys match the tag pattern and its values
-  are item labels, checked at load like `loot`.
+  family the item takes up when worn, at least 1; a value other than 1 needs `wear`. An item with `equip_affects`,
+  `modifiers`, `max_vital_deltas` or `resist_deltas` needs a `wear` slot. Each `equip_affects` entry is either an affect
+  flag (for example `no_regen` or `silenced`), which the wearer has while the item is worn, or `{"flag": ..., "pulses":
+  n}`, which is applied for `n` pulses when the item is equipped and runs out even if the item stays on. Equipping
+  applies each entry to the wearer as an affect, through `apply_affect` like a spell's, and removing the item removes
+  the untimed ones. `stunned` must be timed, so an item can't stun its wearer for good (§5.4.1). `item_affect(name,
+  applies = "worn", stat_deltas = stats(), sense_deltas = {}, max_vital_deltas = vitals(), resist_deltas = resists(),
+  modifiers = {}, flags = [])` declares a prototype affect. A `worn` affect with `modifiers` needs a `wear` slot; a
+  `carried` one doesn't. `stunned` isn't allowed. `variants` keys match the tag pattern and its values are item labels,
+  checked at load like `loot`.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
@@ -980,17 +982,17 @@ from `ctx.actor.skills`.
 
 **Effect primitives (v0):**
 
-|                                                                                Primitive                                                                                 |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `damage(dice, type)`                                                                                                                                                     | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and then `mitigate`. A negative chain result counts as 0.                                                                                                                                                                                                                         |
-| `heal(dice, vital)`                                                                                                                                                      | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, applies=None)` | Attach a timed buff or debuff. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one.                                                                                                                                                                                                                                                                   |
-| `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                    | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
-| `knockback(steps)`                                                                                                                                                       | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                            |
-| `pull(steps)`                                                                                                                                                            | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                               |
-| `stun(pulses)`                                                                                                                                                           | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `summon(label, count=1, duration=None)`                                                                                                                                  | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
-| `sequence(*effects)`                                                                                                                                                     | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|                                                                                                          Primitive                                                                                                           |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `damage(dice, type)`                                                                                                                                                                                                         | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and then `mitigate`. A negative chain result counts as 0.                                                                                                                                                                                                                         |
+| `heal(dice, vital)`                                                                                                                                                                                                          | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, max_vital_deltas=vitals(), resist_deltas=resists(), applies=None)` | Attach a timed buff or debuff. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one.                                                                                                                                                                                                                                                                   |
+| `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                                                                        | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
+| `knockback(steps)`                                                                                                                                                                                                           | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                            |
+| `pull(steps)`                                                                                                                                                                                                                | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                               |
+| `stun(pulses)`                                                                                                                                                                                                               | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `summon(label, count=1, duration=None)`                                                                                                                                                                                      | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
+| `sequence(*effects)`                                                                                                                                                                                                         | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ### 4.4 Hook Catalog
 
@@ -1096,8 +1098,9 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
 - **Leveling:** (`leveling` feature): `level`, `xp`, and `pending_levels`: how many levels the actor has the XP for and
   has not been given (§5.4). Reading it without `leveling` is an error, like `level`.
 - **Position:** `room`, `track_index` and `band_of(other)` (`track` feature), `home_room`, `recall_room`.
-- **State:** `attrs`, `affects`, `skills` and `is_casting`/`casting` (`skills` feature), `flags`, `has_flag(flag)`,
-  `equipped(slot)`, `inventory()`, `carried_weight`, `has_item(label)`, `fighting()` (`combat` feature), `wait_state`.
+- **State:** `attrs`, `affects`, `slots` (the slots `actor_slots` returned), `skills` and `is_casting`/`casting`
+  (`skills` feature), `flags`, `has_flag(flag)`, `equipped(slot)`, `inventory()`, `carried_weight`, `has_item(label)`,
+  `fighting()` (`combat` feature), `wait_state`.
 
 **Room view:**
 
@@ -1107,8 +1110,12 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
   without a door.
 
 **Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
-`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `stat_deltas`, `sense_deltas`, `affects`,
-`has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are the effective tags.
+`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `slot_cost`, `stat_deltas`, `sense_deltas`,
+`max_vital_deltas`, `resist_deltas`, `inactive`, `affects`, `has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are
+the effective tags.
+
+**Affect view:** `id`, `name`, `host`, `expires_at`, `remaining`, `flags`, `stat_deltas`, `sense_deltas`,
+`max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`.
 
 **Skill view:** includes `cost`, `channels`, `interrupt` and `tags`.
 
@@ -1184,9 +1191,9 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
   - `act_cast` requires the mob to know the skill.
 - **Attributes:** `get_attr` returns a mutable copy.
 - **Simulation verbs:** return `None`. A reason added twice counts once.
-- **`apply_affect`:** takes `modifiers`, as the effect primitive does. On an item it takes `applies` (`worn` or
-  `carried`, default `worn`) and allows `duration=None` (permanent); `applies` on an actor is an error; item affects
-  can't carry `stunned`.
+- **`apply_affect`:** takes `modifiers`, `sense_deltas`, `max_vital_deltas` and `resist_deltas`, as the effect primitive
+  does. On an item it takes `applies` (`worn` or `carried`, default `worn`) and allows `duration=None` (permanent);
+  `applies` on an actor is an error; item affects can't carry `stunned`.
 
 Verbs without a player command (`say`, `emote`, door and exit-block setters, `path_to`, and the mob actions) are public
 `core` functions, so Kotlin and plugins share them.
@@ -1320,7 +1327,8 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
   of `equipment_slots()`, with no repeats; no slot belongs to two families. A slot in no family stands alone.
 - `actor_slots(ctx)` returns a subset of `equipment_slots()`. A slot outside it is a bad return value: it is reported
   and dropped, and the actor keeps the rest. If every slot it returns is outside `equipment_slots()`, the actor has
-  every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore.
+  every slot. The answer is kept until the actor's traits, affects or level change, a reload or a restore. While
+  `actor_slots` runs for an actor, `ctx.actor.slots` on that actor reads as every slot of `equipment_slots()`.
 - `slot_cost(ctx)` gets `ctx.actor` and `ctx.item`. A result below 1 is a bad return value and counts as the item's
   `slot_cost`.
 
@@ -2141,8 +2149,9 @@ subsystems (`core` or `script`). It consists of three primary components:
 **Facade operations:**
 
 - **Verbs:** Verbs mirror the semantics and argument conventions of `ctx` verbs, invoking the same underlying engine
-  logic on the world thread. Attempting to target an entity that has left the world (a dead mob, logged-out player, or
-  destroyed item) fails with an error rather than silently doing nothing. Rooms never leave.
+  logic on the world thread. `applyAffect` and `applyItemAffect` take `maxVitalDeltas` and `resistDeltas`. Attempting to
+  target an entity that has left the world (a dead mob, logged-out player, or destroyed item) fails with an error rather
+  than silently doing nothing. Rooms never leave.
 - **Choices and traits:** `setChoices` validates and applies choice changes atomically or refuses all changes (§4.19).
   `grantTrait` and `removeTrait` add or remove granted traits across any actor, refusing invalid or duplicate
   modifications.
@@ -2153,8 +2162,10 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Schema validation:** Referencing undeclared stats, vitals, or damage types in verbs or trait deltas throws
   `IllegalArgumentException` with spelling suggestions.
 - **Read-only views:** Views wrap entities dynamically (`PluginEntity`, `PluginRoom`, `PluginActor`, `PluginItem`,
-  `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem.plural` exposes the prototype's optional
-  display name for stacks of 2 or more.
+  `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem` exposes `keywords`, `kind`, `wear`,
+  `slotCost`, `weight`, `maxVitalDeltas`, `resistDeltas`, `inactive`, `tags`, `variants`, `affects` (each a
+  `PluginItemAffect` with its `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`), `contents`, `custodian`
+  and `plural`. `PluginItem.plural` exposes the prototype's optional display name for stacks of 2 or more.
 - **Thread bridge:** `PluginViews.world(thread)` and `PluginViews.room/actor/item(value)` bridge Starlark threads and
   facade values. Unqualified attribute writes are disallowed when the calling plugin cannot be determined.
 

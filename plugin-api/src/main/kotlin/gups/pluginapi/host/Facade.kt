@@ -26,6 +26,7 @@ import gups.core.world.echo
 import gups.core.world.grantTrait
 import gups.core.world.heal
 import gups.core.world.heldAffects
+import gups.core.world.isInactive
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.pendingLevels
@@ -255,8 +256,20 @@ internal class ItemFacade(val item: Item, private val world: World) :
   override val wear: String?
     get() = item.proto.wear
 
+  override val slotCost: Int
+    get() = item.proto.slotCost
+
   override val weight: Int
     get() = item.proto.weight
+
+  override val maxVitalDeltas: Map<String, Int>
+    get() = item.proto.maxVitalDeltas
+
+  override val resistDeltas: Map<String, Int>
+    get() = item.proto.resistDeltas.mapKeys { it.key.name }
+
+  override val inactive: Boolean
+    get() = world.isInactive(item)
 
   override val tags: List<String>
     get() = item.tags.sorted()
@@ -288,6 +301,8 @@ internal fun toPlugin(ha: HeldAffect): PluginItemAffect =
     senseDeltas = ha.senseDeltas.mapKeys { it.key.name },
     origin = if (ha.instance == null) "proto" else "instance",
     expiresAt = ha.instance?.expiresAt?.takeIf { it != Long.MAX_VALUE },
+    maxVitalDeltas = ha.maxVitalDeltas,
+    resistDeltas = ha.resistDeltas.mapKeys { it.key.name },
   )
 
 internal class SkillFacade(val skill: gups.core.model.SkillProto) : PluginSkill {
@@ -391,6 +406,8 @@ internal class WorldFacade(
     duration: Int,
     statDeltas: Map<String, Int>,
     flags: Set<String>,
+    maxVitalDeltas: Map<String, Int>,
+    resistDeltas: Map<String, Int>,
   ) {
     require(name.isNotBlank()) { "apply_affect(name): must not be blank" }
     require(duration >= 1) { "apply_affect(duration): must be at least 1" }
@@ -400,7 +417,27 @@ internal class WorldFacade(
       "stat",
       "apply_affect(statDeltas)",
     )
-    world.applyAffect(actorOf(target, "apply_affect(target)"), name, duration, statDeltas, flags)
+    for (vital in maxVitalDeltas.keys) declared(
+      vital,
+      world.schema.vitalNames,
+      "vital",
+      "apply_affect(maxVitalDeltas)",
+    )
+    for (type in resistDeltas.keys) declared(
+      type,
+      world.schema.damageTypes,
+      "damage type",
+      "apply_affect(resistDeltas)",
+    )
+    world.applyAffect(
+      target = actorOf(target, "apply_affect(target)"),
+      name = name,
+      duration = duration,
+      statDeltas = statDeltas,
+      flags = flags,
+      maxVitalDeltas = maxVitalDeltas,
+      resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
+    )
   }
 
   override fun removeAffect(target: PluginActor, name: String): Boolean =
@@ -414,6 +451,8 @@ internal class WorldFacade(
     statDeltas: Map<String, Int>,
     flags: Set<String>,
     senseDeltas: Map<String, Int>,
+    maxVitalDeltas: Map<String, Int>,
+    resistDeltas: Map<String, Int>,
   ) {
     val target = itemOf(item, "apply_item_affect(item)")
     require(name.isNotBlank()) { "apply_item_affect(name): must not be blank" }
@@ -435,6 +474,18 @@ internal class WorldFacade(
       "channel",
       "apply_item_affect(senseDeltas)",
     )
+    for (vital in maxVitalDeltas.keys) declared(
+      vital,
+      world.schema.vitalNames,
+      "vital",
+      "apply_item_affect(maxVitalDeltas)",
+    )
+    for (type in resistDeltas.keys) declared(
+      type,
+      world.schema.damageTypes,
+      "damage type",
+      "apply_item_affect(resistDeltas)",
+    )
     world.applyItemAffect(
       item = target,
       name = name,
@@ -443,6 +494,8 @@ internal class WorldFacade(
       statDeltas = statDeltas,
       flags = flags,
       senseDeltas = senseDeltas.mapKeys { Channel(it.key) },
+      maxVitalDeltas = maxVitalDeltas,
+      resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
     )
   }
 

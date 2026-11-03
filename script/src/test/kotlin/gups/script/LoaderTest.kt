@@ -584,4 +584,46 @@ class LoaderTest {
       assertEquals("attribute namespace 'weather' is the namespace of plugin 'weather'", e.message)
     }
   }
+
+  @Test
+  fun `item with unknown vital or damage type in delta maps fails with did-you-mean`() {
+    val badVital =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"i\", wear = \"finger_l\", max_vital_deltas = vitals(hpo = 5))",
+        )
+      )
+    assertContains(only(badVital).message, "unknown vital 'hpo' (did you mean 'hp'?)")
+
+    val badResist =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"i\", wear = \"finger_l\", resist_deltas = resists(frie = 5))",
+        )
+      )
+    assertContains(only(badResist).message, "unknown damage type 'frie' (did you mean 'fire'?)")
+  }
+
+  @Test
+  fun `item with vital or resist deltas without wear fails to load`() {
+    val unwornVital =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"i\", max_vital_deltas = vitals(hp = 5))",
+        )
+      )
+    assertContains(only(unwornVital).message, "needs a wear slot")
+
+    val unwornResist =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"i\", resist_deltas = resists(fire = 5))",
+        )
+      )
+    assertContains(only(unwornResist).message, "needs a wear slot")
+  }
 }

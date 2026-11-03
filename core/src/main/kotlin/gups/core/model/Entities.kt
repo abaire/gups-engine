@@ -432,6 +432,7 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   internal val inventoryIndex = TreeMap<EntityId, Item>()
   internal val equipmentIndex = LinkedHashMap<String, Item>()
   internal var slotCache: List<String>? = null
+  internal var askingSlots = false
 
   /**
    * Worn slots whose items don't fit the actor's current slots or capacity; worked out, not saved.

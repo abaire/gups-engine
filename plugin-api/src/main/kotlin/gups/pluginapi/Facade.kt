@@ -48,6 +48,8 @@ interface PluginWorld {
     duration: Int,
     statDeltas: Map<String, Int> = emptyMap(),
     flags: Set<String> = emptySet(),
+    maxVitalDeltas: Map<String, Int> = emptyMap(),
+    resistDeltas: Map<String, Int> = emptyMap(),
   )
 
   fun removeAffect(target: PluginActor, name: String): Boolean
@@ -60,6 +62,8 @@ interface PluginWorld {
     statDeltas: Map<String, Int> = emptyMap(),
     flags: Set<String> = emptySet(),
     senseDeltas: Map<String, Int> = emptyMap(),
+    maxVitalDeltas: Map<String, Int> = emptyMap(),
+    resistDeltas: Map<String, Int> = emptyMap(),
   )
 
   fun removeItemAffect(item: PluginItem, name: String): Boolean
@@ -257,7 +261,19 @@ interface PluginItem : PluginEntity {
   val keywords: List<String>
   val kind: String
   val wear: String?
+
+  /** How many slots of its family this item occupies when equipped, at least 1. */
+  val slotCost: Int
   val weight: Int
+
+  /** Vital maximum adjustments while equipped, by vital name. */
+  val maxVitalDeltas: Map<String, Int>
+
+  /** Damage resistance percentage adjustments while equipped, by damage type. */
+  val resistDeltas: Map<String, Int>
+
+  /** True if equipped in a slot that does not currently fit its wearer. */
+  val inactive: Boolean
 
   /** Effective tags, sorted: the prototype's plus those added, minus those removed. */
   val tags: List<String>
@@ -296,6 +312,10 @@ data class PluginItemAffect(
   val origin: String,
   /** Absolute pulse, or null when permanent or from the prototype. */
   val expiresAt: Long?,
+  /** Vital maximum adjustments while the affect reaches the holder, by vital name. */
+  val maxVitalDeltas: Map<String, Int> = emptyMap(),
+  /** Damage resistance adjustments while the affect reaches the holder, by damage type. */
+  val resistDeltas: Map<String, Int> = emptyMap(),
 )
 
 interface PluginSkill {

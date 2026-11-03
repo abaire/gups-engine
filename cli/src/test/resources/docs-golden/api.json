@@ -915,6 +915,26 @@
             "doc": "Sense score changes by channel while the affect lasts."
           },
           {
+            "symbol": "ctx.apply_affect.max_vital_deltas",
+            "name": "max_vital_deltas",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Vital maximum adjustments while the affect lasts, built with vitals(...)."
+          },
+          {
+            "symbol": "ctx.apply_affect.resist_deltas",
+            "name": "resist_deltas",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Damage resistance adjustments while the affect lasts, built with resists(...)."
+          },
+          {
             "symbol": "ctx.apply_affect.applies",
             "name": "applies",
             "positional": true,

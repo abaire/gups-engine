@@ -425,6 +425,30 @@
           "since": 1
         },
         {
+          "symbol": "item.max_vital_deltas",
+          "name": "max_vital_deltas",
+          "type": "vitals",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "vitals()",
+          "allowed_values": [],
+          "doc": "Vital maximum adjustments applied while the item is worn, built with vitals(...).",
+          "since": 1
+        },
+        {
+          "symbol": "item.resist_deltas",
+          "name": "resist_deltas",
+          "type": "resists",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "resists()",
+          "allowed_values": [],
+          "doc": "Damage resistance adjustments applied while the item is worn, built with resists(...).",
+          "since": 1
+        },
+        {
           "symbol": "item.tags",
           "name": "tags",
           "type": "list[str]",
@@ -600,6 +624,30 @@
           "default": "{}",
           "allowed_values": [],
           "doc": "Sense score changes by channel while the affect reaches the holder.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.max_vital_deltas",
+          "name": "max_vital_deltas",
+          "type": "vitals",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "vitals()",
+          "allowed_values": [],
+          "doc": "Vital maximum adjustments applied while the affect reaches the holder, built with vitals(...).",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.resist_deltas",
+          "name": "resist_deltas",
+          "type": "resists",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "resists()",
+          "allowed_values": [],
+          "doc": "Damage resistance adjustments applied while the affect reaches the holder, built with resists(...).",
           "since": 1
         },
         {
@@ -2981,6 +3029,26 @@
             "doc": "Sense score changes by channel while the affect lasts."
           },
           {
+            "symbol": "ctx.apply_affect.max_vital_deltas",
+            "name": "max_vital_deltas",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Vital maximum adjustments while the affect lasts, built with vitals(...)."
+          },
+          {
+            "symbol": "ctx.apply_affect.resist_deltas",
+            "name": "resist_deltas",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Damage resistance adjustments while the affect lasts, built with resists(...)."
+          },
+          {
             "symbol": "ctx.apply_affect.applies",
             "name": "applies",
             "positional": true,
@@ -4464,6 +4532,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.slots",
+          "name": "slots",
+          "doc": "Equipment slots this actor currently has, a subset of equipment_slots().",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.track_index",
           "feature": "track",
           "name": "track_index",
@@ -4655,6 +4729,12 @@
           "since": 1
         },
         {
+          "symbol": "view:affect.max_vital_deltas",
+          "name": "max_vital_deltas",
+          "doc": "Vital maximum adjustments granted by this affect.",
+          "since": 1
+        },
+        {
           "symbol": "view:affect.name",
           "name": "name",
           "doc": "The affect's name.",
@@ -4670,6 +4750,12 @@
           "symbol": "view:affect.remaining",
           "name": "remaining",
           "doc": "Pulses until it expires.",
+          "since": 1
+        },
+        {
+          "symbol": "view:affect.resist_deltas",
+          "name": "resist_deltas",
+          "doc": "Damage resistance adjustments granted by this affect.",
           "since": 1
         },
         {
@@ -4845,6 +4931,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.inactive",
+          "name": "inactive",
+          "doc": "True if equipped in a slot that does not currently fit its wearer.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.keywords",
           "name": "keywords",
           "doc": "Words that match this item when targeting.",
@@ -4869,6 +4961,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.max_vital_deltas",
+          "name": "max_vital_deltas",
+          "doc": "Vital maximum changes while worn.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.name",
           "name": "name",
           "doc": "The entity's display name.",
@@ -4885,6 +4983,12 @@
           "feature": "track",
           "name": "range",
           "doc": "A weapon's reach: 'melee', 'near' or 'far'.",
+          "since": 1
+        },
+        {
+          "symbol": "view:item.resist_deltas",
+          "name": "resist_deltas",
+          "doc": "Resistance changes while worn.",
           "since": 1
         },
         {
@@ -5071,6 +5175,12 @@
           "since": 1
         },
         {
+          "symbol": "view:proto_affect.max_vital_deltas",
+          "name": "max_vital_deltas",
+          "doc": "Vital maximum adjustments granted by this affect.",
+          "since": 1
+        },
+        {
           "symbol": "view:proto_affect.name",
           "name": "name",
           "doc": "The affect's name.",
@@ -5086,6 +5196,12 @@
           "symbol": "view:proto_affect.remaining",
           "name": "remaining",
           "doc": "Always None: prototype affects never expire.",
+          "since": 1
+        },
+        {
+          "symbol": "view:proto_affect.resist_deltas",
+          "name": "resist_deltas",
+          "doc": "Damage resistance adjustments granted by this affect.",
           "since": 1
         },
         {
@@ -5501,6 +5617,28 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Sense score changes by channel while the affect lasts."
+        },
+        {
+          "symbol": "apply_affect.max_vital_deltas",
+          "feature": "skills",
+          "name": "max_vital_deltas",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Vital maximum adjustments while the affect lasts, built with vitals(...)."
+        },
+        {
+          "symbol": "apply_affect.resist_deltas",
+          "feature": "skills",
+          "name": "resist_deltas",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Damage resistance adjustments while the affect lasts, built with resists(...)."
         },
         {
           "symbol": "apply_affect.applies",
@@ -6684,6 +6822,12 @@
           "symbol": "p.skills",
           "name": "skills",
           "doc": "Skill label to proficiency (0-100).",
+          "since": 1
+        },
+        {
+          "symbol": "p.slots",
+          "name": "slots",
+          "doc": "Equipment slots this actor currently has, a subset of equipment_slots().",
           "since": 1
         },
         {

@@ -195,6 +195,8 @@ class WeatherPluginTest {
       duration: Int,
       statDeltas: Map<String, Int>,
       flags: Set<String>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ) {
       affects += listOf(target, name, duration, statDeltas)
     }
@@ -230,6 +232,8 @@ class WeatherPluginTest {
       statDeltas: Map<String, Int>,
       flags: Set<String>,
       senseDeltas: Map<String, Int>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ) = TODO()
 
     override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO()

@@ -167,7 +167,7 @@
 </table>
 </article>
 <article id="ctx.apply_affect" class="entry">
-<h4><code>apply_affect(target, name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {}, sense_deltas = {}, applies = None)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>apply_affect(target, name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {}, sense_deltas = {}, max_vital_deltas = None, resist_deltas = None, applies = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Attaches a buff or debuff to an actor or item; re-applying a name replaces it.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -183,6 +183,8 @@
 <tr id="ctx.apply_affect.expire_msg"><td><code>expire_msg</code></td><td>positional or named</td><td><code>''</code></td><td>Text sent to the target when the affect ends.</td></tr>
 <tr id="ctx.apply_affect.modifiers"><td><code>modifiers</code></td><td>positional or named</td><td><code>{}</code></td><td>Rules modifiers active while the affect lasts, by modifier point name.</td></tr>
 <tr id="ctx.apply_affect.sense_deltas"><td><code>sense_deltas</code></td><td>positional or named</td><td><code>{}</code></td><td>Sense score changes by channel while the affect lasts.</td></tr>
+<tr id="ctx.apply_affect.max_vital_deltas"><td><code>max_vital_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Vital maximum adjustments while the affect lasts, built with vitals(...).</td></tr>
+<tr id="ctx.apply_affect.resist_deltas"><td><code>resist_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Damage resistance adjustments while the affect lasts, built with resists(...).</td></tr>
 <tr id="ctx.apply_affect.applies"><td><code>applies</code></td><td>positional or named</td><td><code>None</code></td><td>Item affects only: 'worn' or 'carried'.</td></tr>
 </tbody>
 </table>

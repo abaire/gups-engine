@@ -99,7 +99,11 @@ class CursePluginTest {
     override val keywords: List<String> = emptyList()
     override val kind: String = "item"
     override val wear: String? = null
+    override val slotCost: Int = 1
     override val weight: Int = 1
+    override val maxVitalDeltas: Map<String, Int> = emptyMap()
+    override val resistDeltas: Map<String, Int> = emptyMap()
+    override val inactive: Boolean = false
     override val tags: List<String> = tags.sorted()
 
     override fun hasTag(tag: String): Boolean = tag in tags
@@ -178,6 +182,8 @@ class CursePluginTest {
       duration: Int,
       statDeltas: Map<String, Int>,
       flags: Set<String>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ) = TODO()
 
     override fun removeAffect(target: PluginActor, name: String): Boolean = TODO()
@@ -190,6 +196,8 @@ class CursePluginTest {
       statDeltas: Map<String, Int>,
       flags: Set<String>,
       senseDeltas: Map<String, Int>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ) = TODO()
 
     override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO()

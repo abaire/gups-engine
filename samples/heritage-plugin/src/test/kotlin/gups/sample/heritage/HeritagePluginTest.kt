@@ -180,7 +180,11 @@ class HeritagePluginTest {
     override val keywords = listOf("item")
     override val kind = "armor"
     override val wear = "body"
+    override val slotCost = 1
     override val weight = 10
+    override val maxVitalDeltas = emptyMap<String, Int>()
+    override val resistDeltas = emptyMap<String, Int>()
+    override val inactive = false
     override val plural: String? = null
 
     override fun hasTag(tag: String): Boolean = tag in tags
@@ -236,6 +240,8 @@ class HeritagePluginTest {
       duration: Int,
       statDeltas: Map<String, Int>,
       flags: Set<String>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ) = TODO()
 
     override fun removeAffect(target: PluginActor, name: String) = TODO()
@@ -248,6 +254,8 @@ class HeritagePluginTest {
       statDeltas: Map<String, Int>,
       flags: Set<String>,
       senseDeltas: Map<String, Int>,
+      maxVitalDeltas: Map<String, Int>,
+      resistDeltas: Map<String, Int>,
     ): Unit = TODO("not used")
 
     override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO("not used")
