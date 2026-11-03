@@ -6,6 +6,13 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ### Consumables and charges
 
+- `item(charges=N, empty=...)` declares the uses an item has before being spent (`charges`, at least 1, or `None` for
+  unlimited) and what happens when the last is spent (`empty`: `"destroy"`, `"keep"`, or the name of a variant). A
+  stackable item may only have `charges = 1` and cannot `keep`.
+- `item.charges` and `item.max_charges` on item views expose uses left and the prototype's charges, or `None` when
+  unlimited.
+- `ctx.set_charges(item, charges)` sets an item's remaining uses, from 0 to its prototype's charges; unlimited and
+  stackable items are refused, and 0 does not run `empty`.
 - An item with `charges` and none left is refused ("There are no charges left in {item}."). After `on_use`, if the item
   is still in the world, the use spends one charge, or one item of a stack; the last charge runs the item's `empty`
   action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without `charges` is never

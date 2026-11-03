@@ -2012,6 +2012,34 @@
         ]
       },
       {
+        "symbol": "ctx.set_charges",
+        "name": "set_charges",
+        "doc": "Sets an item's remaining uses, from 0 to its prototype's charges.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_charges.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item with charges."
+          },
+          {
+            "symbol": "ctx.set_charges.charges",
+            "name": "charges",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Uses left; 0 doesn't run the empty action."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.spawn",
         "name": "spawn",
         "doc": "Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count > 1 makes several.",

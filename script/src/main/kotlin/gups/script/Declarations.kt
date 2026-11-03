@@ -16,6 +16,7 @@ import gups.core.model.DoorProto
 import gups.core.model.DoorState
 import gups.core.model.DormantRecovery
 import gups.core.model.Effect
+import gups.core.model.EmptyAction
 import gups.core.model.EquipAffect
 import gups.core.model.ExitProto
 import gups.core.model.Interrupt
@@ -989,6 +990,27 @@ internal class DeclarationBuiltins(
         }
         out
       }
+      val charges = d.int("charges")
+      val empty = d.str("empty")
+      if (charges != null && charges < 1) fail("item(charges): must be at least 1")
+      if (empty != null && empty != "destroy" && charges == null) fail("item(empty): needs charges")
+      val stackable = d.bool("stackable") ?: false
+      if (stackable && charges != null && charges != 1) {
+        fail("item(charges): a stackable item can only have 1 charge")
+      }
+      if (stackable && empty == "keep") {
+        fail("item(empty): a stackable item can't keep an empty item")
+      }
+      if (empty != null && empty != "destroy" && empty != "keep" && empty !in variants) {
+        fail("item(empty): '$empty' is not 'destroy', 'keep' or one of this item's variants")
+      }
+      val emptyAction =
+        when (empty) {
+          null,
+          "destroy" -> EmptyAction.Destroy
+          "keep" -> EmptyAction.Keep
+          else -> EmptyAction.Variant(empty)
+        }
       val def = ItemProto(label, name, emptyList())
       val proto =
         ItemProto(
@@ -1018,7 +1040,7 @@ internal class DeclarationBuiltins(
               DamageType(k)
             },
           tags = parseTags(d),
-          stackable = d.bool("stackable") ?: false,
+          stackable = stackable,
           decayPulses = d.int("decay_pulses"),
           container = container,
           commands = commands(d["commands"], d.what("commands"), pkg),
@@ -1028,6 +1050,8 @@ internal class DeclarationBuiltins(
           modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
           version = version(d),
           plural = plural,
+          charges = charges,
+          empty = emptyAction,
         )
       if (proto.weight < 0) fail("item(weight): can't be negative")
       if (proto.keywords.isEmpty()) fail("item(keywords): an item needs at least one keyword")
@@ -2419,6 +2443,18 @@ internal class DeclarationBuiltins(
               "dict[str, str]",
               "Related item prototypes by free-form name, for transform.",
               default = "{}",
+            ),
+            DeclParam(
+              "charges",
+              "int",
+              "Uses before the item is spent, at least 1; None for unlimited.",
+              default = "None",
+            ),
+            DeclParam(
+              "empty",
+              "str",
+              "After the last charge: 'destroy', 'keep', or the name of one of the item's variants.",
+              default = "'destroy'",
             ),
             DeclParam(
               "modifiers",

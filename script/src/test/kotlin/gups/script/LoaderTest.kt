@@ -5,6 +5,7 @@ import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Effect
+import gups.core.model.EmptyAction
 import gups.core.model.TrackSize
 import gups.core.world.HookName
 import gups.script.testing.TestWorlds
@@ -625,5 +626,102 @@ class LoaderTest {
         )
       )
     assertContains(only(unwornResist).message, "needs a wear slot")
+  }
+
+  @Test
+  fun `item charges below 1 fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"wand\", charges = 0)",
+        )
+      )
+    assertContains(only(r).message, "item(charges): must be at least 1")
+  }
+
+  @Test
+  fun `item empty without charges fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"wand\", empty = \"keep\")",
+        )
+      )
+    assertContains(only(r).message, "item(empty): needs charges")
+  }
+
+  @Test
+  fun `stackable item with charges not equal to 1 fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"potion\", stackable = True, charges = 2)",
+        )
+      )
+    assertContains(only(r).message, "item(charges): a stackable item can only have 1 charge")
+  }
+
+  @Test
+  fun `stackable item with empty keep fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"potion\", stackable = True, charges = 1, empty = \"keep\")",
+        )
+      )
+    assertContains(only(r).message, "item(empty): a stackable item can't keep an empty item")
+  }
+
+  @Test
+  fun `item empty with unknown variant fails load`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"wand\", charges = 3, empty = \"dust\")",
+        )
+      )
+    assertContains(
+      only(r).message,
+      "item(empty): 'dust' is not 'destroy', 'keep' or one of this item's variants",
+    )
+  }
+
+  @Test
+  fun `item with charges and empty variant loads successfully`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            item("spent_wand")
+            item("wand", charges = 3, empty = "spent", variants = {"spent": ":spent_wand"})
+            """,
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val wand = r.prototypes().item(Label("//zones/z:wand"))
+    assertEquals(3, wand.charges)
+    assertEquals(EmptyAction.Variant("spent"), wand.empty)
+  }
+
+  @Test
+  fun `item empty destroy without charges loads`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to "item(\"lamp\", empty = \"destroy\")",
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val lamp = r.prototypes().item(Label("//zones/z:lamp"))
+    assertEquals(null, lamp.charges)
+    assertEquals(EmptyAction.Destroy, lamp.empty)
   }
 }

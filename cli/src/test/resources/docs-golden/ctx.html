@@ -590,6 +590,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.set_charges" class="entry">
+<h4><code>set_charges(item, charges)</code> <span class="since">since api_version 1</span></h4>
+<p>Sets an item's remaining uses, from 0 to its prototype's charges.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_charges.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item with charges.</td></tr>
+<tr id="ctx.set_charges.charges"><td><code>charges</code></td><td>positional or named</td><td></td><td>Uses left; 0 doesn't run the empty action.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.spawn" class="entry">
 <h4><code>spawn(label, at, index = 0, count = 1)</code> <span class="since">since api_version 1</span></h4>
 <p>Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count &gt; 1 makes several.</p>

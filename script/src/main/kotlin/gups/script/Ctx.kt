@@ -50,6 +50,7 @@ import gups.core.world.say
 import gups.core.world.send
 import gups.core.world.setActive
 import gups.core.world.setAnchor
+import gups.core.world.setCharges
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
 import gups.core.world.spawnItem
@@ -1259,6 +1260,26 @@ internal constructor(
       val n = intOrNull(count, "destroy(count)") ?: i.count
       if (n !in 1..i.count) fail("destroy(count): must be between 1 and ${i.count}")
       world.destroy(i, n)
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "set_charges",
+    doc = "Sets an item's remaining uses, from 0 to its prototype's charges.",
+    parameters =
+      [
+        Param(name = "item", named = true, doc = "Item with charges."),
+        Param(name = "charges", named = true, doc = "Uses left; 0 doesn't run the empty action."),
+      ],
+  )
+  fun setCharges(item: Any, charges: Any): Any =
+    verb("set_charges") {
+      val i = itemArg(item, "set_charges(item)")
+      val n = int(charges, "set_charges(charges)")
+      val max = i.proto.charges ?: fail("set_charges: ${i.name} has unlimited uses")
+      if (i.proto.stackable) fail("set_charges: ${i.name} is stackable")
+      if (n !in 0..max) fail("set_charges: charges must be between 0 and $max, got $n")
+      world.setCharges(i, n)
       Starlark.NONE
     }
 

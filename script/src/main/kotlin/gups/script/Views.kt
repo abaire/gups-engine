@@ -584,6 +584,22 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
   fun count(): Any = read { sInt(item.count) }
 
   @StarlarkMethod(
+    name = "charges",
+    structField = true,
+    allowReturnNones = true,
+    doc = "Uses left, or None when unlimited.",
+  )
+  fun charges(): Any? = read { item.charges?.let(::sInt) }
+
+  @StarlarkMethod(
+    name = "max_charges",
+    structField = true,
+    allowReturnNones = true,
+    doc = "The prototype's charges, or None when unlimited.",
+  )
+  fun maxCharges(): Any? = read { item.proto.charges?.let(::sInt) }
+
+  @StarlarkMethod(
     name = "weight",
     structField = true,
     doc = "Total weight, including the stack and any contents.",

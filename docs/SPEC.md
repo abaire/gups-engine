@@ -874,6 +874,7 @@ item("short_bow",
      variants={},  # related prototypes, for transform (§4.5)
      stackable=False, decay_pulses=None,
      commands={}, on_use=None,
+     charges=None, empty="destroy",  # uses, and what the last one does (§4.9)
      )
 
 item("satchel", container=container(capacity=10, max_weight=20,
@@ -913,6 +914,10 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   modifiers = {}, flags = [])` declares a prototype affect. A `worn` affect with `modifiers` needs a `wear` slot; a
   `carried` one doesn't. `stunned` isn't allowed. `variants` keys match the tag pattern and its values are item labels,
   checked at load like `loot`.
+- **Charges:** `charges` is the number of uses an item has, at least 1, or `None` for unlimited. `empty` says what
+  happens when the last is spent: `"destroy"` (the default), `"keep"` (the item stays at 0 charges), or the name of one
+  of the item's `variants`, which it is transformed into. An `empty` other than `"destroy"` needs `charges`. A stackable
+  item may only have `charges = 1` and can't `keep`.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
@@ -1115,10 +1120,10 @@ affect removed on or after its expiry pulse counts as expired), `targets` (`on_c
 - **Exits:** `exit(dir)`, an exit view with its `tags` and `door`: a door view (`state`, `key`, `tags`), or `None`
   without a door.
 
-**Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `weight`, `location`, `attrs`,
-`container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`, `slot_cost`, `stat_deltas`, `sense_deltas`,
-`max_vital_deltas`, `resist_deltas`, `inactive`, `affects`, `has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are
-the effective tags.
+**Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `charges` and `max_charges` (`None`
+when unlimited), `weight`, `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`, `range`, `wear`,
+`slot_cost`, `stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `inactive`, `affects`, `has_tag(tag)`,
+`variants`, `tags`, `in_world`. `tags` are the effective tags.
 
 **Affect view:** `id`, `name`, `host`, `expires_at`, `remaining`, `flags`, `stat_deltas`, `sense_deltas`,
 `max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`.
@@ -1134,7 +1139,7 @@ the effective tags.
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players. |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                 |
 | Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor or an item)                                                            |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                                                       |
+| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                         |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                           |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                       |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                        |
@@ -1170,6 +1175,8 @@ the effective tags.
     instance affects and tag changes.
   - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
     count, removes that many from the stack.
+  - `set_charges(item, charges)` sets an item's remaining uses, from 0 to its prototype's `charges`; unlimited and
+    stackable items are refused, and 0 doesn't run `empty`.
   - Verbs never merge stacks. An item with instance affects or tag changes never merges into a stack.
   - `transform(item, label)` keeps the item's id, location, count, attributes, affects, tag changes, name and timers. A
     stack into a non-stackable prototype keeps one of its count; a container into a non-container drops its contents on

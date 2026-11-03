@@ -545,6 +545,30 @@
           "since": 1
         },
         {
+          "symbol": "item.charges",
+          "name": "charges",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Uses before the item is spent, at least 1; None for unlimited.",
+          "since": 1
+        },
+        {
+          "symbol": "item.empty",
+          "name": "empty",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "'destroy'",
+          "allowed_values": [],
+          "doc": "After the last charge: 'destroy', 'keep', or the name of one of the item's variants.",
+          "since": 1
+        },
+        {
           "symbol": "item.modifiers",
           "name": "modifiers",
           "type": "dict[str, function]",
@@ -4126,6 +4150,34 @@
         ]
       },
       {
+        "symbol": "ctx.set_charges",
+        "name": "set_charges",
+        "doc": "Sets an item's remaining uses, from 0 to its prototype's charges.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_charges.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item with charges."
+          },
+          {
+            "symbol": "ctx.set_charges.charges",
+            "name": "charges",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Uses left; 0 doesn't run the empty action."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.spawn",
         "name": "spawn",
         "doc": "Spawns a mob (in a room) or an item (in a room, on an actor, or in a container). Returns its view, or a list when count > 1 makes several.",
@@ -4895,6 +4947,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.charges",
+          "name": "charges",
+          "doc": "Uses left, or None when unlimited.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.container_state",
           "name": "container_state",
           "doc": "'open', 'closed' or 'locked'; None if not a container.",
@@ -4958,6 +5016,12 @@
           "symbol": "view:item.location",
           "name": "location",
           "doc": "Where the item currently is.",
+          "since": 1
+        },
+        {
+          "symbol": "view:item.max_charges",
+          "name": "max_charges",
+          "doc": "The prototype's charges, or None when unlimited.",
           "since": 1
         },
         {
