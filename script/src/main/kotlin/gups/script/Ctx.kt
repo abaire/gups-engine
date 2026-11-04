@@ -1115,6 +1115,12 @@ internal constructor(
           defaultValue = "None",
           doc = "Item affects only: 'worn' or 'carried'.",
         ),
+        Param(
+          name = "procs",
+          named = true,
+          defaultValue = "[]",
+          doc = "Combat procs that fire during auto-attack swings.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1132,6 +1138,7 @@ internal constructor(
     maxVitalDeltas: Any,
     resistDeltas: Any,
     applies: Any,
+    procs: Any,
   ): Any =
     verb("apply_affect") {
       val e =
@@ -1152,6 +1159,8 @@ internal constructor(
           world.schema,
           world.features,
           allowPermanent = true,
+          procs = procs,
+          procsSymbol = "ctx.apply_affect.procs",
         )
       if (target is ItemView) {
         val item = itemArg(target, "apply_affect(target)")
@@ -1183,6 +1192,7 @@ internal constructor(
             e.senseDeltas,
             maxVitalDeltas = e.maxVitalDeltas,
             resistDeltas = e.resistDeltas,
+            procs = e.procs,
           )
         a?.let { AffectView(frame, item, it) } ?: Starlark.NONE
       } else {
@@ -1205,6 +1215,7 @@ internal constructor(
             senseDeltas = e.senseDeltas,
             maxVitalDeltas = e.maxVitalDeltas,
             resistDeltas = e.resistDeltas,
+            procs = e.procs,
           )
         a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
       }

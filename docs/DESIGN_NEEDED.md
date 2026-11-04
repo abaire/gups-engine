@@ -77,7 +77,7 @@ cross exits. **Questions:** - How should line-of-sight and projectile paths acro
 Does a ranged attack initiate combat by dragging the attacker into the target's room/track, or does it create a
 cross-room engagement? - How do perception and aggro propagate across rooms when an attack is fired from a distance?
 
-### Combat procs: items and affects that cast on attack
+### Combat procs: items and affects that cast on attack (COMPLETED — M28)
 
 **Spec:** §4.3 (skills and effect primitives), §4.4 (hooks), §4.6 (auto-attacks). **Today (after M18):** every equipped
 item with `dice` makes its own auto-attack swing, so an amulet can deal weapon-style damage through the `to_hit` and

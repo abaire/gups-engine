@@ -191,3 +191,55 @@ item("oily_rags",
     stat_deltas = stats(armor = 4),
     modifiers = {MODIFIER.receive_damage: _flammable},
 )
+
+# The ember only flares when the dagger itself lands a swing, not when an off-hand weapon does.
+item("ember_dagger",
+    name = "an ember dagger",
+    keywords = ["ember", "dagger"],
+    desc = "A blackened blade flickering with embers.",
+    kind = "melee",
+    wield = "wield",
+    dice = "1d4",
+    damage_type = "pierce",
+    weight = 2,
+    procs = [proc(on = "hit", chance = 0.25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
+)
+
+# Thorns answer every blow, but their damage can't set off further procs.
+item("bramble_vest",
+    name = "a bramble vest",
+    keywords = ["bramble", "vest"],
+    desc = "A vest woven from tough, thorny briars.",
+    kind = "armor",
+    wear = "body",
+    stat_deltas = stats(armor = 1),
+    procs = [proc(
+        on = "struck",
+        effect = damage(dice = "1d2", type = DAMAGE.pierce),
+        message = "Thorns rake your attacker!",
+    )],
+)
+
+# One roll per landed hit picks at most one outcome.
+item("cracked_wand",
+    name = "a cracked wand of many colors",
+    keywords = ["cracked", "wand"],
+    desc = "A splintered wooden wand crackling with volatile magic.",
+    kind = "melee",
+    wield = "wield",
+    dice = "1d2",
+    damage_type = "bludgeon",
+    weight = 1,
+    procs = [proc(on = "hit", outcomes = [
+        outcome(0.05, effect = damage(dice = "3d6", type = DAMAGE.fire),
+                message = "A ball of fire bursts from the wand!"),
+        outcome(0.40, effect = apply_affect(name = "frightened", duration = 12,
+                                            stat_deltas = stats(dex = -2),
+                                            expire_msg = "You steady your nerves."),
+                message = "The wand flashes a terrifying violet!"),
+        outcome(0.44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
+        # The remaining 10% does nothing.
+        outcome(0.01, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
+                message = "The wand cracks open and explodes in your hand!"),
+    ])],
+)

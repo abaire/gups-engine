@@ -287,6 +287,8 @@ data class ItemProto(
   val variants: Map<String, Label> = emptyMap(),
   /** Rules modifiers contributed to the bearer while this item is equipped. */
   val modifiers: Modifiers = emptyMap(),
+  /** Procs this item contributes while worn and active. */
+  val procs: List<Proc> = emptyList(),
   /** Content schema version of this item prototype, defaulting to 1. */
   val version: Int = 1,
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
@@ -379,6 +381,7 @@ data class ItemAffect(
   val modifiers: Modifiers = emptyMap(),
   /** Status flags counted for the holder while the affect reaches it. */
   val flags: Set<String> = emptySet(),
+  val procs: List<Proc> = emptyList(),
 )
 
 /** Interrupt conditions that break an in-progress skill or spell cast. */

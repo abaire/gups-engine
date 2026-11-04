@@ -684,6 +684,19 @@
           "since": 1
         },
         {
+          "symbol": "item.procs",
+          "feature": "combat",
+          "name": "procs",
+          "type": "list[proc]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Combat procs that fire during auto-attack swings.",
+          "since": 1
+        },
+        {
           "symbol": "item.version",
           "name": "version",
           "type": "int",
@@ -799,6 +812,19 @@
           "default": "[]",
           "allowed_values": [],
           "doc": "Status flags applied to the holder while the affect reaches it.",
+          "since": 1
+        },
+        {
+          "symbol": "item_affect.procs",
+          "feature": "combat",
+          "name": "procs",
+          "type": "list[proc]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "[]",
+          "allowed_values": [],
+          "doc": "Combat procs that fire during auto-attack swings.",
           "since": 1
         }
       ]
@@ -1078,6 +1104,82 @@
       ]
     },
     {
+      "symbol": "outcome",
+      "feature": "combat",
+      "name": "outcome",
+      "doc": "A weighted outcome in a proc's outcome table.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "outcome.weight",
+          "feature": "combat",
+          "name": "weight",
+          "type": "float",
+          "positional": true,
+          "keyword": false,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Probability weight between 0.0 and 1.0.",
+          "since": 1
+        },
+        {
+          "symbol": "outcome.skill",
+          "feature": "combat",
+          "name": "skill",
+          "type": "label",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Skill or spell triggered on this outcome.",
+          "since": 1
+        },
+        {
+          "symbol": "outcome.effect",
+          "feature": "combat",
+          "name": "effect",
+          "type": "effect",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Effect primitive applied on this outcome.",
+          "since": 1
+        },
+        {
+          "symbol": "outcome.target",
+          "feature": "combat",
+          "name": "target",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": ["enemy", "self", "none"],
+          "doc": "Target for the outcome: 'enemy', 'self' or 'none'.",
+          "since": 1
+        },
+        {
+          "symbol": "outcome.message",
+          "feature": "combat",
+          "name": "message",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Message sent to the bearer instead of combat.proc.self.",
+          "since": 1
+        }
+      ]
+    },
+    {
       "symbol": "package",
       "name": "package",
       "doc": "Declares the package. Must be called exactly once, in package.star.",
@@ -1179,6 +1281,108 @@
           "default": "[]",
           "allowed_values": [],
           "doc": "Prototype labels whose version rose without needing a migrate() function.",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "symbol": "proc",
+      "feature": "combat",
+      "name": "proc",
+      "doc": "A combat proc that fires during auto-attack swings.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "proc.on",
+          "feature": "combat",
+          "name": "on",
+          "type": "str",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": ["hit", "struck", "avoid"],
+          "doc": "When the proc fires: 'hit', 'struck' or 'avoid'.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.chance",
+          "feature": "combat",
+          "name": "chance",
+          "type": "float",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "1.0",
+          "allowed_values": [],
+          "doc": "Probability of firing between 0.0 and 1.0.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.skill",
+          "feature": "combat",
+          "name": "skill",
+          "type": "label",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Skill or spell triggered by the proc.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.effect",
+          "feature": "combat",
+          "name": "effect",
+          "type": "effect",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Effect primitive applied by the proc.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.target",
+          "feature": "combat",
+          "name": "target",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": ["enemy", "self", "none"],
+          "doc": "Target for the outcome: 'enemy', 'self' or 'none'.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.message",
+          "feature": "combat",
+          "name": "message",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Message sent to the bearer instead of combat.proc.self.",
+          "since": 1
+        },
+        {
+          "symbol": "proc.outcomes",
+          "feature": "combat",
+          "name": "outcomes",
+          "type": "list[outcome]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Weighted table of outcomes.",
           "since": 1
         }
       ]
@@ -3214,6 +3418,17 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Item affects only: 'worn' or 'carried'."
+          },
+          {
+            "symbol": "ctx.apply_affect.procs",
+            "feature": "combat",
+            "name": "procs",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Combat procs that fire during auto-attack swings."
           }
         ]
       },
@@ -5951,6 +6166,17 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Item affects only: 'worn' or 'carried'."
+        },
+        {
+          "symbol": "apply_affect.procs",
+          "feature": "combat",
+          "name": "procs",
+          "positional": true,
+          "named": true,
+          "default": "[]",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Combat procs that fire during auto-attack swings."
         }
       ]
     },
@@ -7803,6 +8029,34 @@
           "params": []
         },
         {
+          "symbol": "w.force_rng",
+          "name": "force_rng",
+          "doc": "Queues the results of later rolls: each rng.int (and rng.chance) takes the next of ints, and each engine fraction roll the next of fractions, before the seeded stream resumes. A forced int outside the roll's range is an error.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.force_rng.ints",
+              "name": "ints",
+              "positional": true,
+              "named": true,
+              "default": "[]",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Results for later integer rolls, in order."
+            },
+            {
+              "symbol": "w.force_rng.fractions",
+              "name": "fractions",
+              "positional": true,
+              "named": true,
+              "default": "[]",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Results for later fraction rolls, in order, each from 0 up to but not including 1."
+            }
+          ]
+        },
+        {
           "symbol": "w.get_attr",
           "name": "get_attr",
           "doc": "Reads an attribute directly. Unprefixed keys are in the test package's namespace.",
@@ -8598,6 +8852,24 @@
       "placeholders": ["target"],
       "required": [],
       "default": "{target} is out of reach.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.proc.room",
+      "feature": "combat",
+      "id": "combat.proc.room",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "Power surges around {actor}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.proc.self",
+      "feature": "combat",
+      "id": "combat.proc.self",
+      "placeholders": ["source"],
+      "required": [],
+      "default": "Power surges from {source}!",
       "since": 1
     },
     {

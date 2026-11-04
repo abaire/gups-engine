@@ -17,6 +17,8 @@ import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Modifiers
 import gups.core.model.Player
+import gups.core.model.Proc
+import gups.core.model.ProcTrigger
 import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
 
@@ -155,6 +157,7 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
       COMBAT_INTENSITY,
       exclude = arrayOf(a, target),
     )
+    fireProcs(ProcTrigger.AVOID, target, a, weapon)
     return
   }
   val hit = resolveDamage(ctx, rules.damage(ctx), type)
@@ -173,6 +176,8 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
     exclude = arrayOf(a, target),
   )
   damage(target, hit.losses, type, a, hit.parts)
+  fireProcs(ProcTrigger.HIT, a, target, weapon)
+  fireProcs(ProcTrigger.STRUCK, target, a, weapon)
 }
 
 // ---- Damage, healing, death ------------------------------------------------------------------
@@ -362,6 +367,7 @@ fun World.applyAffect(
   senseDeltas: Map<Channel, Int> = emptyMap(),
   maxVitalDeltas: Map<String, Int> = emptyMap(),
   resistDeltas: Map<DamageType, Int> = emptyMap(),
+  procs: List<Proc> = emptyList(),
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -388,6 +394,7 @@ fun World.applyAffect(
       senseDeltas,
       maxVitalDeltas = maxVitalDeltas,
       resistDeltas = resistDeltas,
+      procs = procs,
     )
   target.affects += affect
   target.dirty = true
@@ -461,6 +468,7 @@ fun World.applyItemAffect(
   senseDeltas: Map<Channel, Int> = emptyMap(),
   maxVitalDeltas: Map<String, Int> = emptyMap(),
   resistDeltas: Map<DamageType, Int> = emptyMap(),
+  procs: List<Proc> = emptyList(),
 ): Affect? {
   if (item.id !in entities) return null
   require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -487,6 +495,7 @@ fun World.applyItemAffect(
       applies,
       maxVitalDeltas,
       resistDeltas,
+      procs,
     )
   item.affects += affect
   item.dirty = true
@@ -614,6 +623,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             senseDeltas = effect.senseDeltas,
             maxVitalDeltas = effect.maxVitalDeltas,
             resistDeltas = effect.resistDeltas,
+            procs = effect.procs,
           )
         is Effect.Dispel -> {
           val gone = t.affects.filter(effect::matches)
@@ -660,6 +670,7 @@ fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item) {
         effect.senseDeltas,
         effect.maxVitalDeltas,
         effect.resistDeltas,
+        effect.procs,
       )
     is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item)
     else -> error("${effect::class.simpleName} can't act on an item")

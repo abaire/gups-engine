@@ -4,6 +4,16 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Combat procs
+
+- Auto-attack swings fire procs: the attacker's `hit` procs after a landed hit, then the defender's `struck` procs; the
+  defender's `avoid` procs on a miss. New engine messages `combat.proc.self` and `combat.proc.room`.
+- Added `proc(...)` and `outcome(...)`, and `procs` on `item`, `item_affect` and `apply_affect` (the primitive and the
+  verb): chance-based skills or effects that fire during auto-attack swings, with weighted one-of tables.
+- The tutorial zone has an `ember_dagger` (`hit`), a `bramble_vest` (`struck`) and a `cracked_wand` (an outcome table).
+- Added `w.force_rng(ints = [], fractions = [])` to the test harness: it queues the results of later rolls, so tests can
+  force a proc or a hit without searching for a seed.
+
 ### Test fixture files
 
 - A package may hold `*_testdata.star` files: test-only fixtures for content that only tests need. They are ordinary

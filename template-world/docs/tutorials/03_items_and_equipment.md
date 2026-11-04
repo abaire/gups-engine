@@ -245,7 +245,80 @@ item("oily_rags",
 If you only wanted to lower the wearer's fire resist instead, `resist_deltas = resists(fire = -100)` does it additively
 on the resists; a `receive_damage` modifier multiplies the part before armor and resists.
 
----
+### Procs: `procs`
+
+A **proc** is something that may happen during an auto-attack swing: a burst of fire from a blade, thorns that rake an
+attacker. Items, item affects and `apply_affect` take a `procs` list of `proc(...)` values:
+
+```python
+item("ember_dagger",
+    name = "an ember dagger",
+    wield = "wield",
+    dice = "1d4",
+    damage_type = "pierce",
+    procs = [proc(on = "hit", chance = 0.25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
+)
+```
+
+`on` picks the trigger:
+
+* `"hit"`: the bearer's swing landed. It fires after the swing's damage.
+* `"struck"`: the bearer was hit. It fires right after the attacker's `hit` procs.
+* `"avoid"`: a swing at the bearer missed.
+
+A worn weapon's procs count only on its own swing, so an off-hand dagger doesn't proc when the main hand lands. Armor,
+rings and other worn items count on every swing, like the defender modifiers above.
+
+A proc gives one of `effect` (an effect primitive), `skill` (a skill label, in worlds with the `skills` feature) or
+`outcomes`. It lands on the other actor in the swing unless you pass `target = "self"` (or `"none"`); a skill proc
+follows the skill's own target. `message` replaces the bearer's "Power surges from ..." line:
+
+```python
+item("bramble_vest",
+    name = "a bramble vest",
+    wear = "body",
+    stat_deltas = stats(armor = 1),
+    procs = [proc(
+        on = "struck",
+        effect = damage(dice = "1d2", type = DAMAGE.pierce),
+        message = "Thorns rake your attacker!",
+    )],
+)
+```
+
+#### Outcome tables
+
+`chance` decides whether a proc triggers at all. An `outcomes` list of `outcome(weight, ...)` entries then picks at most
+one result with a single roll. The weights are probabilities that add up to at most 1, and whatever is left over means
+nothing happens:
+
+```python
+item("cracked_wand",
+    name = "a cracked wand of many colors",
+    wield = "wield",
+    dice = "1d2",
+    procs = [proc(on = "hit", outcomes = [
+        outcome(0.05, effect = damage(dice = "3d6", type = DAMAGE.fire),
+                message = "A ball of fire bursts from the wand!"),
+        outcome(0.40, effect = apply_affect(name = "frightened", duration = 12,
+                                            stat_deltas = stats(dex = -2)),
+                message = "The wand flashes a terrifying violet!"),
+        outcome(0.44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
+        # The remaining 10% does nothing.
+        outcome(0.01, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
+                message = "The wand cracks open and explodes in your hand!"),
+    ])],
+)
+```
+
+#### Rules to remember
+
+* A skill proc skips the skill's cost, warmup and lag, and the bearer needn't know the skill, but it still has to pass
+  `cast_allowed`: a bearer who may not cast doesn't get skill procs either.
+* Procs fire only from auto-attack swings, never from spells, `use_effect` or other procs' damage, so they can't chain.
+* A proc's `apply_affect` needs a duration, and procs can't `summon`.
+* `@trace rules` (or `w.trace()` in a test) prints one `proc ...` line per roll. In tests, `w.force_rng(fractions =
+  [0.0])` makes the next proc trigger instead of searching for a lucky seed.
 
 ## 4. Consumables, Charges, and Declarative Use
 

@@ -411,3 +411,34 @@ def test_fire_ignores_armor(t):
     t.true(fire_bare > 0)
     t.eq(fire_shielded, fire_bare)
     t.true(slash_shielded < slash_bare)
+
+def _proc_fight(t, wield = None, wear = None, fractions = []):
+    # Fights the training dummy for three rounds with one item in hand or on the body, and
+    # returns the world and the player's output. Each proc draws one fraction for its chance
+    # (and a second to pick from an outcome table), so forcing fractions decides the first procs.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena", vitals = vitals(hp = 100))
+    for (label, verb) in [(wield, "wield"), (wear, "wear")]:
+        if label != None:
+            w.spawn(label, at = p)
+            p.do(verb + " " + label.split("_")[-1])
+    w.force_rng(fractions = fractions)
+    p.do("kill dummy")
+    w.run(pulses = 24)
+    return w, p.output()
+
+def test_ember_dagger_procs_on_its_own_hits(t):
+    (_, ember) = _proc_fight(t, wield = ":ember_dagger", fractions = [0.0])
+    t.contains(ember, "Power surges from an ember dagger!")
+    (_, plain) = _proc_fight(t, wield = ":dagger", fractions = [0.0])
+    t.false("Power surges" in plain)
+
+def test_bramble_vest_rakes_attackers(t):
+    (_, out) = _proc_fight(t, wear = ":bramble_vest")
+    t.contains(out, "Thorns rake your attacker!")
+
+def test_cracked_wand_picks_one_outcome(t):
+    # 0.6 falls past fire (0.05) and fear (0.45) into the stun band, which runs to 0.89.
+    (w, out) = _proc_fight(t, wield = ":cracked_wand", fractions = [0.0, 0.6])
+    t.contains(out, "A dazzling arc of light leaps from the wand!")
+    t.eq(w.diagnostics(), [])

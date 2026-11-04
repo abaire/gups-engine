@@ -222,6 +222,33 @@ object DocExamples {
                 t.false(keeper.is_player)
             """,
         ),
+      "outcome" to
+        ex(
+          pkg =
+            """
+                item("chaos_wand",
+                    name = "a chaos wand",
+                    wear = "wield",
+                    dice = "1d4",
+                    procs = [
+                        proc(
+                            on = "hit",
+                            outcomes = [
+                                outcome(0.5, effect = damage(dice = "1d6", type = DAMAGE.fire)),
+                                outcome(0.5, effect = heal(dice = "1d4", vital = "hp"), target = "self"),
+                            ],
+                        ),
+                    ],
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":start")
+                wand = w.spawn(":chaos_wand", at = p)
+                t.eq(wand.kind, "misc")
+            """,
+        ),
       "package" to
         ex(
           pkg =
@@ -233,6 +260,27 @@ object DocExamples {
                     reset_world_ticks = 10,
                 )
             """
+        ),
+      "proc" to
+        ex(
+          pkg =
+            """
+                item("ember_dagger",
+                    name = "an ember dagger",
+                    wear = "wield",
+                    dice = "1d4",
+                    procs = [
+                        proc(on = "hit", chance = 0.1, effect = damage(dice = "1d6", type = DAMAGE.fire)),
+                    ],
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":start")
+                dagger = w.spawn(":ember_dagger", at = p)
+                t.eq(dagger.kind, "misc")
+            """,
         ),
       "resists" to
         ex(

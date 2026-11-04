@@ -38,6 +38,13 @@ object FeatureOwnership {
       "modifier:flee_fail_lag",
     )
     owns(Feature.COMBAT, "view:actor.fighting")
+    owns(
+      Feature.COMBAT,
+      "item.procs",
+      "item_affect.procs",
+      "apply_affect.procs",
+      "ctx.apply_affect.procs",
+    )
     owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
     owns(Feature.TRACK, "SIZE")
     owns(Feature.TRACK, "ctx.act_advance", "ctx.act_retreat")
@@ -57,6 +64,7 @@ object FeatureOwnership {
     owns(Feature.COMBAT, "aggressive", "assist", "flee")
     owns(Feature.COMBAT, "ctx.start_combat", "ctx.stop_combat", "ctx.act_attack")
     owns(Feature.COMBAT, "ctx.enemies_near", "ctx.allies_near")
+    owns(Feature.COMBAT, "proc", "outcome")
     owns(Feature.TRACK, "knockback", "pull")
   }
 

@@ -27,6 +27,10 @@ import gups.core.model.LootRule
 import gups.core.model.MobProto
 import gups.core.model.ModifierPoint
 import gups.core.model.Modifiers
+import gups.core.model.Proc
+import gups.core.model.ProcOutcome
+import gups.core.model.ProcTarget
+import gups.core.model.ProcTrigger
 import gups.core.model.RegionProto
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
@@ -387,6 +391,10 @@ internal class DoorDecl(val proto: DoorProto) : DeclValue("door")
 internal class SpawnDecl(val rule: SpawnRule) : DeclValue("spawn")
 
 internal class LootDecl(val rule: LootRule) : DeclValue("loot")
+
+internal class ProcDecl(val proc: Proc) : DeclValue("proc")
+
+internal class OutcomeDecl(val outcome: ProcOutcome) : DeclValue("outcome")
 
 internal class ContainerDecl(val proto: ContainerProto) : DeclValue("container")
 
@@ -883,6 +891,7 @@ internal class DeclarationBuiltins(
       val rawFlags = d.strList("flags").map { flag(it, d.what("flags")) }
       if ("stunned" in rawFlags)
         fail("item_affect(flags): 'stunned' isn't allowed; item affects can't stun")
+      val procs = procList(d["procs"], "item_affect(procs)")
       ItemAffectDecl(
         ItemAffect(
           name = name,
@@ -893,8 +902,145 @@ internal class DeclarationBuiltins(
           resistDeltas = resistDeltas,
           modifiers = modifiers,
           flags = rawFlags.toSortedSet(),
+          procs = procs,
         )
       )
+    }
+  }
+
+  @StarlarkMethod(
+    name = "outcome",
+    doc = "A weighted outcome in a proc's outcome table.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun outcome(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    need("outcome", "procs")
+    val loadCtx = thread.getThreadLocal(LoadCtx::class.java)
+    val pkg = loadCtx?.pkg?.path ?: callerFile(thread)?.pkg
+    return OUTCOME_SPEC.bind(args, kwargs, features = features) { d ->
+      val weight = d.number("weight") ?: 1.0
+      if (weight !in 0.0..1.0) fail("outcome(weight): must be between 0 and 1")
+      val skillRaw = d["skill"]
+      val effectRaw = d["effect"]
+      if (skillRaw != null && !isNone(skillRaw) && effectRaw != null && !isNone(effectRaw)) {
+        fail("outcome(): give skill or effect, not both")
+      }
+      val skill =
+        if (skillRaw != null && !isNone(skillRaw)) {
+          if (Feature.SKILLS !in features)
+            fail(FeatureOwnership.refusal("proc(skill)", Feature.SKILLS))
+          val l = label(str(skillRaw, d.what("skill")), pkg, d.what("skill"))
+          loadCtx?.ref(l, RefKind.SKILL, thread)
+          l
+        } else null
+      val effect =
+        if (effectRaw != null && !isNone(effectRaw)) {
+          val e = effectValue(effectRaw, d.what("effect"))
+          checkProcEffect(e, d.what("effect"), loadCtx, thread)
+          e
+        } else null
+      val target = d.choice("target")?.let { ProcTarget.valueOf(it.uppercase()) }
+      val message =
+        d["message"]?.let {
+          val s = str(it, d.what("message"))
+          if (s.isBlank()) fail("outcome(message): must not be blank")
+          s
+        }
+      OutcomeDecl(
+        ProcOutcome(
+          weight = weight,
+          skill = skill,
+          effect = effect,
+          target = target,
+          message = message,
+        )
+      )
+    }
+  }
+
+  @StarlarkMethod(
+    name = "proc",
+    doc = "A combat proc that fires during auto-attack swings.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun proc(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    need("proc", "procs")
+    val loadCtx = thread.getThreadLocal(LoadCtx::class.java)
+    val pkg = loadCtx?.pkg?.path ?: callerFile(thread)?.pkg
+    return PROC_SPEC.bind(args, kwargs, features = features) { d ->
+      val onStr = choice(d["on"], "proc(on)", listOf("hit", "struck", "avoid"))
+      val trigger = ProcTrigger.valueOf(onStr.uppercase())
+      val chance = d.number("chance") ?: 1.0
+      if (chance !in 0.0..1.0) fail("proc(chance): must be between 0 and 1")
+      val outcomesRaw = d["outcomes"]
+      val skillRaw = d["skill"]
+      val effectRaw = d["effect"]
+      val targetRaw = d["target"]
+      val messageRaw = d["message"]
+      val outcomes: List<ProcOutcome>
+      if (outcomesRaw != null && !isNone(outcomesRaw)) {
+        if (!isNone(skillRaw) || !isNone(effectRaw) || !isNone(targetRaw) || !isNone(messageRaw)) {
+          fail("proc(outcomes): can't be combined with skill, effect, target or message")
+        }
+        val list =
+          outcomesRaw as? Sequence<*>
+            ?: fail("proc(outcomes): expected list, got ${typeName(outcomesRaw)}")
+        if (list.isEmpty()) fail("proc(outcomes): must not be empty")
+        val parsedOutcomes =
+          list.mapIndexed { i, elem ->
+            (elem as? OutcomeDecl)?.outcome
+              ?: fail("proc(outcomes): element ${i + 1} must be an outcome(...) value")
+          }
+        var total = 0.0
+        for (o in parsedOutcomes) {
+          total += o.weight
+        }
+        if (total > 1.0000001) fail("proc(outcomes): weights add up to more than 1")
+        outcomes = parsedOutcomes
+      } else {
+        if (isNone(skillRaw) && isNone(effectRaw)) {
+          fail("proc(): give one of skill, effect or outcomes")
+        }
+        if (!isNone(skillRaw) && !isNone(effectRaw)) {
+          fail("proc(): give one of skill, effect or outcomes")
+        }
+        val skill =
+          if (!isNone(skillRaw)) {
+            if (Feature.SKILLS !in features)
+              fail(FeatureOwnership.refusal("proc(skill)", Feature.SKILLS))
+            val l = label(str(skillRaw, d.what("skill")), pkg, d.what("skill"))
+            loadCtx?.ref(l, RefKind.SKILL, thread)
+            l
+          } else null
+        val effect =
+          if (!isNone(effectRaw)) {
+            val e = effectValue(effectRaw, d.what("effect"))
+            checkProcEffect(e, d.what("effect"), loadCtx, thread)
+            e
+          } else null
+        val target = d.choice("target")?.let { ProcTarget.valueOf(it.uppercase()) }
+        val message =
+          if (!isNone(messageRaw)) {
+            val s = str(messageRaw, d.what("message"))
+            if (s.isBlank()) fail("proc(message): must not be blank")
+            s
+          } else null
+        outcomes =
+          listOf(
+            ProcOutcome(
+              weight = 1.0,
+              skill = skill,
+              effect = effect,
+              target = target,
+              message = message,
+            )
+          )
+      }
+      ProcDecl(Proc(on = trigger, chance = chance, outcomes = outcomes))
     }
   }
 
@@ -1064,6 +1210,7 @@ internal class DeclarationBuiltins(
           "with use_target = 'item'",
         )
       }
+      val procs = procList(d["procs"], "item(procs)")
       val def = ItemProto(label, name, emptyList())
       val proto =
         ItemProto(
@@ -1102,6 +1249,7 @@ internal class DeclarationBuiltins(
           affects = affects,
           variants = variants,
           modifiers = modifiers(d["modifiers"], d.what("modifiers"), features),
+          procs = procs,
           version = version(d),
           plural = plural,
           charges = charges,
@@ -1118,10 +1266,11 @@ internal class DeclarationBuiltins(
           (proto.equipAffects.isNotEmpty() ||
             proto.modifiers.isNotEmpty() ||
             proto.maxVitalDeltas.isNotEmpty() ||
-            proto.resistDeltas.isNotEmpty())
+            proto.resistDeltas.isNotEmpty() ||
+            proto.procs.isNotEmpty())
       ) {
         fail(
-          "item(): equip_affects, modifiers, max_vital_deltas and resist_deltas apply while the item is worn, so it needs a wear slot"
+          "item(): equip_affects, modifiers, max_vital_deltas, resist_deltas and procs apply while the item is worn, so it needs a wear slot"
         )
       }
       if (
@@ -1129,6 +1278,12 @@ internal class DeclarationBuiltins(
           proto.affects.any { it.applies == AffectScope.WORN && it.modifiers.isNotEmpty() }
       ) {
         fail("item(): a worn item_affect with modifiers needs a wear slot")
+      }
+      if (
+        proto.wear == null &&
+          proto.affects.any { it.applies == AffectScope.WORN && it.procs.isNotEmpty() }
+      ) {
+        fail("item(): a worn item_affect with procs needs a wear slot")
       }
       ctx.pkg.itemList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
@@ -1263,6 +1418,22 @@ internal class DeclarationBuiltins(
       is Effect.Summon -> ctx.ref(e.label, RefKind.MOB, thread)
       is Effect.Sequence -> e.effects.forEach { effectRefs(it, ctx, thread) }
       else -> Unit
+    }
+  }
+
+  private fun checkProcEffect(e: Effect, what: String, ctx: LoadCtx?, thread: StarlarkThread) {
+    for (leaf in flattenLeaves(e)) {
+      if (leaf is Effect.Summon) {
+        fail("$what: summon can't be used in a proc")
+      }
+      if (leaf is Effect.ApplyAffect) {
+        if (leaf.duration == null || leaf.applies != null) {
+          fail("$what: apply_affect in a proc needs a duration and no applies")
+        }
+      }
+    }
+    if (ctx != null) {
+      effectRefs(e, ctx, thread)
     }
   }
 
@@ -1674,6 +1845,12 @@ internal class DeclarationBuiltins(
           defaultValue = "None",
           doc = "Item affects only: 'worn' or 'carried'.",
         ),
+        Param(
+          name = "procs",
+          named = true,
+          defaultValue = "[]",
+          doc = "Combat procs that fire during auto-attack swings.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1690,6 +1867,7 @@ internal class DeclarationBuiltins(
     maxVitalDeltas: Any,
     resistDeltas: Any,
     applies: Any,
+    procs: Any,
   ): Any {
     val e =
       affectEffect(
@@ -1709,6 +1887,7 @@ internal class DeclarationBuiltins(
         schema,
         features,
         allowPermanent = true,
+        procs = procs,
       )
     val scope =
       if (isNone(applies)) null
@@ -2323,6 +2502,101 @@ internal class DeclarationBuiltins(
               "Status flags applied to the holder while the affect reaches it.",
               default = "[]",
             ),
+            DeclParam(
+              "procs",
+              "list[proc]",
+              "Combat procs that fire during auto-attack swings.",
+              default = "[]",
+            ),
+          ),
+      )
+
+    val OUTCOME_SPEC =
+      DeclSpec(
+        name = "outcome",
+        doc = "A weighted outcome in a proc's outcome table.",
+        positionalError = "outcome() takes the weight as its only positional argument",
+        params =
+          listOf(
+            DeclParam(
+              "weight",
+              "float",
+              "Probability weight between 0.0 and 1.0.",
+              positional = true,
+              keyword = false,
+              required = true,
+            ),
+            DeclParam(
+              "skill",
+              "label",
+              "Skill or spell triggered on this outcome.",
+              default = "None",
+            ),
+            DeclParam(
+              "effect",
+              "effect",
+              "Effect primitive applied on this outcome.",
+              default = "None",
+            ),
+            DeclParam(
+              "target",
+              "str",
+              "Target for the outcome: 'enemy', 'self' or 'none'.",
+              default = "None",
+              allowedValues = listOf("enemy", "self", "none"),
+            ),
+            DeclParam(
+              "message",
+              "str",
+              "Message sent to the bearer instead of combat.proc.self.",
+              default = "None",
+            ),
+          ),
+      )
+
+    val PROC_SPEC =
+      DeclSpec(
+        name = "proc",
+        doc = "A combat proc that fires during auto-attack swings.",
+        positionalError = "proc() takes 'on' as its only positional argument",
+        params =
+          listOf(
+            DeclParam(
+              "on",
+              "str",
+              "When the proc fires: 'hit', 'struck' or 'avoid'.",
+              positional = true,
+              keyword = true,
+              required = true,
+              allowedValues = listOf("hit", "struck", "avoid"),
+            ),
+            DeclParam(
+              "chance",
+              "float",
+              "Probability of firing between 0.0 and 1.0.",
+              default = "1.0",
+            ),
+            DeclParam("skill", "label", "Skill or spell triggered by the proc.", default = "None"),
+            DeclParam(
+              "effect",
+              "effect",
+              "Effect primitive applied by the proc.",
+              default = "None",
+            ),
+            DeclParam(
+              "target",
+              "str",
+              "Target for the outcome: 'enemy', 'self' or 'none'.",
+              default = "None",
+              allowedValues = listOf("enemy", "self", "none"),
+            ),
+            DeclParam(
+              "message",
+              "str",
+              "Message sent to the bearer instead of combat.proc.self.",
+              default = "None",
+            ),
+            DeclParam("outcomes", "list[outcome]", "Weighted table of outcomes.", default = "None"),
           ),
       )
 
@@ -2611,6 +2885,12 @@ internal class DeclarationBuiltins(
               allowedValues = POINTS,
             ),
             DeclParam(
+              "procs",
+              "list[proc]",
+              "Combat procs that fire during auto-attack swings.",
+              default = "[]",
+            ),
+            DeclParam(
               "version",
               "int",
               "Prototype schema version for persisted state migration.",
@@ -2812,6 +3092,8 @@ internal class DeclarationBuiltins(
         LOOT_SPEC,
         CONTAINER_SPEC,
         ITEM_AFFECT_SPEC,
+        PROC_SPEC,
+        OUTCOME_SPEC,
         MOB_SPEC,
         ITEM_SPEC,
         SKILL_SPEC,
@@ -2820,6 +3102,14 @@ internal class DeclarationBuiltins(
         GLOBAL_COMMAND_SPEC,
         STRUCT_SPEC,
       ) + SCHEMA_SPECS
+  }
+}
+
+internal fun procList(v: Any?, what: String): List<Proc> {
+  if (v == null || isNone(v)) return emptyList()
+  val list = v as? Sequence<*> ?: fail("$what: expected list, got ${typeName(v)}")
+  return list.mapIndexed { i, elem ->
+    (elem as? ProcDecl)?.proc ?: fail("$what: element ${i + 1} must be a proc(...) value")
   }
 }
 
@@ -2841,6 +3131,8 @@ internal fun affectEffect(
   schema: WorldSchema,
   features: Features = Features.ALL,
   allowPermanent: Boolean = false,
+  procs: Any = Tuple.empty(),
+  procsSymbol: String = "$fn.procs",
 ): Effect.ApplyAffect {
   val d =
     if (allowPermanent && isNone(duration)) null
@@ -2851,6 +3143,10 @@ internal fun affectEffect(
     }
   val every = intOrNull(tickEvery, "$fn(tick_every)")
   if (every != null && every < 1) fail("$fn(tick_every): must be at least 1")
+  val procList = procList(procs, "$fn(procs)")
+  if (procList.isNotEmpty()) {
+    FeatureOwnership.refused(procsSymbol, "$fn(procs)", features)?.let { fail(it) }
+  }
   return Effect.ApplyAffect(
     name = str(name, "$fn(name)"),
     duration = d,
@@ -2867,6 +3163,7 @@ internal fun affectEffect(
       typed(resistDeltas, TypedKind.RESISTS, "$fn(resist_deltas)").mapKeys { (k, _) ->
         DamageType(k)
       },
+    procs = procList,
   )
 }
 

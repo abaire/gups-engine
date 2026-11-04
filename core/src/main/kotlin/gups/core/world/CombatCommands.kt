@@ -20,6 +20,8 @@ object CombatMsg : MsgGroup(Feature.COMBAT) {
   val HIT_SELF = msg("combat.hit.self", "You hit {target}.", "target")
   val HIT_TARGET = msg("combat.hit.target", "{actor} hits you.", "actor")
   val HIT_ROOM = msg("combat.hit.room", "{actor} hits {target}.", "actor,target")
+  val PROC_SELF = msg("combat.proc.self", "Power surges from {source}!", "source")
+  val PROC_ROOM = msg("combat.proc.room", "Power surges around {actor}!", "actor")
   val FLEE_NOWHERE = msg("combat.flee.nowhere", "There's nowhere to flee!")
   val FLEE_FAILED = msg("combat.flee.failed", "You fail to escape!")
   val FLEE_SELF = msg("combat.flee.self", "You flee {direction}!", "direction")

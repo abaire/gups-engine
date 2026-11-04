@@ -58,6 +58,7 @@ sealed interface Effect {
     val resistDeltas: Map<DamageType, Int> = emptyMap(),
     /** Set only on an item skill's effect. */
     val applies: AffectScope? = null,
+    val procs: List<Proc> = emptyList(),
   ) : Effect
 
   /**
@@ -103,4 +104,64 @@ sealed interface Effect {
    * Boolean, null, List, Map), so prototypes still compare by value.
    */
   data class Plugin(val pluginId: String, val name: String, val args: Map<String, Any?>) : Effect
+}
+
+/** When a proc fires during an auto-attack swing. */
+enum class ProcTrigger(val word: String) {
+  /** The attacker's procs, after a landed swing's damage. */
+  HIT("hit"),
+
+  /** The defender's procs, right after the attacker's for the same hit. */
+  STRUCK("struck"),
+
+  /** The defender's procs, when a swing at it misses. */
+  AVOID("avoid");
+
+  companion object {
+    fun byWord(w: String): ProcTrigger? = entries.firstOrNull { it.word == w }
+  }
+}
+
+/** Whom a proc outcome lands on. */
+enum class ProcTarget(val word: String) {
+  /** The other actor in the swing. */
+  ENEMY("enemy"),
+
+  /** The proc's bearer. */
+  SELF("self"),
+
+  /** No actor (a `target = "none"` skill). */
+  NONE("none");
+
+  companion object {
+    fun byWord(w: String): ProcTarget? = entries.firstOrNull { it.word == w }
+  }
+}
+
+/**
+ * One possible result of a proc. With neither [skill] nor [effect] it does nothing. A null [target]
+ * follows the skill's own target, or means [ProcTarget.ENEMY] for an effect.
+ */
+data class ProcOutcome(
+  val weight: Double,
+  val skill: Label? = null,
+  val effect: Effect? = null,
+  val target: ProcTarget? = null,
+  val message: String? = null,
+) {
+  init {
+    require(weight in 0.0..1.0) { "outcome weight must be between 0 and 1" }
+    require(skill == null || effect == null) { "an outcome takes a skill or an effect, not both" }
+  }
+}
+
+/** A chance, on [on], to resolve one of [outcomes] for the bearer. */
+data class Proc(val on: ProcTrigger, val chance: Double, val outcomes: List<ProcOutcome>) {
+  init {
+    require(chance in 0.0..1.0) { "proc chance must be between 0 and 1" }
+    require(outcomes.isNotEmpty()) { "a proc needs at least one outcome" }
+    require(outcomes.sumOf { it.weight } <= 1.0 + 1e-9) {
+      "proc outcome weights add up to more than 1"
+    }
+  }
 }

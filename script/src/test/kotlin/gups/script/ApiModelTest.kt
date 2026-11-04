@@ -238,6 +238,30 @@ class ApiModelTest {
         Case(zone, { "item(\"i\", affects = [item_affect(\"a\"${it.after()})])" }) {
           it.pkg(zone).itemList.single().affects.single()
         },
+      "outcome" to
+        Case(
+          zone,
+          {
+            "item(\"i\", wear = \"wield\", procs = [proc(\"hit\", outcomes = [outcome(1.0${it.after()})])])"
+          },
+        ) {
+          it.pkg(zone).itemList.single().procs.single().outcomes.single()
+        },
+      "proc" to
+        Case(
+          zone,
+          {
+            val payload =
+              if (it != null && it.startsWith("effect =")) {
+                "outcomes = [outcome(1.0)], $it"
+              } else {
+                "effect = damage(dice = \"1d4\", type = DAMAGE.fire)${it.after()}"
+              }
+            "item(\"i\", wear = \"wield\", procs = [proc(\"hit\", $payload)])"
+          },
+        ) {
+          it.pkg(zone).itemList.single().procs.single()
+        },
       "mob" to Case(zone, { "mob(\"m\"${it.after()})" }) { it.pkg(zone).mobList.single() },
       "item" to Case(zone, { "item(\"i\"${it.after()})" }) { it.pkg(zone).itemList.single() },
       "skill" to Case(zone, { "skill(\"s\"${it.after()})" }) { it.pkg(zone).skillList.single() },

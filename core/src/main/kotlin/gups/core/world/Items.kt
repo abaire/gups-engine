@@ -92,6 +92,7 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
       a.applies,
       a.maxVitalDeltas,
       a.resistDeltas,
+      a.procs,
     )
   part.addedTags += item.addedTags
   part.removedTags += item.removedTags

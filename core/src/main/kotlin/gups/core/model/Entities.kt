@@ -219,6 +219,8 @@ class Affect(
   val maxVitalDeltas: Map<String, Int> = emptyMap(),
   /** Damage resistance deltas applied to the host actor while active. */
   val resistDeltas: Map<DamageType, Int> = emptyMap(),
+  /** Procs that fire for the host (or the item's holder) during auto-attack swings. */
+  val procs: List<Proc> = emptyList(),
 )
 
 /**

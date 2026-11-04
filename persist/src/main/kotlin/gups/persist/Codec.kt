@@ -147,6 +147,7 @@ data class AffectJson(
   val maxVitalDeltas: Map<String, Int> = emptyMap(),
   /** Damage type name to a change in resistance. */
   val resistDeltas: Map<String, Int> = emptyMap(),
+  val procs: List<ProcJson> = emptyList(),
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -328,9 +329,9 @@ internal fun JsonObject.toAttrs(): Map<String, AttrValue> = mapValues { it.value
 // ---- Timers and affects
 // --------------------------------------------------------------------------
 
-private fun HookRef.json() = RefJson(file.v, name)
+internal fun HookRef.json() = RefJson(file.v, name)
 
-private fun RefJson.ref() = HookRef(Label(file), name)
+internal fun RefJson.ref() = HookRef(Label(file), name)
 
 private fun LevelGain.toJson(): LevelGainJson =
   LevelGainJson(stats = stats.takeIf { it.isNotEmpty() }, max = max.takeIf { it.isNotEmpty() })
@@ -364,6 +365,7 @@ internal fun affectJson(a: Affect): AffectJson =
     a.applies?.name?.lowercase(),
     maxVitalDeltas = a.maxVitalDeltas,
     resistDeltas = a.resistDeltas.entries.associate { (k, v) -> k.name to v },
+    procs = a.procs.map { it.json() },
   )
 
 internal fun affectsJson(a: Actor) =
@@ -390,6 +392,7 @@ internal fun affectFromJson(x: AffectJson): Affect =
     applies = x.applies?.let { AffectScope.valueOf(it.uppercase()) },
     maxVitalDeltas = x.maxVitalDeltas,
     resistDeltas = x.resistDeltas.mapKeys { DamageType(it.key) },
+    procs = x.procs.map { it.toProc() },
   )
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {

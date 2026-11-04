@@ -949,6 +949,17 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Item affects only: 'worn' or 'carried'."
+          },
+          {
+            "symbol": "ctx.apply_affect.procs",
+            "feature": "combat",
+            "name": "procs",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Combat procs that fire during auto-attack swings."
           }
         ]
       },
@@ -3385,6 +3396,24 @@
       "placeholders": ["target"],
       "required": [],
       "default": "{target} is out of reach.",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.proc.room",
+      "feature": "combat",
+      "id": "combat.proc.room",
+      "placeholders": ["actor"],
+      "required": [],
+      "default": "Power surges around {actor}!",
+      "since": 1
+    },
+    {
+      "symbol": "message:combat.proc.self",
+      "feature": "combat",
+      "id": "combat.proc.self",
+      "placeholders": ["source"],
+      "required": [],
+      "default": "Power surges from {source}!",
       "since": 1
     },
     {

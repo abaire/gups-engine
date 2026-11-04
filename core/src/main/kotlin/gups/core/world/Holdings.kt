@@ -7,6 +7,7 @@ import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Item
 import gups.core.model.Modifiers
+import gups.core.model.Proc
 
 /** What an actor's items contribute to it, recomputed by [refreshHoldings]. */
 data class HeldEffects(
@@ -19,6 +20,7 @@ data class HeldEffects(
   val flags: Set<String> = emptySet(),
   /** The modifiers each held item contributes, in modifier-chain order. */
   val modifierSteps: List<HeldModifiers> = emptyList(),
+  val procSteps: List<HeldProcs> = emptyList(),
 ) {
   companion object {
     val EMPTY = HeldEffects()
@@ -27,6 +29,9 @@ data class HeldEffects(
 
 /** Modifiers one held item contributes, with the item they come from. */
 data class HeldModifiers(val source: String, val item: Item, val modifiers: Modifiers)
+
+/** Procs one held item contributes, with the item they come from. */
+data class HeldProcs(val source: String, val item: Item, val procs: List<Proc>)
 
 /** One item affect as seen by the holder: from the prototype or from the instance. */
 class HeldAffect(
@@ -43,6 +48,7 @@ class HeldAffect(
   val flags: Set<String>,
   /** The instance affect, or null for a prototype affect. */
   val instance: Affect?,
+  val procs: List<Proc> = emptyList(),
 )
 
 /** A plugin check that can stop an item affect from reaching its holder through a container. */
@@ -90,6 +96,7 @@ internal fun Item.adminAffectsList(): List<HeldAffect> {
       a.modifiers,
       a.flags,
       null,
+      a.procs,
     )
   for (a in affects.sortedBy { it.id }) out +=
     HeldAffect(
@@ -103,6 +110,7 @@ internal fun Item.adminAffectsList(): List<HeldAffect> {
       a.modifiers,
       a.flags,
       a,
+      a.procs,
     )
   return out
 }
@@ -115,6 +123,7 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
   val resistDeltas = mutableMapOf<DamageType, Int>()
   val flags = mutableSetOf<String>()
   val modifierSteps = mutableListOf<HeldModifiers>()
+  val procSteps = mutableListOf<HeldProcs>()
   fun add(ha: HeldAffect) {
     for ((stat, delta) in ha.statDeltas) statDeltas[stat] = (statDeltas[stat] ?: 0) + delta
     for ((channel, delta) in ha.senseDeltas) senseDeltas[channel] =
@@ -126,6 +135,8 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     if (ha.modifiers.isNotEmpty())
       modifierSteps +=
         HeldModifiers("item:${ha.item.protoLabel.name}:${ha.name}", ha.item, ha.modifiers)
+    if (ha.procs.isNotEmpty())
+      procSteps += HeldProcs("item:${ha.item.protoLabel.name}:${ha.name}", ha.item, ha.procs)
   }
   val slots = equipmentSlots()
   val worn =
@@ -144,6 +155,8 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
         (resistDeltas[type] ?: 0) + delta
       if (item.proto.modifiers.isNotEmpty())
         modifierSteps += HeldModifiers("item:${item.protoLabel.name}", item, item.proto.modifiers)
+      if (item.proto.procs.isNotEmpty())
+        procSteps += HeldProcs("item:${item.protoLabel.name}", item, item.proto.procs)
       for (ha in item.heldAffects()) add(ha)
     }
   }
@@ -176,5 +189,6 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     resistDeltas = resistDeltas.filterValues { it != 0 },
     flags = flags,
     modifierSteps = modifierSteps,
+    procSteps = procSteps,
   )
 }

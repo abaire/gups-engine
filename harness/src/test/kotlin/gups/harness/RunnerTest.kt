@@ -185,6 +185,45 @@ class RunnerTest {
   }
 
   @Test
+  fun `force_rng queues the results of later rolls`() {
+    val files =
+      mapOf(
+        "zones/a/package.star" to "package(api_version = 1, kind = \"zone\")",
+        "zones/a/rooms.star" to
+          """
+            def _roll(ctx):
+                ctx.send(ctx.actor, "rolled %d" % ctx.rng.int(1, 6))
+
+            room("start", name = "Start", commands = {"roll": _roll})
+          """,
+        "zones/a/a_test.star" to
+          """
+            def test_forced(t):
+                w = t.world(seed = 1)
+                p = w.spawn_player("Pat", at = ":start")
+                w.force_rng(ints = [4, 6])
+                t.contains(p.do("roll"), "rolled 4")
+                t.contains(p.do("roll"), "rolled 6")
+
+            def test_out_of_range(t):
+                w = t.world(seed = 1)
+                p = w.spawn_player("Pat", at = ":start")
+                w.force_rng(ints = [9])
+                p.do("roll")
+                t.contains(w.diagnostics()[0].message, "the forced value 9 is out of range")
+
+            def test_bad_fraction(t):
+                t.world().force_rng(fractions = [1.0])
+          """,
+      )
+    val r = run(files, "//zones/a").results
+    assertEquals(Status.PASS, r[0].status, r[0].render())
+    assertEquals(Status.PASS, r[1].status, r[1].render())
+    assertEquals(Status.ERROR, r[2].status)
+    assertContains(r[2].message!!, "must be in [0, 1)")
+  }
+
+  @Test
   fun `world rejects package misuse and a rules package that isn't there`() {
     val files =
       zone +
