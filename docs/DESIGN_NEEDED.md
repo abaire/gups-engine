@@ -69,17 +69,6 @@ an owner's kill credit the pet? - How is the award split: equal shares, or weigh
 sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
 below the victim's level, excluded from the split?
 
-### Defender-side modifiers in combat (COMPLETED — M26)
-
-**Spec:** §4.6 (Rules Module and the Modifier Chain: `to_hit`, `damage`, chain order). **Today:** the modifier chain for
-`to_hit` and `damage` evaluates only the attacker's chain: zone, region, room, attacker affects, and attacker worn items
-(D-111). Defender affects and worn items are not evaluated in the chain. Defensive scaling is limited to entity stats
-(`dex`), `armor`, and `resists` evaluated in `to_hit` and `mitigate`. **Questions:** - How should defender items and
-affects contribute to combat resolution (e.g. an evasion cloak reducing hit chance, or a damage-ward affect absorbing
-flat damage)? - Should there be distinct modifier points such as `defend_hit` / `incoming_damage`, or should the
-defender's affects and equipment be appended to the existing `to_hit` and `damage` chains? - If appended, in what order
-do attacker and defender modifiers apply?
-
 ### Cross-room projectiles and ranged combat between rooms
 
 **Spec:** §3.3 (item `range`, `kind = "ranged"`), §5.5. **Today:** all combat is strictly self-contained within a single
@@ -107,22 +96,6 @@ amount of a hit but not its type, so a slashing sword can't also deal 2 fire dam
 affects and traits carry declarative per-type bonus damage, or should `damage` modifiers be able to return extra typed
 amounts? - Is each extra type mitigated separately, and does it fire `on_damage` and `interrupt_check` once per type or
 once per hit? - Does bonus damage apply to spell damage as well as auto-attacks?
-
-### Ownership of the `damage` modifier point (COMPLETED)
-
-**Resolved:** the modifier point moved to the kernel; the `damage(ctx)` export stays with `combat` (§3.10, §4.6).
-
-**Spec:** §3.10 (feature ownership table), §4.3 (`damage(dice, type)` effect primitive), §4.6 (`damage` export and
-modifier point, "Whose chain"). **Today:** the `combat` feature owns the `damage` modifier point
-(`script/src/main/kotlin/gups/script/Ownership.kt`), but the `damage(...)` effect primitive and `mitigate` are kernel
-and work with combat off. In a world without combat, a `damage(...)` spell or trap still runs `mitigate` (and, after the
-defender-modifier milestone, the kernel-owned `receive_damage` and `mitigate` points), yet nothing can declare a
-`damage` modifier, so an attacker-side "+2 spell damage" item or affect is impossible there. The intended direction is
-to move the `damage` modifier point to the kernel. **Questions:** - Does only the modifier point move, leaving the
-`damage(ctx)` rules export (raw auto-attack damage) with `combat`, or do both move? - With combat off, which `ctx`
-fields does a `damage` modifier see (`weapon`, `slot` and `band` are swing-only)? - Does the template world or any
-sample need content changes, and does the dry run or `gups lint` need to report a `damage` modifier differently in
-combat-off worlds?
 
 ## Mobs and AI
 
@@ -246,24 +219,6 @@ moderation, quotas, and cross-character delivery handled?
 
 ## Economy and crafting
 
-### Shops (COMPLETED — M24)
-
-**Spec:** §5.11 (item custody log notes shops and banks do not exist yet). **Today:** items can be moved between
-inventories, dropped, or given, but the engine has no merchant behaviors or currency transaction mechanics.
-**Questions:** - Should shops ship as a standard `//lib` library or require engine primitives? - How should shop
-inventories handle infinite vs. limited stock, restocking cadences, and currency types?
-
-### Shopkeepers in combat (COMPLETED — M25)
-
-**Spec:** §4.9 (`//lib:shop.star`), §4.5 (actor views), §4.16 (feature ownership). **Today:** a shop closes when its
-keeper's condition isn't `ok`, and a stunned keeper refuses to trade, but a keeper that is fighting keeps serving every
-customer, including the one attacking it. The `combat` feature owns `actor.fighting`, which fails when the feature is
-off, and scripts can't test whether a feature is enabled, so the library can't check for a fight in a portable way.
-**Questions:** - Should a fighting keeper refuse everyone, refuse only its attackers, or keep trading? - Do scripts need
-a way to test whether a feature is enabled, or should `actor.fighting` read as empty when combat is off? - Should a
-keeper remember customers who attacked it, for example by refusing them service or raising their prices? - Should
-restocking pause while the keeper is fighting?
-
 ### Crafting
 
 **Spec:** §3.3 (items, `variants`), §4.3 (skills and proficiency). **Today:** the engine has no crafting recipes. Items
@@ -331,13 +286,6 @@ imports?
 are explicitly unsupported; structured client communication relies entirely on GMCP. **Questions:** - Is there
 sufficient demand from legacy MUD clients to warrant implementing MSDP and MXP parsers and formatters? - How would MXP
 formatting tags integrate with ANSI rendering and web client pipelines?
-
-### GMCP input packages beyond Core.* (COMPLETED — M21)
-
-**Spec:** §4.10, §4.13. **Today:** clients can send only `Core.Hello` and `Core.Supports.Set`/`Add`/`Remove`. All other
-inbound GMCP packages are ignored. **Questions:** - Which client-to-server GMCP packages should be supported (e.g., UI
-interactions, client-side target selection, character customization)? - How should inbound GMCP messages be validated
-and routed to the command pipeline or script hooks?
 
 ### Built-in ACME certificate issuance
 
