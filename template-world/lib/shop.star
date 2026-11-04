@@ -14,6 +14,7 @@
 # coin by default). Stock and the till are real items in the container, so sold goods keep their
 # state, a burglar can take the stock, and restocking is lazy and time-based. The keeper's custom
 # hook `shop_price` may change any price or refuse any customer.
+# A keeper that is fighting, stunned or down doesn't trade.
 #
 # The definition is stored on the keeper and the container as a custom attribute. Attributes can't
 # hold None in a dict or list, so an absent key or till is the empty string and an unlimited stock
@@ -431,9 +432,13 @@ def _shop_here(ctx, apply):
     if keeper.condition != "ok":
         ctx.send(ctx.self, "The shop is closed.")
         return None
-    # A stun only stops trading: the keeper is still present, so restocking goes on.
+    # A stun or a fight only stops trading: the keeper is still present, so restocking goes on.
     if keeper.has_flag("stunned"):
         ctx.send(ctx.self, "%s is in no state to trade." % keeper.name)
+        return None
+    # fighting() is an error in a world without the combat feature.
+    if ctx.has_feature("combat") and keeper.fighting():
+        ctx.send(ctx.self, "%s is busy fighting." % keeper.name)
         return None
     container = _container_of(ctx, keeper)
     if container == None:

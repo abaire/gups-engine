@@ -136,9 +136,15 @@ shop window from it without parsing any text.
 * **`value <item>`** reports what the keeper would pay without moving anything.
 * **The keeper must be fit to trade.** If the keeper is incapacitated or its container is missing, every command answers
   "The shop is closed."; if it is stunned, "the shopkeeper is in no state to trade." until the stun wears off. A stunned
-  keeper still counts as present, so its stock keeps restocking. A keeper that is fighting still trades.
+  keeper still counts as present, so its stock keeps restocking. A keeper that is fighting answers every customer, its
+  attacker included, with "the shopkeeper is busy fighting." until the fight ends, and its stock keeps restocking
+  meanwhile. The keeper bears no grudge afterwards. To give it one, have the keeper's `on_damage` hook record
+  `ctx.actor` in an attribute and refuse that customer from `shop_price`.
 * **`list` changes nothing.** It runs in the fast lane, which is not replayed, so the library projects the stock the
   next catch-up would hold and shows that, without spawning or moving a thing.
+
+A library that must run in worlds with and without a feature checks `ctx.has_feature("combat")` before touching combat
+fields, as the shop does.
 
 ---
 

@@ -51,6 +51,42 @@ errors.
   markdownFormat`) must be run outside standard sandbox isolation (`BypassSandbox: true`) so the Gradle client process
   can connect to the Gradle daemon over the local loopback socket (`127.0.0.1`).
 
+## End-to-end checks
+
+When a milestone asks for an end-to-end check (players at a real zone, typing commands), use `gups scenario` instead of
+scripting telnet against `gups serve --dev`. It boots the world in-process from its `.star` files, drives the same
+command pipeline the server does, and skips only the network, login, real-time pacing and saved database state.
+
+Write the scenario in your scratchpad, not in the world, using the harness API of `*_test.star` files:
+
+```python
+def test_flee_then_trade(t):
+    w = t.world(seed = 1)
+    tess = w.spawn_player("Tess", at = ":shop")
+    ash = w.spawn_player("Ash", at = ":shop")
+    ash.do("kill shopkeeper")
+    t.contains(tess.do("list"), "busy fighting")
+    ash.do("flee")
+    print(ash.room.label)
+```
+
+Then run it against the template world:
+
+```bash
+./gradlew :cli:installDist
+cli/build/install/gups/bin/gups scenario --world template-world --package //zones/tutorial /path/to/scenario.star
+```
+
+- The transcript tags each command with the player and the room it was typed in, so check where a player is before
+  reading a reply as a bug. Output that reaches a player between commands appears when you call `p.output()` or that
+  player's next `p.do(...)`.
+- `p.do(line)` runs pulses until that player's command finishes, so players take turns; they don't act in the same
+  pulse. Use `w.run(pulses = n)` to let time pass.
+- Assertions (`t.contains`, `t.eq`, ...) make the run exit 1 on failure, with the transcript still printed.
+- If the scenario should become a permanent test, move it into the package as a `*_test.star` file; it runs there
+  unchanged.
+- Only fall back to `gups serve --dev` for what the harness can't reach: login, the network layer, saved state.
+
 ## Ignored directories
 
 `local-world/` is a gitignored developer artifact: a personal scratch copy of a world for running a dev server. It is

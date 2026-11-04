@@ -276,6 +276,60 @@ def test_stunned_keeper_does_not_trade(t):
     t.contains(p.do("list"), "offers")
     t.contains(p.do("buy sword"), "You buy 1 a test sword")
 
+def test_fighting_keeper_refuses_everyone(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":shop_test_room", gmcp = ["Shop"])
+    w.spawn("//lib:gold_coin", at = p, count = 100)
+    w.spawn("//zones/tutorial:test_axe", at = p)
+    q = w.spawn_player("Ash", at = ":shop_test_room", gmcp = ["Shop"])
+    w.spawn("//lib:gold_coin", at = q, count = 100)
+    q.do("fight_keeper")
+    refusal = "the test shopkeeper is busy fighting."
+    for a in (p, q):
+        t.contains(a.do("list"), refusal)
+        t.contains(a.do("buy sword"), refusal)
+        t.contains(a.do("sell axe"), refusal)
+        t.contains(a.do("value axe"), refusal)
+    t.eq(len(p.gmcp("Shop")), 0)   # list sends no Shop GMCP while the keeper fights
+    t.eq(_coins(p), 100)
+    t.eq(_carried_count(p, "//zones/tutorial:test_sword"), 0)
+    t.eq(_carried_count(p, "//zones/tutorial:test_axe"), 1)
+    q.do("calm_keeper")
+    t.contains(p.do("list"), "offers")
+    t.contains(p.do("buy sword"), "You buy 1 a test sword")
+    t.contains(q.do("buy sword"), "You buy 1 a test sword")   # the former attacker trades too
+
+def test_fighting_keeper_keeps_restocking(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":shop_test_room")
+    q = w.spawn_player("Ash", at = ":shop_test_room")
+    p.do("drain sword")
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 0)
+    w.run(pulses = 600)   # one full interval (every = 600); no fight yet
+    q.do("fight_keeper")
+    t.true(_keeper(w).fighting())   # the keeper is engaged
+    p.do("restock")   # catch-up runs while the keeper is present, fight or no fight
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 1)
+    q.do("calm_keeper")
+
+def test_keeper_trades_again_after_attacker_flees(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":shop")
+    q = w.spawn_player("Ash", at = ":shop")
+    keeper = [a for a in w.room(":shop").actors() if a.label == "//zones/tutorial:shopkeeper"][0]
+    q.do("kill shopkeeper")
+    t.contains(p.do("list"), "the shopkeeper is busy fighting.")
+    for _ in range(20):   # flee can fail; the seed makes the number of tries fixed
+        if q.room.label != "//zones/tutorial:shop":
+            break
+        q.do("flee")
+    t.eq(q.room.label, "//zones/tutorial:armory")   # the shop's only exit
+    t.eq(len(keeper.fighting()), 0)
+    t.contains(p.do("list"), "the shopkeeper offers:")
+    t.contains(q.do("list"), "There's no shop here.")   # the attacker is next door
+    q.do("east")
+    t.contains(q.do("list"), "the shopkeeper offers:")
+
 def test_capacity_counts_each_unstacked_item(t):
     w = _world(t)
     keeper = w.spawn(":test_small_keeper", at = ":shop_test_room")

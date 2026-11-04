@@ -16,6 +16,7 @@ import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.TAG_REGEX
+import gups.core.world.Feature
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HookContext
 import gups.core.world.InvariantViolation
@@ -1913,6 +1914,23 @@ internal constructor(
           fail("roll(): ${e.message}")
         }
       sInt(d.roll(world.rng))
+    }
+
+  @StarlarkMethod(
+    name = "has_feature",
+    doc = "Whether the world has the named feature module on.",
+    parameters = [Param(name = "name", named = true, doc = "Feature id, such as 'combat'.")],
+  )
+  fun hasFeature(name: Any): Any =
+    verb("has_feature", "$name") {
+      val id = str(name, "has_feature(name)")
+      val f =
+        Feature.byId(id)
+          ?: fail(
+            "has_feature(): unknown feature '$id'; expected one of " +
+              Feature.entries.joinToString { it.id }
+          )
+      f in world.features
     }
 
   override fun repr(printer: Printer) {

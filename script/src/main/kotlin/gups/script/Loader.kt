@@ -13,6 +13,7 @@ import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.HookName
 import gups.core.world.gmcpOverlaps
+import java.nio.file.Path
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 import net.starlark.java.eval.EvalException
@@ -149,13 +150,16 @@ class ScriptLoader(
 
   /**
    * Loads [requested] (package paths such as `zones/tutorial`) and their dependencies. [tests] are
-   * `*_test.star` files to evaluate as well, with [testGlobals] as their builtins.
+   * `*_test.star` files to evaluate as well, with [testGlobals] as their builtins. A test label in
+   * [testSources] is read from that path instead of the world, so a file kept elsewhere can run as
+   * if it sat in the label's package.
    */
   fun load(
     requested: Collection<String>,
     tests: Collection<Label> = emptyList(),
     testGlobals: Map<String, Any> = emptyMap(),
-  ): LoadResult = Session().run(requested, tests, testGlobals)
+    testSources: Map<Label, Path> = emptyMap(),
+  ): LoadResult = Session(testSources).run(requested, tests, testGlobals)
 
   private class PkgState(val pkg: ScriptPackage) {
     val errors = mutableListOf<LoadError>()
@@ -169,7 +173,7 @@ class ScriptLoader(
       get() = errors.isNotEmpty()
   }
 
-  private inner class Session {
+  private inner class Session(private val testSources: Map<Label, Path>) {
     val states = LinkedHashMap<String, PkgState>()
     val modules = HashMap<Label, Module>()
     val testModules = LinkedHashMap<Label, Module>()
@@ -322,7 +326,7 @@ class ScriptLoader(
         if (test) testErrors.getOrPut(file) { mutableListOf() } += e else st.errors += e
         badFiles += file
       }
-      val path = dir.fileOf(file)
+      val path = (if (test) testSources[file] else null) ?: dir.fileOf(file)
       if (!path.isRegularFile()) {
         err(LoadError(st.pkg.path, "missing", "no file $path"))
         return null

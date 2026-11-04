@@ -81,6 +81,7 @@ fun gupsCommand(): CliktCommand =
       MigrateCheck(),
       Docs(),
       Repro(),
+      ScenarioCmd(),
       Backup(),
       Restore(),
       Deploy(),
@@ -463,6 +464,36 @@ class TestCmd : CliktCommand(name = "test") {
         }
       }
     for (p in report.problems) echo("gups test: $p", err = true)
+    if (report.results.isNotEmpty()) echo("\n" + report.summary())
+    if (!report.ok) throw ProgramResult(EXIT_TESTS_FAILED)
+  }
+}
+
+class ScenarioCmd : CliktCommand(name = "scenario") {
+  val file by argument("file.star").file(mustExist = true, canBeDir = false)
+  val pkg by
+    option(
+        "--package",
+        metavar = "//PKG",
+        help = "Package the file runs as if it were in, e.g. //zones/tutorial.",
+      )
+      .required()
+  val world by
+    option("--world", help = "Course world directory (default: the current directory).")
+      .file(mustExist = true, canBeFile = false)
+
+  override fun help(context: Context) =
+    "Run a test file kept outside the world and print what its players typed and received."
+
+  override fun run() {
+    val dir = WorldDir((world ?: File(".")).toPath())
+    val report =
+      withPlugins(dir) { plugins ->
+        TestRunner(dir, plugins).scenario(file.toPath(), pkg) { r ->
+          echo(r.render(transcript = true))
+        }
+      }
+    for (p in report.problems) echo("gups scenario: $p", err = true)
     if (report.results.isNotEmpty()) echo("\n" + report.summary())
     if (!report.ok) throw ProgramResult(EXIT_TESTS_FAILED)
   }

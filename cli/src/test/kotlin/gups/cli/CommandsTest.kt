@@ -35,6 +35,7 @@ class CommandsTest {
         "migrate-check",
         "docs",
         "repro",
+        "scenario",
         "backup",
         "restore",
         "deploy",
@@ -192,6 +193,55 @@ class CommandsTest {
     val result = gupsCommand().test(listOf("test", "--world", world, "//zones/nowhere"))
     assertEquals(EXIT_TESTS_FAILED, result.statusCode)
     assertContains(result.stderr, "no package matches //zones/nowhere")
+  }
+
+  @Test
+  fun `scenario runs a file from outside the world and prints its transcript`() {
+    val world = System.getProperty("gups.templateWorld")
+    val file = kotlin.io.path.createTempDirectory("gups-scenario").resolve("flee.star")
+    file
+      .toFile()
+      .writeText(
+        """
+        def test_flee_then_trade(t):
+            w = t.world(seed = 1)
+            tess = w.spawn_player("Tess", at = ":shop")
+            ash = w.spawn_player("Ash", at = ":shop")
+            ash.do("kill shopkeeper")
+            t.contains(ash.do("list"), "busy fighting")
+            t.contains(tess.do("list"), "busy fighting")
+            for _ in range(20):
+                if ash.room.label != "//zones/tutorial:shop":
+                    break
+                ash.do("flee")
+            print("Ash fled")
+            ash.do("east")
+            t.contains(tess.do("list"), "offers")
+            t.contains(ash.do("list"), "offers")
+        """
+          .trimIndent() + "\n"
+      )
+    val result =
+      gupsCommand()
+        .test(listOf("scenario", "--world", world, "--package", "//zones/tutorial", "$file"))
+    assertEquals(0, result.statusCode, result.output)
+    assertContains(result.stdout, "Ash@//zones/tutorial:shop> kill shopkeeper")
+    assertContains(result.stdout, "(Ash is now in //zones/tutorial:armory)")
+    assertContains(result.stdout, "Ash fled")
+    assertContains(result.stdout, "Tess@//zones/tutorial:shop> list")
+    assertContains(result.stdout, "PASS  test_flee_then_trade")
+    assertContains(result.stdout, "1 passed, 0 failed, 0 errors")
+  }
+
+  @Test
+  fun `scenario fails on an unknown package`() {
+    val world = System.getProperty("gups.templateWorld")
+    val file = kotlin.io.path.createTempDirectory("gups-scenario").resolve("x.star")
+    file.toFile().writeText("def test_x(t):\n    pass\n")
+    val result =
+      gupsCommand().test(listOf("scenario", "--world", world, "--package", "//zones/nope", "$file"))
+    assertEquals(EXIT_TESTS_FAILED, result.statusCode)
+    assertContains(result.stderr, "no package //zones/nope")
   }
 
   @Test

@@ -3829,6 +3829,24 @@
         ]
       },
       {
+        "symbol": "ctx.has_feature",
+        "name": "has_feature",
+        "doc": "Whether the world has the named feature module on.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.has_feature.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Feature id, such as 'combat'."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.heal",
         "name": "heal",
         "doc": "Restores a vital of target, up to its maximum.",

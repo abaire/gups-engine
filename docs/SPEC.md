@@ -778,6 +778,8 @@ as leaving it out.
   - Its `ctx` verbs and view fields are errors naming the feature.
   - Its rules exports are neither required nor allowed (§4.6).
   - Its GMCP packages and fields aren't sent.
+  - Scripts can test for a feature with `ctx.has_feature(name)` (§4.5), so a library can serve worlds with and without
+    it.
 - **Without `track`,** every room has one track slot and every actor and item sits at index 0, so combat, movement and
   items keep one code path; nothing shows bands. `look` lists them as `Also here: …` and `On the ground: …`. A skill's
   `range` may be omitted (any one target in the room), `self` or `room`. The rules `ctx.band` is `None`, and `get` costs
@@ -1168,7 +1170,7 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
 | Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                      |
 | Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                            |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                             |
-| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`                                                                                                                                 |
+| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`                                                                                                    |
 | Randomness        | `rng.int(lo, hi)`, `rng.chance(pct)`, `rng.choice(list)`. Seeded and deterministic; there is no other source of randomness.                                                                                                                                                            |
 | Leveling          | `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`                                                                                                                                                                                   |
 
@@ -1190,6 +1192,8 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
   suggestion before anything changes.
 - **Features:** `start_combat`, `stop_combat`, `enemies_near` and `act_attack` need `combat`; `act_cast` needs `skills`;
   `act_advance`, `act_retreat` and the `index` arguments of `teleport`, `spawn` and `move_item` need `track` (§3.10).
+  `has_feature(name)` belongs to the kernel and works in every world: it returns whether the world has the feature
+  `name` on (`"combat"`, `"track"`, `"skills"` or `"leveling"`), and any other name raises an error.
 - **Items:**
   - `spawn` returns a view, or a list when it makes several entities. For items, `at` may be a room or room label
     (ground, at `index`), an actor (carried) or a container.
@@ -1644,9 +1648,11 @@ in the lib's own `lib` namespace on the player, so only the library writes it (�
 **`//lib:shop.star`:** `shop.define(id, stock, ...)` describes a shop and `shop.open(ctx, keeper, shop)` (from the
 keeper's `on_spawn`) binds a keeper to a stock container: a locked chest in its room or a pack it carries. Stock and the
 till (coins of the shop's currency, `//lib:gold_coin` by default) are real items in the container, restocked lazily over
-time while a keeper is present. Players use `list`, `buy`, `sell` and `value`. Prices start from `item(value=)`; the
-keeper's custom hook `shop_price` (§4.4) may change any price or refuse any customer, and plugin handlers for it join in
-(§4.15). `list` also sends the GMCP event `Shop.Stock`.
+time while a keeper is present. A keeper that is incapacitated, stunned or fighting doesn't trade: while it is engaged
+(`combat` feature) it refuses every customer, and its stock still restocks. The library keeps no memory of attackers; a
+world can refuse or reprice them from the keeper's `shop_price` hook. Players use `list`, `buy`, `sell` and `value`.
+Prices start from `item(value=)`; the keeper's custom hook `shop_price` (§4.4) may change any price or refuse any
+customer, and plugin handlers for it join in (§4.15). `list` also sends the GMCP event `Shop.Stock`.
 
 **Roles and gating:** A command can require a role. To players without it the command doesn't exist: they get "Huh?",
 and `help` leaves it out. This applies to engine `@` tools and plugin commands alike. `@` commands registered from
@@ -2069,28 +2075,37 @@ maximum, with `type` defaulting to the unarmed damage type.
 
 ### 4.13 CLI
 
-|                                      Command                                      |                      Purpose                      |
-|-----------------------------------------------------------------------------------|---------------------------------------------------|
-| `gups serve --dev\|--prod [--fresh] [--world DIR] [--db FILE] ...`                | Run the server (§2.4).                            |
-| `gups test [--world DIR] <label-pattern...>`                                      | Run tests, e.g. `//zones/goblin_caves/...`.       |
-| `gups lint [--base REF] [--format text\|github] [label-pattern...]`               | Run the load and static checks (§7.3).            |
-| `gups fuzz [--pulses N] [--seed S] <label-pattern...>`                            | Run the fuzz walker (§7.3).                       |
-| `gups snapshot --sanitized --out FILE [--admin ADDR]`                             | Make a sanitized database copy.                   |
-| `gups migrate-check --snapshot FILE`                                              | Run the migration check (§7.3).                   |
-| `gups docs [--out DIR] [--world DIR]`                                             | Write the HTML API reference (§4.16).             |
-| `gups docs --json [--out PATH]`                                                   | Write the `api.json` model (§4.16).               |
-| `gups docs --update-baseline [--docs-dir DIR]`                                    | Before a release: write the API baseline (§4.17). |
-| `gups repro <diagnostic-id\|bundle.json> [--save FILE]`                           | Replay a diagnostic in the harness.               |
-| `gups backup` / `gups restore <file>`                                             | Back up or restore the database.                  |
-| `gups deploy [--commit SHA]`                                                      | Called by CI; talks to the admin port.            |
-| `gups invite --role R`, `gups import-roster [--admin ADDR] [--days N] roster.csv` | Create accounts.                                  |
+|                                      Command                                      |                      Purpose                       |
+|-----------------------------------------------------------------------------------|----------------------------------------------------|
+| `gups serve --dev\|--prod [--fresh] [--world DIR] [--db FILE] ...`                | Run the server (§2.4).                             |
+| `gups test [--world DIR] <label-pattern...>`                                      | Run tests, e.g. `//zones/goblin_caves/...`.        |
+| `gups lint [--base REF] [--format text\|github] [label-pattern...]`               | Run the load and static checks (§7.3).             |
+| `gups fuzz [--pulses N] [--seed S] <label-pattern...>`                            | Run the fuzz walker (§7.3).                        |
+| `gups snapshot --sanitized --out FILE [--admin ADDR]`                             | Make a sanitized database copy.                    |
+| `gups migrate-check --snapshot FILE`                                              | Run the migration check (§7.3).                    |
+| `gups docs [--out DIR] [--world DIR]`                                             | Write the HTML API reference (§4.16).              |
+| `gups docs --json [--out PATH]`                                                   | Write the `api.json` model (§4.16).                |
+| `gups docs --update-baseline [--docs-dir DIR]`                                    | Before a release: write the API baseline (§4.17).  |
+| `gups repro <diagnostic-id\|bundle.json> [--save FILE]`                           | Replay a diagnostic in the harness.                |
+| `gups scenario --package //PKG [--world DIR] FILE`                                | Run a test file kept outside the world, verbosely. |
+| `gups backup` / `gups restore <file>`                                             | Back up or restore the database.                   |
+| `gups deploy [--commit SHA]`                                                      | Called by CI; talks to the admin port.             |
+| `gups invite --role R`, `gups import-roster [--admin ADDR] [--days N] roster.csv` | Create accounts.                                   |
 
 - `--world` defaults to the current directory. `gups backup`, `restore` and `repro` take `--world` and `--db` as `serve`
   does.
-- Commands that load a world (`test`, `lint`, `fuzz`, `migrate-check`, `repro`, `docs --world`) load its plugins too
-  (§4.15).
+- Commands that load a world (`test`, `scenario`, `lint`, `fuzz`, `migrate-check`, `repro`, `docs --world`) load its
+  plugins too (§4.15).
 - **`gups test`:** patterns are `//...`, `//a/...`, `//a`, `//a:file_test.star` and `//a:test_name`. It exits 1 if any
   test fails or errors, or a pattern matches nothing.
+- **`gups scenario`:** runs the `test_*` functions of one `.star` file kept anywhere, as if it sat in the package
+  `--package` names: its `load`s, relative labels and default `t.world()` packages resolve there. The harness API and
+  the freshly booted, seeded worlds are those of `gups test`. Each function prints a transcript, pass or fail, of every
+  `p.do(line)` (tagged `<player>@<room label>> <line>`, its output indented below, then a note if the player changed
+  rooms), every non-empty `p.output()` and every `print()`, in the order they happened. It exits 1 if a function fails
+  or errors, the file has no `test_*` functions, or the package doesn't exist. It is meant for end-to-end checks that
+  drive the real command pipeline without a network or a database; a scenario that should keep running moves into the
+  package as a `*_test.star` file unchanged.
 - **`gups restore FILE`** replaces the database with SQLite's restore API. The server must be stopped first; nothing
   enforces it.
 - **`gups import-roster`:**
@@ -3764,3 +3779,4 @@ template's `.github/workflows/gates.yml`.
 | **M22**   | Starlark GMCP events: `gmcp_package()` for `lib` and `rules` packages with reserved roots and world-wide overlap checks, `ctx.gmcp(player, package, data)`, GMCP payload values and the 16 KB cap, harness `spawn_player(gmcp=)` and `p.gmcp()`, `world.html` listing (§2.3, §4.2, §4.5, §4.10, §4.12, §4.16, §6.1).                                                                                                                                  |
 | **M23**   | Item value and custom hooks: `item(value=)`, `hooks = {...}` on rooms, mobs and items, `ctx.call_hook` with plain-value arguments and results, the plugin handler chain (`addHook`, `PluginHookCall`), `cha` in the template schema (§3.3, §3.9, §4.2, §4.4, §4.5, §4.15, §4.16).                                                                                                                                                                     |
 | **M24**   | The shop library: `//lib:shop.star` with coin currency, stock containers (chest or pack) holding real stock and the till, lazy partial restocking, `list`/`buy`/`sell`/`value`, the `shop_price` custom hook, `Shop.Stock` GMCP, `ctx.merge_stack`; the tutorial shop (§4.5, §4.9, §5.11).                                                                                                                                                            |
+| **M25**   | Shopkeepers in combat: `ctx.has_feature`; a fighting keeper refuses every customer while restocking goes on, and shops work without the `combat` feature; `gups scenario` (§3.10, §4.5, §4.9, §4.13).                                                                                                                                                                                                                                                 |

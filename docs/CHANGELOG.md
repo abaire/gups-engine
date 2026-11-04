@@ -4,6 +4,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Shopkeepers in combat
+
+- `ctx.has_feature(name)` reports whether the world has a feature module on; an unknown name is an error.
+- `//lib:shop.star`: a keeper that is fighting refuses every customer with "<keeper> is busy fighting."; restocking goes
+  on, and worlds without combat are unaffected.
+
 ### Shops
 
 - Added `//lib:shop.star` to the template world: `shop.define(id, stock, ...)` describes a shop — stock lines with

@@ -9,6 +9,8 @@ import gups.script.WorldDir
 import gups.script.WorldMessages
 import gups.script.WorldModule
 import gups.script.WorldPluginWiring
+import java.nio.file.Path
+import kotlin.io.path.isRegularFile
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Mutability
 import net.starlark.java.eval.Starlark
@@ -75,6 +77,8 @@ data class TestResult(
   val printed: String = "",
   /** Script diagnostics logged in the test's worlds, which don't fail the test themselves. */
   val warnings: List<String> = emptyList(),
+  /** A scenario's commands, output and printed lines, in order; empty for ordinary tests. */
+  val transcript: String = "",
 )
 
 class TestReport(val results: List<TestResult>, val problems: List<String>) {
@@ -144,6 +148,48 @@ class TestRunner(
     return TestReport(results, problems)
   }
 
+  /**
+   * Runs the `test_*` functions of [file], which may live outside the world, as if it sat in the
+   * package [pkgLabel] (such as `//zones/tutorial`): its relative labels and default `t.world()`
+   * load resolve there. Each result carries a transcript of what the players typed and received.
+   */
+  fun scenario(file: Path, pkgLabel: String, listener: (TestResult) -> Unit = {}): TestReport {
+    val problems = mutableListOf<String>()
+    problems += moduleProblems(dir)
+    val pkg = pkgLabel.removePrefix("//")
+    when {
+      !pkgLabel.startsWith("//") || ':' in pkgLabel || pkg.isEmpty() ->
+        problems += "'$pkgLabel' is not a package label such as //zones/forest"
+      !dir.hasPackage(pkg) -> problems += "no package //$pkg in ${dir.root}"
+    }
+    val name = file.fileName?.toString().orEmpty()
+    if (!name.endsWith(".star") || !file.isRegularFile()) problems += "$file is not a .star file"
+    val label =
+      if (problems.isEmpty())
+        runCatching { Label("//$pkg:$name") }
+          .onFailure { problems += "$file: ${it.message}" }
+          .getOrNull()
+      else null
+    if (label == null) return TestReport(emptyList(), problems)
+    val loaded =
+      loader.load(listOf(pkg) + implicit, tests = listOf(label), testSources = mapOf(label to file))
+    val results = mutableListOf<TestResult>()
+    loaded.testErrors[label]?.let { errs ->
+      val r = TestResult(label, "(load)", Status.ERROR, errs.joinToString("\n") { it.render() })
+      listener(r)
+      return TestReport(listOf(r), problems)
+    }
+    val module = loaded.testModules[label]
+    for ((fnName, fn) in module?.globals.orEmpty()) {
+      if (!fnName.startsWith("test_") || fn !is StarlarkFunction) continue
+      val r = runTest(pkg, label, fnName, fn, Transcript())
+      results += r
+      listener(r)
+    }
+    if (results.isEmpty()) problems += "$file has no test_ functions"
+    return TestReport(results, problems)
+  }
+
   private fun runPackage(
     pkg: String,
     files: List<Label>,
@@ -166,7 +212,13 @@ class TestRunner(
     return out
   }
 
-  private fun runTest(pkg: String, file: Label, name: String, fn: StarlarkFunction): TestResult {
+  private fun runTest(
+    pkg: String,
+    file: Label,
+    name: String,
+    fn: StarlarkFunction,
+    transcript: Transcript? = null,
+  ): TestResult {
     val t =
       TestCtx(
         pkg,
@@ -176,6 +228,7 @@ class TestRunner(
         settings = settings,
         schema = loader.schema,
         levelMode = loader.module.levelMode,
+        transcript = transcript,
       )
     val printed = StringBuilder()
     var status = Status.PASS
@@ -184,7 +237,10 @@ class TestRunner(
     Mutability.create(name).use { mu ->
       val thread = StarlarkThread(mu, StarlarkSemantics.DEFAULT)
       thread.setMaxExecutionSteps(TEST_STEPS)
-      thread.setPrintHandler { _, msg -> printed.append(msg).append('\n') }
+      thread.setPrintHandler { _, msg ->
+        printed.append(msg).append('\n')
+        transcript?.printed(msg)
+      }
       try {
         Starlark.call(thread, fn, listOf(t), emptyMap())
       } catch (e: EvalException) {
@@ -230,16 +286,24 @@ class TestRunner(
       trace.takeIf { status != Status.PASS },
       printed.toString(),
       warnings,
+      transcript?.toString().orEmpty(),
     )
   }
 }
 
-/** Human-readable report lines, as `gups test` prints them. */
-fun TestResult.render(): String = buildString {
+/**
+ * Human-readable report lines, as `gups test` prints them. With [transcript], a scenario's
+ * transcript comes first, in full, whether the test passed or not; it already holds what was
+ * printed.
+ */
+fun TestResult.render(transcript: Boolean = false): String = buildString {
+  if (transcript && this@render.transcript.isNotEmpty()) {
+    append("--- ").append(name).append('\n').append(this@render.transcript)
+  }
   append("  ").append(status.name.padEnd(5)).append(' ').append(name)
   if (location != null) append("  (").append(location).append(')')
   message?.let { m -> append('\n').append(m.lines().joinToString("\n") { "        $it" }) }
-  if (status != Status.PASS && printed.isNotEmpty()) {
+  if (!transcript && status != Status.PASS && printed.isNotEmpty()) {
     append("\n        printed:\n")
       .append(printed.trimEnd().lines().joinToString("\n") { "          $it" })
   }

@@ -41,6 +41,8 @@ internal constructor(
   private val schema: WorldSchema = WorldSchema.EMPTY,
   /** How earned levels apply in the test worlds. */
   private val levelMode: LevelMode = LevelMode.AUTO,
+  /** Records the players' commands and output when running a scenario. */
+  private val transcript: Transcript? = null,
 ) : StarlarkValue {
   internal val worlds = mutableListOf<WorldHandle>()
 
@@ -123,7 +125,7 @@ internal constructor(
     host.install(world)
     world.start()
     plugins.started(world)
-    return WorldHandle(world, host, from).also { worlds += it }
+    return WorldHandle(world, host, from, transcript).also { worlds += it }
   }
 
   private fun same(a: Any?, b: Any?, thread: StarlarkThread): Boolean {

@@ -117,6 +117,14 @@ gups fuzz --world local-world --pulses 1000 //zones/tutorial/...   # bot players
 
 A failing fuzz run prints the exact command to rerun it and writes a repro bundle for `gups repro`.
 
+**Try a scenario end to end.** `gups scenario` runs a `.star` file kept anywhere (it need not be in the world) with the
+same `t` and `w` API as a test, as if it sat in the package `--package` names. It prints every command each player
+typed, tagged with the player and room, the output they got and whatever the file printed, whether it passes or fails:
+
+```bash
+gups scenario --world local-world --package //zones/tutorial /tmp/flee.star
+```
+
 **Generate the API reference.** `gups docs` writes the offline HTML reference of the whole Script API to `build/docs`
 (`--out DIR` to change it, `--world DIR` to include that world's plugins). `gups docs --json` writes `api.json` instead.
 
@@ -170,6 +178,7 @@ track bands).
 | `gups migrate-check --snapshot FILE`        | Checks migrations and reconciliation against a snapshot.                  |
 | `gups deploy --commit SHA --admin ADDR`     | Deploys a course world commit to a running server (CI calls it).          |
 | `gups repro <diagnostic-id or bundle.json>` | Replays a diagnostic in the harness.                                      |
+| `gups scenario --package //PKG FILE`        | Runs a test file kept outside the world and prints a full transcript.     |
 
 ## Creating a course world
 

@@ -497,6 +497,64 @@ class FeatureScriptTest {
     assertFalse(f.diagnostics("script_error").isNotEmpty())
   }
 
+  /**
+   * In a world with [features], runs [body] in a room's `on_enter`; returns the player's output and
+   * the first script error.
+   */
+  private fun featureProbe(features: Features, body: String): Pair<String, String?> {
+    val f =
+      ScriptFixture(
+        world(
+          features,
+          "zones/z/a.star" to
+            """
+            def _enter(ctx):
+                a = ctx.actor
+                $body
+
+            room("start", exits = [exit("north", ":hall")])
+            room("hall", on_enter = _enter)
+            """,
+        )
+      )
+    val p = f.player()
+    f.input(p, "north")
+    f.run(2)
+    return f.out(p) to f.diagnostics("script_error").firstOrNull()?.message
+  }
+
+  @Test
+  fun `has_feature reports each enabled feature`() {
+    for (features in listOf(Features.ALL, without(Feature.COMBAT))) {
+      for (f in Feature.entries) {
+        val (out, err) = featureProbe(features, "ctx.send(a, str(ctx.has_feature(\"${f.id}\")))")
+        assertTrue(err == null, "with features=$features, ${f.id}: $err")
+        val (expected, other) = if (f in features) "True" to "False" else "False" to "True"
+        assertContains(out, expected)
+        assertFalse(other in out, "with features=$features, ${f.id}: $out")
+      }
+    }
+  }
+
+  @Test
+  fun `has_feature rejects an unknown name`() {
+    val unknown = runtimeError(Feature.COMBAT, "ctx.has_feature(\"magic\")")
+    assertTrue(unknown != null && "unknown feature 'magic'" in unknown, unknown)
+    val badType = runtimeError(Feature.COMBAT, "ctx.has_feature(3)")
+    assertTrue(
+      badType != null && "expected a string" in badType && "unknown feature" !in badType,
+      badType,
+    )
+  }
+
+  @Test
+  fun `has_feature works whatever is off`() {
+    val (out, err) =
+      featureProbe(Features(emptySet()), "ctx.send(a, str(ctx.has_feature(\"combat\")))")
+    assertTrue(err == null, "with no features: $err")
+    assertContains(out, "False")
+  }
+
   @Test
   fun `pending_levels counts the owed levels in deferred mode, and is 0 after an auto award`() {
     val zoneFiles =

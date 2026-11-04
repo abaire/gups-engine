@@ -237,7 +237,7 @@ inventories, dropped, or given, but the engine has no merchant behaviors or curr
 **Questions:** - Should shops ship as a standard `//lib` library or require engine primitives? - How should shop
 inventories handle infinite vs. limited stock, restocking cadences, and currency types?
 
-### Shopkeepers in combat
+### Shopkeepers in combat (COMPLETED — M25)
 
 **Spec:** §4.9 (`//lib:shop.star`), §4.5 (actor views), §4.16 (feature ownership). **Today:** a shop closes when its
 keeper's condition isn't `ok`, and a stunned keeper refuses to trade, but a keeper that is fighting keeps serving every

@@ -104,6 +104,8 @@ internal constructor(
   val host: StarlarkHost,
   /** The test file's package, for relative labels and attribute keys. */
   override val pkg: String,
+  /** Where a scenario records its players' commands and output; null in ordinary tests. */
+  internal val transcript: Transcript? = null,
 ) : StarlarkValue, ViewScope {
   private var nextSession = 1L
   internal val traceLines = ArrayDeque<String>()
@@ -639,18 +641,22 @@ internal constructor(
   fun doLine(line: Any): Any {
     val world = w.world
     if (!player.inWorld) evalFail("do(): ${player.name} is no longer in the world")
-    world.submit(player, str(line, "do(line)"))
+    val text = str(line, "do(line)")
+    val room = Transcript.roomOf(player)
+    world.submit(player, text)
     var pulses = 0
     while (player.inWorld && (player.actionQueue.isNotEmpty() || player.casting != null)) {
       if (pulses++ >= DO_MAX_PULSES)
         evalFail("do(\"$line\"): still busy after $DO_MAX_PULSES pulses")
       world.runPulse()
     }
-    return output()
+    return drain().also { w.transcript?.command(player, room, text, it) }
   }
 
   @StarlarkMethod(name = "output", doc = "Output received since the last do() or output().")
-  fun output(): Any {
+  fun output(): Any = drain().also { w.transcript?.output(player, it) }
+
+  private fun drain(): String {
     w.world.flushOutput()
     return sink.drain()
   }

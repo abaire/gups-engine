@@ -122,13 +122,32 @@ def _stun_keeper(ctx):
             return
     ctx.send(ctx.actor, "The keeper is not here.")
 
+# fight_keeper: engages the fixture shopkeeper in combat with the player.
+def _fight_keeper(ctx):
+    for a in ctx.room.actors():
+        if a.label == "//zones/tutorial:test_shopkeeper":
+            ctx.start_combat(ctx.actor, a)
+            ctx.send(ctx.actor, "You attack the keeper.")
+            return
+    ctx.send(ctx.actor, "The keeper is not here.")
+
+# calm_keeper: ends the fixture shopkeeper's fights.
+def _calm_keeper(ctx):
+    for a in ctx.room.actors():
+        if a.label == "//zones/tutorial:test_shopkeeper":
+            ctx.stop_combat(a)
+            ctx.send(ctx.actor, "The keeper calms down.")
+            return
+    ctx.send(ctx.actor, "The keeper is not here.")
+
 room("shop_test_room",
     name = "The Shop Test Room",
     desc = "A bare room kept for the shop tests.",
     flags = ["dead_end_ok"],
     commands = {"bad_label": _bad_label, "bad_markup": _bad_markup, "bad_count": _bad_count,
                 "good_define": _good_define, "drain": _drain, "restock": _restock,
-                "stun_keeper": _stun_keeper},
+                "stun_keeper": _stun_keeper, "fight_keeper": _fight_keeper,
+                "calm_keeper": _calm_keeper},
     spawns = [spawn(":test_shopkeeper")],
 )
 
