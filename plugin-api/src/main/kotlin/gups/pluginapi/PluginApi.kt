@@ -272,6 +272,7 @@ data class PluginTrait(
 enum class PluginModifierPoint {
   TO_HIT,
   DAMAGE,
+  BONUS_DAMAGE,
   DEFEND_HIT,
   RECEIVE_DAMAGE,
   MITIGATE,

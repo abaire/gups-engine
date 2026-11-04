@@ -270,8 +270,9 @@ Plugins can define traits, character creation choices and operational restrictio
 
 Traits carry stat, max-vital and resist deltas, flags, and modifiers. They are registered on the plugin registry. A
 modifier at a defender point (`DEFEND_HIT`, `RECEIVE_DAMAGE` or `MITIGATE`) runs on the chain of the actor being hit, so
-the call's `actor` is the trait's bearer, the defender, and `other` the attacker. The heritage plugin's elf is harder to
-hit the higher its dexterity:
+the call's `actor` is the trait's bearer, the defender, and `other` the attacker. The `BONUS_DAMAGE` modifier takes and
+returns a `Map<String, Long>` keyed by damage type; return the base with entries added. `actor` is the attacker. The
+heritage plugin's elf is harder to hit the higher its dexterity:
 
 ```kotlin
 r.addTrait(

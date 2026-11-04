@@ -115,8 +115,9 @@ def _blunted(ctx, base):
     return max(1, base // 2)
 
 # A region is a tag rooms carry (room(regions = [...])); it may span zones. Its modifiers
-# apply in every room that carries it. Points: to_hit, defend_hit, damage, receive_damage,
-# mitigate, initiative, cast_allowed, move_cost, regen. `@trace rules` shows each modifier at work.
+# apply in every room that carries it. Points: to_hit, defend_hit, damage, bonus_damage,
+# receive_damage, mitigate, initiative, cast_allowed, move_cost, regen. `@trace rules` shows each
+# modifier at work.
 region("practice_grounds",
     modifiers = {MODIFIER.damage: _blunted},
 )

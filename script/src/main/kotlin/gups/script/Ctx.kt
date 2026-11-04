@@ -292,6 +292,26 @@ internal constructor(
       ?: Starlark.NONE
   }
 
+  @StarlarkMethod(
+    name = "parts",
+    structField = true,
+    doc = "The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.",
+  )
+  fun parts(): Any = field {
+    hc.parts?.let {
+      sList(
+        it.map { part ->
+          StructValue(
+            mapOf(
+              "type" to part.type.name,
+              "losses" to TypedMap(TypedKind.VITALS, part.losses, frame.world.schema.vitalNames),
+            )
+          )
+        }
+      )
+    } ?: Starlark.NONE
+  }
+
   @StarlarkMethod(name = "type", structField = true, doc = "The damage type, for on_damage.")
   fun type(): Any = field { hc.type?.name ?: Starlark.NONE }
 

@@ -30,6 +30,9 @@ enum class ModifierPoint(
   /** Modifies the raw damage rolled during combat resolution. */
   DAMAGE("damage"),
 
+  /** Adds typed damage parts to a hit or damage effect, on the attacker's chain. */
+  BONUS_DAMAGE("bonus_damage"),
+
   /**
    * Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain.
    */

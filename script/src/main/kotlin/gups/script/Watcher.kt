@@ -29,12 +29,19 @@ class WorldWatcher(private val dir: WorldDir, private val debounceNanos: Long = 
     return pending.toList().also { pending.clear() }
   }
 
-  /** `.star` files that aren't tests, with their modification time and size. */
+  /**
+   * `.star` files that aren't tests or test fixtures, with their modification time and size. The
+   * server never loads either, so changing one needs no reload.
+   */
   private fun scan(): Map<Path, Pair<Long, Long>> {
     if (!Files.isDirectory(dir.root)) return emptyMap()
     Files.walk(dir.root).use { paths ->
       return paths
-        .filter { it.name.endsWith(".star") && !it.name.endsWith(WorldDir.TEST_SUFFIX) }
+        .filter {
+          it.name.endsWith(".star") &&
+            !it.name.endsWith(WorldDir.TEST_SUFFIX) &&
+            !WorldDir.isFixture(it.name)
+        }
         .filter { p ->
           dir.root.relativize(p).none { it.name.startsWith(".") || it.name == "build" }
         }

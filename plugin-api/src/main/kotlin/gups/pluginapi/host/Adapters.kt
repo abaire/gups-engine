@@ -170,6 +170,21 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
                   }
                 } else refuse("returned an invalid vital map, expected Map<String, Long>")
               }
+              ModifierPoint.BONUS_DAMAGE -> {
+                @Suppress("UNCHECKED_CAST")
+                val res =
+                  mod.modify(call, (base as Map<String, Int>).mapValues { it.value.toLong() })
+                if (
+                  res is Map<*, *> &&
+                    res.keys.all { it is String && it in w.schema.damageTypes } &&
+                    res.values.all { it is Long }
+                ) {
+                  res.entries.associate { (k, v) ->
+                    (k as String) to
+                      (v as Long).coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+                  }
+                } else refuse("returned an invalid damage map, expected Map<String, Long>")
+              }
               else -> base
             }
           } catch (e: Throwable) {

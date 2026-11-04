@@ -260,6 +260,45 @@ class RulesTest {
   }
 
   @Test
+  fun `an item's bonus_damage modifier adds a typed part the rules mitigate with its own type`() {
+    val f =
+      world(
+        """
+            def to_hit(ctx):
+                return 100
+
+            def damage(ctx):
+                return 5
+
+            def mitigate(ctx, amount, type):
+                if type == "fire":
+                    return vitals(mana = amount)
+                return vitals(hp = amount)
+            """,
+        rooms =
+          """
+            def _flame(ctx, base):
+                # Runs on the attacker's chain, adding a fire part to each hit.
+                return base + damages(fire = 2)
+
+            room("start")
+            mob("rat", vitals = vitals(hp = 100, mana = 20))
+            item("amulet", wear = "neck", modifiers = {"bonus_damage": _flame})
+            """,
+      )
+    val p = f.player()
+    val rat = f.mob("//zones/z:rat")
+    val amulet = f.w.spawnItem(Label("//zones/z:amulet"), ItemLocation.Carried(p.id))
+    f.w.moveItem(amulet, ItemLocation.Equipped(p.id, "neck"))
+    f.w.startCombat(p, rat)
+    f.run(8)
+    // The primary part's loss lands in hp; the fire part is mitigated with its own type.
+    assertEquals(100 - 5, rat.current("hp"), "only the primary part hits hp")
+    assertEquals(20 - 2, rat.current("mana"), "the fire part is mitigated with its own type")
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+  }
+
+  @Test
   fun `a defender modifier returning the wrong type leaves the value and records a script_error`() {
     val f =
       world(
@@ -1124,7 +1163,7 @@ class RulesTest {
   fun `an item's advance_lag and retreat_lag modifiers change the lag`() {
     val f =
       world(
-        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n"),
+        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n") { it.trimIndent() },
         """
         def _quick(ctx, base):
             return base - 3
@@ -1151,7 +1190,9 @@ class RulesTest {
   fun `a room's flee_fail_lag modifier changes a failed flee's lag`() {
     val f =
       world(
-        (listOf(quietCombat(fleeChance = 0)) + DISTINCT_LAGS).joinToString("\n\n"),
+        (listOf(quietCombat(fleeChance = 0)) + DISTINCT_LAGS).joinToString("\n\n") {
+          it.trimIndent()
+        },
         """
         def _slow(ctx, base):
             return base + 2
@@ -1171,7 +1212,7 @@ class RulesTest {
   fun `a lag chain that goes below 0 leaves no recovery`() {
     val f =
       world(
-        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n"),
+        (listOf(quietCombat(100)) + DISTINCT_LAGS).joinToString("\n\n") { it.trimIndent() },
         """
         def _quick(ctx, base):
             return base - 100

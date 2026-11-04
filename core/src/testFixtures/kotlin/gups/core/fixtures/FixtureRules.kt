@@ -161,7 +161,10 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     }
     if (amount <= 0) return emptyMap()
     val d = c.defender
-    val afterArmor = (amount - stat(d, fs.armor) / 2).coerceAtLeast(1)
+    // Armor turns aside physical blows only; the schema's magic type is reduced by resistance
+    // alone.
+    val afterArmor =
+      if (type.name == fs.magic) amount else (amount - stat(d, fs.armor) / 2).coerceAtLeast(1)
     val resist = d.resists[type] ?: 0
     return mapOf(fs.health to (afterArmor * (100 - resist) / 100).coerceAtLeast(0))
   }

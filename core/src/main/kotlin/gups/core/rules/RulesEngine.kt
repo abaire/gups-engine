@@ -65,6 +65,35 @@ class RulesContext(
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
 
+  /**
+   * A copy of this context with [damageType] replaced; every other field is listed explicitly and
+   * carried over unchanged.
+   */
+  fun withDamageType(type: DamageType): RulesContext =
+    RulesContext(
+      world = world,
+      actor = actor,
+      target = target,
+      weapon = weapon,
+      band = band,
+      skill = skill,
+      item = item,
+      room = room,
+      exit = exit,
+      channel = channel,
+      event = event,
+      intensity = intensity,
+      cost = cost,
+      sourceRoom = sourceRoom,
+      viaExit = viaExit,
+      text = text,
+      action = action,
+      tags = tags,
+      source = source,
+      damageType = type,
+      slot = slot,
+    )
+
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
   val attacker: Actor
     get() = requireActor()

@@ -177,4 +177,21 @@ class ScenarioTest {
     val broken = scenario(zone, "def test_x(t):\n    nope(")
     assertEquals(Status.ERROR, broken.results.single().status)
   }
+
+  @Test
+  fun `a scenario sees the package's fixture files`() {
+    val r =
+      scenario(
+        zone + ("zones/a/probe_testdata.star" to "item(\"probe\", name = \"a probe\")"),
+        """
+            def test_probe(t):
+                w = t.world()
+                p = w.spawn_player("Pat", at = ":start")
+                w.spawn(":probe", at = p)
+                t.true(p.has_item(":probe"))
+        """,
+      )
+    val result = r.results.single()
+    assertEquals(Status.PASS, result.status, result.message ?: "")
+  }
 }

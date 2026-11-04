@@ -52,6 +52,7 @@ persistence, and linking to official specifications and generated API references
    * The Starlark test harness API (`*_test.star`)
    * Spawning virtual players and executing simulated commands
    * Fast-forwarding world time and asserting outcomes
+   * Test-only fixture files (`*_testdata.star`)
    * Running tests (`gups test`) and static checks (`gups lint`)
 8. **[08. Shops: The `//lib:shop.star` Library](08_shops.md)**
    * Defining a shop with `shop.define`: stock lines, the till, and prices from `item(value=)`

@@ -89,7 +89,7 @@ dispatched to the attacker's held items and affects, or a declarative `item(atta
 fire per swing or per hit? - Does the proc go through `cast_allowed`, warmup, cost and lag, or resolve its effects
 directly? - Can a defender's items proc when struck (thorns, retaliation)?
 
-### Typed bonus damage on attacks
+### Typed bonus damage on attacks (COMPLETED — M27)
 
 **Spec:** §4.6 (`damage` modifier point, `mitigate`). **Today (after M18):** the `damage` modifier chain changes the
 amount of a hit but not its type, so a slashing sword can't also deal 2 fire damage. **Questions:** - Should items,

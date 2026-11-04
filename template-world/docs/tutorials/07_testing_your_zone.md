@@ -116,7 +116,34 @@ The `t` object provides standard assertions:
 
 ---
 
-## 6. Running Tests & CI Checks
+## 6. Test-Only Fixtures (`*_testdata.star`)
+
+A test file can't declare rooms, mobs or items. When a test needs content of its own (a probe mob, an item that records
+what happened to it), put it in a `*_testdata.star` file in your zone. It is an ordinary content file, but only `gups
+test` and `gups scenario` load it, so the fixture never reaches the live game:
+
+```python
+# zones/my_zone/probes_testdata.star
+item("probe", name = "a probe", keywords = ["probe"])
+```
+
+```python
+# zones/my_zone/my_zone_test.star
+def test_probe(t):
+    w = t.world()
+    p = w.spawn_player("Tess", at = ":gate")
+    w.spawn(":probe", at = p)
+    t.true(p.has_item(":probe"))
+```
+
+Fixture names share your zone's name space, so they can't reuse a name your real content declares. Your real content
+must not name a fixture: `gups lint` and the server load the zone without them, so such a label fails to resolve. Only
+test files and other fixture files may `load()` a fixture file, and a fixture file doesn't count as your zone's required
+`*_test.star`.
+
+---
+
+## 7. Running Tests & CI Checks
 
 Before submitting a pull request, run your tests locally using the CLI:
 

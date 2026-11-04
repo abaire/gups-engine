@@ -8,9 +8,11 @@ import gups.core.model.didYouMean
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Dict
+import net.starlark.java.eval.HasBinary
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.Structure
+import net.starlark.java.syntax.TokenKind
 
 // The typed values of a world's schema: numbers keyed by declared vitals, stats or damage types.
 // A constructor checks its keywords against the schema, and every API that takes such numbers
@@ -20,13 +22,15 @@ import net.starlark.java.eval.Structure
 internal enum class TypedKind(val constructor: String, val noun: String) {
   VITALS("vitals", "vital"),
   STATS("stats", "stat"),
-  RESISTS("resists", "damage type");
+  RESISTS("resists", "damage type"),
+  DAMAGES("damages", "damage type");
 
   fun known(schema: WorldSchema): List<String> =
     when (this) {
       VITALS -> schema.vitalNames
       STATS -> schema.statNames
-      RESISTS -> schema.damageTypes
+      RESISTS,
+      DAMAGES -> schema.damageTypes
     }
 }
 
@@ -35,11 +39,34 @@ internal class TypedMap(
   val kind: TypedKind,
   val values: Map<String, Int>,
   private val known: List<String>,
-) : Structure {
+) : Structure, HasBinary {
   override fun getValue(name: String): Any? =
     when {
       name in values -> sInt(values.getValue(name))
       name in known -> sInt(0)
+      else -> null
+    }
+
+  /**
+   * The sum of `+` on two values of this constructor, key by key: each key takes the sum of its
+   * entry in either operand, so `vitals(hp = 2) + vitals(hp = 1, mana = 3)` is `vitals(hp = 3, mana
+   * = 3)`. Adding values of different constructors fails, naming both; any other operator, or a
+   * right-hand side that is not a typed value, leaves the operation to Starlark.
+   */
+  override fun binaryOp(op: TokenKind, that: Any, thisLeft: Boolean): Any? =
+    when {
+      op != TokenKind.PLUS -> null
+      that is TypedMap && that.kind == kind -> {
+        val out = LinkedHashMap(values)
+        for ((k, v) in that.values) out[k] = (out[k] ?: 0) + v
+        TypedMap(kind, out, known)
+      }
+      that is TypedMap -> {
+        val (left, right) =
+          if (thisLeft) kind.constructor to that.kind.constructor
+          else that.kind.constructor to kind.constructor
+        fail("can't add ${left}(...) and ${right}(...)")
+      }
       else -> null
     }
 
@@ -130,6 +157,13 @@ internal class SchemaBuiltins(private val schema: WorldSchema) {
     extraKeywords = Param(name = "kwargs"),
   )
   fun resists(kwargs: Dict<String, Any>): Any = build(TypedKind.RESISTS, kwargs)
+
+  @StarlarkMethod(
+    name = "damages",
+    doc = "Amounts of damage by type, such as damages(fire = 2).",
+    extraKeywords = Param(name = "kwargs"),
+  )
+  fun damages(kwargs: Dict<String, Any>): Any = build(TypedKind.DAMAGES, kwargs)
 }
 
 /** The schema-dependent builtins of every package, test and `@eval` file. */
@@ -156,6 +190,10 @@ internal val SCHEMA_SPECS: List<DeclSpec> =
     constructorSpec(
       TypedKind.RESISTS,
       "Percentages keyed by the world's declared damage types, such as resists(fire = 25). Used for mob resists.",
+    ),
+    constructorSpec(
+      TypedKind.DAMAGES,
+      "Amounts of damage by type, such as damages(fire = 2). Used for the value of bonus_damage modifiers.",
     ),
   )
 

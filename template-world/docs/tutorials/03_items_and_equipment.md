@@ -178,6 +178,73 @@ item("siphon_amulet",
 Trace these with `@trace rules`: a defender's chain continues the line after a `defender:defend_hit`,
 `defender:receive_damage`, or `defender:mitigate` step.
 
+### Bonus damage: `bonus_damage` and `damages(...)`
+
+A `bonus_damage` modifier adds typed parts to everything its bearer deals. It runs on the attacker's chain, takes a map
+from damage type to amount — empty at the start of a swing — and returns it with entries added. The `damages(...)`
+constructor builds such a value, and `+` on two typed values of the kind adds their entries. Every entry above 0 becomes
+a damage part of its own: it runs the defender's `receive_damage` chain and `mitigate` with its own type, so armor and
+resists apply to it separately, and the parts are then applied with the hit as one damage event, which is what
+`on_damage`'s `ctx.parts` lists, the hit's type first. While a swing is in flight, only the swinging weapon's own
+`bonus_damage` modifier runs among worn weapons — the same filter as `to_hit` and `damage` — so a neck amulet is always
+in the chain and an off-hand dagger is not.
+
+The tutorial's `flaming_sword` burns on its own swings only. Outside a swing — a spell, for instance — `ctx.slot` is
+`None`, so the guard leaves the base alone and the fire never reaches the spell's damage:
+
+```python
+def _flame_edge(ctx, base):
+    if ctx.slot == None:
+        return base
+    return base + damages(fire = ctx.roll("1d2"))
+
+item("flaming_sword",
+     name="a flaming sword",
+     keywords=["flaming", "sword"],
+     kind="melee",
+     wield="wield",
+     dice="1d6",
+     damage_type="slash",
+     modifiers={MODIFIER.bonus_damage: _flame_edge},
+     )
+```
+
+The `ember_amulet` is unguarded, so everything its wearer deals carries a little fire, spells included. Its fire adds to
+the sword's when the wearer wields both:
+
+```python
+def _embers(ctx, base):
+    return base + damages(fire = 1)
+
+item("ember_amulet",
+     name="an ember amulet",
+     keywords=["ember"],
+     wear="neck",
+     modifiers={MODIFIER.bonus_damage: _embers},
+     )
+```
+
+From the defender's side, `receive_damage` already runs once per part with `ctx.damage_type` set to that part's type, so
+a multiplicative effect can key on it. The tutorial's `oily_rags` double a fire part — a fireball and a flaming sword's
+fire alike — while their armor turns aside the physical parts:
+
+```python
+def _flammable(ctx, base):
+    return base * 2 if ctx.damage_type == DAMAGE.fire else base
+
+item("oily_rags",
+     name="sketchy oil-soaked rags of protection",
+     keywords=["rags"],
+     kind="armor",
+     wear="arms",
+     stat_deltas=stats(armor=4),
+     modifiers={MODIFIER.receive_damage: _flammable},
+     )
+```
+
+If you only wanted to lower the wearer's fire resist instead, `resist_deltas = resists(fire = -100)` does it additively
+on the resists; a `receive_damage` modifier multiplies the part before armor and resists.
+
 ---
 
 ## 4. Consumables, Charges, and Declarative Use

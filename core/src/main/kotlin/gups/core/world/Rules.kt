@@ -67,7 +67,9 @@ private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainS
     // The swinging-weapon filter is for the attacker's points only: a defender's worn weapons
     // always contribute, so a parry dagger can carry a defend_hit modifier.
     if (
-      (point == ModifierPoint.TO_HIT || point == ModifierPoint.DAMAGE) &&
+      (point == ModifierPoint.TO_HIT ||
+        point == ModifierPoint.DAMAGE ||
+        point == ModifierPoint.BONUS_DAMAGE) &&
         c.slot != null &&
         step.item.proto.dice != null &&
         step.item.location is ItemLocation.Equipped &&
@@ -162,12 +164,19 @@ fun World.toHitChain(c: RulesContext): ChainResult<Int> {
 fun World.damageChain(c: RulesContext, base: Int = rules.damage(c)): ChainResult<Int> =
   chain(ModifierPoint.DAMAGE, c, base) { "$it" }
 
-/** A hit's vital losses and its whole trace line. */
-class DamageResult(val losses: Map<String, Int>, val text: String)
+/** One typed part of a damage event and the positive vital losses it caused. */
+data class DamagePart(val type: DamageType, val losses: Map<String, Int>)
+
+/** A hit's vital losses, its parts and its whole trace line. */
+class DamageResult(val losses: Map<String, Int>, val parts: List<DamagePart>, val text: String)
 
 /**
- * The attacker's damage chain on [base], the defender's receive_damage chain, mitigate with [type],
- * then the defender's mitigate chain.
+ * A hit or damage effect resolves as the primary part — the attacker's damage chain, the defender's
+ * receive_damage chain, mitigate with [type], then the defender's mitigate chain — and the
+ * attacker's bonus_damage chain. Each bonus part with an amount above 0, in the schema's damage
+ * type order, runs the defender's receive_damage chain, mitigate with its own type, and the
+ * defender's mitigate chain, with the damage type set to that part's type. The parts' losses are
+ * added per vital, gains included, and the whole is applied as one damage event.
  */
 fun World.resolveDamage(c: RulesContext, base: Int, type: DamageType): DamageResult {
   val atk = damageChain(c, base)
@@ -175,9 +184,41 @@ fun World.resolveDamage(c: RulesContext, base: Int, type: DamageType): DamageRes
   val amount = recv.value.coerceAtLeast(0)
   val losses = rules.mitigate(c, amount, type)
   val mit = defenderSegment(ModifierPoint.MITIGATE, c, losses) { it.show() }
-  val shown = if (losses.isEmpty()) "0" else losses.entries.joinToString { "${it.key} ${it.value}" }
-  val text = atk.text + recv.text + " → mitigate $shown $type" + mit.text
-  return DamageResult(mit.value, text)
+  var text = atk.text + recv.text + " → mitigate ${losses.shown()} $type" + mit.text
+  val finals = mutableListOf(type to mit.value)
+
+  val steps = chainSteps(ModifierPoint.BONUS_DAMAGE, c)
+  val bonus: Map<String, Int> =
+    if (steps.isEmpty()) emptyMap()
+    else {
+      val bonusText = StringBuilder(" → bonus_damage")
+      val bonusMap =
+        runSteps<Map<String, Int>>(ModifierPoint.BONUS_DAMAGE, c, steps, emptyMap(), bonusText) {
+          v: Map<String, Int> ->
+          v.showDamages()
+        }
+      text += bonusText
+      bonusMap
+    }
+  for (name in schema.damageTypes) {
+    val n = bonus[name] ?: continue
+    if (n <= 0) continue
+    val pc = c.withDamageType(DamageType(name))
+    text += " → part $name $n"
+    val partRecv = defenderSegment(ModifierPoint.RECEIVE_DAMAGE, pc, n) { "$it" }
+    text += partRecv.text
+    val partAmount = partRecv.value.coerceAtLeast(0)
+    val partLosses = rules.mitigate(pc, partAmount, DamageType(name))
+    text += " → mitigate ${partLosses.shown()} $name"
+    val partMit = defenderSegment(ModifierPoint.MITIGATE, pc, partLosses) { it.show() }
+    text += partMit.text
+    finals += DamageType(name) to partMit.value
+  }
+
+  val combined = LinkedHashMap<String, Int>()
+  for ((_, final) in finals) for ((k, v) in final) combined[k] = (combined[k] ?: 0) + v
+  val parts = finals.map { (pType, final) -> DamagePart(pType, final.filterValues { it > 0 }) }
+  return DamageResult(combined, parts, text)
 }
 
 fun World.initiativeOf(c: RulesContext): Int =
@@ -234,3 +275,11 @@ fun World.regenOf(c: RulesContext): Map<String, Int> =
 
 private fun Map<String, Int>.show(): String =
   entries.joinToString(", ", "{", "}") { "${it.key} ${it.value}" }
+
+/** The losses of a mitigate result as a trace segment: `hp 4`, or `0` when there are none. */
+private fun Map<String, Int>.shown(): String =
+  if (isEmpty()) "0" else entries.joinToString { "${it.key} ${it.value}" }
+
+/** A `damages(...)` value as a trace segment, as the script constructor prints it. */
+private fun Map<String, Int>.showDamages(): String =
+  "damages(" + entries.joinToString(", ") { "${it.key} = ${it.value}" } + ")"

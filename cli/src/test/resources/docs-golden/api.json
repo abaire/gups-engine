@@ -425,6 +425,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.parts",
+        "name": "parts",
+        "doc": "The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.proposals",
         "name": "proposals",
         "doc": "For think: behavior proposals, best first.",

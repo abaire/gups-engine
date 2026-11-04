@@ -43,7 +43,8 @@ package(
   * `rules`: Global game mechanics (e.g. `//rules:combat.star`).
   * `skills`: Global spell and skill declarations.
 * **Evaluation order:** The engine evaluates all non-test `.star` content files in alphabetical order. Files ending in
-  `_test.star` are ignored during normal world loading and run only under `gups test`.
+  `_test.star` are ignored during normal world loading and run only under `gups test`. Files ending in `_testdata.star`
+  hold test-only content and load only for tests (see [07. Testing and Verifying Your Zone](07_testing_your_zone.md)).
 
 ---
 

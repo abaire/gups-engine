@@ -298,6 +298,10 @@ private fun baseValue(point: ModifierPoint, v: Any?, schema: WorldSchema): Any =
       @Suppress("UNCHECKED_CAST")
       TypedMap(TypedKind.VITALS, v as Map<String, Int>, schema.vitalNames)
     }
+    ModifierPoint.BONUS_DAMAGE -> {
+      @Suppress("UNCHECKED_CAST")
+      TypedMap(TypedKind.DAMAGES, v as Map<String, Int>, schema.damageTypes)
+    }
     ModifierPoint.CAST_ALLOWED -> (v as String?)?.let(::Denial) ?: Starlark.NONE
     else -> sInt(v as Int)
   }
@@ -315,6 +319,7 @@ private fun pointValue(point: ModifierPoint, v: Any?, what: String): Any? =
     ModifierPoint.MOVE_COST,
     ModifierPoint.REGEN,
     ModifierPoint.MITIGATE -> typed(v, TypedKind.VITALS, what)
+    ModifierPoint.BONUS_DAMAGE -> typed(v, TypedKind.DAMAGES, what)
     ModifierPoint.CAST_ALLOWED -> denialValue(v, what)
     else -> int(v, what)
   }
@@ -1117,6 +1122,29 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
           "rng",
         ),
       doc = "Adjusts damage before mitigation, for auto-attacks and the damage(...) effect.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.BONUS_DAMAGE,
+      signature = "fn(ctx, base)",
+      valueType = "damages",
+      ctxFields =
+        listOf(
+          "actor",
+          "attacker",
+          "defender",
+          "target",
+          "weapon",
+          "band",
+          "skill",
+          "room",
+          "damage_type",
+          "slot",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "Adds typed damage parts to an auto-attack hit or a damage(...) effect, on the attacker's chain; " +
+          "each part is mitigated with its own type and applied with the hit as one damage event.",
     ),
     ModifierPointSpec(
       point = ModifierPoint.DEFEND_HIT,

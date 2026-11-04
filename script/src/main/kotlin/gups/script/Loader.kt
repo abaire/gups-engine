@@ -24,14 +24,17 @@ import net.starlark.java.eval.StarlarkFunction
 import net.starlark.java.eval.StarlarkSemantics
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.syntax.AssignmentStatement
+import net.starlark.java.syntax.CallExpression
 import net.starlark.java.syntax.DefStatement
 import net.starlark.java.syntax.FileOptions
 import net.starlark.java.syntax.Identifier
 import net.starlark.java.syntax.LoadStatement
 import net.starlark.java.syntax.Location
+import net.starlark.java.syntax.NodeVisitor
 import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.Program
 import net.starlark.java.syntax.StarlarkFile
+import net.starlark.java.syntax.StringLiteral
 import net.starlark.java.syntax.SyntaxError
 
 internal val SEMANTICS: StarlarkSemantics = StarlarkSemantics.DEFAULT
@@ -127,6 +130,11 @@ class ScriptLoader(
   val knownTraits: () -> Set<String> = { plugins.traits },
   /** GMCP packages plugins registered, which script packages may not overlap. */
   val knownGmcp: () -> Set<String> = { plugins.gmcpPackages },
+  /**
+   * Whether packages include their `*_testdata.star` fixture files. Only test runs set it; every
+   * other load leaves fixtures out, so content that names one fails to resolve.
+   */
+  val fixtures: Boolean = false,
 ) {
   /** The world's `MODULE.gups`; a world without a valid one has an empty schema. */
   val module: WorldModule by lazy { WorldModule.read(dir).first }
@@ -216,17 +224,19 @@ class ScriptLoader(
         val st = header(p) ?: continue
         if (st.contentDone || st.failed) continue
         st.contentDone = true
-        for (file in dir.files(p, tests = false)) loadFile(file, st)
+        for (file in contentFiles(p)) loadFile(file, st)
         for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
         findMigrate(st)
         if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
       }
     }
 
+    fun contentFiles(pkg: String): List<Label> = dir.files(pkg, tests = false, fixtures = fixtures)
+
     /** One file of the package may define a top-level `migrate`. */
     fun findMigrate(st: PkgState) {
       val defs =
-        dir.files(st.pkg.path, tests = false).filter { file ->
+        contentFiles(st.pkg.path).filter { file ->
           val m = modules[file]
           (m?.globals?.get("migrate") as? StarlarkFunction)?.module === m
         }
@@ -245,7 +255,7 @@ class ScriptLoader(
      * some of them, but not the same one twice; every export the enabled features need must exist.
      */
     fun findRulesExports(st: PkgState) {
-      val files = dir.files(st.pkg.path, tests = false)
+      val files = contentFiles(st.pkg.path)
       for (export in RulesExport.entries) {
         val name = export.scriptName
         val defs =
@@ -463,6 +473,10 @@ class ScriptLoader(
         fail("load(\"$spec\"): package.star can't be loaded")
       if (target.name.endsWith(WorldDir.TEST_SUFFIX) && !test)
         fail("load(\"$spec\"): test files can only be loaded by other test files")
+      if (WorldDir.isFixture(target.name) && !test && !WorldDir.isFixture(from.name))
+        fail(
+          "load(\"$spec\"): test fixture files can only be loaded by test files and other fixture files"
+        )
       return target
     }
 
@@ -563,7 +577,8 @@ class ScriptLoader(
               !dir.hasPackage(ref.label.pkg) ->
                 "${ref.label} doesn't resolve: there is no package //${ref.label.pkg}"
               else ->
-                "${ref.label} doesn't resolve: //${ref.label.pkg} declares no ${ref.kind.word} named '${ref.label.name}'"
+                "${ref.label} doesn't resolve: //${ref.label.pkg} declares no ${ref.kind.word} named '${ref.label.name}'" +
+                  fixtureNote(ref.label)
             }
           st.errors +=
             LoadError(
@@ -577,6 +592,45 @@ class ScriptLoader(
             )
         }
       }
+    }
+
+    private val fixtureDecls = HashMap<String, Map<String, Label>>()
+
+    /**
+     * When fixtures are left out, says which fixture file of the label's package declares the name,
+     * found by scanning those files for declaration calls without evaluating them.
+     */
+    fun fixtureNote(label: Label): String {
+      if (fixtures) return ""
+      val decls =
+        fixtureDecls.getOrPut(label.pkg) {
+          dir
+            .files(label.pkg, tests = false, fixtures = true)
+            .filter { WorldDir.isFixture(it.name) }
+            .flatMap { file -> declaredNames(file).map { it to file } }
+            .toMap()
+        }
+      val file = decls[label.name] ?: return ""
+      return " (it is declared in $file, a test fixture file, which loads only for gups test and gups scenario)"
+    }
+
+    /** The names [file]'s `room`, `mob`, `item` and `skill` calls declare, wherever they are. */
+    fun declaredNames(file: Label): List<String> {
+      val text = runCatching { dir.fileOf(file).readText() }.getOrNull() ?: return emptyList()
+      val parsed = StarlarkFile.parse(ParserInput.fromString(text, file.v), FILE_OPTIONS)
+      val kinds = RefKind.entries.mapTo(HashSet()) { it.word }
+      val names = mutableListOf<String>()
+      parsed.accept(
+        object : NodeVisitor() {
+          override fun visit(node: CallExpression) {
+            val fn = node.function as? Identifier
+            val first = node.arguments.firstOrNull()?.takeIf { it.name == null }?.value
+            if (fn != null && fn.name in kinds && first is StringLiteral) names += first.value
+            super.visit(node)
+          }
+        }
+      )
+      return names
     }
 
     /** Attribute namespaces are unique across the world, plugins' included. */

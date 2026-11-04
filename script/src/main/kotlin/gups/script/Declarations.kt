@@ -268,7 +268,18 @@ internal object HookCatalog {
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
         ctxFields =
-          listOf("self", "actor", "target", "amount", "type", "losses", "room", "pulse", "rng"),
+          listOf(
+            "self",
+            "actor",
+            "target",
+            "amount",
+            "type",
+            "losses",
+            "parts",
+            "room",
+            "pulse",
+            "rng",
+          ),
         doc = "Fires when an actor takes damage.",
       ),
       HookSpec(

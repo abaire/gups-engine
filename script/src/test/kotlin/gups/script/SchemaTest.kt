@@ -6,8 +6,12 @@ import gups.core.world.changeVital
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import net.starlark.java.eval.Dict
+import net.starlark.java.eval.EvalException
+import net.starlark.java.eval.StarlarkInt
 
 class SchemaTest {
   private val pkg = "zones/z/package.star" to zonePkg()
@@ -109,6 +113,119 @@ class SchemaTest {
       failure("skill(\"s\", cost = stats(str = 1))"),
       "expected vitals(...), got stats(...)",
     )
+  }
+
+  // ---- damages(...) and + --------------------------------------------------------------------
+
+  /** A fixture whose schema declares the damage types `fire` and `cold`. */
+  private fun coldFixture(source: String) =
+    ScriptFixture(
+        mapOf(
+          pkg,
+          "MODULE.gups" to
+            """
+            module(
+                api_version = 1,
+                stats = [
+                    stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
+                    stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
+                    stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"), "armor",
+                ],
+                vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
+                damage_types = ["fire", "cold"],
+                unarmed_damage_type = "fire",
+                channels = ["spell"],
+            )
+            """,
+          "zones/z/rooms.star" to source,
+        )
+      )
+      .also { assertTrue(it.result.ok, it.result.report()) }
+
+  @Test
+  fun `damages reads back its keys and 0 for an absent declared type`() {
+    val f =
+      coldFixture(
+        """
+            def _probe(ctx):
+                c = damages(fire = 2)
+                ctx.send(ctx.actor, "%d %d" % (c.fire, c.cold))
+
+            room("start", commands = {"probe": _probe})
+            """
+      )
+    val p = f.player()
+    f.input(p, "probe")
+    f.run()
+    assertEquals("2 0\n", f.out(p))
+  }
+
+  @Test
+  fun `damages refuses an unknown type with a suggestion`() {
+    assertContains(
+      failure("x = damages(fier = 1)"),
+      "damages(): unknown damage type 'fier' (did you mean 'fire'?)",
+    )
+  }
+
+  @Test
+  fun `typed names the damages constructor for a plain dict`() {
+    val e =
+      assertFailsWith<EvalException> {
+        typed(
+          Dict.immutableCopyOf(mapOf("fire" to StarlarkInt.of(1))),
+          TypedKind.DAMAGES,
+          "bonus_damage()",
+        )
+      }
+    assertContains(e.message!!, "use damages(...) instead of a dict")
+  }
+
+  @Test
+  fun `typed values of the same kind add key by key`() {
+    val f =
+      fixture(
+        """
+            def _probe(ctx):
+                s = vitals(hp = 2) + vitals(hp = 1, mana = 3)
+                ctx.send(ctx.actor, "%s %d %d" % (s == vitals(hp = 3, mana = 3), s.hp, s.mana))
+
+            room("start", commands = {"probe": _probe})
+            """
+      )
+    val p = f.player()
+    f.input(p, "probe")
+    f.run()
+    assertEquals("True 3 3\n", f.out(p))
+  }
+
+  @Test
+  fun `damages values add across declared types`() {
+    val f =
+      coldFixture(
+        """
+            def _probe(ctx):
+                s = damages(fire = 1) + damages(cold = 2)
+                ctx.send(ctx.actor, "%d %d" % (s.fire, s.cold))
+
+            room("start", commands = {"probe": _probe})
+            """
+      )
+    val p = f.player()
+    f.input(p, "probe")
+    f.run()
+    assertEquals("1 2\n", f.out(p))
+  }
+
+  @Test
+  fun `adding typed values of different kinds names both constructors`() {
+    assertContains(failure("x = vitals() + stats()"), "can't add vitals(...) and stats(...)")
+    assertContains(failure("x = stats() + vitals()"), "can't add stats(...) and vitals(...)")
+  }
+
+  @Test
+  fun `a typed value plus an int is an unsupported operation`() {
+    assertContains(failure("x = vitals(hp = 1) + 1"), "unsupported binary operation")
   }
 
   @Test

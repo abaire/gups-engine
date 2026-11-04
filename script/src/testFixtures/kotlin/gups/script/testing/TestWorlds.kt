@@ -66,13 +66,20 @@ object TestWorlds {
    */
   private const val DEFAULTS: String = "def on_level_up(ctx):\n    return None\n"
 
-  /** The template's blocks with [DEFAULTS] and then [overrides] replacing or adding functions. */
+  /**
+   * The template's blocks with [DEFAULTS] and then [overrides] replacing or adding functions. An
+   * override's preamble is added after the template's rather than replacing it, since the
+   * template's functions read the constants it declares.
+   */
   private fun merged(overrides: Array<out String>): List<Pair<String, String>> {
     val over = LinkedHashMap<String, String>()
+    val preambles = mutableListOf<Pair<String, String>>()
     for (src in listOf(DEFAULTS) + overrides) {
-      for ((name, text) in blocks(src.trimIndent() + "\n")) over[name] = text
+      for ((name, text) in blocks(src.trimIndent() + "\n")) {
+        if (name.isEmpty()) preambles += name to text else over[name] = text
+      }
     }
-    return blocks(base).filter { it.first !in over } + over.toList()
+    return blocks(base).filter { it.first !in over } + preambles + over.toList()
   }
 
   /**
@@ -135,21 +142,37 @@ object TestWorlds {
       }
   }
 
-  /** Splits Starlark source into its top-level `def`s, each with the comments before the next. */
+  /**
+   * Splits Starlark source into its top-level `def`s, each with the comments before the next,
+   * preceded by the preamble (comments and constants before the first `def`) under the empty name
+   * when it is not blank.
+   */
   private fun blocks(source: String): List<Pair<String, String>> {
     val out = mutableListOf<Pair<String, String>>()
     var name: String? = null
-    val text = StringBuilder()
+    var preamble = ""
+    var text = ""
     for (line in source.lines()) {
       val def = Regex("def (\\w+)\\(").find(line)?.takeIf { line.startsWith("def ") }
       if (def != null) {
-        name?.let { out += it to text.toString().trimEnd() + "\n" }
+        if (name == null) {
+          if (preamble.isNotBlank()) out += "" to preamble.trimEnd() + "\n"
+        } else {
+          out += name to text.trimEnd() + "\n"
+        }
         name = def.groupValues[1]
-        text.clear()
+        text = line + '\n'
+      } else if (name == null) {
+        preamble += line + '\n'
+      } else {
+        text += line + '\n'
       }
-      if (name != null) text.append(line).append('\n')
     }
-    name?.let { out += it to text.toString().trimEnd() + "\n" }
+    if (name == null) {
+      if (preamble.isNotBlank()) out += "" to preamble.trimEnd() + "\n"
+    } else {
+      out += name to text.trimEnd() + "\n"
+    }
     return out
   }
 

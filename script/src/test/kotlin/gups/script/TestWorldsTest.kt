@@ -10,6 +10,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.io.TempDir
 
 class TestWorldsTest {
@@ -33,5 +34,21 @@ class TestWorldsTest {
       listOf("MODULE.gups", "zones"),
       Files.list(to).use { s -> s.map { it.fileName.toString() }.sorted().toList() },
     )
+  }
+
+  @Test
+  fun `an override's preamble keeps the template's`() {
+    val rules =
+      TestWorlds.rules(
+        """
+        # An override's own comment, before its first def.
+        _BONUS = 1
+
+        def damage(ctx):
+            return 5 + _BONUS
+        """
+      )
+    assertTrue("_PHYSICAL = " in rules, "the template's constants stay: $rules")
+    assertTrue("_BONUS = 1" in rules, "the override's constants are added: $rules")
   }
 }

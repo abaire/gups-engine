@@ -10,6 +10,9 @@
 # ctx.actor.max_hp, ctx.actor.resists.fire. Results are built with the constructors
 # vitals(...) and stats(...), which check their names against MODULE.gups.
 
+# The damage types armor turns aside in mitigate; the rest are reduced by resistance only.
+_PHYSICAL = ["bludgeon", "slash", "pierce"]
+
 def _clamp(n, lo, hi):
     return max(lo, min(hi, n))
 
@@ -86,12 +89,14 @@ def damage(ctx):
     return max(1, ctx.roll(dice) + (ctx.attacker.str - 10) // 2)
 
 def mitigate(ctx, amount, type):
-    # The vital losses that `amount` damage of `type` causes ctx.defender: armor first, then
-    # resistance to the damage type. Name more vitals to spread damage around.
+    # The vital losses that `amount` damage of `type` causes ctx.defender. Armor turns aside
+    # physical blows only, and always lets at least 1 through; resistance to the type applies to
+    # every type. Bonus parts (bonus_damage) are mitigated one by one, so armor isn't charged
+    # against each.
     if amount <= 0:
         return vitals()
     d = ctx.defender
-    after_armor = max(1, amount - d.armor // 2)
+    after_armor = max(1, amount - d.armor // 2) if type in _PHYSICAL else amount
     resist = getattr(d.resists, type)
     return vitals(hp = max(0, after_armor * (100 - resist) // 100))
 

@@ -348,3 +348,66 @@ def test_a_mob_can_wear_an_amulet(t):
     w.run(pulses = 4)
     t.eq(dummy.equipped("neck").label, "//zones/tutorial:amulet")
     t.eq(dummy.max_hp, max_before + 5)
+
+def _burning_fight(t, player_gear = []):
+    # The dummy wears an ember amulet (fire 1 on every swing it deals) and a flaming sword
+    # (slash dice, plus 1d2 fire on its own swings); the player, recording with the part_logger
+    # fixture, may wear the gear given. Returns (fire hp lost, slash hp lost) to the player, each
+    # recorded by the part its hp came from.
+    w = _world(t)
+    dummy = w.spawn(":training_dummy", at = ":hall")
+    w.spawn(":ember_amulet", at = dummy)
+    w.spawn(":flaming_sword", at = dummy)
+    w.act(dummy, "wear ember")
+    w.act(dummy, "wield flaming")
+    w.run(pulses = 4)
+    t.eq(dummy.equipped("neck").label, "//zones/tutorial:ember_amulet")
+    t.eq(dummy.equipped("wield").label, "//zones/tutorial:flaming_sword")
+    p = w.spawn_player("Tess", at = ":hall", index = 0, vitals = vitals(hp = 100))
+    w.spawn(":part_logger", at = p)
+    p.do("wear logger")
+    for gear in player_gear:
+        w.spawn(gear[0], at = p)
+        p.do("wear " + gear[1])
+    p.do("kill dummy")
+    w.run(pulses = 40)
+    return w.get_attr(p, "hp_fire", 0), w.get_attr(p, "hp_slash", 0)
+
+def test_flaming_sword_adds_fire(t):
+    # A sword's bonus_damage modifier adds a fire part to its own swings; the part_logger fixture
+    # on the player records the hp each part takes. (The swing-versus-spell contrast is covered
+    # by the engine's script tests; the tutorial has no damage spell of its own.)
+    w = _world(t)
+    dummy = w.spawn(":training_dummy", at = ":hall")
+    w.spawn(":flaming_sword", at = dummy)
+    w.act(dummy, "wield flaming")
+    w.run(pulses = 4)
+    t.eq(dummy.equipped("wield").label, "//zones/tutorial:flaming_sword")
+    p = w.spawn_player("Tess", at = ":hall", index = 0, vitals = vitals(hp = 100))
+    w.spawn(":part_logger", at = p)
+    p.do("wear logger")
+    p.do("kill dummy")
+    w.run(pulses = 40)
+    # The dummy swings the flaming sword: a slash part (its dice) plus a fire part (its bonus).
+    t.true(w.get_attr(p, "hp_slash", 0) > 0)
+    t.true(w.get_attr(p, "hp_fire", 0) > 0)
+
+def test_oily_rags_double_fire(t):
+    # The rags' receive_damage modifier doubles a fire part before armor: the two runs share
+    # seed 1 and 40 pulses, so the fire hp with rags is exactly twice the bare fire hp, and the
+    # armor turns aside the physical (slash) part at the same time.
+    (fire_bare, slash_bare) = _burning_fight(t)
+    (fire_rags, slash_rags) = _burning_fight(t, player_gear = [(":oily_rags", "rags")])
+    t.true(fire_bare > 0)
+    t.eq(fire_rags, 2 * fire_bare)
+    t.true(slash_bare > 0)
+    t.true(slash_rags < slash_bare)
+
+def test_fire_ignores_armor(t):
+    # Armor turns aside physical blows only: the fire part comes through the shield's armor 2
+    # untouched, while the slash part is reduced.
+    (fire_bare, slash_bare) = _burning_fight(t)
+    (fire_shielded, slash_shielded) = _burning_fight(t, player_gear = [(":wooden_shield", "shield")])
+    t.true(fire_bare > 0)
+    t.eq(fire_shielded, fire_bare)
+    t.true(slash_shielded < slash_bare)

@@ -176,6 +176,8 @@ data class HookContext(
   val type: DamageType? = null,
   /** Vital losses contributing to damage for `on_damage`. */
   val losses: Map<String, Int>? = null,
+  /** The damage event's parts, the hit's type first, for `on_damage`. */
+  val parts: List<DamagePart>? = null,
   /** Affect instance triggering a tick or expiration callback. */
   val affect: Affect? = null,
   /** Reason why [affect] ended for its `on_expire` callback. */

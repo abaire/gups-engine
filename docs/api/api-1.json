@@ -61,6 +61,15 @@
       ]
     },
     {
+      "symbol": "damages",
+      "name": "damages",
+      "doc": "Amounts of damage by type, such as damages(fire = 2). Used for the value of bonus_damage modifiers.",
+      "hook_owner": null,
+      "extra_keywords": true,
+      "since": 1,
+      "params": []
+    },
+    {
       "symbol": "door",
       "name": "door",
       "doc": "A door, for exit(door=...).",
@@ -670,7 +679,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the item is worn.",
           "since": 1
         },
@@ -776,7 +785,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the affect reaches the holder.",
           "since": 1
         },
@@ -1144,7 +1153,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Zone-wide rules modifiers by modifier point name.",
           "since": 1
         },
@@ -1202,7 +1211,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active in rooms carrying this region tag.",
           "since": 1
         }
@@ -1366,7 +1375,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Room rules modifiers by modifier point name.",
           "since": 1
         },
@@ -2201,7 +2210,7 @@
       "symbol": "MODIFIER",
       "name": "MODIFIER",
       "type": "struct",
-      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
       "since": 1
     },
@@ -2385,7 +2394,7 @@
       "signature": "fn(ctx)",
       "vetoable": false,
       "attach_to": ["mob", "item"],
-      "ctx_fields": ["self", "actor", "target", "amount", "type", "losses", "room", "pulse", "rng"],
+      "ctx_fields": ["self", "actor", "target", "amount", "type", "losses", "parts", "room", "pulse", "rng"],
       "doc": "Fires when an actor takes damage.",
       "since": 1
     },
@@ -2678,6 +2687,12 @@
         "feature": "leveling",
         "name": "old_level",
         "doc": "For on_level_change: the actor's level before the change.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.parts",
+        "name": "parts",
+        "doc": "The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.",
         "since": 1
       },
       {
@@ -6835,6 +6850,15 @@
         "value_type": "int",
         "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
         "doc": "Adjusts the recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step. The final result is clamped to 0.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:bonus_damage",
+        "name": "bonus_damage",
+        "signature": "fn(ctx, base)",
+        "value_type": "damages",
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
+        "doc": "Adds typed damage parts to an auto-attack hit or a damage(...) effect, on the attacker's chain; each part is mitigated with its own type and applied with the hit as one damage event.",
         "since": 1
       },
       {

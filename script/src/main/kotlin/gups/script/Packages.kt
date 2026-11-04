@@ -46,14 +46,18 @@ class WorldDir(root: Path) {
   /** The file a load label such as `//lib:quest.star` names. */
   fun fileOf(label: Label): Path = packageDir(label.pkg).resolve(label.name)
 
-  /** The package's own `.star` files, sorted by name: content files or `*_test.star` files. */
-  fun files(pkg: String, tests: Boolean): List<Label> {
+  /**
+   * The package's own `.star` files, sorted by name: its `*_test.star` files if [tests], else its
+   * content files, which include the `*_testdata.star` fixture files only if [fixtures].
+   */
+  fun files(pkg: String, tests: Boolean, fixtures: Boolean = false): List<Label> {
     val dir = packageDir(pkg)
     if (!dir.isDirectory()) return emptyList()
     Files.list(dir).use { paths ->
       return paths
         .filter { it.isRegularFile() && it.name.endsWith(".star") && it.name != PACKAGE_FILE }
         .filter { it.name.endsWith(TEST_SUFFIX) == tests }
+        .filter { tests || fixtures || !isFixture(it.name) }
         .map { Label("//$pkg:${it.name}") }
         .sorted(compareBy { it.v })
         .toList()
@@ -67,6 +71,11 @@ class WorldDir(root: Path) {
   companion object {
     const val PACKAGE_FILE = "package.star"
     const val TEST_SUFFIX = "_test.star"
+    const val FIXTURE_SUFFIX = "_testdata.star"
+
+    /** Whether a file name is a test-only fixture file, loaded only for tests. */
+    fun isFixture(name: String): Boolean = name.endsWith(FIXTURE_SUFFIX)
+
     private val PACKAGE_PATH = Regex("[a-z0-9_]+(?:/[a-z0-9_]+)*")
   }
 }

@@ -255,6 +255,7 @@ class ApiModelTest {
       "vitals" to Case(zone, { "S = vitals(${it.only()})" }) { null },
       "stats" to Case(zone, { "S = stats(${it.only()})" }) { null },
       "resists" to Case(zone, { "S = resists(${it.only()})" }) { null },
+      "damages" to Case(zone, { "S = damages(${it.only()})" }) { null },
     )
 
   /**

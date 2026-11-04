@@ -434,4 +434,35 @@ class RunnerTest {
       assertContains(result.message!!, "w.$name() needs the leveling feature")
     }
   }
+
+  @Test
+  fun `a test spawns a fixture item, and a fixture's test functions never run`() {
+    val r =
+      run(
+        zone +
+          mapOf(
+            "zones/a/probe_testdata.star" to
+              """
+                  item("probe", name = "a probe")
+
+                  def test_in_fixture(t):
+                      t.fail("fixtures hold no tests")
+              """,
+            "zones/a/a_test.star" to
+              """
+                  def test_probe(t):
+                      w = t.world()
+                      p = w.spawn_player("Pat", at = ":start")
+                      w.spawn(":probe", at = p)
+                      t.true(p.has_item(":probe"))
+              """,
+          ),
+        "//zones/a",
+      )
+    assertEquals(
+      listOf("test_probe" to Status.PASS),
+      r.results.map { it.name to it.status },
+      r.results.joinToString("\n") { "${it.name}: ${it.message}" },
+    )
+  }
 }

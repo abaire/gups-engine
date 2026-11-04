@@ -68,6 +68,17 @@ object DocExamples {
                 t.eq(chest.label, "//zones/ex:chest")
             """,
         ),
+      "damages" to
+        ex(
+          test =
+            """
+                w = t.world(seed = 1)
+                s = damages(fire = 2) + damages(slash = 1)
+                t.eq(s.fire, 2)
+                t.eq(s.slash, 1)
+                t.eq(s.bludgeon, 0)
+            """
+        ),
       "door" to
         ex(
           pkg =

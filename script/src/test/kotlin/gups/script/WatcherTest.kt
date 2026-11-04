@@ -25,4 +25,15 @@ class WatcherTest {
     assertEquals(listOf("zones/a", "zones/b"), w.poll(5000))
     assertEquals(emptyList(), w.poll(10_000))
   }
+
+  @Test
+  fun `test and fixture files trigger no reload`() {
+    val root =
+      tempWorld(mapOf("zones/a/package.star" to zonePkg(), "zones/a/rooms.star" to "room(\"x\")"))
+    val w = WorldWatcher(WorldDir(root), debounceNanos = 1000)
+    assertEquals(emptyList(), w.poll(0))
+    root.resolve("zones/a/a_test.star").writeText("def test_x(t):\n    pass\n")
+    root.resolve("zones/a/probe_testdata.star").writeText("item(\"probe\")\n")
+    assertEquals(emptyList(), w.poll(5000))
+  }
 }

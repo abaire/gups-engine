@@ -143,3 +143,51 @@ item("siphon_amulet",
     wear = "neck",
     modifiers = {MODIFIER.mitigate: _siphon},
 )
+
+def _flame_edge(ctx, base):
+    # Only this blade's own swings burn: outside a swing (a spell, for instance), ctx.slot is
+    # None, so the fire stays a part of the swing and never of a spell's damage.
+    if ctx.slot == None:
+        return base
+    return base + damages(fire = ctx.roll("1d2"))
+
+item("flaming_sword",
+    name = "a flaming sword",
+    keywords = ["flaming", "sword"],
+    desc = "A short blade wreathed in a low, steady flame.",
+    kind = "melee",
+    wield = "wield",
+    dice = "1d6",
+    damage_type = "slash",
+    weight = 3,
+    value = 60,
+    modifiers = {MODIFIER.bonus_damage: _flame_edge},
+)
+
+def _embers(ctx, base):
+    # Unguarded, so everything the wearer deals carries a little fire, spells included.
+    return base + damages(fire = 1)
+
+item("ember_amulet",
+    name = "an ember amulet",
+    keywords = ["ember"],
+    desc = "A pendant of warm charcoal, faintly smoking.",
+    wear = "neck",
+    value = 40,
+    modifiers = {MODIFIER.bonus_damage: _embers},
+)
+
+def _flammable(ctx, base):
+    # On the wearer's chain, once per damage part: ctx.damage_type is that part's type, so this
+    # doubles a fireball and a flaming sword's fire alike, before armor and resists.
+    return base * 2 if ctx.damage_type == DAMAGE.fire else base
+
+item("oily_rags",
+    name = "sketchy oil-soaked rags of protection",
+    keywords = ["rags"],
+    desc = "You do not want to ask what they soaked in.",
+    kind = "armor",
+    wear = "arms",
+    stat_deltas = stats(armor = 4),
+    modifiers = {MODIFIER.receive_damage: _flammable},
+)

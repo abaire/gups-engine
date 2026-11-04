@@ -1,21 +1,30 @@
 package gups.pluginapi
 
+import gups.core.CapturingSink
 import gups.core.Label
+import gups.core.SessionId
+import gups.core.WorldControlEvent
 import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.World
+import gups.core.world.attach
+import gups.core.world.grantTrait
+import gups.core.world.handle
 import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.core.world.teleport
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.WorldFacade
+import gups.script.WorldPluginWiring
+import gups.script.testing.TestWorlds
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -24,6 +33,39 @@ class CreationRegistrationTest {
   private val stat = schema.statNames.first()
   private val vital = schema.vitalNames.first()
   private val damage = schema.damageTypes.first()
+
+  /**
+   * A world where every swing hits, and the wolf speaks the number of parts of its damage events.
+   */
+  private fun bonusWorld(plugins: WorldPluginWiring) =
+    world(
+      files =
+        ZONE +
+          mapOf(
+            "zones/z/rooms.star" to
+              """
+              def _rec(ctx):
+                  ctx.say(ctx.self, "parts " + str(len(ctx.parts)))
+
+              room("a", name = "Glade", desc = "A glade.", size = SIZE.large, regions = ["forest", "outdoors"], exits = [exit(DIR.north, ":b")])
+              room("b", name = "Cave", desc = "A cave.", regions = ["underground"], flags = ["dead_end_ok"], exits = [exit("south", ":a")])
+              mob("wolf", name = "a wolf", desc = "A wolf.", keywords = ["wolf"], on_damage = _rec)
+              item("stick", name = "a stick", desc = "A stick.", keywords = ["stick", "wood"])
+              """,
+            "rules/package.star" to TestWorlds.RULES_PACKAGE,
+            "rules/combat.star" to TestWorlds.rules("def to_hit(ctx):\n    return 100"),
+          ),
+      plugins = plugins,
+    )
+
+  /** Connects [p] to a capturing session and returns the sink. */
+  private fun World.capture(p: Player): CapturingSink {
+    val id = SessionId(1)
+    val sink = CapturingSink()
+    handle(WorldControlEvent.Connect(id, sink))
+    attach(id, p)
+    return sink
+  }
 
   private fun plugin(id: String, register: (PluginRegistry) -> Unit) =
     object : GupsPlugin {
@@ -207,6 +249,117 @@ class CreationRegistrationTest {
         features = noTrack,
       )
     assertEquals(listOf("ok"), host.ids, "flee_fail_lag needs only combat")
+  }
+
+  @Test
+  fun `a trait BONUS_DAMAGE modifier adds a typed part to the bearer's swing`() {
+    val host =
+      PluginHost.of(
+        plugin("flame") {
+          it.addTrait(
+            PluginTrait(
+              "flame",
+              modifiers =
+                mapOf(
+                  PluginModifierPoint.BONUS_DAMAGE to
+                    PluginModifier { _, base ->
+                      @Suppress("UNCHECKED_CAST")
+                      (base as Map<String, Long>) + ("fire" to 2L)
+                    }
+                ),
+            )
+          )
+        },
+        schema = schema,
+      )
+    val w = bonusWorld(host)
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    assertNull(w.grantTrait(ann, "flame"))
+    val sink = w.capture(ann)
+    w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.submit(ann, "kill wolf")
+    repeat(20) { w.runPulse() }
+    val out = sink.drain()
+    assertTrue("parts 2" in out, "the swing carried the trait's fire part: $out")
+  }
+
+  @Test
+  fun `a BONUS_DAMAGE modifier with an unknown damage type is refused and keeps the base`() {
+    val host =
+      PluginHost.of(
+        plugin("arcane") {
+          it.addTrait(
+            PluginTrait(
+              "arcane",
+              modifiers =
+                mapOf(
+                  PluginModifierPoint.BONUS_DAMAGE to
+                    PluginModifier { _, base ->
+                      @Suppress("UNCHECKED_CAST")
+                      (base as Map<String, Long>) + ("zap" to 2L)
+                    }
+                ),
+            )
+          )
+        },
+        schema = schema,
+      )
+    val w = bonusWorld(host)
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    assertNull(w.grantTrait(ann, "arcane"))
+    val sink = w.capture(ann)
+    w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.submit(ann, "kill wolf")
+    repeat(20) { w.runPulse() }
+    val out = sink.drain()
+    assertFalse("parts 2" in out, "the refused modifier adds no part: $out")
+    assertTrue(
+      w.diagnostics.any {
+        it.kind == "plugin" &&
+          "returned an invalid damage map, expected Map<String, Long>" in it.message
+      },
+      w.diagnostics.toString(),
+    )
+  }
+
+  @Test
+  fun `a BONUS_DAMAGE modifier with Int values is refused`() {
+    val host =
+      PluginHost.of(
+        plugin("sparks") {
+          it.addTrait(
+            PluginTrait(
+              "sparks",
+              modifiers =
+                mapOf(
+                  PluginModifierPoint.BONUS_DAMAGE to
+                    PluginModifier { _, base ->
+                      @Suppress("UNCHECKED_CAST") val m = HashMap<Any, Any>(base as Map<Any, Any>)
+                      m["fire"] = 2
+                      m
+                    }
+                ),
+            )
+          )
+        },
+        schema = schema,
+      )
+    val w = bonusWorld(host)
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    assertNull(w.grantTrait(ann, "sparks"))
+    val sink = w.capture(ann)
+    w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.submit(ann, "kill wolf")
+    repeat(20) { w.runPulse() }
+    val out = sink.drain()
+    assertFalse("parts 2" in out, "the refused modifier adds no part: $out")
+    assertTrue(
+      w.diagnostics.any {
+        it.kind == "plugin" &&
+          "returned an invalid damage map, expected Map<String, Long>" in it.message
+      },
+      w.diagnostics.toString(),
+    )
   }
 
   @Test

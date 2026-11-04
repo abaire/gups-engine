@@ -4,6 +4,29 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Test fixture files
+
+- A package may hold `*_testdata.star` files: test-only fixtures for content that only tests need. They are ordinary
+  content files (same builtins, load order and declaration rules, one name space with the package's other files), loaded
+  only by `gups test` and `gups scenario`. The server, `gups lint`, `gups fuzz` and every other command leave them out,
+  so normal content that names a fixture fails with an unresolved label, whose error names the fixture file.
+- Only test files and other fixture files may `load()` a `*_testdata.star` file.
+
+### Typed bonus damage
+
+- Added the `damages(**n)` typed value, keyed by damage type, and `+` between typed values of the same kind (`vitals`,
+  `stats`, `resists`, `damages`), which adds them key by key.
+- Added the kernel modifier point `bonus_damage` (`MODIFIER.bonus_damage`): the attacker's chain returns `damages(...)`
+  parts that are each mitigated with their own type and applied with the hit as one damage event, for auto-attacks and
+  the `damage(...)` effect.
+- `on_damage` has `ctx.parts`, the event's parts as `struct(type, losses)`.
+- Plugin traits can declare `BONUS_DAMAGE` modifiers, which take and return a map from damage type to amount.
+- The template's `mitigate` applies armor only to physical damage (`bludgeon`, `slash`, `pierce`); fire is reduced only
+  by resists.
+- The tutorial zone has a `flaming_sword` (a `bonus_damage` modifier on its own swings), an `ember_amulet` (a
+  `bonus_damage` modifier on everything its wearer deals) and `oily_rags` (armor, and double fire through a
+  `receive_damage` modifier).
+
 ### Harness mob actions
 
 - Added `w.act(mob, command_line)` to the test harness: it queues a command for a mob, as `ctx.act` does, so a test can

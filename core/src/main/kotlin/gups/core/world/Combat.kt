@@ -172,7 +172,7 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
     COMBAT_INTENSITY,
     exclude = arrayOf(a, target),
   )
-  damage(target, hit.losses, type, a)
+  damage(target, hit.losses, type, a, hit.parts)
 }
 
 // ---- Damage, healing, death ------------------------------------------------------------------
@@ -181,9 +181,16 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
  * The `damage` verb: lowers each vital in [losses] by its amount, with no floor; a negative entry
  * is a gain, raising that vital up to its maximum and never lowering it. When any loss is positive,
  * `on_damage` fires once with those losses and the interrupt check runs. A target whose condition
- * becomes dead is mortally wounded until death processing.
+ * becomes dead is mortally wounded until death processing. [parts] are the typed parts the losses
+ * came from, the hit's type first; the raw verb makes one part.
  */
-fun World.damage(target: Actor, losses: Map<String, Int>, type: DamageType, source: Actor? = null) {
+fun World.damage(
+  target: Actor,
+  losses: Map<String, Int>,
+  type: DamageType,
+  source: Actor? = null,
+  parts: List<DamagePart> = listOf(DamagePart(type, losses.filterValues { it > 0 })),
+) {
   if (!target.inWorld) return
   val dealt = losses.filterValues { it > 0 }
   val total = dealt.values.sum()
@@ -199,7 +206,14 @@ fun World.damage(target: Actor, losses: Map<String, Int>, type: DamageType, sour
       HookName.ON_DAMAGE,
       target,
       target.room,
-      HookContext(actor = source, target = target, amount = total, type = type, losses = dealt),
+      HookContext(
+        actor = source,
+        target = target,
+        amount = total,
+        type = type,
+        losses = dealt,
+        parts = parts,
+      ),
     )
     val cast = target.casting
     if (
@@ -581,7 +595,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
           val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
           val hit = resolveDamage(c, effect.dice.roll(rng), effect.type)
           traceRules(caster, hit.text)
-          damage(t, hit.losses, effect.type, caster)
+          damage(t, hit.losses, effect.type, caster, hit.parts)
         }
         is Effect.Heal -> heal(t, effect.vital, effect.dice.roll(rng))
         is Effect.ApplyAffect ->
