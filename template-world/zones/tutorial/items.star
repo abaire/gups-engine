@@ -107,3 +107,39 @@ item("amulet",
     wear = "neck",
     max_vital_deltas = vitals(hp = 5),
 )
+
+def _blur(ctx, base):
+    # Runs on the wearer's chain when the wearer is hit: ctx.defender is the wearer, so this
+    # lowers the chance that a swing lands on them.
+    return base - 15
+
+def _ward(ctx, base):
+    # Runs on the wearer's chain before armor and resists: it softens every blow by 1.
+    return max(0, base - 1)
+
+item("shadow_cloak",
+    name = "a shadow cloak",
+    keywords = ["shadow", "cloak"],
+    desc = "A hooded cloak that seems to drink the light around its wearer.",
+    kind = "armor",
+    wear = "body",
+    modifiers = {
+        MODIFIER.defend_hit: _blur,
+        MODIFIER.receive_damage: _ward,
+    },
+)
+
+def _siphon(ctx, base):
+    # Runs on the wearer's chain after mitigate. It moves a tenth of the hp loss (at least 1
+    # while any hp is lost) out of hp and back as a mana gain: a negative loss is a gain,
+    # capped at the vital's maximum.
+    moved = max(1, base.hp // 10) if base.hp > 0 else 0
+    return vitals(hp = base.hp - moved, mana = base.mana - moved)
+
+item("siphon_amulet",
+    name = "a siphon amulet",
+    keywords = ["siphon"],
+    desc = "A dark pendant that hums when its wearer is struck.",
+    wear = "neck",
+    modifiers = {MODIFIER.mitigate: _siphon},
+)

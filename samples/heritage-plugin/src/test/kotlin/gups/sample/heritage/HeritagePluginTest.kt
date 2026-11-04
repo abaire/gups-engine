@@ -141,6 +141,7 @@ class HeritagePluginTest {
     val traitSet: Set<String> = emptySet(),
     override val choices: Map<String, String> = emptyMap(),
     override val room: PluginRoom = FakeRoom(),
+    val statValue: Int = 10,
   ) : PluginActor {
     override val id = 100L
     override val label: String? = null
@@ -151,7 +152,7 @@ class HeritagePluginTest {
 
     override fun hasTrait(name: String) = name in traitSet
 
-    override fun stat(name: String) = 10
+    override fun stat(name: String) = statValue
 
     override fun baseStat(name: String) = 10
 
@@ -337,6 +338,22 @@ class HeritagePluginTest {
     val elf = reg.traits.getValue("elf")
     assertEquals(mapOf("dex" to 2, "con" to -1), elf.statDeltas)
     assertEquals(mapOf("mana" to 10), elf.maxVitalDeltas)
+    val dodge = elf.modifiers[gups.pluginapi.PluginModifierPoint.DEFEND_HIT]
+    assertNotNull(dodge)
+    // The bearer is the defender: its dex (16) counts, not the attacker's (4).
+    val dodged =
+      dodge.modify(
+        gups.pluginapi.PluginModifierCall(
+          world = FakeWorld(),
+          point = gups.pluginapi.PluginModifierPoint.DEFEND_HIT,
+          actor = FakeActor(statValue = 16),
+          other = FakeActor(statValue = 4),
+          weapon = null,
+          room = FakeRoom(),
+        ),
+        60L,
+      )
+    assertEquals(52L, dodged)
 
     val dwarf = reg.traits.getValue("dwarf")
     assertEquals(mapOf("con" to 2), dwarf.statDeltas)

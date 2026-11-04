@@ -11,6 +11,7 @@ configure<SpotlessExtension> {
       "**/build-logic/build/**",
       "**/.idea/**",
       "**/local-world/**",
+      "**/local-world-test/**",
       "**/.gups/**",
     )
     flexmark().emulationProfile("GITHUB_DOC").formatterOptions(mapOf("RIGHT_MARGIN" to "120"))

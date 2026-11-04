@@ -123,6 +123,61 @@ item("tar_walker_boots",
      )
 ```
 
+### Defender Modifiers: `defend_hit`, `receive_damage`, and `mitigate`
+
+Three modifier points run on the *defender's* chain — the chain of the actor being hit — so an equipped item guards its
+wearer rather than empowering it. Where each runs:
+
+* `MODIFIER.defend_hit` adjusts an auto-attack's hit chance after the attacker's `to_hit` chain; it takes the attacker's
+  result as its base.
+* `MODIFIER.receive_damage` softens the raw damage after the attacker's `damage` chain and before armor and resists; a
+  negative result counts as 0.
+* `MODIFIER.mitigate` adjusts the vital losses `mitigate` returned; a negative loss is a gain to that vital, capped at
+  its maximum.
+
+On all three, `ctx.defender` is the wearer (the actor being hit) and `ctx.attacker` the one swinging, so a modifier
+reads its bearer as `ctx.defender`. Unlike the attacker, a defender's worn weapons count too: a dagger worn in `wield`
+carries its modifiers even though it is not the swinging weapon. The tutorial arena's `shadow_cloak` blurs and wards,
+and the `siphon_amulet` trades pain for mana:
+
+```python
+def _blur(ctx, base):
+    # Runs on the wearer's chain when the wearer is hit: ctx.defender is the wearer.
+    return base - 15
+
+def _ward(ctx, base):
+    # Runs on the wearer's chain before armor and resists: it softens every blow by 1.
+    return max(0, base - 1)
+
+item("shadow_cloak",
+     name="a shadow cloak",
+     keywords=["shadow", "cloak"],
+     desc="A hooded cloak that seems to drink the light around its wearer.",
+     kind="armor",
+     wear="body",
+     modifiers={
+         MODIFIER.defend_hit: _blur,
+         MODIFIER.receive_damage: _ward,
+     },
+     )
+
+def _siphon(ctx, base):
+    # Moves a tenth of the hp loss (at least 1 while any hp is lost) into a mana gain.
+    moved = max(1, base.hp // 10) if base.hp > 0 else 0
+    return vitals(hp=base.hp - moved, mana=base.mana - moved)
+
+item("siphon_amulet",
+     name="a siphon amulet",
+     keywords=["siphon"],
+     desc="A dark pendant that hums when its wearer is struck.",
+     wear="neck",
+     modifiers={MODIFIER.mitigate: _siphon},
+     )
+```
+
+Trace these with `@trace rules`: a defender's chain continues the line after a `defender:defend_hit`,
+`defender:receive_damage`, or `defender:mitigate` step.
+
 ---
 
 ## 4. Consumables, Charges, and Declarative Use

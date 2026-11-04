@@ -71,6 +71,24 @@ class ScenarioTest {
   }
 
   @Test
+  fun `a passing scenario still reports its trace`() {
+    val r =
+      scenario(
+        zone,
+        """
+            def test_trace(t):
+                w = t.world(seed = 1)
+                w.trace()
+                w.spawn_player("Pat", at = ":start")
+        """,
+      )
+    val result = r.results.single()
+    assertEquals(Status.PASS, result.status, result.message ?: "")
+    assertContains(result.trace.orEmpty(), "rules.starting_stats on rules")
+    assertContains(result.render(transcript = true), "trace:")
+  }
+
+  @Test
   fun `the transcript tags each command with the player and room, and notes moves`() {
     val r =
       scenario(

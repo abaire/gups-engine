@@ -293,7 +293,8 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
 private fun baseValue(point: ModifierPoint, v: Any?, schema: WorldSchema): Any =
   when (point) {
     ModifierPoint.MOVE_COST,
-    ModifierPoint.REGEN -> {
+    ModifierPoint.REGEN,
+    ModifierPoint.MITIGATE -> {
       @Suppress("UNCHECKED_CAST")
       TypedMap(TypedKind.VITALS, v as Map<String, Int>, schema.vitalNames)
     }
@@ -312,7 +313,8 @@ private fun denialValue(v: Any?, what: String): String? =
 private fun pointValue(point: ModifierPoint, v: Any?, what: String): Any? =
   when (point) {
     ModifierPoint.MOVE_COST,
-    ModifierPoint.REGEN -> typed(v, TypedKind.VITALS, what)
+    ModifierPoint.REGEN,
+    ModifierPoint.MITIGATE -> typed(v, TypedKind.VITALS, what)
     ModifierPoint.CAST_ALLOWED -> denialValue(v, what)
     else -> int(v, what)
   }
@@ -1115,6 +1117,72 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
           "rng",
         ),
       doc = "Adjusts damage before mitigation, for auto-attacks and the damage(...) effect.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.DEFEND_HIT,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields =
+        listOf(
+          "actor",
+          "attacker",
+          "defender",
+          "target",
+          "weapon",
+          "band",
+          "skill",
+          "room",
+          "damage_type",
+          "slot",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.RECEIVE_DAMAGE,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields =
+        listOf(
+          "actor",
+          "attacker",
+          "defender",
+          "target",
+          "weapon",
+          "band",
+          "skill",
+          "room",
+          "damage_type",
+          "slot",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "Adjusts the raw damage of a hit or damage(...) effect on the defender's chain, after the attacker's damage chain and before mitigate. A negative result counts as 0.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.MITIGATE,
+      signature = "fn(ctx, base)",
+      valueType = "vitals",
+      ctxFields =
+        listOf(
+          "actor",
+          "attacker",
+          "defender",
+          "target",
+          "weapon",
+          "band",
+          "skill",
+          "room",
+          "damage_type",
+          "slot",
+          "pulse",
+          "rng",
+        ),
+      doc =
+        "Adjusts the vital losses mitigate returned, on the defender's chain. A negative loss is a gain to that vital.",
     ),
     ModifierPointSpec(
       point = ModifierPoint.INITIATIVE,

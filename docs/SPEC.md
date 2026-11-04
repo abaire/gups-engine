@@ -763,13 +763,13 @@ The engine is a kernel plus four feature modules. A world lists the features it 
 ["combat", "track", "skills", "leveling"]`; leaving `features` out turns all four on, and listing all four is the same
 as leaving it out.
 
-|      Feature       |                                                                                                                                                                                                                                                                                                                            Owns                                                                                                                                                                                                                                                                                                                            | Requires |
-|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage` modifier point; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                            | —        |
-| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                             | `combat` |
-| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, `casting` in `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                  | —        |
-| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                                                                                                                                                                                                             | —        |
+|      Feature       |                                                                                                                                                                                                                                                                                                                                             Owns                                                                                                                                                                                                                                                                                                                                             | Requires |
+|--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; the `defend_hit` modifier point; `before_attack`, `on_combat_tick`; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                             | —        |
+| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                               | `combat` |
+| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, `casting` in `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                    | —        |
+| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                                                                                                                                                                                                                                               | —        |
 
 - **A feature that is off doesn't exist** for the world:
   - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
@@ -1014,7 +1014,7 @@ from `ctx.actor.skills`.
 
 |                                                                                                          Primitive                                                                                                           |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
 |------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `damage(dice, type)`                                                                                                                                                                                                         | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and then `mitigate`. A negative chain result counts as 0.                                                                                                                                                                                                                         |
+| `damage(dice, type)`                                                                                                                                                                                                         | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and the target's `receive_damage` chain; a negative result counts as 0. `mitigate` and then the target's `mitigate` chain turn it into vital losses (§4.6).                                                                                                                       |
 | `heal(dice, vital)`                                                                                                                                                                                                          | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, max_vital_deltas=vitals(), resist_deltas=resists(), applies=None)` | Attach a timed buff or debuff. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one.                                                                                                                                                                                                                                                                   |
 | `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                                                                        | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
@@ -1073,8 +1073,9 @@ and must be attachable to that kind of entity per the "Attach to" column. `befor
 `[a-z][a-z0-9_]*` and may not be catalog names; each value is a top-level function. The engine never fires them: scripts
 run them with `ctx.call_hook` (§4.5), which also runs any plugin handlers for the name (§4.15).
 
-**`on_damage`:** `ctx.amount` is the total of the vital losses and `ctx.losses` the losses themselves, a `vitals(...)`
-value (§3.9); `ctx.type` is the damage type. It fires once per damage event, after the losses are applied.
+**`on_damage`:** `ctx.amount` is the total of the positive vital losses and `ctx.losses` those losses (a gain, §4.6, is
+left out), a `vitals(...)` value (§3.9); `ctx.type` is the damage type. It fires once per damage event with a positive
+loss, after the losses and gains are applied.
 
 **`on_level_change`** needs `leveling`. It fires once per level step, after the gains or their unwinding and the gain
 record, so it sees the new state; a loss of three levels fires it three times. A level gained is announced before its
@@ -1337,7 +1338,9 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
   about as `level`.
 - `mitigate` is called for auto-attacks and the `damage(...)` effect primitive, never for the raw `ctx.damage` verb. Its
   result may name any vitals, so a world can send psychic damage to `sanity` or let a `shield` vital soak damage first.
-  Each loss is subtracted with no floor.
+  Each loss is subtracted with no floor. A negative loss is a gain: it raises that vital up to its maximum and never
+  lowers it. `on_damage`'s `amount` and `losses` and `interrupt_check`'s `amount` count only the positive losses; an
+  event with no positive loss fires no `on_damage` and runs no interrupt check, but still applies its gains.
 - `move_cost` spends from each named vital. A transition the actor can't afford (some vital's `current` below its cost)
   fails with "You are too exhausted." (§4.18).
 - `regen` adds its result to each vital, up to the vital's maximum; vitals it doesn't name don't change.
@@ -1416,19 +1419,25 @@ formulas for custom worlds. See [combat.star](../template-world/rules/combat.sta
 [manipulation.star](../template-world/rules/manipulation.star) in `template-world/rules/` for the complete reference
 formulas.
 
-**Modifier points (v0):** `to_hit`, `damage`, `initiative`, `cast_allowed`, `move_cost`, `regen`, `advance_lag`,
-`retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`. The list grows with `api_version`. `mitigate` and `get_lag` are not
-modifier points. Modifiers of `move_cost` and `regen` take and return `vitals(...)` values; modifiers of the four lag
-points take and return pulses as ints, and may go below 0 along the chain, but the chain's final value is clamped to 0.
-Modifier points of a feature that is off can't be named: the lag points belong to the feature of the export of the same
-name. The `damage` point is the exception: it belongs to the kernel, because the `damage(...)` effect primitive runs its
-chain with any features, while the `damage` export belongs to `combat`. Without `combat`, a `damage` chain runs only for
-the effect primitive, so `ctx.weapon`, `ctx.slot` and `ctx.band` are `None` in it.
+**Modifier points (v0):** `to_hit`, `damage`, `defend_hit`, `receive_damage`, `mitigate`, `initiative`, `cast_allowed`,
+`move_cost`, `regen`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`. The list grows with
+`api_version`. `get_lag` is not a modifier point. The `mitigate` modifier point adjusts the `mitigate` export's result;
+it is not a second export. Modifiers of `move_cost`, `regen` and `mitigate` take and return `vitals(...)` values;
+modifiers of the four lag points take and return pulses as ints, and may go below 0 along the chain, but the chain's
+final value is clamped to 0. Modifier points of a feature that is off can't be named: the lag points belong to the
+feature of the export of the same name. The `damage`, `receive_damage` and `mitigate` points are the exception: they
+belong to the kernel, because the `damage(...)` effect primitive runs their chains with any features, while the `damage`
+export belongs to `combat`. Without `combat`, these chains run only for the effect primitive, so `ctx.weapon`,
+`ctx.slot` and `ctx.band` are `None` in them.
 
 **Whose chain:** the attacker's for `to_hit` and `damage` (the caster is the attacker for spell damage), the caster's
 for `cast_allowed`, the mover's for `move_cost` (from the room being left), and the actor's own for `regen`,
-`initiative` and the four lag points (the actor that advanced, retreated or failed to flee). "Zone" means the package of
-that actor's room, and the regions and room are those of that room too.
+`initiative` and the four lag points (the actor that advanced, retreated or failed to flee). The defender's for
+`defend_hit`, `receive_damage` and `mitigate` (the target of a `damage(...)` effect is the defender; the caster is the
+attacker): these points run the chain of the actor being hit, with zone, regions and room those of that actor's room.
+The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.actor` are still the attacker, and
+`ctx.defender` is the actor whose modifiers run. "Zone" means the package of that actor's room, and the regions and room
+are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
 room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
@@ -1439,8 +1448,18 @@ other held item's `carried` affects, depth first through containers in item-id o
 traits contribute the Kotlin modifiers of their plugin. Traits have no `cast_allowed` modifiers: the `cast` restriction
 refuses casts (§4.19).
 
+**Attack and defense:** an auto-attack's hit chance is the `to_hit` export, then the attacker's `to_hit` chain, then the
+defender's `defend_hit` chain, which takes the attacker's result as its base; the swing rolls against the final value.
+Spells have no to-hit roll and run no `defend_hit` chain. The damage of a hit or of a `damage(...)` effect is the raw
+amount (the `damage` export, or the effect's dice), then the attacker's `damage` chain, then the defender's
+`receive_damage` chain; a negative result counts as 0. `mitigate` turns that amount into vital losses, the defender's
+`mitigate` chain adjusts them, and the result is applied. A `receive_damage` modifier changes the blow before armor and
+resists; a `mitigate` modifier changes what it costs, for example moving part of an `hp` loss to `mana` or turning it
+into a gain. The raw `ctx.damage` verb runs none of these chains.
+
 **Weapons in swings:** during an auto-attack swing (`ctx.slot` is set), the modifiers of a worn item with `dice`, and of
 its item affects, apply only when that item is `ctx.weapon`. Outside swings, worn weapons contribute like any worn item.
+The rule is for the swinging attacker only: in a defender's chain every active worn item contributes, weapons included.
 
 Each modifier is a top-level function with the signature `fn(ctx, base) -> value`, or returns `ctx.deny(msg)` (only for
 `cast_allowed`):
@@ -1464,7 +1483,11 @@ room("antimagic_vault", modifiers={
 ```
 
 The harness and `@trace` print the full chain, for example `rules.to_hit base=62 → region:null_field ×0.5 → 31 → roll 44
-MISS`. A lag chain that ends below 0 prints a final `→ clamp 0` step.
+MISS`. A lag chain that ends below 0 prints a final `→ clamp 0` step. A defender's chain continues the same line after a
+`defender:<point>` step, for example `rules.to_hit base=62 → room:fog 52 → defender:defend_hit → affect:blur 42 → roll
+44 HIT`; the step is left out when the defender has no modifier at that point. The damage chains trace the same way, for
+example `rules.damage base=6 → defender:receive_damage → item:ward 1 → mitigate hp 1 slash → defender:mitigate →
+item:siphon {hp 1, mana -1}`.
 
 **Encumbrance:** `rules.encumbrance` applies while the carried and worn weight exceeds `rules.carry_limit` (computed
 without the current encumbrance). It is recomputed when an actor's custody changes (spawn, move, destroy) and at every
@@ -2073,7 +2096,8 @@ maximum, with `type` defaulting to the unarmed damage type.
   `w.diagnostics()` explicitly.
 - `t.eq` and `t.ne` treat an entity view as equal to a label string that resolves (relative to the calling package) to
   its prototype label. Players are excluded.
-- `w.trace()` keeps the last 400 lines (rules lines included) and prints them when the test fails.
+- `w.trace()` keeps the last 400 lines (rules lines included) and prints them when the test fails, and always in a `gups
+  scenario` run.
 
 ### 4.13 CLI
 
@@ -2104,10 +2128,10 @@ maximum, with `type` defaulting to the unarmed damage type.
   `--package` names: its `load`s, relative labels and default `t.world()` packages resolve there. The harness API and
   the freshly booted, seeded worlds are those of `gups test`. Each function prints a transcript, pass or fail, of every
   `p.do(line)` (tagged `<player>@<room label>> <line>`, its output indented below, then a note if the player changed
-  rooms), every non-empty `p.output()` and every `print()`, in the order they happened. It exits 1 if a function fails
-  or errors, the file has no `test_*` functions, or the package doesn't exist. It is meant for end-to-end checks that
-  drive the real command pipeline without a network or a database; a scenario that should keep running moves into the
-  package as a `*_test.star` file unchanged.
+  rooms), every non-empty `p.output()` and every `print()`, in the order they happened, followed by the `w.trace()`
+  record when one was started. It exits 1 if a function fails or errors, the file has no `test_*` functions, or the
+  package doesn't exist. It is meant for end-to-end checks that drive the real command pipeline without a network or a
+  database; a scenario that should keep running moves into the package as a `*_test.star` file unchanged.
 - **`gups restore FILE`** replaces the database with SQLite's restore API. The server must be stopped first; nothing
   enforces it.
 - **`gups import-roster`:**
@@ -2593,10 +2617,12 @@ no traits and no restrictions, and players see nothing new.
     effective value.
   - **Flags:** A trait's flags are the actor's flags while it carries the trait, as an untimed affect's would be
     (`has_flag`, `silenced`, `no_regen`). `stunned` can't be a trait flag.
-  - **Modifiers:** At the `to_hit` and `initiative` points (`combat` feature) and `damage`, `move_cost` and `regen`.
-    They join the chain after the room's modifiers and before the actor's affects (§4.6), and `@trace` shows them as
-    `trait:<name>`. Like a script modifier, one that fails or returns the wrong type leaves the value as it was; the
-    failure is a `plugin` diagnostic.
+  - **Modifiers:** At the `to_hit`, `defend_hit` and `initiative` points (`combat` feature) and `damage`,
+    `receive_damage`, `mitigate`, `move_cost` and `regen`. On `defend_hit`, `receive_damage` and `mitigate` the trait's
+    bearer is the defender: the plugin call's `actor` is the defender and `other` the attacker. They join the chain
+    after the room's modifiers and before the actor's affects (§4.6), and `@trace` shows them as `trait:<name>`. Like a
+    script modifier, one that fails or returns the wrong type leaves the value as it was; the failure is a `plugin`
+    diagnostic.
   - **Schema names:** Stats, vitals, and damage types named in a trait are checked when the plugin registers it (§4.15).
 
 **Restrictions** are checks that plugins register at eight points. Each gets the actor and what it is about to do, and
@@ -2843,11 +2869,13 @@ and work with or without it (§3.10). Combat resolution is implemented in
 - **Resolution:**
   1. Call `before_attack` (vetoable) on the defender first (§5.6), so defensive wards evaluate before the attacker and
      the swinging weapon.
-  2. Roll `rng.int(1,100)` against `to_hit` (through the modifier chain).
-  3. On a hit, compute `damage` (chain), then `mitigate` with the weapon's damage type (or the world's
-     `unarmed_damage_type`), then subtract the vital losses it returns. Every loss is subtracted, `on_damage` fires
-     once, the interrupt check runs, and then `condition` is asked once for the damage event (death is still deferred to
-     the end of an initiative tier). Outside a damage event, a vital change asks `condition` once.
+  2. Roll `rng.int(1,100)` against `to_hit` (through the attacker's `to_hit` chain and then the defender's `defend_hit`
+     chain, §4.6).
+  3. On a hit, compute `damage` (the attacker's chain, then the defender's `receive_damage` chain), then `mitigate` with
+     the weapon's damage type (or the world's `unarmed_damage_type`) and the defender's `mitigate` chain, then apply the
+     vital losses (§4.6). Every loss is subtracted and every gain added; if any loss is positive, `on_damage` fires once
+     and the interrupt check runs; then `condition` is asked once for the damage event (death is still deferred to the
+     end of an initiative tier). Outside a damage event, a vital change asks `condition` once.
   - Messages show no numbers: "You hit X." / "X hits you." / "X misses Y."
 - **Regen** at the world tick applies to every actor without `no_regen`, engaged or not.
 - **Conditions:** `rules.condition` (§4.6) decides each actor's condition after any change to one of its vitals, and for
@@ -3782,3 +3810,4 @@ template's `.github/workflows/gates.yml`.
 | **M23**   | Item value and custom hooks: `item(value=)`, `hooks = {...}` on rooms, mobs and items, `ctx.call_hook` with plain-value arguments and results, the plugin handler chain (`addHook`, `PluginHookCall`), `cha` in the template schema (§3.3, §3.9, §4.2, §4.4, §4.5, §4.15, §4.16).                                                                                                                                                                     |
 | **M24**   | The shop library: `//lib:shop.star` with coin currency, stock containers (chest or pack) holding real stock and the till, lazy partial restocking, `list`/`buy`/`sell`/`value`, the `shop_price` custom hook, `Shop.Stock` GMCP, `ctx.merge_stack`; the tutorial shop (§4.5, §4.9, §5.11).                                                                                                                                                            |
 | **M25**   | Shopkeepers in combat: `ctx.has_feature`; a fighting keeper refuses every customer while restocking goes on, and shops work without the `combat` feature; `gups scenario` (§3.10, §4.5, §4.9, §4.13).                                                                                                                                                                                                                                                 |
+| **M26**   | Defender-side modifiers: the `defend_hit` (`combat`), `receive_damage` and `mitigate` (kernel) modifier points on the defender's full chain, worn weapons included; negative `mitigate` losses are gains; plugin trait modifiers see their bearer as `actor`; the tutorial's `shadow_cloak` and `siphon_amulet` (§3.10, §4.3, §4.6, §4.19, §5.4).                                                                                                     |

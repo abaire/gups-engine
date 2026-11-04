@@ -115,14 +115,17 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
       .mapValues { (point, mod) ->
         TraitModifier { c, base ->
           val w = c.world
+          val bearer = if (point.defender) c.target else c.requireActor()
+          if (bearer == null) return@TraitModifier base
+          val opponent = if (point.defender) c.requireActor() else c.target
           val call =
             PluginModifierCall(
               world = WorldFacade(w, pluginId, Facades.logOf(w)),
               point = PluginModifierPoint.valueOf(point.name),
-              actor = ActorFacade(c.requireActor(), w),
-              other = c.target?.let { ActorFacade(it, w) },
+              actor = ActorFacade(bearer, w),
+              other = opponent?.let { ActorFacade(it, w) },
               weapon = c.weapon?.let { ItemFacade(it, w) },
-              room = RoomFacade(c.requireActor().room, w),
+              room = RoomFacade(bearer.room, w),
             )
           fun refuse(why: String): Any {
             w.record(
@@ -138,6 +141,8 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
             when (point) {
               ModifierPoint.TO_HIT,
               ModifierPoint.DAMAGE,
+              ModifierPoint.DEFEND_HIT,
+              ModifierPoint.RECEIVE_DAMAGE,
               ModifierPoint.INITIATIVE,
               ModifierPoint.ADVANCE_LAG,
               ModifierPoint.RETREAT_LAG,
@@ -149,7 +154,8 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
                 else refuse("returned ${res::class.simpleName}, expected Long")
               }
               ModifierPoint.MOVE_COST,
-              ModifierPoint.REGEN -> {
+              ModifierPoint.REGEN,
+              ModifierPoint.MITIGATE -> {
                 @Suppress("UNCHECKED_CAST")
                 val res =
                   mod.modify(call, (base as Map<String, Int>).mapValues { it.value.toLong() })

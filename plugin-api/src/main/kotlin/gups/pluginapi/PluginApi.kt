@@ -272,6 +272,9 @@ data class PluginTrait(
 enum class PluginModifierPoint {
   TO_HIT,
   DAMAGE,
+  DEFEND_HIT,
+  RECEIVE_DAMAGE,
+  MITIGATE,
   INITIATIVE,
   MOVE_COST,
   REGEN,
@@ -284,7 +287,12 @@ enum class PluginModifierPoint {
 data class PluginModifierCall(
   val world: PluginWorld,
   val point: PluginModifierPoint,
+  /**
+   * The trait's bearer. On `DEFEND_HIT`, `RECEIVE_DAMAGE` and `MITIGATE` the bearer is the
+   * defender.
+   */
   val actor: PluginActor,
+  /** The bearer's opponent. On `DEFEND_HIT`, `RECEIVE_DAMAGE` and `MITIGATE` it is the attacker. */
   val other: PluginActor?,
   val weapon: PluginItem?,
   val room: PluginRoom,

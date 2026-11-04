@@ -300,3 +300,38 @@ def test_amulet_max_hp(t):
     t.eq(p.max_hp, 25)
     p.do("remove amulet")
     t.eq(p.max_hp, 20)
+
+def _dummy_fight(t, item = None, pulses = 60, mana = 20):
+    # Fights the training dummy for a fixed time and returns (hp lost, the player's mana).
+    # spawn_player's vitals set the starting and maximum values alike, so the current mana is
+    # brought down with the raw damage verb, which runs no modifier chains. The dummy swings
+    # back each round, so the fight exercises the full to_hit, defend_hit, damage,
+    # receive_damage and mitigate path. w.trace() prints only on a failed test, so the tests
+    # assert on vitals.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena", vitals = vitals(hp = 100))
+    if p.mana > mana:
+        w.damage(p, "mana", amount = p.mana - mana)
+    if item != None:
+        w.spawn(item, at = p)
+        # The item's first word is a keyword unique to it: "shadow" and "siphon".
+        p.do("wear " + item.split(":")[1].split("_")[0])
+    before = p.hp
+    p.do("kill dummy")
+    w.run(pulses = pulses)
+    return before - p.hp, p.mana
+
+def test_shadow_cloak_blurs_and_wards(t):
+    # Both runs share seed 1 (via _world) and the same number of pulses, so they are
+    # deterministic; that seed lands hits in both, so the cloak's difference is measurable.
+    (bare_hp_lost, _) = _dummy_fight(t)
+    (cloaked_hp_lost, _) = _dummy_fight(t, item = ":shadow_cloak")
+    t.true(bare_hp_lost > 0)
+    t.true(cloaked_hp_lost < bare_hp_lost)
+
+def test_siphon_amulet_turns_pain_into_mana(t):
+    (hp_lost, mana_with) = _dummy_fight(t, item = ":siphon_amulet", mana = 0)
+    (_, mana_without) = _dummy_fight(t, mana = 0)
+    t.true(hp_lost > 0)
+    # Both runs start at 0 mana and regen the same amount; the amulet's siphon adds more.
+    t.true(mana_with > mana_without)

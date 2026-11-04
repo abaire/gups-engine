@@ -115,8 +115,8 @@ def _blunted(ctx, base):
     return max(1, base // 2)
 
 # A region is a tag rooms carry (room(regions = [...])); it may span zones. Its modifiers
-# apply in every room that carries it. Points: to_hit, damage, initiative, cast_allowed,
-# move_cost, regen. `@trace rules` shows each modifier at work.
+# apply in every room that carries it. Points: to_hit, defend_hit, damage, receive_damage,
+# mitigate, initiative, cast_allowed, move_cost, regen. `@trace rules` shows each modifier at work.
 region("practice_grounds",
     modifiers = {MODIFIER.damage: _blunted},
 )
@@ -132,7 +132,8 @@ def _arena_enter(ctx):
 
 def _stock_arena(ctx):
     # Keep demonstration equipment on the arena benches.
-    for label in (":copper_ring", ":wooden_shield", ":dagger", ":greatsword", ":amulet"):
+    for label in (":copper_ring", ":wooden_shield", ":dagger", ":greatsword", ":amulet",
+                  ":shadow_cloak", ":siphon_amulet"):
         on_floor = [i for i in ctx.self.items() if i.label.endswith(label)]
         if not on_floor:
             ctx.spawn(label, ctx.self)

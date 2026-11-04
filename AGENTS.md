@@ -57,7 +57,8 @@ When a milestone asks for an end-to-end check (players at a real zone, typing co
 scripting telnet against `gups serve --dev`. It boots the world in-process from its `.star` files, drives the same
 command pipeline the server does, and skips only the network, login, real-time pacing and saved database state.
 
-Write the scenario in your scratchpad, not in the world, using the harness API of `*_test.star` files:
+Write the scenario in `local-world-test/` (see below), not in the world and not outside the repository, using the
+harness API of `*_test.star` files:
 
 ```python
 def test_flee_then_trade(t):
@@ -74,7 +75,7 @@ Then run it against the template world:
 
 ```bash
 ./gradlew :cli:installDist
-cli/build/install/gups/bin/gups scenario --world template-world --package //zones/tutorial /path/to/scenario.star
+cli/build/install/gups/bin/gups scenario --world template-world --package //zones/tutorial local-world-test/scenario.star
 ```
 
 - The transcript tags each command with the player and the room it was typed in, so check where a player is before
@@ -83,6 +84,9 @@ cli/build/install/gups/bin/gups scenario --world template-world --package //zone
 - `p.do(line)` runs pulses until that player's command finishes, so players take turns; they don't act in the same
   pulse. Use `w.run(pulses = n)` to let time pass.
 - Assertions (`t.contains`, `t.eq`, ...) make the run exit 1 on failure, with the transcript still printed.
+- Scenario players are ordinary players, so admin commands such as `@trace` answer "Huh?". To see the rules chains, call
+  `w.trace()` before the commands you care about: a scenario prints the trace record (hook calls and every `rules.*`
+  line that `@trace rules` would show) after its transcript, whether it passes or fails.
 - If the scenario should become a permanent test, move it into the package as a `*_test.star` file; it runs there
   unchanged.
 - Only fall back to `gups serve --dev` for what the harness can't reach: login, the network layer, saved state.
@@ -90,5 +94,13 @@ cli/build/install/gups/bin/gups scenario --world template-world --package //zone
 ## Ignored directories
 
 `local-world/` is a gitignored developer artifact: a personal scratch copy of a world for running a dev server. It is
-not part of the engine, is never tested or kept in sync, and may be stale. Never read, search, edit, lint or investigate
-it, and ignore it in search results and when reporting what else might need updating.
+not part of the engine, is never tested or kept in sync, and may be stale. Never read, search, edit, lint, copy, run
+against or investigate it, and ignore it in search results and when reporting what else might need updating.
+
+`local-world-test/` is the agents' gitignored scratch area inside the repository. Use it, never `/tmp` or another path
+outside the repository, for anything temporary: scenario files, and a world you need to change for an investigation.
+
+- For a world of your own, copy the template: `cp -R template-world local-world-test/world`, then pass `--world
+  local-world-test/world`. Never start from `local-world/`.
+- Delete `local-world-test/` when you are done, and don't commit anything from it. If a scenario should stay, move it
+  into the package as a `*_test.star` file.

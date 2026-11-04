@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.HookRef
 import gups.core.model.Actor
+import gups.core.model.DamageType
 import gups.core.model.ItemLocation
 import gups.core.model.ModifierPoint
 import gups.core.model.Trait
@@ -40,10 +41,12 @@ private sealed interface ChainStep {
 }
 
 /**
- * The modifiers that apply to [c]'s actor at [point], in chain order, with where each comes from.
+ * The modifiers that apply to [c]'s actor at [point], in chain order, with where each comes from. A
+ * defender point reads the target instead of the actor.
  */
 private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainStep> {
-  val actor = c.requireActor()
+  val actor = if (point.defender) c.target else c.requireActor()
+  if (actor == null) return emptyList()
   val room = actor.room
   val out = mutableListOf<ChainStep>()
   protos.zones[room.label.pkg]?.modifiers?.get(point)?.let {
@@ -61,6 +64,8 @@ private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainS
     out += ChainStep.Script("affect:${a.name}", it)
   }
   for (step in actor.heldEffects.modifierSteps) {
+    // The swinging-weapon filter is for the attacker's points only: a defender's worn weapons
+    // always contribute, so a parry dagger can carry a defend_hit modifier.
     if (
       (point == ModifierPoint.TO_HIT || point == ModifierPoint.DAMAGE) &&
         c.slot != null &&
@@ -85,6 +90,25 @@ fun World.equipmentSlots(): List<String> {
   return slots
 }
 
+/** Runs each of [steps] in order, appending each to [text]; returns the final value. */
+private fun <T> World.runSteps(
+  point: ModifierPoint,
+  c: RulesContext,
+  steps: List<ChainStep>,
+  base: T,
+  text: StringBuilder,
+  show: (T) -> String,
+): T {
+  var v = base
+  for (step in steps) {
+    @Suppress("UNCHECKED_CAST")
+    v = step.apply(this, point, c, v) as T
+    text.append(" → ").append(step.source).append(' ').append(show(v))
+    if (point == ModifierPoint.CAST_ALLOWED && v != null) break
+  }
+  return v
+}
+
 /**
  * Runs [base] through the chain for [point] of [c]'s actor. A cast_allowed chain stops at the first
  * denial. Modifiers that fail leave the value as it was (the host reports them).
@@ -97,13 +121,24 @@ private fun <T> World.chain(
 ): ChainResult<T> {
   val steps = chainSteps(point, c)
   val text = StringBuilder("rules.${point.scriptName} base=${show(base)}")
-  var v = base
-  for (step in steps) {
-    @Suppress("UNCHECKED_CAST")
-    v = step.apply(this, point, c, v) as T
-    text.append(" → ").append(step.source).append(' ').append(show(v))
-    if (point == ModifierPoint.CAST_ALLOWED && v != null) break
-  }
+  val v = runSteps(point, c, steps, base, text, show)
+  return ChainResult(v, text.toString())
+}
+
+/**
+ * Runs the defender's chain at [point] (a defender point) on [base]. The text is empty when the
+ * defender has no step at [point], otherwise " → defender:<point>" and each step.
+ */
+private fun <T> World.defenderSegment(
+  point: ModifierPoint,
+  c: RulesContext,
+  base: T,
+  show: (T) -> String,
+): ChainResult<T> {
+  val steps = chainSteps(point, c)
+  if (steps.isEmpty()) return ChainResult(base, "")
+  val text = StringBuilder(" → defender:${point.scriptName}")
+  val v = runSteps(point, c, steps, base, text, show)
   return ChainResult(v, text.toString())
 }
 
@@ -117,11 +152,33 @@ private fun <T> World.traced(c: RulesContext, r: ChainResult<T>): T {
   return r.value
 }
 
-fun World.toHitChain(c: RulesContext): ChainResult<Int> =
-  chain(ModifierPoint.TO_HIT, c, rules.toHit(c)) { "$it" }
+/** The attacker's to_hit chain, then the defender's defend_hit chain. */
+fun World.toHitChain(c: RulesContext): ChainResult<Int> {
+  val atk = chain(ModifierPoint.TO_HIT, c, rules.toHit(c)) { "$it" }
+  val def = defenderSegment(ModifierPoint.DEFEND_HIT, c, atk.value) { "$it" }
+  return ChainResult(def.value, atk.text + def.text)
+}
 
 fun World.damageChain(c: RulesContext, base: Int = rules.damage(c)): ChainResult<Int> =
   chain(ModifierPoint.DAMAGE, c, base) { "$it" }
+
+/** A hit's vital losses and its whole trace line. */
+class DamageResult(val losses: Map<String, Int>, val text: String)
+
+/**
+ * The attacker's damage chain on [base], the defender's receive_damage chain, mitigate with [type],
+ * then the defender's mitigate chain.
+ */
+fun World.resolveDamage(c: RulesContext, base: Int, type: DamageType): DamageResult {
+  val atk = damageChain(c, base)
+  val recv = defenderSegment(ModifierPoint.RECEIVE_DAMAGE, c, atk.value) { "$it" }
+  val amount = recv.value.coerceAtLeast(0)
+  val losses = rules.mitigate(c, amount, type)
+  val mit = defenderSegment(ModifierPoint.MITIGATE, c, losses) { it.show() }
+  val shown = if (losses.isEmpty()) "0" else losses.entries.joinToString { "${it.key} ${it.value}" }
+  val text = atk.text + recv.text + " → mitigate $shown $type" + mit.text
+  return DamageResult(mit.value, text)
+}
 
 fun World.initiativeOf(c: RulesContext): Int =
   traced(c, chain(ModifierPoint.INITIATIVE, c, rules.initiative(c)) { "$it" })

@@ -8,6 +8,7 @@ import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.awardXp
 import gups.core.world.changeVital
+import gups.core.world.moveItem
 import gups.core.world.spawnItem
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
@@ -207,6 +208,11 @@ class FeatureScriptTest {
       "item(modifiers)[\"to_hit\"]",
     )
     refused(
+      Feature.COMBAT,
+      "def f(ctx, base):\n    return base\nitem(\"cloak\", wear = \"body\", modifiers = {\"defend_hit\": f})",
+      "item(modifiers)[\"defend_hit\"]",
+    )
+    refused(
       Feature.SKILLS,
       "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"cast_allowed\": f})",
       "room(modifiers)[\"cast_allowed\"]",
@@ -264,6 +270,68 @@ class FeatureScriptTest {
     f.input(p, "use wand dummy")
     f.run()
     assertEquals(50 - 11, dummy.current("hp"), f.out(p))
+  }
+
+  @Test
+  fun `the receive_damage and mitigate modifier points need no feature`() {
+    for (point in listOf("receive_damage", "mitigate")) {
+      val r =
+        load(
+          world(
+            Features(emptySet()),
+            "zones/z/a.star" to
+              "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"$point\": f})",
+          )
+        )
+      assertTrue(r.errors.none { it.pkg == "zones/z" }, r.report())
+    }
+  }
+
+  @Test
+  fun `a receive_damage and a mitigate modifier change use_effect damage without combat`() {
+    val features = Features(emptySet())
+    val f =
+      ScriptFixture(
+        mapOf(
+          "MODULE.gups" to TestWorlds.module("features = []"),
+          "rules/package.star" to TestWorlds.RULES_PACKAGE,
+          "rules/combat.star" to
+            TestWorlds.rulesFor(
+              features.ids,
+              "def mitigate(ctx, amount, type):\n    return vitals(hp = amount)\n",
+            ),
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            def _ward(ctx, base):
+                if ctx.weapon != None or ctx.slot != None or ctx.band != None:
+                    return base
+                return base - 3
+            def _siphon(ctx, base):
+                if ctx.weapon != None or ctx.slot != None or ctx.band != None:
+                    return base
+                return vitals(hp = base.hp, mana = -1)
+            room("start", modifiers = {"receive_damage": _ward})
+            mob("dummy", name = "a dummy", keywords = ["dummy"], vitals = vitals(hp = 50, mana = 5))
+            item("amulet", name = "an amulet", wear = "neck", modifiers = {"mitigate": _siphon})
+            item("wand", name = "a wand", use_target = "enemy", use_effect = damage(dice = "1d1"))
+            """,
+        )
+      )
+    val p = f.player()
+    val dummy = f.mob("//zones/z:dummy")
+    val amulet = f.w.spawnItem(Label("//zones/z:amulet"), ItemLocation.Carried(dummy.id))
+    f.w.moveItem(amulet, ItemLocation.Equipped(dummy.id, "neck"))
+    f.w.changeVital(dummy, "mana", -1) // below the maximum, so the gain is not capped
+    f.w.spawnItem(Label("//zones/z:wand"), ItemLocation.Carried(p.id))
+
+    f.input(p, "use wand dummy")
+    f.run()
+    // 1d1 rolls a 1; the room's receive_damage subtracts 3, so the blow lands for 0 and the
+    // amulet's mitigate turns it into a mana gain. Both modifiers only act when ctx.weapon,
+    // ctx.slot and ctx.band are None, so the mana gain shows they ran on that path.
+    assertEquals(50, dummy.current("hp"), f.out(p))
+    assertEquals(5, dummy.current("mana"), f.out(p))
   }
 
   @Test

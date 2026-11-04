@@ -283,7 +283,8 @@ class TestRunner(
       status,
       message,
       location,
-      trace.takeIf { status != Status.PASS },
+      // A scenario is run to be read, so its trace is kept even when it passes.
+      trace.takeIf { status != Status.PASS || transcript != null },
       printed.toString(),
       warnings,
       transcript?.toString().orEmpty(),

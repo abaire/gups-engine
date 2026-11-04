@@ -670,7 +670,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the item is worn.",
           "since": 1
         },
@@ -776,7 +776,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active while the affect reaches the holder.",
           "since": 1
         },
@@ -1144,7 +1144,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Zone-wide rules modifiers by modifier point name.",
           "since": 1
         },
@@ -1202,7 +1202,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Rules modifiers active in rooms carrying this region tag.",
           "since": 1
         }
@@ -1366,7 +1366,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
           "doc": "Room rules modifiers by modifier point name.",
           "since": 1
         },
@@ -2201,7 +2201,7 @@
       "symbol": "MODIFIER",
       "name": "MODIFIER",
       "type": "struct",
-      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
       "since": 1
     },
@@ -6857,6 +6857,16 @@
         "since": 1
       },
       {
+        "symbol": "modifier:defend_hit",
+        "feature": "combat",
+        "name": "defend_hit",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
+        "doc": "Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger.",
+        "since": 1
+      },
+      {
         "symbol": "modifier:flee_fail_lag",
         "feature": "combat",
         "name": "flee_fail_lag",
@@ -6877,12 +6887,30 @@
         "since": 1
       },
       {
+        "symbol": "modifier:mitigate",
+        "name": "mitigate",
+        "signature": "fn(ctx, base)",
+        "value_type": "vitals",
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
+        "doc": "Adjusts the vital losses mitigate returned, on the defender's chain. A negative loss is a gain to that vital.",
+        "since": 1
+      },
+      {
         "symbol": "modifier:move_cost",
         "name": "move_cost",
         "signature": "fn(ctx, base)",
         "value_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
         "doc": "Adjusts the vitals spent for leaving a room.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:receive_damage",
+        "name": "receive_damage",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
+        "doc": "Adjusts the raw damage of a hit or damage(...) effect on the defender's chain, after the attacker's damage chain and before mitigate. A negative result counts as 0.",
         "since": 1
       },
       {
@@ -8151,7 +8179,7 @@
         {
           "symbol": "w.trace",
           "name": "trace",
-          "doc": "Records every hook and verb call; shown when the test fails.",
+          "doc": "Records every hook and verb call; shown when the test fails, and always in a scenario.",
           "since": 1,
           "params": [
             {

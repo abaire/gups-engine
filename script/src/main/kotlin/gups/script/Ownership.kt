@@ -30,7 +30,13 @@ object FeatureOwnership {
       "rules:flee_chance",
       "rules:flee_fail_lag",
     )
-    owns(Feature.COMBAT, "modifier:to_hit", "modifier:initiative", "modifier:flee_fail_lag")
+    owns(
+      Feature.COMBAT,
+      "modifier:to_hit",
+      "modifier:defend_hit",
+      "modifier:initiative",
+      "modifier:flee_fail_lag",
+    )
     owns(Feature.COMBAT, "view:actor.fighting")
     owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
     owns(Feature.TRACK, "SIZE")

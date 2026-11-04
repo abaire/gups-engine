@@ -40,6 +40,14 @@ class HeritagePlugin : GupsPlugin {
         doc = "Nimble and magical, but fragile.",
         statDeltas = mapOf("dex" to 2, "con" to -1),
         maxVitalDeltas = mapOf("mana" to 10),
+        modifiers =
+          mapOf(
+            PluginModifierPoint.DEFEND_HIT to
+              PluginModifier { call, base ->
+                // On a defender point call.actor is the bearer, the one being swung at.
+                (base as Long) - call.actor.stat("dex") / 2
+              }
+          ),
       )
     )
     r.addTrait(

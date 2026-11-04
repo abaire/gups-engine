@@ -69,7 +69,7 @@ an owner's kill credit the pet? - How is the award split: equal shares, or weigh
 sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
 below the victim's level, excluded from the split?
 
-### Defender-side modifiers in combat
+### Defender-side modifiers in combat (COMPLETED — M26)
 
 **Spec:** §4.6 (Rules Module and the Modifier Chain: `to_hit`, `damage`, chain order). **Today:** the modifier chain for
 `to_hit` and `damage` evaluates only the attacker's chain: zone, region, room, attacker affects, and attacker worn items

@@ -430,7 +430,7 @@ internal constructor(
 
   @StarlarkMethod(
     name = "trace",
-    doc = "Records every hook and verb call; shown when the test fails.",
+    doc = "Records every hook and verb call; shown when the test fails, and always in a scenario.",
     parameters =
       [
         Param(

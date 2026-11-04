@@ -17,13 +17,29 @@ val TAG_REGEX = Regex("[a-z][a-z0-9_]*")
 /** The hook points in the rules evaluation chain where entities can apply custom modifiers. */
 enum class ModifierPoint(
   /** Starlark hook name for this modifier point. */
-  val scriptName: String
+  val scriptName: String,
+  /**
+   * True when the point runs on the defender's chain (the rules ctx's target) rather than the
+   * actor's.
+   */
+  val defender: Boolean = false,
 ) {
   /** Modifies the auto-attack or skill to-hit calculation. */
   TO_HIT("to_hit"),
 
   /** Modifies the raw damage rolled during combat resolution. */
   DAMAGE("damage"),
+
+  /**
+   * Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain.
+   */
+  DEFEND_HIT("defend_hit", defender = true),
+
+  /** Adjusts the raw damage of a hit or damage effect on the defender's chain, before mitigate. */
+  RECEIVE_DAMAGE("receive_damage", defender = true),
+
+  /** Adjusts the vital losses mitigate returned, on the defender's chain. */
+  MITIGATE("mitigate", defender = true),
 
   /** Modifies the initiative rolled at the start of a combat round. */
   INITIATIVE("initiative"),

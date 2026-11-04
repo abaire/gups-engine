@@ -157,12 +157,8 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
     )
     return
   }
-  val raw = damageChain(ctx)
-  val losses = rules.mitigate(ctx, raw.value.coerceAtLeast(0), type)
-  traceRules(
-    a,
-    "${raw.text} → mitigate ${losses.entries.joinToString { "${it.key} ${it.value}" }} $type",
-  )
+  val hit = resolveDamage(ctx, rules.damage(ctx), type)
+  traceRules(a, hit.text)
   tell(a, CombatMsg.HIT_SELF, "target" to target.name)
   tell(target, CombatMsg.HIT_TARGET, "actor" to a.name.cap())
   tellPerceivers(
@@ -176,37 +172,45 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
     COMBAT_INTENSITY,
     exclude = arrayOf(a, target),
   )
-  damage(target, losses, type, a)
+  damage(target, hit.losses, type, a)
 }
 
 // ---- Damage, healing, death ------------------------------------------------------------------
 
 /**
- * The `damage` verb: lowers each vital in [losses] by its amount, with no floor, then fires
- * `on_damage` once with the total. A target whose condition becomes dead is mortally wounded until
- * death processing.
+ * The `damage` verb: lowers each vital in [losses] by its amount, with no floor; a negative entry
+ * is a gain, raising that vital up to its maximum and never lowering it. When any loss is positive,
+ * `on_damage` fires once with those losses and the interrupt check runs. A target whose condition
+ * becomes dead is mortally wounded until death processing.
  */
 fun World.damage(target: Actor, losses: Map<String, Int>, type: DamageType, source: Actor? = null) {
   if (!target.inWorld) return
   val dealt = losses.filterValues { it > 0 }
   val total = dealt.values.sum()
-  if (total <= 0) return
-  applyVitalDeltas(target, dealt.mapValues { -it.value }, source)
-  dispatch(
-    HookName.ON_DAMAGE,
-    target,
-    target.room,
-    HookContext(actor = source, target = target, amount = total, type = type, losses = dealt),
-  )
-  val cast = target.casting
-  if (
-    cast != null &&
-      rules.interruptCheck(
-        RulesContext(this, target, source, skill = (cast.action as? Castable)?.skill),
-        total,
-      )
-  )
-    interruptCast(target)
+  val gains =
+    losses
+      .filterValues { it < 0 }
+      .mapValues { (name, loss) -> minOf(-loss, maxOf(0, target.max(name) - target.current(name))) }
+      .filterValues { it > 0 }
+  if (dealt.isEmpty() && gains.isEmpty()) return
+  applyVitalDeltas(target, dealt.mapValues { -it.value } + gains, source)
+  if (total > 0) {
+    dispatch(
+      HookName.ON_DAMAGE,
+      target,
+      target.room,
+      HookContext(actor = source, target = target, amount = total, type = type, losses = dealt),
+    )
+    val cast = target.casting
+    if (
+      cast != null &&
+        rules.interruptCheck(
+          RulesContext(this, target, source, skill = (cast.action as? Castable)?.skill),
+          total,
+        )
+    )
+      interruptCast(target)
+  }
   refreshCondition(target)
 }
 
@@ -575,10 +579,9 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
       when (effect) {
         is Effect.Damage -> {
           val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
-          val raw = damageChain(c, effect.dice.roll(rng))
-          traceRules(caster, raw.text)
-          val losses = rules.mitigate(c, raw.value.coerceAtLeast(0), effect.type)
-          damage(t, losses, effect.type, caster)
+          val hit = resolveDamage(c, effect.dice.roll(rng), effect.type)
+          traceRules(caster, hit.text)
+          damage(t, hit.losses, effect.type, caster)
         }
         is Effect.Heal -> heal(t, effect.vital, effect.dice.roll(rng))
         is Effect.ApplyAffect ->

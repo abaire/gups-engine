@@ -4,6 +4,27 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Scenario traces
+
+- `gups scenario` prints the `w.trace()` record after the transcript even when the scenario passes, so the rules chains
+  can be read without `@trace`.
+
+### Defender-side modifiers
+
+- A negative entry in `mitigate`'s result is now a gain to that vital, capped at its maximum, instead of being ignored;
+  `on_damage` and `interrupt_check` count only the losses.
+- Added the `defend_hit` modifier point (`MODIFIER.defend_hit`, `combat` feature): it runs on the defender's chain
+  (zone, regions, room, then the defender's traits, affects and every active worn item, weapons included) after the
+  attacker's `to_hit` chain, with the same `ctx`; `@trace rules` shows it after a `defender:defend_hit` step.
+- Added the kernel modifier points `receive_damage` (int, the defender's chain after the attacker's `damage` chain and
+  before `mitigate`) and `mitigate` (`vitals(...)`, the defender's chain after the `mitigate` export), for auto-attacks
+  and the `damage(...)` effect; the `damage(...)` effect's trace now ends with the `mitigate` step.
+- Plugin traits can declare `DEFEND_HIT`, `RECEIVE_DAMAGE` and `MITIGATE` modifiers; on these the `PluginModifierCall`'s
+  `actor` is the trait's bearer, the defender. The heritage sample's elf trait has one, a `DEFEND_HIT` modifier scaled
+  by its bearer's dex.
+- The tutorial zone has a `shadow_cloak` (`defend_hit` and `receive_damage`) and a `siphon_amulet` (`mitigate` moving a
+  tenth of hp loss into a mana gain).
+
 ### The `damage` modifier point belongs to the kernel
 
 - The `damage` modifier point no longer needs the `combat` feature: zones, regions, rooms, items, affects and plugin

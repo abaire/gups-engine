@@ -138,6 +138,7 @@ class CreationRegistrationTest {
     for (point in
       listOf(
         PluginModifierPoint.TO_HIT,
+        PluginModifierPoint.DEFEND_HIT,
         PluginModifierPoint.INITIATIVE,
         PluginModifierPoint.FLEE_FAIL_LAG,
       )) {
@@ -158,6 +159,8 @@ class CreationRegistrationTest {
                 mapOf(
                   PluginModifierPoint.REGEN to PluginModifier { _, b -> b },
                   PluginModifierPoint.DAMAGE to PluginModifier { _, b -> b },
+                  PluginModifierPoint.RECEIVE_DAMAGE to PluginModifier { _, b -> b },
+                  PluginModifierPoint.MITIGATE to PluginModifier { _, b -> b },
                 ),
             )
           )
@@ -165,7 +168,11 @@ class CreationRegistrationTest {
         schema = schema,
         features = noCombat,
       )
-    assertEquals(listOf("ok"), host.ids, "regen and damage need no feature")
+    assertEquals(
+      listOf("ok"),
+      host.ids,
+      "regen, damage, receive_damage and mitigate need no feature",
+    )
   }
 
   @Test

@@ -171,6 +171,7 @@ internal class HookCall(
 private val MODIFIER_POINT_FEATURES =
   mapOf(
     PluginModifierPoint.TO_HIT to Feature.COMBAT,
+    PluginModifierPoint.DEFEND_HIT to Feature.COMBAT,
     PluginModifierPoint.INITIATIVE to Feature.COMBAT,
     PluginModifierPoint.FLEE_FAIL_LAG to Feature.COMBAT,
     PluginModifierPoint.ADVANCE_LAG to Feature.TRACK,
