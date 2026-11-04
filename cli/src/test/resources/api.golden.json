@@ -6593,7 +6593,7 @@
         "name": "damage",
         "signature": "damage(ctx)",
         "return_type": "int",
-        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
         "doc": "Raw attack damage before modifiers and mitigation.",
         "since": 1
       },
@@ -6679,7 +6679,7 @@
         "name": "mitigate",
         "signature": "mitigate(ctx, amount, type)",
         "return_type": "vitals",
-        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "room", "pulse", "rng"],
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "room", "damage_type", "pulse", "rng"],
         "doc": "The vital losses that amount damage of type causes the defender.",
         "since": 1
       },
@@ -6801,7 +6801,7 @@
         "name": "to_hit",
         "signature": "to_hit(ctx)",
         "return_type": "int",
-        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
         "doc": "Hit chance in percent before modifiers.",
         "since": 1
       },
@@ -6849,12 +6849,11 @@
       },
       {
         "symbol": "modifier:damage",
-        "feature": "combat",
         "name": "damage",
         "signature": "fn(ctx, base)",
         "value_type": "int",
-        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
-        "doc": "Adjusts raw damage before mitigation.",
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
+        "doc": "Adjusts damage before mitigation, for auto-attacks and the damage(...) effect.",
         "since": 1
       },
       {
@@ -6921,7 +6920,7 @@
         "name": "to_hit",
         "signature": "fn(ctx, base)",
         "value_type": "int",
-        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "pulse", "rng"],
+        "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
         "doc": "Adjusts hit chance in percent.",
         "since": 1
       }

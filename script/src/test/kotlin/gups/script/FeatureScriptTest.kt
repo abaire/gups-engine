@@ -219,6 +219,54 @@ class FeatureScriptTest {
   }
 
   @Test
+  fun `the damage modifier point needs no feature`() {
+    val r =
+      load(
+        world(
+          Features(emptySet()),
+          "zones/z/a.star" to
+            "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"damage\": f})",
+        )
+      )
+    assertTrue(r.errors.none { it.pkg == "zones/z" }, r.report())
+  }
+
+  @Test
+  fun `a damage modifier changes use_effect damage without combat`() {
+    val features = Features(emptySet())
+    val f =
+      ScriptFixture(
+        mapOf(
+          "MODULE.gups" to TestWorlds.module("features = []"),
+          "rules/package.star" to TestWorlds.RULES_PACKAGE,
+          "rules/combat.star" to
+            TestWorlds.rulesFor(
+              features.ids,
+              "def mitigate(ctx, amount, type):\n    return vitals(hp = amount)\n",
+            ),
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            def _plus(ctx, base):
+                if ctx.weapon != None or ctx.slot != None or ctx.band != None:
+                    return base
+                return base + 10
+            room("start", modifiers = {"damage": _plus})
+            mob("dummy", name = "a dummy", keywords = ["dummy"], vitals = vitals(hp = 50))
+            item("wand", name = "a wand", use_target = "enemy", use_effect = damage(dice = "1d1"))
+            """,
+        )
+      )
+    val p = f.player()
+    val dummy = f.mob("//zones/z:dummy")
+    f.w.spawnItem(Label("//zones/z:wand"), ItemLocation.Carried(p.id))
+
+    f.input(p, "use wand dummy")
+    f.run()
+    assertEquals(50 - 11, dummy.current("hp"), f.out(p))
+  }
+
+  @Test
   fun `the track lag modifier points need the track, flee_fail_lag doesn't`() {
     for (point in listOf("advance_lag", "retreat_lag", "retreat_fail_lag")) {
       refused(

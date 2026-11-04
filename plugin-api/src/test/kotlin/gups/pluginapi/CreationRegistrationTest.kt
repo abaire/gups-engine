@@ -138,7 +138,6 @@ class CreationRegistrationTest {
     for (point in
       listOf(
         PluginModifierPoint.TO_HIT,
-        PluginModifierPoint.DAMAGE,
         PluginModifierPoint.INITIATIVE,
         PluginModifierPoint.FLEE_FAIL_LAG,
       )) {
@@ -155,14 +154,18 @@ class CreationRegistrationTest {
           it.addTrait(
             PluginTrait(
               "brisk",
-              modifiers = mapOf(PluginModifierPoint.REGEN to PluginModifier { _, b -> b }),
+              modifiers =
+                mapOf(
+                  PluginModifierPoint.REGEN to PluginModifier { _, b -> b },
+                  PluginModifierPoint.DAMAGE to PluginModifier { _, b -> b },
+                ),
             )
           )
         },
         schema = schema,
         features = noCombat,
       )
-    assertEquals(listOf("ok"), host.ids, "regen needs no feature")
+    assertEquals(listOf("ok"), host.ids, "regen and damage need no feature")
   }
 
   @Test

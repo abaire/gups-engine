@@ -108,6 +108,22 @@ affects and traits carry declarative per-type bonus damage, or should `damage` m
 amounts? - Is each extra type mitigated separately, and does it fire `on_damage` and `interrupt_check` once per type or
 once per hit? - Does bonus damage apply to spell damage as well as auto-attacks?
 
+### Ownership of the `damage` modifier point (COMPLETED)
+
+**Resolved:** the modifier point moved to the kernel; the `damage(ctx)` export stays with `combat` (§3.10, §4.6).
+
+**Spec:** §3.10 (feature ownership table), §4.3 (`damage(dice, type)` effect primitive), §4.6 (`damage` export and
+modifier point, "Whose chain"). **Today:** the `combat` feature owns the `damage` modifier point
+(`script/src/main/kotlin/gups/script/Ownership.kt`), but the `damage(...)` effect primitive and `mitigate` are kernel
+and work with combat off. In a world without combat, a `damage(...)` spell or trap still runs `mitigate` (and, after the
+defender-modifier milestone, the kernel-owned `receive_damage` and `mitigate` points), yet nothing can declare a
+`damage` modifier, so an attacker-side "+2 spell damage" item or affect is impossible there. The intended direction is
+to move the `damage` modifier point to the kernel. **Questions:** - Does only the modifier point move, leaving the
+`damage(ctx)` rules export (raw auto-attack damage) with `combat`, or do both move? - With combat off, which `ctx`
+fields does a `damage` modifier see (`weapon`, `slot` and `band` are swing-only)? - Does the template world or any
+sample need content changes, and does the dry run or `gups lint` need to report a `damage` modifier differently in
+combat-off worlds?
+
 ## Mobs and AI
 
 ### Pets and followers bonded to a player

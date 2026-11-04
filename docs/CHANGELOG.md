@@ -4,6 +4,14 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### The `damage` modifier point belongs to the kernel
+
+- The `damage` modifier point no longer needs the `combat` feature: zones, regions, rooms, items, affects and plugin
+  traits may declare it in any world, and it applies to the `damage(...)` effect primitive (`cast`, `use`). The
+  `damage(ctx)` rules export still belongs to `combat`.
+- The documented `ctx` fields of `to_hit`, `damage` (export and modifier point) and `mitigate` now list `damage_type`,
+  and those of `to_hit` and `damage` list `slot`, which they already had.
+
 ### Shopkeepers in combat
 
 - `ctx.has_feature(name)` reports whether the world has a feature module on; an unknown name is an error.
