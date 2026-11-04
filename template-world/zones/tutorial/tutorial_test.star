@@ -335,3 +335,16 @@ def test_siphon_amulet_turns_pain_into_mana(t):
     t.true(hp_lost > 0)
     # Both runs start at 0 mana and regen the same amount; the amulet's siphon adds more.
     t.true(mana_with > mana_without)
+
+def test_a_mob_can_wear_an_amulet(t):
+    # Groundwork for defender-side damage tests, which need a mob (the dummy) to wear an item
+    # so its modifiers apply to the mob's own swings. The amulet's +5 max hp shows it took
+    # effect, not just that it was moved to the neck slot.
+    w = _world(t)
+    dummy = w.spawn(":training_dummy", at = ":hall")
+    w.spawn(":amulet", at = dummy)
+    max_before = dummy.max_hp
+    w.act(dummy, "wear amulet")
+    w.run(pulses = 4)
+    t.eq(dummy.equipped("neck").label, "//zones/tutorial:amulet")
+    t.eq(dummy.max_hp, max_before + 5)

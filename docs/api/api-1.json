@@ -7657,6 +7657,34 @@
       ],
       "methods": [
         {
+          "symbol": "w.act",
+          "name": "act",
+          "doc": "Queues a command line for a mob, exactly as if it typed it, like ctx.act. Returns whether the line was accepted; run pulses to let it happen.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.act.mob",
+              "name": "mob",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The mob that acts; players are refused."
+            },
+            {
+              "symbol": "w.act.command_line",
+              "name": "command_line",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The command line, as a player would type it."
+            }
+          ]
+        },
+        {
           "symbol": "w.award_xp",
           "feature": "leveling",
           "name": "award_xp",

@@ -8,11 +8,13 @@ import gups.core.model.Actor
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
+import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.StartingStats
 import gups.core.world.Diagnostic
 import gups.core.world.World
+import gups.core.world.act
 import gups.core.world.attach
 import gups.core.world.awardXp
 import gups.core.world.damage
@@ -370,6 +372,28 @@ internal constructor(
       else damageTypeName(str(type, "damage(type)"), schema, "damage(type)")
     world.damage(a, mapOf(name to n), DamageType(damageType))
     return Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "act",
+    doc =
+      "Queues a command line for a mob, exactly as if it typed it, like ctx.act. Returns whether" +
+        " the line was accepted; run pulses to let it happen.",
+    parameters =
+      [
+        Param(name = "mob", named = true, doc = "The mob that acts; players are refused."),
+        Param(
+          name = "command_line",
+          named = true,
+          doc = "The command line, as a player would type it.",
+        ),
+      ],
+  )
+  fun act(mob: Any, commandLine: Any): Any {
+    val m =
+      (mob as? ActorView)?.actor as? Mob
+        ?: evalFail("act(mob): expected a mob, got ${typeName(mob)}")
+    return world.act(m, str(commandLine, "act(command_line)"))
   }
 
   /** The stored key for [key]: the test package's namespace unless it names one. */

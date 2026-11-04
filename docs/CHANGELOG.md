@@ -4,6 +4,11 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Harness mob actions
+
+- Added `w.act(mob, command_line)` to the test harness: it queues a command for a mob, as `ctx.act` does, so a test can
+  have a mob wear an item.
+
 ### Scenario traces
 
 - `gups scenario` prints the `w.trace()` record after the transcript even when the scenario passes, so the rules chains

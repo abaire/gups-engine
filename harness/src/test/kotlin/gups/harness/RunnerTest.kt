@@ -249,6 +249,43 @@ class RunnerTest {
   }
 
   @Test
+  fun `w act queues a command for a mob, and refuses players`() {
+    val files =
+      zone +
+        mapOf(
+          "zones/a/items.star" to
+            """
+              item("amulet", name = "an amulet", wear = "neck", max_vital_deltas = vitals(hp = 5))
+            """,
+          "zones/a/act_test.star" to
+            """
+              def test_mob_wears(t):
+                  w = t.world(seed = 1)
+                  rat = w.spawn(":rat", at = ":start")
+                  w.spawn(":amulet", at = rat)
+                  t.eq(rat.max_hp, 8)
+                  t.true(w.act(rat, "wear amulet"))
+                  w.run(pulses = 4)
+                  t.eq(rat.equipped("neck").label, "//zones/a:amulet")
+                  t.eq(rat.max_hp, 13)
+
+              def test_player_refused(t):
+                  w = t.world()
+                  p = w.spawn_player("Pat", at = ":start")
+                  w.act(p, "north")
+            """,
+        )
+    val r = run(files, "//zones/a").results.associateBy { it.name }
+    assertEquals(
+      Status.PASS,
+      r.getValue("test_mob_wears").status,
+      r.getValue("test_mob_wears").render(),
+    )
+    assertEquals(Status.ERROR, r.getValue("test_player_refused").status)
+    assertContains(r.getValue("test_player_refused").message!!, "act(mob): expected a mob")
+  }
+
+  @Test
   fun `a harness test drives each of the four w verbs and checks the level and XP`() {
     val autoFiles =
       zone +
