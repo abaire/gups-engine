@@ -88,6 +88,17 @@ at once. Nothing hides players or models stealth. **Question:** is sneaking or i
 `aggressive` take a chance or a delay? Also, should we support "unless_level_below" and more complex player targeting
 like `attack_healers_first`?
 
+### Target preference for aggressive mobs
+
+**Spec:** §4.7 `aggressive(toward, ...)`. **Today:** an aggressive mob attacks the lowest-id actor that matches `toward`
+and passes its level and perception checks. The engine has no notion of a role such as healer, and `ActorFilter` matches
+only `players`, `mobs`, `all` and label patterns. **Questions:** - Should `aggressive` (or `assist`) take a preference,
+such as `prefer=...`, that orders candidates by something other than id? - If so, what does it match on: plugin traits,
+tags, a role model, or built-in orderings such as `weakest` and `strongest`? - Is the preference data with value
+equality (behaviors are compared by the version-bump lint, §7.3), or can it be a script function? - How does it relate
+to a hate list and factions ("Hostility and factions"), which would also change whom a mob prefers? - Should an
+aggressive mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
+
 ## Items
 
 ### Corpses and looting
