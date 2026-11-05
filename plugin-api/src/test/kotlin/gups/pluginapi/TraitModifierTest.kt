@@ -1,19 +1,30 @@
 package gups.pluginapi
 
+import gups.core.CapturingSink
+import gups.core.Label
+import gups.core.SessionId
+import gups.core.WorldControlEvent
 import gups.core.model.Band
 import gups.core.model.DamageType
 import gups.core.model.Player
+import gups.core.model.SkillProto
+import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 import gups.core.world.World
 import gups.core.world.advanceLagOf
+import gups.core.world.attach
+import gups.core.world.handle
 import gups.core.world.regenOf
 import gups.core.world.resolveDamage
 import gups.core.world.retreatLagOf
+import gups.core.world.submit
 import gups.core.world.toHitChain
 import gups.pluginapi.host.traitAdapter
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TraitModifierTest {
@@ -21,7 +32,7 @@ class TraitModifierTest {
 
   private fun player(vararg traits: PluginTrait): Player {
     w.traits = traits.associate { it.name to traitAdapter("heritage", it) }
-    val p = w.spawnPlayer("Ann", gups.core.Label("//zones/z:a"))
+    val p = w.spawnPlayer("Ann", Label("//zones/z:a"))
     p.grantedTraits = traits.map { it.name }.toSet()
     p.recomputeTraits(w)
     return p
@@ -118,7 +129,7 @@ class TraitModifierTest {
             mapOf(PluginModifierPoint.RETREAT_LAG to PluginModifier { _, _ -> "not_a_long" }),
         ),
       )
-    val other = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val other = w.spawnMob(Label("//zones/z:wolf"), p.room)
     val ctx = RulesContext(w, p, other, band = Band.NEAR)
     val baseAdvance = w.rules.advanceLag(ctx)
     val lag = w.advanceLagOf(ctx)
@@ -146,7 +157,7 @@ class TraitModifierTest {
             ),
         )
       )
-    val other = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val other = w.spawnMob(Label("//zones/z:wolf"), p.room)
     val lines = mutableListOf<String>()
     w.onRules = { _, line -> lines += line }
     assertEquals(0, w.advanceLagOf(RulesContext(w, p, other, band = Band.NEAR)))
@@ -176,8 +187,8 @@ class TraitModifierTest {
             ),
           )
       )
-    val p = w.spawnPlayer("Ann", gups.core.Label("//zones/z:a"))
-    val wolf = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val p = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), p.room)
     wolf.grantedTraits = setOf("parry")
     wolf.recomputeTraits(w)
     val base = w.rules.toHit(RulesContext(w, p, wolf))
@@ -209,8 +220,8 @@ class TraitModifierTest {
             ),
           )
       )
-    val p = w.spawnPlayer("Ann", gups.core.Label("//zones/z:a"))
-    val wolf = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val p = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), p.room)
     wolf.grantedTraits = setOf("siphon")
     wolf.recomputeTraits(w)
     val hit = w.resolveDamage(RulesContext(w, p, wolf), 5, DamageType("slash"))
@@ -236,8 +247,8 @@ class TraitModifierTest {
             ),
           )
       )
-    val p = w.spawnPlayer("Ann", gups.core.Label("//zones/z:a"))
-    val wolf = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val p = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), p.room)
     wolf.grantedTraits = setOf("bad_siphon")
     wolf.recomputeTraits(w)
     val hit = w.resolveDamage(RulesContext(w, p, wolf), 5, DamageType("slash"))
@@ -265,9 +276,86 @@ class TraitModifierTest {
             ),
         )
       )
-    val wolf = w.spawnMob(gups.core.Label("//zones/z:wolf"), p.room)
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), p.room)
     w.toHitChain(RulesContext(w, p, wolf))
     assertEquals(p.name, seenActor, "an attacker point still runs on the attacker")
     assertEquals(wolf.name, seenOther)
+  }
+
+  private val zap = SkillProto(Label("//zones/z:zap"), kind = "spell", target = TargetKind.ENEMY)
+
+  @Test
+  fun `a to_hit trait modifier sees the spell, and no skill for a swing`() {
+    val seen = mutableListOf<PluginSkill?>()
+    val p =
+      player(
+        PluginTrait(
+          "focus",
+          modifiers =
+            mapOf(
+              PluginModifierPoint.TO_HIT to
+                PluginModifier { call, base ->
+                  seen += call.skill
+                  (base as Long) + 10L
+                }
+            ),
+        )
+      )
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), p.room)
+    val r = w.toHitChain(RulesContext(w, p, wolf, skill = zap))
+    w.toHitChain(RulesContext(w, p, wolf, slot = "wield"))
+    assertEquals(2, seen.size)
+    assertEquals("zap", assertNotNull(seen[0]).name)
+    assertEquals("spell", seen[0]?.kind)
+    assertNull(seen[1], "a swing has no skill")
+    assertContains(r.text, "trait:focus")
+  }
+
+  @Test
+  fun `a defend_hit trait modifier that refuses spells makes its bearer resist a cast`() {
+    val files =
+      ZONE +
+        ("zones/z/skills.star" to
+          """
+            skill("charm", kind = "spell", target = "enemy", effect = damage(dice = "1d4"))
+          """)
+    val w = world(files)
+    val seen = mutableListOf<PluginSkill?>()
+    w.traits =
+      mapOf(
+        "fey" to
+          traitAdapter(
+            "heritage",
+            PluginTrait(
+              "fey",
+              modifiers =
+                mapOf(
+                  PluginModifierPoint.DEFEND_HIT to
+                    PluginModifier { call, base ->
+                      seen += call.skill
+                      if (call.skill?.kind == "spell") 0L else base
+                    }
+                ),
+            ),
+          )
+      )
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    ann.skills[Label("//zones/z:charm")] = 100
+    val wolf = w.spawnMob(Label("//zones/z:wolf"), ann.room)
+    wolf.grantedTraits = setOf("fey")
+    wolf.recomputeTraits(w)
+    val hp = wolf.current("hp")
+    val sink = CapturingSink()
+    w.handle(WorldControlEvent.Connect(SessionId(1), sink))
+    w.attach(SessionId(1), ann)
+    val trace = mutableListOf<String>()
+    w.onRules = { _, line -> trace += line }
+
+    w.submit(ann, "cast charm wolf")
+    w.runPulse()
+    assertEquals(hp, wolf.current("hp"), "the charmed wolf took no damage")
+    assertContains(sink.drain(), "A wolf resists your charm.")
+    assertTrue(trace.any { "trait:fey 0" in it && it.endsWith("RESIST") }, "$trace")
+    assertEquals("charm", assertNotNull(seen.single()).name)
   }
 }

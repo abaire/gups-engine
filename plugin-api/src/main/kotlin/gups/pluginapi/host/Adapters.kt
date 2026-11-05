@@ -126,6 +126,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               other = opponent?.let { ActorFacade(it, w) },
               weapon = c.weapon?.let { ItemFacade(it, w) },
               room = RoomFacade(bearer.room, w),
+              skill = c.skill?.let { SkillFacade(it) },
             )
           fun refuse(why: String): Any {
             w.record(

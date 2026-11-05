@@ -51,4 +51,36 @@ class TestWorldsTest {
     assertTrue("_PHYSICAL = " in rules, "the template's constants stay: $rules")
     assertTrue("_BONUS = 1" in rules, "the override's constants are added: $rules")
   }
+
+  @Test
+  fun `rules contains spell_hit override returning 100`() {
+    assertTrue("def _spell_hit(ctx):\n    return 100" in TestWorlds.rules())
+  }
+
+  @Test
+  fun `copyWorld rewrites spell_hit by default and preserves it when false`() {
+    val from = tmp.resolve("template_with_rules")
+    from.resolve("rules").createDirectories()
+    from
+      .resolve("rules/combat.star")
+      .writeText(
+        """
+        def _spell_hit(ctx):
+            return 70 + (ctx.attacker.int - ctx.defender.wis) * 2
+
+        def to_hit(ctx):
+            return 50
+        """
+          .trimIndent()
+      )
+
+    val to1 = TestWorlds.copyWorld(from, tmp.resolve("copy1"))
+    val combatStar1 = to1.resolve("rules/combat.star").readText()
+    assertTrue("def _spell_hit(ctx):\n    return 100" in combatStar1)
+    assertFalse("ctx.attacker.int - ctx.defender.wis" in combatStar1)
+
+    val to2 = TestWorlds.copyWorld(from, tmp.resolve("copy2"), spellsAlwaysLand = false)
+    val combatStar2 = to2.resolve("rules/combat.star").readText()
+    assertTrue("ctx.attacker.int - ctx.defender.wis" in combatStar2)
+  }
 }

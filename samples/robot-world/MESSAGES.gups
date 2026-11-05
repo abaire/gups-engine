@@ -16,6 +16,9 @@ messages({
     "cast.done.victim": "{actor} invokes {skill} at you!",
     "cast.room.self": "{actor} invokes {skill}.",
     "cast.room.target": "{actor} invokes {skill} at {target}.",
+    "cast.resisted.self": "{target} shrugs off your {skill}.",
+    "cast.resisted.target": "You shrug off {actor}'s {skill}.",
+    "cast.resisted.room": "{target} shrugs off {actor}'s {skill}.",
     "cast.interrupted": "Your routine is interrupted!",
     "stop.cast": "You abort the routine.",
 

@@ -142,6 +142,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   }
 
   override fun toHit(c: RulesContext): Int {
+    if (c.skill != null) return 100
     val a = c.attacker
     val d = c.defender
     return (60 + (a.stat(fs.agility) - d.stat(fs.agility)) * 2 + (a.level - d.level) * 3).coerceIn(

@@ -4,6 +4,23 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Spells that miss
+
+- Script API entries can be owned by several features, either any of them or all of them. `api.json` writes `features`
+  and `features_mode` for such entries instead of `feature`.
+- `to_hit` (the export) and the `to_hit` and `defend_hit` modifier points now belong to `combat` or `skills`. A world
+  with `skills` and without `combat` must define `to_hit`, and the dry run calls it with a synthetic skill whenever
+  `skills` is on.
+- Enemy spells can miss. An `enemy` skill rolls `to_hit` (with `ctx.skill` set and no weapon or slot), the caster's
+  `to_hit` chain and the victim's `defend_hit` chain, once per victim. A victim it doesn't land on gets neither the
+  effect nor `resolve`, but the cost, lag and engagement still happen. A chance of 100 or more lands without a roll.
+  `@trace rules` ends the line with `LAND`, `RESIST` or `auto LAND`.
+- Added the messages `cast.resisted.self`, `cast.resisted.target` and `cast.resisted.room`.
+- `PluginModifierCall` has `skill`, the skill being cast when the rules call has one, so a trait modifier can tell a
+  spell from a swing.
+- The template's `to_hit` has a spell branch (`_spell_hit`: `int` against `wis`, and `area` spells always land), and the
+  robot world's routines are resisted by `grit`.
+
 ### Combat procs
 
 - Auto-attack swings fire procs: the attacker's `hit` procs after a landed hit, then the defender's `struck` procs; the

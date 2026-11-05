@@ -774,7 +774,7 @@ as leaving it out.
 |      Feature       |                                                                                                                                                                                                                                                                                                                                                     Owns                                                                                                                                                                                                                                                                                                                                                     | Requires |
 |--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect` and `remove_affect` verbs), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `to_hit`, `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; the `defend_hit` modifier point; `before_attack`, `on_combat_tick`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                    | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist` and `flee` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                               | —        |
 | `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                               | `combat` |
 | `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, `act_cast`, `casting` in `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                                    | —        |
 | `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`                                                                                                                                                                                                                                                                                                                                                                                                               | —        |
@@ -788,6 +788,11 @@ as leaving it out.
   - Its GMCP packages and fields aren't sent.
   - Scripts can test for a feature with `ctx.has_feature(name)` (§4.5), so a library can serve worlds with and without
     it.
+- **Shared ownership:** a few entries belong to more than one feature. The `to_hit` export and the `to_hit` and
+  `defend_hit` modifier points belong to `combat` or `skills`, because auto-attacks and enemy spells both roll them.
+  Such an entry exists while any one of its features is on. An entry can instead need all of its features, and then
+  exists only while every one is on. A refusal names them, for example "`to_hit` needs the `combat` or `skills`
+  feature".
 - **Without `track`,** every room has one track slot and every actor and item sits at index 0, so combat, movement and
   items keep one code path; nothing shows bands. `look` lists them as `Also here: …` and `On the ground: …`. A skill's
   `range` may be omitted (any one target in the room), `self` or `room`. The rules `ctx.band` is `None`, and `get` costs
@@ -1034,8 +1039,14 @@ validation with "You don't have enough <label>." (§4.18).
   the cast hooks, the item is `ctx.target`.
 - The target is chosen at the first validation and stays fixed through the warmup.
 
-**Proficiency** is stored but not rolled against: the rules have no proficiency input yet. Rules functions can read it
-from `ctx.actor.skills`.
+**Landing:** an `enemy` skill rolls to land on each actor it reaches other than the caster, one roll per victim for a
+`room`-range skill. The chance is `rules.to_hit` with `ctx.skill` set, then the caster's `to_hit` chain, then the
+victim's `defend_hit` chain (§4.6). A chance of 100 or more lands without a roll. A victim it doesn't land on resists:
+that victim gets neither the `effect` nor `resolve`, and the caster, the victim and the room are told. The cost and lag
+are paid either way, and the victim is still engaged (§5.4). `ally`, `self`, `item` and `none` skills always land.
+
+**Proficiency** is stored but not rolled against by the engine. Rules functions can read it from `ctx.actor.skills`, for
+example in `to_hit` when `ctx.skill` is set.
 
 **Effect primitives (v0):**
 
@@ -1310,44 +1321,46 @@ silently ignored; helpers take a `_` prefix.
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the other actor, if any: the
 defender, the pinner, the killed or the killer, or the actor advanced on or retreated from), `weapon`, `item`, `band` (a
 word in the calls that set one, such as `get_lag` and the track lag exports; otherwise `None`, and always `None` without
-the `track` feature), `skill`, `room` (the actor's, or the room the call is about), `damage_type` (the damage type as a
-string in auto-attack `to_hit` and `damage` calls, `damage`, `bonus_damage`, `receive_damage` and `mitigate` chains and
-`mitigate`, otherwise `None`), `slot` (the slot of the swinging item in an auto-attack swing, `"wield"` for an unarmed
-swing, otherwise `None`), `pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its modifiers.
-It has no verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
+the `track` feature), `skill` (the skill being cast or evaluated; in `to_hit` and `defend_hit` it is set only for an
+enemy spell's roll, where `weapon`, `slot` and `damage_type` are `None`), `room` (the actor's, or the room the call is
+about), `damage_type` (the damage type as a string in auto-attack `to_hit` and `damage` calls, `damage`, `bonus_damage`,
+`receive_damage` and `mitigate` chains and `mitigate`, otherwise `None`), `slot` (the slot of the swinging item in an
+auto-attack swing, `"wield"` for an unarmed swing, otherwise `None`), `pulse`, `rng`, `roll(dice)`, and `deny(msg)`,
+valid only in `cast_allowed` and its modifiers. It has no verbs. Its actor views have the schema fields of §4.5, and
+`choices`, `traits` and `has_trait` (§4.19).
 
-|                   Function                    |  Feature   |                                                                                                   Returns                                                                                                    |
-|-----------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `equipment_slots()`                           | kernel     | `list[str]`, the equipment slots.                                                                                                                                                                            |
-| `slot_families()`                             | kernel     | `dict[str, list[str]]`, slot families: a family name to its ordered concrete slots.                                                                                                                          |
-| `actor_slots(ctx)`                            | kernel     | `list[str]`, the slots `ctx.actor` has, a subset of `equipment_slots()`.                                                                                                                                     |
-| `slot_cost(ctx)`                              | kernel     | `int >= 1`, how many slots of its family `ctx.item` takes up when `ctx.actor` wears it.                                                                                                                      |
-| `starting_stats(ctx)`                         | kernel     | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
-| `condition(ctx)`                              | kernel     | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
-| `mitigate(ctx, amount, type)`                 | kernel     | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
-| `move_cost(ctx)`                              | kernel     | `vitals(...)`, what a room transition spends.                                                                                                                                                                |
-| `regen(ctx)`                                  | kernel     | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                      |
-| `carry_limit(ctx)`                            | kernel     | Weight.                                                                                                                                                                                                      |
-| `encumbrance(ctx)`                            | kernel     | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
-| `on_player_death(ctx)`                        | kernel     | `{"respawn": label, "vitals": vitals(...), "xp_loss": int, "level_loss": int}`                                                                                                                               |
-| `to_hit(ctx)`                                 | `combat`   | Hit chance in percent. `ctx.attacker`, `defender`, `weapon`, `band`, `skill`, `damage_type`, `slot`.                                                                                                         |
-| `damage(ctx)`                                 | `combat`   | Raw auto-attack damage, an int; every auto-attack and `damage(...)` effect then runs the `damage` modifier chain.                                                                                            |
-| `initiative(ctx)`                             | `combat`   | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
-| `flee_chance(ctx)`                            | `combat`   | Percent.                                                                                                                                                                                                     |
-| `retreat_check(ctx)`                          | `track`    | Success chance in percent, used when pinned.                                                                                                                                                                 |
-| `get_lag(ctx, band)`                          | `track`    | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                                                        |
-| `advance_lag(ctx)`                            | `track`    | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                                                         |
-| `retreat_lag(ctx)`                            | `track`    | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                                                                |
-| `retreat_fail_lag(ctx)`                       | `track`    | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                                                            |
-| `flee_fail_lag(ctx)`                          | `combat`   | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                                                     |
-| `cast_allowed(ctx)`                           | `skills`   | `None` or `deny(msg)`.                                                                                                                                                                                       |
-| `interrupt_check(ctx, amount)`                | `skills`   | Whether a casting actor is interrupted, a bool.                                                                                                                                                              |
-| `sense_cost(ctx)`                             | kernel     | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                         |
-| `can_perceive(ctx)`                           | kernel     | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                 |
-| `perceive_message(ctx)`                       | kernel     | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel. |
-| `door_intensity(ctx)`                         | kernel     | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                            |
-| `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` | `leveling` | Ints.                                                                                                                                                                                                        |
-| `on_level_up(ctx)`                            | `leveling` | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                             |
+|                   Function                    |       Feature        |                                                                                                   Returns                                                                                                    |
+|-----------------------------------------------|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `equipment_slots()`                           | kernel               | `list[str]`, the equipment slots.                                                                                                                                                                            |
+| `slot_families()`                             | kernel               | `dict[str, list[str]]`, slot families: a family name to its ordered concrete slots.                                                                                                                          |
+| `actor_slots(ctx)`                            | kernel               | `list[str]`, the slots `ctx.actor` has, a subset of `equipment_slots()`.                                                                                                                                     |
+| `slot_cost(ctx)`                              | kernel               | `int >= 1`, how many slots of its family `ctx.item` takes up when `ctx.actor` wears it.                                                                                                                      |
+| `starting_stats(ctx)`                         | kernel               | `struct(stats = stats(...), max = vitals(...), current = vitals(...), senses = {...})`, every field optional. Base numbers for a new character (after its choices, §4.19) or a spawned mob.                  |
+| `condition(ctx)`                              | kernel               | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                       |
+| `mitigate(ctx, amount, type)`                 | kernel               | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                       |
+| `move_cost(ctx)`                              | kernel               | `vitals(...)`, what a room transition spends.                                                                                                                                                                |
+| `regen(ctx)`                                  | kernel               | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                      |
+| `carry_limit(ctx)`                            | kernel               | Weight.                                                                                                                                                                                                      |
+| `encumbrance(ctx)`                            | kernel               | `stats(...)`, deltas applied while over the limit.                                                                                                                                                           |
+| `on_player_death(ctx)`                        | kernel               | `{"respawn": label, "vitals": vitals(...), "xp_loss": int, "level_loss": int}`                                                                                                                               |
+| `to_hit(ctx)`                                 | `combat` or `skills` | Hit chance in percent, for an auto-attack swing or an enemy spell (§4.3). `ctx.attacker`, `defender`, `weapon`, `band`, `skill`, `damage_type`, `slot`.                                                      |
+| `damage(ctx)`                                 | `combat`             | Raw auto-attack damage, an int; every auto-attack and `damage(...)` effect then runs the `damage` modifier chain.                                                                                            |
+| `initiative(ctx)`                             | `combat`             | Int; higher acts first within a combat round (§5.4.1). `ctx.actor`, `ctx.rng`.                                                                                                                               |
+| `flee_chance(ctx)`                            | `combat`             | Percent.                                                                                                                                                                                                     |
+| `retreat_check(ctx)`                          | `track`              | Success chance in percent, used when pinned.                                                                                                                                                                 |
+| `get_lag(ctx, band)`                          | `track`              | Extra lag for picking up an item at a band. `None` means not allowed.                                                                                                                                        |
+| `advance_lag(ctx)`                            | `track`              | Recovery lag in pulses after `advance`. `ctx.target` is the actor approached; `ctx.band` is the band after the step.                                                                                         |
+| `retreat_lag(ctx)`                            | `track`              | Recovery lag after a successful `retreat`. `ctx.target` is the threat; `ctx.band` is the band after the step.                                                                                                |
+| `retreat_fail_lag(ctx)`                       | `track`              | Recovery lag after a failed `retreat_check`. `ctx.target` is the pinner; `ctx.band` is `"melee"`.                                                                                                            |
+| `flee_fail_lag(ctx)`                          | `combat`             | Recovery lag after a failed `flee`, whether the roll failed or the exit refused. `ctx.target` and `ctx.band` are `None`.                                                                                     |
+| `cast_allowed(ctx)`                           | `skills`             | `None` or `deny(msg)`.                                                                                                                                                                                       |
+| `interrupt_check(ctx, amount)`                | `skills`             | Whether a casting actor is interrupted, a bool.                                                                                                                                                              |
+| `sense_cost(ctx)`                             | kernel               | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                         |
+| `can_perceive(ctx)`                           | kernel               | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                 |
+| `perceive_message(ctx)`                       | kernel               | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel. |
+| `door_intensity(ctx)`                         | kernel               | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                            |
+| `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` | `leveling`           | Ints.                                                                                                                                                                                                        |
+| `on_level_up(ctx)`                            | `leveling`           | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                             |
 
 **Perception exports** (§5.7): the perception calls get a `ctx` about a listener or a room rather than a fighter.
 
@@ -1432,12 +1445,13 @@ its rules above are checked; `actor_slots` runs for each synthetic actor and mus
 `equipment_slots()`; `slot_cost` runs for each synthetic actor against one item of each item prototype that has `wear`,
 stopping at the first failure. The actors live in a throwaway world with one room: two players and one mob per loaded
 mob prototype. Each actor is called against another (the first player against the second, everyone else against the
-first player), unarmed. `get_lag` runs once per band, the three track lag exports see the pair's other actor as
-`ctx.target` at band `melee`, `flee_fail_lag` sees no target, and `cast_allowed` and `interrupt_check` get a synthetic
-skill with `interrupt = {"damage_pct": 10}`. The room has a north exit back to itself with a closed door. For every
-channel, `sense_cost` sees that exit, and `can_perceive` and `perceive_message` are each called once as an event in the
-actor's own room and once as one carried in through the north exit at cost 1, with no source room. `door_intensity` is
-called for each of `open`, `close`, `lock` and `unlock`, with and without a tag. With a creation provider (§4.19),
+first player), unarmed. With `skills` on, `to_hit` is also called once per pair with the synthetic skill, as for an
+enemy spell. `get_lag` runs once per band, the three track lag exports see the pair's other actor as `ctx.target` at
+band `melee`, `flee_fail_lag` sees no target, and `cast_allowed` and `interrupt_check` get a synthetic skill with
+`interrupt = {"damage_pct": 10}`. The room has a north exit back to itself with a closed door. For every channel,
+`sense_cost` sees that exit, and `can_perceive` and `perceive_message` are each called once as an event in the actor's
+own room and once as one carried in through the north exit at cost 1, with no source room. `door_intensity` is called
+for each of `open`, `close`, `lock` and `unlock`, with and without a tag. With a creation provider (§4.19),
 `starting_stats` also runs for one synthetic player per option of each choice. Its answers are built in choice order:
 that option for its own choice, and the first available option for every other. An option that isn't available on that
 path, or whose path the provider fails on, is skipped. A mob whose own package failed to load isn't checked. Only the
@@ -1457,20 +1471,20 @@ with `api_version`. `get_lag` is not a modifier point. The `mitigate` modifier p
 result; it is not a second export. Modifiers of `move_cost`, `regen` and `mitigate` take and return `vitals(...)`
 values; modifiers of `bonus_damage` take and return `damages(...)` values; modifiers of the four lag points take and
 return pulses as ints, and may go below 0 along the chain, but the chain's final value is clamped to 0. Modifier points
-of a feature that is off can't be named: the lag points belong to the feature of the export of the same name. The
-`damage`, `bonus_damage`, `receive_damage` and `mitigate` points are the exception: they belong to the kernel, because
-the `damage(...)` effect primitive runs their chains with any features, while the `damage` export belongs to `combat`.
-Without `combat`, these chains run only for the effect primitive, so `ctx.weapon`, `ctx.slot` and `ctx.band` are `None`
-in them.
+of a feature that is off can't be named: the lag points belong to the feature of the export of the same name. `to_hit`
+and `defend_hit` belong to `combat` or `skills`. The `damage`, `bonus_damage`, `receive_damage` and `mitigate` points
+are the exception: they belong to the kernel, because the `damage(...)` effect primitive runs their chains with any
+features, while the `damage` export belongs to `combat`. Without `combat`, these chains run only for the effect
+primitive, so `ctx.weapon`, `ctx.slot` and `ctx.band` are `None` in them.
 
-**Whose chain:** the attacker's for `to_hit`, `damage` and `bonus_damage` (the caster is the attacker for spell damage),
-the caster's for `cast_allowed`, the mover's for `move_cost` (from the room being left), and the actor's own for
-`regen`, `initiative` and the four lag points (the actor that advanced, retreated or failed to flee). The defender's for
-`defend_hit`, `receive_damage` and `mitigate` (the target of a `damage(...)` effect is the defender; the caster is the
-attacker): these points run the chain of the actor being hit, with zone, regions and room those of that actor's room.
-The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.actor` are still the attacker, and
-`ctx.defender` is the actor whose modifiers run. "Zone" means the package of that actor's room, and the regions and room
-are those of that room too.
+**Whose chain:** the attacker's for `to_hit`, `damage` and `bonus_damage` (the caster is the attacker for an enemy
+spell's roll and for spell damage), the caster's for `cast_allowed`, the mover's for `move_cost` (from the room being
+left), and the actor's own for `regen`, `initiative` and the four lag points (the actor that advanced, retreated or
+failed to flee). The defender's for `defend_hit`, `receive_damage` and `mitigate` (the target of a `damage(...)` effect
+is the defender; the caster is the attacker): these points run the chain of the actor being hit, with zone, regions and
+room those of that actor's room. The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.actor`
+are still the attacker, and `ctx.defender` is the actor whose modifiers run. "Zone" means the package of that actor's
+room, and the regions and room are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
 room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
@@ -1483,12 +1497,13 @@ refuses casts (§4.19).
 
 **Attack and defense:** an auto-attack's hit chance is the `to_hit` export, then the attacker's `to_hit` chain, then the
 defender's `defend_hit` chain, which takes the attacker's result as its base; the swing rolls against the final value.
-Spells have no to-hit roll and run no `defend_hit` chain. The damage of a hit or of a `damage(...)` effect is the raw
-amount (the `damage` export, or the effect's dice), then the attacker's `damage` chain, then the defender's
-`receive_damage` chain; a negative result counts as 0. `mitigate` turns that amount into vital losses, the defender's
-`mitigate` chain adjusts them, and the result, with any bonus parts (below), is applied. A `receive_damage` modifier
-changes the blow before armor and resists; a `mitigate` modifier changes what it costs, for example moving part of an
-`hp` loss to `mana` or turning it into a gain. The raw `ctx.damage` verb runs none of these chains.
+An `enemy` spell rolls the same way against each victim, with `ctx.skill` set and no weapon or slot. A chance of 100 or
+more lands without a roll (§4.3). The damage of a hit or of a `damage(...)` effect is the raw amount (the `damage`
+export, or the effect's dice), then the attacker's `damage` chain, then the defender's `receive_damage` chain; a
+negative result counts as 0. `mitigate` turns that amount into vital losses, the defender's `mitigate` chain adjusts
+them, and the result, with any bonus parts (below), is applied. A `receive_damage` modifier changes the blow before
+armor and resists; a `mitigate` modifier changes what it costs, for example moving part of an `hp` loss to `mana` or
+turning it into a gain. The raw `ctx.damage` verb runs none of these chains.
 
 **Bonus damage:** after the primary amount is mitigated, the attacker's `bonus_damage` chain runs on `damages()` (there
 is no export) with `ctx.damage_type` the hit's type, and each modifier adds parts, as in `return base + damages(fire =
@@ -1534,7 +1549,8 @@ example `rules.damage base=6 → defender:receive_damage → item:ward 1 → mit
 item:siphon {hp 1, mana -1}`. Bonus parts continue the same line: ` → bonus_damage` and the attacker's steps, then ` →
 part <type> <amount>` and that part's defender and `mitigate` steps, for example `rules.damage base=6 → mitigate hp 4
 slash → bonus_damage → item:flaming_sword damages(fire = 2) → part fire 2 → mitigate hp 2 fire`; the segment is left out
-when the attacker has no `bonus_damage` modifier.
+when the attacker has no `bonus_damage` modifier. A spell's roll ends in `LAND` or `RESIST`, or in `→ auto LAND` when
+the chance is 100 or more.
 
 **Encumbrance:** `rules.encumbrance` applies while the carried and worn weight exceeds `rules.carry_limit` (computed
 without the current encumbrance). It is recomputed when an actor's custody changes (spawn, move, destroy) and at every
@@ -2346,7 +2362,9 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, custom hook
   handlers, or `onWorldStarted` hooks are caught and logged as `plugin` diagnostics while world execution continues.
 - **Traits (`addTrait`):** Declares permanent bundles of stat, max vital, resist, and sense deltas, flags, and modifier
-  chain functions (§4.19). Unique across all plugins.
+  chain functions (§4.19). A modifier call receives the world, point, actor, other, weapon and room, and `skill`, the
+  skill being cast (a `PluginSkill`) when the rules call has one: an enemy spell's `to_hit` and `defend_hit`, and a
+  spell's `damage`, `receive_damage` and `mitigate` chains; otherwise null. Unique across all plugins.
 - **Creation (`setCreation`):** Configures character creation choices, options, availability rules, validation, start
   room selection, and initial setup (`created`) (§4.19). At most one plugin per world may set creation.
 - **Restrictions (`addRestriction`):** Intercepts actions at `WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`,
@@ -2589,6 +2607,9 @@ mechanics ("You begin casting" becomes "Your implant spins up").
   - Leveling entries include `leveling.level_down` (`"You have fallen to level {level}."`, placeholders `level`,
     `count`), `leveling.ready` (`"You feel ready to advance."`, no placeholders) and `leveling.score_ready` (`"You are
     ready to advance."`, no placeholders).
+  - Cast resistance entries include `cast.resisted.self` (`"{target} resists your {skill}."`, placeholders `target`,
+    `skill`), `cast.resisted.target` (`"You resist {actor}'s {skill}."`, placeholders `actor`, `skill`), and
+    `cast.resisted.room` (`"{target} resists {actor}'s {skill}."`, placeholders `target`, `actor`, `skill`).
 - **Coverage:** every message to players and onlookers from the engine and its features: command replies and refusals,
   combat, cast and condition messages, `look`, `score`, `who` and `help` framing, and login and character-menu text.
   Output of `@` tools isn't in the catalog; staff see engine terms.
@@ -2678,12 +2699,13 @@ no traits and no restrictions, and players see nothing new.
     effective value.
   - **Flags:** A trait's flags are the actor's flags while it carries the trait, as an untimed affect's would be
     (`has_flag`, `silenced`, `no_regen`). `stunned` can't be a trait flag.
-  - **Modifiers:** At the `to_hit`, `defend_hit` and `initiative` points (`combat` feature) and `damage`,
-    `bonus_damage`, `receive_damage`, `mitigate`, `move_cost` and `regen`. The `bonus_damage` point's value is a map
-    from damage type to amount. On `defend_hit`, `receive_damage` and `mitigate` the trait's bearer is the defender: the
-    plugin call's `actor` is the defender and `other` the attacker. They join the chain after the room's modifiers and
-    before the actor's affects (§4.6), and `@trace` shows them as `trait:<name>`. Like a script modifier, one that fails
-    or returns the wrong type leaves the value as it was; the failure is a `plugin` diagnostic.
+  - **Modifiers:** At the `to_hit` and `defend_hit` points (`combat` or `skills` feature), `initiative` (`combat`) and
+    `damage`, `bonus_damage`, `receive_damage`, `mitigate`, `move_cost` and `regen`. The `bonus_damage` point's value is
+    a map from damage type to amount. On `defend_hit`, `receive_damage` and `mitigate` the trait's bearer is the
+    defender: the plugin call's `actor` is the defender and `other` the attacker. The call's `skill` is set for a
+    spell's roll and damage (§4.15). They join the chain after the room's modifiers and before the actor's affects
+    (§4.6), and `@trace` shows them as `trait:<name>`. Like a script modifier, one that fails or returns the wrong type
+    leaves the value as it was; the failure is a `plugin` diagnostic.
   - **Schema names:** Stats, vitals, and damage types named in a trait are checked when the plugin registers it (§4.15).
 
 **Restrictions** are checks that plugins register at eight points. Each gets the actor and what it is about to do, and
@@ -2888,7 +2910,8 @@ For each popped action:
 - Pay the cost.
 - For casts, everyone else in the room except the target sees "<caster> casts <skill>.", with " at <target>" or " on
   <item>" when there is one. Instant casts are seen too.
-- Apply the `effect`, or call `resolve(ctx)`. All mutations go through verbs.
+- Apply the `effect`, or call `resolve(ctx)`. For an `enemy` skill, each victim first rolls to land (§4.3); a victim
+  that resists gets neither. All mutations go through verbs.
 - Fire the `on_*` hooks (`on_cast`, `on_damage`, …).
 
 6. **Recovery:** Set `waitState = max(waitState, lag)`, so recovery never shortens existing lag. No lag is applied if
@@ -2906,11 +2929,12 @@ and work with or without it (§3.10). Combat resolution is implemented in
 [Leveling.kt](../core/src/main/kotlin/gups/core/world/Leveling.kt).
 
 - **Engagement:**
-  - Combat starts through `kill`/`attack`, `aggressive`/`assist` behaviors, a hostile skill landing, or
-    `ctx.start_combat`.
-  - A skill is hostile when it lands on an actor other than the caster and either its `target` is `enemy` (including a
-    `room`-range skill hitting each actor in the room), whatever its effects, or it applies a `damage`, `stun`,
-    `knockback` or `pull` primitive (§4.3). Those primitives engage the same way wherever they are applied from.
+  - Combat starts through `kill`/`attack`, `aggressive`/`assist` behaviors, a hostile skill cast at it (an `enemy` skill
+    engages its victim whether or not it lands), or `ctx.start_combat`.
+  - A skill is hostile toward an actor other than the caster when its `target` is `enemy` and it is cast at that actor
+    (including each actor in the room for a `room`-range skill), whether or not it lands and whatever its effects. A
+    `damage`, `stun`, `knockback` or `pull` primitive that lands on an actor other than the caster is hostile too
+    (§4.3). Those primitives engage the same way wherever they are applied from.
   - It ends on death, on either party leaving the room, on a successful `flee`, or with `ctx.stop_combat`.
   - Engagement is always symmetric. `start_combat` engages both sides and sets each side's primary target if it has
     none. "Hostile", wherever the track rules use it, means an engaged opponent in the same room.
@@ -3879,3 +3903,4 @@ template's `.github/workflows/gates.yml`.
 | **M26**   | Defender-side modifiers: the `defend_hit` (`combat`), `receive_damage` and `mitigate` (kernel) modifier points on the defender's full chain, worn weapons included; negative `mitigate` losses are gains; plugin trait modifiers see their bearer as `actor`; the tutorial's `shadow_cloak` and `siphon_amulet` (§3.10, §4.3, §4.6, §4.19, §5.4).                                                                                                                                                                                             |
 | **M27**   | Typed bonus damage: the kernel `bonus_damage` modifier point on the attacker's chain, `damages(...)` values and `+` on typed values of the kind, the swinging-weapon filter, each bonus part mitigated with its own type and applied with the hit as one damage event, `ctx.parts` in `on_damage`, `BONUS_DAMAGE` plugin trait modifiers, the template's physical-only armor, and the tutorial's `flaming_sword`, `ember_amulet` and `oily_rags`, and test-only `*_testdata.star` fixture files (§3.9, §4.3, §4.4, §4.6, §4.12, §4.19, §5.4). |
 | **M28**   | Combat procs: `proc(...)` and `outcome(...)` with weighted one-of tables; `procs` on `item`, `item_affect` and `apply_affect`; `hit`, `struck` and `avoid` triggers on auto-attack swings, in modifier-chain order with the swinging-weapon filter; skill procs through `cast_allowed` only; the `combat.proc.*` messages; saved instance-affect procs; the tutorial's `ember_dagger`, `bramble_vest` and `cracked_wand` (§3.10, §4.2, §4.3, §4.4, §4.5, §5.4).                                                                               |
+| **M29**   | Whether a spell lands: `enemy` skills roll `to_hit` (with `ctx.skill`), the caster's `to_hit` chain and the victim's `defend_hit` chain per victim, and a resisted victim gets no effect or `resolve`; `cast.resisted.*` messages; `to_hit` and `defend_hit` owned by `combat` or `skills`, with any-of and all-of feature ownership; `PluginModifierCall.skill`; the template's and robot world's spell formulas (§3.10, §4.3, §4.6, §4.15, §5.3, §5.4).                                                                                     |

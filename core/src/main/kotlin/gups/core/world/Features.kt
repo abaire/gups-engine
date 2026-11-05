@@ -41,3 +41,35 @@ class Features(val enabled: Set<Feature>) {
       Features(text.split(',').filter { it.isNotBlank() }.mapNotNull(Feature::byId).toSet())
   }
 }
+
+/**
+ * The features an API entry needs: any one of [features] when [all] is false, every one of them
+ * when it is true. A single-feature requirement is either.
+ */
+data class FeatureRequirement(val features: Set<Feature>, val all: Boolean = false) {
+  init {
+    require(features.isNotEmpty()) { "a feature requirement names at least one feature" }
+  }
+
+  fun satisfiedBy(enabled: Features): Boolean =
+    if (all) features.all { it in enabled } else features.any { it in enabled }
+
+  /** Feature ids in `Feature` declaration order. */
+  val ids: List<String> = Feature.entries.filter { it in features }.map { it.id }
+
+  /** "combat", "combat or skills", "combat and skills" (declaration order). */
+  val text: String = ids.joinToString(if (all) " and " else " or ")
+
+  /** "feature", or "features" when every one of several is needed. */
+  val noun: String = if (all && features.size > 1) "features" else "feature"
+
+  companion object {
+    fun of(feature: Feature): FeatureRequirement = FeatureRequirement(setOf(feature))
+
+    fun anyOf(vararg features: Feature): FeatureRequirement =
+      FeatureRequirement(features.toSet(), all = false)
+
+    fun allOf(vararg features: Feature): FeatureRequirement =
+      FeatureRequirement(features.toSet(), all = true)
+  }
+}

@@ -18,6 +18,7 @@ import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.EntityRef
 import gups.core.world.FastCommand
 import gups.core.world.Feature
+import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.GmcpInput
@@ -167,16 +168,16 @@ internal class HookCall(
   override val result: Any?,
 ) : PluginHookCall
 
-/** The feature a trait modifier point needs; points not listed need none. */
-private val MODIFIER_POINT_FEATURES =
+/** The feature requirement a trait modifier point needs; points not listed need none. */
+private val MODIFIER_POINT_FEATURES: Map<PluginModifierPoint, FeatureRequirement> =
   mapOf(
-    PluginModifierPoint.TO_HIT to Feature.COMBAT,
-    PluginModifierPoint.DEFEND_HIT to Feature.COMBAT,
-    PluginModifierPoint.INITIATIVE to Feature.COMBAT,
-    PluginModifierPoint.FLEE_FAIL_LAG to Feature.COMBAT,
-    PluginModifierPoint.ADVANCE_LAG to Feature.TRACK,
-    PluginModifierPoint.RETREAT_LAG to Feature.TRACK,
-    PluginModifierPoint.RETREAT_FAIL_LAG to Feature.TRACK,
+    PluginModifierPoint.TO_HIT to FeatureRequirement.anyOf(Feature.COMBAT, Feature.SKILLS),
+    PluginModifierPoint.DEFEND_HIT to FeatureRequirement.anyOf(Feature.COMBAT, Feature.SKILLS),
+    PluginModifierPoint.INITIATIVE to FeatureRequirement.of(Feature.COMBAT),
+    PluginModifierPoint.FLEE_FAIL_LAG to FeatureRequirement.of(Feature.COMBAT),
+    PluginModifierPoint.ADVANCE_LAG to FeatureRequirement.of(Feature.TRACK),
+    PluginModifierPoint.RETREAT_LAG to FeatureRequirement.of(Feature.TRACK),
+    PluginModifierPoint.RETREAT_FAIL_LAG to FeatureRequirement.of(Feature.TRACK),
   )
 
 /**
@@ -394,8 +395,8 @@ internal class PluginRegistryImpl(
     require("stunned" !in trait.flags) { "trait '${trait.name}': flags cannot contain 'stunned'" }
     for (p in trait.modifiers.keys) {
       val needed = MODIFIER_POINT_FEATURES[p] ?: continue
-      require(needed in features) {
-        "trait '${trait.name}': modifier point $p needs the ${needed.id} feature"
+      require(needed.satisfiedBy(features)) {
+        "trait '${trait.name}': modifier point $p needs the ${needed.text} ${needed.noun}"
       }
     }
     traits[trait.name] = trait

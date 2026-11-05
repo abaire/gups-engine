@@ -7038,12 +7038,13 @@
       },
       {
         "symbol": "rules:to_hit",
-        "feature": "combat",
+        "features": ["combat", "skills"],
+        "features_mode": "any",
         "name": "to_hit",
         "signature": "to_hit(ctx)",
         "return_type": "int",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
-        "doc": "Hit chance in percent before modifiers.",
+        "doc": "Hit chance in percent before modifiers, for an auto-attack swing or an enemy spell (ctx.skill set, no weapon or slot).",
         "since": 1
       },
       {
@@ -7108,12 +7109,13 @@
       },
       {
         "symbol": "modifier:defend_hit",
-        "feature": "combat",
+        "features": ["combat", "skills"],
+        "features_mode": "any",
         "name": "defend_hit",
         "signature": "fn(ctx, base)",
         "value_type": "int",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
-        "doc": "Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger.",
+        "doc": "Adjusts an auto-attack's or enemy spell's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger or caster.",
         "since": 1
       },
       {
@@ -7194,12 +7196,13 @@
       },
       {
         "symbol": "modifier:to_hit",
-        "feature": "combat",
+        "features": ["combat", "skills"],
+        "features_mode": "any",
         "name": "to_hit",
         "signature": "fn(ctx, base)",
         "value_type": "int",
         "ctx_fields": ["actor", "attacker", "defender", "target", "weapon", "band", "skill", "room", "damage_type", "slot", "pulse", "rng"],
-        "doc": "Adjusts hit chance in percent.",
+        "doc": "Adjusts hit chance in percent, for swings and enemy spells.",
         "since": 1
       }
     ]
@@ -8627,6 +8630,33 @@
       "placeholders": ["target"],
       "required": [],
       "default": "{target} is out of range.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.resisted.room",
+      "feature": "skills",
+      "id": "cast.resisted.room",
+      "placeholders": ["actor", "skill", "target"],
+      "required": ["skill"],
+      "default": "{target} resists {actor}'s {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.resisted.self",
+      "feature": "skills",
+      "id": "cast.resisted.self",
+      "placeholders": ["skill", "target"],
+      "required": ["skill"],
+      "default": "{target} resists your {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.resisted.target",
+      "feature": "skills",
+      "id": "cast.resisted.target",
+      "placeholders": ["actor", "skill"],
+      "required": ["skill"],
+      "default": "You resist {actor}'s {skill}.",
       "since": 1
     },
     {

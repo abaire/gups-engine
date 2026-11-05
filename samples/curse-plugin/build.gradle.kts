@@ -4,6 +4,7 @@ dependencies {
   implementation(project(":plugin-api"))
   testImplementation(project(":core"))
   testImplementation(project(":script"))
+  testImplementation(testFixtures(project(":script")))
   testImplementation(project(":harness"))
   testImplementation(project(":net"))
 }

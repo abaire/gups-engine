@@ -179,7 +179,10 @@ interface RulesEngine {
    */
   fun condition(c: RulesContext): Condition
 
-  /** Calculates the hit probability percentage (1..99) for an attack. */
+  /**
+   * Calculates the hit chance in percent for an auto-attack swing, or for an enemy spell when
+   * `c.skill` is set (then `c.weapon` and `c.slot` are null).
+   */
   fun toHit(c: RulesContext): Int
 
   /** Rolls raw auto-attack damage before damage mitigation. */

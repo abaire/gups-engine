@@ -59,7 +59,13 @@ def condition(ctx):
         return "incapacitated"
     return "ok"
 
+def _spell_hit(ctx):
+    # Routines are resisted by grit.
+    return _clamp(65 + (ctx.attacker.tech - ctx.defender.grit) * 2, 5, 95)
+
 def to_hit(ctx):
+    if ctx.skill:
+        return _spell_hit(ctx)
     a = ctx.attacker
     d = ctx.defender
     return _clamp(55 + (a.agility - d.agility) * 2, 5, 95)

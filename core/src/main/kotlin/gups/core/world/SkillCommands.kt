@@ -31,6 +31,12 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
   val ROOM_SELF = msg("cast.room.self", "{actor} casts {skill}.", "actor,skill", "skill")
   val ROOM_TARGET =
     msg("cast.room.target", "{actor} casts {skill} at {target}.", "actor,skill,target", "skill")
+  val RESISTED_SELF =
+    msg("cast.resisted.self", "{target} resists your {skill}.", "skill,target", "skill")
+  val RESISTED_TARGET =
+    msg("cast.resisted.target", "You resist {actor}'s {skill}.", "actor,skill", "skill")
+  val RESISTED_ROOM =
+    msg("cast.resisted.room", "{target} resists {actor}'s {skill}.", "actor,skill,target", "skill")
   val INTERRUPTED = msg("cast.interrupted", "Your concentration is broken!")
   val STOP_CAST = msg("stop.cast", "You stop casting.")
 }
@@ -228,9 +234,30 @@ internal class CastAction(
     if (onItem != null && onItem.id in w.entities)
       skill.effect?.let { w.applyItemEffect(it, actor, onItem) }
     for (each in targets) {
-      // An enemy skill engages whatever it lands on, whatever its effects do.
-      if (skill.target == TargetKind.ENEMY && each != null && each !== actor)
-        w.startCombat(actor, each)
+      val hostile = skill.target == TargetKind.ENEMY && each != null && each !== actor
+      // An enemy skill engages whatever it is cast at, whether or not it lands.
+      if (hostile) w.startCombat(actor, each)
+      if (hostile && !w.spellLands(actor, each, skill)) {
+        w.send(
+          actor,
+          w.msg(SkillMsg.RESISTED_SELF, "target" to each.name.cap(), "skill" to skill.name),
+        )
+        w.tell(each, SkillMsg.RESISTED_TARGET, "actor" to actor.name.cap(), "skill" to skill.name)
+        w.tellSight(
+          actor.room,
+          "cast",
+          actor,
+          w.msg(
+            SkillMsg.RESISTED_ROOM,
+            "actor" to who,
+            "skill" to skill.name,
+            "target" to each.name.cap(),
+          ),
+          actor,
+          each,
+        )
+        continue
+      }
       // An item skill's effect already ran on the item.
       if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill) }
       skill.resolve?.resolve(w, actor, each, onItem)
@@ -243,4 +270,27 @@ internal class CastAction(
     )
     return skill.lag
   }
+}
+
+/**
+ * Whether [caster]'s enemy [skill] lands on [victim]: to_hit with the skill set, the caster's
+ * to_hit chain, then the victim's defend_hit chain. A chance of 100 or more lands without a roll.
+ */
+internal fun World.spellLands(caster: Actor, victim: Actor, skill: SkillProto): Boolean {
+  val c =
+    RulesContext(
+      this,
+      caster,
+      victim,
+      band = Band.between(indexOf(caster), indexOf(victim)),
+      skill = skill,
+    )
+  val chance = toHitChain(c)
+  if (chance.value >= 100) {
+    traceRules(caster, "${chance.text} → auto LAND")
+    return true
+  }
+  val roll = rng.int(1, 100)
+  traceRules(caster, "${chance.text} → roll $roll ${if (roll > chance.value) "RESIST" else "LAND"}")
+  return roll <= chance.value
 }

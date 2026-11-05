@@ -9,7 +9,7 @@ import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
 import gups.core.model.didYouMean
 import gups.core.world.CommandRegistry
-import gups.core.world.Feature
+import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 import gups.core.world.HookName
 import gups.core.world.gmcpOverlaps
@@ -421,12 +421,12 @@ class ScriptLoader(
       if (!test && st.pkg.kind == PackageKind.RULES) {
         val forbidden = forbiddenRulesExports(module, features)
         if (forbidden.isNotEmpty()) {
-          for ((name, feature) in forbidden) {
+          for ((name, req) in forbidden) {
             err(
               LoadError(
                 st.pkg.path,
                 "rules",
-                "the rules package defines $name(...), which needs the ${feature.id} feature",
+                "the rules package defines $name(...), which needs the ${req.text} ${req.noun}",
                 file.v,
                 bindingLine(parsed, name),
               )
@@ -826,21 +826,24 @@ internal fun missingRulesExports(
 ): List<String> =
   RulesExport.entries
     .filter {
-      FeatureOwnership.of("rules:${it.scriptName}").let { f -> f == null || f in features }
+      FeatureOwnership.of("rules:${it.scriptName}").let { req ->
+        req == null || req.satisfiedBy(features)
+      }
     }
     .map { it.scriptName }
     .filter { it !in defined }
     .sorted()
 
-/** Exports of a feature that is off which [module] defines anyway, with the feature. */
+/** Exports of a feature that is off which [module] defines anyway, with the feature requirement. */
 internal fun forbiddenRulesExports(
   module: Module,
   features: Features,
-): List<Pair<String, Feature>> =
+): List<Pair<String, FeatureRequirement>> =
   RulesExport.entries
     .mapNotNull { e ->
-      val f = FeatureOwnership.of("rules:${e.scriptName}")?.takeIf { it !in features }
-      if (f != null && module.globals[e.scriptName] is StarlarkFunction) e.scriptName to f else null
+      val req = FeatureOwnership.of("rules:${e.scriptName}")?.takeIf { !it.satisfiedBy(features) }
+      if (req != null && module.globals[e.scriptName] is StarlarkFunction) e.scriptName to req
+      else null
     }
     .sortedBy { it.first }
 

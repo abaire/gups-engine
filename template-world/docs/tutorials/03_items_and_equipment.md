@@ -128,17 +128,18 @@ item("tar_walker_boots",
 Three modifier points run on the *defender's* chain — the chain of the actor being hit — so an equipped item guards its
 wearer rather than empowering it. Where each runs:
 
-* `MODIFIER.defend_hit` adjusts an auto-attack's hit chance after the attacker's `to_hit` chain; it takes the attacker's
-  result as its base.
+* `MODIFIER.defend_hit` adjusts an auto-attack's or enemy spell's hit chance after the attacker's `to_hit` chain; it
+  takes the attacker's result as its base. When rolling for a spell, `ctx.skill` is set (and `ctx.weapon` and `ctx.slot`
+  are `None`).
 * `MODIFIER.receive_damage` softens the raw damage after the attacker's `damage` chain and before armor and resists; a
   negative result counts as 0.
 * `MODIFIER.mitigate` adjusts the vital losses `mitigate` returned; a negative loss is a gain to that vital, capped at
   its maximum.
 
-On all three, `ctx.defender` is the wearer (the actor being hit) and `ctx.attacker` the one swinging, so a modifier
-reads its bearer as `ctx.defender`. Unlike the attacker, a defender's worn weapons count too: a dagger worn in `wield`
-carries its modifiers even though it is not the swinging weapon. The tutorial arena's `shadow_cloak` blurs and wards,
-and the `siphon_amulet` trades pain for mana:
+On all three, `ctx.defender` is the wearer (the actor being hit) and `ctx.attacker` the one swinging or casting, so a
+modifier reads its bearer as `ctx.defender`. Unlike the attacker, a defender's worn weapons count too: a dagger worn in
+`wield` carries its modifiers even though it is not the swinging weapon. The tutorial arena's `shadow_cloak` blurs and
+wards, and the `siphon_amulet` trades pain for mana:
 
 ```python
 def _blur(ctx, base):
@@ -177,6 +178,35 @@ item("siphon_amulet",
 
 Trace these with `@trace rules`: a defender's chain continues the line after a `defender:defend_hit`,
 `defender:receive_damage`, or `defender:mitigate` step.
+
+### Spells that miss
+
+An `enemy` spell rolls to land on each victim through the same chain as a swing: the `to_hit` rules export, the caster's
+`to_hit` chain, then the victim's `defend_hit` chain. The rules tell the two apart by `ctx.skill`, which is set for a
+spell (with `ctx.weapon` and `ctx.slot` `None`) and `None` for a swing. The template's `to_hit` hands spells to a helper
+in `rules/combat.star` that pits the caster's `int` against the victim's `wis`, and reads the skill's free-form `kind`
+to let area spells through:
+
+```python
+def _spell_hit(ctx):
+    if ctx.skill.kind == "area":
+        return 100
+    return _clamp(70 + (ctx.attacker.int - ctx.defender.wis) * 2, 5, 95)
+```
+
+A chance of 100 or more always lands without a roll, so return 100 for spells that should never miss. A victim the spell
+doesn't land on resists: it gets neither the skill's `effect` nor its `resolve`, but the caster still pays the cost and
+lag, and the two are engaged in combat. `@trace rules` ends the line with `LAND`, `RESIST`, or `auto LAND`.
+
+Because `defend_hit` runs for spells too, the `shadow_cloak` above blurs spells as well as swings. A modifier meant only
+for blows checks `ctx.skill` first:
+
+```python
+def _blur(ctx, base):
+    if ctx.skill:
+        return base
+    return base - 15
+```
 
 ### Bonus damage: `bonus_damage` and `damages(...)`
 

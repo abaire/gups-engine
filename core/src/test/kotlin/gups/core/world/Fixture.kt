@@ -188,12 +188,14 @@ object T {
 open class FixedRules(
   fs: FixtureSchema = FixtureSchemas.current,
   var toHit: Int? = 100,
+  var spellToHit: Int? = 100,
   var damage: Int? = 5,
   var initiative: Map<String, Int> = emptyMap(),
   var flee: Int? = null,
   var retreat: Int? = null,
 ) : FixtureRules(fs) {
-  override fun toHit(c: RulesContext): Int = toHit ?: super.toHit(c)
+  override fun toHit(c: RulesContext): Int =
+    if (c.skill != null) (spellToHit ?: super.toHit(c)) else (toHit ?: super.toHit(c))
 
   override fun damage(c: RulesContext): Int = damage ?: super.damage(c)
 

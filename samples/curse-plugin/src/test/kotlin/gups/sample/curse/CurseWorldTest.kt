@@ -40,6 +40,7 @@ class CurseWorldTest {
     Files.list(rules)
       .use { s -> s.toList() }
       .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
+    gups.script.testing.TestWorlds.makeSpellsLand(tmp.resolve("rules"))
 
     write(tmp, "skills/package.star", """package(api_version = 1, kind = "skills")""")
     write(

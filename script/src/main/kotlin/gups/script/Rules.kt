@@ -841,7 +841,8 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
           "pulse",
           "rng",
         ),
-      doc = "Hit chance in percent before modifiers.",
+      doc =
+        "Hit chance in percent before modifiers, for an auto-attack swing or an enemy spell (ctx.skill set, no weapon or slot).",
     ),
     RulesExportSpec(
       export = RulesExport.DAMAGE,
@@ -1100,7 +1101,7 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
           "pulse",
           "rng",
         ),
-      doc = "Adjusts hit chance in percent.",
+      doc = "Adjusts hit chance in percent, for swings and enemy spells.",
     ),
     ModifierPointSpec(
       point = ModifierPoint.DAMAGE,
@@ -1166,7 +1167,7 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
           "rng",
         ),
       doc =
-        "Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger.",
+        "Adjusts an auto-attack's or enemy spell's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger or caster.",
     ),
     ModifierPointSpec(
       point = ModifierPoint.RECEIVE_DAMAGE,
@@ -1303,7 +1304,8 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *   `flee_fail_lag`.
  * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
  *   `retreat_fail_lag`, and `get_lag` across all range bands.
- * - If the `skills` feature is enabled, tests `cast_allowed` and `interrupt_check`.
+ * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed` and
+ *   `interrupt_check`.
  * - Tests `carry_limit`, `encumbrance`, `regen`, and `move_cost`.
  * - Tests `mitigate` for each damage type declared in the world [schema].
  * - For player actors, tests `on_player_death`.
@@ -1457,6 +1459,7 @@ internal fun dryRunRules(
         rules.retreatFailLag(melee)
       }
       if (Feature.SKILLS in features) {
+        rules.toHit(withSkill)
         rules.castAllowed(withSkill)
         rules.interruptCheck(withSkill, 1)
       }

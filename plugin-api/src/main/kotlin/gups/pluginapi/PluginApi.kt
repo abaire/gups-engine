@@ -297,6 +297,11 @@ data class PluginModifierCall(
   val other: PluginActor?,
   val weapon: PluginItem?,
   val room: PluginRoom,
+  /**
+   * The skill being cast when this rules call has one (an enemy spell's roll, a spell's damage),
+   * else null.
+   */
+  val skill: PluginSkill? = null,
 )
 
 fun interface PluginModifier {

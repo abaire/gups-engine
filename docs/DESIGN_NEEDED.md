@@ -15,16 +15,9 @@ delete it here.
 
 **Spec:** §3.3 (`skills: Map<Label, Int>`, proficiency 0–100), §4.3, §4.6. **Today:** proficiency is stored and readable
 by scripts (`ctx.actor.skills`), but nothing rolls against it (D-024). **Questions:** - Does proficiency decide whether
-a skill succeeds, how strong it is, or both? - Which rules export rolls it? `to_hit` has `ctx.skill`, but casts never
-call `to_hit`. - How do players gain proficiency: through use, trainers, or levels?
-
-### Whether a spell lands
-
-**Spec:** §4.3 (effect primitives), §4.6 (rules exports). **Today:** an `enemy` spell whose target is valid and in range
-always applies its effect. `mitigate` reduces damage, but nothing decides a miss, a resist or a save. A skill's `kind`
-is "free-form; rules interpret it", yet no rules call that runs during a cast receives the skill and can act on it.
-**Question:** is a rules export needed for spell success, such as `spell_hits(ctx) -> bool`, or a `save` check per
-effect?
+a skill succeeds, how strong it is, or both? - Which rules export rolls it? An `enemy` skill's land roll calls `to_hit`
+with `ctx.skill` set, so a ruleset can already read proficiency there, but `ally`, `self`, `item` and `none` skills
+never roll. - How do players gain proficiency: through use, trainers, or levels?
 
 ### Acquiring skills
 
@@ -76,26 +69,6 @@ room. The tactical track, range bands, advance, and retreat operate only inside 
 cross exits. **Questions:** - How should line-of-sight and projectile paths across open or closed doors be evaluated? -
 Does a ranged attack initiate combat by dragging the attacker into the target's room/track, or does it create a
 cross-room engagement? - How do perception and aggro propagate across rooms when an attack is fired from a distance?
-
-### Combat procs: items and affects that cast on attack (COMPLETED — M28)
-
-**Spec:** §4.3 (skills and effect primitives), §4.4 (hooks), §4.6 (auto-attacks). **Today (after M18):** every equipped
-item with `dice` makes its own auto-attack swing, so an amulet can deal weapon-style damage through the `to_hit` and
-`damage` chains. An equipped item's `on_combat_tick` hook already runs once per round, so a script can fire a per-round
-effect. Nothing ties an effect to a hit: "10% chance on hit to cast `fireball`" has no hook that fires after a swing
-lands, `before_attack` is a veto hook that fires before the roll, and `on_damage` fires for any damage in the room.
-Affects have no combat hook at all. **Questions:** - Is this a new non-veto hook (such as `on_hit` or `after_attack`)
-dispatched to the attacker's held items and affects, or a declarative `item(attack_skill=..., chance=...)`? - Does it
-fire per swing or per hit? - Does the proc go through `cast_allowed`, warmup, cost and lag, or resolve its effects
-directly? - Can a defender's items proc when struck (thorns, retaliation)?
-
-### Typed bonus damage on attacks (COMPLETED — M27)
-
-**Spec:** §4.6 (`damage` modifier point, `mitigate`). **Today (after M18):** the `damage` modifier chain changes the
-amount of a hit but not its type, so a slashing sword can't also deal 2 fire damage. **Questions:** - Should items,
-affects and traits carry declarative per-type bonus damage, or should `damage` modifiers be able to return extra typed
-amounts? - Is each extra type mitigated separately, and does it fire `on_damage` and `interrupt_check` once per type or
-once per hit? - Does bonus damage apply to spell damage as well as auto-attacks?
 
 ## Mobs and AI
 

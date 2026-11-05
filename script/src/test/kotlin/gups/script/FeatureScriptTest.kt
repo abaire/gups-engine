@@ -203,16 +203,6 @@ class FeatureScriptTest {
   @Test
   fun `modifier points of a feature need it`() {
     refused(
-      Feature.COMBAT,
-      "def f(ctx, base):\n    return base\nitem(\"ring\", wear = \"ring\", modifiers = {\"to_hit\": f})",
-      "item(modifiers)[\"to_hit\"]",
-    )
-    refused(
-      Feature.COMBAT,
-      "def f(ctx, base):\n    return base\nitem(\"cloak\", wear = \"body\", modifiers = {\"defend_hit\": f})",
-      "item(modifiers)[\"defend_hit\"]",
-    )
-    refused(
       Feature.SKILLS,
       "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"cast_allowed\": f})",
       "room(modifiers)[\"cast_allowed\"]",
@@ -222,6 +212,40 @@ class FeatureScriptTest {
       "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"flee_fail_lag\": f})",
       "room(modifiers)[\"flee_fail_lag\"]",
     )
+  }
+
+  @Test
+  fun `to_hit and defend_hit modifier points belong to combat or skills`() {
+    val neither = without(Feature.COMBAT, Feature.SKILLS)
+    for (point in listOf("to_hit", "defend_hit")) {
+      val item =
+        if (point == "to_hit") "item(\"ring\", wear = \"ring\""
+        else "item(\"cloak\", wear = \"body\""
+      val files =
+        world(
+          neither,
+          "zones/z/a.star" to
+            "def f(ctx, base):\n    return base\n$item, modifiers = {\"$point\": f})",
+        )
+      val r = load(files)
+      assertTrue(
+        r.errors.any {
+          it.pkg == "zones/z" &&
+            "item(modifiers)[\"$point\"] needs the combat or skills feature" in it.message
+        },
+        "without combat or skills: ${r.report()}",
+      )
+    }
+
+    val skillsOnly = without(Feature.COMBAT)
+    val files =
+      world(
+        skillsOnly,
+        "zones/z/a.star" to
+          "def f(ctx, base):\n    return base\nitem(\"cloak\", wear = \"body\", modifiers = {\"defend_hit\": f})",
+      )
+    val r = load(files)
+    assertTrue(r.errors.none { it.pkg == "zones/z" }, "with skills only: ${r.report()}")
   }
 
   @Test
@@ -392,7 +416,7 @@ class FeatureScriptTest {
     val all = TestWorlds.rulesFor(Features.ALL.ids)
     for ((feature, exports) in
       mapOf(
-        Feature.COMBAT to listOf("to_hit", "damage", "initiative", "flee_chance", "flee_fail_lag"),
+        Feature.COMBAT to listOf("damage", "initiative", "flee_chance", "flee_fail_lag"),
         Feature.SKILLS to listOf("cast_allowed", "interrupt_check"),
         Feature.TRACK to
           listOf("retreat_check", "get_lag", "advance_lag", "retreat_lag", "retreat_fail_lag"),
@@ -419,6 +443,58 @@ class FeatureScriptTest {
         "$e is required with ${feature.id}",
       )
     }
+  }
+
+  @Test
+  fun `to_hit export belongs to combat or skills`() {
+    val neither = without(Feature.COMBAT, Feature.SKILLS)
+    val withToHit =
+      world(neither, "zones/z/a.star" to "room(\"start\")") +
+        ("rules/combat.star" to
+          TestWorlds.rulesFor(neither.ids) + "\ndef to_hit(ctx):\n    return 100\n")
+    val r1 =
+      ScriptLoader(WorldDir(tempWorld(withToHit)), ScriptLimits.HARNESS).load(listOf("rules"))
+    assertTrue(
+      r1.errors.any {
+        "defines to_hit(...)" in it.message && "needs the combat or skills feature" in it.message
+      },
+      "neither: ${r1.report()}",
+    )
+
+    val skillsOnly = Features(setOf(Feature.SKILLS))
+    val withoutToHit =
+      world(skillsOnly, "zones/z/a.star" to "room(\"start\")") +
+        ("rules/combat.star" to TestWorlds.rulesFor(emptyList()))
+    val r2 =
+      ScriptLoader(WorldDir(tempWorld(withoutToHit)), ScriptLimits.HARNESS).load(listOf("rules"))
+    assertTrue(
+      r2.errors.any { "must define to_hit(...)" in it.message },
+      "skills only without to_hit: ${r2.report()}",
+    )
+
+    val combatOnly = without(Feature.SKILLS)
+    val withoutToHitCombat =
+      world(combatOnly, "zones/z/a.star" to "room(\"start\")") +
+        ("rules/combat.star" to TestWorlds.rulesFor(emptyList()))
+    val r3 =
+      ScriptLoader(WorldDir(tempWorld(withoutToHitCombat)), ScriptLimits.HARNESS)
+        .load(listOf("rules"))
+    assertTrue(
+      r3.errors.any { "must define to_hit(...)" in it.message },
+      "combat only without to_hit: ${r3.report()}",
+    )
+  }
+
+  @Test
+  fun `dry run calls to_hit with synthetic skill when skills is enabled`() {
+    val skillsOnly = Features(setOf(Feature.SKILLS))
+    val failingToHit =
+      world(skillsOnly, "zones/z/a.star" to "room(\"start\")") +
+        ("rules/combat.star" to
+          TestWorlds.rulesFor(listOf("skills"), "def to_hit(ctx):\n    return ctx.skill.nope\n"))
+    val r =
+      ScriptLoader(WorldDir(tempWorld(failingToHit)), ScriptLimits.HARNESS).load(listOf("rules"))
+    assertTrue(r.errors.any { "rules.to_hit" in it.message }, "dry run should fail: ${r.report()}")
   }
 
   private fun exportsOf(source: String, names: List<String>): String =

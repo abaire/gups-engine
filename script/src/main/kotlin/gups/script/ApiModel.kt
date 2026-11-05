@@ -298,7 +298,8 @@ data class RulesExportSpec(
  * features can use. Used for `gups docs --world`.
  */
 fun ScriptApiModel.forFeatures(features: Features): ScriptApiModel {
-  fun on(symbol: String) = FeatureOwnership.of(symbol).let { it == null || it in features }
+  fun on(symbol: String) =
+    FeatureOwnership.of(symbol).let { it == null || it.satisfiedBy(features) }
 
   fun decl(d: DeclSpec) =
     if (!on(d.name)) null else d.copy(params = d.params.filter { on("${d.name}.${it.name}") })
@@ -876,9 +877,18 @@ private class JsonWriter {
   private fun symbol(path: String) {
     symbols += path
     field("symbol", path)
-    (if (path.startsWith("message:")) Messages.find(path.removePrefix("message:"))?.feature
-      else FeatureOwnership.of(path))
-      ?.let { field("feature", it.id) }
+    if (path.startsWith("message:")) {
+      Messages.find(path.removePrefix("message:"))?.feature?.let { field("feature", it.id) }
+    } else {
+      FeatureOwnership.of(path)?.let { req ->
+        if (req.features.size == 1) {
+          field("feature", req.ids.first())
+        } else {
+          strListField("features", req.ids)
+          field("features_mode", if (req.all) "all" else "any")
+        }
+      }
+    }
   }
 
   private var firstInObjStack = ArrayDeque<Boolean>()

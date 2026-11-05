@@ -24,7 +24,7 @@ enum class ModifierPoint(
    */
   val defender: Boolean = false,
 ) {
-  /** Modifies the auto-attack or skill to-hit calculation. */
+  /** Modifies the hit chance of an auto-attack swing or an enemy spell. */
   TO_HIT("to_hit"),
 
   /** Modifies the raw damage rolled during combat resolution. */
@@ -34,7 +34,8 @@ enum class ModifierPoint(
   BONUS_DAMAGE("bonus_damage"),
 
   /**
-   * Adjusts an auto-attack's hit chance on the defender's chain, after the attacker's to_hit chain.
+   * Adjusts the hit chance of an auto-attack or enemy spell on the defender's chain, after the
+   * attacker's to_hit chain.
    */
   DEFEND_HIT("defend_hit", defender = true),
 

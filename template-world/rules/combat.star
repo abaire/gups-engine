@@ -73,8 +73,18 @@ def condition(ctx):
     # and at every world tick. ctx.actor.below_zero_since("hp") gives time-based rules.
     return "dead" if ctx.actor.hp <= 0 else "ok"
 
+def _spell_hit(ctx):
+    # Percent chance that ctx.attacker's spell (ctx.skill) takes hold on ctx.defender.
+    # A skill's free-form kind says how it is delivered: an "area" spell can't be dodged.
+    if ctx.skill.kind == "area":
+        return 100
+    return _clamp(70 + (ctx.attacker.int - ctx.defender.wis) * 2, 5, 95)
+
 def to_hit(ctx):
-    # Percent chance that ctx.attacker's swing hits ctx.defender.
+    # Percent chance that ctx.attacker's swing, or enemy spell when ctx.skill is set, hits
+    # ctx.defender.
+    if ctx.skill:
+        return _spell_hit(ctx)
     a = ctx.attacker
     d = ctx.defender
     chance = 60 + (a.dex - d.dex) * 2 + (a.level - d.level) * 3

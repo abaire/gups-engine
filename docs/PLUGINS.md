@@ -294,6 +294,11 @@ r.addTrait(
 )
 ```
 
+A modifier tells a spell from a swing by `call.skill`: the skill being cast (a `PluginSkill`) when the rules call has
+one, which is an enemy spell's `TO_HIT` and `DEFEND_HIT` roll and a spell's `DAMAGE`, `RECEIVE_DAMAGE` and `MITIGATE`
+chains, and null otherwise. A `DEFEND_HIT` modifier returning `if (call.skill?.kind == "spell") 0L else base` makes its
+bearer resist every enemy spell of kind `"spell"` cast at it, while swings roll as usual.
+
 #### Creation provider
 
 A plugin registers at most one creation provider that presents choices (such as race and class) at login:

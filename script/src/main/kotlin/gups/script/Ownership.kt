@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.world.Feature
+import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 
 /**
@@ -9,8 +10,10 @@ import gups.core.world.Features
  * [refusal]) and the docs of a world leave them out.
  */
 object FeatureOwnership {
-  private val exact: Map<String, Feature> = buildMap {
-    fun owns(feature: Feature, vararg symbols: String) = symbols.forEach { put(it, feature) }
+  private val exact: Map<String, FeatureRequirement> = buildMap {
+    fun owns(req: FeatureRequirement, vararg symbols: String) = symbols.forEach { put(it, req) }
+    fun owns(feature: Feature, vararg symbols: String) =
+      owns(FeatureRequirement.of(feature), *symbols)
     owns(Feature.SKILLS, "mob.skills", "ctx.act_cast", "ctx.skill")
     owns(Feature.SKILLS, "hook:before_cast", "hook:on_cast_start", "hook:on_cast")
     owns(Feature.SKILLS, "rules:cast_allowed", "rules:interrupt_check", "modifier:cast_allowed")
@@ -21,22 +24,21 @@ object FeatureOwnership {
     owns(Feature.LEVELING, "rules:xp_for_kill", "rules:xp_to_level", "rules:on_level_up")
     owns(Feature.LEVELING, "ctx.award_xp", "ctx.take_xp", "ctx.level_up", "ctx.level_down")
     owns(Feature.LEVELING, "w.award_xp", "w.take_xp", "w.level_up", "w.level_down")
+    owns(
+      FeatureRequirement.anyOf(Feature.COMBAT, Feature.SKILLS),
+      "rules:to_hit",
+      "modifier:to_hit",
+      "modifier:defend_hit",
+    )
     owns(Feature.COMBAT, "hook:before_attack", "hook:on_combat_tick")
     owns(
       Feature.COMBAT,
-      "rules:to_hit",
       "rules:damage",
       "rules:initiative",
       "rules:flee_chance",
       "rules:flee_fail_lag",
     )
-    owns(
-      Feature.COMBAT,
-      "modifier:to_hit",
-      "modifier:defend_hit",
-      "modifier:initiative",
-      "modifier:flee_fail_lag",
-    )
+    owns(Feature.COMBAT, "modifier:initiative", "modifier:flee_fail_lag")
     owns(Feature.COMBAT, "view:actor.fighting")
     owns(
       Feature.COMBAT,
@@ -58,8 +60,10 @@ object FeatureOwnership {
   }
 
   /** Entries whose parameters and fields are owned along with them. */
-  private val subtrees: Map<String, Feature> = buildMap {
-    fun owns(feature: Feature, vararg symbols: String) = symbols.forEach { put(it, feature) }
+  private val subtrees: Map<String, FeatureRequirement> = buildMap {
+    fun owns(req: FeatureRequirement, vararg symbols: String) = symbols.forEach { put(it, req) }
+    fun owns(feature: Feature, vararg symbols: String) =
+      owns(FeatureRequirement.of(feature), *symbols)
     owns(Feature.SKILLS, "skill", "view:skill")
     owns(Feature.COMBAT, "aggressive", "assist", "flee")
     owns(Feature.COMBAT, "ctx.start_combat", "ctx.stop_combat", "ctx.act_attack")
@@ -68,8 +72,8 @@ object FeatureOwnership {
     owns(Feature.TRACK, "knockback", "pull")
   }
 
-  /** The feature that owns the entry named by [symbol] in `api.json`, or null for the kernel. */
-  fun of(symbol: String): Feature? {
+  /** The requirement of the entry named by [symbol] in `api.json`, or null for the kernel. */
+  fun of(symbol: String): FeatureRequirement? {
     exact[symbol]?.let {
       return it
     }
@@ -84,12 +88,17 @@ object FeatureOwnership {
     }
   }
 
-  /** The error for using [name], which [feature] owns, when it is off. */
-  internal fun refusal(name: String, feature: Feature) = "$name needs the ${feature.id} feature"
+  /** The error for using [name], which needs [req], when it isn't met. */
+  internal fun refusal(name: String, req: FeatureRequirement): String =
+    "$name needs the ${req.text} ${req.noun}"
+
+  /** Kept for the existing single-feature call sites. */
+  internal fun refusal(name: String, feature: Feature): String =
+    refusal(name, FeatureRequirement.of(feature))
 
   /**
    * The refusal for [symbol] used as [name] in a world with [features], or null if it is allowed.
    */
   fun refused(symbol: String, name: String, features: Features): String? =
-    of(symbol)?.takeIf { it !in features }?.let { refusal(name, it) }
+    of(symbol)?.takeIf { !it.satisfiedBy(features) }?.let { refusal(name, it) }
 }

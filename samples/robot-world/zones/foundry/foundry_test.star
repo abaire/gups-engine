@@ -15,6 +15,7 @@ def test_a_mob_keeps_the_numbers_its_prototype_declares(t):
     t.eq(hound.base.agility, 12)
 
 def test_psychic_damage_goes_to_sanity(t):
+    # The seed is chosen so the routine lands.
     w = t.world(seed = 1)
     p = w.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 100})
     drone = w.spawn(":welder_drone", at = ":gate")
@@ -124,3 +125,14 @@ def test_the_world_reskins_combat_and_conditions(t):
     t.contains(p.do("quit"), "You can't disconnect mid-firefight!")
     w.damage(p, "integrity", amount = p.integrity)
     t.contains(p.output(), "Your systems fail and you power down.")
+
+def test_routine_can_be_shrugged_off(t):
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 100})
+    drone = w.spawn(":welder_drone", at = ":gate")
+    # A roll of 100 is above any chance _spell_hit can give, so the routine is shrugged off.
+    w.force_rng(ints = [100])
+    sanity = drone.sanity
+    out = p.do("invoke mind_lash drone")
+    t.contains(out, "A welder drone shrugs off your mind_lash.")
+    t.eq(drone.sanity, sanity)

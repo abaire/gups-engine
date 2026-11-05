@@ -3,6 +3,7 @@ package gups.cli
 import gups.core.model.WorldSchema
 import gups.core.world.CommandInfo
 import gups.core.world.Feature
+import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 import gups.script.DeclSpec
 import gups.script.DocExample
@@ -237,8 +238,10 @@ object DocsRenderer {
     /** The `feature: <id>` badge of the entry named by [symbol], if a feature owns it. */
     fun featureBadge(symbol: String): String = FeatureOwnership.of(symbol)?.let { badge(it) } ?: ""
 
-    fun badge(feature: Feature): String =
-      " <span class=\"badge feature\">feature: ${esc(feature.id)}</span>"
+    fun badge(req: FeatureRequirement): String =
+      " <span class=\"badge feature\">${req.noun}: ${esc(req.text)}</span>"
+
+    fun badge(feature: Feature): String = badge(FeatureRequirement.of(feature))
 
     fun page(file: String, body: StringBuilder.() -> Unit): String = buildString {
       val title = TITLES.getValue(file)

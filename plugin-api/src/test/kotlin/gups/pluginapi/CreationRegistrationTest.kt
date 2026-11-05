@@ -176,14 +176,33 @@ class CreationRegistrationTest {
 
   @Test
   fun `a combat modifier point needs the combat feature`() {
+    val neither = Features(Feature.entries.toSet() - Feature.COMBAT - Feature.SKILLS)
+    for (point in listOf(PluginModifierPoint.TO_HIT, PluginModifierPoint.DEFEND_HIT)) {
+      assertEquals(
+        "trait 'keen': modifier point $point needs the combat or skills feature",
+        refusal(neither) {
+          it.addTrait(PluginTrait("keen", modifiers = mapOf(point to PluginModifier { _, b -> b })))
+        },
+      )
+    }
+    val skillsOnly = Features(setOf(Feature.SKILLS))
+    val hostWithSkills =
+      PluginHost.of(
+        plugin("ok") {
+          it.addTrait(
+            PluginTrait(
+              "keen",
+              modifiers = mapOf(PluginModifierPoint.TO_HIT to PluginModifier { _, b -> b }),
+            )
+          )
+        },
+        schema = schema,
+        features = skillsOnly,
+      )
+    assertTrue("keen" in hostWithSkills.traits)
+
     val noCombat = Features(Feature.entries.toSet() - Feature.COMBAT)
-    for (point in
-      listOf(
-        PluginModifierPoint.TO_HIT,
-        PluginModifierPoint.DEFEND_HIT,
-        PluginModifierPoint.INITIATIVE,
-        PluginModifierPoint.FLEE_FAIL_LAG,
-      )) {
+    for (point in listOf(PluginModifierPoint.INITIATIVE, PluginModifierPoint.FLEE_FAIL_LAG)) {
       assertEquals(
         "trait 'keen': modifier point $point needs the combat feature",
         refusal(noCombat) {

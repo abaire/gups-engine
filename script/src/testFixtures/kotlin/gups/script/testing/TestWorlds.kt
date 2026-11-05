@@ -64,7 +64,8 @@ object TestWorlds {
    * Replaces template functions in every test world, so that tests see no level-up gains unless
    * they override `on_level_up` themselves.
    */
-  private const val DEFAULTS: String = "def on_level_up(ctx):\n    return None\n"
+  private const val DEFAULTS: String =
+    "def on_level_up(ctx):\n    return None\ndef _spell_hit(ctx):\n    return 100\n"
 
   /**
    * The template's blocks with [DEFAULTS] and then [overrides] replacing or adding functions. An
@@ -90,23 +91,23 @@ object TestWorlds {
   fun rules(vararg overrides: String): String = merged(overrides).joinToString("\n") { it.second }
 
   /** The rules exports each feature owns; the others belong to the kernel. */
-  private val OWNED: Map<String, String> =
+  private val OWNED: Map<String, Set<String>> =
     mapOf(
-      "to_hit" to "combat",
-      "damage" to "combat",
-      "initiative" to "combat",
-      "flee_chance" to "combat",
-      "cast_allowed" to "skills",
-      "interrupt_check" to "skills",
-      "retreat_check" to "track",
-      "get_lag" to "track",
-      "advance_lag" to "track",
-      "retreat_lag" to "track",
-      "retreat_fail_lag" to "track",
-      "flee_fail_lag" to "combat",
-      "xp_for_kill" to "leveling",
-      "xp_to_level" to "leveling",
-      "on_level_up" to "leveling",
+      "to_hit" to setOf("combat", "skills"),
+      "damage" to setOf("combat"),
+      "initiative" to setOf("combat"),
+      "flee_chance" to setOf("combat"),
+      "cast_allowed" to setOf("skills"),
+      "interrupt_check" to setOf("skills"),
+      "retreat_check" to setOf("track"),
+      "get_lag" to setOf("track"),
+      "advance_lag" to setOf("track"),
+      "retreat_lag" to setOf("track"),
+      "retreat_fail_lag" to setOf("track"),
+      "flee_fail_lag" to setOf("combat"),
+      "xp_for_kill" to setOf("leveling"),
+      "xp_to_level" to setOf("leveling"),
+      "on_level_up" to setOf("leveling"),
     )
 
   /**
@@ -122,7 +123,7 @@ object TestWorlds {
       if ("leveling" in enabled) overrides
       else (listOf(LEVELING_OFF_DEATH) + overrides).toTypedArray()
     return merged(allOverrides)
-      .filter { (name, _) -> OWNED[name].let { it == null || it in enabled } }
+      .filter { (name, _) -> OWNED[name].let { it == null || it.any { f -> f in enabled } } }
       .joinToString("\n") { it.second }
       .let { text ->
         if ("track" in enabled) text
@@ -200,11 +201,35 @@ object TestWorlds {
       )
 
   /**
+   * Rewrites the `_spell_hit` block of every `.star` file in [rulesDir] that defines one so it
+   * returns 100. Files without `_spell_hit` are left unchanged.
+   */
+  fun makeSpellsLand(rulesDir: Path) {
+    if (!Files.isDirectory(rulesDir)) return
+    Files.list(rulesDir).use { stream ->
+      for (file in stream) {
+        if (!file.toString().endsWith(".star") || !Files.isRegularFile(file)) continue
+        val content = Files.readString(file)
+        val blk = blocks(content)
+        if (blk.any { it.first == "_spell_hit" }) {
+          val rewritten =
+            blk.joinToString("\n") { (name, text) ->
+              if (name == "_spell_hit") "def _spell_hit(ctx):\n    return 100\n" else text
+            }
+          Files.writeString(file, rewritten)
+        }
+      }
+    }
+  }
+
+  /**
    * Copies the world at [from] into [to] and returns [to]. A developer's local server data
    * (`.gups`, where `gups serve` keeps the database) is left out, so a test starts with no database
-   * whatever has been run in the source world.
+   * whatever has been run in the source world. By default, [spellsAlwaysLand] rewrites `_spell_hit`
+   * in the copied rules to return 100, keeping plugin and integration tests independent of spell
+   * resistance; pass `false` to test it.
    */
-  fun copyWorld(from: Path = templateWorld, to: Path): Path {
+  fun copyWorld(from: Path = templateWorld, to: Path, spellsAlwaysLand: Boolean = true): Path {
     val local = from.resolve(".gups")
     Files.walk(from).use { paths ->
       for (p in paths) {
@@ -212,6 +237,9 @@ object TestWorlds {
         val target = to.resolve(from.relativize(p).toString())
         if (Files.isDirectory(p)) Files.createDirectories(target) else Files.copy(p, target)
       }
+    }
+    if (spellsAlwaysLand) {
+      makeSpellsLand(to.resolve("rules"))
     }
     return to
   }

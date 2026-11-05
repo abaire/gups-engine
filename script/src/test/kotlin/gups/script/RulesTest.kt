@@ -953,6 +953,26 @@ class RulesTest {
     )
   }
 
+  @Test
+  fun `an enemy spell can be resisted in starlark world`() {
+    val f =
+      world(
+        "def _spell_hit(ctx):\n    return 0\n",
+        """
+        room("start")
+        skill("zap", target = "enemy", effect = damage(dice = "1d4"))
+        mob("rat", vitals = vitals(hp = 100))
+        """,
+      )
+    val p = f.player()
+    val rat = f.mob("//zones/z:rat")
+    p.skills[Label("//zones/z:zap")] = 100
+    f.input(p, "cast zap rat")
+    f.run()
+    assertEquals(100, rat.current("hp"))
+    assertContains(f.out(p), "Rat resists your zap.")
+  }
+
   // ---- track-movement lags --------------------------------------------------------------------
 
   /** A large room with a tag, an exit that a hook can refuse, and a rat. */

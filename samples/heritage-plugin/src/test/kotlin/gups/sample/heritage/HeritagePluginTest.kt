@@ -35,6 +35,7 @@ import gups.script.StarlarkHost
 import gups.script.WorldDir
 import gups.script.WorldMessages
 import gups.script.WorldModule
+import gups.script.testing.TestWorlds
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.copyTo
@@ -547,6 +548,7 @@ class HeritagePluginTest {
     Files.list(rules)
       .use { s -> s.toList() }
       .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
+    TestWorlds.makeSpellsLand(tmp.resolve("rules"))
 
     write(
       tmp,
@@ -692,6 +694,7 @@ class HeritagePluginTest {
     Files.list(rules)
       .use { s -> s.toList() }
       .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
+    TestWorlds.makeSpellsLand(tmp.resolve("rules"))
 
     write(tmp, "zones/start/package.star", """package(api_version = 1, kind = "zone")""")
     write(

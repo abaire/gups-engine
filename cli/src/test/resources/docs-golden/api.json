@@ -3174,6 +3174,33 @@
       "since": 1
     },
     {
+      "symbol": "message:cast.resisted.room",
+      "feature": "skills",
+      "id": "cast.resisted.room",
+      "placeholders": ["actor", "skill", "target"],
+      "required": ["skill"],
+      "default": "{target} resists {actor}'s {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.resisted.self",
+      "feature": "skills",
+      "id": "cast.resisted.self",
+      "placeholders": ["skill", "target"],
+      "required": ["skill"],
+      "default": "{target} resists your {skill}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.resisted.target",
+      "feature": "skills",
+      "id": "cast.resisted.target",
+      "placeholders": ["actor", "skill"],
+      "required": ["skill"],
+      "default": "You resist {actor}'s {skill}.",
+      "since": 1
+    },
+    {
       "symbol": "message:cast.room.item",
       "feature": "skills",
       "id": "cast.room.item",
