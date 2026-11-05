@@ -24,7 +24,10 @@ never roll. - How do players gain proficiency: through use, trainers, or levels?
 **Spec:** §3.3, §4.3, §5.12. **Today:** players get skills only from the harness (`spawn_player(skills=...)`), Kotlin
 code, or (after M11) a plugin's `setSkill`, which runs the `learn` restrictions (§4.19). Mobs get them from their
 prototype. No command, script verb or rules hook teaches a skill. **Questions:** is there a `learn`/`practice` flow, a
-`ctx.teach(actor, skill, pct)` verb, or skills granted by level through the rules?
+`ctx.teach(actor, skill, pct)` verb, or skills granted by level through the rules? - The "Skill proficiency" design
+([MILESTONE_31.md](MILESTONE_31.md)) leaves every way of gaining proficiency to this entry and "Skill-based
+advancement". This design must also cover how a skill the actor already knows gets better outside of use: does a trainer
+or `practice` raise its proficiency, by how much, and up to what cap?
 
 ### Skill-based advancement (worlds without character levels)
 
@@ -36,7 +39,14 @@ the proficiency a function of it? - Is the advancement mechanism a rules export 
 `skill_gain(ctx)`), a plugin timer or hook, or both? - What counts as a use: a cast, a hit with a weapon skill, a failed
 attempt? Is there a cap per use or per time to stop farming? - Can a world mix character levels and skill levels, and
 can a skill's level gate on the character's? - Which engine code may still read `level` when `leveling` is off? The
-template rules read it in `to_hit` and `regen`; those are template choices, but the kernel must not assume it.
+template rules read it in `to_hit` and `regen`; those are template choices, but the kernel must not assume it. - The
+"Skill proficiency" design ([MILESTONE_31.md](MILESTONE_31.md)) makes proficiency drive `skill_check` (success),
+`skill_power` (a cast's strength) and `item_power` (the strength of an item's `use_effect` and procs, which rules may
+base on a passive skill such as an artificer's), and leaves all gain to this entry and "Acquiring skills". This design
+must also cover gain through use, including: a failed `skill_check` pays cost and lag but fires no hook (`on_cast` fires
+only when the skill takes effect), so a use hook must report failed attempts itself; skill procs skip `skill_check` and
+`skill_power`, so decide whether a proc counts as a use; and decide whether a passive skill that only a rules export
+reads, such as one feeding `item_power`, can advance, and what event counts as using it.
 
 ### Rerolls and point-buy at character creation
 
