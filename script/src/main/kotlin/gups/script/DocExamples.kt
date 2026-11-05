@@ -567,6 +567,16 @@ object DocExamples {
                 t.eq(sword.damage_type, "fire")
             """,
         ),
+      "SEMI_PERMANENT" to
+        ex(
+          pkg =
+            """
+                # A burn that never ends on its own; dispel it to put it out.
+                skill("immolate", kind = "spell", cost = vitals(mana = 5), range = "near",
+                      effect = apply_affect(name = "burning", duration = SEMI_PERMANENT,
+                                             flags = ["burning"]))
+            """
+        ),
 
       // ---- Effect primitives --------------------------------------------------------------
       "apply_affect" to

@@ -22,6 +22,7 @@ import gups.core.model.Proc
 import gups.core.model.ProcTrigger
 import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
+import gups.core.saturatingAdd
 
 // ---- Engagement ------------------------------------------------------------------------------
 
@@ -355,7 +356,7 @@ private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
 fun World.applyAffect(
   target: Actor,
   name: String,
-  duration: Int,
+  duration: Long,
   statDeltas: Map<String, Int> = emptyMap(),
   flags: Set<String> = emptySet(),
   tickEvery: Int? = null,
@@ -374,7 +375,7 @@ fun World.applyAffect(
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
   // A worn item's affect lasts until the item comes off.
-  val expiresAt = if (wornFrom != null) Long.MAX_VALUE else pulse + duration
+  val expiresAt = if (wornFrom != null) Long.MAX_VALUE else saturatingAdd(pulse, duration)
   target.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
   val wasDisabled = target.isDisabled
   target.affects.removeIf { it.name == name }
@@ -458,7 +459,7 @@ private fun World.endAffect(
 fun World.applyItemAffect(
   item: Item,
   name: String,
-  duration: Int?,
+  duration: Long?,
   applies: AffectScope = AffectScope.WORN,
   statDeltas: Map<String, Int> = emptyMap(),
   flags: Set<String> = emptySet(),
@@ -477,7 +478,7 @@ fun World.applyItemAffect(
   if (item.id !in entities) return null
   require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
   require("stunned" !in flags) { "apply_affect: item affects can't stun" }
-  val expiresAt = duration?.let { pulse + it } ?: Long.MAX_VALUE
+  val expiresAt = duration?.let { saturatingAdd(pulse, it) } ?: Long.MAX_VALUE
   item.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
   item.affects.removeIf { it.name == name }
   val affect =
@@ -565,7 +566,7 @@ internal fun World.applyEquipAffects(wearer: Actor, item: Item, untimedOnly: Boo
   for (e in item.proto.equipAffects) {
     if (untimedOnly && e.pulses != null) continue
     val name = equipAffectName(item, e.flag)
-    if (e.pulses != null) applyAffect(wearer, name, e.pulses, flags = setOf(e.flag))
+    if (e.pulses != null) applyAffect(wearer, name, e.pulses.toLong(), flags = setOf(e.flag))
     else applyAffect(wearer, name, 1, flags = setOf(e.flag), wornFrom = item.id)
   }
 }
@@ -587,6 +588,15 @@ private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag
 internal fun scaled(amount: Int, power: Int): Int =
   if (amount <= 0) amount else maxOf(1, (amount.toLong() * power / 100).toInt())
 
+/** Like [scaled] for a Long amount: rounded down, never below 1 when positive, saturating. */
+internal fun scaledDuration(amount: Long, power: Int): Long =
+  when {
+    amount <= 0 -> amount
+    power <= 0 -> 1L
+    amount > Long.MAX_VALUE / power -> Long.MAX_VALUE
+    else -> maxOf(1L, amount * power / 100)
+  }
+
 /**
  * Spawns [count] mobs of [label] beside [caster] as its summons; [duration] null means they stay.
  */
@@ -607,7 +617,7 @@ fun World.summon(
       applyAffect(
         m,
         "summoned",
-        scaled(it, power),
+        scaled(it, power).toLong(),
         flags = setOf("summoned"),
         source = caster,
         power = power,
@@ -628,7 +638,7 @@ fun World.applyEffect(
 ) {
   when (effect) {
     is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill, power) }
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null, power)
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null, null, power)
     is Effect.Summon -> summon(caster, effect.label, effect.count, effect.duration, power)
     else -> {
       val t = target ?: return
@@ -652,7 +662,7 @@ fun World.applyEffect(
           applyAffect(
             t,
             effect.name,
-            scaled(
+            scaledDuration(
               requireNotNull(effect.duration) { "apply_affect: duration is required for an actor" },
               power,
             ),
@@ -688,7 +698,7 @@ fun World.applyEffect(
           applyAffect(
             t,
             "stun",
-            scaled(effect.pulses, power),
+            scaled(effect.pulses, power).toLong(),
             flags = setOf("stunned"),
             source = caster,
             power = power,
@@ -709,7 +719,7 @@ fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item, power: Int 
       applyItemAffect(
         item,
         effect.name,
-        effect.duration?.let { scaled(it, power) },
+        effect.duration?.let { scaledDuration(it, power) },
         effect.applies ?: AffectScope.WORN,
         effect.statDeltas,
         effect.flags,
@@ -725,7 +735,7 @@ fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item, power: Int 
         effect.procs,
         power = power,
       )
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item, power)
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item, null, power)
     else -> error("${effect::class.simpleName} can't act on an item")
   }
 }

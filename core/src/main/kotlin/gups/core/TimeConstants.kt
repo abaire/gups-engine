@@ -8,6 +8,16 @@ package gups.core
  */
 const val PULSE_MS = 250L
 
+/** [a] + [b], or Long.MAX_VALUE if the sum would overflow; both are at least 0. */
+fun saturatingAdd(a: Long, b: Long): Long {
+  val r = a + b
+  return if (r < 0) Long.MAX_VALUE else r
+}
+
+/** Whole seconds in [pulses] pulses, without overflowing for any non-negative value. */
+fun pulsesToSeconds(pulses: Long): Long =
+  if (pulses > Long.MAX_VALUE / PULSE_MS) Long.MAX_VALUE / 1000 else pulses * PULSE_MS / 1000
+
 /**
  * Interval between combat rounds in game pulses (8 pulses = 2.0 seconds). Attacks and initiative
  * resolution occur on pulse boundaries divisible by this constant.

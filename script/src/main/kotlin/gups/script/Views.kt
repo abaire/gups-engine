@@ -429,8 +429,19 @@ class RoomView(scope: ViewScope, val room: Room) : EntityView(scope, room) {
   @StarlarkMethod(name = "size", structField = true, doc = "'cramped', 'normal' or 'large'.")
   fun size(): Any = read("room.size") { room.proto.size.name.lowercase() }
 
-  @StarlarkMethod(name = "tags", structField = true, doc = "Tags carried by this room, sorted.")
-  fun tags(): Any = read { sList(room.tags.sorted()) }
+  @StarlarkMethod(
+    name = "tags",
+    structField = true,
+    doc =
+      "The effective tags: the room's own, plus its live affects' added tags minus their removed tags, sorted.",
+  )
+  fun tags(): Any = read { sList(room.tagsAt(scope.world.roomClock).sorted()) }
+
+  @StarlarkMethod(name = "affects", structField = true, doc = "The room's live affects, by id.")
+  fun affects(): Any =
+    read("room.affects") {
+      sList(room.liveAffects(scope.world.roomClock).map { AffectView(scope, room, it) })
+    }
 
   @StarlarkMethod(
     name = "track_size",
@@ -883,14 +894,18 @@ internal constructor(private val scope: ViewScope, private val host: Entity, val
   )
   fun source(): Any = view(scope, affect.source?.let { scope.world.actor(it) })
 
-  @StarlarkMethod(name = "host", structField = true, doc = "The actor or item carrying the affect.")
+  @StarlarkMethod(
+    name = "host",
+    structField = true,
+    doc = "The actor, item or room carrying the affect.",
+  )
   fun hostView(): Any = view(scope, host)
 
   @StarlarkMethod(
     name = "applies",
     structField = true,
     allowReturnNones = true,
-    doc = "Scope for item affects ('worn' or 'carried'), or None for actor affects.",
+    doc = "Scope for item affects ('worn' or 'carried'), or None for actor and room affects.",
   )
   fun applies(): Any = affect.applies?.name?.lowercase() ?: Starlark.NONE
 

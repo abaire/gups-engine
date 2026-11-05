@@ -55,14 +55,6 @@ an owner's kill credit the pet? - How is the award split: equal shares, or weigh
 sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
 below the victim's level, excluded from the split?
 
-### Cross-room projectiles and ranged combat between rooms
-
-**Spec:** §3.3 (item `range`, `kind = "ranged"`), §5.5. **Today:** all combat is strictly self-contained within a single
-room. The tactical track, range bands, advance, and retreat operate only inside the room; no attacks or projectiles
-cross exits. **Questions:** - How should line-of-sight and projectile paths across open or closed doors be evaluated? -
-Does a ranged attack initiate combat by dragging the attacker into the target's room/track, or does it create a
-cross-room engagement? - How do perception and aggro propagate across rooms when an attack is fired from a distance?
-
 ## Mobs and AI
 
 ### Pets and followers bonded to a player
@@ -71,7 +63,8 @@ cross-room engagement? - How do perception and aggro propagate across rooms when
 `follow(target)`. **Today:** - Nothing creates a bond. - `follow` latches onto the first matching actor it sees, and
 drops it after more than 3 exits (D-121). - Scripts can't tell a mob whom to follow. **Questions:** - Is there a verb
 such as `ctx.bond(mob, player)`, or a `follow`/`order` command? - Who adds and clears the `bond:` active reason, and
-does it survive logout? - Does a pet fight for its owner, and does it count as an ally for `assist`?
+does it survive logout? - Does a pet fight for its owner, and does it count as an ally for `assist`? Does spawning a pet
+provide hooks that can be used for mobs/characters to react? Could we allow counterspells to prevent a spawn?
 
 ### Hostility and factions
 
@@ -134,27 +127,6 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
-### Enchantments on rooms
-
-**Spec:** §4.2 (room `tags` and `modifiers`, `region` modifiers), §4.6 (the modifier chain). **Today:** a room's tags
-and modifiers come only from its prototype and its regions, so a script or plugin can't consecrate, ward or curse one
-room for a while. Items gain per-instance tag changes and affects; rooms don't. **Questions:** - Should rooms carry
-enchantments at all, and should they work through per-instance tag changes like items, through timed room affects that
-contribute modifiers to the chain, or through some other mechanism? - Does a zone reset keep, clear or restore a room's
-enchantments? - Do room enchantments tick and expire while the room is dormant, or catch up on wake as mob affects do?
-
-## Commands
-
-### Exits named after a plugin command
-
-**Spec:** §4.9 (reserved exit names), §4.15, §5.2. **Today:** a package fails to load if an exit is named after an
-engine command, an engine alias or a global command. Plugin commands aren't checked: the script loader doesn't know
-which plugin commands are registered. Movement is resolved before plugin commands, so an exit named after a plugin
-command silently hides that command in the exit's room. **Questions:** - Should the loader receive the registered plugin
-command names and aliases, and reject such an exit like any other reserved name? - Plugins load before packages but can
-be added or removed between runs. Does a newly added plugin command fail packages that loaded fine before, or does the
-plugin fail instead? - Do role-gated plugin commands reserve the name for everyone, even players who can't use them?
-
 ## Social and communication
 
 ### Player groups and parties
@@ -164,14 +136,6 @@ concept; XP goes solely to the killer, and assisting allies or followers do not 
 party and pet XP sharing". **Questions:** - Should party formation, invitations, party leadership, group chat channels,
 and friendly-fire prevention be engine primitives or implemented in `//lib`? - How should party state handle player
 disconnects, zone transfers, and persistence across logout?
-
-### Mail, message boards, and additional channels
-
-**Spec:** §4.9 (Communication commands: `say`, `tell`, `whisper`, `shout`, `gossip`). **Today:** communication is
-synchronous and limited to built-in channels. There is no offline mail system, in-game message board / bulletin system,
-or builder-defined chat channels. **Questions:** - Should asynchronous mail and message boards be backed by SQLite
-tables in `persist`, or can they be built as `//lib` packages using custom entities and attributes? - How are retention,
-moderation, quotas, and cross-character delivery handled?
 
 ## Economy and crafting
 
@@ -185,70 +149,6 @@ recipes define material requirements, tools, workstations and skill checks? - Wh
 flawed product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
 overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
 feature?
-
-## World building and administration
-
-### In-game OLC editing
-
-**Spec:** §1.2, §2.1, §2.3. **Today:** world building is strictly file-based through Starlark source files committed to
-git and verified by CI gates (§7.3). There is no online creation (OLC) command set (`@redit`, `@medit`, `@oedit`).
-**Questions:** - If builders could edit rooms, mobs, and items live in-game, how would mutations persist back to
-Starlark code and git branches? - How would schema validation, CODEOWNERS boundaries, and concurrent edit conflicts be
-handled?
-
-### Live @reload on shared production servers
-
-**Spec:** §2.4, §5.10. **Today:** `@reload` and `@eval` are permitted only in `--dev`. In `--prod`, code changes require
-the deploy pipeline (`gups deploy` / `@deploy`) to ensure atomic checkpointing, reconciliation, and consistency.
-**Questions:** - Can builders safely reload individual packages on a live shared server without desynchronizing state,
-orphaning references, or disrupting active player sessions? - What role permissions or locks would be required?
-
-### Schema and feature migrations without a server wipe
-
-**Spec:** §2.4, §3.9, §3.10, §5.10. **Today:** changes to declared stats, vitals, or enabled features in `MODULE.gups`
-require starting with `--wipe`, resetting all persistent characters and items. **Questions:** - Could the persistence
-layer migrate existing character and item records (e.g. populating defaults for newly added stats, pruning removed
-vitals, recalculating derived values) rather than requiring a server wipe? - How should automated migrations handle
-incompatible feature flag changes?
-
-## Accounts and authentication
-
-### Open self-signup
-
-**Spec:** §2.4, §5.12. **Today:** `open_signup = False` by default in `MODULE.gups`. Accounts require an invite code or
-roster import. Enabling `open_signup = True` allows registration at the telnet login prompt, but remains minimal.
-**Questions:** - What anti-abuse controls (rate limiting, CAPTCHA, email verification, or registration gates) are
-required before open signup is safe for public internet servers? - How does open signup interact with web client invites
-and session tokens?
-
-### Self-service password reset
-
-**Spec:** §4.9, §5.12. **Today:** there is no self-service password reset. Instructors reset passwords using `@role
-<account> reset`, which generates a new setup code. **Questions:** - Without native email infrastructure, how should
-self-service resets be authenticated (e.g., web recovery tokens, OAuth provider integration, or reset codes)?
-
-### Team owners in CODEOWNERS
-
-**Spec:** §2.4, §5.12. **Today:** `CODEOWNERS` recognizes only individual `@user` GitHub handles (matched against
-account `github_handle`). Team handles (`@org/team`) are ignored. **Questions:** - How should team membership be
-resolved and synchronized: via GitHub REST API calls during deploy, manual configuration in `auth`, or roster CSV
-imports?
-
-## Networking and protocols
-
-### MSDP and MXP protocols
-
-**Spec:** §4.10, §4.13. **Today:** telnet negotiations support NAWS, TTYPE/MTTS, GMCP, EOR, and CHARSET. MSDP and MXP
-are explicitly unsupported; structured client communication relies entirely on GMCP. **Questions:** - Is there
-sufficient demand from legacy MUD clients to warrant implementing MSDP and MXP parsers and formatters? - How would MXP
-formatting tags integrate with ANSI rendering and web client pipelines?
-
-### Built-in ACME certificate issuance
-
-**Spec:** §4.10, §4.13. **Today:** the engine monitors PEM certificate files on disk and live-reloads them when changed,
-relying on an external client (such as certbot) to negotiate ACME issuance and renewal. **Questions:** - Should the
-engine embed an ACME client (responding to HTTP-01 or TLS-ALPN-01 challenges directly) to manage Let's Encrypt
-certificates without external dependencies?
 
 ## Scripting and runtime
 

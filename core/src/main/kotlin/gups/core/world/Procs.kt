@@ -136,7 +136,8 @@ private fun World.resolveProcOutcome(
             TargetKind.ENEMY -> ProcTarget.ENEMY
             TargetKind.SELF,
             TargetKind.ALLY -> ProcTarget.SELF
-            TargetKind.NONE -> ProcTarget.NONE
+            TargetKind.NONE,
+            TargetKind.ROOM -> ProcTarget.NONE
             TargetKind.ITEM -> ProcTarget.ENEMY
           }
         else -> ProcTarget.ENEMY

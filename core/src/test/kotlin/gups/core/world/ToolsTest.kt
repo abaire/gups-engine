@@ -173,6 +173,16 @@ class ToolsTest {
   }
 
   @Test
+  fun `stat on an actor shows each affect once with its flags`() {
+    val f = fixture()
+    val b = f.builder()
+    val mob = f.mob(at = b.room.label)
+    f.w.applyAffect(mob, "keen", 500, flags = setOf("glowing"))
+    f.input(b, "@stat #${mob.id.v}")
+    assertContains(f.out(b), "Affects: keen (125s left; glowing)")
+  }
+
+  @Test
   fun `stat on an item without affects or tag changes says so`() {
     val f = fixture()
     val b = f.builder()

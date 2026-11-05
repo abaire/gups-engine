@@ -145,9 +145,18 @@ class Room(id: EntityId, proto: RoomProto, private val singleSlot: Boolean = fal
   val regions: Set<String>
     get() = proto.regions
 
-  /** Semantic tags assigned to this room. */
-  val tags: Set<String>
-    get() = proto.tags
+  /** Timed enchantments on this room, in application order. */
+  val affects: MutableList<Affect> = mutableListOf()
+
+  /** The affects live at [pulse]: applied by then and not yet expired, by id. */
+  fun liveAffects(pulse: Long): List<Affect> =
+    affects.filter { it.appliedAt <= pulse && it.expiresAt > pulse }.sortedBy { it.id }
+
+  /** The prototype's tags plus the live affects' added tags, minus their removed tags. */
+  fun tagsAt(pulse: Long): Set<String> {
+    val live = liveAffects(pulse)
+    return (proto.tags + live.flatMap { it.addTags }) - live.flatMap { it.removeTags }
+  }
 
   /** Outgoing exits from this room indexed by direction. */
   var exits: Map<Direction, Exit> =
@@ -223,6 +232,10 @@ class Affect(
   val procs: List<Proc> = emptyList(),
   /** Percent strength this affect was applied at; 100 when nothing scaled it. */
   val power: Int = 100,
+  /** Tags a room gains while this affect is live; empty for any other host. */
+  val addTags: Set<String> = emptySet(),
+  /** Tags a room loses while this affect is live; empty for any other host. */
+  val removeTags: Set<String> = emptySet(),
 )
 
 /**

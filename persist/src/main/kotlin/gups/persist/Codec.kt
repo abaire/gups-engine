@@ -149,6 +149,10 @@ data class AffectJson(
   val resistDeltas: Map<String, Int> = emptyMap(),
   val procs: List<ProcJson> = emptyList(),
   val power: Int = 100,
+  /** Tags a room affect adds while live; sorted. */
+  val addTags: List<String> = emptyList(),
+  /** Tags a room affect removes while live; sorted. */
+  val removeTags: List<String> = emptyList(),
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -188,6 +192,8 @@ data class RoomPayload(
   /** `set_active` and `set_anchor` reasons. */
   val active: List<String> = emptyList(),
   val anchor: List<String> = emptyList(),
+  /** Timed enchantments on the room. */
+  val affects: List<AffectJson> = emptyList(),
 )
 
 @Serializable
@@ -368,6 +374,8 @@ internal fun affectJson(a: Affect): AffectJson =
     resistDeltas = a.resistDeltas.entries.associate { (k, v) -> k.name to v },
     procs = a.procs.map { it.json() },
     power = a.power,
+    addTags = a.addTags.sorted(),
+    removeTags = a.removeTags.sorted(),
   )
 
 internal fun affectsJson(a: Actor) =
@@ -396,6 +404,8 @@ internal fun affectFromJson(x: AffectJson): Affect =
     resistDeltas = x.resistDeltas.mapKeys { DamageType(it.key) },
     procs = x.procs.map { it.toProc() },
     power = x.power,
+    addTags = x.addTags.toSet(),
+    removeTags = x.removeTags.toSet(),
   )
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {
@@ -405,10 +415,10 @@ internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String
   e.anchorReasons.addAll(anchor)
 }
 
-internal fun restoreAffects(a: Actor, affects: List<AffectJson>) {
-  a.affects.removeIf { it.wornFrom == null }
-  for (x in affects) a.affects += affectFromJson(x)
-}
+/**
+ * The live form of saved affects, hook references resolved; actors and rooms restore through it.
+ */
+internal fun restoreAffects(affects: List<AffectJson>): List<Affect> = affects.map(::affectFromJson)
 
 // ---- Encoding (world thread) -------------------------------------------------------------------
 
@@ -440,6 +450,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           timers = timersJson(e),
           active = e.activeReasons.toList(),
           anchor = e.anchorReasons.toList(),
+          affects = e.affects.map(::affectJson),
         )
       EntityRow(
         e.id.v,
@@ -581,6 +592,8 @@ internal fun applyRoom(room: Room, p: RoomPayload) {
   room.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(room, p.timers)
   restoreReasons(room, p.active, p.anchor)
+  room.affects.clear()
+  room.affects += restoreAffects(p.affects)
 }
 
 internal fun applyMob(world: World, m: Mob, p: MobPayload) {
@@ -615,7 +628,8 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   m.customAttributes.clear()
   m.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(m, p.timers)
-  restoreAffects(m, p.affects)
+  m.affects.removeIf { it.wornFrom == null }
+  m.affects += restoreAffects(p.affects)
   restoreReasons(m, p.active, p.anchor)
 }
 
@@ -677,6 +691,7 @@ internal fun applyPlayer(world: World, pl: Player, p: PlayerPayload) {
   pl.customAttributes.clear()
   pl.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(pl, p.timers)
-  restoreAffects(pl, p.affects)
+  pl.affects.removeIf { it.wornFrom == null }
+  pl.affects += restoreAffects(p.affects)
   restoreReasons(pl, p.active, p.anchor)
 }

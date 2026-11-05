@@ -4,6 +4,27 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Room enchantments
+
+- Rooms can carry timed affects (tags, modifiers, hooks).
+- Room affects expire while their room is dormant, and are removed first on wake; the dormant regen catch-up accounts
+  for room affects piece by piece.
+- `apply_affect` durations are 64-bit; pulse arithmetic saturates.
+- `SEMI_PERMANENT`: a predeclared constant for a duration that effectively never ends, accepted wherever a timed affect
+  takes a duration. An affect that expires at that value reports `expires_at` and `remaining` as `None`.
+- `ctx.apply_affect` and `ctx.remove_affect` take a room as their target, applying a room affect (§3.3). A room's
+  `add_tags` and `remove_tags` grant and withdraw tags for as long as the affect is live; both are an error on any other
+  target. Actor-only fields (`stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `procs`, `applies`) are
+  an error on a room, and a room's affect needs a duration.
+- `room.affects` lists a room's live affects, by id. `room.tags` is the effective tags, so it includes a room affect's
+  added tags and hides its removed ones.
+- The `room` skill target: `skill(target="room")` enchants the caster's room and needs no keyword. Its `effect` may use
+  `apply_affect`, `dispel`, `sequence` and plugin primitives; `apply_affect` attaches a room affect and `dispel` removes
+  the room's matching affects (sending each one's `expire_msg`). The cast's power scales the room affect's duration,
+  which it remembers. `item(use_target="room")` is a load error.
+- Plugin effect primitives run in `room` skills. `PluginEffectCall` gains `targetRoom`, the caster's room, which is null
+  for every other target kind, where `target` and `targetItem` are also null.
+
 ### Encumbrance hook
 
 - `global_hook("on_encumbrance_change", fn)` for `lib` and `rules` packages: fires once for each change of an actor's

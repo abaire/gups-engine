@@ -53,7 +53,7 @@ sealed class EffectJson {
   @SerialName("apply_affect")
   data class ApplyAffect(
     val name: String,
-    val duration: Int? = null,
+    val duration: Long? = null,
     val statDeltas: Map<String, Int> = emptyMap(),
     val flags: List<String> = emptyList(),
     val tickEvery: Int? = null,
@@ -66,6 +66,8 @@ sealed class EffectJson {
     val resistDeltas: Map<String, Int> = emptyMap(),
     val applies: String? = null,
     val procs: List<ProcJson> = emptyList(),
+    val addTags: List<String> = emptyList(),
+    val removeTags: List<String> = emptyList(),
   ) : EffectJson()
 
   @Serializable
@@ -154,6 +156,8 @@ internal fun Effect.json(): EffectJson =
         resistDeltas = resistDeltas.entries.associate { (k, v) -> k.name to v },
         applies = applies?.name?.lowercase(),
         procs = procs.map { it.json() },
+        addTags = addTags.sorted(),
+        removeTags = removeTags.sorted(),
       )
     is Effect.Dispel ->
       EffectJson.Dispel(name = name, flags = flags.sorted(), all = all, count = count)
@@ -193,6 +197,8 @@ internal fun EffectJson.toEffect(): Effect =
         resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
         applies = applies?.let { AffectScope.valueOf(it.uppercase()) },
         procs = procs.map { it.toProc() },
+        addTags = addTags.toSet(),
+        removeTags = removeTags.toSet(),
       )
     is EffectJson.Dispel ->
       Effect.Dispel(name = name, flags = flags.toSet(), all = all, count = count)

@@ -826,7 +826,7 @@
       {
         "symbol": "ctx.apply_affect",
         "name": "apply_affect",
-        "doc": "Attaches a buff or debuff to an actor or item; re-applying a name replaces it.",
+        "doc": "Attaches a buff or debuff to an actor, an item or a room; re-applying a name replaces it.",
         "since": 1,
         "params": [
           {
@@ -837,7 +837,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor or item to receive the affect."
+            "doc": "Actor, item or room to receive the affect."
           },
           {
             "symbol": "ctx.apply_affect.name",
@@ -979,6 +979,26 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Combat procs that fire during auto-attack swings."
+          },
+          {
+            "symbol": "ctx.apply_affect.add_tags",
+            "name": "add_tags",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tags a room gains while the affect lasts; a room affect only."
+          },
+          {
+            "symbol": "ctx.apply_affect.remove_tags",
+            "name": "remove_tags",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tags a room loses while the affect lasts; a room affect only."
           }
         ]
       },
@@ -1997,7 +2017,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor or item carrying the affect."
+            "doc": "Actor, item or room carrying the affect."
           },
           {
             "symbol": "ctx.remove_affect.name",

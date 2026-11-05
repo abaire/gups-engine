@@ -12,8 +12,8 @@ import gups.core.rules.RulesContext
 
 // The modifier chain. Each modifiable rules result is the base value from the rules
 // module, then the zone's package modifiers, the region modifiers sorted by region name, the
-// room's, then the actor's traits (in name order), affects (by id) and equipped items (in slot
-// order).
+// room's, then the room's live affects (by id), then the actor's traits (in name order),
+// affects (by id) and equipped items (in slot order).
 
 /** One computed rules value and its chain, as `@trace rules` shows it. */
 class ChainResult<T>(val value: T, val text: String)
@@ -58,6 +58,9 @@ private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainS
     out += ChainStep.Script("region:$name", it)
   }
   room.proto.modifiers[point]?.let { out += ChainStep.Script("room:${room.label.name}", it) }
+  for (a in room.liveAffects(roomClock)) a.modifiers[point]?.let {
+    out += ChainStep.Script("room-affect:${a.name}", it, affect = a)
+  }
   for (t in actor.traits) {
     val mod = t.modifiers[point] ?: continue
     out += ChainStep.TraitStep(t, mod)

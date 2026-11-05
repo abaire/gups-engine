@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Item
+import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.TargetKind
@@ -140,6 +141,9 @@ internal class CastAction(
   /** The target of an `item` skill: carried, worn or on the ground. */
   private var targetItem: Item? = null
 
+  /** The room a `room` skill acts on: the caster's. */
+  private var targetRoom: Room? = null
+
   private fun chooseTarget(w: World, caster: Actor): Result<Actor?> {
     if (targetChosen) return Result.success(target)
     fun fail(m: Msg, vararg args: Pair<String, Any?>) =
@@ -151,6 +155,10 @@ internal class CastAction(
         when (skill.target) {
           TargetKind.SELF -> caster
           TargetKind.NONE -> null
+          TargetKind.ROOM -> {
+            targetRoom = caster.room
+            null
+          }
           TargetKind.ITEM -> {
             val word = targetWord ?: return fail(SkillMsg.ON_WHAT, "skill" to skill.name)
             targetItem =
@@ -250,6 +258,7 @@ internal class CastAction(
     val power = w.skillPowerChain(c)
     val t = target
     val onItem = targetItem
+    val onRoom = targetRoom
     w.send(
       actor,
       when {
@@ -281,6 +290,7 @@ internal class CastAction(
       else listOf(t)
     if (onItem != null && onItem.id in w.entities)
       skill.effect?.let { w.applyItemEffect(it, actor, onItem, power = power) }
+    onRoom?.let { r -> skill.effect?.let { w.applyRoomEffect(it, actor, r, power = power) } }
     for (each in targets) {
       val hostile = skill.target == TargetKind.ENEMY && each != null && each !== actor
       // An enemy skill engages whatever it is cast at, whether or not it lands.
@@ -306,8 +316,9 @@ internal class CastAction(
         )
         continue
       }
-      // An item skill's effect already ran on the item.
-      if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill, power = power) }
+      // An item or room skill's effect already ran on the item or the room.
+      if (onItem == null && onRoom == null)
+        skill.effect?.let { w.applyEffect(it, actor, each, skill, power = power) }
       skill.resolve?.resolve(w, actor, each, onItem, power)
     }
     w.dispatch(

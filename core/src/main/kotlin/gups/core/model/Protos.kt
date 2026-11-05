@@ -363,6 +363,9 @@ enum class TargetKind {
 
   /** Requires no specific target. */
   NONE,
+
+  /** Targets the caster's room. */
+  ROOM,
 }
 
 /** Passive affect definition granted while an item remains equipped. */

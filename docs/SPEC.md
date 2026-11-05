@@ -416,9 +416,14 @@ the world graph:
 
 - **Tactical layout:** `trackSize` (`1`, `3`, or `5`; always `1` without the `track` feature, §3.10).
 - **Spatial connectivity:** outward `exits` map keyed by cardinal `Direction`.
-- **Classification and tags:** builder `regions`, queryable `tags` (§4.2), and frozen prototype `modifiers`.
+- **Classification and tags:** builder `regions`, queryable effective `tags`, and frozen prototype `modifiers`.
 - **Spawns and commands:** mob `spawns` rules, zone `commands` map, and simulation flags (`always_active`,
   `dead_end_ok`).
+- **Affects:** timed `affects`, the same `Affect` as actors and items have. A room affect carries `modifiers`, `flags`,
+  `addTags`, `removeTags`, hooks and `power`, and no stat, sense, vital or resist deltas. A room's effective `tags` are
+  the prototype's, plus the `addTags` of its live affects, minus their `removeTags`; a tag that is both added and
+  removed is removed. An affect is live at a pulse when its `appliedAt` is not later and its `expiresAt` is later than
+  that pulse.
 
 **Exit and Door** ([`Exit`](../core/src/main/kotlin/gups/core/model/Entities.kt),
 [`Door`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
@@ -491,14 +496,16 @@ the world graph:
 - **Tracking:** unique `id`, source `label`, optional `source` entity ID, absolute expiration pulse `expiresAt`, and
   percent strength `power` (int, default 100).
 - **Mechanics:** schema `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`, status `flags` (such as
-  `stunned`, `silenced`, or `no_regen`), periodic `tickEvery` cadence with `onTick` and `onExpire` hook references, and
-  applied `modifiers`. The deltas mean the same for actor affects and item affects.
+  `stunned`, `silenced`, or `no_regen`), periodic `tickEvery` cadence with `onTick` and `onExpire` hook references,
+  applied `modifiers`, and `addTags` and `removeTags` (used by room affects only). The deltas mean the same for actor
+  affects and item affects.
 - **Replacement rule:** re-applying an affect with the same name replaces the existing affect only if the new
   `expiresAt` is strictly later; shorter affects never truncate longer active affects. A permanent item affect counts as
   expiring latest.
 - **Scope:** item affects carry `applies` (`worn` or `carried`); an item affect's stat and sense deltas, flags and
   modifiers count for the item's holder while it reaches it. An item removed from the world mid-pulse takes its
-  remaining affects with it; their hooks don't fire.
+  remaining affects with it; their hooks don't fire. A room affect's expire message goes to every actor in the room when
+  it expires or is dispelled; `on_expire` and `on_tick` run with the room as `self`.
 
 **ScriptTimer** ([`ScriptTimer`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -631,7 +638,7 @@ The engine persists world state and account information to SQLite in WAL mode
 - **JSON payloads and delta encoding:** Payloads are serialized using delta encoding
   ([Codec.kt](../persist/src/main/kotlin/gups/persist/Codec.kt)). Each payload carries a `format_version` integer for
   engine schema evolution:
-  - Rooms store modified door states, custom attributes, and running timers.
+  - Rooms store modified door states, custom attributes, running timers, and affects.
   - Mobs store position, current vitals, XP, home room, and spawn rule bindings. Modifiable stats, vitals maxima,
     resists, skills, and behavior cadences are persisted only when differing from prototype definitions.
   - Schema-keyed stats, vitals, and resists are stored as JSON maps, recording current values, base maxima, and
@@ -976,8 +983,8 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
-  (§4.5). The tag `no_all` keeps an item out of bare `all` in `get`, `drop`, `give` and `put`; `//engine:corpse` carries
-  it.
+  (§4.5). A room's effective tags also include those its affects add (§3.3). The tag `no_all` keeps an item out of bare
+  `all` in `get`, `drop`, `give` and `put`; `//engine:corpse` carries it.
 - **Mob traits:** `mob(traits = [...])` names traits the world's plugins define (§4.19), stored sorted without repeats.
   A name no loaded plugin defines fails the package's load with a "did you mean" suggestion, as a skipped plugin's
   builtins do; every tool that loads packages registers the plugins first, so `gups lint` checks it too. The traits'
@@ -998,8 +1005,9 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   `track`; `skills` with `skills`; `level` with `leveling`; `procs`, `proc` and `outcome` with `combat`) fail the load,
   naming the feature (§3.10).
 - **Constants:** Common engine constants are namespaced into structs (such as `DIR`, `MODIFIER`, `SIZE`, `SENSE`,
-  `DOOR`, and `DAMAGE`) to prevent bare-string typos. The constant namespaces and their values are defined in
-  [Declarations.kt](../script/src/main/kotlin/gups/script/Declarations.kt) (`DeclarationBuiltins.constants`).
+  `DOOR`, and `DAMAGE`) to prevent bare-string typos. `SEMI_PERMANENT` is a plain int constant. The constant namespaces
+  and their values are defined in [Declarations.kt](../script/src/main/kotlin/gups/script/Declarations.kt)
+  (`DeclarationBuiltins.constants`).
 - **`struct(**fields)`** makes an immutable record. Libraries use it to export a namespace of functions (`quest.start`).
 - **When builtins work:** declaration builtins work only while a package loads; effect primitives, `proc` and `outcome`
   work anywhere.
@@ -1018,7 +1026,7 @@ skill("fireball",
       warmup=6,  # pulses in CASTING; 0 = instant
       lag=4,  # waitState pulses after resolution
       range="far",  # melee | near | far | self | room
-      target="enemy",  # enemy | ally | self | item | none
+      target="enemy",  # enemy | ally | self | item | none | room
       channels=["spell", "sound"],  # built-in or declared channels
       interrupt={"damage_pct": 10, "stun": True},
       attack_while_casting=False,  # default; True lets auto-attacks continue during warmup
@@ -1047,6 +1055,11 @@ validation with "You don't have enough <label>." (§4.18).
   Its `effect` acts on the item: `apply_affect` attaches an item affect (with `applies`), plugin primitives receive the
   item, and `sequence` may combine them. Any other primitive in an item skill's effect fails the load. In `resolve` and
   the cast hooks, the item is `ctx.target`.
+- A `room` skill acts on the caster's room and needs no keyword. Its `effect` may use `apply_affect`, `dispel`,
+  `sequence` and plugin primitives; anything else fails the load. `apply_affect` attaches a room affect (the room rules
+  of §3.3 apply, and `applies`, `procs` and the actor deltas are load errors); `dispel` removes the room's matching
+  affects. A plugin primitive is called with `target` and `targetItem` null and `targetRoom` the caster's room (§4.19).
+  The target kind `room` is not the `range` value `room`: `range` is ignored for a `room` target.
 - The target is chosen at the first validation and stays fixed through the warmup.
 
 **Success and power:** when a cast resolves (after any warmup), costs are deducted from the caster's vitals and the
@@ -1061,8 +1074,14 @@ declared; every target of the cast shares it. Rules usually base both on the cas
 **Power** scales what the effect primitives do: the rolled amount of `damage` (before the `damage` chain) and of `heal`,
 `stun` pulses, and the `duration` of `apply_affect` and of `summon`, rounded down, a positive value never below 1.
 Nothing else is scaled. An affect remembers the power it was applied at (`affect.power`), and its modifiers can read it
-as `ctx.affect.power`. `resolve` gets it as `ctx.power`. Effects outside casts run at 100, except items' (§4.2). Skill
-procs never roll `skill_check` or `skill_power`.
+as `ctx.affect.power`. On a `room` skill, a room affect's duration is scaled by the cast's power and the affect
+remembers it. `resolve` gets it as `ctx.power`. Effects outside casts run at 100, except items' (§4.2). Skill procs
+never roll `skill_check` or `skill_power`.
+
+`SEMI_PERMANENT` is a predeclared constant for a duration that effectively never ends (the largest 64-bit integer). It
+is accepted wherever a timed affect takes a duration. Scaling and expiry arithmetic never overflow: a scaled duration
+stops at the largest 64-bit integer. An affect whose expiry is that value reports `expires_at` and `remaining` as
+`None`, like a permanent item affect.
 
 **Landing:** a cast that passed `skill_check` then rolls to land: an `enemy` skill rolls to land on each actor it
 reaches other than the caster, one roll per victim for a `room`-range skill. The chance is `rules.to_hit` with
@@ -1073,17 +1092,17 @@ caster, the victim and the room are told. The cost and lag are paid either way, 
 
 **Effect primitives (v0):**
 
-|                                                                                                               Primitive                                                                                                                |                                                                                                                                                                                                                                   Purpose                                                                                                                                                                                                                                   |
-|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `damage(dice, type)`                                                                                                                                                                                                                   | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and the target's `receive_damage` chain; the caster's `bonus_damage` chain may add typed parts, each mitigated separately (§4.6); a negative result counts as 0. `mitigate` and then the target's `mitigate` chain turn it into vital losses (§4.6).                              |
-| `heal(dice, vital)`                                                                                                                                                                                                                    | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, max_vital_deltas=vitals(), resist_deltas=resists(), applies=None, procs=[])` | Attach a timed buff or debuff. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one. `procs` (§4.2, needs `combat`) fire for the affect's host, or for the holder of the item it is on.                                                                                                                                                                |
-| `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                                                                                  | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. |
-| `knockback(steps)`                                                                                                                                                                                                                     | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                            |
-| `pull(steps)`                                                                                                                                                                                                                          | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                               |
-| `stun(pulses)`                                                                                                                                                                                                                         | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `summon(label, count=1, duration=None)`                                                                                                                                                                                                | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                               |
-| `sequence(*effects)`                                                                                                                                                                                                                   | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|                                                                                                                              Primitive                                                                                                                              |                                                                                                                                                                                                                                                                                                                                 Purpose                                                                                                                                                                                                                                                                                                                                 |
+|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `damage(dice, type)`                                                                                                                                                                                                                                                | Deal damage of a declared type, by default the world's `unarmed_damage_type`. The rolled amount goes through the caster's `damage` modifier chain (`ctx.skill` and `ctx.damage_type` set) and the target's `receive_damage` chain; the caster's `bonus_damage` chain may add typed parts, each mitigated separately (§4.6); a negative result counts as 0. `mitigate` and then the target's `mitigate` chain turn it into vital losses (§4.6).                                                                                                                                                                                                                          |
+| `heal(dice, vital)`                                                                                                                                                                                                                                                 | Restore a declared vital, up to its maximum.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apply_affect(name, duration, stat_deltas=stats(), flags=[], tick_every=None, on_tick=None, on_expire=None, expire_msg="", modifiers={}, sense_deltas={}, max_vital_deltas=vitals(), resist_deltas=resists(), applies=None, procs=[], add_tags=[], remove_tags=[])` | Attach a timed buff or debuff; `duration` is pulses, 64-bit. On an `item` skill, attaches an item affect; `applies` (`worn` or `carried`, `worn` when omitted) is allowed only there, and `duration` may be `None` for a permanent one. `procs` (§4.2, needs `combat`) fire for the affect's host, or for the holder of the item it is on. On a room (`ctx.apply_affect(room, ...)` only; a room is not a skill target until the `room` target below), only `modifiers`, `flags`, `tick_every`, `on_tick`, `on_expire`, `expire_msg`, `add_tags` and `remove_tags` apply, and the duration is required. `add_tags` and `remove_tags` are an error for any other target. |
+| `dispel(name=None, flag=None, all=False, count=None)`                                                                                                                                                                                                               | Remove the target's affects that match every criterion given: `name` exactly, or as a prefix when it ends in `*`; `flag` (a string or a list) when the affect has any of those flags; `all=True` matches every affect. At least one criterion is required, checked at load. `count` caps how many are removed, oldest first. Affects flagged `intrinsic` are never dispelled. Each removed affect sends its `expire_msg` and fires its `on_expire` with reason `"removed"`. On a `room` skill it removes the room's matching affects.                                                                                                                                   |
+| `knockback(steps)`                                                                                                                                                                                                                                                  | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `pull(steps)`                                                                                                                                                                                                                                                       | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `stun(pulses)`                                                                                                                                                                                                                                                      | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `summon(label, count=1, duration=None)`                                                                                                                                                                                                                             | Spawn mobs beside the caster, each with `summonedBy` set to the caster. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `sequence(*effects)`                                                                                                                                                                                                                                                | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### 4.4 Hook Catalog
 
@@ -1117,8 +1136,8 @@ other return value means "allow". The return values of `on_*` hooks are ignored.
 | `on_open`, `on_close`, `on_lock`, `on_unlock`                 | —         | Item, Room, Mob (§5.7)                | `actor`, `direction` (a door) or `item` (a container)                               |
 | `think`                                                       | —         | Mob                                   | `self`, `proposals`                                                                 |
 | `commands[verb]`                                              | —         | Room, Item                            | `actor`, `args`, `target`, `item`                                                   |
-| affect `on_tick`                                              | —         | Affect                                | `self` (host), `affect`                                                             |
-| affect `on_expire`                                            | —         | Affect                                | `self` (host), `affect`, `reason`                                                   |
+| affect `on_tick`                                              | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`                                |
+| affect `on_expire`                                            | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`, `reason`                      |
 
 **Observer semantics:** Hooks on a mob fire for actions *by others in the same room*. `ctx.self` is always the hook's
 owner.
@@ -1217,8 +1236,8 @@ elsewhere; `skills` feature), `pulse`, `rng`.
 
 **Room view:**
 
-- **Identity:** `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`, `tags`.
-- **Contents:** `exits()`, `actors()`, `items()`, `contents()`.
+- **Identity:** `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`, `tags` (the effective tags, §3.3).
+- **Contents:** `exits()`, `actors()`, `items()`, `contents()`, `affects` (the live affects, by id).
 - **Exits:** `exit(dir)`, an exit view with its `tags` and `door`: a door view (`state`, `key`, `tags`), or `None`
   without a door.
 
@@ -1228,8 +1247,8 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
 `has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are the effective tags.
 
 **Affect view:** `id`, `name`, `host`, `expires_at`, `remaining`, `flags`, `stat_deltas`, `sense_deltas`,
-`max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`, `power`. `power` is the percent strength the affect
-was applied at (§4.3); 100 when nothing scaled it.
+`max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`, `power`. `host` is the actor, item or room the
+affect is on. `power` is the percent strength the affect was applied at (§4.3); 100 when nothing scaled it.
 
 **Skill view:** includes `cost`, `channels`, `interrupt` and `tags`.
 
@@ -1241,7 +1260,7 @@ was applied at (§4.3); 100 when nothing scaled it.
 | Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                                 |
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players.       |
 | Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                       |
-| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor or an item), `summon(caster, label, count=1, duration=None)`                 |
+| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor, an item or a room), `summon(caster, label, count=1, duration=None)`         |
 | Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`          |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                                 |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                             |
@@ -1562,13 +1581,13 @@ The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.
 are those of that room too.
 
 **Chain order:** base rules result, then zone `package(modifiers=)`, then region modifiers (sorted by region name), then
-room modifiers, then the actor's traits (in name order, §4.19), then its affects (sorted by affect id), then its items:
-each worn item in `equipment_slots()` order (then any other slots by name) contributes its `item(modifiers=)` and then
-the modifiers of its item affects (prototype affects in declaration order, then instance affects by id); then every
-other held item's `carried` affects, depth first through containers in item-id order. Items contribute their
-`item(modifiers=)` and item affects their `modifiers`; affects contribute the `modifiers` given to `apply_affect`;
-traits contribute the Kotlin modifiers of their plugin. Traits have no `cast_allowed` modifiers: the `cast` restriction
-refuses casts (§4.19).
+room modifiers, then the modifiers of the room's live affects (by affect id), then the actor's traits (in name order,
+§4.19), then its affects (sorted by affect id), then its items: each worn item in `equipment_slots()` order (then any
+other slots by name) contributes its `item(modifiers=)` and then the modifiers of its item affects (prototype affects in
+declaration order, then instance affects by id); then every other held item's `carried` affects, depth first through
+containers in item-id order. Items contribute their `item(modifiers=)` and item affects their `modifiers`; affects
+contribute the `modifiers` given to `apply_affect`; traits contribute the Kotlin modifiers of their plugin. Traits have
+no `cast_allowed` modifiers: the `cast` restriction refuses casts (§4.19).
 
 **Attack and defense:** an auto-attack's hit chance is the `to_hit` export, then the attacker's `to_hit` chain, then the
 defender's `defend_hit` chain, which takes the attacker's result as its base; the swing rolls against the final value.
@@ -1617,16 +1636,17 @@ room("antimagic_vault", modifiers={
 ```
 
 The harness and `@trace` print the full chain, for example `rules.to_hit base=62 → region:null_field ×0.5 → 31 → roll 44
-MISS`. A lag chain that ends below 0 prints a final `→ clamp 0` step. A defender's chain continues the same line after a
-`defender:<point>` step, for example `rules.to_hit base=62 → room:fog 52 → defender:defend_hit → affect:blur 42 → roll
-44 HIT`; the step is left out when the defender has no modifier at that point. The damage chains trace the same way, for
-example `rules.damage base=6 → defender:receive_damage → item:ward 1 → mitigate hp 1 slash → defender:mitigate →
-item:siphon {hp 1, mana -1}`. Bonus parts continue the same line: ` → bonus_damage` and the attacker's steps, then ` →
-part <type> <amount>` and that part's defender and `mitigate` steps, for example `rules.damage base=6 → mitigate hp 4
-slash → bonus_damage → item:flaming_sword damages(fire = 2) → part fire 2 → mitigate hp 2 fire`; the segment is left out
-when the attacker has no `bonus_damage` modifier. A spell's roll ends in `LAND` or `RESIST`, or in `→ auto LAND` when
-the chance is 100 or more. `skill_check` ends in `→ roll N SUCCEED`, `→ roll N FAIL` or `→ auto SUCCEED`; the power
-chains are traced as plain chains (`rules.skill_power base=118 → trait:artificer 130`).
+MISS`. A step of a room's live affect shows as `room-affect:<name>`. A lag chain that ends below 0 prints a final `→
+clamp 0` step. A defender's chain continues the same line after a `defender:<point>` step, for example `rules.to_hit
+base=62 → room:fog 52 → defender:defend_hit → affect:blur 42 → roll 44 HIT`; the step is left out when the defender has
+no modifier at that point. The damage chains trace the same way, for example `rules.damage base=6 →
+defender:receive_damage → item:ward 1 → mitigate hp 1 slash → defender:mitigate → item:siphon {hp 1, mana -1}`. Bonus
+parts continue the same line: ` → bonus_damage` and the attacker's steps, then ` → part <type> <amount>` and that part's
+defender and `mitigate` steps, for example `rules.damage base=6 → mitigate hp 4 slash → bonus_damage →
+item:flaming_sword damages(fire = 2) → part fire 2 → mitigate hp 2 fire`; the segment is left out when the attacker has
+no `bonus_damage` modifier. A spell's roll ends in `LAND` or `RESIST`, or in `→ auto LAND` when the chance is 100 or
+more. `skill_check` ends in `→ roll N SUCCEED`, `→ roll N FAIL` or `→ auto SUCCEED`; the power chains are traced as
+plain chains (`rules.skill_power base=118 → trait:artificer 130`).
 
 **Encumbrance:** `rules.encumbrance_level` gives an actor's encumbrance level, 0 or more, from `ctx.carried` (carried
 and worn weight, containers' contents included) and `ctx.limit` (`rules.carry_limit` asked without an item), and
@@ -2441,8 +2461,10 @@ subsystems (`core` or `script`). It consists of three primary components:
   called while the world runs from a hook or command.
 - **Effect primitives:** Declared via `addEffectPrimitive` (`weather.soak(pulses = 3)`). They bind arguments as builtins
   do, reject entity arguments, and return an effect value usable in `skill(effect = ...)` or `sequence(...)`. On an
-  `item` skill, `targetItem` is the item and `target` is null. `PluginEffectCall.power` is the percent power the effect
-  runs at, 100 outside casts and item effects; the primitive decides what it scales.
+  `item` skill, `targetItem` is the item and `target` is null. On a `room` skill, `targetRoom` is the caster's room and
+  both `target` and `targetItem` are null. A primitive written for an actor or item target that gets such a call sees a
+  target it has no view of and should ignore it or behave as when handed no item. `PluginEffectCall.power` is the
+  percent power the effect runs at, 100 outside casts and item effects; the primitive decides what it scales.
 - **Commands:** Integrated into the command registry (§5.2). Names must be lowercase with no whitespace and cannot start
   with `@`. They cannot shadow engine commands or aliases. Role-gated plugin commands are hidden from ineligible
   players.
@@ -2911,7 +2933,8 @@ Pulse boundaries come from `System.nanoTime()`.
   actor's queue. Output produced while handling a session's input between pulses is flushed to that session at once;
   output caused by anything else waits for phase 7.
 - **At each pulse boundary**, `pulse++` and then these phases run in this exact order:
-  1. **Timers:** Fire `ScriptTimer`s and affect ticks/expiries due at this pulse, ordered by `(due, id)`.
+  1. **Timers:** Fire `ScriptTimer`s and affect ticks/expiries due at this pulse, ordered by `(due, id)`. Room affects
+     tick and expire here too, for rooms that are simulated.
   2. **Action pulse:** For each active actor, in **initiative order** (§5.4.1):
      - If `casting`, advance it. When the warmup completes, resolve the action (§5.3).
      - Otherwise, if `waitState > 0`, decrement it.
@@ -3402,14 +3425,15 @@ The reality bubble and room simulation lifecycle are implemented in
   - AI, `on_tick`, and `on_combat_tick` stop. Entities with an active or anchor reason keep running.
   - Each `ScriptTimer` converts from `due` to `remaining`, keeping at least 1 pulse to run.
   - Affects are **not** paused. Their `expiresAt` is an absolute pulse, so they keep running out while the room is
-    dormant.
+    dormant. Room affects behave the same: they keep running out while the room is dormant, and their ticks don't run.
   - Combat disengages (§5.4). Mobs drop their action queue and cast; recovery (`waitState`) is kept.
 - **Waking (lazy catch-up, never simulation),** in this order:
   1. Timers convert back from `remaining` to `due`.
   2. Mobs recover (below).
-  3. Affects that ran out are removed, firing `on_expire` in expiry order, then id: first each mob's own affects, mob by
-     mob, then the affects of every item in the room (on the ground, inside containers, or carried by its mobs).
-  4. A missed zone reset is applied to the room: its spawns, then `on_reset`.
+  3. Affects that ran out are removed, firing `on_expire` in expiry order, then id: first the room's own affects, then
+     each mob's own affects, mob by mob, then the affects of every item in the room (on the ground, inside containers,
+     or carried by its mobs).
+  4. A missed zone reset is applied to the room, after the room's expired affects are gone: its spawns, then `on_reset`.
   5. Respawns that are due fill.
   6. Items that decayed go.
   7. `on_wake(ctx, elapsed_pulses)` fires on the room, then its mobs, then its items (each ascending id), as they were
@@ -3425,9 +3449,13 @@ The reality bubble and room simulation lifecycle are implemented in
   - With a `no_regen` affect still running at wake, `full` falls back to the piecewise catch-up, which then restores
     nothing while the affect lasts.
 
-  - **Catch-up is piecewise.** The elapsed time is split at every affect expiry that fell inside it, and regen is
-    computed per segment with the affects active in that segment. A 15-minute `no_regen` affect therefore suppresses
-    exactly 15 minutes of healing, then normal regen resumes.
+  - **Catch-up is piecewise.** The elapsed time is split at every affect expiry that fell inside it, at every point
+    where one of the room's affects was applied or expired, and regen is computed per segment with the mob's affects and
+    the room's affects that were active in that segment. A 15-minute `no_regen` affect therefore suppresses exactly 15
+    minutes of healing, then normal regen resumes. A room affect counts as active at a tick when its `appliedAt` is not
+    later than the tick and its `expiresAt` is later than it. The room's expired affects are still in place when mobs
+    recover, because they are removed in step 3. A room affect's `no_regen` flag does nothing: only the mob's own
+    `no_regen` suppresses regen.
 
   - The world ticks counted are those after the room went dormant, up to and including the waking pulse. An affect
     counts as active at a tick when its `expiresAt` is later than the tick, matching live play, where expiry (phase 1)
@@ -4028,3 +4056,4 @@ template's `.github/workflows/gates.yml`.
 | **M32**   | Progressive encumbrance: `encumbrance_level` rules export, `ctx.limit`/`ctx.carried`/`ctx.encumbrance_level`, `actor.encumbrance_level`, `encumbrance` only above level 0, `encumbrance.up`/`down` messages, the template's and robot world's formulas (§4.6, §4.18, §5.5).                                                                                                                                                                                                                                                                                                                                                            |
 | **M33**   | Acquiring skills: `ctx.set_skill`, `ctx.remove_skill` and `ctx.skill_info` (and `w.set_skill`/`w.remove_skill`), with `learn` run on every set; `global_hook("on_level_change", fn)` for privileged packages, loaded but inert without `leveling`; the `skills` command and `Char.Skills`, with a web client panel; `//lib:trainer.star` with practice sessions per level (a balance that can go negative), `practice` and the `practice_offer` hook; the template's `//skills/arcane` and tutorial mentor (§3.10, §4.4, §4.5, §4.9, §4.10, §4.12, §4.19).                                                                             |
 | **M34**   | The `on_encumbrance_change` global hook: `global_hook("on_encumbrance_change", fn)` for privileged packages, fired once per encumbrance level change for every actor, `ctx.old_encumbrance_level` and `ctx.new_encumbrance_level`, the template's flavor example (§4.4, §4.9).                                                                                                                                                                                                                                                                                                                                                         |
+| **M35**   | Room enchantments: timed `Affect`s on rooms with modifiers and tag changes, `apply_affect` and `remove_affect` on a room, `room.affects`, 64-bit affect durations and `SEMI_PERMANENT`, the `room` skill target and plugin primitives on a room (§3.3, §4.2, §4.3, §4.4, §4.6, §4.15, §4.19, §5.9).                                                                                                                                                                                                                                                                                                                                    |

@@ -298,7 +298,7 @@ class TraitScriptTest {
             )
           )
       )
-    assertEquals(listOf("holy", "shrine"), w.room(start).tags.toList())
+    assertEquals(listOf("holy", "shrine"), w.room(start).tagsAt(w.pulse).toList())
     assertEquals(
       listOf("cloth", "light"),
       w.protos.items.getValue(Label("//zones/z:robe")).tags.toList(),
@@ -321,6 +321,6 @@ class TraitScriptTest {
     val w = world(root = root)
     root.resolve("zones/z/rooms.star").toFile().writeText("room(\"start\", tags = [\"cursed\"])\n")
     w.handle(WorldControlEvent.Reload(listOf("zones/z")))
-    assertEquals(setOf("cursed"), w.room(start).tags)
+    assertEquals(setOf("cursed"), w.room(start).tagsAt(w.pulse))
   }
 }

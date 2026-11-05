@@ -645,32 +645,34 @@ internal constructor(
     }
     val effects =
       plugins.flatMap { p -> p.reg.effects.map { (p.id to it.name) to (p.id to it) } }.toMap()
-    world.pluginEffects = PluginEffectRunner { w, effect, caster, target, targetItem, power ->
-      val (id, e) =
-        effects[effect.pluginId to effect.name]
-          ?: run {
-            w.record(
-              Diagnostic(
-                w.pulse,
-                "plugin",
-                "no plugin effect ${effect.pluginId}.${effect.name} is loaded",
+    world.pluginEffects =
+      PluginEffectRunner { w, effect, caster, target, targetItem, targetRoom, power ->
+        val (id, e) =
+          effects[effect.pluginId to effect.name]
+            ?: run {
+              w.record(
+                Diagnostic(
+                  w.pulse,
+                  "plugin",
+                  "no plugin effect ${effect.pluginId}.${effect.name} is loaded",
+                )
               )
+              return@PluginEffectRunner
+            }
+        guard(w, id, "effect '${e.name}'") {
+          e.apply.apply(
+            PluginEffectCall(
+              facade(w, id),
+              ActorFacade(caster, w),
+              target?.let { ActorFacade(it, w) },
+              effect.args,
+              targetItem = targetItem?.let { ItemFacade(it, w) },
+              power = power,
+              targetRoom = targetRoom?.let { RoomFacade(it, w) },
             )
-            return@PluginEffectRunner
-          }
-      guard(w, id, "effect '${e.name}'") {
-        e.apply.apply(
-          PluginEffectCall(
-            facade(w, id),
-            ActorFacade(caster, w),
-            target?.let { ActorFacade(it, w) },
-            effect.args,
-            targetItem = targetItem?.let { ItemFacade(it, w) },
-            power = power,
           )
-        )
+        }
       }
-    }
   }
 
   override fun started(world: World) {

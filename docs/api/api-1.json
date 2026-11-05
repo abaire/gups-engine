@@ -689,7 +689,7 @@
           "keyword": true,
           "required": false,
           "default": "'self'",
-          "allowed_values": ["enemy", "ally", "self", "item", "none"],
+          "allowed_values": ["enemy", "ally", "self", "item", "none", "room"],
           "doc": "Whom use_effect acts on: 'enemy', 'ally', 'self', 'item' or 'none'.",
           "since": 1
         },
@@ -1727,7 +1727,7 @@
           "keyword": true,
           "required": false,
           "default": "'enemy'",
-          "allowed_values": ["enemy", "ally", "self", "item", "none"],
+          "allowed_values": ["enemy", "ally", "self", "item", "none", "room"],
           "doc": "Kind of target the skill accepts.",
           "since": 1
         },
@@ -2450,6 +2450,14 @@
       "type": "struct",
       "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\", skill_check = \"skill_check\", skill_power = \"skill_power\", item_power = \"item_power\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
+      "since": 1
+    },
+    {
+      "symbol": "SEMI_PERMANENT",
+      "name": "SEMI_PERMANENT",
+      "type": "int",
+      "value": "9223372036854775807",
+      "doc": "A duration (in pulses) that effectively never ends; accepted wherever a timed affect takes a duration.",
       "since": 1
     },
     {
@@ -3339,7 +3347,7 @@
       {
         "symbol": "ctx.apply_affect",
         "name": "apply_affect",
-        "doc": "Attaches a buff or debuff to an actor or item; re-applying a name replaces it.",
+        "doc": "Attaches a buff or debuff to an actor, an item or a room; re-applying a name replaces it.",
         "since": 1,
         "params": [
           {
@@ -3350,7 +3358,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor or item to receive the affect."
+            "doc": "Actor, item or room to receive the affect."
           },
           {
             "symbol": "ctx.apply_affect.name",
@@ -3492,6 +3500,26 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Combat procs that fire during auto-attack swings."
+          },
+          {
+            "symbol": "ctx.apply_affect.add_tags",
+            "name": "add_tags",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tags a room gains while the affect lasts; a room affect only."
+          },
+          {
+            "symbol": "ctx.apply_affect.remove_tags",
+            "name": "remove_tags",
+            "positional": true,
+            "named": true,
+            "default": "[]",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Tags a room loses while the affect lasts; a room affect only."
           }
         ]
       },
@@ -4510,7 +4538,7 @@
             "default": null,
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor or item carrying the affect."
+            "doc": "Actor, item or room carrying the affect."
           },
           {
             "symbol": "ctx.remove_affect.name",
@@ -5465,7 +5493,7 @@
         {
           "symbol": "view:affect.applies",
           "name": "applies",
-          "doc": "Scope for item affects ('worn' or 'carried'), or None for actor affects.",
+          "doc": "Scope for item affects ('worn' or 'carried'), or None for actor and room affects.",
           "since": 1
         },
         {
@@ -5483,7 +5511,7 @@
         {
           "symbol": "view:affect.host",
           "name": "host",
-          "doc": "The actor or item carrying the affect.",
+          "doc": "The actor, item or room carrying the affect.",
           "since": 1
         },
         {
@@ -6095,6 +6123,12 @@
       "since": 1,
       "fields": [
         {
+          "symbol": "view:room.affects",
+          "name": "affects",
+          "doc": "The room's live affects, by id.",
+          "since": 1
+        },
+        {
           "symbol": "view:room.attrs",
           "name": "attrs",
           "doc": "Custom attributes; your package's own keys by short name.",
@@ -6146,7 +6180,7 @@
         {
           "symbol": "view:room.tags",
           "name": "tags",
-          "doc": "Tags carried by this room, sorted.",
+          "doc": "The effective tags: the room's own, plus its live affects' added tags minus their removed tags, sorted.",
           "since": 1
         },
         {
@@ -6435,6 +6469,26 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Combat procs that fire during auto-attack swings."
+        },
+        {
+          "symbol": "apply_affect.add_tags",
+          "name": "add_tags",
+          "positional": true,
+          "named": true,
+          "default": "[]",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Tags a room gains while the affect lasts; a room affect only."
+        },
+        {
+          "symbol": "apply_affect.remove_tags",
+          "name": "remove_tags",
+          "positional": true,
+          "named": true,
+          "default": "[]",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Tags a room loses while the affect lasts; a room affect only."
         }
       ]
     },

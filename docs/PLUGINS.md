@@ -185,6 +185,10 @@ r.addEffectPrimitive(
 }
 ```
 
+On a `room` skill, `call.targetRoom` is the caster's room, and both `call.target` and `call.targetItem` are null. A
+primitive written for an actor or item target that gets a room call has no view of its usual target; ignore it or behave
+as when handed no item.
+
 ### GMCP packages
 
 A state package's producer runs in phase 7 for each player whose client supports the package, and only changed payloads

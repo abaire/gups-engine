@@ -470,7 +470,7 @@ internal class WorldFacade(
     world.applyAffect(
       target = actorOf(target, "apply_affect(target)"),
       name = name,
-      duration = duration,
+      duration = duration.toLong(),
       statDeltas = statDeltas,
       flags = flags,
       maxVitalDeltas = maxVitalDeltas,
@@ -527,7 +527,7 @@ internal class WorldFacade(
     world.applyItemAffect(
       item = target,
       name = name,
-      duration = duration,
+      duration = duration?.toLong(),
       applies = scope,
       statDeltas = statDeltas,
       flags = flags,

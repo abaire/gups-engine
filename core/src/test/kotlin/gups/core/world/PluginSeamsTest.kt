@@ -30,7 +30,7 @@ class PluginSeamsTest {
     val ann = f.player("Ann")
     val goblin = f.mob()
     val seen = mutableListOf<Triple<Effect.Plugin, Actor, Actor?>>()
-    f.w.pluginEffects = PluginEffectRunner { w, e, caster, target, _, _ ->
+    f.w.pluginEffects = PluginEffectRunner { w, e, caster, target, _, _, _ ->
       assertSame(f.w, w)
       seen += Triple(e, caster, target)
     }
@@ -59,7 +59,7 @@ class PluginSeamsTest {
     f.mob(T.DUMMY, index = 2)
     val sword = f.w.spawnItem(T.SWORD, ItemLocation.Carried(ann.id))
     val seen = mutableListOf<SeenPluginEffect>()
-    f.w.pluginEffects = PluginEffectRunner { _, e, caster, target, targetItem, _ ->
+    f.w.pluginEffects = PluginEffectRunner { _, e, caster, target, targetItem, _, _ ->
       seen += SeenPluginEffect(e, caster, target, targetItem)
     }
     ann.skills[skill.label] = 100

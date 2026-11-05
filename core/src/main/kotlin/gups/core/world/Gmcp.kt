@@ -1,9 +1,9 @@
 package gups.core.world
 
-import gups.core.PULSE_MS
 import gups.core.model.Band
 import gups.core.model.DoorState
 import gups.core.model.Player
+import gups.core.pulsesToSeconds
 import gups.core.rules.RulesContext
 
 // GMCP payloads. `core` builds them as plain values (String,
@@ -159,7 +159,7 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
           "name" to a.name,
           "remaining" to
             if (a.wornFrom != null) null
-            else (a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000,
+            else pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0)),
           "flags" to a.flags.sorted(),
         )
       }

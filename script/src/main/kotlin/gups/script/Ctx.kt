@@ -35,6 +35,7 @@ import gups.core.world.actRetreat
 import gups.core.world.addItemTag
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
+import gups.core.world.applyRoomAffect
 import gups.core.world.awardXp
 import gups.core.world.callHook
 import gups.core.world.clearActive
@@ -57,6 +58,7 @@ import gups.core.world.perceive
 import gups.core.world.removeAffect
 import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
+import gups.core.world.removeRoomAffect
 import gups.core.world.removeSkill
 import gups.core.world.roomOfEntity
 import gups.core.world.say
@@ -1130,10 +1132,11 @@ internal constructor(
 
   @StarlarkMethod(
     name = "apply_affect",
-    doc = "Attaches a buff or debuff to an actor or item; re-applying a name replaces it.",
+    doc =
+      "Attaches a buff or debuff to an actor, an item or a room; re-applying a name replaces it.",
     parameters =
       [
-        Param(name = "target", named = true, doc = "Actor or item to receive the affect."),
+        Param(name = "target", named = true, doc = "Actor, item or room to receive the affect."),
         Param(
           name = "name",
           named = true,
@@ -1216,6 +1219,18 @@ internal constructor(
           defaultValue = "[]",
           doc = "Combat procs that fire during auto-attack swings.",
         ),
+        Param(
+          name = "add_tags",
+          named = true,
+          defaultValue = "[]",
+          doc = "Tags a room gains while the affect lasts; a room affect only.",
+        ),
+        Param(
+          name = "remove_tags",
+          named = true,
+          defaultValue = "[]",
+          doc = "Tags a room loses while the affect lasts; a room affect only.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1234,6 +1249,8 @@ internal constructor(
     resistDeltas: Any,
     applies: Any,
     procs: Any,
+    addTags: Any,
+    removeTags: Any,
   ): Any =
     verb("apply_affect") {
       val e =
@@ -1256,9 +1273,44 @@ internal constructor(
           allowPermanent = true,
           procs = procs,
           procsSymbol = "ctx.apply_affect.procs",
+          addTags = addTags,
+          removeTags = removeTags,
         )
-      if (target is ItemView) {
+      if (target is RoomView) {
+        val room = target.room
+        val d = e.duration ?: fail("apply_affect(duration): a room's affect needs a duration")
+        if (e.statDeltas.isNotEmpty())
+          fail("apply_affect(stat_deltas): a room's affect can't change stats")
+        if (e.senseDeltas.isNotEmpty())
+          fail("apply_affect(sense_deltas): a room's affect can't change senses")
+        if (e.maxVitalDeltas.isNotEmpty())
+          fail("apply_affect(max_vital_deltas): a room's affect can't change maximum vitals")
+        if (e.resistDeltas.isNotEmpty())
+          fail("apply_affect(resist_deltas): a room's affect can't change resists")
+        if (e.procs.isNotEmpty()) fail("apply_affect(procs): a room's affect can't have procs")
+        if (!isNone(applies)) fail("apply_affect(applies): only item affects take applies")
+        val a =
+          world.applyRoomAffect(
+            room,
+            e.name,
+            d,
+            e.flags,
+            e.tickEvery,
+            e.onTick,
+            e.onExpire,
+            e.expireMessage,
+            owner as? Actor,
+            e.modifiers,
+            e.addTags,
+            e.removeTags,
+          )
+        a?.let { AffectView(frame, room, it) } ?: Starlark.NONE
+      } else if (target is ItemView) {
         val item = itemArg(target, "apply_affect(target)")
+        if (e.addTags.isNotEmpty())
+          fail("apply_affect(add_tags): only a room's affect can add tags")
+        if (e.removeTags.isNotEmpty())
+          fail("apply_affect(remove_tags): only a room's affect can remove tags")
         val scope =
           if (isNone(applies)) AffectScope.WORN
           else {
@@ -1292,6 +1344,10 @@ internal constructor(
         a?.let { AffectView(frame, item, it) } ?: Starlark.NONE
       } else {
         val t = actorArg(target, "apply_affect(target)")
+        if (e.addTags.isNotEmpty())
+          fail("apply_affect(add_tags): only a room's affect can add tags")
+        if (e.removeTags.isNotEmpty())
+          fail("apply_affect(remove_tags): only a room's affect can remove tags")
         if (!isNone(applies)) fail("apply_affect(applies): only item affects take applies")
         val d = e.duration ?: fail("apply_affect(duration): an actor's affect needs a duration")
         val a =
@@ -1321,13 +1377,15 @@ internal constructor(
     doc = "Removes an affect by name; True if there was one.",
     parameters =
       [
-        Param(name = "target", named = true, doc = "Actor or item carrying the affect."),
+        Param(name = "target", named = true, doc = "Actor, item or room carrying the affect."),
         Param(name = "name", named = true, doc = "Affect name."),
       ],
   )
   fun removeAffect(target: Any, name: Any): Any =
     verb("remove_affect") {
-      if (target is ItemView) {
+      if (target is RoomView) {
+        world.removeRoomAffect(target.room, str(name, "remove_affect(name)"))
+      } else if (target is ItemView) {
         world.removeItemAffect(
           itemArg(target, "remove_affect(target)"),
           str(name, "remove_affect(name)"),

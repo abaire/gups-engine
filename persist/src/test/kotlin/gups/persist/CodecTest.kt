@@ -7,6 +7,7 @@ import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Affect
 import gups.core.model.AffectScope
 import gups.core.model.DamageType
+import gups.core.model.Effect
 import gups.core.model.EquipAffect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
@@ -23,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.serialization.decodeFromString
 
 class CodecTest {
   @Test
@@ -53,6 +55,16 @@ class CodecTest {
     assertEquals(affect.maxVitalDeltas, restored.maxVitalDeltas)
     assertEquals(affect.resistDeltas, restored.resistDeltas)
     assertEquals(affect.applies, restored.applies)
+  }
+
+  @Test
+  fun `an apply_affect effect with a 64-bit duration round trips through the codec`() {
+    val effect = Effect.ApplyAffect(name = "forever", duration = Long.MAX_VALUE)
+    val json = JSON.encodeToString(EffectJson.serializer(), effect.json())
+    val back = JSON.decodeFromString(EffectJson.serializer(), json).toEffect()
+    val a = back as Effect.ApplyAffect
+    assertEquals("forever", a.name)
+    assertEquals<Long?>(Long.MAX_VALUE, a.duration)
   }
 
   @Test

@@ -121,6 +121,7 @@ fun interface PluginEffectRunner {
     caster: Actor,
     target: Actor?,
     targetItem: Item?,
+    targetRoom: Room?,
     power: Int,
   )
 }
@@ -146,6 +147,16 @@ class World(
   /** Game time. */
   var pulse: Long = boot.pulse
     private set
+
+  /**
+   * The pulse that room affects are read as of: the current pulse, or the start of the piece of
+   * dormant time a regen catch-up is working out.
+   */
+  val roomClock: Long
+    get() = catchUpAt ?: pulse
+
+  /** Set only by the dormant regen catch-up, and always cleared again. */
+  internal var catchUpAt: Long? = null
 
   /** Where checkpoints go; nowhere until a persistence layer is attached. */
   var persistence: Persistence = Persistence.NONE
@@ -197,7 +208,7 @@ class World(
   var onPulse: ((Long) -> Unit)? = null
 
   /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner. */
-  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _, _, _ -> }
+  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _, _, _, _ -> }
 
   /** Plugin containment filters, in plugin id order then registration order. */
   var containmentFilters: List<ContainmentFilter> = emptyList()
@@ -653,6 +664,21 @@ class World(
                 // An earlier hook this pulse may have destroyed the item or ended the affect.
                 if (e.id in entities && aff in e.affects)
                   invokeRef(e, aff.onTick, HookContext(affect = aff))
+              }
+        }
+      }
+    }
+    for (e in entities.values) {
+      if (e !is Room || e.affects.isEmpty() || !isSimulated(e)) continue
+      for (aff in e.affects) {
+        val every = aff.tickEvery
+        when {
+          aff.expiresAt <= pulse -> due += Due(aff.expiresAt, aff.id) { expireRoomAffect(e, aff) }
+          every != null && aff.onTick != null && (pulse - aff.appliedAt) % every == 0L ->
+            due +=
+              Due(pulse, aff.id) {
+                // An earlier hook this pulse may have ended the affect.
+                if (aff in e.affects) invokeRef(e, aff.onTick, HookContext(affect = aff))
               }
         }
       }

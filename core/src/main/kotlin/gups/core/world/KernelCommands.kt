@@ -889,6 +889,10 @@ internal object KernelCommands {
           target = null
           targetItem = null
         }
+        TargetKind.ROOM -> {
+          target = null
+          targetItem = null
+        }
       }
     }
     val lag = item.proto.useLag

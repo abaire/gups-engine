@@ -42,8 +42,8 @@ sealed interface Effect {
 
   data class ApplyAffect(
     val name: String,
-    /** Pulses; null only for a permanent item affect. */
-    val duration: Int?,
+    /** Pulses, 64-bit; null only for a permanent item affect. */
+    val duration: Long?,
     val statDeltas: Map<String, Int> = emptyMap(),
     val flags: Set<String> = emptySet(),
     val tickEvery: Int? = null,
@@ -59,6 +59,9 @@ sealed interface Effect {
     /** Set only on an item skill's effect. */
     val applies: AffectScope? = null,
     val procs: List<Proc> = emptyList(),
+    /** Tags a room gains while the affect lasts; used only on a room. */
+    val addTags: Set<String> = emptySet(),
+    val removeTags: Set<String> = emptySet(),
   ) : Effect
 
   /**

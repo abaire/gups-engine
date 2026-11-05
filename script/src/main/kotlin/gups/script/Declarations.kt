@@ -69,6 +69,7 @@ import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Sequence
 import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkInt
 import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
@@ -561,6 +562,12 @@ private fun flags(v: Any?, what: String): Set<String> =
 
 private fun flag(f: String, what: String): String =
   f.also { if (!TAG_REGEX.matches(it)) fail("$what: '$it' is not a valid flag") }
+
+/** A `add_tags` or `remove_tags` list: tags a room gains or loses, validated like a room's tags. */
+private fun affectTagList(v: Any?, what: String): Set<String> =
+  strList(v, what)
+    .onEach { t -> if (!TAG_REGEX.matches(t)) fail("$what: '$t' is not a valid tag") }
+    .toSet()
 
 private fun parseTags(d: ParsedDecl): Set<String> {
   val tags = d.strList("tags")
@@ -1211,6 +1218,7 @@ internal class DeclarationBuiltins(
       val useEffect = d["use_effect"]?.let { effectValue(it, d.what("use_effect")) }
       useEffect?.let { effectRefs(it, ctx, thread) }
       val useTarget = d.choice("use_target")?.let { TargetKind.valueOf(it.uppercase()) }
+      if (useTarget == TargetKind.ROOM) fail("item(use_target): 'room' is not a valid use target")
       val useLag = d.int("use_lag") ?: 0
       if (useTarget != null && useTarget != TargetKind.SELF && useEffect == null) {
         fail("item(use_target): needs use_effect")
@@ -1385,11 +1393,47 @@ internal class DeclarationBuiltins(
     noneOnly: String,
   ) {
     val leaves = flattenLeaves(effect)
+    if (target == TargetKind.ROOM) {
+      for (leaf in leaves) {
+        when (leaf) {
+          is Effect.ApplyAffect -> {
+            if (leaf.statDeltas.isNotEmpty())
+              fail("$what: apply_affect(stat_deltas): a room's affect can't change stats")
+            if (leaf.senseDeltas.isNotEmpty())
+              fail("$what: apply_affect(sense_deltas): a room's affect can't change senses")
+            if (leaf.maxVitalDeltas.isNotEmpty())
+              fail(
+                "$what: apply_affect(max_vital_deltas): a room's affect can't change maximum vitals"
+              )
+            if (leaf.resistDeltas.isNotEmpty())
+              fail("$what: apply_affect(resist_deltas): a room's affect can't change resists")
+            if (leaf.procs.isNotEmpty())
+              fail("$what: apply_affect(procs): a room's affect can't have procs")
+            if (leaf.applies != null)
+              fail("$what: apply_affect(applies): only item affects take applies")
+            if (leaf.duration == null)
+              fail("$what: apply_affect(duration): a room's affect needs a duration")
+          }
+          is Effect.Dispel,
+          is Effect.Sequence,
+          is Effect.Plugin -> Unit
+          else ->
+            fail(
+              "$what: ${primitiveName(leaf)} acts on actors; a room skill may use apply_affect, dispel, sequence and plugin primitives"
+            )
+        }
+      }
+      return
+    }
     if (target == TargetKind.ITEM) {
       for (leaf in leaves) {
         when (leaf) {
           is Effect.ApplyAffect -> {
             if ("stunned" in leaf.flags) fail("$what: item affects can't stun")
+            if (leaf.addTags.isNotEmpty())
+              fail("$what: apply_affect(add_tags) is only for room skills")
+            if (leaf.removeTags.isNotEmpty())
+              fail("$what: apply_affect(remove_tags) is only for room skills")
           }
           is Effect.Plugin -> Unit
           else ->
@@ -1404,6 +1448,10 @@ internal class DeclarationBuiltins(
           if (leaf.applies != null) fail("$what: apply_affect(applies) is only $appliesOnly")
           if (leaf.duration == null)
             fail("$what: apply_affect(duration) can be None only $noneOnly")
+          if (leaf.addTags.isNotEmpty())
+            fail("$what: apply_affect(add_tags) is only for room skills")
+          if (leaf.removeTags.isNotEmpty())
+            fail("$what: apply_affect(remove_tags) is only for room skills")
         }
       }
     }
@@ -1893,6 +1941,18 @@ internal class DeclarationBuiltins(
           defaultValue = "[]",
           doc = "Combat procs that fire during auto-attack swings.",
         ),
+        Param(
+          name = "add_tags",
+          named = true,
+          defaultValue = "[]",
+          doc = "Tags a room gains while the affect lasts; a room affect only.",
+        ),
+        Param(
+          name = "remove_tags",
+          named = true,
+          defaultValue = "[]",
+          doc = "Tags a room loses while the affect lasts; a room affect only.",
+        ),
       ],
   )
   fun applyAffect(
@@ -1910,6 +1970,8 @@ internal class DeclarationBuiltins(
     resistDeltas: Any,
     applies: Any,
     procs: Any,
+    addTags: Any,
+    removeTags: Any,
   ): Any {
     val e =
       affectEffect(
@@ -1930,6 +1992,8 @@ internal class DeclarationBuiltins(
         features,
         allowPermanent = true,
         procs = procs,
+        addTags = addTags,
+        removeTags = removeTags,
       )
     val scope =
       if (isNone(applies)) null
@@ -2098,6 +2162,7 @@ internal class DeclarationBuiltins(
         "SENSE" to senses,
         "DOOR" to doorStates,
         "DAMAGE" to damageTypes,
+        "SEMI_PERMANENT" to StarlarkInt.of(Long.MAX_VALUE),
       )
     }
 
@@ -2140,6 +2205,12 @@ internal class DeclarationBuiltins(
           "struct",
           Starlark.repr(CONSTANTS.getValue("DAMAGE")),
           "A struct of the world's declared damage types, such as DAMAGE.fire; a misspelling fails at that line.",
+        ),
+        ConstantSpec(
+          "SEMI_PERMANENT",
+          "int",
+          Starlark.repr(CONSTANTS.getValue("SEMI_PERMANENT")),
+          "A duration (in pulses) that effectively never ends; accepted wherever a timed affect takes a duration.",
         ),
       )
 
@@ -3203,11 +3274,13 @@ internal fun affectEffect(
   allowPermanent: Boolean = false,
   procs: Any = Tuple.empty(),
   procsSymbol: String = "$fn.procs",
+  addTags: Any = Tuple.empty(),
+  removeTags: Any = Tuple.empty(),
 ): Effect.ApplyAffect {
   val d =
     if (allowPermanent && isNone(duration)) null
     else {
-      val v = int(duration, "$fn(duration)")
+      val v = long(duration, "$fn(duration)")
       if (v < 1) fail("$fn(duration): must be at least 1")
       v
     }
@@ -3217,6 +3290,8 @@ internal fun affectEffect(
   if (procList.isNotEmpty()) {
     FeatureOwnership.refused(procsSymbol, "$fn(procs)", features)?.let { fail(it) }
   }
+  val addTagsSet = affectTagList(addTags, "$fn(add_tags)")
+  val removeTagsSet = affectTagList(removeTags, "$fn(remove_tags)")
   return Effect.ApplyAffect(
     name = str(name, "$fn(name)"),
     duration = d,
@@ -3234,6 +3309,8 @@ internal fun affectEffect(
         DamageType(k)
       },
     procs = procList,
+    addTags = addTagsSet,
+    removeTags = removeTagsSet,
   )
 }
 

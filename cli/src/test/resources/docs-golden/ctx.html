@@ -171,12 +171,12 @@
 </table>
 </article>
 <article id="ctx.apply_affect" class="entry">
-<h4><code>apply_affect(target, name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {}, sense_deltas = {}, max_vital_deltas = None, resist_deltas = None, applies = None, procs = [])</code> <span class="since">since api_version 1</span></h4>
-<p>Attaches a buff or debuff to an actor or item; re-applying a name replaces it.</p>
+<h4><code>apply_affect(target, name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {}, sense_deltas = {}, max_vital_deltas = None, resist_deltas = None, applies = None, procs = [], add_tags = [], remove_tags = [])</code> <span class="since">since api_version 1</span></h4>
+<p>Attaches a buff or debuff to an actor, an item or a room; re-applying a name replaces it.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.apply_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor or item to receive the affect.</td></tr>
+<tr id="ctx.apply_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor, item or room to receive the affect.</td></tr>
 <tr id="ctx.apply_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name; applying the same name again replaces the existing affect.</td></tr>
 <tr id="ctx.apply_affect.duration"><td><code>duration</code></td><td>positional or named</td><td></td><td>Duration in pulses; None makes an item affect permanent.</td></tr>
 <tr id="ctx.apply_affect.stat_deltas"><td><code>stat_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Stat adjustments while the affect lasts, built with stats(...).</td></tr>
@@ -191,6 +191,8 @@
 <tr id="ctx.apply_affect.resist_deltas"><td><code>resist_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Damage resistance adjustments while the affect lasts, built with resists(...).</td></tr>
 <tr id="ctx.apply_affect.applies"><td><code>applies</code></td><td>positional or named</td><td><code>None</code></td><td>Item affects only: 'worn' or 'carried'.</td></tr>
 <tr id="ctx.apply_affect.procs"><td><code>procs</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>[]</code></td><td>Combat procs that fire during auto-attack swings.</td></tr>
+<tr id="ctx.apply_affect.add_tags"><td><code>add_tags</code></td><td>positional or named</td><td><code>[]</code></td><td>Tags a room gains while the affect lasts; a room affect only.</td></tr>
+<tr id="ctx.apply_affect.remove_tags"><td><code>remove_tags</code></td><td>positional or named</td><td><code>[]</code></td><td>Tags a room loses while the affect lasts; a room affect only.</td></tr>
 </tbody>
 </table>
 </article>
@@ -570,7 +572,7 @@
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="ctx.remove_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor or item carrying the affect.</td></tr>
+<tr id="ctx.remove_affect.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor, item or room carrying the affect.</td></tr>
 <tr id="ctx.remove_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name.</td></tr>
 </tbody>
 </table>

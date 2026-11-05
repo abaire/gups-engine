@@ -220,8 +220,9 @@ internal fun World.sleep(room: Room) {
 
 /**
  * A room wakes: lazy catch-up, never simulation. Timers resume; missed resets, respawns and decay
- * are applied; mobs recover by their `dormant_recovery` and their affects that ran out are removed
- * (`on_expire` in expiry order); then `on_wake` fires on the room, its mobs and its items.
+ * are applied; mobs recover by their `dormant_recovery` and the affects that ran out are removed
+ * (`on_expire` in expiry order), first the room's own, then the mobs', then the items'; then
+ * `on_wake` fires on the room, its mobs and its items.
  */
 internal fun World.wake(room: Room) {
   val since = room.dormantSince ?: return
@@ -233,6 +234,14 @@ internal fun World.wake(room: Room) {
   for (e in sleepers) resumeTimers(e)
   val mobs = sleepers.filterIsInstance<Mob>()
   for (m in mobs) guarded("dormant recovery of $m") { recover(m, since) }
+  // A room with an active or anchor reason was never paused, so it expired its affects live.
+  if (room.activeReasons.isEmpty() && room.anchorReasons.isEmpty()) {
+    val expired =
+      room.affects
+        .filter { it.expiresAt <= pulse }
+        .sortedWith(compareBy({ it.expiresAt }, { it.id }))
+    for (a in expired) guarded("expiry of ${a.name} on $room") { expireRoomAffect(room, a) }
+  }
   for (m in mobs) {
     val expired =
       m.affects.filter { it.expiresAt <= pulse }.sortedWith(compareBy({ it.expiresAt }, { it.id }))
@@ -291,12 +300,17 @@ private fun ticksIn(lo: Long, hi: Long): Long =
 
 /**
  * Regen for the world ticks missed since [since], computed piecewise: the time is split at every
- * affect expiry inside it, and each piece regenerates with the affects that were active then,
- * through `rules.regen` and the modifier chain.
+ * point where one of the mob's or room's affects was applied or expired, and each piece regenerates
+ * with the affects that were active then, through `rules.regen` and the modifier chain.
  */
 internal fun World.catchUpRegen(m: Mob, since: Long) {
   val all = m.affects.toList()
-  val cuts = all.map { it.expiresAt }.filter { it in (since + 1)..pulse }.distinct().sorted()
+  val roomAll = m.room.affects.toList()
+  val cuts =
+    (all.map { it.expiresAt } + roomAll.flatMap { listOf(it.appliedAt, it.expiresAt) })
+      .filter { it in (since + 1)..pulse }
+      .distinct()
+      .sorted()
   val bounds = listOf(since + 1) + cuts + listOf(pulse + 1)
   try {
     for (i in 0 until bounds.size - 1) {
@@ -305,6 +319,7 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
       val hi = bounds[i + 1]
       val n = ticksIn(lo, hi)
       if (n <= 0) continue
+      catchUpAt = lo
       m.affects.clear()
       m.affects += all.filter { it.expiresAt > lo }
       if (m.hasFlag("no_regen")) continue
@@ -317,6 +332,7 @@ internal fun World.catchUpRegen(m: Mob, since: Long) {
   } finally {
     m.affects.clear()
     m.affects += all
+    catchUpAt = null
   }
 }
 

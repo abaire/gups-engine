@@ -14,6 +14,7 @@ import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.pulsesToSeconds
 
 /** A debug mob despawns this long after `@spawn`, if its spawner hasn't logged out first. */
 const val DEBUG_MOB_PULSES = 30L * 60 * 1000 / PULSE_MS
@@ -607,7 +608,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
           else
             e.affects.joinToString(", ") { a ->
               (if (a.wornFrom != null) "${a.name} (while worn"
-              else "${a.name} (${(a.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000}s left") +
+              else "${a.name} (${pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0))}s left") +
                 (if (a.flags.isEmpty()) "" else "; ${a.flags.joinToString()}") +
                 ")"
             }
@@ -660,7 +661,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
                   ha.instance == null -> "prototype"
                   ha.instance.expiresAt == Long.MAX_VALUE -> "permanent"
                   else ->
-                    "${(ha.instance.expiresAt - pulse).coerceAtLeast(0) * PULSE_MS / 1000}s left"
+                    "${pulsesToSeconds((ha.instance.expiresAt - pulse).coerceAtLeast(0))}s left"
                 }
               val flags = if (ha.flags.isEmpty()) "" else "; " + ha.flags.sorted().joinToString()
               "${ha.name} (${ha.applies.name.lowercase()}, $timing$flags)"
@@ -682,7 +683,8 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
             }
             .ifEmpty { "none" }
       )
-      if (e.tags.isNotEmpty()) add("Tags: " + e.tags.sorted().joinToString(", "))
+      val tags = e.tagsAt(roomClock)
+      if (tags.isNotEmpty()) add("Tags: " + tags.sorted().joinToString(", "))
       add("Here: ${e.actors.size} actors, ${e.items.size} items on the ground")
     }
   }

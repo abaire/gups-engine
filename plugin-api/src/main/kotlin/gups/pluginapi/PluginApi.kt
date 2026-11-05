@@ -216,13 +216,15 @@ interface PluginHookCall {
 data class PluginEffectCall(
   val world: PluginWorld,
   val caster: PluginActor,
-  /** Null for `target = "none"` and `target = "item"` skills. */
+  /** Null for `target = "none"`, `target = "item"` and `target = "room"` skills. */
   val target: PluginActor?,
   val args: Map<String, Any?>,
   /** The target item of an `item` skill, else null. */
   val targetItem: PluginItem? = null,
   /** Percent strength the effect runs at; 100 outside casts and item effects. */
   val power: Int = 100,
+  /** The caster's room for a `target = "room"` skill, else null. */
+  val targetRoom: PluginRoom? = null,
 )
 
 fun interface PluginEffect {
