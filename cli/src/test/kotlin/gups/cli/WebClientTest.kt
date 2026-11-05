@@ -132,6 +132,7 @@ class WebClientTest {
         .send(HttpRequest.newBuilder(URI("$base/")).build(), HttpResponse.BodyHandlers.ofString())
         .body()
     val prefix = Regex("/assets/[0-9a-f]+").find(index)!!.value
+    assertContains(index, "skills-panel")
     for (file in listOf("app.js", "markup.js", "panels.js", "style.css")) {
       assertEquals(
         200,

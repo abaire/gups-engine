@@ -88,6 +88,8 @@ export function drawRoom(heading, room) {
  * @typedef {{name: string, step: "choice"|"confirm", choice: Choice|null, answers: Answer[]}} CreationData
  * @typedef {{name: string, label: string, doc: string}} Trait
  * @typedef {{choices: Answer[], traits: Trait[]}} TraitsData
+ * @typedef {{label: string, name: string, kind: string, proficiency: number}} Skill
+ * @typedef {{skills: Skill[]}} SkillsData
  */
 
 /**
@@ -188,4 +190,21 @@ export function drawTraits(panel, choicesBox, traitsList, data) {
       traitsList.append(li);
     }
   }
+}
+
+/**
+ * Draws the skills the character knows, one line each, hidden when it knows none.
+ * @param {HTMLElement} panel
+ * @param {HTMLElement} list
+ * @param {SkillsData} data
+ */
+export function drawSkills(panel, list, data) {
+  const skills = data.skills || [];
+  list.replaceChildren();
+  for (const s of skills) {
+    const li = el("li", "skill", `${s.name} ${s.proficiency}%`);
+    li.title = s.kind;
+    list.append(li);
+  }
+  panel.hidden = skills.length === 0;
 }

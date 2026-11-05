@@ -2,6 +2,7 @@
 
 load("//lib:quest.star", "quest")
 load("//lib:shop.star", "shop")
+load("//lib:trainer.star", "trainer")
 load(":helpers.star", "FIRST_STEPS", "READY_WORD", "said")
 
 def _guide_hears(ctx):
@@ -133,4 +134,41 @@ mob("shopkeeper",
     behaviors = [sentinel()],
     hooks = {"shop_price": _shop_price},
     on_spawn = _shop_open,
+)
+
+# The mentor teaches the arcane spells in the arena, where a training dummy stands ready for
+# practice. A trainer is a keeper bound to a set of skills and the levels it will raise them to,
+# all described by one trainer.define call. Students spend practice sessions, earned by changing
+# level, to learn and improve a skill.
+
+MENTOR = trainer.define(
+    id = "mentor",
+    teaches = [
+        trainer.teach("//skills/arcane:spark", up_to = 50, gain = 10),
+        trainer.teach("//skills/arcane:mend", up_to = 40, gain = 10),
+    ],
+)
+
+def _mentor_offer(ctx, customer, skill, current, gain, cost, refusal):
+    # The keeper's custom hook, fired by the trainer library before a session is settled.
+    # Returning None keeps the library's default (one session), a string refuses the session,
+    # and a dict may replace gain and/or cost. `current` is the student's proficiency, or None
+    # for a skill they don't know yet. Once a student knows a skill well, the mentor charges two
+    # sessions instead of one to push them to learn something new.
+    if current != None and current > 30:
+        return {"cost": 2}
+    return None
+
+def _mentor_open(ctx):
+    # A trainer opens when its keeper spawns: the library marks the keeper as teaching MENTOR.
+    trainer.open(ctx, ctx.self, MENTOR)
+
+mob("mentor",
+    name = "the mentor",
+    desc = "A robed figure who hums to themselves, sparks of light dancing between their fingers.",
+    vitals = vitals(hp = 60),
+    behaviors = [sentinel()],
+    skills = {"//skills/arcane:spark": 100, "//skills/arcane:mend": 100},
+    hooks = {"practice_offer": _mentor_offer},
+    on_spawn = _mentor_open,
 )

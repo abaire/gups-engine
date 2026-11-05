@@ -33,7 +33,7 @@ class MessagesTest {
       when (m.feature) {
         Feature.COMBAT -> assertTrue(prefix == "combat", m.id)
         Feature.TRACK -> assertTrue(prefix == "track", m.id)
-        Feature.SKILLS -> assertTrue(prefix in setOf("cast", "stop"), m.id)
+        Feature.SKILLS -> assertTrue(prefix in setOf("cast", "stop", "skills"), m.id)
         Feature.LEVELING -> assertTrue(prefix == "leveling", m.id)
         null -> assertTrue(prefix !in setOf("combat", "track", "cast", "leveling"), m.id)
       }

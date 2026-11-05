@@ -41,20 +41,53 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
   val FAILED_ROOM = msg("cast.failed.room", "{actor}'s spell fizzles.", "actor", "actor")
   val INTERRUPTED = msg("cast.interrupted", "Your concentration is broken!")
   val STOP_CAST = msg("stop.cast", "You stop casting.")
+  val SKILLS_HEADER = msg("skills.header", "You know these skills:")
+  val SKILLS_LINE =
+    msg("skills.line", "  {skill} ({kind}) {proficiency}%", "skill,kind,proficiency", "skill")
+  val SKILLS_NONE = msg("skills.none", "You don't know any skills.")
 }
 
 /** The commands of the `skills` feature. */
 internal object SkillCommands {
   fun all(): List<CommandDef> =
     listOf(
+      FastCommand(
+        "skills",
+        category = CommandCategory.SKILLS,
+        help = "List the skills you know and how well.\nUsage: skills",
+      ) {
+        listSkills(it)
+      },
       TickCommand(
         "cast",
         category = CommandCategory.SKILLS,
         help = "Cast a skill or spell at an optional target.\nUsage: cast <skill> [target]",
       ) {
         planCast(it)
-      }
+      },
     )
+
+  private fun listSkills(c: CommandCall) {
+    val w = c.world
+    val known =
+      c.actor.skills
+        .mapNotNull { (label, proficiency) -> w.protos.skills[label]?.let { it to proficiency } }
+        .sortedWith(compareBy({ it.first.name }, { it.first.label.v }))
+    if (known.isEmpty()) {
+      w.tell(c.actor, SkillMsg.SKILLS_NONE)
+      return
+    }
+    w.tell(c.actor, SkillMsg.SKILLS_HEADER)
+    for ((proto, proficiency) in known) {
+      w.tell(
+        c.actor,
+        SkillMsg.SKILLS_LINE,
+        "skill" to proto.name,
+        "kind" to proto.kind,
+        "proficiency" to proficiency,
+      )
+    }
+  }
 
   private fun planCast(c: CommandCall): Action? {
     val w = c.world

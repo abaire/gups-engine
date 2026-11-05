@@ -44,6 +44,7 @@ class GmcpTest(private val fs: FixtureSchema) {
         "Char.Vitals",
         "Char.Status",
         "Char.Affects",
+        "Char.Skills",
         "Room.Info",
         "Room.Bands",
       ),
@@ -219,7 +220,7 @@ class GmcpTest(private val fs: FixtureSchema) {
     f.run()
     val sent = sink.take()
     assertEquals(
-      listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects"),
+      listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects", "Char.Skills"),
       sent.map { it.first },
     )
     assertEquals(
@@ -240,6 +241,44 @@ class GmcpTest(private val fs: FixtureSchema) {
     f.w.attach(id, p)
     f.run()
     assertEquals(1, again.packages().count { it == "Char.Schema" })
+  }
+
+  @Test
+  fun `Char Skills lists the known skills and sends a delta when they change`() {
+    val f = Fixture()
+    val (p, sink) = f.gmcpPlayer("Ann")
+    f.run()
+    val first = sink.take().first { it.first == "Char.Skills" }
+    assertEquals(mapOf("skills" to emptyList<Map<String, Any?>>()), first.second)
+    f.w.setSkill(p, T.ZAP, 40)
+    f.w.setSkill(p, T.BOLT, 15)
+    f.run()
+    assertEquals(
+      "Char.Skills" to
+        mapOf(
+          "skills" to
+            listOf(
+              mapOf(
+                "label" to "//t:bolt",
+                "name" to "bolt",
+                "kind" to "spell",
+                "proficiency" to 15,
+              ),
+              mapOf("label" to "//t:zap", "name" to "zap", "kind" to "spell", "proficiency" to 40),
+            )
+        ),
+      sink.take().single(),
+    )
+    f.run(3)
+    assertEquals(emptyList(), sink.packages(), "an unchanged list sends nothing")
+  }
+
+  @Test
+  fun `without skills, Char Skills is not sent`() {
+    val f = Fixture(features = Features(Feature.entries.toSet() - setOf(Feature.SKILLS)))
+    val (_, sink) = f.gmcpPlayer("Ann")
+    f.run(2)
+    assertTrue("Char.Skills" !in sink.packages(), "no Char.Skills without the skills feature")
   }
 
   @Test

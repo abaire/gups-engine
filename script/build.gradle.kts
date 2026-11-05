@@ -19,3 +19,13 @@ tasks.processTestFixturesResources {
     into("template-rules")
   }
 }
+
+tasks.test {
+  // The trainer library tests load the template world's own lib file.
+  val templateLib = rootProject.layout.projectDirectory.dir("template-world/lib")
+  inputs.files(fileTree(templateLib)).withPropertyName("templateLib")
+  systemProperty(
+    "gups.templateWorld",
+    rootProject.layout.projectDirectory.dir("template-world").asFile.absolutePath,
+  )
+}

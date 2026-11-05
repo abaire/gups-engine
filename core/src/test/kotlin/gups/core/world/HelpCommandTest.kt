@@ -47,7 +47,7 @@ class HelpCommandTest {
       lines.first { it.startsWith("Items:") },
     )
     assertEquals("Combat: flee kill", lines.first { it.startsWith("Combat:") })
-    assertEquals("Skills: cast", lines.first { it.startsWith("Skills:") })
+    assertEquals("Skills: cast skills", lines.first { it.startsWith("Skills:") })
     assertEquals("Game: clear quit stop", lines.first { it.startsWith("Game:") })
   }
 

@@ -1674,6 +1674,30 @@ internal class DeclarationBuiltins(
   }
 
   @StarlarkMethod(
+    name = "global_hook",
+    doc =
+      "Registers a hook that fires for every actor, wherever it is. lib and rules packages only.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun globalHook(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    val ctx = contentCtx(thread, "global_hook")
+    return GLOBAL_HOOK_SPEC.bind(args, kwargs, features = features) { d ->
+      if (!ctx.pkg.kind.privileged)
+        fail("global_hook(): only lib and rules packages may register global hooks")
+      val name = d.reqStr("name", "global_hook() name")
+      if (name != "on_level_change")
+        fail("global_hook(): '$name' can't be a global hook; only on_level_change can")
+      val fn = hookRef(d["fn"], "global_hook(fn)")
+      if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })
+        fail("global_hook(): '$name' is already registered")
+      ctx.pkg.hookList += GlobalHookDecl(name, fn, ctx.pkg.path)
+      Starlark.NONE
+    }
+  }
+
+  @StarlarkMethod(
     name = "gmcp_package",
     doc = "Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.",
     extraPositionals = Param(name = "args"),
@@ -3073,6 +3097,33 @@ internal class DeclarationBuiltins(
           ),
       )
 
+    val GLOBAL_HOOK_SPEC =
+      DeclSpec(
+        name = "global_hook",
+        doc =
+          "Registers a hook that fires for every actor, wherever it is. lib and rules packages only.",
+        positionalError = "global_hook() takes the hook name and fn",
+        params =
+          listOf(
+            DeclParam(
+              "name",
+              "str",
+              "The hook to run globally: 'on_level_change', the only hook that can be global.",
+              positional = true,
+              keyword = true,
+              required = true,
+            ),
+            DeclParam(
+              "fn",
+              "function",
+              "Top-level handler function fn(ctx).",
+              positional = true,
+              keyword = true,
+              required = true,
+            ),
+          ),
+      )
+
     val STRUCT_SPEC =
       DeclSpec(
         name = "struct",
@@ -3100,6 +3151,7 @@ internal class DeclarationBuiltins(
         REGION_SPEC,
         GMCP_PACKAGE_SPEC,
         GLOBAL_COMMAND_SPEC,
+        GLOBAL_HOOK_SPEC,
         STRUCT_SPEC,
       ) + SCHEMA_SPECS
   }

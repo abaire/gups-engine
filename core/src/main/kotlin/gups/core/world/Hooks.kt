@@ -260,6 +260,9 @@ interface ScriptHost {
    */
   fun hasHook(owner: Entity, hook: HookName): Boolean = true
 
+  /** Runs every global [hook] registered by loaded packages, with [ctx]. */
+  fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) = Unit
+
   /** Evaluates rules modifier [ref] for [point], returning modified value or [base] on error. */
   fun modify(
     world: World,
@@ -364,6 +367,17 @@ internal fun World.invokeOn(owner: Entity, hook: HookName, ctx: HookContext) {
       scripts.invokeHook(this, owner, hook, ctx)
     } catch (e: Exception) {
       diagnose("script", "${hook.scriptName} on $owner failed: ${e.message}", e)
+    }
+  }
+}
+
+/** Runs every global [hook] registered by loaded packages, with [ctx]. */
+internal fun World.dispatchGlobal(hook: HookName, ctx: HookContext) {
+  withCascadeGuard(hook.scriptName) {
+    try {
+      scripts.invokeGlobal(this, hook, ctx)
+    } catch (e: Exception) {
+      diagnose("script", "${hook.scriptName} failed: ${e.message}", e)
     }
   }
 }

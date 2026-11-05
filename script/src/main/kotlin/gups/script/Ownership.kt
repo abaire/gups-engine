@@ -15,6 +15,8 @@ object FeatureOwnership {
     fun owns(feature: Feature, vararg symbols: String) =
       owns(FeatureRequirement.of(feature), *symbols)
     owns(Feature.SKILLS, "mob.skills", "ctx.act_cast", "ctx.skill", "ctx.power")
+    owns(Feature.SKILLS, "ctx.set_skill", "ctx.remove_skill", "ctx.skill_info")
+    owns(Feature.SKILLS, "w.set_skill", "w.remove_skill")
     owns(Feature.SKILLS, "hook:before_cast", "hook:on_cast_start", "hook:on_cast")
     owns(
       Feature.SKILLS,

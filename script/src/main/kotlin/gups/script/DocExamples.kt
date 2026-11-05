@@ -38,7 +38,7 @@ object DocExamples {
    * Symbols whose example package is a `lib` package rather than a `zone`, because the declaration
    * is only allowed there.
    */
-  val LIB_SYMBOLS: Set<String> = setOf("global_command", "gmcp_package")
+  val LIB_SYMBOLS: Set<String> = setOf("global_command", "global_hook", "gmcp_package")
 
   private fun ex(pkg: String = "", test: String = "", module: String = ""): DocExample =
     DocExample(
@@ -133,6 +133,24 @@ object DocExamples {
                 w = t.world(seed = 1)
                 p = w.spawn_player("Tess", at = ":start")
                 t.contains(p.do("pulse"), "It is pulse")
+            """,
+        ),
+      "global_hook" to
+        ex(
+          pkg =
+            """
+                def _step(ctx):
+                    ctx.send(ctx.actor, "Step %s->%s." % (ctx.old_level, ctx.new_level))
+
+                # Only lib and rules packages may register global hooks.
+                global_hook("on_level_change", _step)
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":start")
+                w.award_xp(p, 1000)
+                t.contains(p.output(), "Step 1->2.")
             """,
         ),
       "gmcp_package" to

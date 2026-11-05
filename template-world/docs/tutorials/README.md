@@ -60,6 +60,11 @@ persistence, and linking to official specifications and generated API references
    * Peddlers: carried packs that drop on death
    * The `shop_price` custom hook: charisma discounts and stolen-goods refusals
    * The `Shop.Stock` GMCP event and plugin handlers joining the hook
+9. **[09. Trainers: The `//lib:trainer.star` Library](09_trainers.md)**
+   * Skills, proficiency, and the `skills` command
+   * Defining a trainer with `trainer.define`, `teach`, and `open`
+   * Practice sessions earned by changing level and spent with `practice`
+   * The `practice_offer` custom hook and class caps via `learn` restrictions
 
 ---
 

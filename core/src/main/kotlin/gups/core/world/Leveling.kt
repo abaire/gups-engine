@@ -125,12 +125,9 @@ fun World.levelUp(a: Actor): Boolean {
 
   if (max.isNotEmpty() || current.isNotEmpty() || capped) refreshCondition(a)
 
-  dispatch(
-    HookName.ON_LEVEL_CHANGE,
-    a,
-    a.room,
-    HookContext(actor = a, oldLevel = a.level - 1, newLevel = a.level),
-  )
+  val levelCtx = HookContext(actor = a, oldLevel = a.level - 1, newLevel = a.level)
+  dispatch(HookName.ON_LEVEL_CHANGE, a, a.room, levelCtx)
+  dispatchGlobal(HookName.ON_LEVEL_CHANGE, levelCtx)
 
   a.dirty = true
   if (a is Player) requestImmediate("level")
@@ -237,12 +234,9 @@ fun World.levelDownStep(a: Actor) {
 
   if (gain?.max?.isNotEmpty() == true || capped) refreshCondition(a)
 
-  dispatch(
-    HookName.ON_LEVEL_CHANGE,
-    a,
-    a.room,
-    HookContext(actor = a, oldLevel = a.level + 1, newLevel = a.level),
-  )
+  val levelCtx = HookContext(actor = a, oldLevel = a.level + 1, newLevel = a.level)
+  dispatch(HookName.ON_LEVEL_CHANGE, a, a.room, levelCtx)
+  dispatchGlobal(HookName.ON_LEVEL_CHANGE, levelCtx)
 
   a.dirty = true
 }

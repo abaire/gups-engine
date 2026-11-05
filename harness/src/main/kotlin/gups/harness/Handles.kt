@@ -24,8 +24,10 @@ import gups.core.world.grantTrait
 import gups.core.world.handle
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
+import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.setChoices
+import gups.core.world.setSkill
 import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.core.world.takeXp
@@ -34,6 +36,7 @@ import gups.script.EntityView
 import gups.script.FeatureOwnership
 import gups.script.ItemView
 import gups.script.RoomView
+import gups.script.SkillView
 import gups.script.StarlarkHost
 import gups.script.TypeSpec
 import gups.script.ViewScope
@@ -600,6 +603,56 @@ internal constructor(
     val refusal = world.removeTrait(a, t)
     return refusal ?: Starlark.NONE
   }
+
+  @StarlarkMethod(
+    name = "set_skill",
+    doc =
+      "Sets actor's skill, a label or skill view, at proficiency (0 to 100), or raises it, running the" +
+        " learn restrictions. Returns the refusal message or None. Needs the skills feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor who learns or raises the skill."),
+        Param(name = "skill", named = true, doc = "Skill label, or the skill's view."),
+        Param(name = "proficiency", named = true, doc = "Proficiency, 0 to 100."),
+      ],
+    useStarlarkThread = true,
+  )
+  fun setSkill(actor: Any, skill: Any, proficiency: Any, thread: StarlarkThread): Any {
+    requireFeature("set_skill")
+    val a = actorArg(actor, "set_skill(actor)")
+    val l = skillArg(skill, "set_skill", thread)
+    if (l !in world.protos.skills) evalFail("set_skill(skill): unknown skill '${l.v}'")
+    val n = int(proficiency, "set_skill(proficiency)")
+    if (n !in 0..100) evalFail("set_skill(proficiency): must be 0 to 100, got $n")
+    return world.setSkill(a, l, n) ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "remove_skill",
+    doc =
+      "Forgets the skill, a label or skill view, and returns whether the actor knew it. Needs the skills feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor who forgets the skill."),
+        Param(name = "skill", named = true, doc = "Skill label, or the skill's view."),
+      ],
+    useStarlarkThread = true,
+  )
+  fun removeSkill(actor: Any, skill: Any, thread: StarlarkThread): Any {
+    requireFeature("remove_skill")
+    val a = actorArg(actor, "remove_skill(actor)")
+    val l = skillArg(skill, "remove_skill", thread)
+    if (l !in world.protos.skills) evalFail("remove_skill(skill): unknown skill '${l.v}'")
+    return world.removeSkill(a, l)
+  }
+
+  /** A skill argument: a skill view's label, or a string resolved against the caller's package. */
+  private fun skillArg(skill: Any?, what: String, thread: StarlarkThread): Label =
+    when (skill) {
+      is SkillView -> skill.skill.label
+      is String -> label(skill, pkgOf(thread), "$what(skill)")
+      else -> evalFail("$what(skill): expected a skill label or skill view, got ${typeName(skill)}")
+    }
 
   @StarlarkMethod(
     name = "award_xp",

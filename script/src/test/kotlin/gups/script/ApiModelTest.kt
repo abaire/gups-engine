@@ -271,6 +271,13 @@ class ApiModelTest {
         Case("lib", { "def _f(ctx):\n    pass\n\nglobal_command(\"wave\", _f${it.after()})" }) {
           it.pkg("lib").commandList.single()
         },
+      "global_hook" to
+        Case(
+          "lib",
+          { "def _f(ctx):\n    pass\n\nglobal_hook(\"on_level_change\", _f${it.after()})" },
+        ) {
+          it.pkg("lib").hookList.single()
+        },
       "gmcp_package" to
         Case("lib", { "gmcp_package(\"Shop.Stock\"${it.after()})" }) {
           it.pkg("lib").gmcpPackages.single()

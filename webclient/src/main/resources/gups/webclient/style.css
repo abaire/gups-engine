@@ -82,6 +82,8 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 
 .traits-panel { margin-top: 1rem; }
 .traits-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.skills-panel { margin-top: 1rem; }
+.skills-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .choices-list { font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .choices-list .title { color: var(--muted); }
 

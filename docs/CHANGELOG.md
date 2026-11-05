@@ -4,6 +4,16 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Acquiring skills
+
+- `ctx.set_skill`, `ctx.remove_skill` and `ctx.skill_info`, and the harness's `w.set_skill` and `w.remove_skill`.
+  Setting a skill runs the `learn` restrictions, also when it raises a skill the actor knows.
+- The `skills` command and the `Char.Skills` GMCP package.
+- `global_hook("on_level_change", fn)` for `lib` and `rules` packages: fires for every actor's level step.
+- `//lib:trainer.star`: trainers, practice sessions earned per level, `practice`, and the `practice_offer` hook. The
+  template world has a `//skills/arcane` package with `spark` and `mend`.
+- The tutorial zone's mentor teaches `spark` and `mend`; tutorial 09 covers trainers.
+
 ### Progressive encumbrance
 
 - New kernel rules export `encumbrance_level(ctx)`, required in every ruleset: the actor's encumbrance level, an int of

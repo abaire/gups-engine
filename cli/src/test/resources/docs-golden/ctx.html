@@ -573,6 +573,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.remove_skill" class="entry">
+<h4><code>remove_skill(actor, skill)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Forgets the skill, a label or skill view, and returns whether the actor knew it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.remove_skill.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who forgets the skill.</td></tr>
+<tr id="ctx.remove_skill.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.remove_tag" class="entry">
 <h4><code>remove_tag(item, tag)</code> <span class="since">since api_version 1</span></h4>
 <p>Removes a tag from an item's effective tags; True if it was present.</p>
@@ -658,6 +669,28 @@
 <tbody>
 <tr id="ctx.set_charges.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item with charges.</td></tr>
 <tr id="ctx.set_charges.charges"><td><code>charges</code></td><td>positional or named</td><td></td><td>Uses left; 0 doesn't run the empty action.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_skill" class="entry">
+<h4><code>set_skill(actor, skill, proficiency)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Gives actor the skill, a label or skill view, at proficiency (0 to 100), or changes the proficiency it has. Runs the learn restrictions and returns the refusal message, or None once the skill is set. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_skill.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who learns or raises the skill.</td></tr>
+<tr id="ctx.set_skill.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+<tr id="ctx.set_skill.proficiency"><td><code>proficiency</code></td><td>positional or named</td><td></td><td>Proficiency, 0 to 100.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.skill_info" class="entry">
+<h4><code>skill_info(label)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>The skill a label names, as ctx.skill in a cast, or None when no loaded skill has it.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.skill_info.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
 </tbody>
 </table>
 </article>

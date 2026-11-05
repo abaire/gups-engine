@@ -245,6 +245,40 @@
       ]
     },
     {
+      "symbol": "global_hook",
+      "name": "global_hook",
+      "doc": "Registers a hook that fires for every actor, wherever it is. lib and rules packages only.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "global_hook.name",
+          "name": "name",
+          "type": "str",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The hook to run globally: 'on_level_change', the only hook that can be global.",
+          "since": 1
+        },
+        {
+          "symbol": "global_hook.fn",
+          "name": "fn",
+          "type": "function",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Top-level handler function fn(ctx).",
+          "since": 1
+        }
+      ]
+    },
+    {
       "symbol": "gmcp_package",
       "name": "gmcp_package",
       "doc": "Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.",
@@ -4469,6 +4503,35 @@
         ]
       },
       {
+        "symbol": "ctx.remove_skill",
+        "feature": "skills",
+        "name": "remove_skill",
+        "doc": "Forgets the skill, a label or skill view, and returns whether the actor knew it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.remove_skill.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who forgets the skill."
+          },
+          {
+            "symbol": "ctx.remove_skill.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.remove_tag",
         "name": "remove_tag",
         "doc": "Removes a tag from an item's effective tags; True if it was present.",
@@ -4689,6 +4752,64 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Uses left; 0 doesn't run the empty action."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_skill",
+        "feature": "skills",
+        "name": "set_skill",
+        "doc": "Gives actor the skill, a label or skill view, at proficiency (0 to 100), or changes the proficiency it has. Runs the learn restrictions and returns the refusal message, or None once the skill is set. Needs the skills feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_skill.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who learns or raises the skill."
+          },
+          {
+            "symbol": "ctx.set_skill.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
+          },
+          {
+            "symbol": "ctx.set_skill.proficiency",
+            "name": "proficiency",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Proficiency, 0 to 100."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.skill_info",
+        "feature": "skills",
+        "name": "skill_info",
+        "doc": "The skill a label names, as ctx.skill in a cast, or None when no loaded skill has it.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.skill_info.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
           }
         ]
       },
@@ -8393,6 +8514,35 @@
           "params": []
         },
         {
+          "symbol": "w.remove_skill",
+          "feature": "skills",
+          "name": "remove_skill",
+          "doc": "Forgets the skill, a label or skill view, and returns whether the actor knew it. Needs the skills feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.remove_skill.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor who forgets the skill."
+            },
+            {
+              "symbol": "w.remove_skill.skill",
+              "name": "skill",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Skill label, or the skill's view."
+            }
+          ]
+        },
+        {
           "symbol": "w.remove_trait",
           "name": "remove_trait",
           "doc": "Removes a granted trait from an actor, returning the refusal message or None.",
@@ -8519,6 +8669,45 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Map of choice id to option id, with None removing an answer."
+            }
+          ]
+        },
+        {
+          "symbol": "w.set_skill",
+          "feature": "skills",
+          "name": "set_skill",
+          "doc": "Sets actor's skill, a label or skill view, at proficiency (0 to 100), or raises it, running the learn restrictions. Returns the refusal message or None. Needs the skills feature.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.set_skill.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor who learns or raises the skill."
+            },
+            {
+              "symbol": "w.set_skill.skill",
+              "name": "skill",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Skill label, or the skill's view."
+            },
+            {
+              "symbol": "w.set_skill.proficiency",
+              "name": "proficiency",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Proficiency, 0 to 100."
             }
           ]
         },
@@ -10768,6 +10957,33 @@
       "placeholders": [],
       "required": [],
       "default": "Shout what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:skills.header",
+      "feature": "skills",
+      "id": "skills.header",
+      "placeholders": [],
+      "required": [],
+      "default": "You know these skills:",
+      "since": 1
+    },
+    {
+      "symbol": "message:skills.line",
+      "feature": "skills",
+      "id": "skills.line",
+      "placeholders": ["skill", "kind", "proficiency"],
+      "required": ["skill"],
+      "default": "  {skill} ({kind}) {proficiency}%",
+      "since": 1
+    },
+    {
+      "symbol": "message:skills.none",
+      "feature": "skills",
+      "id": "skills.none",
+      "placeholders": [],
+      "required": [],
+      "default": "You don't know any skills.",
       "since": 1
     },
     {

@@ -5,7 +5,7 @@
 //   client: {"t":"auth","d":token} {"t":"input","d":"..."} {"t":"gmcp","p":"Core.Supports.Set","d":[...]}
 
 import { render } from "./markup.js";
-import { drawAffects, drawBands, drawCreation, drawRoom, drawTraits, drawVitals } from "./panels.js";
+import { drawAffects, drawBands, drawCreation, drawRoom, drawSkills, drawTraits, drawVitals } from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
 const output = $("output");
@@ -81,6 +81,7 @@ function onGmcp(pkg, data) {
     case "Char.Traits":
       drawTraits($("traits-panel"), $("choices-list"), $("traits-list"), data);
       break;
+    case "Char.Skills": drawSkills($("skills-panel"), $("skills-list"), data); break;
   }
 }
 

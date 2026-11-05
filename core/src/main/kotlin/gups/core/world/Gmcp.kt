@@ -18,6 +18,7 @@ private val STATE_PACKAGES =
     "Char.Status",
     "Char.Affects",
     "Char.Traits",
+    "Char.Skills",
     "Room.Info",
     "Room.Bands",
   )
@@ -95,6 +96,7 @@ internal fun World.gmcpDeltas(s: Session) {
   val p = s.player ?: return
   for (pkg in STATE_PACKAGES) {
     if (pkg == "Room.Bands" && Feature.TRACK !in features) continue
+    if (pkg == "Char.Skills" && Feature.SKILLS !in features) continue
     if (pkg == "Char.Traits" && creation == null && traits.isEmpty()) continue
     if (!s.sink.wantsGmcp(pkg)) continue
     s.queueIfChanged(pkg, gmcpPayload(p, pkg))
@@ -178,6 +180,22 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
       val traitsList =
         p.traits.map { t -> mapOf("name" to t.name, "label" to t.label, "doc" to t.doc) }
       mapOf("choices" to choicesList, "traits" to traitsList)
+    }
+    "Char.Skills" -> {
+      val known =
+        p.skills
+          .mapNotNull { (label, proficiency) ->
+            protos.skills[label]?.let {
+              mapOf(
+                "label" to label.v,
+                "name" to it.name,
+                "kind" to it.kind,
+                "proficiency" to proficiency,
+              )
+            }
+          }
+          .sortedWith(compareBy({ it["name"] as String }, { it["label"] as String }))
+      mapOf("skills" to known)
     }
     "Room.Info" -> {
       val room = p.room

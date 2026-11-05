@@ -487,3 +487,13 @@ def test_cracked_wand_picks_one_outcome(t):
     (w, out) = _proc_fight(t, wield = ":cracked_wand", fractions = [0.0, 0.6])
     t.contains(out, "A dazzling arc of light leaps from the wand!")
     t.eq(w.diagnostics(), [])
+
+def test_the_mentor_teaches_spark(t):
+    # The mentor stands in the arena. A level grants practice sessions, which buy the skill.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":arena")
+    w.award_xp(p, 1000)   # one level: +2 practice sessions
+    t.contains(p.do("practice spark"), "You learn spark from the mentor. (10%)")
+    t.eq(p.skills["//skills/arcane:spark"], 10)
+    t.contains(p.do("practice"), "You have 1 practice session")
+    t.contains(p.do("skills"), "spark")
