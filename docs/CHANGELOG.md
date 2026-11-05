@@ -4,6 +4,31 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Progressive encumbrance
+
+- New kernel rules export `encumbrance_level(ctx)`, required in every ruleset: the actor's encumbrance level, an int of
+  at least 0 (0 unencumbered); a negative result is a bad return value. It sees `ctx.limit` (the actor's `carry_limit`
+  asked without an item) and `ctx.carried` (carried and worn weight, containers' contents included).
+- New `rules_ctx` fields `limit` and `carried` (set in `encumbrance_level` and `encumbrance`, `None` elsewhere;
+  `carry_limit`'s own ctx is unchanged) and `encumbrance_level` (set in `encumbrance`, `None` elsewhere).
+- The actor view gains `encumbrance_level`: the level `rules.encumbrance_level` last gave; 0 while that rule runs.
+- `rules.encumbrance` now runs only while the level is above 0.
+- New engine messages `encumbrance.up` (a higher nonzero level) and `encumbrance.down` (a lower nonzero level), each
+  with `{level}` and `{was}`; `encumbrance.on` and `encumbrance.off` cover the transitions to and from 0.
+- The template and robot worlds now define `encumbrance_level`, and existing rulesets must add it. The robot world's
+  one-level formula keeps the old over-the-limit behavior, and the template grades the share of the limit, charging each
+  level in dex, move and recovery pulses. A ruleset that wants the old behavior adds the one-level formula:
+
+```python
+# before: rulesets defined no level; only the stat penalty
+def encumbrance(ctx):
+    return stats(dex = -2)
+
+# after: the level is a required export; this formula keeps the old behavior
+def encumbrance_level(ctx):
+    return 1 if ctx.carried > ctx.limit else 0
+```
+
 ### Skill proficiency
 
 - Tutorial 03 covers proficiency: `skill_check`, `skill_power`, `item_power`, `ctx.affect.power`, `ctx.power` and

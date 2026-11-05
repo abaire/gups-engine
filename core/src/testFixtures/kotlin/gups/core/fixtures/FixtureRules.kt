@@ -53,6 +53,12 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   /** Replaces `sense_cost` when set. */
   var senseCostOf: ((RulesContext) -> Int)? = null
 
+  /** Replaces `encumbrance_level` when set. */
+  var encumbranceLevelOf: ((RulesContext) -> Int)? = null
+
+  /** Replaces `encumbrance` when set. */
+  var encumbranceOf: ((RulesContext) -> Map<String, Int>)? = null
+
   override fun senseCost(c: RulesContext): Int {
     senseCostOf?.let {
       return it(c)
@@ -205,7 +211,19 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
 
   override fun carryLimit(c: RulesContext): Int = c.requireActor().stat(fs.strength) * 10
 
-  override fun encumbrance(c: RulesContext): Map<String, Int> = mapOf(fs.agility to -2)
+  override fun encumbranceLevel(c: RulesContext): Int {
+    encumbranceLevelOf?.let {
+      return it(c)
+    }
+    return if (c.carried!! > c.limit!!) 1 else 0
+  }
+
+  override fun encumbrance(c: RulesContext): Map<String, Int> {
+    encumbranceOf?.let {
+      return it(c)
+    }
+    return mapOf(fs.agility to -2)
+  }
 
   override fun getLag(c: RulesContext, band: Band): Int? =
     when (band) {

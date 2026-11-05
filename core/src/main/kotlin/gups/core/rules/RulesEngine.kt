@@ -64,6 +64,12 @@ class RulesContext(
   val slot: String? = null,
   /** The affect whose modifier is running, or null outside an affect's modifier. */
   val affect: Affect? = null,
+  /** The actor's carry limit asked without an item, in encumbrance_level and encumbrance calls. */
+  val limit: Int? = null,
+  /** Carried and worn weight, in encumbrance_level and encumbrance calls. */
+  val carried: Int? = null,
+  /** The level just computed, in encumbrance calls. */
+  val encumbranceLevel: Int? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -96,6 +102,9 @@ class RulesContext(
       damageType = type,
       slot = slot,
       affect = affect,
+      limit = limit,
+      carried = carried,
+      encumbranceLevel = encumbranceLevel,
     )
 
   /**
@@ -260,10 +269,13 @@ interface RulesEngine {
   /** Calculates periodic vital recovery or loss applied on each world tick. */
   fun regen(c: RulesContext): Map<String, Int>
 
-  /** Calculates maximum carrying weight capacity before encumbrance penalties apply. */
+  /** Calculates maximum carrying weight capacity, the most the actor can pick up. */
   fun carryLimit(c: RulesContext): Int
 
-  /** Calculates stat penalties incurred when carrying weight in excess of the carry limit. */
+  /** The actor's encumbrance level, 0 or more; 0 means unencumbered. */
+  fun encumbranceLevel(c: RulesContext): Int
+
+  /** Calculates stat penalties for the current encumbrance level. */
   fun encumbrance(c: RulesContext): Map<String, Int>
 
   /** Percent strength of what c.item does for c.actor (use, or a proc); 100 is as declared. */

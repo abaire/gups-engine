@@ -2687,6 +2687,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.carried",
+          "name": "carried",
+          "doc": "The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.channel",
           "name": "channel",
           "doc": "For the perception calls: the channel name, such as 'sound'.",
@@ -2711,6 +2717,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.encumbrance_level",
+          "name": "encumbrance_level",
+          "doc": "The level encumbrance_level just gave; None outside encumbrance.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.event",
           "name": "event",
           "doc": "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.",
@@ -2732,6 +2744,12 @@
           "symbol": "rules_ctx.item",
           "name": "item",
           "doc": "The item, for get_lag and carry_limit.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.limit",
+          "name": "limit",
+          "doc": "The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.",
           "since": 1
         },
         {
@@ -4052,6 +4070,14 @@
       "since": 1
     },
     {
+      "symbol": "message:encumbrance.down",
+      "id": "encumbrance.down",
+      "placeholders": ["level", "was"],
+      "required": [],
+      "default": "Your load grows lighter.",
+      "since": 1
+    },
+    {
       "symbol": "message:encumbrance.off",
       "id": "encumbrance.off",
       "placeholders": [],
@@ -4065,6 +4091,14 @@
       "placeholders": [],
       "required": [],
       "default": "You are carrying more than you can manage.",
+      "since": 1
+    },
+    {
+      "symbol": "message:encumbrance.up",
+      "id": "encumbrance.up",
+      "placeholders": ["level", "was"],
+      "required": [],
+      "default": "Your load grows heavier.",
       "since": 1
     },
     {

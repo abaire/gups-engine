@@ -146,8 +146,8 @@ def flee_chance(ctx):
     return _clamp(40 + (ctx.actor.dex - 10) * 2, 5, 95)
 
 def move_cost(ctx):
-    # The vitals spent for walking out of ctx.room.
-    return vitals(move = 1)
+    # The vitals spent for walking out of ctx.room. Every encumbrance level costs more.
+    return vitals(move = 1 + ctx.actor.encumbrance_level)
 
 def regen(ctx):
     # What each vital gains every world tick (30 seconds); a negative number loses.
@@ -161,9 +161,18 @@ def regen(ctx):
 def carry_limit(ctx):
     return ctx.actor.str * 10
 
+def encumbrance_level(ctx):
+    # Tiers by share of the carry limit; a world is free to use race, class or anything on ctx.actor.
+    pct = ctx.carried * 100 // ctx.limit if ctx.limit > 0 else 100
+    if pct >= 100: return 4
+    if pct >= 90: return 3
+    if pct >= 85: return 2
+    if pct >= 75: return 1
+    return 0
+
 def encumbrance(ctx):
-    # Stat changes while carrying more than carry_limit.
-    return stats(dex = -2)
+    # Heavier tiers cost more dexterity.
+    return stats(dex = -ctx.encumbrance_level)
 
 def get_lag(ctx, band):
     # Extra lag for picking up ctx.item at this band; None means it's out of reach.
@@ -178,12 +187,12 @@ def _footing(ctx):
     return 2 if "sticky_floor" in ctx.room.tags else 1
 
 def advance_lag(ctx):
-    # Recovery pulses after stepping toward ctx.target.
-    return 2 * _footing(ctx)
+    # Recovery pulses after stepping toward ctx.target. Every encumbrance level takes longer.
+    return 2 * _footing(ctx) + ctx.actor.encumbrance_level
 
 def retreat_lag(ctx):
-    # Recovery pulses after stepping away from ctx.target.
-    return 2 * _footing(ctx)
+    # Recovery pulses after stepping away from ctx.target. Every encumbrance level takes longer.
+    return 2 * _footing(ctx) + ctx.actor.encumbrance_level
 
 def retreat_fail_lag(ctx):
     # Recovery pulses after ctx.target, the pinner, holds you in place.

@@ -174,6 +174,8 @@ object KernelMsg : MsgGroup(null) {
 
   val ENCUMBERED = msg("encumbrance.on", "You are carrying more than you can manage.")
   val UNENCUMBERED = msg("encumbrance.off", "Your load feels manageable again.")
+  val ENCUMBRANCE_UP = msg("encumbrance.up", "Your load grows heavier.", "level,was")
+  val ENCUMBRANCE_DOWN = msg("encumbrance.down", "Your load grows lighter.", "level,was")
   val DECAYS = msg("item.decays", "{item} crumbles to dust.", "item")
   val RECONCILE_SHIFT = msg("world.shifts", "The world shifts around you.")
 

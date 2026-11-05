@@ -405,6 +405,13 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     sInt(actor.inventory.sumOf { it.weight } + actor.equipment.values.sumOf { it.weight })
   }
 
+  @StarlarkMethod(
+    name = "encumbrance_level",
+    structField = true,
+    doc = "The encumbrance level rules.encumbrance_level last gave; 0 while that rule runs.",
+  )
+  fun encumbranceLevel(): Any = read("actor.encumbrance_level") { sInt(actor.encumbranceLevel) }
+
   @StarlarkMethod(name = "casting", structField = true, doc = "The skill being cast, or None.")
   fun casting(): Any =
     read("actor.casting") {

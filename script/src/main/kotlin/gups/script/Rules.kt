@@ -160,6 +160,29 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   }
 
   @StarlarkMethod(
+    name = "limit",
+    structField = true,
+    doc =
+      "The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.",
+  )
+  fun limit(): Any = field { c.limit?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "carried",
+    structField = true,
+    doc =
+      "The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.",
+  )
+  fun carried(): Any = field { c.carried?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "encumbrance_level",
+    structField = true,
+    doc = "The level encumbrance_level just gave; None outside encumbrance.",
+  )
+  fun encumbranceLevel(): Any = field { c.encumbranceLevel?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "room",
     structField = true,
     doc = "The actor's room; for sense_cost, the room the signal enters.",
@@ -413,6 +436,7 @@ internal fun StarlarkHost.runModifier(
  * - `move_cost`: empty map (no movement vital cost deducted).
  * - `regen`: empty map (no vitals regenerated or lost).
  * - `encumbrance`: empty map (no encumbrance stat penalties applied).
+ * - `encumbrance_level`: `0` (no encumbrance level applied).
  * - `starting_stats`: empty result (base stats and vitals unmodified from prototypes).
  * - `carry_limit`: `Int.MAX_VALUE` (no weight/carrying cap applied).
  * - `get_lag`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`: `0` recovery
@@ -642,6 +666,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     run(RulesExport.CARRY_LIMIT, c, ctxArgs(c), convert = intOf(RulesExport.CARRY_LIMIT))
       ?: Int.MAX_VALUE
 
+  override fun encumbranceLevel(c: RulesContext): Int =
+    run(
+      RulesExport.ENCUMBRANCE_LEVEL,
+      c,
+      ctxArgs(c),
+      convert = lagOf(RulesExport.ENCUMBRANCE_LEVEL),
+    ) ?: 0
+
   override fun encumbrance(c: RulesContext): Map<String, Int> =
     run(RulesExport.ENCUMBRANCE, c, ctxArgs(c)) { v ->
       typed(v, TypedKind.STATS, "rules.encumbrance return value")
@@ -798,6 +830,7 @@ enum class RulesExport(val scriptName: String) {
   MOVE_COST("move_cost"),
   REGEN("regen"),
   CARRY_LIMIT("carry_limit"),
+  ENCUMBRANCE_LEVEL("encumbrance_level"),
   ENCUMBRANCE("encumbrance"),
   ITEM_POWER("item_power"),
   GET_LAG("get_lag"),
@@ -994,11 +1027,18 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       doc = "Maximum weight the actor can carry without encumbrance.",
     ),
     RulesExportSpec(
+      export = RulesExport.ENCUMBRANCE_LEVEL,
+      signature = "encumbrance_level(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "limit", "carried", "room", "pulse", "rng"),
+      doc = "The actor's encumbrance level, 0 for none; the world decides what the levels mean.",
+    ),
+    RulesExportSpec(
       export = RulesExport.ENCUMBRANCE,
       signature = "encumbrance(ctx)",
       returnType = "stats",
-      ctxFields = listOf("actor", "room", "pulse", "rng"),
-      doc = "Stat deltas applied while the actor carries more than carry_limit.",
+      ctxFields = listOf("actor", "limit", "carried", "encumbrance_level", "room", "pulse", "rng"),
+      doc = "Stat deltas applied while the encumbrance level is above 0.",
     ),
     RulesExportSpec(
       export = RulesExport.ITEM_POWER,
@@ -1391,7 +1431,8 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *   `retreat_fail_lag`, and `get_lag` across all range bands.
  * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed`,
  *   `interrupt_check`, `skill_check`, and `skill_power`.
- * - Tests `carry_limit`, `encumbrance`, `item_power`, `regen`, and `move_cost`.
+ * - Tests `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `regen`, and
+ *   `move_cost`.
  * - Tests `mitigate` for each damage type declared in the world [schema].
  * - For player actors, tests `on_player_death`.
  * - Tests sensory perception exports (`sense_cost`, `can_perceive`, `perceive_message`) for each
@@ -1533,7 +1574,8 @@ internal fun dryRunRules(
         rules.fleeFailLag(RulesContext(world, a))
       }
       rules.carryLimit(c)
-      rules.encumbrance(c)
+      rules.encumbranceLevel(RulesContext(world, a, limit = 100, carried = 50))
+      rules.encumbrance(RulesContext(world, a, limit = 100, carried = 150, encumbranceLevel = 1))
       rules.itemPower(RulesContext(world, a, other, event = "use"))
       rules.regen(c)
       rules.moveCost(c)

@@ -106,18 +106,6 @@ corpse. A player corpse decays like any other and drops its contents on the grou
 players loot a player's corpse? - Does a player corpse last longer than a mob's, or is it protected? - Should the owner
 be able to recover their corpse after logging out?
 
-### Encumbrance beyond stats
-
-**Spec:** §4.6 (`carry_limit`, `encumbrance`, the modifier chain). **Today:** encumbrance is a set of stat deltas only
-(D-115). It doesn't affect move cost, lag or the ability to move. Since M19, recovery lag has modifier points
-(`advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`) alongside `move_cost`, but nothing lets encumbrance
-reach them: rules and modifiers can't tell that an actor is over its carry limit (there is no `encumbered` actor view
-field), and `encumbrance(ctx)` can only return stats. **Questions:** - Should actors expose a read-only `encumbered`
-view field, so rules exports and modifiers can add lag or move cost while it is set? - Or should being over the limit
-apply an engine-managed affect that carries `modifiers` (and its stat deltas), so encumbrance uses the ordinary chain? -
-Or should `encumbrance` return move-cost and lag changes directly? - Should movement be forbidden past a hard limit, and
-is that a second rules export or part of the same result?
-
 ## Perception and the world
 
 ### Recognizing an unfamiliar spell

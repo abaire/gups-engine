@@ -460,6 +460,9 @@ class BonusDamageTest {
         damageType = fire,
         slot = "wield",
         affect = Affect(1, "test", null, 0, 10),
+        limit = 100,
+        carried = 50,
+        encumbranceLevel = 2,
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

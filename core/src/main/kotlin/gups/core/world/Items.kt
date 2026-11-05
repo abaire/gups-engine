@@ -121,24 +121,43 @@ private fun World.holderOf(loc: ItemLocation): Actor? =
   }
 
 /**
- * Applies `rules.encumbrance` while [a] carries more than `rules.carry_limit`, and lifts it once
- * they don't. The limit is worked out without the current encumbrance. A change reruns the fit
- * check, which tells the wearer about items that stop or start fitting only if [announceFit].
+ * Works out [a]'s encumbrance level from `rules.encumbrance_level`, and while it is above 0 the
+ * stat penalties from `rules.encumbrance`. The limit and carried weight are asked without the
+ * current level or penalties. A change in level or penalties tells the actor by level transition; a
+ * change in the penalties reruns the fit check, which tells the wearer about items that stop or
+ * start fitting only if [announceFit].
  */
 internal fun World.updateEncumbrance(a: Actor, announceFit: Boolean = true) {
   if (!a.inWorld) return
   val was = a.encumbrance
+  val wasLevel = a.encumbranceLevel
   guarded("encumbrance of $a") {
     a.encumbrance = emptyMap()
-    if (a.carriedWeight() > rules.carryLimit(RulesContext(this, a)))
-      a.encumbrance = rules.encumbrance(RulesContext(this, a))
+    a.encumbranceLevel = 0
+    val limit = rules.carryLimit(RulesContext(this, a))
+    val carried = a.carriedWeight()
+    val level = rules.encumbranceLevel(RulesContext(this, a, limit = limit, carried = carried))
+    // Both results land together, so a failing export leaves level 0 and no penalties.
+    val penalties =
+      if (level > 0)
+        rules.encumbrance(
+          RulesContext(this, a, limit = limit, carried = carried, encumbranceLevel = level)
+        )
+      else emptyMap()
+    a.encumbranceLevel = level
+    a.encumbrance = penalties
   }
-  if (was != a.encumbrance) {
+  val level = a.encumbranceLevel
+  if (was != a.encumbrance || wasLevel != level) {
     a.dirty = true
-    if (was.isEmpty()) tell(a, KernelMsg.ENCUMBERED)
-    else if (a.encumbrance.isEmpty()) tell(a, KernelMsg.UNENCUMBERED)
-    refreshFit(a, announceFit)
+    when {
+      wasLevel == 0 && level > 0 -> tell(a, KernelMsg.ENCUMBERED)
+      level == 0 && wasLevel > 0 -> tell(a, KernelMsg.UNENCUMBERED)
+      level > wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_UP, "level" to level, "was" to wasLevel)
+      level < wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_DOWN, "level" to level, "was" to wasLevel)
+    }
   }
+  if (was != a.encumbrance) refreshFit(a, announceFit)
 }
 
 /**

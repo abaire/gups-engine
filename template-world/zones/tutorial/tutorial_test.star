@@ -171,14 +171,17 @@ def test_the_arena_only_wakes_with_someone_near(t):
     w.run(pulses = 10)
     t.eq(dummy.hp, dummy.max_hp)
 
-def _footwork(t, room, boots = False):
+def _footwork(t, room, boots = False, items = []):
     # Returns the recovery lags of one step toward another player and one step back.
+    # `items` names test-only items the player carries first, for the encumbrance test.
     w = _world(t)
     p = w.spawn_player("Tess", at = room, index = 0)
     if boots:
         w.spawn(":tar_walker_boots", at = p)
         p.do("wear boots")
         w.run(pulses = 10)
+    for label in items:
+        w.spawn(label, at = p)
     w.spawn_player("Gus", at = room, index = 2)
     p.do("advance Gus")
     advance = p.wait_state
@@ -186,6 +189,15 @@ def _footwork(t, room, boots = False):
     p.do("retreat from Gus")
     retreat = p.wait_state
     return advance, retreat
+
+def _step_cost(p):
+    # The move vital one step out of the current room spends: walk out, read the loss, walk
+    # back. The guide holds the hall's north exit, so the test walks to the gate.
+    before = p.move
+    p.do("south")
+    cost = before - p.move
+    p.do("north")
+    return cost
 
 def test_the_tar_pit_slows_footwork(t):
     # The tar_pit's sticky_floor tag doubles the advance and retreat lag in rules/combat.star.
@@ -197,6 +209,39 @@ def test_tar_walker_boots_cancel_the_tar_pit(t):
     # The boots' advance_lag and retreat_lag modifiers halve the lag only in sticky rooms.
     t.eq(_footwork(t, ":tar_pit", boots = True), (2, 2))
     t.eq(_footwork(t, ":hall", boots = True), (2, 2))
+
+def test_encumbrance_tiers_price_move_and_dex(t):
+    # rules/combat.star grades the share of the carry limit (str * 10): level 1 from 75%,
+    # level 3 from 90%. Each level costs 1 dex, 1 move per step and 1 recovery pulse on
+    # advance and retreat, and dropping the load gives it all back. w.spawn puts the cargo
+    # straight into the inventory, so a custody change regrades the level.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":hall")
+    t.eq(p.encumbrance_level, 0)
+    t.eq(p.dex, 10)
+    t.eq(_step_cost(p), 1)
+    t.eq(_footwork(t, ":hall"), (2, 2))
+
+    w.spawn(":heavy_pack", at = p)
+    t.eq(p.encumbrance_level, 1)
+    t.eq(p.dex, 9)
+    t.eq(_step_cost(p), 2)
+    t.eq(_footwork(t, ":hall", items = [":heavy_pack"]), (3, 3))
+
+    w.spawn(":iron_bar", at = p)
+    t.eq(p.encumbrance_level, 3)
+    t.eq(p.dex, 7)
+    t.eq(_step_cost(p), 4)
+    t.eq(_footwork(t, ":hall", items = [":heavy_pack", ":iron_bar"]), (5, 5))
+
+    p.do("drop heavy")
+    p.do("drop iron")
+    t.eq(p.encumbrance_level, 0)
+    t.eq(p.dex, 10)
+    t.eq(_step_cost(p), 1)
+    w.spawn_player("Gus", at = ":hall", index = 2)
+    p.do("advance Gus")
+    t.eq(p.wait_state, 2)
 
 def test_the_guide_congratulates_on_level_up(t):
     w = _world(t)

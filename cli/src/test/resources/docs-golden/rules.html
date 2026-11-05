@@ -37,14 +37,17 @@
 <tr id="rules_ctx.affect"><td><code>affect</code></td><td>1</td><td>In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.</td></tr>
 <tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.carried"><td><code>carried</code></td><td>1</td><td>The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
 <tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
 <tr id="rules_ctx.damage_type"><td><code>damage_type</code></td><td>1</td><td>The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
+<tr id="rules_ctx.encumbrance_level"><td><code>encumbrance_level</code></td><td>1</td><td>The level encumbrance_level just gave; None outside encumbrance.</td></tr>
 <tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.</td></tr>
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
 <tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
+<tr id="rules_ctx.limit"><td><code>limit</code></td><td>1</td><td>The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>

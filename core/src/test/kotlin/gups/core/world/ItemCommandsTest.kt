@@ -404,6 +404,129 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
   }
 
   @Test
+  fun `a tiered encumbrance_level tells on, up, up when loading and down, down, off when dropping`() {
+    val rules = FixedRules(fs)
+    rules.encumbranceLevelOf = { c ->
+      val pct = c.carried!! * 100 / c.limit!!
+      when {
+        pct >= 90 -> 3
+        pct >= 85 -> 2
+        pct >= 75 -> 1
+        else -> 0
+      }
+    }
+    val f = fixture(rules = rules)
+    val p = f.player("Ann")
+    f.carry(p, pebble, 75)
+    f.run()
+    assertEquals(1, p.encumbranceLevel)
+    assertContains(f.out(p), "You are carrying more than you can manage.")
+    f.carry(p, pebble, 10)
+    f.run()
+    assertEquals(2, p.encumbranceLevel)
+    assertContains(f.out(p), "Your load grows heavier.")
+    f.carry(p, pebble, 5)
+    f.run()
+    assertEquals(3, p.encumbranceLevel)
+    assertContains(f.out(p), "Your load grows heavier.")
+    assertContains(f.doLine(p, "drop 5 pebble"), "Your load grows lighter.")
+    assertEquals(2, p.encumbranceLevel)
+    assertContains(f.doLine(p, "drop 5 pebble"), "Your load grows lighter.")
+    assertEquals(1, p.encumbranceLevel)
+    assertContains(f.doLine(p, "drop 10 pebble"), "Your load feels manageable again.")
+    assertEquals(0, p.encumbranceLevel)
+  }
+
+  @Test
+  fun `the level reads 0 inside encumbrance_level and encumbrance is not called at level 0`() {
+    var levelInside = -99
+    var encCalls = 0
+    val counting =
+      object : FixedRules(fs) {
+        override fun encumbrance(c: RulesContext): Map<String, Int> {
+          encCalls++
+          return super.encumbrance(c)
+        }
+      }
+    counting.encumbranceLevelOf = { c ->
+      levelInside = c.requireActor().encumbranceLevel
+      if (c.carried!! > c.limit!!) 1 else 0
+    }
+    val f = fixture(rules = counting)
+    val p = f.player("Ann")
+    f.carry(p, pebble, 50)
+    assertEquals(0, levelInside, "the level reads 0 inside encumbrance_level")
+    assertEquals(0, encCalls, "encumbrance is not called at level 0")
+    f.carry(p, pebble, 60)
+    assertEquals(1, encCalls, "encumbrance is called while the level is above 0")
+  }
+
+  @Test
+  fun `a failing encumbrance export leaves level 0 and no penalties`() {
+    val rules = FixedRules(fs)
+    rules.encumbranceOf = { error("boom") }
+    val f =
+      Fixture(
+        rules = rules,
+        protos = Prototypes(T.rooms, T.mobs, T.items + extra, T.skills),
+        strict = false,
+      )
+    val p = f.player("Ann")
+    f.carry(p, pebble, 110)
+    assertEquals(0, p.encumbranceLevel)
+    assertEquals(emptyMap(), p.encumbrance)
+  }
+
+  @Test
+  fun `a strength debuff that lowers the limit raises the level at the next tick`() {
+    val rules = FixedRules(fs)
+    rules.encumbranceLevelOf = { c -> if (c.carried!! > c.limit!!) 1 else 0 }
+    val f = fixture(rules = rules)
+    val p = f.player("Ann")
+    f.carry(p, pebble, 60)
+    assertEquals(0, p.encumbranceLevel, "60 under the limit of 100 is unencumbered")
+    f.w.applyAffect(p, "weak", duration = 200, statDeltas = mapOf(fs.strength to -5))
+    assertEquals(0, p.encumbranceLevel, "not yet, until the world ticks")
+    f.run(120)
+    assertEquals(1, p.encumbranceLevel, "the lowered limit raises the level at the next tick")
+  }
+
+  @Test
+  fun `the level is not saved, and a restore recomputes it`() {
+    val rules = FixedRules(fs)
+    rules.encumbranceLevelOf = { c -> if (c.carried!! > c.limit!!) 1 else 0 }
+    val f = fixture(rules = rules)
+    val p = f.player("Ann")
+    f.carry(p, pebble, 110)
+    assertEquals(1, p.encumbranceLevel)
+    p.encumbranceLevel = 0
+    f.w.settleRestoredHoldings(p)
+    assertEquals(1, p.encumbranceLevel, "restore recomputes the level from the load")
+  }
+
+  @Test
+  fun `overriding the encumbrance up message changes the text the actor is told`() {
+    val rules = FixedRules(fs)
+    rules.encumbranceLevelOf = { c ->
+      val pct = c.carried!! * 100 / c.limit!!
+      if (pct >= 85) 2 else if (pct >= 75) 1 else 0
+    }
+    val f =
+      Fixture(
+        rules = rules,
+        protos = Prototypes(T.rooms, T.mobs, T.items + extra, T.skills),
+        messages = mapOf("encumbrance.up" to "Your back aches."),
+      )
+    val p = f.player("Ann")
+    f.carry(p, pebble, 75)
+    f.carry(p, pebble, 10)
+    f.run()
+    val out = f.out(p)
+    assertContains(out, "Your back aches.")
+    assertFalse("Your load grows heavier." in out, out)
+  }
+
+  @Test
   fun `describe shows the plural for stacks of 2 and the name otherwise`() {
     val f = fixture()
     val p = f.player("Ann")

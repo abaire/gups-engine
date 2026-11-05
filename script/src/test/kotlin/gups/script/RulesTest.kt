@@ -421,6 +421,9 @@ class RulesTest {
         Case("regen", "ctx", "vitals(hp = 1)") { w, c ->
           assertEquals(emptyMap(), w.rules.regen(c))
         },
+        Case("encumbrance_level", "ctx", "2") { w, c ->
+          assertEquals(0, w.rules.encumbranceLevel(c))
+        },
         Case("encumbrance", "ctx", "stats(dex = -2)") { w, c ->
           assertEquals(emptyMap(), w.rules.encumbrance(c))
         },
@@ -662,6 +665,124 @@ class RulesTest {
     assertTrue(messages.any { "must define actor_slots(...)" in it }, messages.toString())
     assertTrue(messages.any { "must define slot_cost(...)" in it }, messages.toString())
     assertTrue(messages.none { "to_hit" in it })
+  }
+
+  @Test
+  fun `a ruleset without encumbrance_level fails to load`() {
+    // The template rules, with only its encumbrance_level def dropped.
+    val base = TestWorlds.rules().lines()
+    val start = base.indexOfFirst { it.startsWith("def encumbrance_level(") }
+    assertTrue(start >= 0, "the template rules define encumbrance_level")
+    val end = (start + 1 until base.size).firstOrNull { base[it].startsWith("def ") } ?: base.size
+    val without = (base.subList(0, start) + base.subList(end, base.size)).joinToString("\n")
+    val result = loadWith(without)
+    assertTrue("rules" in result.failed)
+    val messages = result.errors.filter { it.pkg == "rules" }.map { it.message }
+    assertTrue(messages.any { "must define encumbrance_level(...)" in it }, messages.toString())
+  }
+
+  @Test
+  fun `encumbrance_level reads the limit and the carried weight set for it`() {
+    val f =
+      world(
+        """
+            def encumbrance_level(ctx):
+                # The limit is carry_limit (str * 10); carried is the weight carried and worn.
+                return ctx.limit * 1000 + ctx.carried if ctx.carried else 0
+            """,
+        DEFAULT_ROOMS,
+        "zones/z/items.star" to "item('sack', weight = 60)\n",
+      )
+    val p = f.player()
+    assertEquals(0, p.encumbranceLevel, "empty hands carry no level")
+    f.w.spawnItem(Label("//zones/z:sack"), ItemLocation.Carried(p.id))
+    assertEquals(100 * 1000 + 60, p.encumbranceLevel, "the level encodes ctx.limit and ctx.carried")
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+  }
+
+  @Test
+  fun `encumbrance reads the level set for it`() {
+    val f =
+      world(
+        """
+            def encumbrance_level(ctx):
+                return 1 if ctx.carried > ctx.limit else 0
+
+            def encumbrance(ctx):
+                # The dry run asks without the level set, so the level defaults to 0 there.
+                return stats(dex = -3 * (ctx.encumbrance_level or 0))
+            """,
+        DEFAULT_ROOMS,
+        "zones/z/items.star" to "item('sack', weight = 120)\n",
+      )
+    val p = f.player()
+    assertEquals(10, p.stat("dex"))
+    f.w.spawnItem(Label("//zones/z:sack"), ItemLocation.Carried(p.id))
+    assertEquals(1, p.encumbranceLevel)
+    assertEquals(10 - 3, p.stat("dex"), "dex loses 3 per level, from ctx.encumbrance_level")
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+  }
+
+  @Test
+  fun `a weight field read in an export that does not set it fails the dry run`() {
+    val result =
+      loadWith(TestWorlds.rules("def move_cost(ctx):\n    return vitals(move = ctx.limit + 1)\n"))
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "rules.move_cost failed")
+    assertContains(error.message, "NoneType")
+  }
+
+  @Test
+  fun `a negative encumbrance_level is a bad return value`() {
+    val f =
+      world(
+        // Only a level-9 actor gets the bad value, so the load-time dry run (level 1) still passes.
+        """
+        def encumbrance_level(ctx):
+            if ctx.actor.level == 9:
+                return -3
+            return 0
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
+    assertEquals(0, f.w.rules.encumbranceLevel(RulesContext(f.w, p)))
+    val errors = f.diagnostics("script_error").map { it.message }
+    assertTrue(
+      errors.any {
+        "rules.encumbrance_level returned a bad value" in it && "must be at least 0" in it
+      },
+      errors.toString(),
+    )
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
+  fun `the actor view shows the stored level and 0 while encumbrance_level runs`() {
+    val f =
+      world(
+        """
+            def encumbrance_level(ctx):
+                # 99 would mean the stored level was still set while this rule ran.
+                if ctx.actor.encumbrance_level > 0:
+                    return 99
+                return 1 if ctx.carried > ctx.limit else 0
+
+            def move_cost(ctx):
+                return vitals(move = 1 + ctx.actor.encumbrance_level)
+            """,
+        DEFAULT_ROOMS,
+        "zones/z/items.star" to "item('sack', weight = 120)\n",
+      )
+    val p = f.player()
+    val c = RulesContext(f.w, p)
+    assertEquals(1, f.w.rules.moveCost(c)["move"], "no load, no level, base move cost")
+    f.w.spawnItem(Label("//zones/z:sack"), ItemLocation.Carried(p.id))
+    assertEquals(1, p.encumbranceLevel, "99 would mean the rule saw its own previous answer")
+    assertEquals(2, f.w.rules.moveCost(c)["move"], "the move cost reads the stored level")
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
   }
 
   private fun slotFamiliesError(families: String): LoadError {
@@ -1630,7 +1751,16 @@ class RulesTest {
     assertEquals(kotlin.moveCost(c), w.rules.moveCost(c))
     assertEquals(kotlin.regen(c), w.rules.regen(c))
     assertEquals(kotlin.carryLimit(c), w.rules.carryLimit(c))
-    assertEquals(kotlin.encumbrance(c), w.rules.encumbrance(c))
+    // The fixture's level formula needs both weight fields, so it gets them set, as the engine sets
+    // them.
+    val levelC = RulesContext(w, a, b, band = Band.NEAR, limit = 100, carried = 50)
+    assertEquals(kotlin.encumbranceLevel(levelC), w.rules.encumbranceLevel(levelC))
+    // The template prices dex by the level the engine just computed, so the fixture mirrors that
+    // instead of its flat over-the-limit penalty, and both are asked with the level set.
+    kotlin.encumbranceOf = { ctx -> mapOf(kotlin.fs.agility to -(ctx.encumbranceLevel ?: 0)) }
+    val encC =
+      RulesContext(w, a, b, band = Band.NEAR, limit = 100, carried = 95, encumbranceLevel = 3)
+    assertEquals(kotlin.encumbrance(encC), w.rules.encumbrance(encC))
     for (band in Band.entries) assertEquals(kotlin.getLag(c, band), w.rules.getLag(c, band))
     assertEquals(kotlin.advanceLag(c), w.rules.advanceLag(c))
     assertEquals(kotlin.retreatLag(c), w.rules.retreatLag(c))

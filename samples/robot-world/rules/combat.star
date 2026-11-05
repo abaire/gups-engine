@@ -130,6 +130,10 @@ def regen(ctx):
 def carry_limit(ctx):
     return ctx.actor.might * 10
 
+def encumbrance_level(ctx):
+    # 1 while carrying more than carry_limit, the old over-the-limit rule.
+    return 1 if ctx.carried > ctx.limit else 0
+
 def encumbrance(ctx):
     return stats(agility = -2)
 

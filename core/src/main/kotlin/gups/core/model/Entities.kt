@@ -466,8 +466,12 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   /** Returns the item equipped in [slot], or null if the slot is empty. */
   fun equipped(slot: String): Item? = equipmentIndex[slot]
 
-  /** Stat penalties imposed by carrying weight in excess of the carry limit. */
+  /** Stat penalties for the current encumbrance level. */
   var encumbrance: Map<String, Int> = emptyMap()
+    internal set
+
+  /** Level of encumbrance from `rules.encumbrance_level`; 0 when unencumbered. Not saved. */
+  var encumbranceLevel: Int = 0
     internal set
 
   /** What the actor's items contribute; kept current by `refreshHoldings`. */

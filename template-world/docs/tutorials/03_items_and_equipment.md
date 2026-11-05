@@ -664,6 +664,59 @@ custom attributes, and per-instance affects. This is preferred over simply remov
 
 ---
 
+## 8. Weight, Carry Limit, and Encumbrance
+
+An item's `weight` matters only because the rules give it meaning. Two rules exports turn it into a graded penalty:
+
+* **`carry_limit(ctx)`** is the hard cap that `get`, `give` and mob scavenging enforce. The template's is `ctx.actor.str
+  \* 10`, so a strength-10 player picks up at most 100 weight.
+* **`encumbrance_level(ctx)`** gives the actor's encumbrance level, an int of at least 0 (0 means unencumbered). The
+  engine gives a level no meaning: how many there are, where they start, and what they cost all belong to the world. The
+  export sees `ctx.limit` (the actor's `carry_limit`) and `ctx.carried` (carried and worn weight, containers' contents
+  included), plus whatever else of `ctx.actor` it reads. The template grades the share of the limit in
+  `rules/combat.star`:
+
+```python
+def encumbrance_level(ctx):
+    # Tiers by share of the carry limit; a world is free to use race, class or anything on ctx.actor.
+    pct = ctx.carried * 100 // ctx.limit if ctx.limit > 0 else 100
+    if pct >= 100: return 4
+    if pct >= 90: return 3
+    if pct >= 85: return 2
+    if pct >= 75: return 1
+    return 0
+```
+
+The level is read back as `ctx.actor.encumbrance_level`, so the world's own exports price it: the template's `move_cost`
+and the `advance_lag` / `retreat_lag` exports charge one more per level,
+
+```python
+def move_cost(ctx):
+    # The vitals spent for walking out of ctx.room. Every encumbrance level costs more.
+    return vitals(move = 1 + ctx.actor.encumbrance_level)
+```
+
+and `rules.encumbrance(ctx)` supplies stat deltas only while the level is above 0, the template's losing one of dex per
+level. A trait or an item changes the cost through a modifier on any modifier point instead: a `MODIFIER.move_cost`
+reads the same `ctx.actor.encumbrance_level`,
+
+```python
+def _weighted(ctx, base):
+    # Heavy gear doubles the step cost from the moment encumbrance begins.
+    return base * 2 if ctx.actor.encumbrance_level > 0 else base
+
+item("oiled_harness",
+     name="an oiled harness",
+     desc="Bridle and girth, oiled and honest.",
+     wear="waist",
+     modifiers={MODIFIER.move_cost: _weighted},
+     )
+```
+
+and a room, region, or affect modifier can do the same wherever its chain reaches `move_cost`.
+
+---
+
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/items.star`](../../zones/tutorial/items.star)
