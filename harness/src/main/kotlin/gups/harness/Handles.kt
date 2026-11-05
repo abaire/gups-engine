@@ -513,6 +513,13 @@ internal constructor(
     return Starlark.NONE
   }
 
+  @StarlarkMethod(
+    name = "trace_lines",
+    doc =
+      "The lines w.trace() has kept so far, oldest first, each starting with its [pulse]; the trace keeps them.",
+  )
+  fun traceLinesValue(): Any = StarlarkList.immutableCopyOf(traceLines.toList())
+
   private fun addTrace(line: String) {
     traceLines.addLast(line)
     if (traceLines.size > TRACE_KEEP) {

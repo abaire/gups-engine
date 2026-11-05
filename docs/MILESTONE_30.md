@@ -29,9 +29,9 @@
     - **Bounds:** `max_expansions` in 1..16,384 (outside is an error); at most 256 actions; at most 64 distinct fact
       names across `facts`, `goal`, and every `pre` and `effects`; plans of at most 32 steps (nodes at depth 32 are not
       expanded); at most `MAX_ACTION_CHECKS` action checks per call (one action tested against one expanded node;
-      starting value 262,144, tuned in Phase 1 by measurement so the worst case takes a few milliseconds). With more
-      than 16 actions, the action-check cap ends the search before 16,384 expansions can be reached. Exceeding the
-      action, fact or argument limits is a script error; exhausting expansions or action checks returns `None`.
+      65,536, tuned in Phase 1 by measurement so the worst case takes a few milliseconds). With more than 4 actions, the
+      action-check cap ends the search before 16,384 expansions can be reached. Exceeding the action, fact or argument
+      limits is a script error; exhausting expansions or action checks returns `None`.
     - **Why the action-check cap matters:** time spent in `ctx.plan` counts against the `think` hook's 20 ms wall-clock
       backstop, which is checked at the next verb (`ai.run` always calls one afterwards). A plan that is too slow
       becomes a `wall_clock` diagnostic in production, which the harness can't catch because it turns the wall clock
@@ -149,7 +149,7 @@ object GoapPlanner {
   const val MAX_ACTIONS = 256
   const val MAX_FACTS = 64
   const val MAX_PLAN_LENGTH = 32
-  const val MAX_ACTION_CHECKS = 262_144
+  const val MAX_ACTION_CHECKS = 65_536
 
   /** Throws IllegalArgumentException for arguments outside the limits. */
   fun plan(
@@ -195,8 +195,11 @@ object GoapPlanner {
      where the action-check cap is what stops the search. Warm up the JIT with a few runs, then print the median time
      with `println`. The test asserts only that the result is `NotFound(exhausted = true)`, not a time, so it can't
      flake on slow CI. If the median is above about 5 ms on the development machine, lower `MAX_ACTION_CHECKS` (to a
-     power of two) until it isn't. Record the measured figure and the machine in the constant's KDoc. If the final value
-     differs from 262,144, use it everywhere this document says 262,144, including the spec text in Phase 2.
+     power of two) until it isn't. Record the measured figure and the machine in the constant's KDoc.
+
+     **Tuned:** the starting value, 262,144, measured a median of about 26 ms on an Apple M5 Max, more than the whole 20
+     ms `think` backstop; 131,072 measured about 15 ms and 65,536 about 3 ms. The maintainer approved **65,536**, which
+     is the value used throughout this document and the spec. Do not raise it again without re-measuring.
 
 ### Test & Documentation Requirements
 
@@ -217,7 +220,7 @@ object GoapPlanner {
   - each validation error, and its message;
   - determinism: the same call twice gives equal results.
 - KDoc on `GoapPlanner.plan` and each constant explains the semantics above in plain words, including that with more
-  than 16 actions the action-check cap ends the search before `MAX_EXPANSIONS` can be reached.
+  than 4 actions the action-check cap ends the search before `MAX_EXPANSIONS` can be reached.
 - The worst-case timing test from step 8.
 
 ### Exit Conditions
@@ -265,9 +268,9 @@ object GoapPlanner {
   > default empty) and `cost` (an int of at least 1, default 1). Conditions are equality only, and a fact that is absent
   > matches nothing until an effect sets it. It returns the names of the cheapest plan (ties go to fewer steps, then to
   > earlier actions), `[]` when the goal already holds, and `None` when the goal is unreachable or the search runs out
-  > of bounds: `max_expansions` (1 to 16,384), 32 steps per plan, and 262,144 action checks (one action tested at one
-  > search node), which with more than 16 actions ends the search before `max_expansions` does. It is deterministic,
-  > runs in the engine and spends no script steps. At most 256 actions and 64 distinct facts; a malformed argument is an
+  > of bounds: `max_expansions` (1 to 16,384), 32 steps per plan, and 65,536 action checks (one action tested at one
+  > search node), which with more than 4 actions ends the search before `max_expansions` does. It is deterministic, runs
+  > in the engine and spends no script steps. At most 256 actions and 64 distinct facts; a malformed argument is an
   > error. `//lib:ai.star` in the template builds on it.
 
 ### Implementation Blueprint
@@ -311,10 +314,10 @@ fun plan(facts: Any, actions: Any, goal: Any, maxExpansions: Any): Any
   - bool vs int: `{"a": True}` doesn't satisfy `{"a": 1}`;
   - errors: a float fact value, a list fact value, an unknown action key, a duplicate name, `cost = 0`, `max_expansions
     = 0` and `16385`, 257 actions, 65 facts; each raises a script error whose message starts with `ctx.plan(`;
-  - **step cost:** in a mob `think` (or a hook) under the default limits, a call with about 16 actions that expands
-    about 10,000 nodes and returns a plan (not `None`) completes without a `step_limit` diagnostic, showing the search
-    spends no script steps. Keep the action count at 16 or fewer, so the action-check cap can't end the search first and
-    make the test pass trivially;
+  - **step cost:** in a mob `think` (or a hook) under the default limits, a call with 13 independent actions and a goal
+    needing 6 of them (a few thousand expansions, inside the 65,536 action-check cap) returns the expected plan (not
+    `None`) without a `step_limit` diagnostic, showing the search spends no script steps. Keep actions × expansions
+    under the action-check cap, so the cap can't end the search first;
   - determinism: two worlds with different seeds return the same plan.
 - `DocExamples.kt`: add an entry keyed `"ctx.plan"`, mirroring the `"ctx.level_up"` and `"ctx.merge_stack"` entries. Its
   `pkg` declares a room whose hook calls `ctx.plan` on a three-action table and sends the result, and its `test` body
@@ -350,8 +353,9 @@ fun plan(facts: Any, actions: Any, goal: Any, maxExpansions: Any): Any
 - **Files to Modify / Create:**
   - Create `template-world/lib/ai.star`.
   - `template-world/lib/package.star` (add `ai` to the header comment's list).
-  - Create `template-world/zones/tutorial/ai_probes.star` (test-only probe mobs prefixed `test_ai_`, each with a small
-    tree in its `think`, recording what ran in its own attributes). No spawns: tests place them with `w.spawn`.
+  - Create `template-world/zones/tutorial/ai_probes_testdata.star` (a `*_testdata.star` fixture: test-only probe mobs
+    prefixed `test_ai_`, each with a small tree in its `think`, recording what ran in its own attributes). No spawns:
+    tests place them with `w.spawn`.
   - Create `template-world/zones/tutorial/ai_test.star`.
   - `docs/CHANGELOG.md`.
 - **Do Not Touch:** Kotlin sources, `docs/SPEC.md`, `samples/robot-world`, `rooms.star`, `mobs.star`, existing tests.
@@ -484,10 +488,11 @@ ai.run(ctx, tree)                            # call from think: returns "idle" o
        first step toward `ctx.self.home_room`), `drop_pinecone` (pre `has_pinecone: True, at_home: True`; effects
        `has_pinecone: False, cached: True`; run: `ctx.act(ctx.self, "drop pinecone")`). Goal `{"cached": True}`. Use the
        command names through the world's command words as other mob code in the tutorial does, if it does.
-     - Tree: `ai.selector([ ai.sequence([ai.condition(_fighting), ai.action(_yield)]), ai.goap("cache", ...) ])`, where
-       `_fighting` is `len(ctx.self.fighting()) > 0` (guard with `ctx.has_feature("combat")`) and `_yield` returns
-       `"failure"` so the whole tree fails and the built-in `flee` proposal runs. Comment the file in the tutorial's
-       teaching tone.
+     - Tree: `ai.sequence([ai.inverter(ai.condition(_fighting)), ai.goap("cache", ...)])`, where `_fighting` is
+       `len(ctx.self.fighting()) > 0` (guard with `ctx.has_feature("combat")`). While fighting, the inverter fails the
+       sequence, so the whole tree fails and the built-in `flee` proposal runs. (A selector whose first branch is
+       `sequence([condition(_fighting), action(_yield)])` does not work: when that branch fails, the selector moves on
+       to the GOAP branch and the squirrel keeps foraging mid-fight.) Comment the file in the tutorial's teaching tone.
      - The squirrel must not disturb the shop, armory or guide tests: it lives on the gravel path and only collects
        pinecones.
      - `ctx.find(":pinecone", scope = "zone")` returns item views in ascending id order, including carried ones; keep
@@ -502,10 +507,11 @@ ai.run(ctx, tree)                            # call from think: returns "idle" o
     assert a pinecone lies on the gravel floor and none in the tar pit;
   - `test_squirrel_replans_when_the_pinecone_moves`: after it plans, a player picks the pinecone up and drops it in
     `:hall`; the squirrel still caches it;
-  - `test_squirrel_idles_with_nothing_to_fetch`: destroy the tar pit's pinecone first; the tree fails and the squirrel
-    stays put (it has no built-in movement behaviors);
+  - `test_squirrel_idles_with_nothing_to_fetch`: a player takes the tar pit's pinecone first (the harness can't destroy
+    items). The squirrel may already have set off, so let it settle, then check it stays wherever it is, with no cached
+    plan: the tree fails and it has no built-in movement behaviors;
   - `test_squirrel_flees_when_hurt`: `w.damage(squirrel, "hp", pct = 60)` while it fights; it leaves the room (use
-    `bubble = False`, the default).
+    `bubble = False`, the default). Flee is a random roll, so run a bounded loop of thinks until it leaves.
 - CHANGELOG bullet (append): "The tutorial zone's squirrel uses `//lib:ai.star` to fetch pinecones from the tar pit."
 
 ### Exit Conditions
@@ -520,8 +526,8 @@ ai.run(ctx, tree)                            # call from think: returns "idle" o
 
 ### Objective & Scope
 
-- **In Scope:** the tutorial 05 section and correction; §4.8; §2.3 if needed; §7.4; an end-to-end scenario; marking the
-  `DESIGN_NEEDED` entry completed.
+- **In Scope:** the tutorial 05 section and correction; §4.8; §2.3 if needed; §7.4; an end-to-end scenario; deleting the
+  `DESIGN_NEEDED` entry.
 - **Out of Scope:** engine and library behavior changes.
 
 ### Context Working Set
@@ -567,8 +573,7 @@ ai.run(ctx, tree)                            # call from think: returns "idle" o
    pinecone ends on the gravel floor; run it with `gups scenario --world local-world-test/world --package
    //zones/tutorial local-world-test/squirrel.star` as `AGENTS.md` describes. Read the transcript to confirm the
    squirrel walks east, takes the pinecone, returns and drops it. Delete `local-world-test/`.
-5. **`docs/DESIGN_NEEDED.md`:** rename the heading to `### Behavior trees and GOAP (COMPLETED — M30)` and leave the body
-   in place (do not delete it).
+5. **`docs/DESIGN_NEEDED.md`:** delete the `### Behavior trees and GOAP` entry; it is designed and folded into the spec.
 6. CHANGELOG bullet: "Tutorial 05 covers behavior trees and planning, and no longer says `ctx.target` is the opponent
    inside `think` (use `ctx.self.fighting()`)."
 
@@ -581,4 +586,4 @@ ai.run(ctx, tree)                            # call from think: returns "idle" o
 
 - [] `./gradlew check` passes with zero warnings. Markdown is formatted.
 - [] The `gups scenario` run passed and its transcript showed the squirrel's round trip. `local-world-test/` is deleted.
-- [] The `DESIGN_NEEDED` entry is marked `(COMPLETED — M30)`, not deleted, and the §7.4 row is present.
+- [] The `DESIGN_NEEDED` entry is deleted, and the §7.4 row is present.

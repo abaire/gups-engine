@@ -548,6 +548,19 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.plan" class="entry">
+<h4><code>plan(facts, actions, goal, max_expansions = 1024)</code> <span class="since">since api_version 1</span></h4>
+<p>Goal-oriented planning: the cheapest list of action names that reaches goal from facts, [] if it already holds, None if unreachable or out of bounds.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.plan.facts"><td><code>facts</code></td><td>positional or named</td><td></td><td>Dict of fact name to bool, int or str.</td></tr>
+<tr id="ctx.plan.actions"><td><code>actions</code></td><td>positional or named</td><td></td><td>List of dicts with name, pre, effects and cost.</td></tr>
+<tr id="ctx.plan.goal"><td><code>goal</code></td><td>positional or named</td><td></td><td>Dict of fact name to the value it must have.</td></tr>
+<tr id="ctx.plan.max_expansions"><td><code>max_expansions</code></td><td>positional or named</td><td><code>1024</code></td><td>Search nodes to expand at most, 1 to 16384.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.remove_affect" class="entry">
 <h4><code>remove_affect(target, name)</code> <span class="since">since api_version 1</span></h4>
 <p>Removes an affect by name; True if there was one.</p>

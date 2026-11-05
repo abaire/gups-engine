@@ -105,15 +105,6 @@ at once. Nothing hides players or models stealth. **Question:** is sneaking or i
 `aggressive` take a chance or a delay? Also, should we support "unless_level_below" and more complex player targeting
 like `attack_healers_first`?
 
-### Behavior trees and GOAP
-
-**Spec:** §4.7 (mob behaviors, `think` hooks). **Today:** mob AI is built from declarative primitive behaviors
-(`patrol`, `wander`, `follow`, `pursue`, `aggressive`, `assist`, `guard`) and custom Starlark logic in `think` hooks.
-The engine does not provide a native Behavior Tree or Goal-Oriented Action Planning (GOAP) runtime. **Questions:** -
-Should complex AI frameworks like behavior trees or GOAP be built as Kotlin primitives in `core` or as a standard
-`//lib` Starlark library? - How would planning algorithms remain within the Starlark step and allocation limits (§4.11)
-during expensive state evaluations?
-
 ## Items
 
 ### Corpses and looting

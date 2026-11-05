@@ -55,6 +55,11 @@ room("hall",
     on_enter = _hall_enter,
 )
 
+def _stock_tar_pit(ctx):
+    # Keep one pinecone on the floor for the squirrel on the gravel path (forager.star).
+    if not [i for i in ctx.self.items() if i.label == "//zones/tutorial:pinecone"]:
+        ctx.spawn(":pinecone", ctx.self)
+
 # The engine gives tags no meaning. The `sticky_floor` tag does something here only because
 # rules/combat.star (`_footing`) doubles the advance and retreat lag in rooms that carry it.
 room("tar_pit",
@@ -63,6 +68,8 @@ room("tar_pit",
     size = SIZE.normal,
     tags = ["sticky_floor"],
     exits = [exit(DIR.east, to = ":hall"), exit(DIR.west, to = ":gravel")],
+    on_load = _stock_tar_pit,
+    on_reset = _stock_tar_pit,
 )
 
 def _crunch(ctx):
@@ -78,6 +85,7 @@ room("gravel",
     desc = "Loose stones shift and crunch with every step.",
     size = SIZE.normal,
     exits = [exit(DIR.east, to = ":tar_pit")],
+    spawns = [spawn(":squirrel")],
     on_enter = _crunch,
 )
 

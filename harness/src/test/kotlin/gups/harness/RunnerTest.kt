@@ -163,6 +163,38 @@ class RunnerTest {
   }
 
   @Test
+  fun `trace_lines returns what the trace recorded`() {
+    val files =
+      mapOf(
+        "zones/a/package.star" to "package(api_version = 1, kind = \"zone\")",
+        "zones/a/rooms.star" to
+          """
+                def _mark(ctx):
+                    ctx.set_attr(ctx.actor, "seen", True)
+
+                room("start", on_enter = _mark, exits = [exit("north", ":start")])
+            """,
+        "zones/a/a_test.star" to
+          """
+                def test_x(t):
+                    w = t.world()
+                    p = w.spawn_player("Pat", at = ":start")
+                    t.eq(w.trace_lines(), [])
+                    w.trace()
+                    p.do("north")
+                    lines = w.trace_lines()
+                    t.true(len([l for l in lines if "on_enter on //zones/a:start" in l]) == 1)
+                    t.true(len([l for l in lines if "set_attr(seen)" in l]) == 1)
+
+                    # Reading doesn't drain: the failure printout still has every line.
+                    t.eq(w.trace_lines(), lines)
+            """,
+      )
+    val r = run(files, "//zones/a").results.single()
+    assertEquals(Status.PASS, r.status, r.render())
+  }
+
+  @Test
   fun `the same seed gives the same fight`() {
     val files =
       zone +

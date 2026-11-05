@@ -1214,7 +1214,7 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
 | Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                      |
 | Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                            |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                             |
-| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`                                                                                                    |
+| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`, `plan(facts, actions, goal, max_expansions=1024) -> [name] | None`                                |
 | Randomness        | `rng.int(lo, hi)`, `rng.chance(pct)`, `rng.choice(list)`. Seeded and deterministic; there is no other source of randomness.                                                                                                                                                            |
 | Leveling          | `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`                                                                                                                                                                                   |
 
@@ -1275,6 +1275,15 @@ when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `con
   - `enemies_near` returns engaged opponents. `allies_near` returns actors on the same side (players with players, mobs
     with mobs) not engaged with the actor.
   - `path_to` returns an empty list when already there and `None` when unreachable (§5.9).
+  - `plan(facts, actions, goal, max_expansions=1024)` is goal-oriented planning over data. `facts` and `goal` map fact
+    names to `bool`, `int` or `str` values; each action is a dict with `name` (unique), `pre` and `effects` (fact dicts,
+    default empty) and `cost` (an int of at least 1, default 1). Conditions are equality only, and a fact that is absent
+    matches nothing until an effect sets it. It returns the names of the cheapest plan (ties go to fewer steps, then to
+    earlier actions), `[]` when the goal already holds, and `None` when the goal is unreachable or the search runs out
+    of bounds: `max_expansions` (1 to 16,384), 32 steps per plan, and 65,536 action checks (one action tested at one
+    search node), which with more than 4 actions ends the search before `max_expansions` does. It is deterministic, runs
+    in the engine and spends no script steps. At most 256 actions and 64 distinct facts; a malformed argument is an
+    error. `//lib:ai.star` in the template builds on it.
 - **Mob actions:**
   - They return whether the action was queued.
   - `move_toward(mob, x)` takes a direction, advances on an actor in the same room, or takes the first step of
@@ -1614,6 +1623,9 @@ def _scout_think(ctx):
 
 - If `think` queued an action for its own mob through `ctx.act*`, the top proposal is not queued as well.
 - A failing `think` falls back to the top proposal.
+
+The template world's `//lib:ai.star` builds behavior trees, a per-mob blackboard and goal-oriented planning (through
+`ctx.plan`) on top of `think`.
 
 ### 4.9 Commands
 
@@ -2163,7 +2175,8 @@ maximum, with `type` defaulting to the unarmed damage type.
 - `t.eq` and `t.ne` treat an entity view as equal to a label string that resolves (relative to the calling package) to
   its prototype label. Players are excluded.
 - `w.trace()` keeps the last 400 lines (rules lines included) and prints them when the test fails, and always in a `gups
-  scenario` run.
+  scenario` run. `w.trace_lines()` returns the kept lines, oldest first, each starting with its `[pulse]`, so a test can
+  assert that a hook did or didn't call a verb; reading them doesn't clear them.
 - `w.force_rng(ints=[], fractions=[])` queues the results of later rolls, so a test needn't hunt for a seed: each
   `rng.int` (and so `rng.chance`) takes the next queued int, and each engine fraction roll (such as a proc's `chance`)
   the next queued fraction, in `[0, 1)`; once a queue is empty the seeded stream resumes where it left off. A forced int
@@ -3904,3 +3917,4 @@ template's `.github/workflows/gates.yml`.
 | **M27**   | Typed bonus damage: the kernel `bonus_damage` modifier point on the attacker's chain, `damages(...)` values and `+` on typed values of the kind, the swinging-weapon filter, each bonus part mitigated with its own type and applied with the hit as one damage event, `ctx.parts` in `on_damage`, `BONUS_DAMAGE` plugin trait modifiers, the template's physical-only armor, and the tutorial's `flaming_sword`, `ember_amulet` and `oily_rags`, and test-only `*_testdata.star` fixture files (§3.9, §4.3, §4.4, §4.6, §4.12, §4.19, §5.4). |
 | **M28**   | Combat procs: `proc(...)` and `outcome(...)` with weighted one-of tables; `procs` on `item`, `item_affect` and `apply_affect`; `hit`, `struck` and `avoid` triggers on auto-attack swings, in modifier-chain order with the swinging-weapon filter; skill procs through `cast_allowed` only; the `combat.proc.*` messages; saved instance-affect procs; the tutorial's `ember_dagger`, `bramble_vest` and `cracked_wand` (§3.10, §4.2, §4.3, §4.4, §4.5, §5.4).                                                                               |
 | **M29**   | Whether a spell lands: `enemy` skills roll `to_hit` (with `ctx.skill`), the caster's `to_hit` chain and the victim's `defend_hit` chain per victim, and a resisted victim gets no effect or `resolve`; `cast.resisted.*` messages; `to_hit` and `defend_hit` owned by `combat` or `skills`, with any-of and all-of feature ownership; `PluginModifierCall.skill`; the template's and robot world's spell formulas (§3.10, §4.3, §4.6, §4.15, §5.3, §5.4).                                                                                     |
+| **M30**   | Behavior trees and planning: the native `ctx.plan` query (uniform-cost GOAP over equality facts, bounded and deterministic, no script steps), the template's `//lib:ai.star` (trees re-evaluated each `think`, a blackboard, a caching `goap` leaf) and the tutorial's squirrel (§4.5, §4.8).                                                                                                                                                                                                                                                 |

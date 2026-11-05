@@ -87,11 +87,13 @@ For complex mob routines (boss mechanics, patrolling specific waypoints, casting
 ```python
 def _shaman_think(ctx):
     # ctx.self is the mob
-    # ctx.target is who the mob is fighting (or None if out of combat)
-    if ctx.target != None and ctx.self.mana >= 10:
-        ctx.cast("//skills/magic:flame_strike", target=ctx.target)
-    elif ctx.self.hp < 50:
-        ctx.cast("//skills/magic:minor_heal", target=ctx.self)
+    # ctx.self.fighting() lists the mob's opponents (empty when it isn't fighting)
+    foes = ctx.self.fighting()
+    if foes and ctx.self.mana >= 10:
+        return ctx.act_cast(ctx.self, "//skills/magic:flame_strike", foes[0])
+    elif ctx.self.hp < 50 and ctx.self.mana >= 5:
+        return ctx.act_cast(ctx.self, "//skills/magic:minor_heal", ctx.self)
+    return None
 
 
 mob("goblin_shaman",
@@ -102,11 +104,111 @@ mob("goblin_shaman",
 ```
 
 * **Pulses:** 1 world pulse = 250 milliseconds. `think_every = 4` runs the AI loop once per second.
-* **Combat Awareness:** Within `think`, `ctx.target` refers to the mob's active combat opponent.
+* **Combat Awareness:** Within `think`, `ctx.self.fighting()` lists the mob's opponents; `ctx.target` is not set.
+* **Return value:** `None` lets the top built-in proposal run (`ctx.proposals[0]`), queuing an action with `ctx.act*`
+  replaces it, and `"idle"` skips the turn.
 
 ---
 
-## 4. Spawns and Zone Resets
+## 4. Behavior Trees and Planning
+
+A `think` hook full of nested `if`s gets hard to follow once a mob has more than a couple of things to do. The
+template's library `//lib:ai.star` gives you two tools on top of `think`: **behavior trees**, for deciding what to do
+this cycle, and **goal-oriented planning** (GOAP), for working out a sequence of steps that reaches a goal.
+
+### Trees
+
+```python
+load("//lib:ai.star", "ai")
+
+def _hurt(ctx, bb):
+    return ctx.self.hp < ctx.self.max_hp // 3
+
+def _shout(ctx, bb):
+    ctx.act(ctx.self, "shout Help!")
+    return ai.SUCCESS
+
+TREE = ai.selector([
+    ai.sequence([ai.condition(_hurt), ai.action(_shout)]),
+    ai.action(_patrol),  # another action, written like _shout
+])
+
+def _think(ctx):
+    return ai.run(ctx, TREE)
+```
+
+Build the tree once, at the top of the file, and return `ai.run(ctx, TREE)` from `think`. Every node returns
+`ai.SUCCESS`, `ai.FAILURE` or `ai.RUNNING`. `RUNNING` means "I acted this cycle and am not done yet", and parents treat
+it like success.
+
+* `ai.selector(children)` tries children in order and returns the first that doesn't fail.
+* `ai.sequence(children)` runs children in order while they succeed and stops at the first that doesn't.
+* `ai.condition(fn)` turns `fn(ctx, bb) -> bool` into success or failure.
+* `ai.action(fn)` calls `fn(ctx, bb)`, which does something and returns a status.
+* `ai.inverter(child)` swaps success and failure.
+* `ai.steps(id, children)` runs its children one per cycle, in order, across cycles.
+* `ai.goap(...)` plans, described below.
+
+`ai.run` returns `"idle"` when the tree succeeded or is running, so the tree has the turn, and `None` when it failed, so
+the mob's top built-in behavior runs instead. A tree that fails on purpose is how you hand control back to `flee` or
+`wander`.
+
+### The blackboard
+
+The tree is evaluated from the root on every `think`. It doesn't remember which node was running last cycle, so a mob
+reacts at once when the world changes. Anything that must carry over goes in the **blackboard**, the `bb` dict every
+leaf receives. `ai.run` saves it in the mob's attributes when it changed, so it counts against the 64 KB attribute cap:
+keep it to a few small values. Use `ai.steps` when a routine really is a fixed order of steps; it keeps its place in the
+blackboard.
+
+### Planning
+
+Planning separates *what is true* from *what to do*. You describe actions by what they need and what they make true, and
+`ctx.plan` finds the cheapest sequence that reaches the goal:
+
+```python
+ACTIONS = [
+    {"name": "walk_to_pinecone", "pre": {"pinecone_known": True, "has_pinecone": False},
+     "effects": {"pinecone_here": True}, "run": _walk_to_pinecone},
+    {"name": "take_pinecone", "pre": {"pinecone_here": True, "has_pinecone": False},
+     "effects": {"has_pinecone": True, "pinecone_here": False}, "run": _take_pinecone},
+    # go_home, drop_pinecone ...
+]
+
+TREE = ai.sequence([
+    ai.inverter(ai.condition(_fighting)),
+    ai.goap("cache", _sense, ACTIONS, {"cached": True}),
+])
+```
+
+Each cycle the `ai.goap` leaf:
+
+1. calls `sense(ctx, bb)`, which turns world queries into a dict of facts;
+2. succeeds if the goal already holds;
+3. otherwise follows its cached plan if the next step can still run, or calls `ctx.plan` for a new one;
+4. calls that step's `run(ctx, bb)` and returns `RUNNING`, or fails if no plan exists.
+
+Facts are compared for equality only, so do the comparing while sensing: return `"hp_low": True`, not the hit points. A
+fact that is missing matches nothing.
+
+The tutorial zone's squirrel ([`forager.star`](../../zones/tutorial/forager.star)) is a complete example. It lives on
+the gravel path, plans its way to the pinecone in the tar pit and back, and caches it at home. While it is fighting the
+first branch fails the whole tree, so its built-in `flee` takes over.
+
+### What it costs
+
+Trees, sensing and every `run` are ordinary script and spend `think` steps. `ctx.plan` runs in the engine and spends
+none, but it is bounded: when a search runs out of room it returns `None`, which `ai.goap` treats as failure. Keep the
+action table small, and plan only when the cached plan breaks, as `ai.goap` does. With many planning mobs in a zone,
+give them different `think_every` values so they don't all think in the same pulse, and avoid world-wide queries such as
+`ctx.find(..., scope = "world")` in every cycle.
+
+AI that needs more speed than this belongs in a plugin builtin written in Kotlin (see
+[PLUGINS.md](../../../docs/PLUGINS.md#builtins)).
+
+---
+
+## 5. Spawns and Zone Resets
 
 Mobs are placed into rooms through the `spawns` list on a `room()`:
 
@@ -148,8 +250,10 @@ When a zone reset triggers:
 
 ## Reference Links
 
-* **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star) *
-  **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L965),
+* **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star) and
+  [`template-world/zones/tutorial/forager.star`](../../zones/tutorial/forager.star)
+* **Library Implementation:** [`template-world/lib/ai.star`](../../lib/ai.star)
+* **Specification:** [SPEC.md §4.2: Content Declarations](../../../docs/SPEC.md#L965),
   [§4.7: Behaviors](../../../docs/SPEC.md#L1433), and [§4.8: Mob Think](../../../docs/SPEC.md#L1460)
 * **HTML Documentation:** `declarations.html#mob`, `declarations.html#spawn`, and `effects.html#behaviors` in `gups
   docs`.

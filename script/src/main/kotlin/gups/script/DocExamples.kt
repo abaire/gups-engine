@@ -735,6 +735,32 @@ object DocExamples {
                 t.contains(p.do("merge"), "count=8 stacks=1")
             """,
         ),
+      "ctx.plan" to
+        ex(
+          pkg =
+            """
+                def _plan(ctx):
+                    actions = [
+                        {"name": "fetch_key", "effects": {"has_key": True}},
+                        {"name": "unlock_door", "pre": {"has_key": True}, "effects": {"door_unlocked": True}},
+                        {"name": "open_door", "pre": {"door_unlocked": True}, "effects": {"door_open": True}},
+                    ]
+                    plan = ctx.plan({"has_key": False}, actions, {"door_open": True})
+                    ctx.send(ctx.actor, "plan=" + "->".join(plan))
+
+                room("workshop",
+                    desc = "A cluttered workshop.",
+                    flags = ["dead_end_ok"],
+                    commands = {"solve": _plan},
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":workshop")
+                t.contains(p.do("solve"), "plan=fetch_key->unlock_door->open_door")
+            """,
+        ),
 
       // ---- Behaviors ----------------------------------------------------------------------
       "aggressive" to

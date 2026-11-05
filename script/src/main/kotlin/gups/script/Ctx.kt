@@ -1,6 +1,10 @@
 package gups.script
 
 import gups.core.AttrValue
+import gups.core.ai.FactValue
+import gups.core.ai.GoapAction
+import gups.core.ai.GoapPlanner
+import gups.core.ai.PlanResult
 import gups.core.model.Actor
 import gups.core.model.AffectScope
 import gups.core.model.Band
@@ -73,6 +77,7 @@ import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkInt
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 
@@ -1964,12 +1969,87 @@ internal constructor(
       f in world.features
     }
 
+  @StarlarkMethod(
+    name = "plan",
+    doc =
+      "Goal-oriented planning: the cheapest list of action names that reaches goal from facts, [] if it already holds, None if unreachable or out of bounds.",
+    parameters =
+      [
+        Param(name = "facts", named = true, doc = "Dict of fact name to bool, int or str."),
+        Param(
+          name = "actions",
+          named = true,
+          doc = "List of dicts with name, pre, effects and cost.",
+        ),
+        Param(name = "goal", named = true, doc = "Dict of fact name to the value it must have."),
+        Param(
+          name = "max_expansions",
+          named = true,
+          defaultValue = "1024",
+          doc = "Search nodes to expand at most, 1 to 16384.",
+        ),
+      ],
+  )
+  fun plan(facts: Any, actions: Any, goal: Any, maxExpansions: Any): Any =
+    verb("plan") {
+      val maxExp = int(maxExpansions, "ctx.plan(max_expansions)")
+      val compiledActions =
+        list(actions, "ctx.plan(actions)").map { item ->
+          val action = dict(item, "ctx.plan(actions) item")
+          val name =
+            str(
+              action["name"] ?: fail("ctx.plan(actions): every action needs a 'name'"),
+              "ctx.plan(actions) name",
+            )
+          action.keys
+            .firstOrNull { it !in ACTION_KEYS }
+            ?.let { fail("ctx.plan(actions): unknown key '$it' in action '$name'") }
+          val cost = action["cost"]
+          GoapAction(
+            name = name,
+            cost = if (isNone(cost)) 1 else int(cost, "ctx.plan(actions) cost of '$name'"),
+            pre =
+              action["pre"].let { if (isNone(it)) emptyMap() else factMap(it, "pre of '$name'") },
+            effects =
+              action["effects"].let {
+                if (isNone(it)) emptyMap() else factMap(it, "effects of '$name'")
+              },
+          )
+        }
+      val res =
+        GoapPlanner.plan(
+          facts = factMap(facts, "facts"),
+          actions = compiledActions,
+          goal = factMap(goal, "goal"),
+          maxExpansions = maxExp,
+        )
+      when (res) {
+        is PlanResult.Found -> sList(res.steps)
+        is PlanResult.NotFound -> Starlark.NONE
+      }
+    }
+
+  private fun factMap(v: Any?, what: String): Map<String, FactValue> =
+    dict(v, "ctx.plan($what)").mapValues { (k, value) ->
+      when (value) {
+        is Boolean -> FactValue.Bool(value)
+        is StarlarkInt -> FactValue.Num(value.toLong("ctx.plan($what) fact '$k'"))
+        is String -> FactValue.Text(value)
+        else ->
+          fail("ctx.plan($what): fact '$k' must be a bool, int or str, got ${typeName(value)}")
+      }
+    }
+
   override fun repr(printer: Printer) {
     printer.append("<ctx ${frame.site.hook} of ${owner.name}>")
   }
 
   /** One line for diagnostics. */
   internal fun summary(): String = describeCtx(owner, hc)
+
+  companion object {
+    private val ACTION_KEYS = setOf("name", "pre", "effects", "cost")
+  }
 }
 
 internal fun describeCtx(owner: Entity, hc: HookContext): String =

@@ -1917,6 +1917,54 @@
         ]
       },
       {
+        "symbol": "ctx.plan",
+        "name": "plan",
+        "doc": "Goal-oriented planning: the cheapest list of action names that reaches goal from facts, [] if it already holds, None if unreachable or out of bounds.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.plan.facts",
+            "name": "facts",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Dict of fact name to bool, int or str."
+          },
+          {
+            "symbol": "ctx.plan.actions",
+            "name": "actions",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "List of dicts with name, pre, effects and cost."
+          },
+          {
+            "symbol": "ctx.plan.goal",
+            "name": "goal",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Dict of fact name to the value it must have."
+          },
+          {
+            "symbol": "ctx.plan.max_expansions",
+            "name": "max_expansions",
+            "positional": true,
+            "named": true,
+            "default": "1024",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Search nodes to expand at most, 1 to 16384."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.remove_affect",
         "name": "remove_affect",
         "doc": "Removes an affect by name; True if there was one.",

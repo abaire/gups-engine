@@ -4,6 +4,19 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Mob planning
+
+- Added `ctx.plan(facts, actions, goal, max_expansions=1024)`: native, deterministic goal-oriented planning over
+  equality facts. It returns the cheapest list of action names, `[]` when the goal holds, or `None` when unreachable or
+  out of bounds, and spends no script steps.
+- The template has `//lib:ai.star`: behavior trees (`selector`, `sequence`, `condition`, `action`, `inverter`, `steps`)
+  re-evaluated from the root each `think`, a per-mob blackboard, and an `ai.goap` leaf that caches `ctx.plan` results.
+- The tutorial zone's squirrel uses `//lib:ai.star` to fetch pinecones from the tar pit.
+- Added `w.trace_lines()` to the test harness: the lines `w.trace()` has kept, so a test can check which verbs a hook
+  called (for example, that a mob's blackboard isn't saved when unchanged).
+- Tutorial 05 covers behavior trees and planning, and no longer says `ctx.target` is the opponent inside `think` (use
+  `ctx.self.fighting()`).
+
 ### Spells that miss
 
 - Script API entries can be owned by several features, either any of them or all of them. `api.json` writes `features`
