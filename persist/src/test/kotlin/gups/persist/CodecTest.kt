@@ -56,6 +56,31 @@ class CodecTest {
   }
 
   @Test
+  fun `affect with power 137 survives save and load, and missing power decodes to 100`() {
+    val affect =
+      Affect(
+        id = 10L,
+        name = "might",
+        source = null,
+        appliedAt = 50L,
+        expiresAt = 150L,
+        power = 137,
+      )
+    val json = affectJson(affect)
+    val restored = affectFromJson(json)
+    assertEquals(137, restored.power)
+
+    val decodedDefault =
+      JSON.decodeFromString(
+        AffectJson.serializer(),
+        """{"id":11,"name":"might","appliedAt":50,"expiresAt":150}""",
+      )
+    assertEquals(100, decodedDefault.power)
+    val restoredDefault = affectFromJson(decodedDefault)
+    assertEquals(100, restoredDefault.power)
+  }
+
+  @Test
   fun `item instance affects with maxVitalDeltas and resistDeltas survive a restart`() {
     val file = tempDb()
     val fire = DamageType("fire")

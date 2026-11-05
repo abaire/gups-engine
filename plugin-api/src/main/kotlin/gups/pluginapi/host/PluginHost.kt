@@ -178,6 +178,8 @@ private val MODIFIER_POINT_FEATURES: Map<PluginModifierPoint, FeatureRequirement
     PluginModifierPoint.ADVANCE_LAG to FeatureRequirement.of(Feature.TRACK),
     PluginModifierPoint.RETREAT_LAG to FeatureRequirement.of(Feature.TRACK),
     PluginModifierPoint.RETREAT_FAIL_LAG to FeatureRequirement.of(Feature.TRACK),
+    PluginModifierPoint.SKILL_CHECK to FeatureRequirement.of(Feature.SKILLS),
+    PluginModifierPoint.SKILL_POWER to FeatureRequirement.of(Feature.SKILLS),
   )
 
 /**
@@ -643,7 +645,7 @@ internal constructor(
     }
     val effects =
       plugins.flatMap { p -> p.reg.effects.map { (p.id to it.name) to (p.id to it) } }.toMap()
-    world.pluginEffects = PluginEffectRunner { w, effect, caster, target, targetItem ->
+    world.pluginEffects = PluginEffectRunner { w, effect, caster, target, targetItem, power ->
       val (id, e) =
         effects[effect.pluginId to effect.name]
           ?: run {
@@ -664,6 +666,7 @@ internal constructor(
             target?.let { ActorFacade(it, w) },
             effect.args,
             targetItem = targetItem?.let { ItemFacade(it, w) },
+            power = power,
           )
         )
       }

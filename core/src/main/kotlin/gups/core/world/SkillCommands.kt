@@ -37,6 +37,8 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
     msg("cast.resisted.target", "You resist {actor}'s {skill}.", "actor,skill", "skill")
   val RESISTED_ROOM =
     msg("cast.resisted.room", "{target} resists {actor}'s {skill}.", "actor,skill,target", "skill")
+  val FAILED_SELF = msg("cast.failed.self", "You fail to cast {skill}.", "skill", "skill")
+  val FAILED_ROOM = msg("cast.failed.room", "{actor}'s spell fizzles.", "actor", "actor")
   val INTERRUPTED = msg("cast.interrupted", "Your concentration is broken!")
   val STOP_CAST = msg("stop.cast", "You stop casting.")
 }
@@ -200,6 +202,19 @@ internal class CastAction(
 
   override fun resolve(w: World, actor: Actor): Int {
     w.changeVitals(actor, skill.cost.mapValues { -it.value })
+    val c = RulesContext(w, actor, target, item = targetItem, skill = skill)
+    if (!w.skillSucceeds(c)) {
+      w.tell(actor, SkillMsg.FAILED_SELF, "skill" to skill.name)
+      w.tellSight(
+        actor.room,
+        "cast",
+        actor,
+        w.msg(SkillMsg.FAILED_ROOM, "actor" to actor.name.cap()),
+        actor,
+      )
+      return skill.lag
+    }
+    val power = w.skillPowerChain(c)
     val t = target
     val onItem = targetItem
     w.send(
@@ -232,7 +247,7 @@ internal class CastAction(
         actor.room.actors.filter { it !== actor && w.isSimulated(it) }
       else listOf(t)
     if (onItem != null && onItem.id in w.entities)
-      skill.effect?.let { w.applyItemEffect(it, actor, onItem) }
+      skill.effect?.let { w.applyItemEffect(it, actor, onItem, power = power) }
     for (each in targets) {
       val hostile = skill.target == TargetKind.ENEMY && each != null && each !== actor
       // An enemy skill engages whatever it is cast at, whether or not it lands.
@@ -259,8 +274,8 @@ internal class CastAction(
         continue
       }
       // An item skill's effect already ran on the item.
-      if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill) }
-      skill.resolve?.resolve(w, actor, each, onItem)
+      if (onItem == null) skill.effect?.let { w.applyEffect(it, actor, each, skill, power = power) }
+      skill.resolve?.resolve(w, actor, each, onItem, power)
     }
     w.dispatch(
       HookName.ON_CAST,

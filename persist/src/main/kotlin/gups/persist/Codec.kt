@@ -148,6 +148,7 @@ data class AffectJson(
   /** Damage type name to a change in resistance. */
   val resistDeltas: Map<String, Int> = emptyMap(),
   val procs: List<ProcJson> = emptyList(),
+  val power: Int = 100,
 )
 
 /** Where an item is: a room by label (room ids aren't stable for references), or a holder by id. */
@@ -366,6 +367,7 @@ internal fun affectJson(a: Affect): AffectJson =
     maxVitalDeltas = a.maxVitalDeltas,
     resistDeltas = a.resistDeltas.entries.associate { (k, v) -> k.name to v },
     procs = a.procs.map { it.json() },
+    power = a.power,
   )
 
 internal fun affectsJson(a: Actor) =
@@ -393,6 +395,7 @@ internal fun affectFromJson(x: AffectJson): Affect =
     maxVitalDeltas = x.maxVitalDeltas,
     resistDeltas = x.resistDeltas.mapKeys { DamageType(it.key) },
     procs = x.procs.map { it.toProc() },
+    power = x.power,
   )
 
 internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String>) {

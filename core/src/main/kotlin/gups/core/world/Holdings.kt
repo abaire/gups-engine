@@ -28,10 +28,20 @@ data class HeldEffects(
 }
 
 /** Modifiers one held item contributes, with the item they come from. */
-data class HeldModifiers(val source: String, val item: Item, val modifiers: Modifiers)
+data class HeldModifiers(
+  val source: String,
+  val item: Item,
+  val modifiers: Modifiers,
+  val affect: Affect? = null,
+)
 
 /** Procs one held item contributes, with the item they come from. */
-data class HeldProcs(val source: String, val item: Item, val procs: List<Proc>)
+data class HeldProcs(
+  val source: String,
+  val item: Item,
+  val procs: List<Proc>,
+  val affect: Affect? = null,
+)
 
 /** One item affect as seen by the holder: from the prototype or from the instance. */
 class HeldAffect(
@@ -134,9 +144,20 @@ internal fun World.computeHeld(a: Actor): HeldEffects {
     flags += ha.flags - "stunned"
     if (ha.modifiers.isNotEmpty())
       modifierSteps +=
-        HeldModifiers("item:${ha.item.protoLabel.name}:${ha.name}", ha.item, ha.modifiers)
+        HeldModifiers(
+          "item:${ha.item.protoLabel.name}:${ha.name}",
+          ha.item,
+          ha.modifiers,
+          affect = ha.instance,
+        )
     if (ha.procs.isNotEmpty())
-      procSteps += HeldProcs("item:${ha.item.protoLabel.name}:${ha.name}", ha.item, ha.procs)
+      procSteps +=
+        HeldProcs(
+          "item:${ha.item.protoLabel.name}:${ha.name}",
+          ha.item,
+          ha.procs,
+          affect = ha.instance,
+        )
   }
   val slots = equipmentSlots()
   val worn =

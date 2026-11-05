@@ -118,6 +118,17 @@ def cast_allowed(ctx):
     # None allows the cast; ctx.deny("why") refuses it before any cost is paid.
     return None
 
+def skill_check(ctx):
+    # Percent chance that ctx.actor gets ctx.skill off. Proficiency 80 and up never fails.
+    prof = ctx.actor.skills.get(ctx.skill.label, 0)
+    return _clamp(prof + 20, 5, 100)
+
+def skill_power(ctx):
+    # Percent strength of ctx.actor's ctx.skill: 100 is the skill as declared.
+    # Half from proficiency, plus 2 per level beyond the first.
+    prof = ctx.actor.skills.get(ctx.skill.label, 0)
+    return 50 + prof // 2 + (ctx.actor.level - 1) * 2
+
 def interrupt_check(ctx, amount):
     # Whether `amount`, the total vital loss of a damage event, breaks ctx.actor's spell
     # (ctx.skill is the spell being cast).

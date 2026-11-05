@@ -16,7 +16,9 @@ import gups.core.world.WorldConfig
 import gups.core.world.applyAffect
 import gups.core.world.changeVital
 import gups.core.world.damageChain
+import gups.core.world.itemPowerChain
 import gups.core.world.moveItem
+import gups.core.world.skillPowerChain
 import gups.core.world.spawnItem
 import gups.core.world.startCombat
 import gups.core.world.toHitChain
@@ -407,6 +409,9 @@ class RulesTest {
         Case("cast_allowed", "ctx", "None") { w, c ->
           assertEquals("Nothing happens.", w.rules.castAllowed(c))
         },
+        Case("skill_check", "ctx", "80") { w, c -> assertEquals(0, w.rules.skillCheck(c)) },
+        Case("skill_power", "ctx", "100") { w, c -> assertEquals(100, w.rules.skillPower(c)) },
+        Case("item_power", "ctx", "100") { w, c -> assertEquals(100, w.rules.itemPower(c)) },
         Case("interrupt_check", "ctx, amount", "True") { w, c ->
           assertFalse(w.rules.interruptCheck(c, 5))
         },
@@ -607,6 +612,30 @@ class RulesTest {
   }
 
   @Test
+  fun `a negative skill_power falls back to 100 with a diagnostic`() {
+    val f =
+      world(
+        """
+        def skill_power(ctx):
+            if ctx.actor.level == 9:
+                return -10
+            return 100
+        """
+      )
+    val alerts = mutableListOf<String>()
+    f.host.alerts = { kind, _ -> alerts += kind }
+    val p = f.w.spawnPlayer("Nine", Label("//zones/z:start"), level = 9)
+    val power = f.w.rules.skillPower(RulesContext(f.w, p))
+    assertEquals(100, power)
+    val errors = f.diagnostics("script_error").map { it.message }
+    assertTrue(
+      errors.any { "rules.skill_power returned a bad value" in it && "must be at least 0" in it },
+      errors.toString(),
+    )
+    assertEquals(listOf("rules_error"), alerts)
+  }
+
+  @Test
   fun `on_player_death parses level_loss`() {
     val f =
       world(
@@ -627,6 +656,7 @@ class RulesTest {
     assertTrue("rules" in result.failed)
     val messages = result.errors.filter { it.pkg == "rules" }.map { it.message }
     assertTrue(messages.any { "must define damage(...)" in it }, messages.toString())
+    assertTrue(messages.any { "must define item_power(...)" in it }, messages.toString())
     assertTrue(messages.any { "must define starting_stats(...)" in it }, messages.toString())
     assertTrue(messages.any { "must define slot_families(...)" in it }, messages.toString())
     assertTrue(messages.any { "must define actor_slots(...)" in it }, messages.toString())
@@ -765,10 +795,60 @@ class RulesTest {
   }
 
   @Test
+  fun `a room skill_power modifier adding 20 gives 120`() {
+    val f =
+      world(
+        "",
+        """
+        def _boost(ctx, base):
+            return base + 20
+
+        room("start", modifiers = {"skill_power": _boost})
+        skill("spark")
+        """
+          .trimIndent(),
+      )
+    val p = f.player()
+    val spark = f.w.protos.skills.getValue(Label("//zones/z:spark"))
+    val c = RulesContext(f.w, p, skill = spark)
+    assertEquals(120, f.w.skillPowerChain(c))
+  }
+
+  @Test
+  fun `a modifier chain driving item_power to minus 30 gives 0`() {
+    val f =
+      world(
+        "",
+        """
+        def _drain(ctx, base):
+            return base - 130
+
+        room("start", modifiers = {"item_power": _drain})
+        item("wand")
+        """
+          .trimIndent(),
+      )
+    val p = f.player()
+    val wand = f.w.spawnItem(Label("//zones/z:wand"), ItemLocation.Carried(p.id))
+    val c = RulesContext(f.w, p, item = wand, event = "use")
+    assertEquals(0, f.w.itemPowerChain(c))
+  }
+
+  @Test
   fun `the dry run catches a wrong return type in regen`() {
     val result = loadWith(TestWorlds.rules("def regen(ctx):\n    return {'hp': 1}\n"))
     assertTrue("rules" in result.failed)
     assertContains(result.errors.single { it.kind == "rules" }.message, "use vitals(...)")
+  }
+
+  @Test
+  fun `the dry run catches a wrong return type in skill_power`() {
+    val result = loadWith(TestWorlds.rules("def skill_power(ctx):\n    return 'strong'\n"))
+    assertTrue("rules" in result.failed)
+    assertContains(
+      result.errors.single { it.kind == "rules" }.message,
+      "rules.skill_power returned a bad value",
+    )
   }
 
   @Test

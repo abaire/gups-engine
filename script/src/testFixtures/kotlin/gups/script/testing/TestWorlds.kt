@@ -65,7 +65,7 @@ object TestWorlds {
    * they override `on_level_up` themselves.
    */
   private const val DEFAULTS: String =
-    "def on_level_up(ctx):\n    return None\ndef _spell_hit(ctx):\n    return 100\n"
+    "def on_level_up(ctx):\n    return None\ndef _spell_hit(ctx):\n    return 100\ndef skill_check(ctx):\n    return 100\ndef skill_power(ctx):\n    return 100\ndef item_power(ctx):\n    return 100\n"
 
   /**
    * The template's blocks with [DEFAULTS] and then [overrides] replacing or adding functions. An
@@ -99,6 +99,8 @@ object TestWorlds {
       "flee_chance" to setOf("combat"),
       "cast_allowed" to setOf("skills"),
       "interrupt_check" to setOf("skills"),
+      "skill_check" to setOf("skills"),
+      "skill_power" to setOf("skills"),
       "retreat_check" to setOf("track"),
       "get_lag" to setOf("track"),
       "advance_lag" to setOf("track"),
@@ -201,8 +203,9 @@ object TestWorlds {
       )
 
   /**
-   * Rewrites the `_spell_hit` block of every `.star` file in [rulesDir] that defines one so it
-   * returns 100. Files without `_spell_hit` are left unchanged.
+   * Rewrites the `_spell_hit`, `skill_check`, and `skill_power` blocks of every `.star` file in
+   * [rulesDir] that defines them so they return 100. Files without those functions are left
+   * unchanged.
    */
   fun makeSpellsLand(rulesDir: Path) {
     if (!Files.isDirectory(rulesDir)) return
@@ -211,10 +214,15 @@ object TestWorlds {
         if (!file.toString().endsWith(".star") || !Files.isRegularFile(file)) continue
         val content = Files.readString(file)
         val blk = blocks(content)
-        if (blk.any { it.first == "_spell_hit" }) {
+        if (blk.any { it.first in setOf("_spell_hit", "skill_check", "skill_power") }) {
           val rewritten =
             blk.joinToString("\n") { (name, text) ->
-              if (name == "_spell_hit") "def _spell_hit(ctx):\n    return 100\n" else text
+              when (name) {
+                "_spell_hit" -> "def _spell_hit(ctx):\n    return 100\n"
+                "skill_check" -> "def skill_check(ctx):\n    return 100\n"
+                "skill_power" -> "def skill_power(ctx):\n    return 100\n"
+                else -> text
+              }
             }
           Files.writeString(file, rewritten)
         }

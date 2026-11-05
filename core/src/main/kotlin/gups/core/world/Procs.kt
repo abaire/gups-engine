@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Effect
 import gups.core.model.Item
 import gups.core.model.ItemLocation
@@ -8,6 +9,7 @@ import gups.core.model.Proc
 import gups.core.model.ProcOutcome
 import gups.core.model.ProcTarget
 import gups.core.model.ProcTrigger
+import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
@@ -18,6 +20,10 @@ private class ProcSource(
   val display: String,
   val procs: List<Proc>,
   val stillThere: () -> Boolean,
+  /** The item behind an item or item-affect proc, else null. */
+  val item: Item? = null,
+  /** The affect behind the proc: an actor affect, or an item's instance affect; null otherwise. */
+  val affect: Affect? = null,
 )
 
 /**
@@ -34,6 +40,8 @@ internal fun World.fireProcs(trigger: ProcTrigger, bearer: Actor, other: Actor, 
           display = a.name.replace('_', ' '),
           procs = a.procs,
           stillThere = { a in bearer.affects },
+          item = null,
+          affect = a,
         )
     }
   }
@@ -52,6 +60,8 @@ internal fun World.fireProcs(trigger: ProcTrigger, bearer: Actor, other: Actor, 
         display = step.item.name,
         procs = step.procs,
         stillThere = { custodian(step.item) === bearer },
+        item = step.item,
+        affect = step.affect,
       )
   }
 
@@ -91,7 +101,7 @@ internal fun World.fireProcs(trigger: ProcTrigger, bearer: Actor, other: Actor, 
           }
           chosen
         }
-      val result = resolveProcOutcome(bearer, other, src, outcome)
+      val result = resolveProcOutcome(bearer, other, src, outcome, trigger)
       traceRules(
         bearer,
         "proc ${src.trace} ${trigger.word} roll ${"%.2f".format(Locale.ROOT, r)} → $result",
@@ -105,6 +115,7 @@ private fun World.resolveProcOutcome(
   other: Actor,
   src: ProcSource,
   outcome: ProcOutcome,
+  trigger: ProcTrigger,
 ): String {
   val skill = outcome.skill?.let { protos.skills[it] }
   if (outcome.skill != null && skill == null) {
@@ -145,6 +156,7 @@ private fun World.resolveProcOutcome(
     if (castAllowed(RulesContext(this, bearer, recipient, skill = skill)) != null) {
       return "cast_allowed denied"
     }
+    val power = computeProcPower(bearer, other, src, skill, trigger)
     sendProcMessages(bearer, src, outcome)
     val recipients =
       if (skill.range == SkillRange.ROOM)
@@ -154,17 +166,45 @@ private fun World.resolveProcOutcome(
       if (skill.target == TargetKind.ENEMY && each != null && each !== bearer) {
         startCombat(bearer, each)
       }
-      skill.effect?.let { applyEffect(it, bearer, each, skill) }
-      skill.resolve?.resolve(this, bearer, each, null)
+      skill.effect?.let { applyEffect(it, bearer, each, skill, power = power) }
+      skill.resolve?.resolve(this, bearer, each, null, power)
     }
     return skill.label.toString()
   }
 
   val effect = outcome.effect!!
+  val power = computeProcPower(bearer, other, src, null, trigger)
   sendProcMessages(bearer, src, outcome)
-  applyEffect(effect, bearer, recipient, null)
+  applyEffect(effect, bearer, recipient, null, power = power)
   return primitiveName(effect)
 }
+
+private fun World.computeProcPower(
+  bearer: Actor,
+  other: Actor,
+  src: ProcSource,
+  skill: SkillProto?,
+  trigger: ProcTrigger,
+): Int =
+  when {
+    src.item == null && src.affect != null -> src.affect.power
+    src.item != null -> {
+      val ip =
+        itemPowerChain(
+          RulesContext(
+            this,
+            bearer,
+            other,
+            item = src.item,
+            skill = skill,
+            event = trigger.word,
+            affect = src.affect,
+          )
+        )
+      src.affect?.let { (it.power.toLong() * ip / 100).toInt() } ?: ip
+    }
+    else -> 100
+  }
 
 private fun World.sendProcMessages(bearer: Actor, src: ProcSource, outcome: ProcOutcome) {
   send(bearer, outcome.message ?: msg(CombatMsg.PROC_SELF, "source" to src.display))

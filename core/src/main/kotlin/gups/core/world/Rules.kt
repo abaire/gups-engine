@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.HookRef
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.DamageType
 import gups.core.model.ItemLocation
 import gups.core.model.ModifierPoint
@@ -22,9 +23,10 @@ private sealed interface ChainStep {
 
   fun apply(world: World, point: ModifierPoint, c: RulesContext, v: Any?): Any?
 
-  class Script(override val source: String, val ref: HookRef) : ChainStep {
+  class Script(override val source: String, val ref: HookRef, val affect: Affect? = null) :
+    ChainStep {
     override fun apply(world: World, point: ModifierPoint, c: RulesContext, v: Any?): Any? =
-      world.scripts.modify(world, point, ref, source, c, v)
+      world.scripts.modify(world, point, ref, source, c.withAffect(affect), v)
   }
 
   class TraitStep(val trait: Trait, val mod: TraitModifier) : ChainStep {
@@ -61,7 +63,7 @@ private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainS
     out += ChainStep.TraitStep(t, mod)
   }
   for (a in actor.affects.sortedBy { it.id }) a.modifiers[point]?.let {
-    out += ChainStep.Script("affect:${a.name}", it)
+    out += ChainStep.Script("affect:${a.name}", it, affect = a)
   }
   for (step in actor.heldEffects.modifierSteps) {
     // The swinging-weapon filter is for the attacker's points only: a defender's worn weapons
@@ -77,7 +79,7 @@ private fun World.chainSteps(point: ModifierPoint, c: RulesContext): List<ChainS
     ) {
       continue
     }
-    step.modifiers[point]?.let { out += ChainStep.Script(step.source, it) }
+    step.modifiers[point]?.let { out += ChainStep.Script(step.source, it, affect = step.affect) }
   }
   return out
 }
@@ -235,6 +237,40 @@ fun World.retreatFailLagOf(c: RulesContext): Int =
 
 fun World.fleeFailLagOf(c: RulesContext): Int =
   lagOf(ModifierPoint.FLEE_FAIL_LAG, c, rules.fleeFailLag(c))
+
+/**
+ * Whether c.actor gets c.skill off: the export, its chain, then a roll unless the chance is 100+.
+ */
+fun World.skillSucceeds(c: RulesContext): Boolean {
+  val r = chain(ModifierPoint.SKILL_CHECK, c, rules.skillCheck(c)) { "$it" }
+  if (r.value >= 100) {
+    traceRules(c.actor, "${r.text} → auto SUCCEED")
+    return true
+  }
+  val roll = rng.int(1, 100)
+  val success = roll <= r.value
+  traceRules(c.actor, "${r.text} → roll $roll ${if (success) "SUCCEED" else "FAIL"}")
+  return success
+}
+
+/** The power of c.actor's successful cast of c.skill, clamped to 0 or more. */
+fun World.skillPowerChain(c: RulesContext): Int =
+  powerChain(ModifierPoint.SKILL_POWER, c, rules.skillPower(c))
+
+/** The power of c.item's effect for c.actor, clamped to 0 or more. */
+fun World.itemPowerChain(c: RulesContext): Int =
+  powerChain(ModifierPoint.ITEM_POWER, c, rules.itemPower(c))
+
+private fun World.powerChain(point: ModifierPoint, c: RulesContext, base: Int): Int {
+  val r = chain(point, c, base) { "$it" }
+  return if (r.value < 0) {
+    traceRules(c.actor, "${r.text} → clamp 0")
+    0
+  } else {
+    traceRules(c.actor, r.text)
+    r.value
+  }
+}
 
 /** Runs a recovery lag through [point]'s chain. Steps may go below 0; the result is at least 0. */
 private fun World.lagOf(point: ModifierPoint, c: RulesContext, base: Int): Int {

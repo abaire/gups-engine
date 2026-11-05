@@ -221,6 +221,8 @@ class Affect(
   val resistDeltas: Map<DamageType, Int> = emptyMap(),
   /** Procs that fire for the host (or the item's holder) during auto-attack swings. */
   val procs: List<Proc> = emptyList(),
+  /** Percent strength this affect was applied at; 100 when nothing scaled it. */
+  val power: Int = 100,
 )
 
 /**

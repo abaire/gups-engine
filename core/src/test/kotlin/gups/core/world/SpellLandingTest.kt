@@ -39,7 +39,7 @@ class SpellLandingTest {
       range = SkillRange.FAR,
       target = TargetKind.ENEMY,
       effect = Effect.Damage(Dice(1, 1, 10), DamageType(fs.magic)),
-      resolve = SkillResolver { _, _, _, _ -> resolverRan = true },
+      resolve = SkillResolver { _, _, _, _, _ -> resolverRan = true },
     )
 
   private fun roomSkill(fs: FixtureSchema) =

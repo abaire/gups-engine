@@ -55,6 +55,9 @@ class TestWorldsTest {
   @Test
   fun `rules contains spell_hit override returning 100`() {
     assertTrue("def _spell_hit(ctx):\n    return 100" in TestWorlds.rules())
+    assertTrue("def skill_check(ctx):\n    return 100" in TestWorlds.rules())
+    assertTrue("def skill_power(ctx):\n    return 100" in TestWorlds.rules())
+    assertTrue("def item_power(ctx):\n    return 100" in TestWorlds.rules())
   }
 
   @Test
@@ -68,6 +71,12 @@ class TestWorldsTest {
         def _spell_hit(ctx):
             return 70 + (ctx.attacker.int - ctx.defender.wis) * 2
 
+        def skill_check(ctx):
+            return 80
+
+        def skill_power(ctx):
+            return 50
+
         def to_hit(ctx):
             return 50
         """
@@ -77,10 +86,14 @@ class TestWorldsTest {
     val to1 = TestWorlds.copyWorld(from, tmp.resolve("copy1"))
     val combatStar1 = to1.resolve("rules/combat.star").readText()
     assertTrue("def _spell_hit(ctx):\n    return 100" in combatStar1)
+    assertTrue("def skill_check(ctx):\n    return 100" in combatStar1)
+    assertTrue("def skill_power(ctx):\n    return 100" in combatStar1)
     assertFalse("ctx.attacker.int - ctx.defender.wis" in combatStar1)
 
     val to2 = TestWorlds.copyWorld(from, tmp.resolve("copy2"), spellsAlwaysLand = false)
     val combatStar2 = to2.resolve("rules/combat.star").readText()
     assertTrue("ctx.attacker.int - ctx.defender.wis" in combatStar2)
+    assertTrue("return 80" in combatStar2)
+    assertTrue("return 50" in combatStar2)
   }
 }

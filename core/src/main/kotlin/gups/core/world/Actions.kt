@@ -150,7 +150,7 @@ fun interface ZoneCommand {
 /** A skill's custom `resolve` hook. */
 fun interface SkillResolver {
   /** [item] is the target of an `item` skill, else null. */
-  fun resolve(world: World, caster: Actor, target: Actor?, item: Item?)
+  fun resolve(world: World, caster: Actor, target: Actor?, item: Item?, power: Int)
 }
 
 internal fun World.think(mob: Mob) {

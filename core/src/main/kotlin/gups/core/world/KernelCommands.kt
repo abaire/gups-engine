@@ -940,10 +940,11 @@ internal object KernelCommands {
           )
         }
         if (effect != null) {
+          val power = w.itemPowerChain(RulesContext(w, actor, target, item = item, event = "use"))
           if (useTarget == TargetKind.ITEM) {
-            targetItem?.let { w.applyItemEffect(effect, actor, it) }
+            targetItem?.let { w.applyItemEffect(effect, actor, it, power = power) }
           } else {
-            w.applyEffect(effect, actor, target)
+            w.applyEffect(effect, actor, target, power = power)
           }
         }
         w.dispatch(HookName.ON_USE, item, actor.room, ctx(actor))

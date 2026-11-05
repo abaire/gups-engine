@@ -48,6 +48,7 @@
 <tr id="ctx.new_level"><td><code>new_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level after the change.</td></tr>
 <tr id="ctx.old_level"><td><code>old_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level before the change.</td></tr>
 <tr id="ctx.parts"><td><code>parts</code></td><td>1</td><td>The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.</td></tr>
+<tr id="ctx.power"><td><code>power</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>In a skill's resolve, the cast's power; None elsewhere.</td></tr>
 <tr id="ctx.proposals"><td><code>proposals</code></td><td>1</td><td>For think: behavior proposals, best first.</td></tr>
 <tr id="ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
 <tr id="ctx.reason"><td><code>reason</code></td><td>1</td><td>Why the affect ended, 'expired' or 'removed', for affect on_expire.</td></tr>
@@ -692,6 +693,19 @@
 <tbody>
 <tr id="ctx.stop_combat.a"><td><code>a</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
 <tr id="ctx.stop_combat.b"><td><code>b</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.summon" class="entry">
+<h4><code>summon(caster, label, count = 1, duration = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Spawns count mobs of prototype label beside caster as its summons. Returns the mobs as a list.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.summon.caster"><td><code>caster</code></td><td>positional or named</td><td></td><td>Actor the mobs are summoned beside.</td></tr>
+<tr id="ctx.summon.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Mob prototype label.</td></tr>
+<tr id="ctx.summon.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of mobs to summon; at least 1.</td></tr>
+<tr id="ctx.summon.duration"><td><code>duration</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses until the summoned affect expires and the mob fades away, or None.</td></tr>
 </tbody>
 </table>
 </article>

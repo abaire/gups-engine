@@ -14,9 +14,18 @@ object FeatureOwnership {
     fun owns(req: FeatureRequirement, vararg symbols: String) = symbols.forEach { put(it, req) }
     fun owns(feature: Feature, vararg symbols: String) =
       owns(FeatureRequirement.of(feature), *symbols)
-    owns(Feature.SKILLS, "mob.skills", "ctx.act_cast", "ctx.skill")
+    owns(Feature.SKILLS, "mob.skills", "ctx.act_cast", "ctx.skill", "ctx.power")
     owns(Feature.SKILLS, "hook:before_cast", "hook:on_cast_start", "hook:on_cast")
-    owns(Feature.SKILLS, "rules:cast_allowed", "rules:interrupt_check", "modifier:cast_allowed")
+    owns(
+      Feature.SKILLS,
+      "rules:cast_allowed",
+      "rules:interrupt_check",
+      "rules:skill_check",
+      "rules:skill_power",
+      "modifier:cast_allowed",
+      "modifier:skill_check",
+      "modifier:skill_power",
+    )
     owns(Feature.SKILLS, "view:actor.skills", "view:actor.casting", "view:actor.is_casting")
     owns(Feature.LEVELING, "module.level_mode", "mob.level", "aggressive.unless_level_above")
     owns(Feature.LEVELING, "hook:on_level_change", "ctx.old_level", "ctx.new_level")

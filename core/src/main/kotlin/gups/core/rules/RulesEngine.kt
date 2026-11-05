@@ -3,6 +3,7 @@ package gups.core.rules
 import gups.core.Label
 import gups.core.Rng
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.Condition
@@ -61,6 +62,8 @@ class RulesContext(
   val damageType: DamageType? = null,
   /** Equipment slot of the swinging item in an auto-attack swing, or null outside swings. */
   val slot: String? = null,
+  /** The affect whose modifier is running, or null outside an affect's modifier. */
+  val affect: Affect? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -92,6 +95,37 @@ class RulesContext(
       source = source,
       damageType = type,
       slot = slot,
+      affect = affect,
+    )
+
+  /**
+   * A copy of this context with [affect] replaced; every other field is listed explicitly and
+   * carried over unchanged.
+   */
+  fun withAffect(a: Affect?): RulesContext =
+    RulesContext(
+      world = world,
+      actor = actor,
+      target = target,
+      weapon = weapon,
+      band = band,
+      skill = skill,
+      item = item,
+      room = room,
+      exit = exit,
+      channel = channel,
+      event = event,
+      intensity = intensity,
+      cost = cost,
+      sourceRoom = sourceRoom,
+      viaExit = viaExit,
+      text = text,
+      action = action,
+      tags = tags,
+      source = source,
+      damageType = damageType,
+      slot = slot,
+      affect = a,
     )
 
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
@@ -205,6 +239,12 @@ interface RulesEngine {
   /** Determines whether suffering [amount] total vital damage interrupts an in-progress cast. */
   fun interruptCheck(c: RulesContext, amount: Int): Boolean
 
+  /** Percent chance that c.actor gets c.skill off; 100 or more always succeeds. */
+  fun skillCheck(c: RulesContext): Int = 100
+
+  /** Percent strength of c.actor's successful cast of c.skill; 100 is as declared. */
+  fun skillPower(c: RulesContext): Int = 100
+
   /**
    * Calculates success probability percentage when attempting to retreat while pinned by an
    * adversary.
@@ -225,6 +265,9 @@ interface RulesEngine {
 
   /** Calculates stat penalties incurred when carrying weight in excess of the carry limit. */
   fun encumbrance(c: RulesContext): Map<String, Int>
+
+  /** Percent strength of what c.item does for c.actor (use, or a proc); 100 is as declared. */
+  fun itemPower(c: RulesContext): Int = 100
 
   /**
    * Calculates extra recovery lag when retrieving an item at distance [band], or null if out of

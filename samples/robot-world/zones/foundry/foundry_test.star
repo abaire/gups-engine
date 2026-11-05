@@ -136,3 +136,33 @@ def test_routine_can_be_shrugged_off(t):
     out = p.do("invoke mind_lash drone")
     t.contains(out, "A welder drone shrugs off your mind_lash.")
     t.eq(drone.sanity, sanity)
+
+def test_failed_skill_check_costs_power_and_emits_failure(t):
+    # Seed 1: the d100 roll for skill_check fails for proficiency 0 (check 20).
+    w = t.world(seed = 1)
+    p = w.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 0})
+    drone = w.spawn(":welder_drone", at = ":gate")
+    sanity = drone.sanity
+    power = p.power
+    out = p.do("invoke mind_lash drone")
+    t.contains(out, "You fail to cast mind_lash.")
+    t.eq(p.power, power - 10)
+    t.eq(drone.sanity, sanity)
+
+def test_skill_power_scales_damage_with_proficiency(t):
+    # A caster at proficiency 100 (power 100) and one at 40 (power 70) cast :mind_lash at identical targets.
+    # Seed 1 gives identical base damage rolls, and the power 100 cast deals more damage.
+    w1 = t.world(seed = 1)
+    expert = w1.spawn_player("Ann", at = ":gate", skills = {":mind_lash": 100})
+    drone1 = w1.spawn(":welder_drone", at = ":gate")
+    expert.do("invoke mind_lash drone")
+    damage_expert = drone1.max_sanity - drone1.sanity
+
+    w2 = t.world(seed = 1)
+    apprentice = w2.spawn_player("Bea", at = ":gate", skills = {":mind_lash": 40})
+    drone2 = w2.spawn(":welder_drone", at = ":gate")
+    apprentice.do("invoke mind_lash drone")
+    damage_apprentice = drone2.max_sanity - drone2.sanity
+
+    t.true(damage_expert > damage_apprentice)
+

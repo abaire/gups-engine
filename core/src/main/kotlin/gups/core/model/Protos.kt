@@ -67,7 +67,16 @@ enum class ModifierPoint(
   RETREAT_FAIL_LAG("retreat_fail_lag"),
 
   /** Modifies the recovery lag after a failed `flee`. */
-  FLEE_FAIL_LAG("flee_fail_lag");
+  FLEE_FAIL_LAG("flee_fail_lag"),
+
+  /** Modifies the chance that a cast gets off. */
+  SKILL_CHECK("skill_check"),
+
+  /** Modifies the percent strength of a successful cast. */
+  SKILL_POWER("skill_power"),
+
+  /** Modifies the percent strength of an item's use effect or proc. */
+  ITEM_POWER("item_power");
 
   companion object {
     /** Finds a [ModifierPoint] by its script hook name, or returns null if not recognized. */

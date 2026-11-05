@@ -208,9 +208,31 @@ class FeatureScriptTest {
       "room(modifiers)[\"cast_allowed\"]",
     )
     refused(
+      Feature.SKILLS,
+      "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"skill_check\": f})",
+      "room(modifiers)[\"skill_check\"]",
+    )
+    refused(
       Feature.COMBAT,
       "def f(ctx, base):\n    return base\nroom(\"start\", modifiers = {\"flee_fail_lag\": f})",
       "room(modifiers)[\"flee_fail_lag\"]",
+    )
+  }
+
+  @Test
+  fun `naming skill_check in package modifiers with skills off is a load error`() {
+    val off = without(Feature.SKILLS)
+    val files =
+      world(off, "zones/z/a.star" to "def f(ctx, base):\n    return base\nroom('start')") +
+        ("zones/z/package.star" to
+          """
+          package(api_version = 1, kind = "zone", modifiers = {"skill_check": "//zones/z:f"})
+          """
+            .trimIndent())
+    val r = load(files)
+    assertTrue(
+      r.errors.any { "skill_check" in it.message && "needs the skills feature" in it.message },
+      "expected refusal for skill_check modifier: ${r.report()}",
     )
   }
 
@@ -417,7 +439,7 @@ class FeatureScriptTest {
     for ((feature, exports) in
       mapOf(
         Feature.COMBAT to listOf("damage", "initiative", "flee_chance", "flee_fail_lag"),
-        Feature.SKILLS to listOf("cast_allowed", "interrupt_check"),
+        Feature.SKILLS to listOf("cast_allowed", "interrupt_check", "skill_check", "skill_power"),
         Feature.TRACK to
           listOf("retreat_check", "get_lag", "advance_lag", "retreat_lag", "retreat_fail_lag"),
         Feature.LEVELING to listOf("xp_for_kill", "xp_to_level", "on_level_up"),

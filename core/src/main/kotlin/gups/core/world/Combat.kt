@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.CORPSE_DECAY_PULSES
 import gups.core.EntityId
 import gups.core.HookRef
+import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.AffectScope
@@ -368,6 +369,7 @@ fun World.applyAffect(
   maxVitalDeltas: Map<String, Int> = emptyMap(),
   resistDeltas: Map<DamageType, Int> = emptyMap(),
   procs: List<Proc> = emptyList(),
+  power: Int = 100,
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -395,6 +397,7 @@ fun World.applyAffect(
       maxVitalDeltas = maxVitalDeltas,
       resistDeltas = resistDeltas,
       procs = procs,
+      power = power,
     )
   target.affects += affect
   target.dirty = true
@@ -469,6 +472,7 @@ fun World.applyItemAffect(
   maxVitalDeltas: Map<String, Int> = emptyMap(),
   resistDeltas: Map<DamageType, Int> = emptyMap(),
   procs: List<Proc> = emptyList(),
+  power: Int = 100,
 ): Affect? {
   if (item.id !in entities) return null
   require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -496,6 +500,7 @@ fun World.applyItemAffect(
       maxVitalDeltas,
       resistDeltas,
       procs,
+      power,
     )
   item.affects += affect
   item.dirty = true
@@ -576,19 +581,55 @@ private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag
 
 // ---- Effect primitives -----------------------------------------------------------------------
 
+/**
+ * Scales a declared amount by [power] percent: rounded down, never below 1 when it was positive.
+ */
+internal fun scaled(amount: Int, power: Int): Int =
+  if (amount <= 0) amount else maxOf(1, (amount.toLong() * power / 100).toInt())
+
+/**
+ * Spawns [count] mobs of [label] beside [caster] as its summons; [duration] null means they stay.
+ */
+fun World.summon(
+  caster: Actor,
+  label: Label,
+  count: Int = 1,
+  duration: Int? = null,
+  power: Int = 100,
+): List<Mob> {
+  require(count >= 1) { "summon: count must be at least 1" }
+  require(duration == null || duration >= 1) { "summon: duration must be at least 1" }
+  val mobs = mutableListOf<Mob>()
+  repeat(count) {
+    val m = spawnMob(label, caster.room, caster.trackIndex)
+    m.summonedBy = caster.id
+    duration?.let {
+      applyAffect(
+        m,
+        "summoned",
+        scaled(it, power),
+        flags = setOf("summoned"),
+        source = caster,
+        power = power,
+      )
+    }
+    mobs += m
+  }
+  return mobs
+}
+
 /** Applies [effect] from [caster] to [target] (null for `target = "none"` skills). */
-fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: SkillProto? = null) {
+fun World.applyEffect(
+  effect: Effect,
+  caster: Actor,
+  target: Actor?,
+  skill: SkillProto? = null,
+  power: Int = 100,
+) {
   when (effect) {
-    is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill) }
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null)
-    is Effect.Summon ->
-      repeat(effect.count) {
-        val m = spawnMob(effect.label, caster.room, caster.trackIndex)
-        m.summonedBy = caster.id
-        effect.duration?.let {
-          applyAffect(m, "summoned", it, flags = setOf("summoned"), source = caster)
-        }
-      }
+    is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill, power) }
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null, power)
+    is Effect.Summon -> summon(caster, effect.label, effect.count, effect.duration, power)
     else -> {
       val t = target ?: return
       if (!t.inWorld) return
@@ -602,16 +643,19 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
       when (effect) {
         is Effect.Damage -> {
           val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
-          val hit = resolveDamage(c, effect.dice.roll(rng), effect.type)
+          val hit = resolveDamage(c, scaled(effect.dice.roll(rng), power), effect.type)
           traceRules(caster, hit.text)
           damage(t, hit.losses, effect.type, caster, hit.parts)
         }
-        is Effect.Heal -> heal(t, effect.vital, effect.dice.roll(rng))
+        is Effect.Heal -> heal(t, effect.vital, scaled(effect.dice.roll(rng), power))
         is Effect.ApplyAffect ->
           applyAffect(
             t,
             effect.name,
-            requireNotNull(effect.duration) { "apply_affect: duration is required for an actor" },
+            scaled(
+              requireNotNull(effect.duration) { "apply_affect: duration is required for an actor" },
+              power,
+            ),
             effect.statDeltas,
             effect.flags,
             effect.tickEvery,
@@ -624,6 +668,7 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
             maxVitalDeltas = effect.maxVitalDeltas,
             resistDeltas = effect.resistDeltas,
             procs = effect.procs,
+            power = power,
           )
         is Effect.Dispel -> {
           val gone = t.affects.filter(effect::matches)
@@ -640,7 +685,14 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
         is Effect.Pull ->
           if (Feature.TRACK in features) pull(t, toward = caster, steps = effect.steps)
         is Effect.Stun ->
-          applyAffect(t, "stun", effect.pulses, flags = setOf("stunned"), source = caster)
+          applyAffect(
+            t,
+            "stun",
+            scaled(effect.pulses, power),
+            flags = setOf("stunned"),
+            source = caster,
+            power = power,
+          )
         is Effect.Sequence,
         is Effect.Summon,
         is Effect.Plugin -> Unit
@@ -650,14 +702,14 @@ fun World.applyEffect(effect: Effect, caster: Actor, target: Actor?, skill: Skil
 }
 
 /** Applies an item skill's [effect] from [caster] to [item]. */
-fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item) {
+fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item, power: Int = 100) {
   when (effect) {
-    is Effect.Sequence -> effect.effects.forEach { applyItemEffect(it, caster, item) }
+    is Effect.Sequence -> effect.effects.forEach { applyItemEffect(it, caster, item, power) }
     is Effect.ApplyAffect ->
       applyItemAffect(
         item,
         effect.name,
-        effect.duration,
+        effect.duration?.let { scaled(it, power) },
         effect.applies ?: AffectScope.WORN,
         effect.statDeltas,
         effect.flags,
@@ -671,8 +723,9 @@ fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item) {
         effect.maxVitalDeltas,
         effect.resistDeltas,
         effect.procs,
+        power = power,
       )
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item)
+    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item, power)
     else -> error("${effect::class.simpleName} can't act on an item")
   }
 }

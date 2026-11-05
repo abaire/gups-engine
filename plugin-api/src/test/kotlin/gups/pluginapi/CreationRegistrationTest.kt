@@ -237,6 +237,19 @@ class CreationRegistrationTest {
   }
 
   @Test
+  fun `a skills modifier point needs the skills feature`() {
+    val noSkills = Features(Feature.entries.toSet() - Feature.SKILLS)
+    for (point in listOf(PluginModifierPoint.SKILL_CHECK, PluginModifierPoint.SKILL_POWER)) {
+      assertEquals(
+        "trait 'keen': modifier point $point needs the skills feature",
+        refusal(noSkills) {
+          it.addTrait(PluginTrait("keen", modifiers = mapOf(point to PluginModifier { _, b -> b })))
+        },
+      )
+    }
+  }
+
+  @Test
   fun `a track lag modifier point needs the track feature`() {
     val noTrack = Features(Feature.entries.toSet() - Feature.TRACK)
     for (point in

@@ -679,7 +679,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active while the item is worn.",
           "since": 1
         },
@@ -798,7 +798,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active while the affect reaches the holder.",
           "since": 1
         },
@@ -1255,7 +1255,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Zone-wide rules modifiers by modifier point name.",
           "since": 1
         },
@@ -1415,7 +1415,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active in rooms carrying this region tag.",
           "since": 1
         }
@@ -1579,7 +1579,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Room rules modifiers by modifier point name.",
           "since": 1
         },
@@ -2414,7 +2414,7 @@
       "symbol": "MODIFIER",
       "name": "MODIFIER",
       "type": "struct",
-      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\")",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\", skill_check = \"skill_check\", skill_power = \"skill_power\", item_power = \"item_power\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
       "since": 1
     },
@@ -2897,6 +2897,13 @@
         "symbol": "ctx.parts",
         "name": "parts",
         "doc": "The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.power",
+        "feature": "skills",
+        "name": "power",
+        "doc": "In a skill's resolve, the cast's power; None elsewhere.",
         "since": 1
       },
       {
@@ -4797,6 +4804,54 @@
         ]
       },
       {
+        "symbol": "ctx.summon",
+        "name": "summon",
+        "doc": "Spawns count mobs of prototype label beside caster as its summons. Returns the mobs as a list.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.summon.caster",
+            "name": "caster",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor the mobs are summoned beside."
+          },
+          {
+            "symbol": "ctx.summon.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob prototype label."
+          },
+          {
+            "symbol": "ctx.summon.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of mobs to summon; at least 1."
+          },
+          {
+            "symbol": "ctx.summon.duration",
+            "name": "duration",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Pulses until the summoned affect expires and the mob fades away, or None."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.take_xp",
         "feature": "leveling",
         "name": "take_xp",
@@ -5304,6 +5359,12 @@
           "symbol": "view:affect.origin",
           "name": "origin",
           "doc": "Always 'instance'; a prototype's affects are proto_affect views.",
+          "since": 1
+        },
+        {
+          "symbol": "view:affect.power",
+          "name": "power",
+          "doc": "Percent strength the affect was applied at; 100 when nothing scaled it.",
           "since": 1
         },
         {
@@ -6647,6 +6708,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.affect",
+          "name": "affect",
+          "doc": "In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.attacker",
           "name": "attacker",
           "doc": "For attack calls, the same as actor.",
@@ -6964,6 +7031,15 @@
         "since": 1
       },
       {
+        "symbol": "rules:item_power",
+        "name": "item_power",
+        "signature": "item_power(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "event", "affect", "room", "pulse", "rng"],
+        "doc": "Percent strength of what ctx.item does for ctx.actor: use or proc.",
+        "since": 1
+      },
+      {
         "symbol": "rules:mitigate",
         "name": "mitigate",
         "signature": "mitigate(ctx, amount, type)",
@@ -7055,6 +7131,26 @@
         "return_type": "int",
         "ctx_fields": ["room", "exit", "channel", "pulse", "rng"],
         "doc": "What a perceivable event on ctx.channel loses crossing ctx.exit into ctx.room, one hop toward the listeners. The price is added to the event's cost; a negative price blocks the hop. ctx.actor is None.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:skill_check",
+        "feature": "skills",
+        "name": "skill_check",
+        "signature": "skill_check(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "room", "pulse", "rng"],
+        "doc": "Percent chance that ctx.actor gets ctx.skill off.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:skill_power",
+        "feature": "skills",
+        "name": "skill_power",
+        "signature": "skill_power(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "room", "pulse", "rng"],
+        "doc": "Percent strength of a successful cast; 100 is the skill as declared.",
         "since": 1
       },
       {
@@ -7187,6 +7283,15 @@
         "since": 1
       },
       {
+        "symbol": "modifier:item_power",
+        "name": "item_power",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "event", "affect", "room", "pulse", "rng"],
+        "doc": "Adjusts the percent strength of what ctx.item does for ctx.actor: use or proc. The final result is clamped to 0.",
+        "since": 1
+      },
+      {
         "symbol": "modifier:mitigate",
         "name": "mitigate",
         "signature": "fn(ctx, base)",
@@ -7240,6 +7345,26 @@
         "value_type": "int",
         "ctx_fields": ["actor", "target", "band", "room", "pulse", "rng"],
         "doc": "Adjusts the recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step. The final result is clamped to 0.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:skill_check",
+        "feature": "skills",
+        "name": "skill_check",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "room", "pulse", "rng"],
+        "doc": "Adjusts the percent chance that ctx.actor gets ctx.skill off.",
+        "since": 1
+      },
+      {
+        "symbol": "modifier:skill_power",
+        "feature": "skills",
+        "name": "skill_power",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "target", "item", "skill", "room", "pulse", "rng"],
+        "doc": "Adjusts the percent strength of a successful cast. The final result is clamped to 0.",
         "since": 1
       },
       {
@@ -8640,6 +8765,24 @@
       "placeholders": ["actor", "skill"],
       "required": ["skill"],
       "default": "{actor} casts {skill} at you!",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.failed.room",
+      "feature": "skills",
+      "id": "cast.failed.room",
+      "placeholders": ["actor"],
+      "required": ["actor"],
+      "default": "{actor}'s spell fizzles.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.failed.self",
+      "feature": "skills",
+      "id": "cast.failed.self",
+      "placeholders": ["skill"],
+      "required": ["skill"],
+      "default": "You fail to cast {skill}.",
       "since": 1
     },
     {

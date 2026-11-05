@@ -404,6 +404,7 @@ class StarlarkHost(
     caster: Actor,
     target: Actor?,
     item: Item?,
+    power: Int,
     ref: HookRef,
     pkg: String,
   ) {
@@ -417,7 +418,7 @@ class StarlarkHost(
           it,
           caster,
           HookContext(actor = caster, target = target, targetItem = item, room = caster.room),
-          CtxExtras(),
+          CtxExtras(power = power),
         )
       },
     )
@@ -806,8 +807,8 @@ internal data class ScriptThink(private val ref: HookRef, private val pkg: Strin
 /** A skill's custom `resolve(ctx)`. */
 internal data class ScriptResolve(private val ref: HookRef, private val pkg: String) :
   SkillResolver {
-  override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?) =
-    hostOf(world).resolve(world, caster, target, item, ref, pkg)
+  override fun resolve(world: World, caster: Actor, target: Actor?, item: Item?, power: Int) =
+    hostOf(world).resolve(world, caster, target, item, power, ref, pkg)
 }
 
 /** A world loaded from a deploy's staging tree: [ok] when every package loaded. */

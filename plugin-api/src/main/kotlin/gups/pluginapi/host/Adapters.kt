@@ -127,6 +127,8 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               weapon = c.weapon?.let { ItemFacade(it, w) },
               room = RoomFacade(bearer.room, w),
               skill = c.skill?.let { SkillFacade(it) },
+              item = c.item?.let { ItemFacade(it, w) },
+              event = c.event,
             )
           fun refuse(why: String): Any {
             w.record(
@@ -148,7 +150,10 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               ModifierPoint.ADVANCE_LAG,
               ModifierPoint.RETREAT_LAG,
               ModifierPoint.RETREAT_FAIL_LAG,
-              ModifierPoint.FLEE_FAIL_LAG -> {
+              ModifierPoint.FLEE_FAIL_LAG,
+              ModifierPoint.SKILL_CHECK,
+              ModifierPoint.SKILL_POWER,
+              ModifierPoint.ITEM_POWER -> {
                 val res = mod.modify(call, (base as Int).toLong())
                 if (res is Long)
                   res.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()

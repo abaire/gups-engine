@@ -221,6 +221,8 @@ data class PluginEffectCall(
   val args: Map<String, Any?>,
   /** The target item of an `item` skill, else null. */
   val targetItem: PluginItem? = null,
+  /** Percent strength the effect runs at; 100 outside casts and item effects. */
+  val power: Int = 100,
 )
 
 fun interface PluginEffect {
@@ -283,6 +285,9 @@ enum class PluginModifierPoint {
   RETREAT_LAG,
   RETREAT_FAIL_LAG,
   FLEE_FAIL_LAG,
+  SKILL_CHECK,
+  SKILL_POWER,
+  ITEM_POWER,
 }
 
 data class PluginModifierCall(
@@ -302,6 +307,13 @@ data class PluginModifierCall(
    * else null.
    */
   val skill: PluginSkill? = null,
+  /**
+   * The item whose use_effect or proc this is, for `ITEM_POWER`; the target item of an `item` skill
+   * for `SKILL_CHECK` and `SKILL_POWER`; else null.
+   */
+  val item: PluginItem? = null,
+  /** `ctx.event` of the rules call: `use` or a proc trigger for `ITEM_POWER`; else null. */
+  val event: String? = null,
 )
 
 fun interface PluginModifier {

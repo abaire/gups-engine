@@ -208,6 +208,72 @@ def _blur(ctx, base):
     return base - 15
 ```
 
+### Proficiency: success and power
+
+When a skill finishes its warmup, the engine evaluates whether the cast succeeds before any combat starts or effects
+apply. The resolution process uses two exports from the `skills` feature:
+
+1. **`rules.skill_check(ctx)`**: Evaluates the percent chance (0–100+) that the caster successfully channels the skill,
+   followed by the caster's `skill_check` modifier chain. A chance of 100 or higher succeeds automatically without a
+   roll.
+2. **Failure handling**: If the d100 roll fails, the spell fizzles immediately. The caster receives `cast.failed.self`
+   ("You fail to cast {skill}."), onlookers receive `cast.failed.room` ("{actor}'s spell fizzles."), and the caster pays
+   the skill's vital cost and lag. No effect applies, custom `resolve` does not run, no landing roll (`to_hit`) is made,
+   combat does not start, and `on_cast` is not triggered.
+3. **`rules.skill_power(ctx)`**: If the check succeeds, cast power is determined by `rules.skill_power(ctx)` followed by
+   the caster's `skill_power` modifier chain (returning a percentage where 100 represents nominal power).
+
+Cast power scales what the effect primitives do, rounded down and never below 1 for a positive amount:
+
+- `damage`: the rolled amount, before the caster's `damage` chain. Bonus damage parts are not scaled.
+- `heal`: the rolled amount restored.
+- `stun`: the stun duration in pulses.
+- `apply_affect`: the duration, and the applied affect remembers the power as `affect.power`.
+- `summon`: the duration of the summoned mobs, not the count.
+
+Stat deltas, modifiers, `tick_every` and the like are not scaled; read `ctx.affect.power` to scale those yourself.
+
+#### Reading `ctx.affect.power` in Modifiers
+
+Modifiers contributed by an affect can inspect `ctx.affect.power` to adjust their contribution based on how strongly the
+spell was cast. For example, a levitation buff might grant dodge evasion scaled by the spell's power:
+
+```python
+def _levitate_evasion(ctx, base):
+    # ctx.affect.power is 100 for a standard cast, granting +10 evasion.
+    return base + (ctx.affect.power // 10)
+```
+
+#### Custom `resolve` and `ctx.summon`
+
+A skill's custom `resolve` can read the cast's power as `ctx.power`, and `ctx.summon` spawns mobs that belong to the
+caster. The verb is not scaled by power, so a `resolve` that wants the duration to follow it passes the scaled value
+itself, and can pick the mob by proficiency:
+
+```python
+def _call_beast(ctx):
+    prof = ctx.actor.skills.get(":call_beast", 0)
+    label = ":bear" if prof >= 80 else ":wolf" if prof >= 40 else ":dog"
+    ctx.summon(ctx.actor, label, duration = 6 * ctx.power)
+```
+
+#### Item Power and Modifiers
+
+Items with declarative `use_effect`s or weapon/armor procs run at `item_power`, evaluated via `rules.item_power(ctx)`
+(from the kernel) and the user's `item_power` modifier chain. An artificer could boost all item activation strength
+through an affect modifier:
+
+```python
+def _artificer_synergy(ctx, base):
+    # Enhances item power by +1% per point of engineering proficiency.
+    engineering = ctx.actor.skills.get(":engineering", 0)
+    return base + engineering
+```
+
+Unlike cast spells, **procs never roll `skill_check` or `skill_power`**. Item procs evaluate `item_power`, item instance
+affect procs run at `affect.power * item_power // 100`, and actor-affect procs run directly at the affect's stored
+`affect.power`.
+
 ### Bonus damage: `bonus_damage` and `damages(...)`
 
 A `bonus_damage` modifier adds typed parts to everything its bearer deals. It runs on the attacker's chain, takes a map

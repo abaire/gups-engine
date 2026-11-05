@@ -12,3 +12,9 @@ def door_intensity(ctx):
             return 1
         return 0
     return 0
+
+def item_power(ctx):
+    # Percent strength of what ctx.item does for ctx.actor: its use_effect (ctx.event "use") or a
+    # proc (ctx.event "hit", "struck" or "avoid"). 100 is the item as declared; a world can base it
+    # on a skill of the user's, such as an artificer's.
+    return 100

@@ -4,11 +4,13 @@ import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorProto
+import gups.core.model.Entity
 import gups.core.model.ExitProto
 import gups.core.model.Interrupt
 import gups.core.model.Item
@@ -143,6 +145,19 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
       "The slot of the swinging item in an auto-attack swing, 'wield' for an unarmed swing, otherwise None.",
   )
   fun slot(): Any = field { c.slot ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "affect",
+    structField = true,
+    allowReturnNones = true,
+    doc =
+      "In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.",
+  )
+  fun affect(): Any = field {
+    val a = c.affect ?: return@field Starlark.NONE
+    val host = findAffectHost(c, a) ?: return@field Starlark.NONE
+    AffectView(frame, host, a)
+  }
 
   @StarlarkMethod(
     name = "room",
@@ -287,6 +302,19 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   override fun repr(printer: Printer) {
     printer.append("<rules ctx ${frame.site.hook} of ${c.actor?.name ?: c.room?.name ?: "none"}>")
   }
+}
+
+/** The entity carrying [a]: the actor, the target, or an item they hold or the rules call names. */
+private fun findAffectHost(c: RulesContext, a: Affect): Entity? {
+  fun carries(x: Actor) = x.affects.any { it.id == a.id }
+  fun carries(x: Item) = x.affects.any { it.id == a.id }
+  fun among(actor: Actor?): Entity? {
+    if (actor == null) return null
+    if (carries(actor)) return actor
+    return actor.inventory.firstOrNull { carries(it) }
+      ?: actor.equipment.values.firstOrNull { carries(it) }
+  }
+  return among(c.actor) ?: among(c.target) ?: c.item?.takeIf { carries(it) }
 }
 
 /** Converts a rules result for [point] to Starlark, as a modifier's `base` argument. */
@@ -492,9 +520,9 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     int(v, "rules.${export.scriptName} return value")
   }
 
-  private fun nonNegative(export: RulesExport, pulses: Int): Int {
-    if (pulses < 0) fail("rules.${export.scriptName} must be at least 0, got $pulses")
-    return pulses
+  private fun nonNegative(export: RulesExport, n: Int): Int {
+    if (n < 0) fail("rules.${export.scriptName} must be at least 0, got $n")
+    return n
   }
 
   private fun lagOf(export: RulesExport): (Any?) -> Int = { v ->
@@ -591,6 +619,12 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       bool(v, "rules.interrupt_check return value")
     } ?: false
 
+  override fun skillCheck(c: RulesContext): Int =
+    run(RulesExport.SKILL_CHECK, c, ctxArgs(c), convert = intOf(RulesExport.SKILL_CHECK)) ?: 0
+
+  override fun skillPower(c: RulesContext): Int =
+    run(RulesExport.SKILL_POWER, c, ctxArgs(c), convert = lagOf(RulesExport.SKILL_POWER)) ?: 100
+
   override fun retreatCheck(c: RulesContext): Int =
     run(RulesExport.RETREAT_CHECK, c, ctxArgs(c), convert = intOf(RulesExport.RETREAT_CHECK)) ?: 0
 
@@ -612,6 +646,9 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     run(RulesExport.ENCUMBRANCE, c, ctxArgs(c)) { v ->
       typed(v, TypedKind.STATS, "rules.encumbrance return value")
     } ?: emptyMap()
+
+  override fun itemPower(c: RulesContext): Int =
+    run(RulesExport.ITEM_POWER, c, ctxArgs(c), convert = lagOf(RulesExport.ITEM_POWER)) ?: 100
 
   override fun getLag(c: RulesContext, band: Band): Int? {
     val answer =
@@ -754,12 +791,15 @@ enum class RulesExport(val scriptName: String) {
   INITIATIVE("initiative"),
   CAST_ALLOWED("cast_allowed"),
   INTERRUPT_CHECK("interrupt_check"),
+  SKILL_CHECK("skill_check"),
+  SKILL_POWER("skill_power"),
   RETREAT_CHECK("retreat_check"),
   FLEE_CHANCE("flee_chance"),
   MOVE_COST("move_cost"),
   REGEN("regen"),
   CARRY_LIMIT("carry_limit"),
   ENCUMBRANCE("encumbrance"),
+  ITEM_POWER("item_power"),
   GET_LAG("get_lag"),
   ADVANCE_LAG("advance_lag"),
   RETREAT_LAG("retreat_lag"),
@@ -905,6 +945,20 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       doc = "True if a damage event with this total loss interrupts an in-progress cast.",
     ),
     RulesExportSpec(
+      export = RulesExport.SKILL_CHECK,
+      signature = "skill_check(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
+      doc = "Percent chance that ctx.actor gets ctx.skill off.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.SKILL_POWER,
+      signature = "skill_power(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
+      doc = "Percent strength of a successful cast; 100 is the skill as declared.",
+    ),
+    RulesExportSpec(
       export = RulesExport.RETREAT_CHECK,
       signature = "retreat_check(ctx)",
       returnType = "int",
@@ -945,6 +999,14 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "stats",
       ctxFields = listOf("actor", "room", "pulse", "rng"),
       doc = "Stat deltas applied while the actor carries more than carry_limit.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.ITEM_POWER,
+      signature = "item_power(ctx)",
+      returnType = "int",
+      ctxFields =
+        listOf("actor", "target", "item", "skill", "event", "affect", "room", "pulse", "rng"),
+      doc = "Percent strength of what ctx.item does for ctx.actor: use or proc.",
     ),
     RulesExportSpec(
       export = RulesExport.GET_LAG,
@@ -1228,6 +1290,20 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
       doc = "Returns None to allow casting, or ctx.deny(msg) to refuse.",
     ),
     ModifierPointSpec(
+      point = ModifierPoint.SKILL_CHECK,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
+      doc = "Adjusts the percent chance that ctx.actor gets ctx.skill off.",
+    ),
+    ModifierPointSpec(
+      point = ModifierPoint.SKILL_POWER,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
+      doc = "Adjusts the percent strength of a successful cast. The final result is clamped to 0.",
+    ),
+    ModifierPointSpec(
       point = ModifierPoint.MOVE_COST,
       signature = "fn(ctx, base)",
       valueType = "vitals",
@@ -1273,6 +1349,15 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
       doc =
         "Adjusts the recovery lag after a failed flee. ctx.target and ctx.band are None. The final result is clamped to 0.",
     ),
+    ModifierPointSpec(
+      point = ModifierPoint.ITEM_POWER,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields =
+        listOf("actor", "target", "item", "skill", "event", "affect", "room", "pulse", "rng"),
+      doc =
+        "Adjusts the percent strength of what ctx.item does for ctx.actor: use or proc. The final result is clamped to 0.",
+    ),
   )
 
 /**
@@ -1304,9 +1389,9 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *   `flee_fail_lag`.
  * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
  *   `retreat_fail_lag`, and `get_lag` across all range bands.
- * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed` and
- *   `interrupt_check`.
- * - Tests `carry_limit`, `encumbrance`, `regen`, and `move_cost`.
+ * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed`,
+ *   `interrupt_check`, `skill_check`, and `skill_power`.
+ * - Tests `carry_limit`, `encumbrance`, `item_power`, `regen`, and `move_cost`.
  * - Tests `mitigate` for each damage type declared in the world [schema].
  * - For player actors, tests `on_player_death`.
  * - Tests sensory perception exports (`sense_cost`, `can_perceive`, `perceive_message`) for each
@@ -1449,6 +1534,7 @@ internal fun dryRunRules(
       }
       rules.carryLimit(c)
       rules.encumbrance(c)
+      rules.itemPower(RulesContext(world, a, other, event = "use"))
       rules.regen(c)
       rules.moveCost(c)
       if (Feature.TRACK in features) {
@@ -1462,6 +1548,8 @@ internal fun dryRunRules(
         rules.toHit(withSkill)
         rules.castAllowed(withSkill)
         rules.interruptCheck(withSkill, 1)
+        rules.skillCheck(withSkill)
+        rules.skillPower(withSkill)
       }
       if (Feature.LEVELING in features) rules.xpForKill(c)
       for (type in schema.damageTypes) {

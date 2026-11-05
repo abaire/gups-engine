@@ -121,6 +121,7 @@ fun interface PluginEffectRunner {
     caster: Actor,
     target: Actor?,
     targetItem: Item?,
+    power: Int,
   )
 }
 
@@ -196,7 +197,7 @@ class World(
   var onPulse: ((Long) -> Unit)? = null
 
   /** Runs `Effect.Plugin`s; does nothing until a plugin host installs a runner. */
-  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _, _ -> }
+  var pluginEffects: PluginEffectRunner = PluginEffectRunner { _, _, _, _, _, _ -> }
 
   /** Plugin containment filters, in plugin id order then registration order. */
   var containmentFilters: List<ContainmentFilter> = emptyList()

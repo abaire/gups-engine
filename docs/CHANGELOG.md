@@ -4,6 +4,23 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Skill proficiency
+
+- Tutorial 03 covers proficiency: `skill_check`, `skill_power`, `item_power`, `ctx.affect.power`, `ctx.power` and
+  `ctx.summon`.
+- Item `use_effect`s and item procs run at `item_power`; procs of an item's instance affect at the affect's power ×
+  `item_power` / 100 (with `ctx.affect` set in that `item_power` call); actor-affect procs at the affect's power.
+- Casts roll `skill_check` and run at `skill_power`: spells that fail fizzle early with `cast.failed.self` and
+  `cast.failed.room`, paying cost and lag without triggering effects, resolvers, combat, or `on_cast`. Successful casts
+  thread `power` to effects and expose `ctx.power` in custom `resolve`.
+- New modifier points `skill_check` and `skill_power` (`skills`) and `item_power` (kernel). Plugin traits can modify
+  them (`PluginModifierPoint`), and `PluginModifierCall` gains `item` and `event`.
+- New rules exports `skill_check` and `skill_power` (`skills`) and `item_power` (kernel). Every ruleset must define
+  them.
+- Modifiers contributed by an affect see it as `ctx.affect` (`ctx.affect.power`).
+- New hook verb `ctx.summon(caster, label, count=1, duration=None)`.
+- The affect view exposes `power`, the percent strength the affect was applied at (100 when unscaled).
+
 ### Mob planning
 
 - Added `ctx.plan(facts, actions, goal, max_expansions=1024)`: native, deterministic goal-oriented planning over

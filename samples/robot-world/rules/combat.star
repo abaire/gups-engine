@@ -92,6 +92,17 @@ def initiative(ctx):
 def cast_allowed(ctx):
     return None
 
+def skill_check(ctx):
+    # Percent chance that ctx.actor gets ctx.skill off. Proficiency 80 and up never fails.
+    prof = ctx.actor.skills.get(ctx.skill.label, 0)
+    return _clamp(prof + 20, 5, 100)
+
+def skill_power(ctx):
+    # Percent strength of ctx.actor's ctx.skill: 100 is the skill as declared. This world has no
+    # levels, so proficiency alone decides it.
+    prof = ctx.actor.skills.get(ctx.skill.label, 0)
+    return 50 + prof // 2
+
 def interrupt_check(ctx, amount):
     pct = ctx.skill.interrupt["damage_pct"] if ctx.skill else None
     if pct == None:

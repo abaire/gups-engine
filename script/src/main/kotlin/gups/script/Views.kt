@@ -888,6 +888,13 @@ internal constructor(private val scope: ViewScope, private val host: Entity, val
   fun applies(): Any = affect.applies?.name?.lowercase() ?: Starlark.NONE
 
   @StarlarkMethod(
+    name = "power",
+    structField = true,
+    doc = "Percent strength the affect was applied at; 100 when nothing scaled it.",
+  )
+  fun power(): Any = sInt(affect.power)
+
+  @StarlarkMethod(
     name = "origin",
     structField = true,
     doc = "Always 'instance'; a prototype's affects are proto_affect views.",

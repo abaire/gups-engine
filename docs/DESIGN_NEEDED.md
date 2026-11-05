@@ -11,14 +11,6 @@ delete it here.
 
 ## Combat and skills
 
-### Skill proficiency
-
-**Spec:** §3.3 (`skills: Map<Label, Int>`, proficiency 0–100), §4.3, §4.6. **Today:** proficiency is stored and readable
-by scripts (`ctx.actor.skills`), but nothing rolls against it (D-024). **Questions:** - Does proficiency decide whether
-a skill succeeds, how strong it is, or both? - Which rules export rolls it? An `enemy` skill's land roll calls `to_hit`
-with `ctx.skill` set, so a ruleset can already read proficiency there, but `ally`, `self`, `item` and `none` skills
-never roll. - How do players gain proficiency: through use, trainers, or levels?
-
 ### Acquiring skills
 
 **Spec:** §3.3, §4.3, §5.12. **Today:** players get skills only from the harness (`spawn_player(skills=...)`), Kotlin
@@ -33,20 +25,20 @@ or `practice` raise its proficiency, by how much, and up to what cap?
 
 **Spec:** §3.3 (`skills: Map<Label, Int>`), §3.10 (`leveling` feature), §4.6. **Today:** a world with `leveling` off has
 no `level` or `xp`, and skills change only through the harness, Kotlin code or a plugin's `setSkill` (§4.19). Nothing
-tracks experience toward a skill, and no hook reports that a skill was used. Depends on "Skill proficiency" and
-"Acquiring skills". **Questions:** - Do skills earn XP of their own (for example `skill_xp: Map<Label, Long>`), and is
-the proficiency a function of it? - Is the advancement mechanism a rules export called after each use (for example
-`skill_gain(ctx)`), a plugin timer or hook, or both? - What counts as a use: a cast, a hit with a weapon skill, a failed
-attempt? Is there a cap per use or per time to stop farming? - Can a world mix character levels and skill levels, and
-can a skill's level gate on the character's? - Which engine code may still read `level` when `leveling` is off? The
-template rules read it in `to_hit` and `regen`; those are template choices, but the kernel must not assume it. - The
-"Skill proficiency" design ([MILESTONE_31.md](MILESTONE_31.md)) makes proficiency drive `skill_check` (success),
-`skill_power` (a cast's strength) and `item_power` (the strength of an item's `use_effect` and procs, which rules may
-base on a passive skill such as an artificer's), and leaves all gain to this entry and "Acquiring skills". This design
-must also cover gain through use, including: a failed `skill_check` pays cost and lag but fires no hook (`on_cast` fires
-only when the skill takes effect), so a use hook must report failed attempts itself; skill procs skip `skill_check` and
-`skill_power`, so decide whether a proc counts as a use; and decide whether a passive skill that only a rules export
-reads, such as one feeding `item_power`, can advance, and what event counts as using it.
+tracks experience toward a skill, and no hook reports that a skill was used. Depends on "Acquiring skills".
+**Questions:** - Do skills earn XP of their own (for example `skill_xp: Map<Label, Long>`), and is the proficiency a
+function of it? - Is the advancement mechanism a rules export called after each use (for example `skill_gain(ctx)`), a
+plugin timer or hook, or both? - What counts as a use: a cast, a hit with a weapon skill, a failed attempt? Is there a
+cap per use or per time to stop farming? - Can a world mix character levels and skill levels, and can a skill's level
+gate on the character's? - Which engine code may still read `level` when `leveling` is off? The template rules read it
+in `to_hit` and `regen`; those are template choices, but the kernel must not assume it. - The "Skill proficiency" design
+([MILESTONE_31.md](MILESTONE_31.md)) makes proficiency drive `skill_check` (success), `skill_power` (a cast's strength)
+and `item_power` (the strength of an item's `use_effect` and procs, which rules may base on a passive skill such as an
+artificer's), and leaves all gain to this entry and "Acquiring skills". This design must also cover gain through use,
+including: a failed `skill_check` pays cost and lag but fires no hook (`on_cast` fires only when the skill takes
+effect), so a use hook must report failed attempts itself; skill procs skip `skill_check` and `skill_power`, so decide
+whether a proc counts as a use; and decide whether a passive skill that only a rules export reads, such as one feeding
+`item_power`, can advance, and what event counts as using it.
 
 ### Rerolls and point-buy at character creation
 
@@ -197,10 +189,10 @@ moderation, quotas, and cross-character delivery handled?
 
 **Spec:** §3.3 (items, `variants`), §4.3 (skills and proficiency). **Today:** the engine has no crafting recipes. Items
 can be transformed into variants, spawned and destroyed by scripts, but nothing turns materials into a product. Split
-from the shops design because it is much more involved; it depends on "Skill proficiency" for skill checks.
-**Questions:** - Should crafting ship as a standard `//lib` library or require engine primitives? - How should recipes
-define material requirements, tools, workstations and skill checks? - What happens on failure (materials lost, a flawed
-product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
+from the shops design because it is much more involved; it can use `skill_check` and `item_power` (§4.3) for skill
+checks. **Questions:** - Should crafting ship as a standard `//lib` library or require engine primitives? - How should
+recipes define material requirements, tools, workstations and skill checks? - What happens on failure (materials lost, a
+flawed product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
 overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
 feature?
 

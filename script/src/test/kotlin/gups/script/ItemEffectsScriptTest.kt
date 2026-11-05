@@ -908,4 +908,26 @@ class ItemEffectsScriptTest {
     f.run()
     assertContains(f.out(p), "value is 30")
   }
+
+  @Test
+  fun `affect view exposes power defaulting to 100`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _buff(ctx):
+              ctx.apply_affect(ctx.actor, "boost", 10)
+              ctx.send(ctx.actor, "power is %s" % ctx.actor.affects[0].power)
+
+          room("start")
+          item("wand", commands = {"buff": _buff})
+          """
+        )
+      )
+    val p = f.player()
+    f.w.spawnItem(Label("//zones/z:wand"), ItemLocation.Carried(p.id))
+    f.input(p, "buff")
+    f.run()
+    assertContains(f.out(p), "power is 100")
+  }
 }

@@ -4,6 +4,7 @@ import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.CastState
 import gups.core.model.Channel
@@ -458,6 +459,7 @@ class BonusDamageTest {
         source = d,
         damageType = fire,
         slot = "wield",
+        affect = Affect(1, "test", null, 0, 10),
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

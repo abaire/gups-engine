@@ -431,6 +431,13 @@
         "since": 1
       },
       {
+        "symbol": "ctx.power",
+        "feature": "skills",
+        "name": "power",
+        "doc": "In a skill's resolve, the cast's power; None elsewhere.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.proposals",
         "name": "proposals",
         "doc": "For think: behavior proposals, best first.",
@@ -2328,6 +2335,54 @@
         ]
       },
       {
+        "symbol": "ctx.summon",
+        "name": "summon",
+        "doc": "Spawns count mobs of prototype label beside caster as its summons. Returns the mobs as a list.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.summon.caster",
+            "name": "caster",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor the mobs are summoned beside."
+          },
+          {
+            "symbol": "ctx.summon.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob prototype label."
+          },
+          {
+            "symbol": "ctx.summon.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "1",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of mobs to summon; at least 1."
+          },
+          {
+            "symbol": "ctx.summon.duration",
+            "name": "duration",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Pulses until the summoned affect expires and the mob fades away, or None."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.take_xp",
         "feature": "leveling",
         "name": "take_xp",
@@ -2610,6 +2665,12 @@
           "symbol": "rules_ctx.actor",
           "name": "actor",
           "doc": "Whom the call is about: the attacker, caster, mover or regenerating actor.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.affect",
+          "name": "affect",
+          "doc": "In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.",
           "since": 1
         },
         {
@@ -3174,6 +3235,24 @@
       "placeholders": ["actor", "skill"],
       "required": ["skill"],
       "default": "{actor} casts {skill} at you!",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.failed.room",
+      "feature": "skills",
+      "id": "cast.failed.room",
+      "placeholders": ["actor"],
+      "required": ["actor"],
+      "default": "{actor}'s spell fizzles.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.failed.self",
+      "feature": "skills",
+      "id": "cast.failed.self",
+      "placeholders": ["skill"],
+      "required": ["skill"],
+      "default": "You fail to cast {skill}.",
       "since": 1
     },
     {

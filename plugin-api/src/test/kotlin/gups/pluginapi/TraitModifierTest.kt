@@ -6,6 +6,7 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Band
 import gups.core.model.DamageType
+import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.model.SkillProto
 import gups.core.model.TargetKind
@@ -14,9 +15,11 @@ import gups.core.world.World
 import gups.core.world.advanceLagOf
 import gups.core.world.attach
 import gups.core.world.handle
+import gups.core.world.itemPowerChain
 import gups.core.world.regenOf
 import gups.core.world.resolveDamage
 import gups.core.world.retreatLagOf
+import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.core.world.toHitChain
 import gups.pluginapi.host.traitAdapter
@@ -309,6 +312,32 @@ class TraitModifierTest {
     assertEquals("spell", seen[0]?.kind)
     assertNull(seen[1], "a swing has no skill")
     assertContains(r.text, "trait:focus")
+  }
+
+  @Test
+  fun `an item_power trait modifier sees the item and event`() {
+    var seenItem: PluginItem? = null
+    var seenEvent: String? = null
+    val p =
+      player(
+        PluginTrait(
+          "artificer",
+          modifiers =
+            mapOf(
+              PluginModifierPoint.ITEM_POWER to
+                PluginModifier { call, base ->
+                  seenItem = call.item
+                  seenEvent = call.event
+                  (base as Long) + 20L
+                }
+            ),
+        )
+      )
+    val wand = w.spawnItem(Label("//zones/z:stick"), ItemLocation.Carried(p.id))
+    val r = w.itemPowerChain(RulesContext(w, p, item = wand, event = "use"))
+    assertEquals(120, r)
+    assertEquals("a stick", seenItem?.name)
+    assertEquals("use", seenEvent)
   }
 
   @Test

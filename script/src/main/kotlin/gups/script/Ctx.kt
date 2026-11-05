@@ -68,6 +68,7 @@ import gups.core.world.spawnItem
 import gups.core.world.stack
 import gups.core.world.startCombat
 import gups.core.world.stopCombat
+import gups.core.world.summon
 import gups.core.world.takeXp
 import gups.core.world.teleport
 import gups.core.world.transformItem
@@ -98,6 +99,7 @@ internal class CtxExtras(
   val commandArgs: String? = null,
   val commandTarget: Actor? = null,
   val targets: List<Actor>? = null,
+  val power: Int? = null,
 )
 
 /**
@@ -272,6 +274,13 @@ internal constructor(
     doc = "The skill being cast, for before_cast, on_cast_start and on_cast.",
   )
   fun skill(): Any = field { hc.skill?.let { SkillView(it, frame.world.schema) } ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "power",
+    structField = true,
+    doc = "In a skill's resolve, the cast's power; None elsewhere.",
+  )
+  fun power(): Any = field { extras.power?.let(::sInt) ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "weapon",
@@ -1248,6 +1257,42 @@ internal constructor(
           str(name, "remove_affect(name)"),
         )
       }
+    }
+
+  @StarlarkMethod(
+    name = "summon",
+    doc =
+      "Spawns count mobs of prototype label beside caster as its summons. Returns the mobs as a list.",
+    parameters =
+      [
+        Param(name = "caster", named = true, doc = "Actor the mobs are summoned beside."),
+        Param(name = "label", named = true, doc = "Mob prototype label."),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "1",
+          doc = "Number of mobs to summon; at least 1.",
+        ),
+        Param(
+          name = "duration",
+          named = true,
+          defaultValue = "None",
+          doc = "Pulses until the summoned affect expires and the mob fades away, or None.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun summon(caster: Any, label: Any, count: Any, duration: Any, thread: StarlarkThread): Any =
+    verb("summon", "$label") {
+      val c = actorArg(caster, "summon(caster)")
+      val l = label(str(label, "summon(label)"), pkgOf(thread), "summon(label)")
+      if (l !in world.protos.mobs) fail("summon(label): there is no mob $l")
+      val n = int(count, "summon(count)")
+      if (n < 1) fail("summon(count): must be at least 1")
+      val d = if (duration == Starlark.NONE) null else int(duration, "summon(duration)")
+      if (d != null && d < 1) fail("summon(duration): must be at least 1")
+      val mobs = world.summon(c, l, n, d)
+      sList(mobs.map { v(it) })
     }
 
   // ---- Items ---------------------------------------------------------------------------------
