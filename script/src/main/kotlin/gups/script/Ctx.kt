@@ -385,6 +385,20 @@ internal constructor(
   )
   fun newLevel(): Any = field { hc.newLevel?.let(::sInt) ?: Starlark.NONE }
 
+  @StarlarkMethod(
+    name = "old_encumbrance_level",
+    structField = true,
+    doc = "For on_encumbrance_change: the actor's encumbrance level before the change.",
+  )
+  fun oldEncumbranceLevel(): Any = field { hc.oldEncumbranceLevel?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "new_encumbrance_level",
+    structField = true,
+    doc = "For on_encumbrance_change: the actor's encumbrance level after the change.",
+  )
+  fun newEncumbranceLevel(): Any = field { hc.newEncumbranceLevel?.let(::sInt) ?: Starlark.NONE }
+
   // ---- Argument conversion -------------------------------------------------------------------
 
   private fun actorArg(x: Any?, what: String): Actor {

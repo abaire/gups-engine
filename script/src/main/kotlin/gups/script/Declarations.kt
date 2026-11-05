@@ -301,6 +301,22 @@ internal object HookCatalog {
         doc = "Fires once per level step when an actor's level changes up or down.",
       ),
       HookSpec(
+        hook = HookName.ON_ENCUMBRANCE_CHANGE,
+        signature = "fn(ctx)",
+        attachTo = emptyList(),
+        ctxFields =
+          listOf(
+            "self",
+            "actor",
+            "old_encumbrance_level",
+            "new_encumbrance_level",
+            "room",
+            "pulse",
+            "rng",
+          ),
+        doc = "Global hook: fires once for each change of an actor's encumbrance level.",
+      ),
+      HookSpec(
         hook = HookName.ON_COMBAT_TICK,
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
@@ -1687,8 +1703,10 @@ internal class DeclarationBuiltins(
       if (!ctx.pkg.kind.privileged)
         fail("global_hook(): only lib and rules packages may register global hooks")
       val name = d.reqStr("name", "global_hook() name")
-      if (name != "on_level_change")
-        fail("global_hook(): '$name' can't be a global hook; only on_level_change can")
+      if (name != "on_level_change" && name != "on_encumbrance_change")
+        fail(
+          "global_hook(): '$name' can't be a global hook; only on_level_change and on_encumbrance_change can"
+        )
       val fn = hookRef(d["fn"], "global_hook(fn)")
       if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })
         fail("global_hook(): '$name' is already registered")
@@ -3108,7 +3126,7 @@ internal class DeclarationBuiltins(
             DeclParam(
               "name",
               "str",
-              "The hook to run globally: 'on_level_change', the only hook that can be global.",
+              "The hook to run globally: 'on_level_change' or 'on_encumbrance_change'.",
               positional = true,
               keyword = true,
               required = true,

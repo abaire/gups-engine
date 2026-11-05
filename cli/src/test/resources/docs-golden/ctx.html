@@ -45,7 +45,9 @@
 <tr id="ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For on_perceive: the event's strength where it happened.</td></tr>
 <tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
 <tr id="ctx.losses"><td><code>losses</code></td><td>1</td><td>The vital losses behind amount, as vitals(...), for on_damage.</td></tr>
+<tr id="ctx.new_encumbrance_level"><td><code>new_encumbrance_level</code></td><td>1</td><td>For on_encumbrance_change: the actor's encumbrance level after the change.</td></tr>
 <tr id="ctx.new_level"><td><code>new_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level after the change.</td></tr>
+<tr id="ctx.old_encumbrance_level"><td><code>old_encumbrance_level</code></td><td>1</td><td>For on_encumbrance_change: the actor's encumbrance level before the change.</td></tr>
 <tr id="ctx.old_level"><td><code>old_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level before the change.</td></tr>
 <tr id="ctx.parts"><td><code>parts</code></td><td>1</td><td>The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.</td></tr>
 <tr id="ctx.power"><td><code>power</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>In a skill's resolve, the cast's power; None elsewhere.</td></tr>

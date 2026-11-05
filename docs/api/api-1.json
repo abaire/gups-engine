@@ -261,7 +261,7 @@
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "The hook to run globally: 'on_level_change', the only hook that can be global.",
+          "doc": "The hook to run globally: 'on_level_change' or 'on_encumbrance_change'.",
           "since": 1
         },
         {
@@ -2657,6 +2657,16 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_encumbrance_change",
+      "name": "on_encumbrance_change",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": [],
+      "ctx_fields": ["self", "actor", "old_encumbrance_level", "new_encumbrance_level", "room", "pulse", "rng"],
+      "doc": "Global hook: fires once for each change of an actor's encumbrance level.",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_enter",
       "name": "on_enter",
       "signature": "fn(ctx)",
@@ -2914,10 +2924,22 @@
         "since": 1
       },
       {
+        "symbol": "ctx.new_encumbrance_level",
+        "name": "new_encumbrance_level",
+        "doc": "For on_encumbrance_change: the actor's encumbrance level after the change.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.new_level",
         "feature": "leveling",
         "name": "new_level",
         "doc": "For on_level_change: the actor's level after the change.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.old_encumbrance_level",
+        "name": "old_encumbrance_level",
+        "doc": "For on_encumbrance_change: the actor's encumbrance level before the change.",
         "since": 1
       },
       {

@@ -243,6 +243,33 @@ def test_encumbrance_tiers_price_move_and_dex(t):
     p.do("advance Gus")
     t.eq(p.wait_state, 2)
 
+def test_heavy_encumbrance_sends_the_flavor_line(t):
+    # rules/combat.star registers a global_hook("on_encumbrance_change") that sends a flavor
+    # line when an actor's encumbrance level rises into the heavy tiers (3 and up), after the
+    # engine's generic "carrying more than you can manage" line. The flavor fires on the way up
+    # into 3 and 4, and only then: lightening sends the engine's line but no flavor.
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":hall")
+    t.eq(p.encumbrance_level, 0)
+    w.spawn(":heavy_pack", at = p)
+    t.eq(p.encumbrance_level, 1)
+    w.spawn(":sack", at = p)
+    t.eq(p.encumbrance_level, 2)
+    # Rises to level 2 are below the heavy tiers, so the flavor is still silent.
+    t.not_contains(p.output(), "Your pack drags at your shoulders")
+    w.spawn(":pouch", at = p)
+    t.eq(p.encumbrance_level, 3)
+    t.contains(p.output(), "Your pack drags at your shoulders")
+    w.spawn(":crate", at = p)
+    t.eq(p.encumbrance_level, 4)
+    t.contains(p.output(), "Your pack drags at your shoulders")
+    # Lightening back down to level 2 sends the engine's line, not the flavor.
+    p.do("drop crate")
+    t.eq(p.encumbrance_level, 3)
+    p.do("drop pouch")
+    t.eq(p.encumbrance_level, 2)
+    t.not_contains(p.output(), "Your pack drags at your shoulders")
+
 def test_the_guide_congratulates_on_level_up(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":hall")

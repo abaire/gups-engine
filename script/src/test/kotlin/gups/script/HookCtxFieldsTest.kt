@@ -22,7 +22,7 @@ import kotlin.test.assertTrue
  * fields it gets must be ones the catalog lists, and each listed field must turn up.
  */
 class HookCtxFieldsTest {
-  /** Records every hook call the world makes. */
+  /** Records every hook call the world makes, local and global. */
   private class Spy(private val inner: ScriptHost) : ScriptHost by inner {
     val calls = mutableListOf<Pair<HookName, HookContext>>()
 
@@ -34,6 +34,11 @@ class HookCtxFieldsTest {
     ): HookOutcome {
       calls += hook to ctx
       return inner.invokeHook(world, owner, hook, ctx)
+    }
+
+    override fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) {
+      calls += hook to ctx
+      inner.invokeGlobal(world, hook, ctx)
     }
   }
 
@@ -84,6 +89,7 @@ class HookCtxFieldsTest {
                     item("cup", ${hooks(OwnerKind.ITEM)})
                     item("key", kind = "key")
                     item("chest", container = container(state = "locked", key = ":key"), ${hooks(OwnerKind.ITEM)})
+                    item("lead", weight = 80)
                     skill("zap", range = "far", warmup = 1, effect = damage(dice = "1d2"))
                 """,
         ),
@@ -96,6 +102,8 @@ class HookCtxFieldsTest {
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:chest"), ItemLocation.Carried(p.id))
+    // A heavy load, so the encumbrance level changes and the global hook fires.
+    f.w.spawnItem(Label("//zones/z:lead"), ItemLocation.Carried(p.id))
     f.run()
     for (line in
       listOf(

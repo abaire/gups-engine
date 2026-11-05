@@ -158,6 +158,11 @@ internal fun World.updateEncumbrance(a: Actor, announceFit: Boolean = true) {
     }
   }
   if (was != a.encumbrance) refreshFit(a, announceFit)
+  if (wasLevel != level && announceFit)
+    dispatchGlobal(
+      HookName.ON_ENCUMBRANCE_CHANGE,
+      HookContext(actor = a, oldEncumbranceLevel = wasLevel, newEncumbranceLevel = level),
+    )
 }
 
 /**

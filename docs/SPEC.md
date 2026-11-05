@@ -1109,6 +1109,7 @@ other return value means "allow". The return values of `on_*` hooks are ignored.
 | `on_damage`                                                   | —         | Mob, Item (equipped)                  | `actor` (source), `target`, `amount`, `type`, `losses`, `parts`                     |
 | `on_death`                                                    | —         | Mob, Room                             | `actor` (killer), `target`                                                          |
 | `on_level_change`                                             | —         | Mob, Room, Item (carried or equipped) | `actor`, `old_level`, `new_level`                                                   |
+| `on_encumbrance_change`                                       | —         | Global only (§4.9)                    | `actor`, `old_encumbrance_level`, `new_encumbrance_level`                           |
 | `on_combat_tick`                                              | —         | Mob, Item (equipped)                  | `self`, `actor`, `targets`                                                          |
 | `on_tick`                                                     | —         | Any (world tick)                      | `self`                                                                              |
 | `on_perceive`                                                 | —         | Mob (§5.7)                            | `event`, `channel`, `intensity`, `cost`, `actor`, `text`, `source_room`, `via_exit` |
@@ -1149,6 +1150,12 @@ record, so it sees the new state; a loss of three levels fires it three times. A
 hook fires; a loss is announced once, after the last step's hook. Global `on_level_change` hooks (§4.9) fire after
 these, once per step.
 
+**`on_encumbrance_change`** is a global hook (§4.9) and can't be attached to an entity. It fires once for each change of
+an actor's encumbrance level (§4.6), up or down and to or from 0, for players and mobs, after the actor has been told,
+its stat deltas are set and the fit of its worn items is checked. It doesn't fire when a restored character's level is
+first worked out. A change of stat deltas at the same level fires nothing. `ctx.self` and `ctx.actor` are the actor;
+`ctx.old_encumbrance_level` and `ctx.new_encumbrance_level` are the levels. Its return value is ignored.
+
 **Timing:**
 
 - `on_load` fires once on every entity, ascending id, after the world is built (or restored from the database) and
@@ -1168,10 +1175,11 @@ each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`, `args`, `event`, `source_room`,
 `via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `parts`, `proposals`, `elapsed_pulses`, `from_room`,
-`to_room`, `old_level`, `new_level`, `affect` (affect hooks; for an item affect's hooks, `self` is the item), `reason`
-(affect `on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"` for `remove_affect` or
-`dispel`; an affect removed on or after its expiry pulse counts as expired), `targets` (`on_combat_tick`), `power` (in a
-skill's custom `resolve`, the cast's power percentage, or `None` elsewhere; `skills` feature), `pulse`, `rng`.
+`to_room`, `old_level`, `new_level`, `old_encumbrance_level`, `new_encumbrance_level`, `affect` (affect hooks; for an
+item affect's hooks, `self` is the item), `reason` (affect `on_expire`: `"expired"` when the affect reached its expiry
+pulse, else `"removed"` for `remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as
+expired), `targets` (`on_combat_tick`), `power` (in a skill's custom `resolve`, the cast's power percentage, or `None`
+elsewhere; `skills` feature), `pulse`, `rng`.
 
 - **Commands:** `ctx.args` is the argument text, `ctx.target` the actor in the room matching the first argument word,
   and `ctx.item` the item for item commands. `ctx.self` is the room or item, or the actor for global commands.
@@ -1805,11 +1813,12 @@ uses the default names. Every player-facing message here is the default text of 
 is how `//lib:quest.star` provides `quests`, which lists active and finished quests.
 
 **Global hooks:** Privileged packages may register a hook that fires for every actor, wherever it is:
-`global_hook("on_level_change", fn)`. `on_level_change` is the only hook that can be global. It fires once per level
-step for every actor, players and mobs, after that step's `on_level_change` hooks on mobs, rooms and items, with the
-same ctx fields; `ctx.self` is the actor. Global hooks run in package label order, then in the order they were
-registered. In a world without `leveling` the declaration loads and the hook never fires, so a library can serve worlds
-with and without it.
+`global_hook("on_level_change", fn)`. `on_level_change` and `on_encumbrance_change` are the hooks that can be global.
+`on_level_change` fires once per level step for every actor, players and mobs, after that step's `on_level_change` hooks
+on mobs, rooms and items, with the same ctx fields; `ctx.self` is the actor. `on_encumbrance_change` belongs to the
+kernel, so it fires in every world. Global hooks run in package label order, then in the order they were registered. In
+a world without `leveling` the declaration loads and the hook never fires, so a library can serve worlds with and
+without it.
 
 **Reserved exit names:** an exit's direction or custom name may not be the name or alias of an engine command the world
 has (after `rename`, §3.10), or the name of any global command. Such an exit fails its package's load with a diagnostic
@@ -4018,3 +4027,4 @@ template's `.github/workflows/gates.yml`.
 | **M31**   | Skill proficiency: `skill_check` (rolled once per cast at resolution; failure pays cost and lag, `cast.failed.*`, nothing else), cast power from `skill_power`, item power from `item_power` for `use_effect` and item procs, item instance affect procs at the affect's power × `item_power` / 100, actor-affect procs at the affect's stored power; power scales damage, heal, stun and affect/summon durations; `affect.power`, `ctx.affect` in modifiers, `ctx.power`, `ctx.summon`; three modifier points and their plugin counterparts; the template's and robot world's formulas (§3.10, §4.2, §4.3, §4.5, §4.6, §4.15, §4.18). |
 | **M32**   | Progressive encumbrance: `encumbrance_level` rules export, `ctx.limit`/`ctx.carried`/`ctx.encumbrance_level`, `actor.encumbrance_level`, `encumbrance` only above level 0, `encumbrance.up`/`down` messages, the template's and robot world's formulas (§4.6, §4.18, §5.5).                                                                                                                                                                                                                                                                                                                                                            |
 | **M33**   | Acquiring skills: `ctx.set_skill`, `ctx.remove_skill` and `ctx.skill_info` (and `w.set_skill`/`w.remove_skill`), with `learn` run on every set; `global_hook("on_level_change", fn)` for privileged packages, loaded but inert without `leveling`; the `skills` command and `Char.Skills`, with a web client panel; `//lib:trainer.star` with practice sessions per level (a balance that can go negative), `practice` and the `practice_offer` hook; the template's `//skills/arcane` and tutorial mentor (§3.10, §4.4, §4.5, §4.9, §4.10, §4.12, §4.19).                                                                             |
+| **M34**   | The `on_encumbrance_change` global hook: `global_hook("on_encumbrance_change", fn)` for privileged packages, fired once per encumbrance level change for every actor, `ctx.old_encumbrance_level` and `ctx.new_encumbrance_level`, the template's flavor example (§4.4, §4.9).                                                                                                                                                                                                                                                                                                                                                         |

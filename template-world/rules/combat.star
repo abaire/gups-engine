@@ -240,3 +240,13 @@ def on_player_death(ctx):
         "xp_loss": xp_loss,
         "level_loss": level_loss,
     }
+
+# --- The encumbrance flavor hook --------------------------------------------------------------
+
+def _encumbrance_flavor(ctx):
+    # Extra flavor for the heavy tiers; the engine already sent its generic line. Fires only on
+    # the way up into a heavy level, so lightening never repeats it.
+    if ctx.new_encumbrance_level >= 3 and ctx.new_encumbrance_level > ctx.old_encumbrance_level:
+        ctx.send(ctx.actor, "Your pack drags at your shoulders, and every step is a labor.")
+
+global_hook("on_encumbrance_change", _encumbrance_flavor)

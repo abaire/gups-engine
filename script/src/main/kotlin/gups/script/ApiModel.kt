@@ -131,7 +131,11 @@ data class DeclSpec(
             ?: fail(
               "$name(): unknown hook '$key'${SpellChecker.didYouMean(key, HookCatalog.names)}"
             )
-        if (hookOwner !in HookCatalog.attach.getValue(hook)) {
+        val attach = HookCatalog.attach.getValue(hook)
+        if (attach.isEmpty()) {
+          fail("$name(): hook '$key' is global; register it with global_hook()")
+        }
+        if (hookOwner !in attach) {
           fail("$name(): hook '$key' can't be attached to a ${hookOwner.word}")
         }
         FeatureOwnership.refused("hook:$key", "hook '$key'", features)?.let { fail("$name(): $it") }
@@ -652,7 +656,6 @@ object ScriptApi {
         problems += "HookName.${h.name} ('${h.scriptName}') is missing from model.hooks"
       } else {
         requireDoc("hook '${spec.name}'", spec.doc)
-        if (spec.attachTo.isEmpty()) problems += "hook '${spec.name}' has empty attachTo"
         if (spec.ctxFields.isEmpty()) problems += "hook '${spec.name}' has empty ctxFields"
         requireFields("hook '${spec.name}'", spec.ctxFields, model.ctx)
       }

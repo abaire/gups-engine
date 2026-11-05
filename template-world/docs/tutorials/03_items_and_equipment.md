@@ -715,6 +715,25 @@ item("oiled_harness",
 
 and a room, region, or affect modifier can do the same wherever its chain reaches `move_cost`.
 
+**Per-tier flavor.** When an actor's encumbrance level changes, the engine sends its own generic line (`encumbrance.up`,
+`encumbrance.down`, ...), and the world's `rules` package can add its own. A `global_hook("on_encumbrance_change", fn)`
+registered by the rules (or lib) package fires once for each change of any actor's level, after the engine has already
+told them. The template's `rules/combat.star` uses it to send a heavier flavor line at the top tiers, and only on the
+way up:
+
+```python
+def _encumbrance_flavor(ctx):
+    # Extra flavor for the heavy tiers; the engine already sent its generic line. Fires only on
+    # the way up into a heavy level, so lightening never repeats it.
+    if ctx.new_encumbrance_level >= 3 and ctx.new_encumbrance_level > ctx.old_encumbrance_level:
+        ctx.send(ctx.actor, "Your pack drags at your shoulders, and every step is a labor.")
+
+global_hook("on_encumbrance_change", _encumbrance_flavor)
+```
+
+`ctx.old_encumbrance_level` and `ctx.new_encumbrance_level` hold the level before and after the change, so a hook can
+act on the tier it crossed into; a change of stat deltas that leaves the level alone fires nothing.
+
 ---
 
 ## Reference Links

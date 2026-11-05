@@ -362,7 +362,11 @@ object DocsRenderer {
           .append("</code></td><td>")
           .append(if (h.vetoable) "yes" else "no")
           .append("</td><td>")
-          .append(esc(h.attachTo.joinToString(", ") { it.word }))
+          .append(
+            esc(
+              if (h.attachTo.isEmpty()) "Global only" else h.attachTo.joinToString(", ") { it.word }
+            )
+          )
           .append("</td></tr>\n")
       }
       append("</tbody>\n</table>\n")
@@ -379,7 +383,11 @@ object DocsRenderer {
           append("<p>Not vetoable.</p>\n")
         }
         append("<p>Attaches to: ")
-          .append(esc(h.attachTo.joinToString(", ") { it.word }))
+          .append(
+            esc(
+              if (h.attachTo.isEmpty()) "Global only" else h.attachTo.joinToString(", ") { it.word }
+            )
+          )
           .append("</p>\n")
         ctxFieldList("ctx fields", "ctx.html", "ctx", h.ctxFields)
         example(symbol)

@@ -99,6 +99,15 @@ enum class HookName(
    */
   ON_LEVEL_CHANGE("on_level_change"),
 
+  /**
+   * Invoked, as a global hook only, once for each change of an actor's encumbrance level.
+   *
+   * [HookContext.actor] is the actor, [HookContext.oldEncumbranceLevel] and
+   * [HookContext.newEncumbranceLevel] are the levels. It fires after the actor has been told and
+   * its fit has been rechecked.
+   */
+  ON_ENCUMBRANCE_CHANGE("on_encumbrance_change"),
+
   /** Invoked on engaged combatants during each combat round tick. */
   ON_COMBAT_TICK("on_combat_tick"),
 
@@ -202,6 +211,10 @@ data class HookContext(
   val oldLevel: Int? = null,
   /** Actor's level after a level change for `on_level_change`, or null. */
   val newLevel: Int? = null,
+  /** The actor's encumbrance level before the change, for `on_encumbrance_change`, or null. */
+  val oldEncumbranceLevel: Int? = null,
+  /** The actor's encumbrance level after the change, for `on_encumbrance_change`, or null. */
+  val newEncumbranceLevel: Int? = null,
 )
 
 /** Outcome result of a package reload operation. */

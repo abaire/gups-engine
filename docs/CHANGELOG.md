@@ -4,6 +4,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Encumbrance hook
+
+- `global_hook("on_encumbrance_change", fn)` for `lib` and `rules` packages: fires once for each change of an actor's
+  encumbrance level, with `ctx.old_encumbrance_level` and `ctx.new_encumbrance_level`.
+- The template world adds a flavor line at heavy encumbrance levels through the new hook.
+
 ### Acquiring skills
 
 - `ctx.set_skill`, `ctx.remove_skill` and `ctx.skill_info`, and the harness's `w.set_skill` and `w.remove_skill`.

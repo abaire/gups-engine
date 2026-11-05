@@ -332,7 +332,7 @@ class StarlarkHost(
     hook in scripts.hooks(owner.protoLabel)
 
   override fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) {
-    if (Feature.LEVELING !in world.features) return
+    if (hook == HookName.ON_LEVEL_CHANGE && Feature.LEVELING !in world.features) return
     val actor = ctx.actor ?: return
     for (pkg in scripts.packages.values.sortedBy { it.path }) {
       for (decl in pkg.globalHooks) {
