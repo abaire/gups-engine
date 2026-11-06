@@ -55,6 +55,23 @@ an owner's kill credit the pet? - How is the award split: equal shares, or weigh
 sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
 below the victim's level, excluded from the split?
 
+### Friendly fire and area-of-effect harm to allies
+
+**Spec:** §5.4 (Engagement: a hostile skill, including each actor in the room for a `room`-range skill, engages its
+victim), §4.3 (hostile primitives), §4.2 and §4.6 (`before_attack`, its attach points). Related design: "Player groups
+and parties", whose milestone adds groups and `allies_near` but not any rule about harming them. **Today:**
+`before_attack` attaches only to mobs and items, so `//lib` cannot veto a player's attack on a groupmate. The engine
+does not treat groupmates, pets or owners differently from anyone else when it resolves the targets of an attack or an
+area skill. **Questions:** - Should a world decide whether friendly fire is allowed, and where does it say so: a rules
+export (for example `can_harm(ctx)`), a world option, or an extension of `before_attack` to players? - What counts as an
+ally for the rule: group members, pets and their owners, mobs of the same side, or whatever the world's export returns?
+\- Should the rule cover every source of harm (auto-attacks, targeted skills, area skills, affect ticks), or can a world
+cover only some, for example allow friendly fire from area skills only? Allowing it for area skills is a possible
+deterrent against overusing them. - When harm is refused, is a direct attack vetoed with a message while an area skill
+silently skips the ally, or does the world choose? - When harm to an ally is allowed, does it engage the ally, start a
+fight with it, and record a contribution, or does it only deal the damage? - Does the rule need information from the
+caller, such as whether the harm is deliberate (a targeted attack) or incidental (an area effect)?
+
 ## Mobs and AI
 
 ### Pets and followers bonded to a player
@@ -65,6 +82,11 @@ drops it after more than 3 exits (D-121). - Scripts can't tell a mob whom to fol
 such as `ctx.bond(mob, player)`, or a `follow`/`order` command? - Who adds and clears the `bond:` active reason, and
 does it survive logout? - Does a pet fight for its owner, and does it count as an ally for `assist`? Does spawning a pet
 provide hooks that can be used for mobs/characters to react? Could we allow counterspells to prevent a spawn?
+
+**Revisit with the group and XP sharing milestone:** that milestone identifies a pet's owner for `xp_share` by reusing
+`Mob.summonedBy`, else `Mob.leader` when the leader is a player, rather than adding an explicit owner. When this entry
+is designed, decide whether bonds need a first-class `owner` field and update the `xp_share` contributor `owner` lookup
+to read it.
 
 ### Hostility and factions
 
