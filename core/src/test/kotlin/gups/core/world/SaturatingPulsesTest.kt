@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SaturatingPulsesTest {
@@ -35,6 +36,21 @@ class SaturatingPulsesTest {
   }
 
   @Test
+  fun `scaledDuration saturates only when the scaled result overflows`() {
+    val big = Long.MAX_VALUE / 120
+    assertEquals(big / 100 * 150 + big % 100 * 150 / 100, scaledDuration(big, 150))
+    assertEquals((Long.MAX_VALUE - 1) / 2, scaledDuration(Long.MAX_VALUE - 1, 50))
+    assertEquals(Long.MAX_VALUE, scaledDuration(Long.MAX_VALUE / 2, 300))
+  }
+
+  @Test
+  fun `a SEMI_PERMANENT duration is never scaled`() {
+    assertEquals(Long.MAX_VALUE, scaledDuration(Long.MAX_VALUE, 50))
+    assertEquals(Long.MAX_VALUE, scaledDuration(Long.MAX_VALUE, 1))
+    assertEquals(Long.MAX_VALUE, scaledDuration(Long.MAX_VALUE, 0))
+  }
+
+  @Test
   fun `an actor affect with a 64-bit duration never expires and displays`() {
     val f = Fixture()
     val p =
@@ -49,10 +65,11 @@ class SaturatingPulsesTest {
     assertEquals(1, p.affects.size, "still on the actor after 1000 pulses")
     @Suppress("UNCHECKED_CAST")
     val affects = f.w.gmcpPayload(p, "Char.Affects") as List<Map<String, Any?>>
-    assertEquals(Long.MAX_VALUE / 1000, affects.single()["remaining"])
+    assertTrue(affects.single().containsKey("remaining"))
+    assertNull(affects.single()["remaining"], "a never-ending affect has no remaining time")
     f.input(p, "@stat #${p.id.v}")
     val display = f.out(p)
-    assertContains(display, "forever (${Long.MAX_VALUE / 1000}s left)")
+    assertContains(display, "forever (permanent)")
     assertFalse("-" in display.substringAfter("Affects: ").substringBefore(")"), "no negative time")
   }
 }

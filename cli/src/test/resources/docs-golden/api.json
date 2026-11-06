@@ -3402,6 +3402,15 @@
       "since": 1
     },
     {
+      "symbol": "message:cast.moved",
+      "feature": "skills",
+      "id": "cast.moved",
+      "placeholders": ["skill"],
+      "required": ["skill"],
+      "default": "You are no longer where you began casting {skill}.",
+      "since": 1
+    },
+    {
       "symbol": "message:cast.not_enough",
       "feature": "skills",
       "id": "cast.not_enough",

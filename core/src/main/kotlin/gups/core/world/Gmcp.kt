@@ -158,7 +158,7 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
         mapOf(
           "name" to a.name,
           "remaining" to
-            if (a.wornFrom != null) null
+            if (a.wornFrom != null || a.expiresAt == Long.MAX_VALUE) null
             else pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0)),
           "flags" to a.flags.sorted(),
         )

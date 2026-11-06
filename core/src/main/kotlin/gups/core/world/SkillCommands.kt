@@ -41,6 +41,8 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
   val FAILED_SELF = msg("cast.failed.self", "You fail to cast {skill}.", "skill", "skill")
   val FAILED_ROOM = msg("cast.failed.room", "{actor}'s spell fizzles.", "actor", "actor")
   val INTERRUPTED = msg("cast.interrupted", "Your concentration is broken!")
+  val MOVED =
+    msg("cast.moved", "You are no longer where you began casting {skill}.", "skill", "skill")
   val STOP_CAST = msg("stop.cast", "You stop casting.")
   val SKILLS_HEADER = msg("skills.header", "You know these skills:")
   val SKILLS_LINE =
@@ -185,6 +187,9 @@ internal class CastAction(
       chooseTarget(w, actor).getOrElse {
         return it.message
       }
+    targetRoom?.let { r ->
+      if (actor.room !== r) return w.msg(SkillMsg.MOVED, "skill" to skill.name)
+    }
     targetItem?.let { i ->
       if (w.item(i.id) !== i || !w.isPresent(i, w.roomOf(actor)))
         return w.msg(SkillMsg.NOT_HERE, "target" to i.name)
@@ -285,7 +290,8 @@ internal class CastAction(
       *listOfNotNull(actor, t).toTypedArray(),
     )
     val targets =
-      if (skill.range == SkillRange.ROOM)
+      if (onRoom != null) listOf(null)
+      else if (skill.range == SkillRange.ROOM)
         actor.room.actors.filter { it !== actor && w.isSimulated(it) }
       else listOf(t)
     if (onItem != null && onItem.id in w.entities)

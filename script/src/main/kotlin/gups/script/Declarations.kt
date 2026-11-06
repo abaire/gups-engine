@@ -1494,6 +1494,9 @@ internal class DeclarationBuiltins(
         if (leaf.duration == null || leaf.applies != null) {
           fail("$what: apply_affect in a proc needs a duration and no applies")
         }
+        if (leaf.addTags.isNotEmpty()) fail("$what: apply_affect(add_tags) is only for room skills")
+        if (leaf.removeTags.isNotEmpty())
+          fail("$what: apply_affect(remove_tags) is only for room skills")
       }
     }
     if (ctx != null) {

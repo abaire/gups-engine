@@ -126,6 +126,10 @@ private fun World.resolveProcOutcome(
     diagnose("script", "proc on ${src.trace}: item skill ${skill.label} can't be a proc")
     return "nothing"
   }
+  if (skill?.target == TargetKind.ROOM) {
+    diagnose("script", "proc on ${src.trace}: room skill ${skill.label} can't be a proc")
+    return "nothing"
+  }
   if (outcome.skill == null && outcome.effect == null) return "nothing"
 
   val targetKind =

@@ -11,7 +11,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   for room affects piece by piece.
 - `apply_affect` durations are 64-bit; pulse arithmetic saturates.
 - `SEMI_PERMANENT`: a predeclared constant for a duration that effectively never ends, accepted wherever a timed affect
-  takes a duration. An affect that expires at that value reports `expires_at` and `remaining` as `None`.
+  takes a duration, and never scaled by power. An affect that expires at that value reports `expires_at` and `remaining`
+  as `None`; GMCP `Char.Affects` sends its `remaining` as null and `@stat` shows it as permanent.
 - `ctx.apply_affect` and `ctx.remove_affect` take a room as their target, applying a room affect (§3.3). A room's
   `add_tags` and `remove_tags` grant and withdraw tags for as long as the affect is live; both are an error on any other
   target. Actor-only fields (`stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `procs`, `applies`) are
@@ -21,9 +22,12 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - The `room` skill target: `skill(target="room")` enchants the caster's room and needs no keyword. Its `effect` may use
   `apply_affect`, `dispel`, `sequence` and plugin primitives; `apply_affect` attaches a room affect and `dispel` removes
   the room's matching affects (sending each one's `expire_msg`). The cast's power scales the room affect's duration,
-  which it remembers. `item(use_target="room")` is a load error.
-- Plugin effect primitives run in `room` skills. `PluginEffectCall` gains `targetRoom`, the caster's room, which is null
-  for every other target kind, where `target` and `targetItem` are also null.
+  which it remembers. A `room` skill ignores `range`: `resolve` runs once with `ctx.target` `None`. If the caster is no
+  longer in the room where the cast began when the warmup ends, the cast fails with the new `cast.moved` message. A
+  `room` skill can't be a proc's skill (a diagnostic, as for an `item` skill), and `apply_affect` in a proc's effect
+  can't take `add_tags` or `remove_tags`. `item(use_target="room")` is a load error.
+- Plugin effect primitives run in `room` skills. `PluginEffectCall` gains `targetRoom`: the caster's room on a `room`
+  skill, where `target` and `targetItem` are null, and null otherwise.
 
 ### Encumbrance hook
 

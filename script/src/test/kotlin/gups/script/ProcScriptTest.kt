@@ -145,6 +145,14 @@ class ProcScriptTest {
       "proc(effect): apply_affect in a proc needs a duration and no applies",
     )
     check(
+      "item(\"a\", wear = \"wield\", procs = [proc(on = \"hit\", effect = apply_affect(\"buff\", 10, add_tags = [\"lit\"]))])",
+      "proc(effect): apply_affect(add_tags) is only for room skills",
+    )
+    check(
+      "item(\"a\", wear = \"wield\", procs = [proc(on = \"hit\", effect = apply_affect(\"buff\", 10, remove_tags = [\"dark\"]))])",
+      "proc(effect): apply_affect(remove_tags) is only for room skills",
+    )
+    check(
       "item(\"a\", procs = [proc(on = \"hit\", effect = damage(dice = \"1d1\", type = DAMAGE.fire))])",
       "needs a wear slot",
     )

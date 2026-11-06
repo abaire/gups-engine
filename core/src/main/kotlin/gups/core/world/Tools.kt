@@ -608,6 +608,7 @@ internal fun World.statLines(e: Entity): List<String> = buildList {
           else
             e.affects.joinToString(", ") { a ->
               (if (a.wornFrom != null) "${a.name} (while worn"
+              else if (a.expiresAt == Long.MAX_VALUE) "${a.name} (permanent"
               else "${a.name} (${pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0))}s left") +
                 (if (a.flags.isEmpty()) "" else "; ${a.flags.joinToString()}") +
                 ")"

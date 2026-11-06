@@ -415,9 +415,7 @@ internal fun restoreReasons(e: Entity, active: List<String>, anchor: List<String
   e.anchorReasons.addAll(anchor)
 }
 
-/**
- * The live form of saved affects, hook references resolved; actors and rooms restore through it.
- */
+/** The live form of saved affects; actors and rooms restore through it. */
 internal fun restoreAffects(affects: List<AffectJson>): List<Affect> = affects.map(::affectFromJson)
 
 // ---- Encoding (world thread) -------------------------------------------------------------------

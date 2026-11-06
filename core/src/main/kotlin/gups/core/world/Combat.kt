@@ -588,14 +588,19 @@ private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag
 internal fun scaled(amount: Int, power: Int): Int =
   if (amount <= 0) amount else maxOf(1, (amount.toLong() * power / 100).toInt())
 
-/** Like [scaled] for a Long amount: rounded down, never below 1 when positive, saturating. */
-internal fun scaledDuration(amount: Long, power: Int): Long =
-  when {
-    amount <= 0 -> amount
-    power <= 0 -> 1L
-    amount > Long.MAX_VALUE / power -> Long.MAX_VALUE
-    else -> maxOf(1L, amount * power / 100)
-  }
+/**
+ * Like [scaled] for a Long amount: rounded down, never below 1 when positive, and stopping at
+ * Long.MAX_VALUE. A duration of Long.MAX_VALUE means "never ends" and is never scaled.
+ */
+internal fun scaledDuration(amount: Long, power: Int): Long {
+  if (amount <= 0 || amount == Long.MAX_VALUE) return amount
+  if (power <= 0) return 1L
+  // amount * power / 100, split so the intermediate product can't overflow.
+  val q = amount / 100
+  val r = amount % 100
+  if (q > (Long.MAX_VALUE - r * power / 100) / power) return Long.MAX_VALUE
+  return maxOf(1L, q * power + r * power / 100)
+}
 
 /**
  * Spawns [count] mobs of [label] beside [caster] as its summons; [duration] null means they stay.

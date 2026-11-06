@@ -6,6 +6,7 @@ import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Effect
 import gups.core.model.Prototypes
 import gups.core.model.SkillProto
+import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 import kotlin.test.Test
@@ -162,5 +163,42 @@ class RoomSkillTest(private val fs: FixtureSchema) {
     val remaining = f.w.room(T.HALL).affects
     assertEquals(1, remaining.size)
     assertEquals("later", remaining[0].name, "the older 'holy' affect was removed")
+  }
+
+  @Test
+  fun `a room skill ignores range room and resolves once with no target`() {
+    for (bystanders in listOf(0, 2)) {
+      val seen = mutableListOf<String?>()
+      val skill =
+        consecrate()
+          .copy(
+            range = SkillRange.ROOM,
+            resolve = SkillResolver { _, _, target, _, _ -> seen += target?.name },
+          )
+      val f = fixture(extra = listOf(skill))
+      val p = f.player("Ann")
+      p.skills[Label("//t:consecrate")] = 100
+      repeat(bystanders) { f.player("Bystander$it", index = 1) }
+      f.input(p, "cast consecrate")
+      f.run()
+      assertEquals(listOf<String?>(null), seen, "with $bystanders bystanders")
+      assertEquals(1, f.w.room(T.HALL).affects.size)
+      assertTrue(f.w.room(T.HALL).actors.none { it.affects.any { a -> a.name == "holy" } })
+    }
+  }
+
+  @Test
+  fun `a room skill fails if the caster left the room during warmup`() {
+    val f = fixture(extra = listOf(consecrate().copy(warmup = 4)))
+    val p = f.player("Ann")
+    p.skills[Label("//t:consecrate")] = 100
+    f.input(p, "cast consecrate")
+    f.run()
+    f.w.placeActor(p, f.w.room(T.YARD), 0)
+    f.run(6)
+    assertTrue(f.w.room(T.HALL).affects.isEmpty(), "the room the cast began in is unchanged")
+    assertTrue(f.w.room(T.YARD).affects.isEmpty(), "the room the caster is in now is unchanged")
+    assertContains(f.out(p), "You are no longer where you began casting consecrate.")
+    assertEquals(50, p.current(fs.energy), "the failed cast pays no cost")
   }
 }

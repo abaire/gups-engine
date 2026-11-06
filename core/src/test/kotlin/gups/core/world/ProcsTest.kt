@@ -18,6 +18,8 @@ import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
 import gups.core.model.RestrictionRequest
 import gups.core.model.SkillProto
+import gups.core.model.SkillRange
+import gups.core.model.TargetKind
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -351,6 +353,45 @@ class ProcsTest {
 
     // Damage chain ran for swing (skill == null) and then for skill proc (skill == spellSkill)
     assertTrue(skillsSeen.any { it?.label == spellSkill })
+  }
+
+  @Test
+  fun `a room skill can't be a proc`() {
+    val skill =
+      SkillProto(
+        label = spellSkill,
+        target = TargetKind.ROOM,
+        range = SkillRange.ROOM,
+        effect = Effect.ApplyAffect("holy", 100, addTags = setOf("consecrated")),
+      )
+    val sword =
+      ItemProto(
+        procSword,
+        "a hallowed sword",
+        listOf("sword"),
+        wear = "wield",
+        dice = Dice(1, 1, 4),
+        procs =
+          listOf(Proc(ProcTrigger.HIT, 1.0, listOf(ProcOutcome(weight = 1.0, skill = spellSkill)))),
+      )
+    val f =
+      Fixture(
+        rules = FixedRules(toHit = 100, damage = 2),
+        protos = protos(listOf(sword), listOf(skill)),
+      )
+    val p = f.player("Ann")
+    val d = f.mob(T.DUMMY)
+    f.w.spawnItem(procSword, ItemLocation.Equipped(p.id, "wield"))
+
+    f.w.startCombat(p, d)
+    f.runTo(8)
+
+    assertTrue(p.room.affects.isEmpty(), "the room gains no affect")
+    assertTrue(p.room.actors.none { a -> a.affects.any { it.name == "holy" } }, "nor does anyone")
+    assertTrue(
+      f.w.diagnostics.any { "room skill ${spellSkill} can't be a proc" in it.message },
+      "${f.w.diagnostics}",
+    )
   }
 
   @Test
