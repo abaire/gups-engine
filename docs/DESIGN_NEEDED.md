@@ -152,29 +152,6 @@ flawed product, nothing)? - How are item quality variations represented (variant
 overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
 feature?
 
-## Scripting and runtime
-
-### Transactional script execution
-
-**Spec:** §5.13, §6.2. **Today:** script verbs apply immediately when called. If a hook aborts or throws an error,
-mutations already performed stay applied; there is no rollback. **Questions:** - Should script execution support atomic
-transactions where failures rollback mutations? - What performance overhead would mutation buffering or journaling
-introduce for frequent hooks like `think` and `on_pulse`?
-
-### Supporting multiple api_versions concurrently
-
-**Spec:** §1.3, §4.17. **Today:** the engine supports exactly one `api_version` at a time. Packages declaring a
-different version fail to load. **Questions:** - Should the engine support running legacy zones alongside newer packages
-by maintaining multiple Starlark API bindings concurrently? - How would compatibility shims be structured, and what is
-the maintenance cost across multiple API versions?
-
-### Starlark-defined choices, traits, and restrictions
-
-**Spec:** §4.2, §4.19. **Today:** character creation choices, traits, and restrictions can only be declared in Kotlin by
-plugins. Starlark content can tag mobs with existing trait names, but cannot define new choices, traits, or restriction
-logic. **Questions:** - Should Starlark packages (`//rules` or `//lib`) be able to declare custom traits and creation
-choices without requiring a compiled JVM plugin? - How would Starlark-defined restrictions be evaluated during character
-creation and item equips without performance penalties?
 
 ## Plugins
 
@@ -205,51 +182,9 @@ interface, so plugins and built-in features register the same way? - That would 
 plugins' "no compatibility promises" policy. Is that acceptable, and what would a plugin-provided feature need
 (commands, actor state, phase work, rules exports, GMCP, load checks)?
 
-### Plugin marketplace, plugin hot reload, and plugin sandboxing
-
-**Spec:** §4.15. **Today:** plugins are `.jar` files in `plugins/`, pinned by SHA-256 in `MODULE.gups`, loaded at boot
-via `URLClassLoader`, and run with full JVM permissions. There is no plugin marketplace, dynamic hot reload, or security
-sandboxing. **Questions:** - Can plugins be reloaded dynamically without classloader leaks or state desynchronization? -
-What sandboxing mechanism is viable on modern JVMs to isolate untrusted plugin code? - Should a discovery registry or
-package manager exist for community plugins?
-
 ### In-game character respec and choice changes
 
 **Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no
 built-in player command, trainer, or shrine mechanic to alter character choices after creation; these belong to plugins.
 **Questions:** - Should the engine or standard sample plugins provide a canonical respec flow (e.g. shrines, guild
 trainers)? - What restrictions, cooldowns, or currency costs should govern resetting choices or traits?
-
-### Plugins calling custom hooks
-
-**Spec:** §4.4, §4.5, §4.15. **Today (after the shops milestone):** rooms, mobs and items can declare custom hooks
-(`hooks = {...}`), scripts run them with `ctx.call_hook(entity, name, **args)`, and plugins can join a hook's handler
-chain with `r.addHook(name, doc)`. Kotlin plugin code can't *call* a custom hook: a plugin-run feature (for example a
-plugin shop asking a keeper's `shop_price`) has no `PluginWorld.callHook`. **Questions:** - Should the facade gain
-`callHook(entity, name, args): Any?`, running the same chain as `ctx.call_hook`? - How are Starlark return values
-converted to plain values for Kotlin, and plugin arguments to Starlark values? - Can a plugin's `callHook` run from
-inside a GMCP input handler or a hook handler (read-only contexts), given that the Starlark hook may change the world? -
-Should a plugin be able to call a hook that its own handler is part of, and how is recursion bounded?
-
-## Operations, scalability and testing
-
-### Multi-server sharding, distributed tracing, and external log aggregation
-
-**Spec:** §1.1, §2.2, §5.1. **Today:** GUPS is designed as a single-process server with an in-memory tick and SQLite
-persistence. Distributed tracing and external log aggregation are not built-in. **Questions:** - How would zone
-handoffs, cross-zone combat, and item custody work across a sharded cluster? - Should standard OpenTelemetry
-instrumentation be integrated for distributed metrics and tracing?
-
-### Dedicated multi-client load testing
-
-**Spec:** §7.1, §7.4 (M6). **Today:** headless harness tests and fuzz walkers verify state transitions and game rules,
-but end-to-end load tests with hundreds of simulated telnet/web clients were deferred. **Questions:** - What tool or
-harness should drive synthetic player traffic to validate the 200-player and tick-latency targets of §7.1? - How should
-load testing be incorporated into CI without exceeding runner resource limits?
-
-### Automated api_version bump in release jobs
-
-**Spec:** §4.17. **Today:** bumping `api_version` is a manual pre-release step because CI validates the API baseline
-against checked-in files, and a tag-triggered release workflow cannot commit back to git. **Questions:** - Can tooling
-or a release bot detect breaking script API changes and automate the version bump, doc regeneration, and baseline update
-as part of a pre-release PR?
