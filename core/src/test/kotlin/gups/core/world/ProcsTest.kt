@@ -54,8 +54,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 5), fire))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 5), fire))),
             )
           ),
       )
@@ -85,8 +85,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.STRUCK,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 3), slash))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 3), slash))),
             )
           ),
       )
@@ -116,8 +116,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.AVOID,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 2), slash))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 2), slash))),
             )
           ),
       )
@@ -132,8 +132,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 5), fire))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 5), fire))),
             )
           ),
       )
@@ -174,8 +174,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 1), fire))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 1), fire))),
             )
           ),
       )
@@ -196,7 +196,7 @@ class ProcsTest {
   }
 
   @Test
-  fun `outcome tables chance 0 makes only one roll and produces no proc`() {
+  fun `outcome tables chance 0 makes no draw and produces no proc`() {
     val sword =
       ItemProto(
         procSword,
@@ -208,10 +208,10 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              0.0,
+              0,
               listOf(
-                ProcOutcome(0.5, effect = Effect.Damage(Dice(1, 1, 2), fire)),
-                ProcOutcome(0.5, effect = Effect.Damage(Dice(1, 1, 3), slash)),
+                ProcOutcome(50, effect = Effect.Damage(Dice(1, 1, 2), fire)),
+                ProcOutcome(50, effect = Effect.Damage(Dice(1, 1, 3), slash)),
               ),
             )
           ),
@@ -222,13 +222,13 @@ class ProcsTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     f.w.spawnItem(procSword, ItemLocation.Equipped(p.id, "wield"))
-
     f.w.startCombat(p, d)
     f.runTo(8)
 
-    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit roll") }
+    // Chance 0 skips the roll: the trace says "auto", not "roll N", and no proc happens.
+    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit") }
     assertEquals(1, procTraces.size)
-    assertTrue(procTraces[0].endsWith("→ no proc"))
+    assertTrue(procTraces[0].endsWith("auto → no proc"))
   }
 
   @Test
@@ -244,10 +244,10 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
+              100,
               listOf(
-                ProcOutcome(0.5, effect = Effect.Damage(Dice(1, 1, 2), fire)),
-                ProcOutcome(0.5, effect = Effect.Damage(Dice(1, 1, 3), slash)),
+                ProcOutcome(50, effect = Effect.Damage(Dice(1, 1, 2), fire)),
+                ProcOutcome(50, effect = Effect.Damage(Dice(1, 1, 3), slash)),
               ),
             )
           ),
@@ -262,7 +262,7 @@ class ProcsTest {
     f.w.startCombat(p, d)
     f.runTo(40) // Several rounds
 
-    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit roll") }
+    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit") }
     assertTrue(procTraces.isNotEmpty())
     assertTrue(procTraces.all { it.endsWith("→ damage") })
   }
@@ -280,8 +280,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
-              listOf(ProcOutcome(0.01, effect = Effect.Damage(Dice(1, 1, 2), fire))),
+              100,
+              listOf(ProcOutcome(1, effect = Effect.Damage(Dice(1, 1, 2), fire))),
             )
           ),
       )
@@ -295,7 +295,7 @@ class ProcsTest {
     f.w.startCombat(p, d)
     f.runTo(16)
 
-    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit roll") }
+    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit") }
     assertTrue(procTraces.any { it.endsWith("→ nothing") })
   }
 
@@ -316,7 +316,7 @@ class ProcsTest {
         wear = "wield",
         dice = Dice(1, 1, 4),
         procs =
-          listOf(Proc(ProcTrigger.HIT, 1.0, listOf(ProcOutcome(weight = 1.0, skill = spellSkill)))),
+          listOf(Proc(ProcTrigger.HIT, 100, listOf(ProcOutcome(weight = 100, skill = spellSkill)))),
       )
     val host = RecordingHost()
     val skillsSeen = mutableListOf<SkillProto?>()
@@ -372,7 +372,7 @@ class ProcsTest {
         wear = "wield",
         dice = Dice(1, 1, 4),
         procs =
-          listOf(Proc(ProcTrigger.HIT, 1.0, listOf(ProcOutcome(weight = 1.0, skill = spellSkill)))),
+          listOf(Proc(ProcTrigger.HIT, 100, listOf(ProcOutcome(weight = 100, skill = spellSkill)))),
       )
     val f =
       Fixture(
@@ -405,7 +405,7 @@ class ProcsTest {
         wear = "wield",
         dice = Dice(1, 1, 4),
         procs =
-          listOf(Proc(ProcTrigger.HIT, 1.0, listOf(ProcOutcome(weight = 1.0, skill = spellSkill)))),
+          listOf(Proc(ProcTrigger.HIT, 100, listOf(ProcOutcome(weight = 100, skill = spellSkill)))),
       )
     val host = RecordingHost()
     host.modifiers["deny_cast"] = { _, _, _ -> "no casting allowed" }
@@ -431,7 +431,7 @@ class ProcsTest {
     f.runTo(8)
 
     assertFalse("Power surges" in f.out(p))
-    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit roll") }
+    val procTraces = traceLines.filter { it.startsWith("proc item:proc_sword hit") }
     assertTrue(procTraces.any { it.endsWith("→ cast_allowed denied") })
   }
 
@@ -446,7 +446,7 @@ class ProcsTest {
         wear = "wield",
         dice = Dice(1, 1, 4),
         procs =
-          listOf(Proc(ProcTrigger.HIT, 1.0, listOf(ProcOutcome(weight = 1.0, skill = spellSkill)))),
+          listOf(Proc(ProcTrigger.HIT, 100, listOf(ProcOutcome(weight = 100, skill = spellSkill)))),
       )
     val f =
       Fixture(
@@ -479,7 +479,7 @@ class ProcsTest {
     assertEquals(hpBefore - 2, d.current("hp"))
     assertTrue(
       traceLines.any {
-        it.startsWith("proc item:proc_sword hit roll") && it.endsWith("→ cast_allowed denied")
+        it.startsWith("proc item:proc_sword hit") && it.endsWith("→ cast_allowed denied")
       }
     )
   }
@@ -497,10 +497,10 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.HIT,
-              1.0,
+              100,
               listOf(
                 ProcOutcome(
-                  weight = 1.0,
+                  weight = 100,
                   effect = Effect.Damage(Dice(1, 1, 5), fire),
                   target = ProcTarget.SELF,
                   message = "The dagger burns your hand!",
@@ -533,8 +533,8 @@ class ProcsTest {
     val flameProc =
       Proc(
         ProcTrigger.HIT,
-        1.0,
-        listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 3), fire))),
+        100,
+        listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 3), fire))),
       )
     f.w.applyAffect(p, "flame_blade", 100, procs = listOf(flameProc))
 
@@ -557,8 +557,8 @@ class ProcsTest {
           listOf(
             Proc(
               ProcTrigger.STRUCK,
-              1.0,
-              listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 1, 500), slash))),
+              100,
+              listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 500), slash))),
             )
           ),
       )

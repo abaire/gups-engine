@@ -31,7 +31,7 @@ def test_sequence_stops_at_running_and_claims_the_turn(t):
     w.run(pulses = 2)
     t.eq(_bb(m).get("log"), ["succeed_1", "running_2", "succeed_1", "running_2"])
 
-    # "running" makes ai.run return "idle", so wander(chance = 1.0) never moves it.
+    # "running" makes ai.run return "idle", so wander(chance = 100) never moves it.
     t.eq(m.room.label, "//zones/tutorial:gate")
 
 def test_inverter_turns_failure_into_success(t):

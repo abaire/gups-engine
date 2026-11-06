@@ -4,6 +4,59 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Percent chances and noticing
+
+- `wander(chance)` is a whole percent from 0 to 100, not a 0..1 float; a float is a load error with a hint.
+
+```python
+# before
+wander(radius=4, chance=0.1)
+
+# after
+wander(radius=4, chance=10)
+```
+
+- `loot(chance)` is a whole percent from 0 to 100, not a 0..1 float; a float is a load error with a hint.
+
+```python
+# before
+mob("rat", loot=[loot(":tail", chance=0.25)])
+
+# after
+mob("rat", loot=[loot(":tail", chance=25)])
+```
+
+- `proc(chance)` and `outcome(weight)` are whole percents from 0 to 100, not 0..1 floats; a float is a load error with a
+  hint. An outcome table's weights are percents whose total is at most 100, and the rest is "nothing happens".
+
+```python
+# before
+item("ember_dagger", procs=[proc(on="hit", chance=0.25, effect=damage(...))])
+item("wand", procs=[proc(on="hit", outcomes=[outcome(0.4, effect=damage(...))])])
+
+# after
+item("ember_dagger", procs=[proc(on="hit", chance=25, effect=damage(...))])
+item("wand", procs=[proc(on="hit", outcomes=[outcome(40, effect=damage(...))])])
+```
+
+- The harness's `w.force_rng(fractions=...)` is removed; force ints. Every chance now shares one int queue, so a forced
+  int lands on the next roll of any kind (a proc's `chance`, a loot or wander roll, `rng.chance`, and so on).
+- `aggressive` gains `chance`, `via` and `unless_level_below`: it looks for a target with probability `chance` percent
+  per think, notices a candidate only through the channels in `via` (a built-in or declared channel), and spares actors
+  below `unless_level_below`. The new `notice` event is asked through `rules.can_perceive`; `aggressive` now asks
+  `can_perceive` as the mob, so a mob with `senses = {"sight": 0}` no longer attacks unless `via` names a channel it
+  senses.
+
+```python
+# before
+aggressive(toward="players", unless_level_above=5)
+
+# after
+aggressive(toward="players", unless_level_above=5, unless_level_below=1, chance=50, via=["sight", "sound"])
+```
+
+- The template world's `can_perceive` hides actors that carry the `hidden` flag from a `notice` on `sight`.
+
 ### Room enchantments
 
 - Rooms can carry timed affects (tags, modifiers, hooks).

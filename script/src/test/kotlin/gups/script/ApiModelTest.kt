@@ -242,7 +242,7 @@ class ApiModelTest {
         Case(
           zone,
           {
-            "item(\"i\", wear = \"wield\", procs = [proc(\"hit\", outcomes = [outcome(1.0${it.after()})])])"
+            "item(\"i\", wear = \"wield\", procs = [proc(\"hit\", outcomes = [outcome(${it ?: ""})])])"
           },
         ) {
           it.pkg(zone).itemList.single().procs.single().outcomes.single()
@@ -253,7 +253,7 @@ class ApiModelTest {
           {
             val payload =
               if (it != null && it.startsWith("effect =")) {
-                "outcomes = [outcome(1.0)], $it"
+                "outcomes = [outcome(100)], $it"
               } else {
                 "effect = damage(dice = \"1d4\", type = DAMAGE.fire)${it.after()}"
               }

@@ -252,7 +252,7 @@ class LinterTest {
           "rat",
           name = "Rat",
           behaviors = [
-              wander(radius = 3, chance = 0.2),
+              wander(radius = 3, chance = 20),
               aggressive(toward = "players", unless_level_above = 5),
               assist(allies = ":rat"),
               flee(below = vitals(hp = 20)),
@@ -285,13 +285,69 @@ class LinterTest {
         mapOf(
           "zones/z/package.star" to zonePkg(),
           "zones/z/content.star" to
-            content.replace("wander(radius = 3, chance = 0.2)", "wander(radius = 4, chance = 0.2)"),
+            content.replace("wander(radius = 3, chance = 20)", "wander(radius = 4, chance = 20)"),
         )
       )
     val changedReport = Linter(WorldDir(changedRoot), basePrototypes = baseProtos).lint()
     assertFalse(changedReport.ok)
     assertTrue(
       changedReport.errors.any {
+        "mob prototype declaration changed since base without a version bump" in it.message
+      }
+    )
+  }
+
+  @Test
+  fun `changing an aggressive chance or via requires a version bump`() {
+    fun content(chance: Int, via: String) =
+      """
+      mob(
+          "rat",
+          name = "Rat",
+          behaviors = [aggressive(toward = "players", chance = $chance, via = $via)],
+          version = 1,
+      )
+      """
+        .trimIndent()
+
+    val root =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to content(100, "\"sight\""),
+        )
+      )
+    val baseProtos =
+      ScriptLoader(WorldDir(root), ScriptLimits.HARNESS)
+        .load(WorldDir(root).packages())
+        .prototypes()
+
+    val chanceChanged =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to content(50, "\"sight\""),
+        )
+      )
+    val chanceReport = Linter(WorldDir(chanceChanged), basePrototypes = baseProtos).lint()
+    assertFalse(chanceReport.ok)
+    assertTrue(
+      chanceReport.errors.any {
+        "mob prototype declaration changed since base without a version bump" in it.message
+      }
+    )
+
+    val viaChanged =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to content(100, "[\"sight\", \"sound\"]"),
+        )
+      )
+    val viaReport = Linter(WorldDir(viaChanged), basePrototypes = baseProtos).lint()
+    assertFalse(viaReport.ok)
+    assertTrue(
+      viaReport.errors.any {
         "mob prototype declaration changed since base without a version bump" in it.message
       }
     )

@@ -202,7 +202,7 @@ item("ember_dagger",
     dice = "1d4",
     damage_type = "pierce",
     weight = 2,
-    procs = [proc(on = "hit", chance = 0.25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
+    procs = [proc(on = "hit", chance = 25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
 )
 
 # Thorns answer every blow, but their damage can't set off further procs.
@@ -231,15 +231,15 @@ item("cracked_wand",
     damage_type = "bludgeon",
     weight = 1,
     procs = [proc(on = "hit", outcomes = [
-        outcome(0.05, effect = damage(dice = "3d6", type = DAMAGE.fire),
+        outcome(5, effect = damage(dice = "3d6", type = DAMAGE.fire),
                 message = "A ball of fire bursts from the wand!"),
-        outcome(0.40, effect = apply_affect(name = "frightened", duration = 12,
+        outcome(40, effect = apply_affect(name = "frightened", duration = 12,
                                             stat_deltas = stats(dex = -2),
                                             expire_msg = "You steady your nerves."),
                 message = "The wand flashes a terrifying violet!"),
-        outcome(0.44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
+        outcome(44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
         # The remaining 10% does nothing.
-        outcome(0.01, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
+        outcome(1, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
                 message = "The wand cracks open and explodes in your hand!"),
     ])],
 )

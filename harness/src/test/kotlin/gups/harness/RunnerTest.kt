@@ -243,16 +243,11 @@ class RunnerTest {
                 w.force_rng(ints = [9])
                 p.do("roll")
                 t.contains(w.diagnostics()[0].message, "the forced value 9 is out of range")
-
-            def test_bad_fraction(t):
-                t.world().force_rng(fractions = [1.0])
           """,
       )
     val r = run(files, "//zones/a").results
     assertEquals(Status.PASS, r[0].status, r[0].render())
     assertEquals(Status.PASS, r[1].status, r[1].render())
-    assertEquals(Status.ERROR, r[2].status)
-    assertContains(r[2].message!!, "must be in [0, 1)")
   }
 
   @Test

@@ -305,7 +305,7 @@ private fun World.runDeath(victim: Actor) {
         moveItem(item, into)
       }
       if (!summoned)
-        for (rule in victim.proto.loot) if (rng.fraction() < rule.chance)
+        for (rule in victim.proto.loot) if (rng.passes(rule.chance))
           spawnItem(rule.label, into, rule.count, debug = victim.debug)
       removeActor(victim)
     }

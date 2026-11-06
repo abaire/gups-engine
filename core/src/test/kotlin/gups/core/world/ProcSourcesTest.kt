@@ -32,20 +32,20 @@ class ProcSourcesTest {
 
   @Test
   fun `proc validation rejects invalid arguments`() {
-    val outcome = ProcOutcome(weight = 0.5)
+    val outcome = ProcOutcome(weight = 50)
 
-    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, -0.1, listOf(outcome)) }
-    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, 1.1, listOf(outcome)) }
-    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, 0.5, emptyList()) }
+    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, -1, listOf(outcome)) }
+    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, 101, listOf(outcome)) }
+    assertFailsWith<IllegalArgumentException> { Proc(ProcTrigger.HIT, 50, emptyList()) }
     assertFailsWith<IllegalArgumentException> {
-      Proc(ProcTrigger.HIT, 0.5, listOf(ProcOutcome(weight = 0.6), ProcOutcome(weight = 0.5)))
+      Proc(ProcTrigger.HIT, 50, listOf(ProcOutcome(weight = 60), ProcOutcome(weight = 50)))
     }
 
-    assertFailsWith<IllegalArgumentException> { ProcOutcome(weight = -0.1) }
-    assertFailsWith<IllegalArgumentException> { ProcOutcome(weight = 1.1) }
+    assertFailsWith<IllegalArgumentException> { ProcOutcome(weight = -1) }
+    assertFailsWith<IllegalArgumentException> { ProcOutcome(weight = 101) }
     assertFailsWith<IllegalArgumentException> {
       ProcOutcome(
-        weight = 0.5,
+        weight = 50,
         skill = Label("//s:magic"),
         effect = Effect.Damage(Dice(1, 6), DamageType("slash")),
       )
@@ -55,11 +55,11 @@ class ProcSourcesTest {
   @Test
   fun `worn item procs, prototype item affects, and carried affects appear in procSteps`() {
     val pWorn =
-      Proc(ProcTrigger.HIT, 0.5, listOf(ProcOutcome(weight = 1.0, target = ProcTarget.ENEMY)))
+      Proc(ProcTrigger.HIT, 50, listOf(ProcOutcome(weight = 100, target = ProcTarget.ENEMY)))
     val pItemAff =
-      Proc(ProcTrigger.STRUCK, 0.3, listOf(ProcOutcome(weight = 1.0, target = ProcTarget.SELF)))
+      Proc(ProcTrigger.STRUCK, 30, listOf(ProcOutcome(weight = 100, target = ProcTarget.SELF)))
     val pCarried =
-      Proc(ProcTrigger.AVOID, 0.2, listOf(ProcOutcome(weight = 1.0, target = ProcTarget.ENEMY)))
+      Proc(ProcTrigger.AVOID, 20, listOf(ProcOutcome(weight = 100, target = ProcTarget.ENEMY)))
 
     val swordProto =
       ItemProto(
@@ -100,7 +100,7 @@ class ProcSourcesTest {
 
   @Test
   fun `an item in an inactive slot contributes no worn procs`() {
-    val pWorn = Proc(ProcTrigger.HIT, 0.5, listOf(ProcOutcome(weight = 1.0)))
+    val pWorn = Proc(ProcTrigger.HIT, 50, listOf(ProcOutcome(weight = 100)))
     val swordProto =
       ItemProto(testSword, "a sword", listOf("sword"), wear = "wield", procs = listOf(pWorn))
     val f = fixture(extra = listOf(swordProto))
@@ -119,13 +119,13 @@ class ProcSourcesTest {
   fun `applyAffect and applyEffect pass procs through to Affect`() {
     val f = fixture()
     val p = f.player("Ann")
-    val proc1 = Proc(ProcTrigger.HIT, 0.4, listOf(ProcOutcome(weight = 1.0)))
+    val proc1 = Proc(ProcTrigger.HIT, 40, listOf(ProcOutcome(weight = 100)))
 
     val aff1 = f.w.applyAffect(p, "buff", duration = 10, procs = listOf(proc1))
     assertEquals(listOf(proc1), aff1?.procs)
     assertEquals(listOf(proc1), p.affects.first { it.name == "buff" }.procs)
 
-    val proc2 = Proc(ProcTrigger.STRUCK, 0.8, listOf(ProcOutcome(weight = 1.0)))
+    val proc2 = Proc(ProcTrigger.STRUCK, 80, listOf(ProcOutcome(weight = 100)))
     val applyEffect = Effect.ApplyAffect(name = "shield", duration = 5, procs = listOf(proc2))
     f.w.applyEffect(applyEffect, p, p)
     assertEquals(listOf(proc2), p.affects.first { it.name == "shield" }.procs)
@@ -138,7 +138,7 @@ class ProcSourcesTest {
     val p = f.player("Ann")
     val stack = f.w.spawnItem(potion, ItemLocation.Carried(p.id), count = 5)
 
-    val proc = Proc(ProcTrigger.AVOID, 0.5, listOf(ProcOutcome(weight = 1.0)))
+    val proc = Proc(ProcTrigger.AVOID, 50, listOf(ProcOutcome(weight = 100)))
     f.w.applyItemAffect(stack, "enchanted", duration = null, procs = listOf(proc))
 
     val part = f.w.moveItem(stack, ItemLocation.Carried(p.id), count = 1)

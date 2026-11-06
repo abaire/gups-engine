@@ -11,7 +11,9 @@ import gups.core.model.Effect
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.LootRule
 import gups.core.model.Mob
+import gups.core.model.MobProto
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
@@ -197,6 +199,36 @@ class CombatTest(private val fs: FixtureSchema) {
     f.input(p, "get key from corpse")
     f.run()
     assertEquals(listOf("a brass key"), p.inventory.map { it.name })
+  }
+
+  @Test
+  fun `loot chance is a percent, drawn once, 100 and 0 draw nothing`() {
+    val rat =
+      MobProto(
+        Label("//t:rat"),
+        "a rat",
+        listOf("rat"),
+        vitals = mapOf(fs.health to 10),
+        loot = listOf(LootRule(T.KEY, chance = 50)),
+      )
+    val protos = T.protos(extraMobs = listOf(rat))
+
+    // A forced int of 50 lands the roll (50 <= 50); a forced int of 51 misses.
+    val hit = Fixture(rules = FixedRules(damage = 20), protos = protos)
+    val ratIn = hit.mob(rat.label)
+    hit.w.rng.force(ints = listOf(50))
+    hit.hurt(ratIn, 999)
+    assertFalse(ratIn.inWorld)
+    val corpse = hit.w.room(T.HALL).items.single { it.name == "the corpse of a rat" }
+    assertEquals(listOf("a brass key"), corpse.contents.map { it.name })
+
+    val miss = Fixture(rules = FixedRules(damage = 20), protos = protos)
+    val ratOut = miss.mob(rat.label)
+    miss.w.rng.force(ints = listOf(51))
+    miss.hurt(ratOut, 999)
+    val corpse2 = miss.w.room(T.HALL).items.single { it.name == "the corpse of a rat" }
+    assertTrue(corpse2.contents.isEmpty(), "51 misses a 50 percent roll")
+    assertEquals(0, miss.w.rng.forcedRemaining)
   }
 
   @Test

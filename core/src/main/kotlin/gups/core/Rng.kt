@@ -9,32 +9,26 @@ import kotlin.random.Random
  * and sequence of method invocations produce identical results on every platform, ensuring
  * reproducible simulation runs and test replays.
  *
- * Tests can queue forced results with [force]: each later [int] (and so [chance]) or [fraction]
- * call takes the next queued value of its kind before falling back to the seeded stream. A forced
- * draw doesn't advance the seeded stream.
+ * Tests can queue forced results with [force]: each later [int] (and so [chance] and [passes]) call
+ * takes the next queued value before falling back to the seeded stream. A forced draw doesn't
+ * advance the seeded stream.
  */
 class Rng(seed: Long) {
   private val random = Random(seed)
   private val forcedInts = ArrayDeque<Int>()
-  private val forcedFractions = ArrayDeque<Double>()
 
   /** How many forced values are still queued. */
   val forcedRemaining: Int
-    get() = forcedInts.size + forcedFractions.size
+    get() = forcedInts.size
 
-  /** Queues [ints] and [fractions] after any values still queued. */
-  fun force(ints: List<Int> = emptyList(), fractions: List<Double> = emptyList()) {
-    for (f in fractions) {
-      require(f >= 0.0 && f < 1.0) { "rng: a forced fraction must be in [0, 1), got $f" }
-    }
+  /** Queues [ints] after any values still queued. */
+  fun force(ints: List<Int> = emptyList()) {
     forcedInts.addAll(ints)
-    forcedFractions.addAll(fractions)
   }
 
   /** Drops every forced value still queued. */
   fun clearForced() {
     forcedInts.clear()
-    forcedFractions.clear()
   }
 
   /** Returns a uniformly distributed pseudo-random integer in `[lo, hi]`, inclusive. */
@@ -51,9 +45,10 @@ class Rng(seed: Long) {
   fun chance(pct: Int): Boolean = int(1, 100) <= pct
 
   /**
-   * Returns a uniformly distributed pseudo-random double in the half-open interval `[0.0, 1.0)`.
+   * True with probability [pct] percent. 100 or more passes and 0 or less fails, each without a
+   * roll.
    */
-  fun fraction(): Double = forcedFractions.removeFirstOrNull() ?: random.nextDouble()
+  fun passes(pct: Int): Boolean = pct >= 100 || (pct > 0 && chance(pct))
 
   /** Returns a uniformly chosen random element from non-empty [items]. */
   fun <T> choice(items: List<T>): T {

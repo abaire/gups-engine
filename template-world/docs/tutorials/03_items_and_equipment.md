@@ -352,7 +352,7 @@ item("ember_dagger",
     wield = "wield",
     dice = "1d4",
     damage_type = "pierce",
-    procs = [proc(on = "hit", chance = 0.25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
+    procs = [proc(on = "hit", chance = 25, effect = damage(dice = "1d4", type = DAMAGE.fire))],
 )
 ```
 
@@ -384,9 +384,9 @@ item("bramble_vest",
 
 #### Outcome tables
 
-`chance` decides whether a proc triggers at all. An `outcomes` list of `outcome(weight, ...)` entries then picks at most
-one result with a single roll. The weights are probabilities that add up to at most 1, and whatever is left over means
-nothing happens:
+`chance` decides whether a proc triggers at all, and is a percent from 0 to 100. An `outcomes` list of `outcome(weight,
+...)` entries then picks at most one result with a single roll. The weights are percents that add up to at most 100, and
+whatever is left over means nothing happens:
 
 ```python
 item("cracked_wand",
@@ -394,14 +394,14 @@ item("cracked_wand",
     wield = "wield",
     dice = "1d2",
     procs = [proc(on = "hit", outcomes = [
-        outcome(0.05, effect = damage(dice = "3d6", type = DAMAGE.fire),
+        outcome(5, effect = damage(dice = "3d6", type = DAMAGE.fire),
                 message = "A ball of fire bursts from the wand!"),
-        outcome(0.40, effect = apply_affect(name = "frightened", duration = 12,
+        outcome(40, effect = apply_affect(name = "frightened", duration = 12,
                                             stat_deltas = stats(dex = -2)),
                 message = "The wand flashes a terrifying violet!"),
-        outcome(0.44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
+        outcome(44, effect = stun(2), message = "A dazzling arc of light leaps from the wand!"),
         # The remaining 10% does nothing.
-        outcome(0.01, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
+        outcome(1, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
                 message = "The wand cracks open and explodes in your hand!"),
     ])],
 )
@@ -413,8 +413,8 @@ item("cracked_wand",
   `cast_allowed`: a bearer who may not cast doesn't get skill procs either.
 * Procs fire only from auto-attack swings, never from spells, `use_effect` or other procs' damage, so they can't chain.
 * A proc's `apply_affect` needs a duration, and procs can't `summon`.
-* `@trace rules` (or `w.trace()` in a test) prints one `proc ...` line per roll. In tests, `w.force_rng(fractions =
-  [0.0])` makes the next proc trigger instead of searching for a lucky seed.
+* `@trace rules` (or `w.trace()` in a test) prints one `proc ...` line per roll. In tests, `w.force_rng(ints = [1])`
+  queues a roll that lands a proc instead of searching for a lucky seed.
 
 ## 4. Consumables, Charges, and Declarative Use
 

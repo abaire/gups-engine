@@ -198,6 +198,11 @@ class FeatureScriptTest {
       "mob(\"m\", behaviors = [aggressive(unless_level_above = 3)])",
       "aggressive(unless_level_above)",
     )
+    refused(
+      Feature.LEVELING,
+      "mob(\"m\", behaviors = [aggressive(unless_level_below = 3)])",
+      "aggressive(unless_level_below)",
+    )
   }
 
   @Test

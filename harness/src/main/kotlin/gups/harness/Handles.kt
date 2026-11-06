@@ -58,7 +58,6 @@ import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Sequence
 import net.starlark.java.eval.Starlark
-import net.starlark.java.eval.StarlarkFloat
 import net.starlark.java.eval.StarlarkInt
 import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
@@ -337,7 +336,7 @@ internal constructor(
   @StarlarkMethod(
     name = "force_rng",
     doc =
-      "Queues the results of later rolls: each rng.int (and rng.chance) takes the next of ints, and each engine fraction roll the next of fractions, before the seeded stream resumes. A forced int outside the roll's range is an error.",
+      "Queues the results of later rolls: each rng.int (and so rng.chance, and every engine chance such as a proc's, loot's or wander's) takes the next queued int, before the seeded stream resumes. A forced int outside the roll's range is an error.",
     parameters =
       [
         Param(
@@ -345,32 +344,15 @@ internal constructor(
           named = true,
           defaultValue = "[]",
           doc = "Results for later integer rolls, in order.",
-        ),
-        Param(
-          name = "fractions",
-          named = true,
-          defaultValue = "[]",
-          doc = "Results for later fraction rolls, in order, each from 0 up to but not including 1.",
-        ),
+        )
       ],
   )
-  fun forceRng(ints: Any, fractions: Any): Any {
+  fun forceRng(ints: Any): Any {
     val i =
       (ints as? Sequence<*> ?: evalFail("force_rng(ints): expected a list")).map {
         int(it, "force_rng(ints)")
       }
-    val f =
-      (fractions as? Sequence<*> ?: evalFail("force_rng(fractions): expected a list")).map {
-        when (it) {
-          is StarlarkFloat -> it.toDouble()
-          is StarlarkInt -> it.toIntUnchecked().toDouble()
-          else -> evalFail("force_rng(fractions): expected a number, got ${typeName(it)}")
-        }
-      }
-    for (x in f) if (x < 0.0 || x >= 1.0) {
-      evalFail("force_rng(fractions): each value must be in [0, 1), got $x")
-    }
-    world.rng.force(ints = i, fractions = f)
+    world.rng.force(ints = i)
     return Starlark.NONE
   }
 

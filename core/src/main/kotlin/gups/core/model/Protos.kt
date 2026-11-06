@@ -170,11 +170,15 @@ data class RegionProto(
 data class LootRule(
   /** Prototype label of the item to drop. */
   val label: Label,
-  /** Probability of dropping this item between 0.0 and 1.0, defaulting to 1.0 (100%). */
-  val chance: Double = 1.0,
+  /** Percent chance of dropping this item, from 0 to 100, defaulting to 100 (always drops). */
+  val chance: Int = 100,
   /** Quantity of the item to drop, defaulting to 1. */
   val count: Int = 1,
-)
+) {
+  init {
+    require(chance in 0..100) { "loot chance must be between 0 and 100" }
+  }
+}
 
 /** Immutable prototype defining the static properties and capabilities of a mob. */
 data class MobProto(

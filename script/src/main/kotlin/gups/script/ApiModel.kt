@@ -197,7 +197,7 @@ internal constructor(
 
   fun bool(param: String): Boolean? = get(param)?.let { gups.script.bool(it, what(param)) }
 
-  fun number(param: String): Double? = get(param)?.let { gups.script.number(it, what(param)) }
+  fun percent(param: String): Int? = get(param)?.let { gups.script.percent(it, what(param)) }
 
   fun choice(param: String): String? {
     val p = spec.param(param)

@@ -847,7 +847,7 @@ internal class DeclarationBuiltins(
 
   @StarlarkMethod(
     name = "loot",
-    doc = "A loot roll, for mob(loot=[...]). chance is a probability between 0 and 1.",
+    doc = "A loot roll, for mob(loot=[...]). chance is a percent from 0 to 100.",
     extraPositionals = Param(name = "args"),
     extraKeywords = Param(name = "kwargs"),
     useStarlarkThread = true,
@@ -858,10 +858,9 @@ internal class DeclarationBuiltins(
       val rule =
         LootRule(
           label = label(d.reqStr("label", "loot() label"), ctx.pkg.path, "loot() label"),
-          chance = d.number("chance") ?: 1.0,
+          chance = d.percent("chance") ?: 100,
           count = d.int("count") ?: 1,
         )
-      if (rule.chance !in 0.0..1.0) fail("loot(chance): must be between 0 and 1")
       if (rule.count < 1) fail("loot(count): must be at least 1")
       LootDecl(rule)
     }
@@ -943,8 +942,7 @@ internal class DeclarationBuiltins(
     val loadCtx = thread.getThreadLocal(LoadCtx::class.java)
     val pkg = loadCtx?.pkg?.path ?: callerFile(thread)?.pkg
     return OUTCOME_SPEC.bind(args, kwargs, features = features) { d ->
-      val weight = d.number("weight") ?: 1.0
-      if (weight !in 0.0..1.0) fail("outcome(weight): must be between 0 and 1")
+      val weight = d.percent("weight") ?: 100
       val skillRaw = d["skill"]
       val effectRaw = d["effect"]
       if (skillRaw != null && !isNone(skillRaw) && effectRaw != null && !isNone(effectRaw)) {
@@ -997,8 +995,7 @@ internal class DeclarationBuiltins(
     return PROC_SPEC.bind(args, kwargs, features = features) { d ->
       val onStr = choice(d["on"], "proc(on)", listOf("hit", "struck", "avoid"))
       val trigger = ProcTrigger.valueOf(onStr.uppercase())
-      val chance = d.number("chance") ?: 1.0
-      if (chance !in 0.0..1.0) fail("proc(chance): must be between 0 and 1")
+      val chance = d.percent("chance") ?: 100
       val outcomesRaw = d["outcomes"]
       val skillRaw = d["skill"]
       val effectRaw = d["effect"]
@@ -1018,11 +1015,11 @@ internal class DeclarationBuiltins(
             (elem as? OutcomeDecl)?.outcome
               ?: fail("proc(outcomes): element ${i + 1} must be an outcome(...) value")
           }
-        var total = 0.0
+        var total = 0
         for (o in parsedOutcomes) {
           total += o.weight
         }
-        if (total > 1.0000001) fail("proc(outcomes): weights add up to more than 1")
+        if (total > 100) fail("proc(outcomes): weights add up to more than 100")
         outcomes = parsedOutcomes
       } else {
         if (isNone(skillRaw) && isNone(effectRaw)) {
@@ -1055,7 +1052,7 @@ internal class DeclarationBuiltins(
         outcomes =
           listOf(
             ProcOutcome(
-              weight = 1.0,
+              weight = 100,
               skill = skill,
               effect = effect,
               target = target,
@@ -1529,7 +1526,7 @@ internal class DeclarationBuiltins(
   @StarlarkMethod(
     name = "wander",
     doc =
-      "Behavior: with probability chance per think, steps through a random open exit within radius exits of home.",
+      "Behavior: with a percent chance per think, steps through a random open exit within radius exits of home.",
     parameters =
       [
         Param(
@@ -1541,8 +1538,8 @@ internal class DeclarationBuiltins(
         Param(
           name = "chance",
           named = true,
-          defaultValue = "0.1",
-          doc = "Probability of taking a step on each think, between 0 and 1.",
+          defaultValue = "10",
+          doc = "Percent chance of taking a step on each think, 0 to 100.",
         ),
       ],
     useStarlarkThread = true,
@@ -1551,17 +1548,13 @@ internal class DeclarationBuiltins(
     contentCtx(thread, "wander")
     val r =
       int(radius, "wander(radius)").also { if (it < 0) fail("wander(radius): can't be negative") }
-    val c =
-      number(chance, "wander(chance)").also {
-        if (it !in 0.0..1.0) fail("wander(chance): must be between 0 and 1")
-      }
-    return BehaviorDecl(Wander(r, c))
+    return BehaviorDecl(Wander(r, percent(chance, "wander(chance)")))
   }
 
   @StarlarkMethod(
     name = "aggressive",
     doc =
-      "Behavior: attacks matching actors on sight. toward is 'players', 'mobs', 'all' or label patterns.",
+      "Behavior: attacks matching actors it notices. toward is 'players', 'mobs', 'all' or label patterns.",
     parameters =
       [
         Param(
@@ -1576,18 +1569,60 @@ internal class DeclarationBuiltins(
           defaultValue = "None",
           doc = "Spare actors above this level, or None to attack any level.",
         ),
+        Param(
+          name = "unless_level_below",
+          named = true,
+          defaultValue = "None",
+          doc = "Spare actors below this level, or None to attack any level.",
+        ),
+        Param(
+          name = "chance",
+          named = true,
+          defaultValue = "100",
+          doc = "Percent chance of looking for a target on each think, 0 to 100.",
+        ),
+        Param(
+          name = "via",
+          named = true,
+          defaultValue = "'sight'",
+          doc =
+            "The channel, or list of channels, the mob notices targets on; built in or declared.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun aggressive(toward: Any, unlessLevelAbove: Any, thread: StarlarkThread): Any {
+  fun aggressive(
+    toward: Any,
+    unlessLevelAbove: Any,
+    unlessLevelBelow: Any,
+    chance: Any,
+    via: Any,
+    thread: StarlarkThread,
+  ): Any {
     val ctx = contentCtx(thread, "aggressive")
     need("aggressive", "aggressive()")
     if (!isNone(unlessLevelAbove))
       need("aggressive.unless_level_above", "aggressive(unless_level_above)")
+    if (!isNone(unlessLevelBelow))
+      need("aggressive.unless_level_below", "aggressive(unless_level_below)")
+    val names =
+      when (via) {
+        is String -> listOf(via)
+        else -> strList(via, "aggressive(via)")
+      }
+    if (names.isEmpty()) fail("aggressive(via): needs at least one channel")
+    names
+      .firstOrNull { n -> names.count { it == n } > 1 }
+      ?.let { fail("aggressive(via): duplicate channel '$it'") }
+    val known = schema.allChannels.map { it.name }
+    val viaChannels = names.map { Channel(choice(it, "aggressive(via)", known)) }
     return BehaviorDecl(
       Aggressive(
         actorFilter(toward, "aggressive(toward)", ctx.pkg.path),
         intOrNull(unlessLevelAbove, "aggressive(unless_level_above)"),
+        intOrNull(unlessLevelBelow, "aggressive(unless_level_below)"),
+        percent(chance, "aggressive(chance)"),
+        viaChannels,
       )
     )
   }
@@ -2503,7 +2538,7 @@ internal class DeclarationBuiltins(
     val LOOT_SPEC =
       DeclSpec(
         name = "loot",
-        doc = "A loot roll, for mob(loot=[...]). chance is a probability between 0 and 1.",
+        doc = "A loot roll, for mob(loot=[...]). chance is a percent from 0 to 100.",
         positionalError = "loot() takes the item's label as its only positional argument",
         params =
           listOf(
@@ -2515,7 +2550,7 @@ internal class DeclarationBuiltins(
               keyword = false,
               required = true,
             ),
-            DeclParam("chance", "float", "Drop probability between 0.0 and 1.0.", default = "1.0"),
+            DeclParam("chance", "int", "Drop chance in percent, 0 to 100.", default = "100"),
             DeclParam(
               "count",
               "int",
@@ -2636,11 +2671,10 @@ internal class DeclarationBuiltins(
           listOf(
             DeclParam(
               "weight",
-              "float",
-              "Probability weight between 0.0 and 1.0.",
+              "int",
+              "Probability weight, a percent from 0 to 100.",
               positional = true,
-              keyword = false,
-              required = true,
+              default = "100",
             ),
             DeclParam(
               "skill",
@@ -2688,9 +2722,9 @@ internal class DeclarationBuiltins(
             ),
             DeclParam(
               "chance",
-              "float",
-              "Probability of firing between 0.0 and 1.0.",
-              default = "1.0",
+              "int",
+              "Chance of firing, a percent from 0 to 100.",
+              default = "100",
             ),
             DeclParam("skill", "label", "Skill or spell triggered by the proc.", default = "None"),
             DeclParam(

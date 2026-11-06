@@ -2740,7 +2740,7 @@
     {
       "symbol": "wander",
       "name": "wander",
-      "doc": "Behavior: with probability chance per think, steps through a random open exit within radius exits of home.",
+      "doc": "Behavior: with a percent chance per think, steps through a random open exit within radius exits of home.",
       "since": 1,
       "params": [
         {
@@ -2758,10 +2758,10 @@
           "name": "chance",
           "positional": true,
           "named": true,
-          "default": "0.1",
+          "default": "10",
           "varargs": false,
           "kwargs": false,
-          "doc": "Probability of taking a step on each think, between 0 and 1."
+          "doc": "Percent chance of taking a step on each think, 0 to 100."
         }
       ]
     }

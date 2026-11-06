@@ -46,13 +46,13 @@
 <h2>Behaviors</h2>
 <p class="intro">Built-in mob behaviors for mob(behaviors=[...]).</p>
 <section id="wander" class="entry">
-<h3><code>wander(radius = 3, chance = 0.1)</code> <span class="since">since api_version 1</span></h3>
-<p>Behavior: with probability chance per think, steps through a random open exit within radius exits of home.</p>
+<h3><code>wander(radius = 3, chance = 10)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: with a percent chance per think, steps through a random open exit within radius exits of home.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="wander.radius"><td><code>radius</code></td><td>positional or named</td><td><code>3</code></td><td>Maximum distance from home, in exits.</td></tr>
-<tr id="wander.chance"><td><code>chance</code></td><td>positional or named</td><td><code>0.1</code></td><td>Probability of taking a step on each think, between 0 and 1.</td></tr>
+<tr id="wander.chance"><td><code>chance</code></td><td>positional or named</td><td><code>10</code></td><td>Percent chance of taking a step on each think, 0 to 100.</td></tr>
 </tbody>
 </table>
 </section>

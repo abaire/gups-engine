@@ -54,7 +54,7 @@ mob("goblin_scout",
     vitals=vitals(hp=30),
     behaviors=[
         # Stay within 4 rooms of spawn, 10% chance to step per idle pulse:
-        wander(radius=4, chance=0.1),
+        wander(radius=4, chance=10),
 
         # Initiate combat automatically against players:
         aggressive(toward="players"),
@@ -65,7 +65,7 @@ mob("goblin_scout",
         # Run away when HP drops below 10:
         flee(below=vitals(hp=10)),
     ],
-    loot=[loot(":rusty_key", chance=0.25)],
+    loot=[loot(":rusty_key", chance=25)],
     )
 ```
 
@@ -73,9 +73,29 @@ mob("goblin_scout",
 
 * `sentinel()`: Never leaves its post; disables movement behaviors.
 * `wander(radius, chance)`: Randomly patrols nearby interconnected rooms.
-* `aggressive(toward)`: Attacks targets matching `"players"`, `"mobs"`, or specific labels.
+* `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, via="sight")`: Looks for a
+  target with probability `chance` percent each think and attacks the first matching actor it notices on a channel in
+  `via`.
 * `assist(allies)`: Jumps into combat to defend friendly mobs.
 * `flee(below)`: Disengages and runs through open exits when health falls below a vital threshold.
+
+### Noticing and hiding
+
+`aggressive` asks the rules whether the mob can perceive each candidate, once per candidate and per channel in `via`,
+about the `notice` event. The template's `can_perceive` hides an actor that carries the `hidden` flag from a sight
+notice:
+
+```python
+def can_perceive(ctx):
+    if ctx.event == "notice" and ctx.channel == "sight" and ctx.source and ctx.source.has_flag("hidden"):
+        return False
+    ...
+```
+
+Decide stealth when the actor hides and store the result as a flag on an affect, then read it in `can_perceive`. Don't
+roll inside `can_perceive`; that would give the mob a fresh roll on every look. `chance` sets how often the mob looks,
+and `via` the channels it uses; a world may declare a channel such as `scent` (§3.9) so a creature that senses it can't
+be hidden from. The template ships no `hide` command.
 
 ---
 

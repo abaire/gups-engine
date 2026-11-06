@@ -880,14 +880,14 @@ mob("goblin_scout",
     level=3, stats=stats(str=10, dex=14, con=9, int=6, wis=6, armor=2),
     vitals=vitals(hp=30), resists=resists(fire=-10),  # schema-checked (§3.9)
     skills={"//skills/martial:kick": 40},
-    senses={"sound": 3, "sight": 0},  # merged over sight/sound = 1; 0 senses nothing (§5.7)
-    behaviors=[wander(radius=4, chance=0.1), aggressive(toward="players"),
+    senses={"sound": 3},  # merged over sight/sound = 1; sight stays 1, sound is boosted (§5.7)
+    behaviors=[wander(radius=4, chance=10), aggressive(toward="players"),
                assist(allies=["goblin_*"]), flee(below=vitals(hp=20))],
     think=_scout_think, think_every=4,
     hooks={},  # custom hooks, run with ctx.call_hook (§4.4)
     traits=[],  # plugin-defined traits, e.g. ["mage"] (§4.19)
     dormant_recovery="full",  # full | regen | none (§5.9)
-    loot=[loot(":rusty_key", chance=0.25)],
+    loot=[loot(":rusty_key", chance=25)],
     version=2,
     )
 
@@ -959,27 +959,27 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   `use_effect` runs at the item's power: `rules.item_power` with `ctx.item` the item, `ctx.event = "use"` and
   `ctx.target` the target actor (or `None`), then the user's `item_power` chain (§4.3, §4.6). An `on_use` hook's verbs
   run at 100.
-- **Procs:** `proc(on, chance = 1.0, skill = None, effect = None, target = None, message = None, outcomes = None)` is
+- **Procs:** `proc(on, chance = 100, skill = None, effect = None, target = None, message = None, outcomes = None)` is
   something that may happen during an auto-attack swing (§5.4), for `item(procs = [...])`, `item_affect(procs = [...])`
   and `apply_affect(procs = [...])`. `on` is `"hit"` (the bearer's swing landed; a worn weapon counts only on its own
-  swing), `"struck"` (the bearer was hit) or `"avoid"` (a swing at the bearer missed). `chance` is a probability between
-  0 and 1. A proc gives one of `skill` (a skill label), `effect` (an effect primitive) or `outcomes`, a list of
-  `outcome(weight, skill = None, effect = None, target = None, message = None)`. Exactly one outcome is chosen per
-  trigger by one roll; the weights are probabilities whose total is at most 1, and the rest is "nothing happens", as is
-  an outcome with no `skill` or `effect`. `target` is `"enemy"` (the other actor in the swing), `"self"` or `"none"`;
-  when omitted it follows a skill's own target (`ally` counts as `self`), or is `"enemy"` for an effect. A proc resolves
-  at once with the bearer as caster: a skill is checked against the bearer's `cast` restriction (§4.19) and
-  `cast_allowed` chain (a denial skips it) and then its `effect` and `resolve`, with no cost, warmup, lag, range check
-  or cast hooks, and the bearer needn't know it; an `item` or `room` skill can't be used. Proc effects may not `summon`,
-  and their `apply_affect` needs a duration and no `applies`. Procs fire only from auto-attack swings, never from
-  effects, so they can't set each other off. The bearer is told `combat.proc.self` (or the `message`) and onlookers
-  `combat.proc.room`. Procs are checked in modifier-chain order (§4.6): the bearer's affects, then each worn item and
-  its item affects, then `carried` item affects. `skill` needs the `skills` feature; procs need `combat`. A proc's
-  effects run at a power (§4.3): for a proc of an item or one of its item affects, `rules.item_power` with `ctx.item`
-  the item, `ctx.event` the trigger (`hit`, `struck` or `avoid`), `ctx.target` the other actor in the swing and
-  `ctx.skill` for a skill proc, then the bearer's `item_power` chain. For a proc of an item's instance affect,
-  `ctx.affect` is that affect in this call, and the proc runs at `affect.power × item_power / 100`, rounded down. For a
-  proc of an actor affect, the power is the one stored on that affect. Procs never roll `skill_check` or `skill_power`.
+  swing), `"struck"` (the bearer was hit) or `"avoid"` (a swing at the bearer missed). `chance` is a whole percent from
+  0 to 100. A proc gives one of `skill` (a skill label), `effect` (an effect primitive) or `outcomes`, a list of
+  `outcome(weight = 100, skill = None, effect = None, target = None, message = None)`. Exactly one outcome is chosen per
+  trigger by one roll; the weights are percents whose total is at most 100, and the rest is "nothing happens", as is an
+  outcome with no `skill` or `effect`. `target` is `"enemy"` (the other actor in the swing), `"self"` or `"none"`; when
+  omitted it follows a skill's own target (`ally` counts as `self`), or is `"enemy"` for an effect. A proc resolves at
+  once with the bearer as caster: a skill is checked against the bearer's `cast` restriction (§4.19) and `cast_allowed`
+  chain (a denial skips it) and then its `effect` and `resolve`, with no cost, warmup, lag, range check or cast hooks,
+  and the bearer needn't know it; an `item` or `room` skill can't be used. Proc effects may not `summon`, and their
+  `apply_affect` needs a duration and no `applies`. Procs fire only from auto-attack swings, never from effects, so they
+  can't set each other off. The bearer is told `combat.proc.self` (or the `message`) and onlookers `combat.proc.room`.
+  Procs are checked in modifier-chain order (§4.6): the bearer's affects, then each worn item and its item affects, then
+  `carried` item affects. `skill` needs the `skills` feature; procs need `combat`. A proc's effects run at a power
+  (§4.3): for a proc of an item or one of its item affects, `rules.item_power` with `ctx.item` the item, `ctx.event` the
+  trigger (`hit`, `struck` or `avoid`), `ctx.target` the other actor in the swing and `ctx.skill` for a skill proc, then
+  the bearer's `item_power` chain. For a proc of an item's instance affect, `ctx.affect` is that affect in this call,
+  and the proc runs at `affect.power × item_power / 100`, rounded down. For a proc of an actor affect, the power is the
+  one stored on that affect. Procs never roll `skill_check` or `skill_power`.
 - **Tags:** `room`, `item` and `skill` take `tags`, a list of words matching `[a-z][a-z0-9_]*`, checked at load, stored
   sorted without repeats. The engine gives them no meaning; plugin restrictions and scripts read them (§4.19). They are
   part of the prototype, so a reload changes them for every instance; items can also gain or lose tags per instance
@@ -998,7 +998,7 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   `lib` and `rules` packages may declare one. A name has two or more dot-separated parts, may not use the roots `Core`,
   `Char`, `Room`, `Comm` or `Gups`, and may not equal, contain or nest in an engine package, a plugin's package, or
   another declared name, compared ignoring case. Two packages whose names overlap both fail to load.
-- **Loot:** a loot `chance` is a probability between 0 and 1.
+- **Loot:** a loot `chance` is a percent from 0 to 100.
 - **Mob numbers:** a mob's `stats`, `vitals` (maxima) and `resists` are its prototype's declared values, the input
   `rules.starting_stats` sees at each spawn (§4.6). There are no `hp` or `armor` arguments; those are schema names.
 - **Features:** arguments that belong to a feature that is off (`size`, `entry_index`, `at_index` and `range` with
@@ -1444,7 +1444,7 @@ schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 | `skill_check(ctx)`                            | `skills`             | Percent chance that `ctx.actor` gets `ctx.skill` off, rolled once per cast at resolution (§4.3). `ctx.target`, `ctx.item` (an `item` skill's item).                                                                 |
 | `skill_power(ctx)`                            | `skills`             | Percent strength of a successful cast; 100 is the skill as declared (§4.3). Same fields as `skill_check`.                                                                                                           |
 | `sense_cost(ctx)`                             | kernel               | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                                |
-| `can_perceive(ctx)`                           | kernel               | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7).                                                                                                                                        |
+| `can_perceive(ctx)`                           | kernel               | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7), including the `notice` event `aggressive` asks once per candidate.                                                                     |
 | `perceive_message(ctx)`                       | kernel               | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel.        |
 | `door_intensity(ctx)`                         | kernel               | `int`. The sound intensity of `ctx.action` on a door (`ctx.exit`) or container (`ctx.item`); 0 or less is silent.                                                                                                   |
 | `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` | `leveling`           | Ints.                                                                                                                                                                                                               |
@@ -1686,20 +1686,27 @@ is sent the refusal instead; it works again when a later re-check allows it.
 
 Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin/gups/core/world/Behaviors.kt).
 
-|                        Behavior                         | Priority |                                                                                      What it does                                                                                      |
-|---------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `wander(radius=3, chance=0.1)`                          | 10       | Moves randomly within `radius` exits of the home room, counted through open doors. `chance` is the probability per think.                                                              |
-| `aggressive(toward="players", unless_level_above=None)` | 60       | Attacks the lowest-id matching target on sight. `combat` feature; `unless_level_above` also needs `leveling`.                                                                          |
-| `assist(allies)`                                        | 50       | Attacks an ally's primary target, or else its lowest-id opponent. `combat` feature.                                                                                                    |
-| `flee(below=vitals(...))`                               | 100      | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature.                                         |
-| `guard(exit, allies="mobs")`                            | —        | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act. |
-| `follow(target)`                                        | 30       | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader.                                                                                 |
-| `pursue(target)`                                        | 40       | Heads for the nearest simulated match by path length, then lowest id, using `path_to` across the whole world.                                                                          |
-| `sentinel()`                                            | —        | Never leaves its room: removes movement and flee proposals.                                                                                                                            |
-| `scavenge()`                                            | 5        | Takes the first reachable, carriable ground item that isn't a corpse.                                                                                                                  |
+|                                                 Behavior                                                  | Priority |                                                                                      What it does                                                                                      |
+|-----------------------------------------------------------------------------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `wander(radius=3, chance=10)`                                                                             | 10       | Moves randomly within `radius` exits of the home room, counted through open doors. `chance` is the percent probability per think.                                                      |
+| `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, via="sight")` | 60       | Looks for a target on each think with probability `chance` percent. Attacks the lowest-id matching target it notices. `combat` feature; the level arguments also need `leveling`.      |
+| `assist(allies)`                                                                                          | 50       | Attacks an ally's primary target, or else its lowest-id opponent. `combat` feature.                                                                                                    |
+| `flee(below=vitals(...))`                                                                                 | 100      | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature.                                         |
+| `guard(exit, allies="mobs")`                                                                              | —        | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act. |
+| `follow(target)`                                                                                          | 30       | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader.                                                                                 |
+| `pursue(target)`                                                                                          | 40       | Heads for the nearest simulated match by path length, then lowest id, using `path_to` across the whole world.                                                                          |
+| `sentinel()`                                                                                              | —        | Never leaves its room: removes movement and flee proposals.                                                                                                                            |
+| `scavenge()`                                                                                              | 5        | Takes the first reachable, carriable ground item that isn't a corpse.                                                                                                                  |
 
 - **Whom they mean:** `players`, `mobs`, `all`, or label patterns with `*`, as a string or a list. A pattern without a
   package (`goblin_*`) matches the label name in any package; `:goblin_*` means this package.
+- **Noticing:** `aggressive` asks `rules.can_perceive` (§4.6) once per candidate and channel in `via`, as the mob, about
+  event `notice` with intensity 1 and the candidate as `ctx.source`. A candidate is noticed if any channel passes.
+  Stealth and invisibility are world rules: decide them when the actor hides, keep the result on an affect, and read it
+  in `can_perceive`. Rolling inside `can_perceive` gives the mob a fresh roll on every look; `chance` sets how often it
+  looks.
+- **`via`:** one channel or a list, each built in or declared (§3.9). A mob that senses a channel nothing else hides on
+  can't be hidden from.
 - **Engagement:** behaviors other than `flee` propose nothing while engaged.
 - **Failures:** a behavior that throws is logged as an engine diagnostic and proposes nothing.
 - Built-in behaviors are data values with value equality, so the version-bump lint (§7.3) can compare them.
@@ -2297,10 +2304,10 @@ maximum, with `type` defaulting to the unarmed damage type.
 - `w.trace()` keeps the last 400 lines (rules lines included) and prints them when the test fails, and always in a `gups
   scenario` run. `w.trace_lines()` returns the kept lines, oldest first, each starting with its `[pulse]`, so a test can
   assert that a hook did or didn't call a verb; reading them doesn't clear them.
-- `w.force_rng(ints=[], fractions=[])` queues the results of later rolls, so a test needn't hunt for a seed: each
-  `rng.int` (and so `rng.chance`) takes the next queued int, and each engine fraction roll (such as a proc's `chance`)
-  the next queued fraction, in `[0, 1)`; once a queue is empty the seeded stream resumes where it left off. A forced int
-  outside the roll's range is an error, reported like any other script error.
+- `w.force_rng(ints=[])` queues the results of later rolls, so a test needn't hunt for a seed: each `rng.int` (and so
+  `rng.chance`, and every engine chance such as a proc's, loot's or wander's) takes the next queued int; once the queue
+  is empty the seeded stream resumes where it left off. A forced int outside the roll's range is an error, reported like
+  any other script error.
 
 **Test fixtures:** test files can't declare anything, so content only tests need (a probe mob, an item that records what
 happened to it) goes in the package's `*_testdata.star` files. They are ordinary content files, loaded only by `gups
@@ -3303,18 +3310,21 @@ exit it crosses. Every simulated actor it reaches, player or mob, is asked wheth
 - **Events:** each has a channel, an intensity, a room, an optional actor (who caused it and never perceives it) and
   optional text:
 
-|                 Event                 | Channel |        Intensity        |
-|---------------------------------------|---------|-------------------------|
-| `say`                                 | `sound` | 1                       |
-| `emote`                               | `sight` | 1                       |
-| `enter`, `exit` (visible movement)    | `sight` | 1                       |
-| `combat_start`, `combat`, `death`     | `sound` | 2                       |
-| `shout`                               | `sound` | 3                       |
-| `open`, `close`, `lock`, `unlock`     | `sound` | `rules.door_intensity`  |
-| `ctx.emit(channel, event, intensity)` | any     | the script's, default 1 |
-| `whisper`, `tell`                     | —       | never perceived         |
+|                 Event                 |      Channel      |        Intensity        |
+|---------------------------------------|-------------------|-------------------------|
+| `say`                                 | `sound`           | 1                       |
+| `emote`                               | `sight`           | 1                       |
+| `enter`, `exit` (visible movement)    | `sight`           | 1                       |
+| `combat_start`, `combat`, `death`     | `sound`           | 2                       |
+| `shout`                               | `sound`           | 3                       |
+| `open`, `close`, `lock`, `unlock`     | `sound`           | `rules.door_intensity`  |
+| `ctx.emit(channel, event, intensity)` | any               | the script's, default 1 |
+| `notice` (asked by `aggressive`)      | the `via` channel | 1                       |
+| `whisper`, `tell`                     | —                 | never perceived         |
 
-`whisper` and `tell` are never propagated or sent to `on_perceive`.
+`whisper` and `tell` are never propagated or sent to `on_perceive`. `notice` is asked by `aggressive` once per candidate
+per channel in its `via`, as the mob, about the candidate as `ctx.source`; it is never propagated and never sent to
+`on_perceive`, only used to decide whether the candidate is attacked.
 
 - **In-room messages:** the built-in commands tell the players of the event's own room through the same
   `rules.can_perceive` check, so senses apply there too. Each player is tried channel by channel in `channel_priority`
@@ -4061,3 +4071,4 @@ template's `.github/workflows/gates.yml`.
 | **M33**   | Acquiring skills: `ctx.set_skill`, `ctx.remove_skill` and `ctx.skill_info` (and `w.set_skill`/`w.remove_skill`), with `learn` run on every set; `global_hook("on_level_change", fn)` for privileged packages, loaded but inert without `leveling`; the `skills` command and `Char.Skills`, with a web client panel; `//lib:trainer.star` with practice sessions per level (a balance that can go negative), `practice` and the `practice_offer` hook; the template's `//skills/arcane` and tutorial mentor (§3.10, §4.4, §4.5, §4.9, §4.10, §4.12, §4.19).                                                                             |
 | **M34**   | The `on_encumbrance_change` global hook: `global_hook("on_encumbrance_change", fn)` for privileged packages, fired once per encumbrance level change for every actor, `ctx.old_encumbrance_level` and `ctx.new_encumbrance_level`, the template's flavor example (§4.4, §4.9).                                                                                                                                                                                                                                                                                                                                                         |
 | **M35**   | Room enchantments: timed `Affect`s on rooms with modifiers and tag changes, `apply_affect` and `remove_affect` on a room, `room.affects`, 64-bit affect durations and `SEMI_PERMANENT`, the `room` skill target and plugin primitives on a room (§3.3, §4.2, §4.3, §4.4, §4.6, §4.15, §4.19, §5.9).                                                                                                                                                                                                                                                                                                                                    |
+| **M36**   | Percent chances (`wander`, `loot`, `proc`, `outcome` are whole percents and the fraction RNG is gone) and perceptive `aggressive` mobs: `chance`, `via` and `unless_level_below`, the `notice` event through `rules.can_perceive`, the template's `hidden` example (§4.2, §4.5, §4.6, §4.7, §5.7).                                                                                                                                                                                                                                                                                                                                     |

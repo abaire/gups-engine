@@ -207,7 +207,7 @@ object DocExamples {
             """
                 item("rat_tail", name = "a rat tail")
 
-                mob("rat", vitals = vitals(hp = 4), loot = [loot(":rat_tail", chance = 1.0, count = 1)])
+                mob("rat", vitals = vitals(hp = 4), loot = [loot(":rat_tail", chance = 100, count = 1)])
             """,
           test =
             """
@@ -252,8 +252,8 @@ object DocExamples {
                         proc(
                             on = "hit",
                             outcomes = [
-                                outcome(0.5, effect = damage(dice = "1d6", type = DAMAGE.fire)),
-                                outcome(0.5, effect = heal(dice = "1d4", vital = "hp"), target = "self"),
+                                outcome(50, effect = damage(dice = "1d6", type = DAMAGE.fire)),
+                                outcome(50, effect = heal(dice = "1d4", vital = "hp"), target = "self"),
                             ],
                         ),
                     ],
@@ -288,7 +288,7 @@ object DocExamples {
                     wear = "wield",
                     dice = "1d4",
                     procs = [
-                        proc(on = "hit", chance = 0.1, effect = damage(dice = "1d6", type = DAMAGE.fire)),
+                        proc(on = "hit", chance = 10, effect = damage(dice = "1d6", type = DAMAGE.fire)),
                     ],
                 )
             """,
@@ -795,7 +795,7 @@ object DocExamples {
         ex(
           pkg =
             """
-                mob("bandit", vitals = vitals(hp = 20), behaviors = [aggressive(toward = "players", unless_level_above = 5)])
+                mob("bandit", vitals = vitals(hp = 20), behaviors = [aggressive(toward = "players", unless_level_above = 5, chance = 50, via = ["sight", "sound"])])
             """
         ),
       "assist" to
@@ -853,7 +853,7 @@ object DocExamples {
         ex(
           pkg =
             """
-                mob("deer", vitals = vitals(hp = 10), behaviors = [wander(radius = 2, chance = 0.2)])
+                mob("deer", vitals = vitals(hp = 10), behaviors = [wander(radius = 2, chance = 20)])
             """
         ),
 

@@ -484,25 +484,28 @@ def test_fire_ignores_armor(t):
     t.eq(fire_shielded, fire_bare)
     t.true(slash_shielded < slash_bare)
 
-def _proc_fight(t, wield = None, wear = None, fractions = []):
+def _proc_fight(t, wield = None, wear = None, ints = []):
     # Fights the training dummy for three rounds with one item in hand or on the body, and
-    # returns the world and the player's output. Each proc draws one fraction for its chance
-    # (and a second to pick from an outcome table), so forcing fractions decides the first procs.
+    # returns the world and the player's output. The first round draws, in order: the dummy's
+    # to-hit and damage, Tess's to-hit and damage, then Tess's proc rolls (the proc's chance
+    # unless it is 100, then the outcome pick if it has a table). Forcing ints decides them.
     w = _world(t)
     p = w.spawn_player("Tess", at = ":arena", vitals = vitals(hp = 100))
     for (label, verb) in [(wield, "wield"), (wear, "wear")]:
         if label != None:
             w.spawn(label, at = p)
             p.do(verb + " " + label.split("_")[-1])
-    w.force_rng(fractions = fractions)
+    w.force_rng(ints = ints)
     p.do("kill dummy")
     w.run(pulses = 24)
     return w, p.output()
 
 def test_ember_dagger_procs_on_its_own_hits(t):
-    (_, ember) = _proc_fight(t, wield = ":ember_dagger", fractions = [0.0])
+    # Both swings hit for 1, and a proc roll of 1 lands the ember's 25% chance.
+    ints = [1, 1, 1, 1, 1]
+    (_, ember) = _proc_fight(t, wield = ":ember_dagger", ints = ints)
     t.contains(ember, "Power surges from an ember dagger!")
-    (_, plain) = _proc_fight(t, wield = ":dagger", fractions = [0.0])
+    (_, plain) = _proc_fight(t, wield = ":dagger", ints = ints)
     t.false("Power surges" in plain)
 
 def test_bramble_vest_rakes_attackers(t):
@@ -510,8 +513,9 @@ def test_bramble_vest_rakes_attackers(t):
     t.contains(out, "Thorns rake your attacker!")
 
 def test_cracked_wand_picks_one_outcome(t):
-    # 0.6 falls past fire (0.05) and fear (0.45) into the stun band, which runs to 0.89.
-    (w, out) = _proc_fight(t, wield = ":cracked_wand", fractions = [0.0, 0.6])
+    # The wand's proc always fires, so the fifth draw is the outcome pick: 60 falls past fire (5)
+    # and fear (45) into the stun band, which runs to 89.
+    (w, out) = _proc_fight(t, wield = ":cracked_wand", ints = [1, 1, 1, 1, 60])
     t.contains(out, "A dazzling arc of light leaps from the wand!")
     t.eq(w.diagnostics(), [])
 

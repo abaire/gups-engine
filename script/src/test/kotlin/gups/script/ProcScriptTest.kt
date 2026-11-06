@@ -41,10 +41,10 @@ class ProcScriptTest {
     assertEquals(1, proto.procs.size)
     val p = proto.procs[0]
     assertEquals(ProcTrigger.HIT, p.on)
-    assertEquals(1.0, p.chance)
+    assertEquals(100, p.chance)
     assertEquals(1, p.outcomes.size)
     val outcome = p.outcomes[0]
-    assertEquals(1.0, outcome.weight)
+    assertEquals(100, outcome.weight)
     assertNull(outcome.target)
     assertTrue(outcome.effect is Effect.Damage)
   }
@@ -58,9 +58,9 @@ class ProcScriptTest {
           room("start")
           item("wand", wear = "wield", dice = "1d4", procs = [
             proc(on = "hit", outcomes = [
-              outcome(0.1, effect = damage(dice = "1d6", type = DAMAGE.fire)),
-              outcome(0.4, effect = heal(dice = "1d4", vital = "hp"), target = "self"),
-              outcome(0.3, effect = stun(2), message = "A blinding flash!"),
+              outcome(10, effect = damage(dice = "1d6", type = DAMAGE.fire)),
+              outcome(40, effect = heal(dice = "1d4", vital = "hp"), target = "self"),
+              outcome(30, effect = stun(2), message = "A blinding flash!"),
             ])
           ])
           """
@@ -69,11 +69,11 @@ class ProcScriptTest {
     val proto = f.w.protos.item(Label("//zones/z:wand"))
     val p = proto.procs[0]
     assertEquals(3, p.outcomes.size)
-    assertEquals(0.1, p.outcomes[0].weight)
+    assertEquals(10, p.outcomes[0].weight)
     assertNull(p.outcomes[0].target)
-    assertEquals(0.4, p.outcomes[1].weight)
+    assertEquals(40, p.outcomes[1].weight)
     assertEquals(ProcTarget.SELF, p.outcomes[1].target)
-    assertEquals(0.3, p.outcomes[2].weight)
+    assertEquals(30, p.outcomes[2].weight)
     assertEquals("A blinding flash!", p.outcomes[2].message)
   }
 
@@ -110,19 +110,19 @@ class ProcScriptTest {
     )
     check(
       "item(\"a\", wear = \"wield\", procs = [proc(on = \"hit\", chance = 1.5, effect = damage(dice = \"1d1\", type = DAMAGE.fire))])",
-      "proc(chance): must be between 0 and 1",
+      "proc(chance): must be a whole percent from 0 to 100, not a fraction (write 25 for 0.25)",
     )
     check(
       """
       item("a", wear = "wield", procs = [proc(on = "hit", outcomes = [
-        outcome(0.7, effect = damage(dice = "1d1", type = DAMAGE.fire)),
-        outcome(0.5, effect = damage(dice = "1d1", type = DAMAGE.fire)),
+        outcome(70, effect = damage(dice = "1d1", type = DAMAGE.fire)),
+        outcome(50, effect = damage(dice = "1d1", type = DAMAGE.fire)),
       ])])
       """,
-      "proc(outcomes): weights add up to more than 1",
+      "proc(outcomes): weights add up to more than 100",
     )
     check(
-      "item(\"a\", wear = \"wield\", procs = [proc(on = \"hit\", skill = \":x\", outcomes = [outcome(0.5)])])",
+      "item(\"a\", wear = \"wield\", procs = [proc(on = \"hit\", skill = \":x\", outcomes = [outcome(50)])])",
       "proc(outcomes): can't be combined with skill, effect, target or message",
     )
     check(
@@ -168,7 +168,7 @@ class ProcScriptTest {
       """
       skill("s")
       item("a", wear = "wield", procs = [proc(on = "hit", outcomes = [
-        outcome(0.5, skill = ":s", effect = damage(dice = "1d1", type = DAMAGE.fire)),
+        outcome(50, skill = ":s", effect = damage(dice = "1d1", type = DAMAGE.fire)),
       ])])
       """,
       "outcome(): give skill or effect, not both",

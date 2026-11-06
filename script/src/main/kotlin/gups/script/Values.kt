@@ -56,12 +56,17 @@ internal fun long(v: Any?, what: String): Long =
 internal fun bool(v: Any?, what: String): Boolean =
   v as? Boolean ?: fail("$what: expected True or False, got ${typeName(v)}")
 
-/** An int or a float, for probabilities such as `chance = 0.25`. */
-internal fun number(v: Any?, what: String): Double =
+/** A whole percent from 0 to 100; a float is refused with a hint to write 25 for 0.25. */
+internal fun percent(v: Any?, what: String): Int =
   when (v) {
-    is StarlarkInt -> v.toDouble()
-    is StarlarkFloat -> v.toDouble()
-    else -> fail("$what: expected a number, got ${typeName(v)}")
+    is StarlarkInt -> {
+      val p = v.toInt(what)
+      if (p !in 0..100) fail("$what: must be a whole percent from 0 to 100")
+      p
+    }
+    is StarlarkFloat ->
+      fail("$what: must be a whole percent from 0 to 100, not a fraction (write 25 for 0.25)")
+    else -> fail("$what: must be a whole percent from 0 to 100")
   }
 
 internal fun list(v: Any?, what: String): List<Any> =

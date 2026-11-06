@@ -30,6 +30,7 @@ object FeatureOwnership {
     )
     owns(Feature.SKILLS, "view:actor.skills", "view:actor.casting", "view:actor.is_casting")
     owns(Feature.LEVELING, "module.level_mode", "mob.level", "aggressive.unless_level_above")
+    owns(Feature.LEVELING, "aggressive.unless_level_below")
     owns(Feature.LEVELING, "hook:on_level_change", "ctx.old_level", "ctx.new_level")
     owns(Feature.LEVELING, "view:actor.level", "view:actor.xp", "view:actor.pending_levels")
     owns(Feature.LEVELING, "rules:xp_for_kill", "rules:xp_to_level", "rules:on_level_up")

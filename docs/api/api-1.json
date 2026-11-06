@@ -866,7 +866,7 @@
     {
       "symbol": "loot",
       "name": "loot",
-      "doc": "A loot roll, for mob(loot=[...]). chance is a probability between 0 and 1.",
+      "doc": "A loot roll, for mob(loot=[...]). chance is a percent from 0 to 100.",
       "hook_owner": null,
       "extra_keywords": false,
       "since": 1,
@@ -886,13 +886,13 @@
         {
           "symbol": "loot.chance",
           "name": "chance",
-          "type": "float",
+          "type": "int",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "1.0",
+          "default": "100",
           "allowed_values": [],
-          "doc": "Drop probability between 0.0 and 1.0.",
+          "doc": "Drop chance in percent, 0 to 100.",
           "since": 1
         },
         {
@@ -1150,13 +1150,13 @@
           "symbol": "outcome.weight",
           "feature": "combat",
           "name": "weight",
-          "type": "float",
+          "type": "int",
           "positional": true,
-          "keyword": false,
-          "required": true,
-          "default": null,
+          "keyword": true,
+          "required": false,
+          "default": "100",
           "allowed_values": [],
-          "doc": "Probability weight between 0.0 and 1.0.",
+          "doc": "Probability weight, a percent from 0 to 100.",
           "since": 1
         },
         {
@@ -1345,13 +1345,13 @@
           "symbol": "proc.chance",
           "feature": "combat",
           "name": "chance",
-          "type": "float",
+          "type": "int",
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "1.0",
+          "default": "100",
           "allowed_values": [],
-          "doc": "Probability of firing between 0.0 and 1.0.",
+          "doc": "Chance of firing, a percent from 0 to 100.",
           "since": 1
         },
         {
@@ -6716,7 +6716,7 @@
       "symbol": "aggressive",
       "feature": "combat",
       "name": "aggressive",
-      "doc": "Behavior: attacks matching actors on sight. toward is 'players', 'mobs', 'all' or label patterns.",
+      "doc": "Behavior: attacks matching actors it notices. toward is 'players', 'mobs', 'all' or label patterns.",
       "since": 1,
       "params": [
         {
@@ -6740,6 +6740,39 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Spare actors above this level, or None to attack any level."
+        },
+        {
+          "symbol": "aggressive.unless_level_below",
+          "feature": "leveling",
+          "name": "unless_level_below",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Spare actors below this level, or None to attack any level."
+        },
+        {
+          "symbol": "aggressive.chance",
+          "feature": "combat",
+          "name": "chance",
+          "positional": true,
+          "named": true,
+          "default": "100",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Percent chance of looking for a target on each think, 0 to 100."
+        },
+        {
+          "symbol": "aggressive.via",
+          "feature": "combat",
+          "name": "via",
+          "positional": true,
+          "named": true,
+          "default": "'sight'",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "The channel, or list of channels, the mob notices targets on; built in or declared."
         }
       ]
     },
@@ -6864,7 +6897,7 @@
     {
       "symbol": "wander",
       "name": "wander",
-      "doc": "Behavior: with probability chance per think, steps through a random open exit within radius exits of home.",
+      "doc": "Behavior: with a percent chance per think, steps through a random open exit within radius exits of home.",
       "since": 1,
       "params": [
         {
@@ -6882,10 +6915,10 @@
           "name": "chance",
           "positional": true,
           "named": true,
-          "default": "0.1",
+          "default": "10",
           "varargs": false,
           "kwargs": false,
-          "doc": "Probability of taking a step on each think, between 0 and 1."
+          "doc": "Percent chance of taking a step on each think, 0 to 100."
         }
       ]
     }
@@ -8443,7 +8476,7 @@
         {
           "symbol": "w.force_rng",
           "name": "force_rng",
-          "doc": "Queues the results of later rolls: each rng.int (and rng.chance) takes the next of ints, and each engine fraction roll the next of fractions, before the seeded stream resumes. A forced int outside the roll's range is an error.",
+          "doc": "Queues the results of later rolls: each rng.int (and so rng.chance, and every engine chance such as a proc's, loot's or wander's) takes the next queued int, before the seeded stream resumes. A forced int outside the roll's range is an error.",
           "since": 1,
           "params": [
             {
@@ -8455,16 +8488,6 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Results for later integer rolls, in order."
-            },
-            {
-              "symbol": "w.force_rng.fractions",
-              "name": "fractions",
-              "positional": true,
-              "named": true,
-              "default": "[]",
-              "varargs": false,
-              "kwargs": false,
-              "doc": "Results for later fraction rolls, in order, each from 0 up to but not including 1."
             }
           ]
         },

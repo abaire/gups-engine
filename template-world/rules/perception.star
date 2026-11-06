@@ -24,6 +24,10 @@ def sense_cost(ctx):
     return cost
 
 def can_perceive(ctx):
+    # Stealth is decided when the actor hides and stored as a flag on an affect; this only reads
+    # it, and never rolls. A hidden actor can't be noticed by sight; other channels still work.
+    if ctx.event == "notice" and ctx.channel == "sight" and ctx.source and ctx.source.has_flag("hidden"):
+        return False
     sense = ctx.actor.senses[ctx.channel]
     if sense <= 0:
         return False

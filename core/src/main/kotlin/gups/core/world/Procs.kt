@@ -13,7 +13,6 @@ import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
-import java.util.Locale
 
 private class ProcSource(
   val trace: String,
@@ -70,42 +69,36 @@ internal fun World.fireProcs(trigger: ProcTrigger, bearer: Actor, other: Actor, 
     for (proc in src.procs) {
       if (proc.on != trigger) continue
       if (!bearer.inWorld) return
-      val r = rng.fraction()
-      if (r >= proc.chance) {
-        traceRules(
-          bearer,
-          "proc ${src.trace} ${trigger.word} roll ${"%.2f".format(Locale.ROOT, r)} → no proc",
-        )
+      val rolled = proc.chance in 1..99
+      val r = if (rolled) rng.int(1, 100) else 0
+      val fired = if (rolled) r <= proc.chance else proc.chance >= 100
+      val rollText = if (rolled) "roll $r" else "auto"
+      if (!fired) {
+        traceRules(bearer, "proc ${src.trace} ${trigger.word} $rollText → no proc")
         continue
       }
       val outcome =
-        if (proc.outcomes.size == 1 && proc.outcomes[0].weight >= 1.0) {
+        if (proc.outcomes.size == 1 && proc.outcomes[0].weight >= 100) {
           proc.outcomes[0]
         } else {
-          val p = rng.fraction()
-          var total = 0.0
+          val p = rng.int(1, 100)
+          var total = 0
           var chosen: ProcOutcome? = null
           for (o in proc.outcomes) {
             total += o.weight
-            if (total > p) {
+            if (p <= total) {
               chosen = o
               break
             }
           }
           if (chosen == null) {
-            traceRules(
-              bearer,
-              "proc ${src.trace} ${trigger.word} roll ${"%.2f".format(Locale.ROOT, r)} → nothing",
-            )
+            traceRules(bearer, "proc ${src.trace} ${trigger.word} $rollText → nothing")
             continue
           }
           chosen
         }
       val result = resolveProcOutcome(bearer, other, src, outcome, trigger)
-      traceRules(
-        bearer,
-        "proc ${src.trace} ${trigger.word} roll ${"%.2f".format(Locale.ROOT, r)} → $result",
-      )
+      traceRules(bearer, "proc ${src.trace} ${trigger.word} $rollText → $result")
     }
   }
 }

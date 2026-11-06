@@ -68,7 +68,7 @@ class LoaderTest {
                 """,
           "zones/z/things.star" to
             """
-                    mob("rat", name = "a fat rat", vitals = vitals(hp = 5), loot = [loot(":key", chance = 0.5)])
+                    mob("rat", name = "a fat rat", vitals = vitals(hp = 5), loot = [loot(":key", chance = 50)])
                     item("key", name = "a brass key")
                     item("loaf", name = "a loaf of bread", plural = "loaves of bread", stackable = True)
                     skill("bite", range = "melee", effect = sequence(damage("1d4", type = "pierce"), stun(2)))

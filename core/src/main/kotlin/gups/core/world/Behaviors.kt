@@ -4,6 +4,7 @@ import gups.core.BUBBLE_RADIUS
 import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.Direction
 import gups.core.model.Item
@@ -60,12 +61,12 @@ private fun World.others(mob: Mob): List<Actor> =
   }
 
 /**
- * `wander(radius, chance)`: with probability [chance] per think, steps through a random open exit
- * that stays within [radius] exits of home.
+ * `wander(radius, chance)`: with probability [chance] percent per think, steps through a random
+ * open exit that stays within [radius] exits of home.
  */
-data class Wander(val radius: Int, val chance: Double) : Behavior {
+data class Wander(val radius: Int, val chance: Int) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
-    if (mob.isEngaged || world.rng.fraction() >= chance) return null
+    if (mob.isEngaged || !world.rng.passes(chance)) return null
     val home = world.roomOrNull(mob.homeRoom) ?: mob.room
     val near = world.within(home, radius)
     val exits =
@@ -98,13 +99,24 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
   return seen.keys
 }
 
-/** `aggressive(toward, unless_level_above)`: attacks the first matching actor in the room. */
-data class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null) : Behavior {
+/**
+ * `aggressive(toward, unless_level_above, unless_level_below, chance, via)`: on each think, with
+ * probability [chance] percent, attacks the first matching actor in the room the mob notices on any
+ * channel in [via], sparing actors outside the level band.
+ */
+data class Aggressive(
+  val toward: ActorFilter,
+  val unlessLevelAbove: Int? = null,
+  val unlessLevelBelow: Int? = null,
+  val chance: Int = 100,
+  val via: List<Channel> = listOf(Channel.SIGHT),
+) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
+    if (!world.rng.passes(chance)) return null
     val target =
       world.others(mob).firstOrNull {
-        toward.matches(it) && (unlessLevelAbove == null || it.level <= unlessLevelAbove)
+        toward.matches(it) && levelOk(it) && world.notices(mob, it, via)
       } ?: return null
     return Proposal(
       "${world.commands.nameOf("kill")} ${target.keywords.first()}",
@@ -113,7 +125,30 @@ data class Aggressive(val toward: ActorFilter, val unlessLevelAbove: Int? = null
       KillAction(target),
     )
   }
+
+  private fun levelOk(a: Actor): Boolean =
+    (unlessLevelAbove == null || a.level <= unlessLevelAbove) &&
+      (unlessLevelBelow == null || a.level >= unlessLevelBelow)
 }
+
+/** Whether [mob] notices [who] in its own room on any channel in [via], as `aggressive` asks it. */
+private fun World.notices(mob: Mob, who: Actor, via: List<Channel>): Boolean =
+  via.any { ch ->
+    rules.canPerceive(
+      RulesContext(
+        this,
+        actor = mob,
+        target = mob,
+        source = who,
+        room = mob.room,
+        sourceRoom = mob.room,
+        channel = ch,
+        event = "notice",
+        intensity = 1,
+        cost = 0,
+      )
+    )
+  }
 
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
 data class Assist(val allies: ActorFilter) : Behavior {

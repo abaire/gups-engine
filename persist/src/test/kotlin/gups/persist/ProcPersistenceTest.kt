@@ -34,11 +34,11 @@ class ProcPersistenceTest {
     val nestedProc =
       Proc(
         on = ProcTrigger.STRUCK,
-        chance = 0.5,
+        chance = 50,
         outcomes =
           listOf(
             ProcOutcome(
-              weight = 1.0,
+              weight = 100,
               effect = Effect.Stun(1),
               target = ProcTarget.SELF,
               message = "Shock!",
@@ -67,48 +67,48 @@ class ProcPersistenceTest {
       listOf(
         Proc(
           ProcTrigger.HIT,
-          0.1,
-          listOf(ProcOutcome(1.0, effect = Effect.Damage(Dice(1, 6, 1), fire))),
+          10,
+          listOf(ProcOutcome(100, effect = Effect.Damage(Dice(1, 6, 1), fire))),
         ),
         Proc(
           ProcTrigger.HIT,
-          0.2,
-          listOf(ProcOutcome(0.8, effect = Effect.Heal(Dice(2, 4), "hp"), target = ProcTarget.SELF)),
+          20,
+          listOf(ProcOutcome(80, effect = Effect.Heal(Dice(2, 4), "hp"), target = ProcTarget.SELF)),
         ),
-        Proc(ProcTrigger.HIT, 0.3, listOf(ProcOutcome(1.0, effect = applyAffectEffect))),
+        Proc(ProcTrigger.HIT, 30, listOf(ProcOutcome(100, effect = applyAffectEffect))),
         Proc(
           ProcTrigger.AVOID,
-          0.4,
+          40,
           listOf(
-            ProcOutcome(1.0, effect = Effect.Dispel("curse*", setOf("bad"), all = false, count = 2))
+            ProcOutcome(100, effect = Effect.Dispel("curse*", setOf("bad"), all = false, count = 2))
           ),
         ),
-        Proc(ProcTrigger.STRUCK, 0.5, listOf(ProcOutcome(1.0, effect = Effect.Knockback(2)))),
-        Proc(ProcTrigger.STRUCK, 0.6, listOf(ProcOutcome(1.0, effect = Effect.Pull(1)))),
-        Proc(ProcTrigger.HIT, 0.7, listOf(ProcOutcome(1.0, effect = Effect.Stun(3)))),
+        Proc(ProcTrigger.STRUCK, 50, listOf(ProcOutcome(100, effect = Effect.Knockback(2)))),
+        Proc(ProcTrigger.STRUCK, 60, listOf(ProcOutcome(100, effect = Effect.Pull(1)))),
+        Proc(ProcTrigger.HIT, 70, listOf(ProcOutcome(100, effect = Effect.Stun(3)))),
         Proc(
           ProcTrigger.HIT,
-          0.8,
+          80,
           listOf(
-            ProcOutcome(1.0, effect = Effect.Summon(Label("//t:minion"), count = 2, duration = 30))
+            ProcOutcome(100, effect = Effect.Summon(Label("//t:minion"), count = 2, duration = 30))
           ),
         ),
         Proc(
           ProcTrigger.HIT,
-          0.9,
+          90,
           listOf(
             ProcOutcome(
-              1.0,
+              100,
               effect = Effect.Sequence(Effect.Damage(Dice(1, 4), fire), Effect.Knockback(1)),
             )
           ),
         ),
         Proc(
           ProcTrigger.STRUCK,
-          1.0,
+          100,
           listOf(
             ProcOutcome(
-              1.0,
+              100,
               effect =
                 Effect.Plugin(
                   pluginId = "custom",
@@ -127,8 +127,8 @@ class ProcPersistenceTest {
         ),
         Proc(
           ProcTrigger.HIT,
-          0.25,
-          listOf(ProcOutcome(0.5, skill = dummySkill, target = ProcTarget.ENEMY, message = "Boom!")),
+          25,
+          listOf(ProcOutcome(50, skill = dummySkill, target = ProcTarget.ENEMY, message = "Boom!")),
         ),
       )
 
@@ -160,11 +160,11 @@ class ProcPersistenceTest {
     val proc =
       Proc(
         on = ProcTrigger.HIT,
-        chance = 0.5,
+        chance = 50,
         outcomes =
           listOf(
             ProcOutcome(
-              weight = 1.0,
+              weight = 100,
               skill = dummySkill,
               target = ProcTarget.ENEMY,
               message = "Magic burst!",
@@ -186,7 +186,7 @@ class ProcPersistenceTest {
     val surge2 = ann2.affects.single { it.name == "surge" }
     assertEquals(1, surge2.procs.size)
     assertEquals(ProcTrigger.HIT, surge2.procs[0].on)
-    assertEquals(0.5, surge2.procs[0].chance)
+    assertEquals(50, surge2.procs[0].chance)
     assertEquals(dummySkill, surge2.procs[0].outcomes[0].skill)
     assertEquals(ProcTarget.ENEMY, surge2.procs[0].outcomes[0].target)
     assertEquals("Magic burst!", surge2.procs[0].outcomes[0].message)
@@ -202,9 +202,9 @@ class ProcPersistenceTest {
     val proc =
       Proc(
         on = ProcTrigger.STRUCK,
-        chance = 0.75,
+        chance = 75,
         outcomes =
-          listOf(ProcOutcome(weight = 1.0, effect = Effect.Damage(Dice(1, 4), DamageType("fire")))),
+          listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 4), DamageType("fire")))),
       )
     a.w.applyItemAffect(gem, "thorns", 50, applies = AffectScope.CARRIED, procs = listOf(proc))
 
@@ -218,7 +218,7 @@ class ProcPersistenceTest {
     val thorns = gem2.affects.single { it.name == "thorns" }
     assertEquals(1, thorns.procs.size)
     assertEquals(ProcTrigger.STRUCK, thorns.procs[0].on)
-    assertEquals(0.75, thorns.procs[0].chance)
+    assertEquals(75, thorns.procs[0].chance)
     assertTrue(thorns.procs[0].outcomes[0].effect is Effect.Damage)
     b.close()
   }
@@ -234,9 +234,9 @@ class ProcPersistenceTest {
           listOf(
             Proc(
               on = ProcTrigger.HIT,
-              chance = 1.0,
+              chance = 100,
               outcomes =
-                listOf(ProcOutcome(1.0, effect = Effect.Damage(Dice(1, 4), DamageType("fire")))),
+                listOf(ProcOutcome(100, effect = Effect.Damage(Dice(1, 4), DamageType("fire")))),
             )
           ),
       )

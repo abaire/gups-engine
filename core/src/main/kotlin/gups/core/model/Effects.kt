@@ -146,25 +146,23 @@ enum class ProcTarget(val word: String) {
  * follows the skill's own target, or means [ProcTarget.ENEMY] for an effect.
  */
 data class ProcOutcome(
-  val weight: Double,
+  val weight: Int,
   val skill: Label? = null,
   val effect: Effect? = null,
   val target: ProcTarget? = null,
   val message: String? = null,
 ) {
   init {
-    require(weight in 0.0..1.0) { "outcome weight must be between 0 and 1" }
+    require(weight in 0..100) { "outcome weight must be between 0 and 100" }
     require(skill == null || effect == null) { "an outcome takes a skill or an effect, not both" }
   }
 }
 
 /** A chance, on [on], to resolve one of [outcomes] for the bearer. */
-data class Proc(val on: ProcTrigger, val chance: Double, val outcomes: List<ProcOutcome>) {
+data class Proc(val on: ProcTrigger, val chance: Int, val outcomes: List<ProcOutcome>) {
   init {
-    require(chance in 0.0..1.0) { "proc chance must be between 0 and 1" }
+    require(chance in 0..100) { "proc chance must be between 0 and 100" }
     require(outcomes.isNotEmpty()) { "a proc needs at least one outcome" }
-    require(outcomes.sumOf { it.weight } <= 1.0 + 1e-9) {
-      "proc outcome weights add up to more than 1"
-    }
+    require(outcomes.sumOf { it.weight } <= 100) { "proc outcome weights add up to more than 100" }
   }
 }

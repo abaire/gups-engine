@@ -96,13 +96,6 @@ Nothing remembers who attacked whom once a fight ends. **Questions:** - Is there
 engine understands, or is it only a `//lib` convention on shared attributes? - Should mobs remember attackers (a hate
 list) after a flee or a disengage?
 
-### Aggressive mobs and players' level or visibility
-
-**Spec:** §4.7 `aggressive(toward, unless_level_above=None)`. **Today:** an aggressive mob attacks the lowest-id match
-at once. Nothing hides players or models stealth. **Question:** is sneaking or invisibility in scope, and should
-`aggressive` take a chance or a delay? Also, should we support "unless_level_below" and more complex player targeting
-like `attack_healers_first`?
-
 ### Target preference for aggressive mobs
 
 **Spec:** §4.7 `aggressive(toward, ...)`. **Today:** an aggressive mob attacks the lowest-id actor that matches `toward`

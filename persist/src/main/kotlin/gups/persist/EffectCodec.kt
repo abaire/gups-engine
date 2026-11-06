@@ -28,15 +28,14 @@ import kotlinx.serialization.json.longOrNull
 
 @Serializable
 data class OutcomeJson(
-  val weight: Double,
+  val weight: Int,
   val skill: String? = null,
   val effect: EffectJson? = null,
   val target: String? = null,
   val message: String? = null,
 )
 
-@Serializable
-data class ProcJson(val on: String, val chance: Double, val outcomes: List<OutcomeJson>)
+@Serializable data class ProcJson(val on: String, val chance: Int, val outcomes: List<OutcomeJson>)
 
 @Serializable
 @JsonClassDiscriminator("kind")
