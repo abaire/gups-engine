@@ -13,6 +13,14 @@
 # The damage types armor turns aside in mitigate; the rest are reduced by resistance only.
 _PHYSICAL = ["bludgeon", "slash", "pierce"]
 
+# The shared-experience weights and rules, applied by xp_share. A pulse is 250 ms.
+CONTRIB_WINDOW_PULSES = 1200   # 5 minutes of recent activity
+LEVEL_BAND = 10                # the level range a payee may be from the victim
+WEIGHT_DAMAGE = 100            # weight per point of damage
+WEIGHT_HEALING = 100           # weight per point of healing
+WEIGHT_SUPPORT = 20            # weight per point of support
+IDLE_SHARE = 10                # the minimum weight of a grouped member in the victim's room
+
 def _clamp(n, lo, hi):
     return max(lo, min(hi, n))
 
@@ -208,6 +216,59 @@ def xp_for_kill(ctx):
     diff = ctx.target.level - ctx.actor.level
     pct = _clamp(100 + 20 * diff, 0, 150)
     return 50 * ctx.target.level * pct // 100
+
+def _sum(values):
+    total = 0
+    for v in values:
+        total += v
+    return total
+
+def xp_share(ctx):
+    # How a kill's experience pool (ctx.xp) is split among its contributors, as {actor: int}.
+    # A pet's share goes to its owner, who may not be listed itself. The shares sum to exactly
+    # ctx.xp, and a solo kill pays ctx.xp to the killer, as before.
+    payees = {}
+    order = []
+    for c in ctx.contributors:
+        payee = c.owner if c.owner != None else c.actor
+        if payee == None:
+            continue
+        # A recent contribution, or a grouped member standing in the room, is eligible.
+        if not (c.in_room or c.group != None):
+            continue
+        if not (ctx.pulse - c.last_pulse <= CONTRIB_WINDOW_PULSES or (c.group != None and c.in_room)):
+            continue
+        diff = payee.level - ctx.target.level
+        if diff < 0:
+            diff = -diff
+        if diff > LEVEL_BAND:
+            continue
+        weight = c.damage * WEIGHT_DAMAGE + c.healing * WEIGHT_HEALING + c.support * WEIGHT_SUPPORT
+        if c.group != None and c.in_room:
+            weight = max(weight, IDLE_SHARE)
+        if payee not in payees:
+            payees[payee] = 0
+            order.append(payee)
+        payees[payee] += weight
+    total = _sum([payees[p] for p in payees])
+    if total == 0:
+        return {ctx.actor: ctx.xp}
+    share = {}
+    for p in payees:
+        share[p] = ctx.xp * payees[p] // total
+    remainder = ctx.xp - _sum([share[p] for p in share])
+    if remainder > 0:
+        if ctx.actor in share:
+            share[ctx.actor] += remainder
+        else:
+            top = None
+            best = -1
+            for p in order:    # a tie goes to the payee listed first
+                if payees[p] > best:
+                    best = payees[p]
+                    top = p
+            share[top] += remainder
+    return share
 
 def xp_to_level(ctx, level):
     # Total XP at which `level` ends: 1000, 3000, 6000, 10000... Each level costs 1000 * level

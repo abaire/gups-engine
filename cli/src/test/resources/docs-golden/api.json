@@ -383,13 +383,19 @@
       {
         "symbol": "ctx.event",
         "name": "event",
-        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit.",
+        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.",
         "since": 1
       },
       {
         "symbol": "ctx.from_room",
         "name": "from_room",
         "doc": "The room the actor came from, for enter hooks.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.group",
+        "name": "group",
+        "doc": "The group after the change, for on_group_change; None elsewhere.",
         "since": 1
       },
       {
@@ -796,7 +802,7 @@
         "symbol": "ctx.allies_near",
         "feature": "combat",
         "name": "allies_near",
-        "doc": "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.",
+        "doc": "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor, and members of actor's group (and their pets) within the band, simulated and not fighting actor.",
         "since": 1,
         "params": [
           {
@@ -1144,6 +1150,34 @@
         ]
       },
       {
+        "symbol": "ctx.clear_contributions",
+        "name": "clear_contributions",
+        "doc": "Empties victim's contribution record, or removes one contributor's entry.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_contributions.victim",
+            "name": "victim",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor whose record is cleared."
+          },
+          {
+            "symbol": "ctx.clear_contributions.contributor",
+            "name": "contributor",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Contributor to remove, or None for the whole record."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.close_container",
         "name": "close_container",
         "doc": "Closes an open container; a locked one stays locked.",
@@ -1243,7 +1277,7 @@
             "default": "None",
             "varargs": false,
             "kwargs": false,
-            "doc": "Actor credited with the damage, or None."
+            "doc": "Actor credited with the damage; an omitted or None source is the applier of the affect whose hook is running."
           }
         ]
       },
@@ -1629,6 +1663,124 @@
         ]
       },
       {
+        "symbol": "ctx.group_add",
+        "name": "group_add",
+        "doc": "Adds a player to another player's group, creating one if the other has none.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_add.member",
+            "name": "member",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player to add."
+          },
+          {
+            "symbol": "ctx.group_add.to",
+            "name": "to",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player whose group the member joins."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.group_disband",
+        "name": "group_disband",
+        "doc": "Dissolves a player's whole group at once.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_disband.member",
+            "name": "member",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player whose group is dissolved."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.group_members",
+        "name": "group_members",
+        "doc": "The members of an actor's group, leader first; [] when it has none.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_members.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor whose group members are wanted."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.group_of",
+        "name": "group_of",
+        "doc": "The group an actor is in, or None; a pet resolves through its owner.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_of.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor whose group is wanted."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.group_remove",
+        "name": "group_remove",
+        "doc": "Removes a player from its group; a group left with one member is disbanded.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_remove.member",
+            "name": "member",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player to remove."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.group_set_leader",
+        "name": "group_set_leader",
+        "doc": "Makes a member the leader of its group.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.group_set_leader.member",
+            "name": "member",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player to make the leader."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.has_feature",
         "name": "has_feature",
         "doc": "Whether the world has the named feature module on.",
@@ -1681,6 +1833,16 @@
             "varargs": false,
             "kwargs": false,
             "doc": "The declared vital to restore."
+          },
+          {
+            "symbol": "ctx.heal.source",
+            "name": "source",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor credited with the healing; an omitted or None source is the applier of the affect whose hook is running."
           }
         ]
       },
@@ -2818,6 +2980,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.contributors",
+          "name": "contributors",
+          "doc": "The victim's contributors, as contributor structs, in xp_share; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.cost",
           "name": "cost",
           "doc": "For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.",
@@ -2941,6 +3109,12 @@
           "symbol": "rules_ctx.weapon",
           "name": "weapon",
           "doc": "The weapon used in an attack, or None for unarmed.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.xp",
+          "name": "xp",
+          "doc": "The experience pool a kill is being settled for, in xp_share; None elsewhere.",
           "since": 1
         }
       ],

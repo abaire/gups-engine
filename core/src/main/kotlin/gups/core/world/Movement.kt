@@ -16,13 +16,19 @@ fun entryIndexFor(exit: Exit, to: Room): Int =
 
 /**
  * Moves [actor] through [exit]: ends its engagements, places it at the entry index, and fires
- * `on_exit`/`on_enter`. Callers inside an initiative tier go through [deferRemoval].
+ * `on_disengage` with [reason] for whoever that freed, then `on_exit`/`on_enter`. Callers inside an
+ * initiative tier go through [deferRemoval].
  */
-internal fun World.transition(actor: Actor, exit: Exit, leave: Msg = KernelMsg.MOVE_LEAVES) {
+internal fun World.transition(
+  actor: Actor,
+  exit: Exit,
+  leave: Msg = KernelMsg.MOVE_LEAVES,
+  reason: String = "stop",
+) {
   if (!actor.inWorld) return
   val from = actor.room
   val to = room(exit.to)
-  disengageAll(actor)
+  val freed = unlinkAll(actor)
   tellPerceivers(
     from,
     "exit",
@@ -41,6 +47,7 @@ internal fun World.transition(actor: Actor, exit: Exit, leave: Msg = KernelMsg.M
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
   perceive("enter", Channel.SIGHT, to, actor)
+  fireDisengage(freed, reason)
   dispatch(
     HookName.ON_EXIT,
     null,
@@ -74,7 +81,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
   deferRemoval(actor, Deferred.Kind.TRANSITION) {
     if (!actor.inWorld) return@deferRemoval
     val from = actor.room
-    disengageAll(actor)
+    val freed = unlinkAll(actor)
     tellPerceivers(
       from,
       "exit",
@@ -93,6 +100,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     if (actor is Player) send(actor, describeRoom(actor))
     perceive("exit", Channel.SIGHT, from, actor)
     perceive("enter", Channel.SIGHT, to, actor)
+    fireDisengage(freed, "stop")
     dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, toRoom = to))
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))
   }

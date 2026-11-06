@@ -39,6 +39,7 @@
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
 <tr id="rules_ctx.carried"><td><code>carried</code></td><td>1</td><td>The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
+<tr id="rules_ctx.contributors"><td><code>contributors</code></td><td>1</td><td>The victim's contributors, as contributor structs, in xp_share; None elsewhere.</td></tr>
 <tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
 <tr id="rules_ctx.damage_type"><td><code>damage_type</code></td><td>1</td><td>The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
@@ -60,6 +61,7 @@
 <tr id="rules_ctx.text"><td><code>text</code></td><td>1</td><td>For can_perceive and perceive_message: the event's text, or None.</td></tr>
 <tr id="rules_ctx.via_exit"><td><code>via_exit</code></td><td>1</td><td>For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.</td></tr>
 <tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
+<tr id="rules_ctx.xp"><td><code>xp</code></td><td>1</td><td>The experience pool a kill is being settled for, in xp_share; None elsewhere.</td></tr>
 </tbody>
 </table>
 <h3>Methods</h3>

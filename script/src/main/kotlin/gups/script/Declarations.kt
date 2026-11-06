@@ -318,11 +318,27 @@ internal object HookCatalog {
         doc = "Global hook: fires once for each change of an actor's encumbrance level.",
       ),
       HookSpec(
+        hook = HookName.ON_GROUP_CHANGE,
+        signature = "fn(ctx)",
+        attachTo = emptyList(),
+        ctxFields = listOf("self", "actor", "event", "group", "room", "pulse", "rng"),
+        doc =
+          "Global hook: fires for each player-group change, with ctx.event the 'join', 'leave', 'leader' or 'disband'.",
+      ),
+      HookSpec(
         hook = HookName.ON_COMBAT_TICK,
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
         ctxFields = listOf("self", "actor", "targets", "room", "pulse", "rng"),
         doc = "Fires once per combat round on each fighting mob and its equipped items.",
+      ),
+      HookSpec(
+        hook = HookName.ON_DISENGAGE,
+        signature = "fn(ctx)",
+        attachTo = listOf(M, R),
+        ctxFields = listOf("self", "actor", "event", "room", "pulse", "rng"),
+        doc =
+          "Fires when an engaged actor has no opponent left; ctx.event is 'flee', 'death' or 'stop'.",
       ),
       HookSpec(
         hook = HookName.ON_TICK,
@@ -1789,9 +1805,14 @@ internal class DeclarationBuiltins(
       if (!ctx.pkg.kind.privileged)
         fail("global_hook(): only lib and rules packages may register global hooks")
       val name = d.reqStr("name", "global_hook() name")
-      if (name != "on_level_change" && name != "on_encumbrance_change")
+      if (
+        name != "on_level_change" &&
+          name != "on_encumbrance_change" &&
+          name != "on_group_change" &&
+          name != "on_disengage"
+      )
         fail(
-          "global_hook(): '$name' can't be a global hook; only on_level_change and on_encumbrance_change can"
+          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change and on_disengage can"
         )
       val fn = hookRef(d["fn"], "global_hook(fn)")
       if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })
@@ -3234,7 +3255,7 @@ internal class DeclarationBuiltins(
             DeclParam(
               "name",
               "str",
-              "The hook to run globally: 'on_level_change' or 'on_encumbrance_change'.",
+              "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change' or 'on_disengage'.",
               positional = true,
               keyword = true,
               required = true,

@@ -19,6 +19,7 @@ private val STATE_PACKAGES =
     "Char.Affects",
     "Char.Traits",
     "Char.Skills",
+    "Char.Group",
     "Room.Info",
     "Room.Bands",
   )
@@ -196,6 +197,31 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
           }
           .sortedWith(compareBy({ it["name"] as String }, { it["label"] as String }))
       mapOf("skills" to known)
+    }
+    "Char.Group" -> {
+      val group = groupOf(p)
+      if (group == null) null
+      else
+        LinkedHashMap<String, Any?>().also { out ->
+          out["id"] = group.id
+          out["leader"] = group.leader.name
+          out["members"] =
+            groupMembers(p).map { m ->
+              LinkedHashMap<String, Any?>().also { mm ->
+                mm["name"] = m.name
+                mm["leader"] = m === group.leader
+                mm["in_room"] = m.room === p.room
+                if (Feature.LEVELING in features) mm["level"] = m.level
+                mm["vitals"] =
+                  LinkedHashMap<String, Any?>().also { vit ->
+                    for (name in schema.vitalNames) {
+                      vit[name] = m.current(name)
+                      vit["max$name"] = m.max(name)
+                    }
+                  }
+              }
+            }
+        }
     }
     "Room.Info" -> {
       val room = p.room

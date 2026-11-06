@@ -292,6 +292,8 @@ data class RulesExportSpec(
   val ctxFields: List<String>,
   val doc: String,
   val since: Int = FIRST_API_VERSION,
+  /** The engine has a built-in default, so a world need not define it. */
+  val hasDefault: Boolean = false,
 ) {
   val name: String
     get() = export.scriptName
@@ -525,9 +527,11 @@ object ScriptApi {
       ActorView::class.java,
       AffectView::class.java,
       ProtoAffectView::class.java,
+      ContributorView::class.java,
       Denial::class.java,
       DoorView::class.java,
       ExitView::class.java,
+      GroupView::class.java,
       ItemView::class.java,
       LocationView::class.java,
       ProposalView::class.java,

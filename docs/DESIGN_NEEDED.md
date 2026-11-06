@@ -42,35 +42,22 @@ free-form input (`str +2`, `done`) instead of picking an option? Would the provi
 module through a new export such as `point_buy(ctx, spend)`? - How would a point-buy or rerolled result reach
 `starting_stats`: as input in `ctx`, or as replacing its result?
 
-### Group, party and pet XP sharing
-
-**Spec:** §4.6 (`xp_for_kill`), §5.4 (Death: the killer is the last actor who damaged the victim), §5.9 (`bond:`
-reasons), §4.7 (`assist`, `follow`). **Today:** only the killer is awarded XP, and nothing records who else fought the
-victim. The engine has no group or party concept, so a party member who didn't land the final blow, a pet's owner, and
-an assisting ally all earn nothing. Related designs: "Pets and followers bonded to a player" and "Hostility and
-factions". **Questions:** - Is there an engine-level group or party (a command to form it, membership that persists
-across logout), or is it only a `//lib` convention on shared attributes? - Should death track every actor that damaged
-the victim, so XP can go to all contributors rather than the last hitter? - Does a pet's kill credit its owner, and does
-an owner's kill credit the pet? - How is the award split: equal shares, or weighted by level or by damage dealt? Who
-sets the formula, and is it a rules export (for example `xp_share(ctx)`)? - Are members out of the room, or far above or
-below the victim's level, excluded from the split?
-
 ### Friendly fire and area-of-effect harm to allies
 
 **Spec:** §5.4 (Engagement: a hostile skill, including each actor in the room for a `room`-range skill, engages its
-victim), §4.3 (hostile primitives), §4.2 and §4.6 (`before_attack`, its attach points). Related design: "Player groups
-and parties", whose milestone adds groups and `allies_near` but not any rule about harming them. **Today:**
-`before_attack` attaches only to mobs and items, so `//lib` cannot veto a player's attack on a groupmate. The engine
-does not treat groupmates, pets or owners differently from anyone else when it resolves the targets of an attack or an
-area skill. **Questions:** - Should a world decide whether friendly fire is allowed, and where does it say so: a rules
-export (for example `can_harm(ctx)`), a world option, or an extension of `before_attack` to players? - What counts as an
-ally for the rule: group members, pets and their owners, mobs of the same side, or whatever the world's export returns?
-\- Should the rule cover every source of harm (auto-attacks, targeted skills, area skills, affect ticks), or can a world
-cover only some, for example allow friendly fire from area skills only? Allowing it for area skills is a possible
-deterrent against overusing them. - When harm is refused, is a direct attack vetoed with a message while an area skill
-silently skips the ally, or does the world choose? - When harm to an ally is allowed, does it engage the ally, start a
-fight with it, and record a contribution, or does it only deal the damage? - Does the rule need information from the
-caller, such as whether the harm is deliberate (a targeted attack) or incidental (an area effect)?
+victim), §4.3 (hostile primitives), §4.2 and §4.6 (`before_attack`, its attach points). M37 added player groups and
+group members in `allies_near`, but no rule about harming them. **Today:** `before_attack` attaches only to mobs and
+items, so `//lib` cannot veto a player's attack on a groupmate. The engine does not treat groupmates, pets or owners
+differently from anyone else when it resolves the targets of an attack or an area skill. **Questions:** - Should a world
+decide whether friendly fire is allowed, and where does it say so: a rules export (for example `can_harm(ctx)`), a world
+option, or an extension of `before_attack` to players? - What counts as an ally for the rule: group members, pets and
+their owners, mobs of the same side, or whatever the world's export returns? - Should the rule cover every source of
+harm (auto-attacks, targeted skills, area skills, affect ticks), or can a world cover only some, for example allow
+friendly fire from area skills only? Allowing it for area skills is a possible deterrent against overusing them. - When
+harm is refused, is a direct attack vetoed with a message while an area skill silently skips the ally, or does the world
+choose? - When harm to an ally is allowed, does it engage the ally, start a fight with it, and record a contribution, or
+does it only deal the damage? - Does the rule need information from the caller, such as whether the harm is deliberate
+(a targeted attack) or incidental (an area effect)?
 
 ## Mobs and AI
 
@@ -83,10 +70,9 @@ such as `ctx.bond(mob, player)`, or a `follow`/`order` command? - Who adds and c
 does it survive logout? - Does a pet fight for its owner, and does it count as an ally for `assist`? Does spawning a pet
 provide hooks that can be used for mobs/characters to react? Could we allow counterspells to prevent a spawn?
 
-**Revisit with the group and XP sharing milestone:** that milestone identifies a pet's owner for `xp_share` by reusing
-`Mob.summonedBy`, else `Mob.leader` when the leader is a player, rather than adding an explicit owner. When this entry
-is designed, decide whether bonds need a first-class `owner` field and update the `xp_share` contributor `owner` lookup
-to read it.
+**Revisit from M37:** the engine identifies a pet's owner for `xp_share` and groups by reusing `Mob.summonedBy`, else
+`Mob.leader` when the leader is a player, rather than adding an explicit owner. When this entry is designed, decide
+whether bonds need a first-class `owner` field and update the `xp_share` contributor `owner` lookup to read it.
 
 ### Hostility and factions
 
@@ -144,13 +130,14 @@ cross-zone event listeners do not wake dormant reality bubbles or violate pulse 
 
 ## Social and communication
 
-### Player groups and parties
+### Showing groups in `who`, `score` and clients
 
-**Spec:** §4.7 (`assist`, `follow`), §4.6 (`xp_for_kill`), §5.4 (Death). **Today:** the engine has no group or party
-concept; XP goes solely to the killer, and assisting allies or followers do not share rewards. Related design: "Group,
-party and pet XP sharing". **Questions:** - Should party formation, invitations, party leadership, group chat channels,
-and friendly-fire prevention be engine primitives or implemented in `//lib`? - How should party state handle player
-disconnects, zone transfers, and persistence across logout?
+**Spec:** §3.3 (Groups), §4.9 (`who`, `score`), §4.10 (`Char.Status`, `Char.Group`). **Today (after M37):** groups
+exist, `Char.Group` describes a player's group, and `//lib:group.star` lists it with `group`. `who`, `score` and
+`Char.Status` show nothing about groups, and the bundled web client ignores `Char.Group`. **Questions:** - Should `who`
+mark grouped players or their leader, and should `score` name the player's group? - Should `Char.Status` carry the group
+id, or is `Char.Group` enough? - How should the web client show the group (a panel with members' vitals, a marker in the
+room list)?
 
 ## Economy and crafting
 

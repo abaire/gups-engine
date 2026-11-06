@@ -40,8 +40,9 @@
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
 <tr id="ctx.direction"><td><code>direction</code></td><td>1</td><td>The movement direction name, for enter and exit hooks.</td></tr>
 <tr id="ctx.elapsed_pulses"><td><code>elapsed_pulses</code></td><td>1</td><td>Pulses spent dormant, for on_wake.</td></tr>
-<tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit.</td></tr>
+<tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.</td></tr>
 <tr id="ctx.from_room"><td><code>from_room</code></td><td>1</td><td>The room the actor came from, for enter hooks.</td></tr>
+<tr id="ctx.group"><td><code>group</code></td><td>1</td><td>The group after the change, for on_group_change; None elsewhere.</td></tr>
 <tr id="ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For on_perceive: the event's strength where it happened.</td></tr>
 <tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
 <tr id="ctx.losses"><td><code>losses</code></td><td>1</td><td>The vital losses behind amount, as vitals(...), for on_damage.</td></tr>
@@ -161,7 +162,7 @@
 </article>
 <article id="ctx.allies_near" class="entry">
 <h4><code>allies_near(actor, band)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
-<p>Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.</p>
+<p>Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor, and members of actor's group (and their pets) within the band, simulated and not fighting actor.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
@@ -251,6 +252,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.clear_contributions" class="entry">
+<h4><code>clear_contributions(victim, contributor = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Empties victim's contribution record, or removes one contributor's entry.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.clear_contributions.victim"><td><code>victim</code></td><td>positional or named</td><td></td><td>Actor whose record is cleared.</td></tr>
+<tr id="ctx.clear_contributions.contributor"><td><code>contributor</code></td><td>positional or named</td><td><code>None</code></td><td>Contributor to remove, or None for the whole record.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.close_container" class="entry">
 <h4><code>close_container(item)</code> <span class="since">since api_version 1</span></h4>
 <p>Closes an open container; a locked one stays locked.</p>
@@ -282,7 +294,7 @@
 <tr id="ctx.damage.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points of damage.</td></tr>
 <tr id="ctx.damage.type"><td><code>type</code></td><td>positional or named</td><td></td><td>A declared damage type, such as DAMAGE.fire.</td></tr>
 <tr id="ctx.damage.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital that loses the points.</td></tr>
-<tr id="ctx.damage.source"><td><code>source</code></td><td>positional or named</td><td><code>None</code></td><td>Actor credited with the damage, or None.</td></tr>
+<tr id="ctx.damage.source"><td><code>source</code></td><td>positional or named</td><td><code>None</code></td><td>Actor credited with the damage; an omitted or None source is the applier of the affect whose hook is running.</td></tr>
 </tbody>
 </table>
 </article>
@@ -414,6 +426,67 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.group_add" class="entry">
+<h4><code>group_add(member, to)</code> <span class="since">since api_version 1</span></h4>
+<p>Adds a player to another player's group, creating one if the other has none.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_add.member"><td><code>member</code></td><td>positional or named</td><td></td><td>Player to add.</td></tr>
+<tr id="ctx.group_add.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Player whose group the member joins.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.group_disband" class="entry">
+<h4><code>group_disband(member)</code> <span class="since">since api_version 1</span></h4>
+<p>Dissolves a player's whole group at once.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_disband.member"><td><code>member</code></td><td>positional or named</td><td></td><td>Player whose group is dissolved.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.group_members" class="entry">
+<h4><code>group_members(actor)</code> <span class="since">since api_version 1</span></h4>
+<p>The members of an actor's group, leader first; [] when it has none.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_members.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor whose group members are wanted.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.group_of" class="entry">
+<h4><code>group_of(actor)</code> <span class="since">since api_version 1</span></h4>
+<p>The group an actor is in, or None; a pet resolves through its owner.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_of.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor whose group is wanted.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.group_remove" class="entry">
+<h4><code>group_remove(member)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes a player from its group; a group left with one member is disbanded.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_remove.member"><td><code>member</code></td><td>positional or named</td><td></td><td>Player to remove.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.group_set_leader" class="entry">
+<h4><code>group_set_leader(member)</code> <span class="since">since api_version 1</span></h4>
+<p>Makes a member the leader of its group.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.group_set_leader.member"><td><code>member</code></td><td>positional or named</td><td></td><td>Player to make the leader.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.has_feature" class="entry">
 <h4><code>has_feature(name)</code> <span class="since">since api_version 1</span></h4>
 <p>Whether the world has the named feature module on.</p>
@@ -425,7 +498,7 @@
 </table>
 </article>
 <article id="ctx.heal" class="entry">
-<h4><code>heal(target, amount, vital)</code> <span class="since">since api_version 1</span></h4>
+<h4><code>heal(target, amount, vital, source = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Restores a vital of target, up to its maximum.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
@@ -433,6 +506,7 @@
 <tr id="ctx.heal.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to heal.</td></tr>
 <tr id="ctx.heal.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to restore.</td></tr>
 <tr id="ctx.heal.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital to restore.</td></tr>
+<tr id="ctx.heal.source"><td><code>source</code></td><td>positional or named</td><td><code>None</code></td><td>Actor credited with the healing; an omitted or None source is the applier of the affect whose hook is running.</td></tr>
 </tbody>
 </table>
 </article>

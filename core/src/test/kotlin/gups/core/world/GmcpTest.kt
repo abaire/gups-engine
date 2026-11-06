@@ -8,6 +8,8 @@ import gups.core.model.Channel
 import gups.core.model.Player
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -45,6 +47,7 @@ class GmcpTest(private val fs: FixtureSchema) {
         "Char.Status",
         "Char.Affects",
         "Char.Skills",
+        "Char.Group",
         "Room.Info",
         "Room.Bands",
       ),
@@ -220,7 +223,14 @@ class GmcpTest(private val fs: FixtureSchema) {
     f.run()
     val sent = sink.take()
     assertEquals(
-      listOf("Char.Schema", "Char.Vitals", "Char.Status", "Char.Affects", "Char.Skills"),
+      listOf(
+        "Char.Schema",
+        "Char.Vitals",
+        "Char.Status",
+        "Char.Affects",
+        "Char.Skills",
+        "Char.Group",
+      ),
       sent.map { it.first },
     )
     assertEquals(
@@ -309,5 +319,81 @@ class GmcpTest(private val fs: FixtureSchema) {
       "<{rads}rads {integrity}integrity {power}power> ",
       FixtureSchemas.ROBOT.schema.promptTemplate,
     )
+  }
+
+  @Test
+  fun `Char Group is null without a group, lists the group with one, and deltas on change`() {
+    val f = Fixture()
+    val (ann, sink) = f.gmcpPlayer("Ann")
+    f.run()
+    assertEquals(null, sink.take().first { it.first == "Char.Group" }.second, "no group: null")
+    val (ben, benSink) = f.gmcpPlayer("Ben")
+    f.run()
+    assertEquals(null, benSink.take().first { it.first == "Char.Group" }.second)
+    f.w.groupAdd(ben, ann)
+    f.run()
+    @Suppress("UNCHECKED_CAST")
+    val m = sink.take().first { it.first == "Char.Group" }.second as Map<String, Any?>
+    assertEquals(1, m["id"])
+    assertEquals("Ann", m["leader"])
+    @Suppress("UNCHECKED_CAST") val members = m["members"] as List<Map<String, Any?>>
+    assertEquals(listOf("Ann", "Ben"), members.map { it["name"] }, "leader first")
+    assertEquals(listOf(true, false), members.map { it["leader"] })
+    assertTrue(members.all { it["in_room"] == true }, "both are in the same room")
+    @Suppress("UNCHECKED_CAST")
+    val vitalsKeys = (f.w.gmcpPayload(ann, "Char.Vitals") as Map<*, *>).keys.toList()
+    assertEquals(vitalsKeys, (members.first()["vitals"] as Map<*, *>).keys.toList())
+    f.run(3)
+    assertEquals(emptyList(), sink.packages(), "an unchanged group sends nothing")
+    f.hurt(ben, 5)
+    f.run()
+    assertTrue(sink.packages().contains("Char.Group"), "a member's vitals change is a delta")
+    f.w.groupSetLeader(ben)
+    f.run()
+    @Suppress("UNCHECKED_CAST")
+    val m2 = sink.take().first { it.first == "Char.Group" }.second as Map<String, Any?>
+    assertEquals("Ben", m2["leader"], "a leader change is a delta")
+    f.w.groupRemove(ben)
+    f.run()
+    assertNull(sink.take().first { it.first == "Char.Group" }.second, "the disband sends null")
+    f.run(3)
+    assertEquals(emptyList(), sink.packages(), "null repeated sends nothing")
+  }
+
+  @Test
+  fun `Char Group marks a member in another room as not in_room`() {
+    val f = Fixture()
+    val (ann, sink) = f.gmcpPlayer("Ann")
+    val (ben, _) = f.gmcpPlayer("Ben", at = T.YARD)
+    f.w.groupAdd(ben, ann)
+    f.run()
+    @Suppress("UNCHECKED_CAST")
+    val m = sink.take().first { it.first == "Char.Group" }.second as Map<String, Any?>
+    @Suppress("UNCHECKED_CAST") val members = m["members"] as List<Map<String, Any?>>
+    assertEquals(listOf("Ann", "Ben"), members.map { it["name"] })
+    assertEquals(listOf(true, false), members.map { it["in_room"] })
+  }
+
+  @Test
+  fun `Char Group has no level field without leveling`() {
+    val f = Fixture(features = Features(Feature.entries.toSet() - setOf(Feature.LEVELING)))
+    val (ann, _) = f.gmcpPlayer("Ann")
+    val (ben, _) = f.gmcpPlayer("Ben")
+    f.w.groupAdd(ben, ann)
+    f.run()
+    @Suppress("UNCHECKED_CAST") val m = f.w.gmcpPayload(ann, "Char.Group") as Map<String, Any?>
+    @Suppress("UNCHECKED_CAST") val member = m["members"] as List<Map<String, Any?>>
+    assertFalse("level" in member.first(), "no level without leveling")
+  }
+
+  @Test
+  fun `a client that does not support Char Group gets nothing`() {
+    val f = Fixture()
+    val (ann, annSink) = f.gmcpPlayer("Ann", sink = GmcpSink(setOf("Room")))
+    val (ben, benSink) = f.gmcpPlayer("Ben", sink = GmcpSink(setOf("Room")))
+    f.w.groupAdd(ben, ann)
+    f.run(2)
+    assertFalse("Char.Group" in annSink.packages())
+    assertFalse("Char.Group" in benSink.packages())
   }
 }

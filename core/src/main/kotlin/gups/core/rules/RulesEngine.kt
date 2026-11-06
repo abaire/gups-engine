@@ -11,6 +11,7 @@ import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.Exit
 import gups.core.model.Item
+import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.world.World
@@ -70,6 +71,10 @@ class RulesContext(
   val carried: Int? = null,
   /** The level just computed, in encumbrance calls. */
   val encumbranceLevel: Int? = null,
+  /** The experience pool a kill is being settled for, in xp_share; null elsewhere. */
+  val xp: Long? = null,
+  /** The victim's contributors, in xp_share; null elsewhere. */
+  val contributors: List<Contributor>? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -105,6 +110,8 @@ class RulesContext(
       limit = limit,
       carried = carried,
       encumbranceLevel = encumbranceLevel,
+      xp = xp,
+      contributors = contributors,
     )
 
   /**
@@ -135,6 +142,8 @@ class RulesContext(
       damageType = damageType,
       slot = slot,
       affect = a,
+      xp = xp,
+      contributors = contributors,
     )
 
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
@@ -149,6 +158,18 @@ class RulesContext(
   val rng: Rng
     get() = world.rng
 }
+
+/** One actor's part in a kill, as `xp_share` sees it. */
+data class Contributor(
+  val actor: Actor,
+  val damage: Int,
+  val healing: Int,
+  val support: Int,
+  val lastPulse: Long,
+  val owner: Player?,
+  val groupId: Int?,
+  val inRoom: Boolean,
+)
 
 /**
  * Initial attribute and vital values assigned to a newly created character or freshly spawned mob.
@@ -289,6 +310,10 @@ interface RulesEngine {
 
   /** Calculates experience points awarded to an actor for defeating a target. */
   fun xpForKill(c: RulesContext): Long
+
+  /** Who is awarded what of [c]`xp` for the kill; the default pays the killer all of it. */
+  fun xpShare(c: RulesContext): Map<Actor, Long> =
+    c.actor?.let { mapOf(it to (c.xp ?: 0L)) } ?: emptyMap()
 
   /**
    * Calculates the total experience points at which [level] ends for the actor in [c].

@@ -112,6 +112,11 @@ class FeatureScriptTest {
       "def f(ctx):\n    pass\nmob(\"m\", on_combat_tick = f)",
       "hook 'on_combat_tick'",
     )
+    refused(
+      Feature.COMBAT,
+      "def f(ctx):\n    pass\nmob(\"m\", on_disengage = f)",
+      "hook 'on_disengage'",
+    )
     for (hook in listOf("before_cast", "on_cast_start", "on_cast")) refused(
       Feature.SKILLS,
       "def f(ctx):\n    pass\nmob(\"m\", $hook = f)",

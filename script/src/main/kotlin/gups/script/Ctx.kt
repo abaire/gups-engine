@@ -15,6 +15,7 @@ import gups.core.model.Dice
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Entity
+import gups.core.model.GroupSnapshot
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -40,6 +41,7 @@ import gups.core.world.awardXp
 import gups.core.world.callHook
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
+import gups.core.world.clearContributions
 import gups.core.world.damage
 import gups.core.world.destroy
 import gups.core.world.echo
@@ -47,7 +49,14 @@ import gups.core.world.emote
 import gups.core.world.findActor
 import gups.core.world.gmcp
 import gups.core.world.gmcpWithin
+import gups.core.world.groupAdd
+import gups.core.world.groupDisband
+import gups.core.world.groupMembers
+import gups.core.world.groupOf
+import gups.core.world.groupRemove
+import gups.core.world.groupSetLeader
 import gups.core.world.heal
+import gups.core.world.isDying
 import gups.core.world.isSimulated
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
@@ -233,9 +242,16 @@ internal constructor(
     name = "event",
     structField = true,
     doc =
-      "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit.",
+      "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.",
   )
   fun event(): Any = field { hc.event ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "group",
+    structField = true,
+    doc = "The group after the change, for on_group_change; None elsewhere.",
+  )
+  fun group(): Any = field { hc.group?.let { GroupView(frame, it) } ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "channel",
@@ -403,6 +419,9 @@ internal constructor(
 
   // ---- Argument conversion -------------------------------------------------------------------
 
+  /** The in-world actor that applied the affect whose hook is running, or null. */
+  private fun affectApplier(): Actor? = hc.affect?.source?.let(world::actor)?.takeIf { it.inWorld }
+
   private fun actorArg(x: Any?, what: String): Actor {
     val a = (x as? ActorView)?.actor ?: fail("$what: expected an actor, got ${typeName(x)}")
     if (!a.inWorld) fail("$what: ${a.name} is no longer in the world")
@@ -411,6 +430,9 @@ internal constructor(
 
   private fun mobArg(x: Any?, what: String): Mob =
     actorArg(x, what) as? Mob ?: fail("$what: mob actions apply only to mobs, never players")
+
+  private fun playerArg(x: Any?, what: String): Player =
+    actorArg(x, what) as? Player ?: fail("$what: must be a player")
 
   private fun itemArg(x: Any?, what: String): Item {
     val i = (x as? ItemView)?.item ?: fail("$what: expected an item, got ${typeName(x)}")
@@ -898,7 +920,8 @@ internal constructor(
           name = "source",
           defaultValue = "None",
           named = true,
-          doc = "Actor credited with the damage, or None.",
+          doc =
+            "Actor credited with the damage; an omitted or None source is the applier of the affect whose hook is running.",
         ),
       ],
   )
@@ -920,7 +943,7 @@ internal constructor(
         t,
         mapOf(name to n),
         DamageType(damageType),
-        if (isNone(source)) null else actorArg(source, "damage(source)"),
+        if (isNone(source)) affectApplier() else actorArg(source, "damage(source)"),
       )
       Starlark.NONE
     }
@@ -933,15 +956,27 @@ internal constructor(
         Param(name = "target", named = true, doc = "Actor to heal."),
         Param(name = "amount", named = true, doc = "Points to restore."),
         Param(name = "vital", named = true, doc = "The declared vital to restore."),
+        Param(
+          name = "source",
+          defaultValue = "None",
+          named = true,
+          doc =
+            "Actor credited with the healing; an omitted or None source is the applier of the affect whose hook is running.",
+        ),
       ],
   )
-  fun heal(target: Any, amount: Any, vital: Any): Any =
+  fun heal(target: Any, amount: Any, vital: Any, source: Any): Any =
     verb("heal") {
       val n = int(amount, "heal(amount)")
       if (n < 0) fail("heal(amount): can't be negative; use damage()")
       val name =
         checkName(str(vital, "heal(vital)"), world.schema.vitalNames, "vital", "heal(vital)")
-      world.heal(actorArg(target, "heal(target)"), name, n)
+      world.heal(
+        actorArg(target, "heal(target)"),
+        name,
+        n,
+        source = if (isNone(source)) affectApplier() else actorArg(source, "heal(source)"),
+      )
       Starlark.NONE
     }
 
@@ -1103,6 +1138,7 @@ internal constructor(
       if (x === y) fail("start_combat(): an actor can't fight itself")
       if (x.room !== y.room)
         fail("start_combat(): ${x.name} and ${y.name} are not in the same room")
+      for (d in listOf(x, y)) if (world.isDying(d)) fail("start_combat(): ${d.name} is dying")
       world.startCombat(x, y)
       Starlark.NONE
     }
@@ -1128,6 +1164,102 @@ internal constructor(
         if (isNone(b)) null else actorArg(b, "stop_combat(b)"),
       )
       Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "clear_contributions",
+    doc = "Empties victim's contribution record, or removes one contributor's entry.",
+    parameters =
+      [
+        Param(name = "victim", named = true, doc = "Actor whose record is cleared."),
+        Param(
+          name = "contributor",
+          defaultValue = "None",
+          named = true,
+          doc = "Contributor to remove, or None for the whole record.",
+        ),
+      ],
+  )
+  fun clearContributions(victim: Any, contributor: Any): Any =
+    verb("clear_contributions") {
+      val v = actorArg(victim, "clear_contributions(victim)")
+      world.clearContributions(
+        v,
+        if (isNone(contributor)) null else actorArg(contributor, "clear_contributions(contributor)"),
+      )
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "group_add",
+    doc = "Adds a player to another player's group, creating one if the other has none.",
+    parameters =
+      [
+        Param(name = "member", named = true, doc = "Player to add."),
+        Param(name = "to", named = true, doc = "Player whose group the member joins."),
+      ],
+  )
+  fun groupAdd(member: Any, to: Any): Any =
+    verb("group_add") {
+      world.groupAdd(playerArg(member, "group_add(member)"), playerArg(to, "group_add(to)"))
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "group_remove",
+    doc = "Removes a player from its group; a group left with one member is disbanded.",
+    parameters = [Param(name = "member", named = true, doc = "Player to remove.")],
+  )
+  fun groupRemove(member: Any): Any =
+    verb("group_remove") {
+      world.groupRemove(playerArg(member, "group_remove(member)"))
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "group_set_leader",
+    doc = "Makes a member the leader of its group.",
+    parameters = [Param(name = "member", named = true, doc = "Player to make the leader.")],
+  )
+  fun groupSetLeader(member: Any): Any =
+    verb("group_set_leader") {
+      world.groupSetLeader(playerArg(member, "group_set_leader(member)"))
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "group_disband",
+    doc = "Dissolves a player's whole group at once.",
+    parameters = [Param(name = "member", named = true, doc = "Player whose group is dissolved.")],
+  )
+  fun groupDisband(member: Any): Any =
+    verb("group_disband") {
+      world.groupDisband(playerArg(member, "group_disband(member)"))
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "group_of",
+    doc = "The group an actor is in, or None; a pet resolves through its owner.",
+    parameters = [Param(name = "actor", named = true, doc = "Actor whose group is wanted.")],
+  )
+  fun groupOf(actor: Any): Any =
+    verb("group_of") {
+      val a = actorArg(actor, "group_of(actor)")
+      val g = world.groupOf(a) ?: return@verb Starlark.NONE
+      GroupView(frame, GroupSnapshot(g.id, g.leader, world.groupMembers(a)))
+    }
+
+  @StarlarkMethod(
+    name = "group_members",
+    doc = "The members of an actor's group, leader first; [] when it has none.",
+    parameters =
+      [Param(name = "actor", named = true, doc = "Actor whose group members are wanted.")],
+  )
+  fun groupMembers(actor: Any): Any =
+    verb("group_members") {
+      val a = actorArg(actor, "group_members(actor)")
+      sList(world.groupMembers(a).map { view(frame, it) })
     }
 
   @StarlarkMethod(
@@ -2087,7 +2219,7 @@ internal constructor(
   @StarlarkMethod(
     name = "allies_near",
     doc =
-      "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor.",
+      "Actors of the same side (players with players, mobs with mobs) within a band who are not fighting actor, and members of actor's group (and their pets) within the band, simulated and not fighting actor.",
     parameters =
       [
         Param(name = "actor", named = true, doc = "The actor whose allies are wanted."),
@@ -2096,7 +2228,10 @@ internal constructor(
   )
   fun alliesNear(actor: Any, band: Any): Any =
     near(actor, band, "allies_near") { a, within ->
-      within.filter { it.isPlayer == a.isPlayer && it.id !in a.fighting }
+      val ga = world.groupOf(a)
+      within.filter { x ->
+        x.id !in a.fighting && (x.isPlayer == a.isPlayer || (ga != null && world.groupOf(x) === ga))
+      }
     }
 
   @StarlarkMethod(

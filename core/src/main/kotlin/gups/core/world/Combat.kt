@@ -21,6 +21,7 @@ import gups.core.model.Player
 import gups.core.model.Proc
 import gups.core.model.ProcTrigger
 import gups.core.model.SkillProto
+import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
 import gups.core.saturatingAdd
 
@@ -29,6 +30,9 @@ import gups.core.saturatingAdd
 fun World.startCombat(a: Actor, b: Actor) {
   if (Feature.COMBAT !in features) return
   if (a === b || !a.inWorld || !b.inWorld || a.room !== b.room) return
+  // An actor whose death is being run is about to be removed or respawned; engaging it now would
+  // leave its opponent fighting someone who is gone.
+  if (isDying(a) || isDying(b)) return
   val fresh = b.id !in a.fighting
   a.fighting += b.id
   b.fighting += a.id
@@ -55,19 +59,54 @@ fun World.startCombat(a: Actor, b: Actor) {
 /** Ends [a]'s engagement with [b], or with everyone if [b] is null. */
 fun World.stopCombat(a: Actor, b: Actor? = null) {
   if (b == null) return disengageAll(a)
+  fireDisengage(unlink(a, b).filter(::isSimulated), "stop")
+}
+
+/** The body of a stop: edits the engagement with [b], returning whoever this freed, in order. */
+private fun World.unlink(a: Actor, b: Actor): List<Actor> {
+  val aWas = a.isEngaged
+  val bWas = b.isEngaged
   a.fighting -= b.id
   b.fighting -= a.id
   if (a.primaryTarget == b.id) a.primaryTarget = null
   if (b.primaryTarget == a.id) b.primaryTarget = null
   if (!a.isEngaged) a.initiative = null
   if (!b.isEngaged) b.initiative = null
+  return buildList {
+    if (aWas && !a.isEngaged) add(a)
+    if (bWas && !b.isEngaged) add(b)
+  }
 }
 
-internal fun World.disengageAll(a: Actor) {
-  for (id in a.fighting.toList()) actor(id)?.let { stopCombat(a, it) }
+internal fun World.disengageAll(a: Actor, reason: String? = "stop") {
+  val freed = unlinkAll(a)
+  if (reason != null) fireDisengage(freed, reason)
+}
+
+/**
+ * Ends every engagement of [a] without firing anything, returning whoever this freed that is
+ * simulated, in order. A caller that is about to move or remove [a] fires [fireDisengage] once that
+ * is done, so a hook can't re-engage an actor that is half gone. Simulation is judged here, where
+ * the fight was, so a mob that flees into a dormant room still hears of it.
+ */
+internal fun World.unlinkAll(a: Actor): List<Actor> {
+  val freed = LinkedHashSet<Actor>()
+  for (id in a.fighting.toList()) actor(id)?.let { freed += unlink(a, it) }
   a.fighting.clear()
   a.primaryTarget = null
   a.initiative = null
+  return freed.filter(::isSimulated)
+}
+
+/** Fires `on_disengage` with [reason], on each of [freed] still in the world and globally. */
+internal fun World.fireDisengage(freed: Collection<Actor>, reason: String) {
+  if (Feature.COMBAT !in features) return
+  for (x in freed) {
+    if (!x.inWorld) continue
+    val ctx = HookContext(actor = x, event = reason)
+    dispatch(HookName.ON_DISENGAGE, x, x.room, ctx)
+    dispatchGlobal(HookName.ON_DISENGAGE, ctx)
+  }
 }
 
 /** Opponents of [a] who are, for validation, in the same room; ascending id. */
@@ -208,6 +247,7 @@ fun World.damage(
       .filterValues { it > 0 }
   if (dealt.isEmpty() && gains.isEmpty()) return
   applyVitalDeltas(target, dealt.mapValues { -it.value } + gains, source)
+  if (source != null && source !== target && total > 0) recordDamage(target, source, total)
   if (total > 0) {
     dispatch(
       HookName.ON_DAMAGE,
@@ -236,10 +276,15 @@ fun World.damage(
 }
 
 /** The `heal` verb: raises [vital] by [amount], up to its maximum. */
-fun World.heal(target: Actor, vital: String, amount: Int) {
+fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null) {
   if (!target.inWorld || amount <= 0) return
+  val effective = minOf(amount, maxOf(0, target.max(vital) - target.current(vital)))
   changeVital(target, vital, amount)
+  if (source != null) recordHealing(target, source, effective)
 }
+
+/** True while [a]'s death is being run, before it is removed or respawned. */
+fun World.isDying(a: Actor): Boolean = a.id in dying
 
 /** Engine-owned death. Runs at most once per life. */
 internal fun World.processDeath(victim: Actor) {
@@ -258,12 +303,16 @@ private fun World.runDeath(victim: Actor) {
   if (standing != Condition.DEAD) return setCondition(victim, standing)
   val room = victim.room
   val killer = victim.lastAttacker?.let(::actor)?.takeIf { it.inWorld && it !== victim }
+  val snapshot = contributorsOf(victim, killer)
+  victim.contributions.clear()
   victim.casting = null
   victim.actionQueue.clear()
   victim.waitState = 0
   victim.heldWaitState = 0
   victim.heldSince = 0
-  disengageAll(victim)
+  // The opponents it frees hear of it once the victim is gone or respawned, so a hook can't
+  // re-engage it here.
+  val freed = unlinkAll(victim) - victim
   removedThisPhase += victim.id
   tell(victim, KernelMsg.DEATH_SELF)
   tellPerceivers(
@@ -284,10 +333,14 @@ private fun World.runDeath(victim: Actor) {
   val summoned = victim is Mob && victim.summonedBy != null
   // Priced now, against the victim as it died, but awarded last: a level the award raises fires
   // on_level_change, which must not reach the victim or the belongings it is about to lose.
-  val killXp =
+  val pool =
     if (Feature.LEVELING in features && killer != null && !victim.debug && !summoned)
       rules.xpForKill(RulesContext(this, killer, victim))
     else 0L
+  val awards: Map<Actor, Long> =
+    if (killer != null && pool > 0)
+      rules.xpShare(RulesContext(this, killer, victim, xp = pool, contributors = snapshot))
+    else emptyMap()
 
   val corpse =
     spawnItem(
@@ -328,7 +381,8 @@ private fun World.runDeath(victim: Actor) {
       if (outcome.levelLoss > 0) levelDown(victim, outcome.levelLoss)
     }
   }
-  if (killer != null && killer.inWorld) awardXp(killer, killXp)
+  fireDisengage(freed, "death")
+  for ((a, n) in awards.entries.sortedBy { it.key.id }) if (a.inWorld && n > 0) awardXp(a, n)
 }
 
 /**
@@ -371,6 +425,7 @@ fun World.applyAffect(
   resistDeltas: Map<DamageType, Int> = emptyMap(),
   procs: List<Proc> = emptyList(),
   power: Int = 100,
+  hostile: Boolean? = null,
 ): Affect? {
   if (!target.inWorld) return null
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
@@ -401,6 +456,7 @@ fun World.applyAffect(
       power = power,
     )
   target.affects += affect
+  if (source != null && source !== target) recordSupport(target, source, hostile)
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
   disabledChanged(target, wasDisabled)
@@ -447,7 +503,7 @@ private fun World.endAffect(
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
   if ("summoned" in affect.flags && a is Mob && a.inWorld) {
     tellSight(a.room, "exit", a, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
-    disengageAll(a)
+    disengageAll(a, null)
     removeActor(a)
   }
 }
@@ -655,6 +711,8 @@ fun World.applyEffect(
           effect is Effect.Knockback ||
           effect is Effect.Pull
       if (hostile && t !== caster) startCombat(caster, t)
+      // A skill's affect is a bane exactly when the skill targets an enemy; a stun always is one.
+      val skillHostile = skill?.let { it.target == TargetKind.ENEMY }
       when (effect) {
         is Effect.Damage -> {
           val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
@@ -662,7 +720,8 @@ fun World.applyEffect(
           traceRules(caster, hit.text)
           damage(t, hit.losses, effect.type, caster, hit.parts)
         }
-        is Effect.Heal -> heal(t, effect.vital, scaled(effect.dice.roll(rng), power))
+        is Effect.Heal ->
+          heal(t, effect.vital, scaled(effect.dice.roll(rng), power), source = caster)
         is Effect.ApplyAffect ->
           applyAffect(
             t,
@@ -684,6 +743,7 @@ fun World.applyEffect(
             resistDeltas = effect.resistDeltas,
             procs = effect.procs,
             power = power,
+            hostile = skillHostile,
           )
         is Effect.Dispel -> {
           val gone = t.affects.filter(effect::matches)
@@ -707,6 +767,7 @@ fun World.applyEffect(
             flags = setOf("stunned"),
             source = caster,
             power = power,
+            hostile = true,
           )
         is Effect.Sequence,
         is Effect.Summon,

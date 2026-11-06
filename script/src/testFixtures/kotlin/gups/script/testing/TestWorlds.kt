@@ -108,6 +108,7 @@ object TestWorlds {
       "retreat_fail_lag" to setOf("track"),
       "flee_fail_lag" to setOf("combat"),
       "xp_for_kill" to setOf("leveling"),
+      "xp_share" to setOf("leveling"),
       "xp_to_level" to setOf("leveling"),
       "on_level_up" to setOf("leveling"),
     )

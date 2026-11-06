@@ -819,12 +819,16 @@ private fun bindingLine(file: StarlarkFile, name: String): Int? =
 /** The package the engine reads its rules from. */
 const val RULES_PACKAGE = "rules"
 
-/** The [RulesExport]s not in [defined]; every export the enabled features need is required. */
+/**
+ * The [RulesExport]s not in [defined] and with no engine default; every export the enabled features
+ * need is required.
+ */
 internal fun missingRulesExports(
   defined: Collection<String>,
   features: Features = Features.ALL,
 ): List<String> =
   RulesExport.entries
+    .filterNot { e -> RULES_EXPORTS.single { spec -> spec.export == e }.hasDefault }
     .filter {
       FeatureOwnership.of("rules:${it.scriptName}").let { req ->
         req == null || req.satisfiedBy(features)

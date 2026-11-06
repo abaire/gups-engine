@@ -10,6 +10,7 @@ import gups.core.world.HookOutcome
 import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.awardXp
+import gups.core.world.groupAdd
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import kotlin.test.Test
@@ -97,6 +98,8 @@ class HookCtxFieldsTest {
         wrap = { host -> Spy(host).also { spy = it } },
       )
     val p = f.player(hp = 500)
+    // A second player, so a group change fires the on_group_change global hook.
+    f.w.groupAdd(f.player("Quinn"), p)
     p.skills[Label("//zones/z:zap")] = 100
     f.w.spawnItem(Label("//zones/z:rock"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))

@@ -228,6 +228,16 @@ class RecordingHost : ScriptHost {
     return h(world, owner, ctx) ?: HookOutcome.Allow
   }
 
+  override fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) {
+    // on_level_change also fires on the attached path, which invokeHook records; counting it
+    // here too would double it. The other global hooks (encumbrance, group) fire only here.
+    if (hook == HookName.ON_LEVEL_CHANGE) return
+    val actor = ctx.actor ?: return
+    val h = handlers[hook] ?: return
+    calls += "${hook.scriptName}:global"
+    h(world, actor, ctx)
+  }
+
   /** Run on a timer or affect callback, by function name, after it is recorded in [calls]. */
   val refHandlers = mutableMapOf<String, (World, Entity, HookContext) -> Unit>()
 

@@ -50,6 +50,9 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   /** Replaces `xp_for_kill` when set. */
   var xpForKillOf: ((RulesContext) -> Long)? = null
 
+  /** Replaces `xp_share` when set. */
+  var xpShareOf: ((RulesContext) -> Map<Actor, Long>)? = null
+
   /** Replaces `sense_cost` when set. */
   var senseCostOf: ((RulesContext) -> Int)? = null
 
@@ -247,6 +250,8 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
     val pct = (100 + 20 * (c.defender.level - c.attacker.level)).coerceIn(0, 150)
     return 50L * c.defender.level * pct / 100
   }
+
+  override fun xpShare(c: RulesContext): Map<Actor, Long> = xpShareOf?.invoke(c) ?: super.xpShare(c)
 
   override fun xpToLevel(c: RulesContext, level: Int): Long =
     xpToLevelOf?.invoke(c.actor!!, level) ?: (500L * level * (level + 1))

@@ -12,6 +12,7 @@ import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Actor
 import gups.core.model.Condition
 import gups.core.model.Entity
+import gups.core.model.Group
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -279,6 +280,11 @@ class World(
   internal val dying = HashSet<EntityId>()
   internal var cascadeDepth = 0
 
+  /** The in-memory player groups, by group id; never saved. */
+  internal val groups = TreeMap<Int, Group>()
+  /** Group ids are allocated from this counter; they are never reused. */
+  internal var nextGroupId = 1
+
   // The reality bubble: how many anchors cover each room, and where each anchor was.
   internal val coverage = HashMap<Room, Int>()
   internal val anchorRooms = HashMap<EntityId, Room>()
@@ -535,6 +541,7 @@ class World(
 
   /** Takes [a] and everything it carries out of the world (mob death, quit). */
   internal fun removeActor(a: Actor) {
+    if (a is Player) leaveGroupOnRemoval(a)
     a.room.actorIndex.remove(a.id)
     actorIndex.remove(a.id)
     entities.remove(a.id)

@@ -442,6 +442,9 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var lastAttacker: EntityId? = null
     internal set
 
+  /** Who has contributed to fights against this actor, by contributor id; ascending. Not saved. */
+  internal val contributions: java.util.TreeMap<EntityId, Contribution> = java.util.TreeMap()
+
   /** True while the actor is actively present in the simulation world. */
   var inWorld: Boolean = false
     internal set
@@ -625,6 +628,10 @@ class Player(
 
   /** Connected session ID, or null while link-dead. */
   var session: SessionId? = null
+    internal set
+
+  /** Id of this player's group, or null. Not saved. */
+  var groupId: Int? = null
     internal set
 
   /** Monotonic pulse when the session disconnected, or null while connected. */

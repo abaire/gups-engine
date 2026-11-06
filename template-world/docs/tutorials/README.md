@@ -65,6 +65,11 @@ persistence, and linking to official specifications and generated API references
    * Defining a trainer with `trainer.define`, `teach`, and `open`
    * Practice sessions earned by changing level and spent with `practice`
    * The `practice_offer` custom hook and class caps via `learn` restrictions
+10. **[10. Groups and Shared Experience: The `//lib:group.star` Library](10_groups_and_shared_experience.md)**
+    * The contribution ledger and the `xp_share` rules export
+    * Tuning the template formula
+    * Player groups: `invite`, `accept`, `leave`, `kick`, `leader`, `disband`, `group` and `gtell`
+    * Clearing contributions from `on_disengage`
 
 ---
 

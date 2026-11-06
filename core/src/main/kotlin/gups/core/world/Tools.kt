@@ -753,7 +753,7 @@ internal fun World.expireDebugMobs() {
 
 private fun World.despawnDebug(m: Mob) {
   if (!m.inWorld) return
-  disengageAll(m)
+  disengageAll(m, null)
   val room = m.room
   for (item in m.inventory + m.equipment.values) markDebug(item)
   removeActor(m)

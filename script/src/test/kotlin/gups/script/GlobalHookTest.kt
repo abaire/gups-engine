@@ -231,7 +231,7 @@ class GlobalHookTest {
       )
     assertContains(
       only(r, "lib").message,
-      "can't be a global hook; only on_level_change and on_encumbrance_change can",
+      "can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change and on_disengage can",
     )
   }
 

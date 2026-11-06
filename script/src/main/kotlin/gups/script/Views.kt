@@ -9,6 +9,7 @@ import gups.core.model.Direction
 import gups.core.model.Door
 import gups.core.model.Entity
 import gups.core.model.Exit
+import gups.core.model.GroupSnapshot
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -17,6 +18,7 @@ import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.rules.Contributor
 import gups.core.world.HeldAffect
 import gups.core.world.Proposal
 import gups.core.world.World
@@ -505,6 +507,77 @@ class DoorView internal constructor(private val scope: ViewScope, private val do
 
   override fun repr(printer: Printer) {
     printer.append("<door ${door.state.name.lowercase()}>")
+  }
+}
+
+@StarlarkBuiltin(name = "contributor", doc = "One actor's part in a kill, for rules.xp_share.")
+class ContributorView
+internal constructor(private val scope: ViewScope, private val c: Contributor) : StarlarkValue {
+  private fun <T> read(block: () -> T): T {
+    scope.check()
+    return block()
+  }
+
+  @StarlarkMethod(name = "actor", structField = true, doc = "The contributor actor.")
+  fun actor(): Any = read { view(scope, c.actor) }
+
+  @StarlarkMethod(name = "damage", structField = true, doc = "Vital loss dealt to the victim.")
+  fun damage(): Any = read { sInt(c.damage) }
+
+  @StarlarkMethod(
+    name = "healing",
+    structField = true,
+    doc = "Vital recovered for the victim's side.",
+  )
+  fun healing(): Any = read { sInt(c.healing) }
+
+  @StarlarkMethod(name = "support", structField = true, doc = "Supporting affects applied.")
+  fun support(): Any = read { sInt(c.support) }
+
+  @StarlarkMethod(
+    name = "last_pulse",
+    structField = true,
+    doc = "The pulse of the last contribution.",
+  )
+  fun lastPulse(): Any = read { sInt(c.lastPulse) }
+
+  @StarlarkMethod(name = "owner", structField = true, doc = "The owner's view, or None.")
+  fun owner(): Any = read { c.owner?.let { view(scope, it) } ?: Starlark.NONE }
+
+  @StarlarkMethod(name = "group", structField = true, doc = "The group id, or None.")
+  fun group(): Any = read { c.groupId?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(name = "in_room", structField = true, doc = "Whether in the victim's room.")
+  fun inRoom(): Any = read { c.inRoom }
+
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append("<contributor ${c.actor.name}>")
+  }
+}
+
+@StarlarkBuiltin(name = "group", doc = "A player group, for the group verbs and on_group_change.")
+class GroupView internal constructor(private val scope: ViewScope, private val g: GroupSnapshot) :
+  StarlarkValue {
+  private fun <T> read(block: () -> T): T {
+    scope.check()
+    return block()
+  }
+
+  @StarlarkMethod(name = "id", structField = true, doc = "The group id.")
+  fun id(): Any = read { sInt(g.id) }
+
+  @StarlarkMethod(name = "leader", structField = true, doc = "The leader's view.")
+  fun leader(): Any = read { view(scope, g.leader) }
+
+  @StarlarkMethod(name = "members", structField = true, doc = "Member views, leader first.")
+  fun members(): Any = read { sList(g.members.map { view(scope, it) }) }
+
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append("<group ${g.id}>")
   }
 }
 

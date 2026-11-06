@@ -50,7 +50,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
         is Player -> {
           val to = roomOrNull(a.recallRoom)?.takeIf { it.label in next.rooms } ?: fallback
           if (a.recallRoom !in next.rooms) a.recallRoom = fallback.label
-          disengageAll(a)
+          disengageAll(a, null)
           placeActor(a, to, 0)
           tell(a, KernelMsg.RECONCILE_SHIFT)
           send(a, describeRoom(a))
@@ -166,7 +166,7 @@ fun tombstone(was: ItemProto) =
   )
 
 private fun World.despawn(m: Mob) {
-  disengageAll(m)
+  disengageAll(m, null)
   m.casting = null
   m.actionQueue.clear()
   removeActor(m)

@@ -4,6 +4,52 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Groups and shared experience
+
+- Each actor holds a transient record of the damage, healing and support other actors do toward fights against it, kept
+  on the victim and never saved. Damage and healing an affect does from its own `on_tick` or `on_expire` hook, naming no
+  `source`, are credited to the actor that applied the affect while it is in the world.
+- `heal` takes an optional `source`, the actor credited with the healing; an omitted or `None` source is the applier of
+  the affect whose hook is running.
+- `clear_contributions(victim, contributor=None)` empties an actor's contribution record, or removes one contributor's
+  entry. The engine never expires the record itself.
+- `xp_share(ctx)` splits a kill's experience pool among actors, after `xp_for_kill` prices it. `ctx.contributors` are
+  the victim's contributors as structs, and `ctx.xp` is the pool. It is the one optional rules export: the default keeps
+  today's behavior, paying the killer the whole pool. When defined, the load-time dry run calls it with a pool of 100
+  and two contributors.
+- Player groups are an in-memory set of players with a leader: `group_add(member, to)`, `group_remove(member)`,
+  `group_set_leader(member)` and `group_disband(member)`, with the queries `group_of(actor)` and `group_members(actor)`.
+  A group is session-scoped: a quit, a link-dead expiry, or any removal of a member from the world drops that member,
+  the leader on leaving is replaced by the lowest-id remaining member, and a group left with one member is disbanded.
+- `on_group_change` is a global hook that fires for each group change, with `ctx.event` the `"join"`, `"leave"`,
+  `"leader"` or `"disband"` and `ctx.group` the group after that step; `group_of` returns the same `group` view. Each
+  change is complete before its events fire, and a hook that disbands the group drops the events still pending for it.
+- `ctx.contributors` now also lists every in-world member of a contributor's group, even with no contribution and
+  wherever it is, so `xp_share` can pay an idle member; each carries `group` and `in_room`.
+- The `Char.Group` GMCP state package shows a player's group, or `null` without one, recomputed when it changes.
+- `on_disengage` fires on an actor and its room, once for each actor that was engaged and has no opponent left, with
+  `ctx.event` the `"flee"`, `"death"` or `"stop"`. A dying actor itself does not get the hook, and the engine clears no
+  ledger: a world calls `clear_contributions` from it. It fires once the move, quit or death that ended the engagement
+  has finished, so a hook can't re-engage an actor that is half gone, and a quitter does not get it.
+- Nothing engages an actor while its death runs, so an `on_death` hook can't leave its killer fighting a removed mob:
+  `ctx.start_combat` with a dying actor is an error naming it.
+- `allies_near` now also returns members of the actor's group, and their pets, within the band and not fighting it.
+- `global_hook` also accepts `on_disengage`, so a privileged package can react whenever any engaged actor loses its last
+  opponent.
+- The template world's `xp_share` splits a kill's pool by weighted damage, healing and support, pays a pet's share to
+  its owner, pays a grouped member in the room a minimum share, and always sums to exactly the pool, so a solo kill pays
+  as before.
+- The template world's `//lib:group.star` adds the `group`, `invite`, `accept`, `leave`, `kick`, `leader`, `disband` and
+  `gtell` commands (alias `gt`), and a `Group.Chat` GMCP event. The arcane school gains the ally spells `soothe` and
+  `ward`.
+- Tutorial 10 explains shared experience, the `xp_share` contract, tuning the constants and clearing contributions on
+  `on_disengage`.
+
+```python
+# before: a player's grouped pet was not an ally
+# after: allies_near(player, "near") includes the player's group members and their pets
+```
+
 ### Percent chances and noticing
 
 - `wander(chance)` is a whole percent from 0 to 100, not a 0..1 float; a float is a load error with a hint.

@@ -23,6 +23,7 @@ import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.rules.Contributor
 import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
@@ -37,6 +38,7 @@ import gups.core.world.msg
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
+import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
@@ -181,6 +183,22 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     doc = "The level encumbrance_level just gave; None outside encumbrance.",
   )
   fun encumbranceLevel(): Any = field { c.encumbranceLevel?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "xp",
+    structField = true,
+    doc = "The experience pool a kill is being settled for, in xp_share; None elsewhere.",
+  )
+  fun xp(): Any = field { c.xp?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "contributors",
+    structField = true,
+    doc = "The victim's contributors, as contributor structs, in xp_share; None elsewhere.",
+  )
+  fun contributors(): Any = field {
+    c.contributors?.let { sList(it.map { x -> ContributorView(frame, x) }) } ?: Starlark.NONE
+  }
 
   @StarlarkMethod(
     name = "room",
@@ -739,6 +757,18 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       int(v, "rules.xp_for_kill return value").toLong()
     } ?: 0
 
+  override fun xpShare(c: RulesContext): Map<Actor, Long> =
+    run(RulesExport.XP_SHARE, c, ctxArgs(c)) { v ->
+      val what = "rules.xp_share return value"
+      val d = v as? Dict<*, *> ?: fail("$what: must be a dict, got ${typeName(v)}")
+      d.entries.associate { (k, n) ->
+        val a = k as? ActorView ?: fail("$what: keys must be actors, got ${typeName(k)}")
+        val amount = int(n, "$what: values must be ints").toLong()
+        if (amount < 0) fail("$what: values must be 0 or more")
+        a.actor to amount
+      }
+    } ?: super.xpShare(c)
+
   override fun xpToLevel(c: RulesContext, level: Int): Long =
     run(RulesExport.XP_TO_LEVEL, c, ctxArgs(c, sInt(level))) { v ->
       int(v, "rules.xp_to_level return value").toLong().also {
@@ -839,6 +869,7 @@ enum class RulesExport(val scriptName: String) {
   RETREAT_FAIL_LAG("retreat_fail_lag"),
   FLEE_FAIL_LAG("flee_fail_lag"),
   XP_FOR_KILL("xp_for_kill"),
+  XP_SHARE("xp_share"),
   XP_TO_LEVEL("xp_to_level"),
   ON_LEVEL_UP("on_level_up"),
   ON_PLAYER_DEATH("on_player_death"),
@@ -1093,6 +1124,14 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "int",
       ctxFields = listOf("actor", "target", "room", "pulse", "rng"),
       doc = "Experience points awarded to actor for slaying target.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.XP_SHARE,
+      signature = "xp_share(ctx)",
+      returnType = "dict",
+      ctxFields = listOf("actor", "target", "xp", "contributors", "room", "pulse", "rng"),
+      doc = "Splits a kill's experience pool among actors.",
+      hasDefault = true,
     ),
     RulesExportSpec(
       export = RulesExport.XP_TO_LEVEL,
@@ -1477,6 +1516,8 @@ internal fun dryRunRules(
     val player = world.spawnPlayer("Dryrunner", at)
     val foe = world.spawnPlayer("Dryrunfoe", at)
     val mobs = protos.mobs.keys.map { world.spawnMob(it, world.room(at)) }
+    // A second xp_share contributor that is never the victim, so a split runs over two entries.
+    val ally = if (Feature.LEVELING in features) world.spawnPlayer("Dryrunally", at) else null
     world.creation?.let { provider ->
       for (c in provider.choices) {
         for (opt in c.options) {
@@ -1593,7 +1634,16 @@ internal fun dryRunRules(
         rules.skillCheck(withSkill)
         rules.skillPower(withSkill)
       }
-      if (Feature.LEVELING in features) rules.xpForKill(c)
+      if (ally != null) {
+        rules.xpForKill(c)
+        val contributors =
+          listOf(
+              Contributor(a, 2, 0, 0, world.pulse, null, null, inRoom = true),
+              Contributor(ally, 0, 1, 0, world.pulse, null, null, inRoom = true),
+            )
+            .sortedBy { it.actor.id }
+        rules.xpShare(RulesContext(world, a, other, xp = 100, contributors = contributors))
+      }
       for (type in schema.damageTypes) {
         val damageType = DamageType(type)
         rules.mitigate(RulesContext(world, a, other, damageType = damageType), 5, damageType)

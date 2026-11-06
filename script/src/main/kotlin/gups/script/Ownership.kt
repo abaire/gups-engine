@@ -33,7 +33,13 @@ object FeatureOwnership {
     owns(Feature.LEVELING, "aggressive.unless_level_below")
     owns(Feature.LEVELING, "hook:on_level_change", "ctx.old_level", "ctx.new_level")
     owns(Feature.LEVELING, "view:actor.level", "view:actor.xp", "view:actor.pending_levels")
-    owns(Feature.LEVELING, "rules:xp_for_kill", "rules:xp_to_level", "rules:on_level_up")
+    owns(
+      Feature.LEVELING,
+      "rules:xp_for_kill",
+      "rules:xp_share",
+      "rules:xp_to_level",
+      "rules:on_level_up",
+    )
     owns(Feature.LEVELING, "ctx.award_xp", "ctx.take_xp", "ctx.level_up", "ctx.level_down")
     owns(Feature.LEVELING, "w.award_xp", "w.take_xp", "w.level_up", "w.level_down")
     owns(
@@ -42,7 +48,7 @@ object FeatureOwnership {
       "modifier:to_hit",
       "modifier:defend_hit",
     )
-    owns(Feature.COMBAT, "hook:before_attack", "hook:on_combat_tick")
+    owns(Feature.COMBAT, "hook:before_attack", "hook:on_combat_tick", "hook:on_disengage")
     owns(
       Feature.COMBAT,
       "rules:damage",

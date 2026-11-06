@@ -185,7 +185,8 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
     }
   }
   player.session = null
-  disengageAll(player)
+  // The opponents it frees hear of it after it has left, so a hook can't re-engage it.
+  val freed = unlinkAll(player)
   despawnDebugMobs(player)
   // Logout saves the character and everything it carries, at once.
   player.dirty = true
@@ -195,6 +196,7 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   val room = player.room
   removeActor(player)
   echo(room, msg(KernelMsg.QUIT_LEFT, "name" to player.name))
+  fireDisengage(freed, "stop")
 }
 
 /**

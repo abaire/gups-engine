@@ -789,7 +789,172 @@ object DocExamples {
                 t.contains(p.do("solve"), "plan=fetch_key->unlock_door->open_door")
             """,
         ),
+      "ctx.clear_contributions" to
+        ex(
+          pkg =
+            """
+                def _reset(ctx):
+                    # Empty the whole contribution record, then remove one entry specifically.
+                    ctx.clear_contributions(ctx.actor)
+                    ctx.clear_contributions(ctx.actor, ctx.actor)
+                    ctx.send(ctx.actor, "record cleared")
 
+                room("pit",
+                    name = "The Pit",
+                    desc = "A dank pit.",
+                    flags = ["dead_end_ok"],
+                    commands = {"reset": _reset},
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":pit")
+                t.contains(p.do("reset"), "record cleared")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_add" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                    ctx.send(ctx.actor, "joined")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                t.contains(p.do("join Quinn"), "joined")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_remove" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                def _leave(ctx):
+                    ctx.group_remove(ctx.actor)
+                    ctx.send(ctx.actor, "left")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join, "leave": _leave})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                p.do("join Quinn")
+                t.contains(p.do("leave"), "left")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_set_leader" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                def _lead(ctx):
+                    ctx.group_set_leader(ctx.actor)
+                    ctx.send(ctx.actor, "leads")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join, "lead": _lead})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                p.do("join Quinn")
+                t.contains(p.do("lead"), "leads")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_disband" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                def _disband(ctx):
+                    ctx.group_disband(ctx.actor)
+                    ctx.send(ctx.actor, "disbanded")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join, "disband": _disband})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                p.do("join Quinn")
+                t.contains(p.do("disband"), "disbanded")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_of" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                def _who(ctx):
+                    g = ctx.group_of(ctx.actor)
+                    ctx.send(ctx.actor, "group %s" % (g.id if g else "none"))
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join, "gwho": _who})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                p.do("join Quinn")
+                t.contains(p.do("gwho"), "group 1")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.group_members" to
+        ex(
+          pkg =
+            """
+                def _join(ctx):
+                    ctx.group_add(ctx.actor, ctx.here(ctx.args))
+                def _roster(ctx):
+                    ctx.send(ctx.actor, "roster %d" % len(ctx.group_members(ctx.actor)))
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"join": _join, "roster": _roster})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn_player("Quinn", at = ":camp")
+                p.do("join Quinn")
+                t.contains(p.do("roster"), "roster 2")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
       // ---- Behaviors ----------------------------------------------------------------------
       "aggressive" to
         ex(

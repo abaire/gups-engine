@@ -97,7 +97,7 @@ internal object FleeAction : Action {
     }
     w.tell(actor, CombatMsg.FLEE_SELF, "direction" to exit.direction)
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) {
-      w.transition(actor, exit, CombatMsg.FLEE_ROOM)
+      w.transition(actor, exit, CombatMsg.FLEE_ROOM, reason = "flee")
     }
     return 0
   }

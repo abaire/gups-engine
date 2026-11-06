@@ -18,6 +18,7 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.ZoneProto
+import gups.core.rules.Contributor
 import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -463,6 +464,8 @@ class BonusDamageTest {
         limit = 100,
         carried = 50,
         encumbranceLevel = 2,
+        xp = 10,
+        contributors = listOf(Contributor(d, 1, 2, 3, 4L, null, null, true)),
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

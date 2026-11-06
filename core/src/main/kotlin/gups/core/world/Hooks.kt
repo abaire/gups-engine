@@ -9,6 +9,7 @@ import gups.core.model.Affect
 import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.Entity
+import gups.core.model.GroupSnapshot
 import gups.core.model.Item
 import gups.core.model.ModifierPoint
 import gups.core.model.Room
@@ -108,8 +109,27 @@ enum class HookName(
    */
   ON_ENCUMBRANCE_CHANGE("on_encumbrance_change"),
 
+  /**
+   * Invoked, as a global hook only, once for each change to a player group.
+   *
+   * [HookContext.actor] is the player the event names, [HookContext.event] is "join", "leave",
+   * "leader" or "disband", and [HookContext.group] is the group after the change (the full group,
+   * no longer including the leaver, on a "leave").
+   */
+  ON_GROUP_CHANGE("on_group_change"),
+
   /** Invoked on engaged combatants during each combat round tick. */
   ON_COMBAT_TICK("on_combat_tick"),
+
+  /**
+   * Invoked when an engaged actor has no opponent left, once for each such actor.
+   *
+   * [HookContext.actor] is the freed actor, and [HookContext.event] is "flee" after a successful
+   * flee, "death" when it was freed by an opponent's death, and "stop" otherwise. A dying actor
+   * itself does not receive the hook. The engine clears no ledger here; a world calls
+   * `clear_contributions` from it.
+   */
+  ON_DISENGAGE("on_disengage"),
 
   /** Invoked periodically on simulated entities. */
   ON_TICK("on_tick"),
@@ -195,6 +215,8 @@ data class HookContext(
   val elapsedPulses: Long? = null,
   /** Perception event type (e.g. `say`, `enter`) for `on_perceive`. */
   val event: String? = null,
+  /** The group after the change, for `on_group_change`, or null. */
+  val group: GroupSnapshot? = null,
   /** Channel name for sensory events. */
   val channel: String? = null,
   /** Sensory signal intensity at the origin. */

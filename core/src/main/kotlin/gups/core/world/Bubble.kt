@@ -211,7 +211,7 @@ internal fun World.sleep(room: Room) {
     if (e.activeReasons.isNotEmpty() || e.anchorReasons.isNotEmpty()) continue
     pauseTimers(e)
     if (e is Mob) {
-      disengageAll(e)
+      disengageAll(e, null)
       e.actionQueue.clear()
       e.casting = null
     }
