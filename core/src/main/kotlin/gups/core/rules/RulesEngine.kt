@@ -14,6 +14,7 @@ import gups.core.model.Item
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
+import gups.core.world.Behavior
 import gups.core.world.World
 
 /**
@@ -75,6 +76,8 @@ class RulesContext(
   val xp: Long? = null,
   /** The victim's contributors, in xp_share; null elsewhere. */
   val contributors: List<Contributor>? = null,
+  /** The prototype's behaviors, in owned_behaviors; null elsewhere. */
+  val behaviors: List<Behavior>? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -112,6 +115,7 @@ class RulesContext(
       encumbranceLevel = encumbranceLevel,
       xp = xp,
       contributors = contributors,
+      behaviors = behaviors,
     )
 
   /**
@@ -144,6 +148,7 @@ class RulesContext(
       affect = a,
       xp = xp,
       contributors = contributors,
+      behaviors = behaviors,
     )
 
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
@@ -310,6 +315,11 @@ interface RulesEngine {
 
   /** Calculates experience points awarded to an actor for defeating a target. */
   fun xpForKill(c: RulesContext): Long
+
+  /**
+   * The owned behavior list for [c]`actor` (a mob) owned by [c]`target`, or null for the default.
+   */
+  fun ownedBehaviors(c: RulesContext): List<Behavior>? = null
 
   /** Who is awarded what of [c]`xp` for the kill; the default pays the killer all of it. */
   fun xpShare(c: RulesContext): Map<Actor, Long> =

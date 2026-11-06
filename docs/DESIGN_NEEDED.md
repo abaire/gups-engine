@@ -61,19 +61,6 @@ does it only deal the damage? - Does the rule need information from the caller, 
 
 ## Mobs and AI
 
-### Pets and followers bonded to a player
-
-**Spec:** §5.9 says "Pets and followers bonded to a player get the reason `bond:<player_id>`." §4.7 has
-`follow(target)`. **Today:** - Nothing creates a bond. - `follow` latches onto the first matching actor it sees, and
-drops it after more than 3 exits (D-121). - Scripts can't tell a mob whom to follow. **Questions:** - Is there a verb
-such as `ctx.bond(mob, player)`, or a `follow`/`order` command? - Who adds and clears the `bond:` active reason, and
-does it survive logout? - Does a pet fight for its owner, and does it count as an ally for `assist`? Does spawning a pet
-provide hooks that can be used for mobs/characters to react? Could we allow counterspells to prevent a spawn?
-
-**Revisit from M37:** the engine identifies a pet's owner for `xp_share` and groups by reusing `Mob.summonedBy`, else
-`Mob.leader` when the leader is a player, rather than adding an explicit owner. When this entry is designed, decide
-whether bonds need a first-class `owner` field and update the `xp_share` contributor `owner` lookup to read it.
-
 ### Hostility and factions
 
 **Spec:** §4.7 (`aggressive(toward)`, `assist(allies)`, `guard`), §3.7 (the example `faction` shared namespace).
@@ -151,7 +138,6 @@ recipes define material requirements, tools, workstations and skill checks? - Wh
 flawed product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
 overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
 feature?
-
 
 ## Plugins
 

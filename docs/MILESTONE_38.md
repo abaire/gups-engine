@@ -1024,8 +1024,8 @@ val mobs: List<Actor>? = null,
 
 ### Exit Conditions
 
-- [] `./gradlew check` passes with zero warnings.
-- [] `SummonHooksTest` and the script summon tests pass.
+- [x] `./gradlew check` passes with zero warnings.
+- [x] `SummonHooksTest` and the script summon tests pass.
 
 ---
 

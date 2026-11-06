@@ -77,6 +77,9 @@ data class PluginRestrictionDocSpec(val point: String, val doc: String)
 /** A containment filter a plugin registers, for `plugins.html`. */
 data class PluginFilterDocSpec(val doc: String)
 
+/** An owned-behaviors adjuster a plugin registers, for `plugins.html`. */
+data class PluginOwnedBehaviorsDocSpec(val doc: String)
+
 /** What `plugins.html` shows about one plugin. */
 data class PluginDocSpec(
   val id: String,
@@ -90,6 +93,7 @@ data class PluginDocSpec(
   val restrictions: List<PluginRestrictionDocSpec> = emptyList(),
   val choices: List<PluginChoiceDocSpec> = emptyList(),
   val containmentFilters: List<PluginFilterDocSpec> = emptyList(),
+  val ownedBehaviors: List<PluginOwnedBehaviorsDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -717,6 +721,24 @@ object DocsRenderer {
               .append(badge)
               .append("</td><td>")
               .append(esc(f.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.ownedBehaviors.isNotEmpty()) {
+          append(
+            "<h3>Owned behaviors</h3>\n<table>\n<thead><tr><th>Adjuster</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for ((i, b) in p.ownedBehaviors.withIndex()) {
+            val n = i + 1
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".owned-behaviors-")
+              .append(n)
+              .append("\"><td><code>owned_behaviors</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(b.doc))
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")

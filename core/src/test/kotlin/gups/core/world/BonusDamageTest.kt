@@ -466,6 +466,7 @@ class BonusDamageTest {
         encumbranceLevel = 2,
         xp = 10,
         contributors = listOf(Contributor(d, 1, 2, 3, 4L, null, null, true)),
+        behaviors = listOf(Heel()),
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

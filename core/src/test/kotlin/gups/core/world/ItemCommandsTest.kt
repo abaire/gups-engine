@@ -887,7 +887,7 @@ class ItemCommandsTest(private val fs: FixtureSchema) {
         "magpie",
         listOf("magpie"),
         vitals = mapOf(fs.health to 40),
-        behaviors = listOf(Scavenge),
+        behaviors = listOf(Scavenge()),
       )
     val f =
       Fixture(protos = Prototypes(T.rooms, T.mobs + listOf(magpie), T.items + extra, T.skills))

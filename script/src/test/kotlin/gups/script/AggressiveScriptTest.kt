@@ -66,4 +66,22 @@ class AggressiveScriptTest {
       )
     assertTrue(r2.ok, r2.report())
   }
+
+  @Test
+  fun `every behavior with a priority accepts priority and rejects a non-int`() {
+    val ok =
+      load(
+        """
+        mob("m", vitals = vitals(hp = 1), behaviors = [
+            wander(priority = 1), aggressive(priority = 2), assist("m", priority = 3),
+            flee(vitals(hp = 10), priority = 4), follow("players", priority = 5),
+            pursue("players", priority = 6), scavenge(priority = 7), heel(priority = 8),
+            defend(group = False, priority = 9)])
+        """
+      )
+    assertTrue(ok.ok, ok.report())
+    val bad = load("mob(\"m\", vitals = vitals(hp = 1), behaviors = [heel(priority = \"high\")])")
+    assertFalse(bad.ok)
+    assertContains(bad.report(), "heel(priority)")
+  }
 }

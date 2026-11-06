@@ -158,6 +158,16 @@ interface PluginRegistry {
    * side-effect free. A filter that throws records a `plugin` diagnostic and doesn't block.
    */
   fun addContainmentFilter(doc: String, blocks: (PluginContainmentCall) -> Boolean)
+
+  /**
+   * Adjusts the owned behavior list of a mob after the world's owned_behaviors rules export, in
+   * plugin-id order.
+   *
+   * [adjust] receives the mob, its owner (or null while offline), and the behavior list so far as
+   * plain descriptors, and returns the replacement list of descriptors. An invalid descriptor or an
+   * exception thrown by [adjust] logs a diagnostic and leaves the list unchanged.
+   */
+  fun addOwnedBehaviors(doc: String, adjust: (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>)
 }
 
 /** Mirrors core's command lanes. */
@@ -331,6 +341,7 @@ enum class PluginRestrictionPoint {
   DROP,
   GIVE,
   PUT,
+  ORDER,
 }
 
 data class PluginRestrictionCall(
@@ -357,4 +368,11 @@ data class PluginContainmentCall(
   val container: PluginItem,
   val item: PluginItem,
   val affect: PluginItemAffect,
+)
+
+data class PluginOwnedBehaviorsCall(
+  val world: PluginWorld,
+  val mob: PluginActor,
+  val owner: PluginActor?,
+  val behaviors: List<Map<String, Any?>>,
 )

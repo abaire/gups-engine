@@ -172,3 +172,11 @@ mob("mentor",
     hooks = {"practice_offer": _mentor_offer},
     on_spawn = _mentor_open,
 )
+
+mob("familiar",
+    name = "a spectral familiar",
+    keywords = ["familiar", "spectral"],
+    desc = "A translucent, glowing creature bound to serve its summoner.",
+    vitals = vitals(hp = 20),
+    behaviors = [wander()],
+)

@@ -11,6 +11,7 @@ import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.awardXp
 import gups.core.world.groupAdd
+import gups.core.world.setOwner
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import kotlin.test.Test
@@ -54,8 +55,12 @@ class HookCtxFieldsTest {
       if (v is Map<*, *> && v.isEmpty()) continue
       // ctx.target is the target actor or, failing that, the target item (Ctx.target).
       out +=
-        if (f.name == "targetItem") "target"
-        else f.name.replace(Regex("[A-Z]")) { "_" + it.value.lowercase() }
+        when (f.name) {
+          "targetItem" -> "target"
+          "summonLabel" -> "label"
+          "mobs" -> "targets"
+          else -> f.name.replace(Regex("[A-Z]")) { "_" + it.value.lowercase() }
+        }
     }
     if (hook == HookName.ON_COMBAT_TICK) out += "targets"
     return out
@@ -92,6 +97,7 @@ class HookCtxFieldsTest {
                     item("chest", container = container(state = "locked", key = ":key"), ${hooks(OwnerKind.ITEM)})
                     item("lead", weight = 80)
                     skill("zap", range = "far", warmup = 1, effect = damage(dice = "1d2"))
+                    skill("conjure", kind = "spell", range = "self", target = "self", warmup = 0, effect = summon(":wolf", count = 1))
                 """,
         ),
         bubble = true,
@@ -100,7 +106,11 @@ class HookCtxFieldsTest {
     val p = f.player(hp = 500)
     // A second player, so a group change fires the on_group_change global hook.
     f.w.groupAdd(f.player("Quinn"), p)
+    // A mob gaining an owner fires the on_owner_change global hook.
+    val pet = f.w.spawnMob(Label("//zones/z:wolf"), p.room)
+    f.w.setOwner(pet, p)
     p.skills[Label("//zones/z:zap")] = 100
+    p.skills[Label("//zones/z:conjure")] = 100
     f.w.spawnItem(Label("//zones/z:rock"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
@@ -112,6 +122,7 @@ class HookCtxFieldsTest {
       listOf(
         "say hello",
         "tell wolf hi",
+        "order wolf look",
         "drop cup",
         "get cup",
         "use cup wolf",
@@ -128,6 +139,7 @@ class HookCtxFieldsTest {
         "north",
         "south",
         "cast zap wolf",
+        "cast conjure",
       )) {
       f.input(p, line)
       f.run(3)

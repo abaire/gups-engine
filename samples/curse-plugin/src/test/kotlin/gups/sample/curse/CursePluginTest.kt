@@ -63,6 +63,11 @@ class CursePluginTest {
       containmentFilters.add(doc to blocks)
     }
 
+    override fun addOwnedBehaviors(
+      doc: String,
+      adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
+    ) = TODO()
+
     override fun addHook(name: String, doc: String, handle: (PluginHookCall) -> Any?) {
       hooks.add(name to handle)
     }

@@ -198,6 +198,7 @@ class FeatureScriptTest {
     refused(Feature.COMBAT, "mob(\"m\", behaviors = [aggressive()])", "aggressive()")
     refused(Feature.COMBAT, "mob(\"m\", behaviors = [assist(\"m\")])", "assist()")
     refused(Feature.COMBAT, "mob(\"m\", behaviors = [flee(vitals(hp = 10))])", "flee()")
+    refused(Feature.COMBAT, "mob(\"m\", behaviors = [defend()])", "defend()")
     refused(
       Feature.LEVELING,
       "mob(\"m\", behaviors = [aggressive(unless_level_above = 3)])",

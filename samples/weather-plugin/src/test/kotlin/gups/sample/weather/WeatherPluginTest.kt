@@ -113,6 +113,11 @@ class WeatherPluginTest {
       blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
     ) = TODO()
 
+    override fun addOwnedBehaviors(
+      doc: String,
+      adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
+    ) = TODO()
+
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) {
       started += fn
     }

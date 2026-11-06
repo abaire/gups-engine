@@ -29,6 +29,7 @@ import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
+import gups.core.world.Behavior
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.KernelMsg
@@ -42,6 +43,8 @@ import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkList
+import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
 import net.starlark.java.spelling.SpellChecker
 
@@ -190,6 +193,15 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     doc = "The experience pool a kill is being settled for, in xp_share; None elsewhere.",
   )
   fun xp(): Any = field { c.xp?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "behaviors",
+    structField = true,
+    doc = "The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.",
+  )
+  fun behaviors(): Any = field {
+    c.behaviors?.let { sList(it.map { b -> BehaviorDecl(b) }) } ?: Starlark.NONE
+  }
 
   @StarlarkMethod(
     name = "contributors",
@@ -501,6 +513,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     c: RulesContext?,
     args: (Frame) -> List<Any>,
     deny: Boolean = false,
+    onThread: (StarlarkThread) -> Unit = {},
     convert: (Any?) -> T,
   ): T? {
     val name = export.scriptName
@@ -521,6 +534,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         positional = args,
         budget = host.limits.rulesSteps,
         recordErrors = sink == null,
+        onThread = onThread,
       )
     when (result) {
       is CallResult.Ok ->
@@ -769,6 +783,23 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
       }
     } ?: super.xpShare(c)
 
+  override fun ownedBehaviors(c: RulesContext): List<Behavior>? {
+    if (!defines(RulesExport.OWNED_BEHAVIORS)) return null
+    return run(
+      RulesExport.OWNED_BEHAVIORS,
+      c,
+      ctxArgs(c),
+      onThread = { it.setThreadLocal(OwnedBehaviorsMarker::class.java, OwnedBehaviorsMarker(pkg)) },
+    ) { v ->
+      val what = "rules.owned_behaviors return value"
+      val list = v as? StarlarkList<*> ?: fail("$what: must be a list, got ${typeName(v)}")
+      list.map {
+        (it as? BehaviorDecl)?.behavior
+          ?: fail("$what: elements must be behaviors, got ${typeName(it)}")
+      }
+    }
+  }
+
   override fun xpToLevel(c: RulesContext, level: Int): Long =
     run(RulesExport.XP_TO_LEVEL, c, ctxArgs(c, sInt(level))) { v ->
       int(v, "rules.xp_to_level return value").toLong().also {
@@ -870,6 +901,7 @@ enum class RulesExport(val scriptName: String) {
   FLEE_FAIL_LAG("flee_fail_lag"),
   XP_FOR_KILL("xp_for_kill"),
   XP_SHARE("xp_share"),
+  OWNED_BEHAVIORS("owned_behaviors"),
   XP_TO_LEVEL("xp_to_level"),
   ON_LEVEL_UP("on_level_up"),
   ON_PLAYER_DEATH("on_player_death"),
@@ -1131,6 +1163,15 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "dict",
       ctxFields = listOf("actor", "target", "xp", "contributors", "room", "pulse", "rng"),
       doc = "Splits a kill's experience pool among actors.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.OWNED_BEHAVIORS,
+      signature = "owned_behaviors(ctx)",
+      returnType = "list",
+      ctxFields = listOf("actor", "target", "behaviors", "room", "pulse", "rng"),
+      doc =
+        "The behaviors a mob runs while a player owns it; ctx.actor is the mob, ctx.target its owner.",
       hasDefault = true,
     ),
     RulesExportSpec(
@@ -1549,6 +1590,11 @@ internal fun dryRunRules(
             )
           }
         }
+      }
+    }
+    if (rules.defines(RulesExport.OWNED_BEHAVIORS)) {
+      mobs.firstOrNull()?.let {
+        rules.ownedBehaviors(RulesContext(world, it, player, behaviors = it.proto.behaviors))
       }
     }
     val actors = listOf(player, foe) + mobs

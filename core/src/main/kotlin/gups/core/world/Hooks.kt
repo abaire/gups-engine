@@ -4,6 +4,7 @@ import gups.core.AttrValue
 import gups.core.CASCADE_MAX_DEPTH
 import gups.core.EntityId
 import gups.core.HookRef
+import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.DamageType
@@ -78,11 +79,20 @@ enum class HookName(
   /** Vetoable hook evaluated before an actor begins warming up a skill or spell. */
   BEFORE_CAST("before_cast"),
 
+  /** Vetoable hook evaluated before a pet is given an order. */
+  BEFORE_ORDER("before_order"),
+
+  /** Vetoable hook evaluated before mobs are summoned. */
+  BEFORE_SUMMON("before_summon"),
+
   /** Invoked when skill warmup successfully starts. */
   ON_CAST_START("on_cast_start"),
 
   /** Invoked when skill warmup completes and the skill resolves. */
   ON_CAST("on_cast"),
+
+  /** Invoked after summoned mobs spawn. */
+  ON_SUMMON("on_summon"),
 
   /** Invoked when an actor takes vital damage. */
   ON_DAMAGE("on_damage"),
@@ -117,6 +127,14 @@ enum class HookName(
    * no longer including the leaver, on a "leave").
    */
   ON_GROUP_CHANGE("on_group_change"),
+
+  /**
+   * Invoked, as a global hook only, after a mob's owner is set or cleared.
+   *
+   * [HookContext.actor] is the mob, [HookContext.target] the owner gained or lost, and
+   * [HookContext.event] is "set" or "clear".
+   */
+  ON_OWNER_CHANGE("on_owner_change"),
 
   /** Invoked on engaged combatants during each combat round tick. */
   ON_COMBAT_TICK("on_combat_tick"),
@@ -237,6 +255,12 @@ data class HookContext(
   val oldEncumbranceLevel: Int? = null,
   /** The actor's encumbrance level after the change, for `on_encumbrance_change`, or null. */
   val newEncumbranceLevel: Int? = null,
+  /** The prototype being summoned, for before_summon. */
+  val summonLabel: Label? = null,
+  /** How many mobs are being summoned, for before_summon. */
+  val count: Int? = null,
+  /** The mobs just summoned, for on_summon. */
+  val mobs: List<Actor>? = null,
 )
 
 /** Outcome result of a package reload operation. */

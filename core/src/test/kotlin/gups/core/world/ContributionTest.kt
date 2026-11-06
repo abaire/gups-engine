@@ -184,19 +184,18 @@ class ContributionTest(private val fs: FixtureSchema) {
     val f = Fixture(rules = FixedRules(damage = 3))
     val p = f.player("Ann")
     val s = f.player("Sam")
-    val led = f.mob(T.GOBLIN)
-    led.leader = p.id
+    val owned = f.mob(T.GOBLIN)
+    f.w.setOwner(owned, p)
     val summoned = f.w.summon(p, T.DUMMY, 1, null).first()
-    val stranger = f.mob(T.GOBLIN)
-    val ledByMob = f.mob(T.DUMMY)
-    ledByMob.leader = stranger.id
-    val lostLeader = f.mob(T.DUMMY)
-    lostLeader.leader = s.id
+    val follower = f.mob(T.DUMMY)
+    follower.leader = p.id
+    val lostOwner = f.mob(T.DUMMY)
+    f.w.setOwner(lostOwner, s)
     f.w.removeActor(s)
     assertEquals(p, f.w.ownerOf(summoned))
-    assertEquals(p, f.w.ownerOf(led))
-    assertNull(f.w.ownerOf(ledByMob), "a mob led by a mob has no player owner")
-    assertNull(f.w.ownerOf(lostLeader), "a leader no longer in the world gives no owner")
+    assertEquals(p, f.w.ownerOf(owned))
+    assertNull(f.w.ownerOf(follower), "following a player does not make a mob its pet")
+    assertNull(f.w.ownerOf(lostOwner), "an owner no longer in the world gives no owner")
     assertNull(f.w.ownerOf(p), "a player has no owner")
   }
 }

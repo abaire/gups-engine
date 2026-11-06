@@ -20,6 +20,7 @@ import gups.core.model.Modifiers
 import gups.core.model.Player
 import gups.core.model.Proc
 import gups.core.model.ProcTrigger
+import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.TargetKind
 import gups.core.rules.RulesContext
@@ -53,6 +54,14 @@ fun World.startCombat(a: Actor, b: Actor) {
       exclude = arrayOf(a, b),
     )
     perceive("combat_start", Channel.SOUND, a.room, a, intensity = COMBAT_INTENSITY)
+    for ((pet, foe) in listOf(a to b, b to a)) {
+      if (pet is Mob) {
+        val owner = ownerOf(pet)
+        if (owner != null && owner.room === pet.room && owner !== foe) {
+          startCombat(owner, foe)
+        }
+      }
+    }
   }
 }
 
@@ -72,11 +81,32 @@ private fun World.unlink(a: Actor, b: Actor): List<Actor> {
   if (b.primaryTarget == a.id) b.primaryTarget = null
   if (!a.isEngaged) a.initiative = null
   if (!b.isEngaged) b.initiative = null
-  return buildList {
+
+  val original = buildList {
     if (aWas && !a.isEngaged) add(a)
     if (bWas && !b.isEngaged) add(b)
   }
+
+  val petFreed = mutableListOf<Actor>()
+  for ((owner, foe) in listOf(a to b, b to a)) {
+    if (owner is Player) {
+      for (pet in petsEngagedWith(owner, owner.room, foe)) {
+        petFreed += unlink(pet, foe)
+      }
+    }
+  }
+
+  val freed = LinkedHashSet<Actor>(original)
+  freed.addAll(petFreed)
+  return freed.toList()
 }
+
+/** [owner]'s pets in [room] engaged with [foe], ascending id. */
+private fun World.petsEngagedWith(owner: Player, room: Room, foe: Actor): List<Mob> =
+  room.actorIndex.values
+    .filterIsInstance<Mob>()
+    .filter { it.owner == owner.id && foe.id in it.fighting }
+    .sortedBy { it.id }
 
 internal fun World.disengageAll(a: Actor, reason: String? = "stop") {
   val freed = unlinkAll(a)
@@ -607,7 +637,7 @@ internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
     a.waitState = maxOf(a.waitState, a.heldWaitState)
     a.heldWaitState = 0
     a.casting?.let { c ->
-      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.heldSince))
+      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.heldSince), c.orderedBy)
     }
   }
 }
@@ -670,10 +700,26 @@ fun World.summon(
 ): List<Mob> {
   require(count >= 1) { "summon: count must be at least 1" }
   require(duration == null || duration >= 1) { "summon: duration must be at least 1" }
+  val denial =
+    dispatch(
+      HookName.BEFORE_SUMMON,
+      caster,
+      caster.room,
+      HookContext(actor = caster, summonLabel = label, count = count),
+    )
+  if (denial != null) {
+    send(caster, denial)
+    return emptyList()
+  }
   val mobs = mutableListOf<Mob>()
+  val owning = caster as? Player
   repeat(count) {
-    val m = spawnMob(label, caster.room, caster.trackIndex)
-    m.summonedBy = caster.id
+    val m =
+      spawnMob(label, caster.room, caster.trackIndex) { m ->
+        m.summonedBy = caster.id
+        if (owning != null && owning.inWorld) m.owner = owning.id
+      }
+    if (owning != null && m.owner != null && m.inWorld) assignOwner(m, owning)
     duration?.let {
       applyAffect(
         m,
@@ -685,6 +731,14 @@ fun World.summon(
       )
     }
     mobs += m
+  }
+  if (owning != null) {
+    for (m in mobs.sortedBy { it.id }) {
+      if (m.inWorld && m.owner == owning.id) announceOwner(m, owning, "set")
+    }
+  }
+  if (mobs.isNotEmpty()) {
+    dispatch(HookName.ON_SUMMON, caster, caster.room, HookContext(actor = caster, mobs = mobs))
   }
   return mobs
 }

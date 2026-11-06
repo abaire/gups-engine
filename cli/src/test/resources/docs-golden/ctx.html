@@ -38,13 +38,15 @@
 <tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
 <tr id="ctx.channel"><td><code>channel</code></td><td>1</td><td>For on_perceive: the channel the event travelled on, such as 'sound'.</td></tr>
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
+<tr id="ctx.count"><td><code>count</code></td><td>1</td><td>How many mobs are being summoned, for before_summon.</td></tr>
 <tr id="ctx.direction"><td><code>direction</code></td><td>1</td><td>The movement direction name, for enter and exit hooks.</td></tr>
 <tr id="ctx.elapsed_pulses"><td><code>elapsed_pulses</code></td><td>1</td><td>Pulses spent dormant, for on_wake.</td></tr>
-<tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.</td></tr>
+<tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_owner_change: 'set' or 'clear'. For on_disengage: 'flee', 'death' or 'stop'.</td></tr>
 <tr id="ctx.from_room"><td><code>from_room</code></td><td>1</td><td>The room the actor came from, for enter hooks.</td></tr>
 <tr id="ctx.group"><td><code>group</code></td><td>1</td><td>The group after the change, for on_group_change; None elsewhere.</td></tr>
 <tr id="ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For on_perceive: the event's strength where it happened.</td></tr>
 <tr id="ctx.item"><td><code>item</code></td><td>1</td><td>The item being picked up, dropped, used or given.</td></tr>
+<tr id="ctx.label"><td><code>label</code></td><td>1</td><td>The prototype label of mobs being summoned, for before_summon.</td></tr>
 <tr id="ctx.losses"><td><code>losses</code></td><td>1</td><td>The vital losses behind amount, as vitals(...), for on_damage.</td></tr>
 <tr id="ctx.new_encumbrance_level"><td><code>new_encumbrance_level</code></td><td>1</td><td>For on_encumbrance_change: the actor's encumbrance level after the change.</td></tr>
 <tr id="ctx.new_level"><td><code>new_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level after the change.</td></tr>
@@ -61,7 +63,7 @@
 <tr id="ctx.skill"><td><code>skill</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_perceive: the room the event happened in.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
-<tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents, for on_combat_tick.</td></tr>
+<tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, or summoned mobs for on_summon.</td></tr>
 <tr id="ctx.text"><td><code>text</code></td><td>1</td><td>Spoken text, for on_say and on_tell.</td></tr>
 <tr id="ctx.to_room"><td><code>to_room</code></td><td>1</td><td>The room the actor is going to, for exit hooks.</td></tr>
 <tr id="ctx.type"><td><code>type</code></td><td>1</td><td>The damage type, for on_damage.</td></tr>
@@ -260,6 +262,16 @@
 <tbody>
 <tr id="ctx.clear_contributions.victim"><td><code>victim</code></td><td>positional or named</td><td></td><td>Actor whose record is cleared.</td></tr>
 <tr id="ctx.clear_contributions.contributor"><td><code>contributor</code></td><td>positional or named</td><td><code>None</code></td><td>Contributor to remove, or None for the whole record.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.clear_owner" class="entry">
+<h4><code>clear_owner(mob)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes a mob's owner. Returns whether it had one.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.clear_owner.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to release.</td></tr>
 </tbody>
 </table>
 </article>
@@ -747,6 +759,17 @@
 <tbody>
 <tr id="ctx.set_charges.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item with charges.</td></tr>
 <tr id="ctx.set_charges.charges"><td><code>charges</code></td><td>positional or named</td><td></td><td>Uses left; 0 doesn't run the empty action.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_owner" class="entry">
+<h4><code>set_owner(mob, player)</code> <span class="since">since api_version 1</span></h4>
+<p>Makes a player the owner of a mob, replacing any owner it had. The mob then runs its owned behaviors, leaves its spawn rule and stops fighting its owner's side. Returns whether anything changed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_owner.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that becomes a pet.</td></tr>
+<tr id="ctx.set_owner.player"><td><code>player</code></td><td>positional or named</td><td></td><td>The in-world player that owns it.</td></tr>
 </tbody>
 </table>
 </article>

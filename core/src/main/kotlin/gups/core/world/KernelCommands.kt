@@ -11,6 +11,7 @@ import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.RestrictionPoint
 import gups.core.model.RestrictionRequest
@@ -64,6 +65,13 @@ internal object KernelCommands {
           "Whisper a message privately to someone in the room.\nUsage: whisper <target> <message>",
       ) {
         spoken(it, ::whisper)
+      },
+      FastCommand(
+        "order",
+        category = CommandCategory.COMMUNICATION,
+        help = "Give an order to your pet.\nUsage: order <pet|pets> <command>",
+      ) {
+        order(it)
       },
       FastCommand(
         "score",
@@ -340,6 +348,75 @@ internal object KernelCommands {
       c.actor,
       target,
     )
+  }
+
+  private fun order(c: CommandCall) {
+    val player = c.actor as? Player ?: return
+    val (petWord, command) = splitFirst(c.args)
+    if (petWord.isEmpty() || command.isEmpty()) {
+      c.world.tell(player, KernelMsg.ORDER_USAGE)
+      return
+    }
+    val w = c.world
+    val pets =
+      c.actor.room.actorIndex.values
+        .filterIsInstance<Mob>()
+        .filter { it.owner == player.id && it.inWorld }
+        .sortedBy { it.id }
+
+    val targets: List<Mob>
+    if (petWord.equals("pets", ignoreCase = true)) {
+      if (pets.isEmpty()) {
+        w.tell(player, KernelMsg.ORDER_NO_PETS)
+        return
+      }
+      targets = pets
+    } else {
+      val (n, word) = ordinal(petWord)
+      val targetPet = pets.filter { it.matches(word) }.getOrNull(n - 1)
+      if (targetPet == null) {
+        w.tell(player, KernelMsg.ORDER_NO_PET, "name" to petWord)
+        return
+      }
+      targets = listOf(targetPet)
+    }
+
+    for (pet in targets) {
+      if (!w.canAct(pet) || !w.isSimulated(pet)) {
+        w.tell(player, KernelMsg.ORDER_CANT, "pet" to pet.name)
+        continue
+      }
+      val refusal =
+        w.restrictionRefusal(
+          RestrictionPoint.ORDER,
+          RestrictionRequest(point = RestrictionPoint.ORDER, actor = player, target = pet),
+        )
+      if (refusal != null) {
+        w.send(player, refusal)
+        continue
+      }
+      val denial =
+        w.dispatch(
+          HookName.BEFORE_ORDER,
+          pet,
+          pet.room,
+          HookContext(actor = player, target = pet, text = command),
+        )
+      if (denial != null) {
+        w.send(player, denial)
+        continue
+      }
+      val before = pet.actionQueue.size
+      val accepted = w.act(pet, command)
+      if (accepted) {
+        for (i in before until pet.actionQueue.size) {
+          pet.actionQueue[i].orderedBy = player.id
+        }
+        w.tell(player, KernelMsg.ORDER_GIVEN, "pet" to pet.name, "command" to command)
+      } else {
+        w.tell(player, KernelMsg.ORDER_CANT, "pet" to pet.name)
+      }
+    }
   }
 
   /**

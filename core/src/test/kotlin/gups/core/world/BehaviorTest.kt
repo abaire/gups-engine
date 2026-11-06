@@ -401,7 +401,7 @@ class BehaviorTest {
 
   @Test
   fun `scavengers pick up what they can reach, but not corpses`() {
-    val f = fixture(mob("magpie", Scavenge))
+    val f = fixture(mob("magpie", Scavenge()))
     val magpie = f.mob(Label("//t:magpie"))
     val hall = f.w.room(T.HALL)
     val corpse =

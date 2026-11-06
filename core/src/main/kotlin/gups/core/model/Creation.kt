@@ -119,6 +119,9 @@ enum class RestrictionPoint {
 
   /** Putting a carried item by command into a container. Trusted moves (verbs) don't run it. */
   PUT,
+
+  /** A player giving an order to one of its pets; actor is the owner, target the pet. */
+  ORDER,
 }
 
 /** Interception context passed when evaluating a gameplay [Restriction]. */

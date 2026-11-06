@@ -186,7 +186,14 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   }
   player.session = null
   // The opponents it frees hear of it after it has left, so a hook can't re-engage it.
-  val freed = unlinkAll(player)
+  val freed = unlinkAll(player).toMutableList()
+  val pets = petsOf(player)
+  for (pet in pets) {
+    freed += unlinkAll(pet)
+    clearActive(pet, ownerReason(player.id))
+    pet.dirty = true
+    for (item in pet.inventory + pet.equipment.values) markDirtyTree(item)
+  }
   despawnDebugMobs(player)
   // Logout saves the character and everything it carries, at once.
   player.dirty = true
@@ -194,6 +201,7 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   immediateCause = null
   guarded("checkpoint") { persistence.checkpoint(this, "quit", immediate = true) }
   val room = player.room
+  stowPets(player, pets)
   removeActor(player)
   echo(room, msg(KernelMsg.QUIT_LEFT, "name" to player.name))
   fireDisengage(freed, "stop")
@@ -204,7 +212,10 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
  * it, so its saved row stays as it was.
  */
 fun World.unload(player: Player) {
-  if (player.inWorld && player.session == null) removeActor(player)
+  if (player.inWorld && player.session == null) {
+    for (pet in petsOf(player)) removeActor(pet, stow = true)
+    removeActor(player)
+  }
 }
 
 /** Link-dead and idle auto-quit. */

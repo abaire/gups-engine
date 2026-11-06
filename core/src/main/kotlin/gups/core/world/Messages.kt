@@ -55,7 +55,7 @@ object Messages {
     Regex("(bold|underline|(bright_)?(black|red|green|yellow|blue|magenta|cyan|white)|x\\d{1,3})")
 
   /** Name placeholders that callers fill with plain names; see [fill]. */
-  private val NAMES = setOf("target", "item", "container", "name")
+  private val NAMES = setOf("target", "item", "container", "name", "pet")
 
   /**
    * [text] with each `{name}` in [values] filled in; other braces, `{{` included, stay. A name

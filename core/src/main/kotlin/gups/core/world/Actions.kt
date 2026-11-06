@@ -1,11 +1,13 @@
 package gups.core.world
 
+import gups.core.EntityId
 import gups.core.model.Actor
 import gups.core.model.CastState
 import gups.core.model.Entity
 import gups.core.model.Interrupt
 import gups.core.model.Item
 import gups.core.model.Mob
+import gups.core.model.Player
 import gups.core.model.QueuedAction
 import gups.core.model.SkillProto
 
@@ -48,12 +50,28 @@ interface Castable {
 
 /** Pops and plans a queued command, then starts its lifecycle. */
 internal fun World.runQueued(actor: Actor, queued: QueuedAction) {
+  val orderedBy = queued.orderedBy
+  if (orderedBy != null) {
+    val owner = actor(orderedBy)
+    if (
+      actor !is Mob ||
+        actor.owner != orderedBy ||
+        owner == null ||
+        !owner.inWorld ||
+        owner.room !== actor.room
+    ) {
+      if (owner is Player && owner.inWorld) {
+        tell(owner, KernelMsg.ORDER_DROPPED, "pet" to actor.name)
+      }
+      return
+    }
+  }
   val action = queued.command.plan(CommandCall(this, actor, queued.verb, queued.args)) ?: return
-  execute(actor, action)
+  execute(actor, action, orderedBy)
 }
 
 /** Steps 1–3, then 5–6 for instant actions. Failures and denials apply no lag. */
-fun World.execute(actor: Actor, action: Action) {
+fun World.execute(actor: Actor, action: Action, orderedBy: EntityId? = null) {
   action.validate(this, actor)?.let {
     send(actor, it)
     return
@@ -63,7 +81,7 @@ fun World.execute(actor: Actor, action: Action) {
     return
   }
   if (action.warmup > 0) {
-    actor.casting = CastState(action, pulse, pulse + action.warmup)
+    actor.casting = CastState(action, pulse, pulse + action.warmup, orderedBy)
     actor.dirty = true
     action.begin(this, actor)
     return
@@ -74,6 +92,22 @@ fun World.execute(actor: Actor, action: Action) {
 internal fun World.advanceCast(actor: Actor, cast: CastState) {
   if (pulse < cast.endsAt) return
   actor.casting = null
+  if (cast.orderedBy != null) {
+    val owner = actor(cast.orderedBy)
+    if (
+      actor !is Mob ||
+        actor.owner != cast.orderedBy ||
+        owner == null ||
+        !owner.inWorld ||
+        owner.room !== actor.room
+    ) {
+      if (owner is Player && owner.inWorld) {
+        tell(owner, KernelMsg.ORDER_DROPPED, "pet" to actor.name)
+      }
+      actor.waitState = cast.action.lag / 2
+      return
+    }
+  }
   val failure = cast.action.validate(this, actor)
   if (failure != null) {
     send(actor, failure)
@@ -155,7 +189,7 @@ fun interface SkillResolver {
 
 internal fun World.think(mob: Mob) {
   mob.lastThink = pulse
-  val behaviors = mob.proto.behaviors
+  val behaviors = behaviorsOf(mob)
   val proposals =
     behaviors
       .mapIndexedNotNull { i, b ->

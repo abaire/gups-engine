@@ -369,6 +369,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.count",
+        "name": "count",
+        "doc": "How many mobs are being summoned, for before_summon.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.direction",
         "name": "direction",
         "doc": "The movement direction name, for enter and exit hooks.",
@@ -383,7 +389,7 @@
       {
         "symbol": "ctx.event",
         "name": "event",
-        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.",
+        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_owner_change: 'set' or 'clear'. For on_disengage: 'flee', 'death' or 'stop'.",
         "since": 1
       },
       {
@@ -408,6 +414,12 @@
         "symbol": "ctx.item",
         "name": "item",
         "doc": "The item being picked up, dropped, used or given.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.label",
+        "name": "label",
+        "doc": "The prototype label of mobs being summoned, for before_summon.",
         "since": 1
       },
       {
@@ -513,7 +525,7 @@
       {
         "symbol": "ctx.targets",
         "name": "targets",
-        "doc": "Opponents, for on_combat_tick.",
+        "doc": "Opponents for on_combat_tick, or summoned mobs for on_summon.",
         "since": 1
       },
       {
@@ -1174,6 +1186,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Contributor to remove, or None for the whole record."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.clear_owner",
+        "name": "clear_owner",
+        "doc": "Removes a mob's owner. Returns whether it had one.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_owner.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to release."
           }
         ]
       },
@@ -2447,6 +2477,34 @@
         ]
       },
       {
+        "symbol": "ctx.set_owner",
+        "name": "set_owner",
+        "doc": "Makes a player the owner of a mob, replacing any owner it had. The mob then runs its owned behaviors, leaves its spawn rule and stops fighting its owner's side. Returns whether anything changed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_owner.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that becomes a pet."
+          },
+          {
+            "symbol": "ctx.set_owner.player",
+            "name": "player",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The in-world player that owns it."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.set_skill",
         "feature": "skills",
         "name": "set_skill",
@@ -2924,6 +2982,16 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Percent chance of taking a step on each think, 0 to 100."
+        },
+        {
+          "symbol": "wander.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     }
@@ -2965,6 +3033,12 @@
           "feature": "track",
           "name": "band",
           "doc": "'melee', 'near' or 'far' between actor and target, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.behaviors",
+          "name": "behaviors",
+          "doc": "The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.",
           "since": 1
         },
         {
@@ -5335,6 +5409,70 @@
       "placeholders": [],
       "required": [],
       "default": "You can't go that way.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.cant",
+      "id": "order.cant",
+      "placeholders": ["pet"],
+      "required": [],
+      "default": "{pet} can't do that right now.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.dropped",
+      "id": "order.dropped",
+      "placeholders": ["pet"],
+      "required": [],
+      "default": "{pet} hesitates without you nearby.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.given",
+      "id": "order.given",
+      "placeholders": ["pet", "command"],
+      "required": [],
+      "default": "You order {pet} to '{command}'.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.no_pet",
+      "id": "order.no_pet",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "You have no pet here called {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.no_pets",
+      "id": "order.no_pets",
+      "placeholders": [],
+      "required": [],
+      "default": "You have no pets here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.usage",
+      "id": "order.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Order whom to do what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:pet.arrives",
+      "id": "pet.arrives",
+      "placeholders": ["pet", "owner"],
+      "required": [],
+      "default": "{pet} arrives with {owner}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:pet.leaves",
+      "id": "pet.leaves",
+      "placeholders": ["pet", "owner"],
+      "required": [],
+      "default": "{pet} leaves with {owner}.",
       "since": 1
     },
     {

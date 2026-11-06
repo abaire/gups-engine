@@ -214,6 +214,9 @@ class World(
   /** Plugin containment filters, in plugin id order then registration order. */
   var containmentFilters: List<ContainmentFilter> = emptyList()
 
+  /** Plugin owned-behavior adjusters, in plugin id order. */
+  var ownedBehaviorAdjusters: List<OwnedBehaviorAdjuster> = emptyList()
+
   /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's. */
   val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 
@@ -454,10 +457,11 @@ class World(
     return p
   }
 
-  fun spawnMob(label: Label, at: Room, index: Int = 0): Mob {
+  fun spawnMob(label: Label, at: Room, index: Int = 0, prepare: (Mob) -> Unit = {}): Mob {
     val proto = protos.mob(label)
     val m = Mob(allocateId(), proto, at, index.coerceIn(0, at.trackSize - 1))
     declareMob(m, proto)
+    prepare(m)
     applyStartingStats(m, startingStatsOf(m))
     settleNewCondition(m, "starting_stats")
     enter(m, at, m.trackIndex)
@@ -539,26 +543,25 @@ class World(
     a.dirty = true
   }
 
-  /** Takes [a] and everything it carries out of the world (mob death, quit). */
-  internal fun removeActor(a: Actor) {
+  /**
+   * Takes [a] and everything it carries out of the world; [stow] keeps a mob's rows for a later
+   * restore.
+   */
+  internal fun removeActor(a: Actor, stow: Boolean = false) {
     if (a is Player) leaveGroupOnRemoval(a)
     a.room.actorIndex.remove(a.id)
     actorIndex.remove(a.id)
     entities.remove(a.id)
     a.inWorld = false
     removedThisPhase += a.id
-    // A player who quits keeps their row and their items' rows; a mob is gone for good.
-    if (a is Mob) {
+    // A player who quits keeps their row and their items' rows; a mob is gone for good unless
+    // stowed.
+    if (a is Mob && !stow) {
       removed += a.id
       for (item in a.inventoryIndex.values + a.equipmentIndex.values) markRemoved(item)
     }
     for (item in a.inventoryIndex.values + a.equipmentIndex.values) forgetItemTree(item)
-    if (a is Mob) {
-      a.spawnedBy?.let { s ->
-        s.live.remove(a.id)
-        if (s.respawnAt == null) s.respawnAt = pulse + s.rule.respawnPulses
-      }
-    }
+    if (a is Mob && !stow) releaseSpawn(a)
   }
 
   internal fun fillSpawn(s: SpawnState) {

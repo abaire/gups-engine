@@ -15,9 +15,12 @@ import gups.core.rules.RulesContext
 
 // The built-in behaviors. Each proposes at most one action per think cycle; the
 // think cycle sorts the proposals by priority, then by declaration order. The
-// priorities are fixed: fleeing beats fighting, which beats moving about.
+// priorities default to the constants below, where fleeing beats fighting, which beats moving
+// about, and each behavior takes its own.
 
 const val PRIORITY_FLEE = 100
+const val PRIORITY_DEFEND = 50
+const val PRIORITY_HEEL = 30
 const val PRIORITY_AGGRESSIVE = 60
 const val PRIORITY_ASSIST = 50
 const val PRIORITY_PURSUE = 40
@@ -64,7 +67,8 @@ private fun World.others(mob: Mob): List<Actor> =
  * `wander(radius, chance)`: with probability [chance] percent per think, steps through a random
  * open exit that stays within [radius] exits of home.
  */
-data class Wander(val radius: Int, val chance: Int) : Behavior {
+data class Wander(val radius: Int, val chance: Int, val priority: Int = PRIORITY_WANDER) :
+  Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged || !world.rng.passes(chance)) return null
     val home = world.roomOrNull(mob.homeRoom) ?: mob.room
@@ -75,7 +79,7 @@ data class Wander(val radius: Int, val chance: Int) : Behavior {
       }
     if (exits.isEmpty()) return null
     val exit = world.rng.choice(exits)
-    return Proposal(exit.direction.name, PRIORITY_WANDER, "wander", MoveAction(exit.direction))
+    return Proposal(exit.direction.name, priority, "wander", MoveAction(exit.direction))
   }
 }
 
@@ -110,17 +114,21 @@ data class Aggressive(
   val unlessLevelBelow: Int? = null,
   val chance: Int = 100,
   val via: List<Channel> = listOf(Channel.SIGHT),
+  val priority: Int = PRIORITY_AGGRESSIVE,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     if (!world.rng.passes(chance)) return null
     val target =
       world.others(mob).firstOrNull {
-        toward.matches(it) && levelOk(it) && world.notices(mob, it, via)
+        toward.matches(it) &&
+          levelOk(it) &&
+          !world.isOwnerSide(mob, it) &&
+          world.notices(mob, it, via)
       } ?: return null
     return Proposal(
       "${world.commands.nameOf("kill")} ${target.keywords.first()}",
-      PRIORITY_AGGRESSIVE,
+      priority,
       "aggressive",
       KillAction(target),
     )
@@ -151,16 +159,19 @@ private fun World.notices(mob: Mob, who: Actor, via: List<Channel>): Boolean =
   }
 
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
-data class Assist(val allies: ActorFilter) : Behavior {
+data class Assist(val allies: ActorFilter, val priority: Int = PRIORITY_ASSIST) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     for (ally in world.others(mob)) {
       if (!allies.matches(ally) || !ally.isEngaged) continue
-      val foes = world.opponentsOf(ally).filter { it !== mob && !allies.matches(it) }
+      val foes =
+        world.opponentsOf(ally).filter {
+          it !== mob && !allies.matches(it) && !world.isOwnerSide(mob, it)
+        }
       val foe = foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.firstOrNull() ?: continue
       return Proposal(
         "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
-        PRIORITY_ASSIST,
+        priority,
         "assist",
         KillAction(foe),
       )
@@ -173,7 +184,7 @@ data class Assist(val allies: ActorFilter) : Behavior {
  * `flee(below)`: flees once any listed vital is at or below its percentage of its maximum, engaged
  * or not.
  */
-data class Flee(val below: Map<String, Int>) : Behavior {
+data class Flee(val below: Map<String, Int>, val priority: Int = PRIORITY_FLEE) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features) return null
     val low =
@@ -184,7 +195,7 @@ data class Flee(val below: Map<String, Int>) : Behavior {
       }
     if (!low) return null
     if (mob.room.exits.values.none { it.passable }) return null
-    return Proposal(world.commands.nameOf("flee"), PRIORITY_FLEE, "flee", FleeAction)
+    return Proposal(world.commands.nameOf("flee"), priority, "flee", FleeAction)
   }
 }
 
@@ -207,7 +218,7 @@ data class Guard(val exit: Direction, val allies: ActorFilter = ActorFilter("mob
 internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String? {
   for (m in room.actorIndex.values) {
     if (m !is Mob || !m.inWorld || m === actor) continue
-    if (m.proto.behaviors.any { it is Guard && it.denies(this, m, actor, dir) })
+    if (behaviorsOf(m).any { it is Guard && it.denies(this, m, actor, dir) })
       return msg(KernelMsg.GUARD_BLOCKS, "actor" to m.name.cap())
   }
   return null
@@ -217,7 +228,7 @@ internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String
  * `follow(target)`: picks the first matching actor in its room as leader, then follows it along the
  * shortest path while it is within [BUBBLE_RADIUS] exits; farther away, it gives up.
  */
-data class Follow(val target: ActorFilter) : Behavior {
+data class Follow(val target: ActorFilter, val priority: Int = PRIORITY_FOLLOW) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
     val leader = mob.leader?.let(world::actor)?.takeIf { it.inWorld && target.matches(it) }
@@ -231,12 +242,12 @@ data class Follow(val target: ActorFilter) : Behavior {
       mob.leader = null
       return null
     }
-    return Proposal(path.first().name, PRIORITY_FOLLOW, "follow", MoveAction(path.first()))
+    return Proposal(path.first().name, priority, "follow", MoveAction(path.first()))
   }
 }
 
 /** `pursue(target)`: heads for the nearest matching actor anywhere in the world by `path_to`. */
-data class Pursue(val target: ActorFilter) : Behavior {
+data class Pursue(val target: ActorFilter, val priority: Int = PRIORITY_PURSUE) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
     if (world.others(mob).any { target.matches(it) }) return null
@@ -250,9 +261,57 @@ data class Pursue(val target: ActorFilter) : Behavior {
         .minWithOrNull(compareBy<Pair<Actor, List<Direction>>>({ it.second.size }, { it.first.id }))
         ?: return null
     val step = best.second.first()
-    return Proposal(step.name, PRIORITY_PURSUE, "pursue", MoveAction(step))
+    return Proposal(step.name, priority, "pursue", MoveAction(step))
   }
 }
+
+/** `heel()`: follows the mob's owner by the shortest path, however far. */
+data class Heel(val priority: Int = PRIORITY_HEEL) : Behavior {
+  override fun propose(world: World, mob: Mob): Proposal? {
+    if (mob.isEngaged) return null
+    val owner = world.ownerOf(mob) ?: return null
+    if (owner.room === mob.room) return null
+    val path = world.pathTo(mob.room, owner.room)?.takeIf { it.isNotEmpty() } ?: return null
+    return Proposal(path.first().name, priority, "heel", MoveAction(path.first()))
+  }
+}
+
+/**
+ * `defend(group)`: joins the fights of the mob's owner, and with [group] its in-room group members.
+ */
+data class Defend(val group: Boolean = true, val priority: Int = PRIORITY_DEFEND) : Behavior {
+  override fun propose(world: World, mob: Mob): Proposal? {
+    if (Feature.COMBAT !in world.features || mob.isEngaged) return null
+    val owner = world.ownerOf(mob) ?: return null
+    val candidates = buildList {
+      if (owner.room === mob.room) add(owner)
+      if (group) {
+        addAll(
+          world
+            .groupMembers(owner)
+            .filter { it !== owner && it.room === mob.room }
+            .sortedBy { it.id }
+        )
+      }
+    }
+    for (c in candidates) {
+      if (!c.isEngaged) continue
+      val foes = world.opponentsOf(c).filter { it !== mob && !world.isOwnerSide(mob, it) }
+      val foe = foes.firstOrNull { it.id == c.primaryTarget } ?: foes.firstOrNull() ?: continue
+      return Proposal(
+        "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
+        priority,
+        "defend",
+        KillAction(foe),
+      )
+    }
+    return null
+  }
+}
+
+/** The behaviors [mob] runs now: its owned list while it has an owner, else its prototype's. */
+fun World.behaviorsOf(mob: Mob): List<Behavior> =
+  if (mob.owner != null) mob.ownedBehaviors ?: defaultOwnedBehaviors(mob) else mob.proto.behaviors
 
 /** `sentinel()`: never leaves its room. Removes other behaviors' moves and flights. */
 data object Sentinel : Behavior {
@@ -265,13 +324,13 @@ data object Sentinel : Behavior {
  * `scavenge()`: picks up the first item on the ground it can reach and carry. Corpses are left
  * alone.
  */
-data object Scavenge : Behavior {
+data class Scavenge(val priority: Int = PRIORITY_SCAVENGE) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
     val item = mob.room.items.firstOrNull { world.canScavenge(mob, it) } ?: return null
     return Proposal(
       "${world.commands.nameOf("get")} ${item.keywords.first()}",
-      PRIORITY_SCAVENGE,
+      priority,
       "scavenge",
       GetAction("", fixed = item),
     )

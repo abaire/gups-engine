@@ -12,6 +12,7 @@ import gups.core.world.World
 import gups.core.world.attach
 import gups.core.world.grantTrait
 import gups.core.world.handle
+import gups.core.world.setOwner
 import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.core.world.teleport
@@ -566,6 +567,28 @@ class CreationRegistrationTest {
     w.runPulse()
     assertTrue(reached)
     assertEquals(ItemLocation.Carried(ann.id), item.location)
+  }
+
+  @Test
+  fun `a plugin restriction registered at PluginRestrictionPoint ORDER is reached by order`() {
+    var reached = false
+    val host =
+      PluginHost.of(
+        plugin("no_orders") {
+          it.addRestriction(PluginRestrictionPoint.ORDER, "Doc.") {
+            reached = true
+            "Cannot order."
+          }
+        },
+        schema = schema,
+      )
+    val w = world(plugins = host)
+    val ann = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    val mob = w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.setOwner(mob, ann)
+    w.submit(ann, "order wolf look")
+    w.runPulse()
+    assertTrue(reached)
   }
 }
 

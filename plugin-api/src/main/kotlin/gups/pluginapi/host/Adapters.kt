@@ -13,11 +13,15 @@ import gups.core.model.Trait
 import gups.core.model.TraitModifier
 import gups.core.world.ContainmentFilter
 import gups.core.world.Diagnostic
+import gups.core.world.OwnedBehaviorAdjuster
 import gups.core.world.World
+import gups.core.world.behaviorOf
+import gups.core.world.descriptor
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginModifierCall
 import gups.pluginapi.PluginModifierPoint
+import gups.pluginapi.PluginOwnedBehaviorsCall
 import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginTrait
@@ -280,6 +284,33 @@ internal fun containmentFilterAdapter(
         Diagnostic(w.pulse, "plugin", "plugin '$pluginId': containment filter failed: $e", e)
       )
       false
+    }
+  }
+}
+
+internal fun ownedBehaviorsAdapter(
+  world: World,
+  pluginId: String,
+  adjust: (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
+): OwnedBehaviorAdjuster {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return OwnedBehaviorAdjuster { w, mob, owner, behaviors ->
+    val inputDescriptors = behaviors.map { it.descriptor() }
+    val call =
+      PluginOwnedBehaviorsCall(
+        world = facade,
+        mob = ActorFacade(mob, w),
+        owner = owner?.let { ActorFacade(it, w) },
+        behaviors = inputDescriptors,
+      )
+    try {
+      val returned = adjust(call)
+      returned.map { w.behaviorOf(it) }
+    } catch (e: Throwable) {
+      w.record(
+        Diagnostic(w.pulse, "plugin", "plugin '$pluginId': owned behaviors adjuster failed: $e", e)
+      )
+      behaviors
     }
   }
 }

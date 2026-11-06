@@ -83,7 +83,7 @@ object FeatureOwnership {
     fun owns(feature: Feature, vararg symbols: String) =
       owns(FeatureRequirement.of(feature), *symbols)
     owns(Feature.SKILLS, "skill", "view:skill")
-    owns(Feature.COMBAT, "aggressive", "assist", "flee")
+    owns(Feature.COMBAT, "aggressive", "assist", "flee", "defend")
     owns(Feature.COMBAT, "ctx.start_combat", "ctx.stop_combat", "ctx.act_attack")
     owns(Feature.COMBAT, "ctx.enemies_near", "ctx.allies_near")
     owns(Feature.COMBAT, "proc", "outcome")

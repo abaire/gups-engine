@@ -212,4 +212,72 @@ class AffectModifierScriptTest {
     f.run()
     assertContains(f.w.diagnostics.last().message, "must be at least 1")
   }
+
+  @Test
+  fun `room before_summon veto stops ctx summon and returns empty list`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to
+            """
+            def _veto_summon(ctx):
+                return ctx.deny("The ground rejects your call.")
+
+            def _cast_summon(ctx):
+                mobs = ctx.summon(ctx.actor, "//zones/z:dog", count = 2)
+                ctx.send(ctx.actor, "summoned %d" % len(mobs))
+
+            room("start", before_summon = _veto_summon)
+            mob("dog")
+            item("horn", commands = {"blow": _cast_summon})
+            """,
+        )
+      )
+    val p = f.player()
+    f.w.spawnItem(Label("//zones/z:horn"), ItemLocation.Carried(p.id))
+    f.input(p, "blow")
+    f.run()
+
+    val out = f.out(p)
+    assertContains(out, "The ground rejects your call.")
+    assertContains(out, "summoned 0")
+    assertEquals(0, f.w.actors.count { it.name == "dog" })
+  }
+
+  @Test
+  fun `before_summon sees label and count and on_summon sees targets in spawn order`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/content.star" to
+            """
+            def _observer_before(ctx):
+                ctx.send(ctx.actor, "before:%s:%d" % (ctx.label, ctx.count))
+
+            def _observer_on(ctx):
+                names = [t.name for t in ctx.targets]
+                ctx.send(ctx.actor, "on:%s" % ",".join(names))
+
+            room("start", on_summon = _observer_on)
+            mob("watcher", before_summon = _observer_before)
+            mob("dog")
+            def _cast_summon(ctx):
+                ctx.summon(ctx.actor, "//zones/z:dog", count = 2)
+
+            item("horn", commands = {"blow": _cast_summon})
+            """,
+        )
+      )
+    val p = f.player()
+    f.w.spawnMob(Label("//zones/z:watcher"), p.room)
+    f.w.spawnItem(Label("//zones/z:horn"), ItemLocation.Carried(p.id))
+    f.input(p, "blow")
+    f.run()
+
+    val out = f.out(p)
+    assertContains(out, "before://zones/z:dog:2")
+    assertContains(out, "on:dog,dog")
+  }
 }

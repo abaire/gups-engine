@@ -58,12 +58,9 @@ fun World.clearContributions(victim: Actor, contributor: Actor? = null) {
   else victim.contributions.remove(contributor.id)
 }
 
-/**
- * The in-world player a pet belongs to: [Mob]`summonedBy` else [Mob]`leader`; players return null.
- */
+/** The in-world player that owns [a]; players and unowned mobs return null. */
 fun World.ownerOf(a: Actor): Player? {
-  if (a !is Mob) return null
-  val id = a.summonedBy ?: a.leader ?: return null
+  val id = (a as? Mob)?.owner ?: return null
   return actor(id)?.takeIf { it is Player && it.inWorld } as? Player
 }
 

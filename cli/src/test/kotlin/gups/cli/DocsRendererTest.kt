@@ -241,6 +241,27 @@ class DocsRendererTest {
   }
 
   @Test
+  fun `plugins html renders owned behaviors with anchors`() {
+    val plugin =
+      PluginDocSpec(
+        id = "pack",
+        doc = "Pack behaviors.",
+        ownedBehaviors =
+          listOf(
+            PluginOwnedBehaviorsDocSpec("Raises heel priority."),
+            PluginOwnedBehaviorsDocSpec("Adds guard."),
+          ),
+      )
+    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val html = pages.getValue("plugins.html")
+    assertContains(html, "<h3>Owned behaviors</h3>")
+    assertContains(html, "<tr id=\"plugin-pack.owned-behaviors-1\">")
+    assertContains(html, "Raises heel priority.")
+    assertContains(html, "<tr id=\"plugin-pack.owned-behaviors-2\">")
+    assertContains(html, "Adds guard.")
+  }
+
+  @Test
   fun `markdown renders CommonMark with raw HTML escaped and links as text`() {
     val html =
       markdownToHtml(

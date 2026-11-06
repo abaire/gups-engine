@@ -44,6 +44,7 @@ import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginHookCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifierPoint
+import gups.pluginapi.PluginOwnedBehaviorsCall
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRestrictionCall
@@ -78,9 +79,12 @@ data class PluginInfo(
   val restrictions: List<PluginRestrictionInfo> = emptyList(),
   val choices: List<PluginChoiceInfo> = emptyList(),
   val containmentFilters: List<PluginFilterInfo> = emptyList(),
+  val ownedBehaviors: List<PluginOwnedBehaviorsInfo> = emptyList(),
 )
 
 data class PluginFilterInfo(val doc: String)
+
+data class PluginOwnedBehaviorsInfo(val doc: String)
 
 data class PluginTraitInfo(
   val name: String,
@@ -219,6 +223,8 @@ internal class PluginRegistryImpl(
       MutableList<Pair<String, (PluginRestrictionCall) -> String?>>,
     >()
   val filters = mutableListOf<Pair<String, (PluginContainmentCall) -> Boolean>>()
+  val ownedBehaviors =
+    mutableListOf<Pair<String, (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>>>()
   private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
 
   private fun member(name: String, value: Any) {
@@ -425,6 +431,13 @@ internal class PluginRegistryImpl(
     filters.add(doc to blocks)
   }
 
+  override fun addOwnedBehaviors(
+    doc: String,
+    adjust: (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
+  ) {
+    ownedBehaviors.add(doc to adjust)
+  }
+
   private fun checkParams(name: String, params: List<PluginParam>) {
     val names = params.map { it.name }
     require(names.distinct().size == names.size) { "'$name' has duplicate parameter names" }
@@ -566,6 +579,14 @@ internal constructor(
       }
     }
     world.containmentFilters = allFilters
+
+    val allAdjusters = mutableListOf<gups.core.world.OwnedBehaviorAdjuster>()
+    for (p in plugins) {
+      for ((_, adjust) in p.reg.ownedBehaviors) {
+        allAdjusters.add(ownedBehaviorsAdapter(world, p.id, adjust))
+      }
+    }
+    world.ownedBehaviorAdjusters = allAdjusters
 
     for (p in plugins) {
       for (cat in p.reg.categories) {
@@ -722,6 +743,7 @@ internal constructor(
             list.map { (doc, _) -> PluginRestrictionInfo(point.name.lowercase(), doc) }
           },
         containmentFilters = p.reg.filters.map { (doc, _) -> PluginFilterInfo(doc) },
+        ownedBehaviors = p.reg.ownedBehaviors.map { (doc, _) -> PluginOwnedBehaviorsInfo(doc) },
         choices =
           p.reg.creation?.choices?.map { c ->
             PluginChoiceInfo(

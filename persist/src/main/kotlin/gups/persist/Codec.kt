@@ -28,6 +28,7 @@ import gups.core.model.ScriptTimer
 import gups.core.world.VitalState
 import gups.core.world.World
 import gups.core.world.restoreActorNumbers
+import gups.core.world.restoreOwner
 import gups.core.world.spawnOf
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -65,7 +66,7 @@ import kotlinx.serialization.json.longOrNull
  *   direction name), custom attributes, script timers, and active/anchor simulation reasons.
  * - **Mobs ([MobPayload]):** Always persists position (room label, track index), current vitals
  *   (`cur`, and `max` only when overridden, plus `belowZeroSince`), life condition, xp, home room,
- *   spawn binding, and summonedBy. Delta fields (level, stats, senses, resists, skills,
+ *   spawn binding, summonedBy, and owner. Delta fields (level, stats, senses, resists, skills,
  *   `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if they equal prototype
  *   defaults, each stored as a whole value rather than per key. Prototype traits are never stored;
  *   only runtime `grantedTraits` are. `levelGains` is stored only when not empty. Active/anchor
@@ -207,6 +208,7 @@ data class MobPayload(
   val home: String? = null,
   val spawn: SpawnJson? = null,
   val summonedBy: Long? = null,
+  val owner: Long? = null,
   // The delta: present only where the instance differs from its prototype.
   val level: Int? = null,
   val stats: Map<String, Int>? = null,
@@ -475,6 +477,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           home = e.homeRoom.v.takeIf { e.homeRoom != e.room.label },
           spawn = spawnOf(e)?.let { (room, rule) -> SpawnJson(room.v, rule) },
           summonedBy = e.summonedBy?.v,
+          owner = e.owner?.v,
           level = delta(e.level, p.level),
           stats = delta(e.baseStats.toMap(), p.stats),
           senses =
@@ -629,6 +632,7 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   m.affects.removeIf { it.wornFrom == null }
   m.affects += restoreAffects(p.affects)
   restoreReasons(m, p.active, p.anchor)
+  world.restoreOwner(m, p.owner?.let(::EntityId))
 }
 
 internal fun containerJson(c: ContainerProto) =

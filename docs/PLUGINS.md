@@ -359,8 +359,9 @@ r.setCreation(
 
 #### Restrictions
 
-Restrictions intercept operations (`WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`) and can refuse
-them:
+Restrictions intercept operations (`WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`) and can
+refuse them. `ORDER` is a player giving an order to one of its pets: `call.actor` is the owner and `call.target` the
+pet:
 
 ```kotlin
 r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") { call ->
@@ -463,6 +464,23 @@ read only the container's and item's label, kind, tags and affects. A filter tha
 holder's stats, the pulse, randomness) gives answers the cache won't notice changing. Filters must also be fast and
 side-effect free. For a detailed guide and testing examples, see the
 [Containment Filters Tutorial](../samples/curse-plugin/docs/tutorials/04_containment_filters.md).
+
+### Owned behaviors
+
+While a mob has an owner it runs an owned behavior list instead of its prototype's behaviors. A plugin's
+`addOwnedBehaviors` handler adjusts that list after the world's `owned_behaviors` rules export: the handler gets
+`call.mob`, `call.owner` and `call.behaviors`, and returns the new list, for example the same maps with `heel`'s
+`priority` raised to `80L`.
+
+Adjusters run in plugin-id order, each getting the list so far and returning the new one. `call.owner` is null while the
+owner is offline. Each behavior is a plain map: `kind` (the builtin's name, such as `"heel"` or `"defend"`) and its
+builtin arguments by name, with ints as `Long`, actor filters (`toward`, `allies`, `target`) as lists of strings, where
+a label pattern is absolute (`//pkg:name*`) or a bare `name*` matching in any package (a `:`-relative pattern is
+invalid, since a plugin has no package), `below` as a map of vital names to `Long`, and `exit` as a direction name. An
+invalid map, or an adjuster that throws, records a `"plugin"` diagnostic and leaves the list unchanged.
+
+The list is computed when a mob gains an owner, when a pet is restored at its owner's login, and after a reload, so an
+adjuster should depend only on the mob, its owner and the list it is given.
 
 ### World start
 

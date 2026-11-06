@@ -31,7 +31,7 @@ class HelpCommandTest {
 
     // Check alphabetical sorting within groups
     assertEquals(
-      "Communication: gossip say shout tell whisper",
+      "Communication: gossip order say shout tell whisper",
       lines.first { it.startsWith("Communication:") },
     )
     assertEquals(

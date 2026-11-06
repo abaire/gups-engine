@@ -25,6 +25,7 @@ import gups.core.world.World
 import gups.core.world.actorSlots
 import gups.core.world.heldAffects
 import gups.core.world.isInactive
+import gups.core.world.ownerOf
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
 import net.starlark.java.annot.Param
@@ -150,6 +151,13 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     doc = "Words that match this actor when targeting.",
   )
   fun keywords(): Any = read { sList(actor.keywords) }
+
+  @StarlarkMethod(
+    name = "owner",
+    structField = true,
+    doc = "The in-world player that owns this mob (a pet), or None.",
+  )
+  fun owner(): Any = read { view(scope, scope.world.ownerOf(actor)) }
 
   @StarlarkMethod(name = "level", structField = true, doc = "The actor's level.")
   fun level(): Any = read("actor.level") { sInt(actor.level) }

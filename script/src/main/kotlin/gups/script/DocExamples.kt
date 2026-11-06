@@ -908,6 +908,55 @@ object DocExamples {
                     t.fail("%s" % d.message)
             """,
         ),
+      "ctx.set_owner" to
+        ex(
+          pkg =
+            """
+                def _adopt(ctx):
+                    ctx.set_owner(ctx.here("wolf"), ctx.actor)
+                    ctx.send(ctx.actor, "adopted")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"adopt": _adopt})
+                mob("wolf", name = "a wolf", keywords = ["wolf"], vitals = vitals(hp = 10))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                wolf = w.spawn(":wolf", at = ":camp")
+                t.contains(p.do("adopt"), "adopted")
+                t.eq(wolf.owner.name, "Tess")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.clear_owner" to
+        ex(
+          pkg =
+            """
+                def _adopt(ctx):
+                    ctx.set_owner(ctx.here("wolf"), ctx.actor)
+                def _release(ctx):
+                    ctx.clear_owner(ctx.here("wolf"))
+                    ctx.send(ctx.actor, "released")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"adopt": _adopt, "release": _release})
+                mob("wolf", name = "a wolf", keywords = ["wolf"], vitals = vitals(hp = 10))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                wolf = w.spawn(":wolf", at = ":camp")
+                p.do("adopt")
+                t.contains(p.do("release"), "released")
+                t.eq(wolf.owner, None)
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
       "ctx.group_of" to
         ex(
           pkg =
@@ -998,6 +1047,22 @@ object DocExamples {
           pkg =
             """
                 mob("hound", vitals = vitals(hp = 15), behaviors = [pursue(target = "players")])
+            """
+        ),
+      "heel" to
+        ex(
+          pkg =
+            """
+                # Idle until the mob has an owner; then it trails the owner anywhere.
+                mob("tame_hound", vitals = vitals(hp = 15), behaviors = [heel(priority = 40)])
+            """
+        ),
+      "defend" to
+        ex(
+          pkg =
+            """
+                # Joins whatever its owner, or the owner's group, is fighting.
+                mob("guard_dog", vitals = vitals(hp = 15), behaviors = [heel(), defend(group = True)])
             """
         ),
       "scavenge" to

@@ -7,6 +7,7 @@ import gups.core.Label
 import gups.core.Role
 import gups.core.SessionId
 import gups.core.world.Action
+import gups.core.world.Behavior
 import gups.core.world.HeldEffects
 import gups.core.world.SpawnState
 import gups.core.world.TickCommand
@@ -263,6 +264,8 @@ class CastState(
   val startedAt: Long,
   /** Absolute pulse when casting warmup will complete. */
   val endsAt: Long,
+  /** The owner who ordered this cast, or null when the actor chose it itself. */
+  val orderedBy: EntityId? = null,
 )
 
 /** An action command waiting in an actor's tick-lane queue. */
@@ -274,6 +277,9 @@ class QueuedAction(
   /** Argument string passed with the verb. */
   val args: String,
 ) {
+  /** The owner who ordered this action, or null when the actor chose it itself. */
+  var orderedBy: EntityId? = null
+
   override fun toString(): String = "$verb $args".trim()
 }
 
@@ -696,7 +702,7 @@ class Mob(
   /** Vital recovery behavior when waking from dormancy. */
   var dormantRecovery: DormantRecovery = proto.dormantRecovery
 
-  /** Leader actor ID that this mob follows, or null if unled. */
+  /** Leader actor ID that this mob follows through a `follow` behavior, or null if unled. */
   var leader: EntityId? = null
     internal set
 
@@ -707,6 +713,14 @@ class Mob(
    * loot.
    */
   var summonedBy: EntityId? = null
+
+  /** The owned behavior list, cached while the mob has an owner; never saved. */
+  var ownedBehaviors: List<Behavior>? = null
+    internal set
+
+  /** The player this mob belongs to, or null. Only the owner functions write it. */
+  var owner: EntityId? = null
+    internal set
 
   /** Player entity ID who spawned this mob via debug commands, or null. */
   var debugOwner: EntityId? = null

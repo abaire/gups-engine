@@ -261,7 +261,7 @@
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change' or 'on_disengage'.",
+          "doc": "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change' or 'on_disengage'.",
           "since": 1
         },
         {
@@ -2572,6 +2572,26 @@
       "since": 1
     },
     {
+      "symbol": "hook:before_order",
+      "name": "before_order",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["mob", "room"],
+      "ctx_fields": ["self", "actor", "target", "text", "room", "pulse", "rng"],
+      "doc": "Fires before a pet is ordered; return ctx.deny(msg) to veto.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:before_summon",
+      "name": "before_summon",
+      "signature": "fn(ctx)",
+      "vetoable": true,
+      "attach_to": ["room", "mob"],
+      "ctx_fields": ["self", "actor", "label", "count", "room", "pulse", "rng"],
+      "doc": "Fires before mobs are summoned; return ctx.deny(msg) to veto.",
+      "since": 1
+    },
+    {
       "symbol": "hook:before_unlock",
       "name": "before_unlock",
       "signature": "fn(ctx)",
@@ -2777,6 +2797,16 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_owner_change",
+      "name": "on_owner_change",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": [],
+      "ctx_fields": ["self", "actor", "target", "event", "room", "pulse", "rng"],
+      "doc": "Global hook: fires after a mob's owner is set or cleared, with ctx.actor the mob, ctx.target the owner and ctx.event 'set' or 'clear'.",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_perceive",
       "name": "on_perceive",
       "signature": "fn(ctx)",
@@ -2814,6 +2844,16 @@
       "attach_to": ["room", "mob", "item"],
       "ctx_fields": ["self", "item", "room", "pulse", "rng"],
       "doc": "Fires when a mob or item is freshly spawned, or on a room when a spawn rule fires.",
+      "since": 1
+    },
+    {
+      "symbol": "hook:on_summon",
+      "name": "on_summon",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["room", "mob"],
+      "ctx_fields": ["self", "actor", "targets", "room", "pulse", "rng"],
+      "doc": "Fires once every mob of the summon has spawned.",
       "since": 1
     },
     {
@@ -2911,6 +2951,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.count",
+        "name": "count",
+        "doc": "How many mobs are being summoned, for before_summon.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.direction",
         "name": "direction",
         "doc": "The movement direction name, for enter and exit hooks.",
@@ -2925,7 +2971,7 @@
       {
         "symbol": "ctx.event",
         "name": "event",
-        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.",
+        "doc": "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_owner_change: 'set' or 'clear'. For on_disengage: 'flee', 'death' or 'stop'.",
         "since": 1
       },
       {
@@ -2950,6 +2996,12 @@
         "symbol": "ctx.item",
         "name": "item",
         "doc": "The item being picked up, dropped, used or given.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.label",
+        "name": "label",
+        "doc": "The prototype label of mobs being summoned, for before_summon.",
         "since": 1
       },
       {
@@ -3055,7 +3107,7 @@
       {
         "symbol": "ctx.targets",
         "name": "targets",
-        "doc": "Opponents, for on_combat_tick.",
+        "doc": "Opponents for on_combat_tick, or summoned mobs for on_summon.",
         "since": 1
       },
       {
@@ -3716,6 +3768,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Contributor to remove, or None for the whole record."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.clear_owner",
+        "name": "clear_owner",
+        "doc": "Removes a mob's owner. Returns whether it had one.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_owner.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to release."
           }
         ]
       },
@@ -4989,6 +5059,34 @@
         ]
       },
       {
+        "symbol": "ctx.set_owner",
+        "name": "set_owner",
+        "doc": "Makes a player the owner of a mob, replacing any owner it had. The mob then runs its owned behaviors, leaves its spawn rule and stops fighting its owner's side. Returns whether anything changed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_owner.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that becomes a pet."
+          },
+          {
+            "symbol": "ctx.set_owner.player",
+            "name": "player",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The in-world player that owns it."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.set_skill",
         "feature": "skills",
         "name": "set_skill",
@@ -5466,6 +5564,12 @@
           "symbol": "view:actor.name",
           "name": "name",
           "doc": "The entity's display name.",
+          "since": 1
+        },
+        {
+          "symbol": "view:actor.owner",
+          "name": "owner",
+          "doc": "The in-world player that owns this mob (a pet), or None.",
           "since": 1
         },
         {
@@ -7042,6 +7146,17 @@
           "varargs": false,
           "kwargs": false,
           "doc": "The channel, or list of channels, the mob notices targets on; built in or declared."
+        },
+        {
+          "symbol": "aggressive.priority",
+          "feature": "combat",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     },
@@ -7062,6 +7177,48 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Allies to help, as label patterns such as 'goblin_*'."
+        },
+        {
+          "symbol": "assist.priority",
+          "feature": "combat",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
+        }
+      ]
+    },
+    {
+      "symbol": "defend",
+      "feature": "combat",
+      "name": "defend",
+      "doc": "Behavior: attacks whatever its owner is fighting; with group, whatever the owner's in-room group members are fighting.",
+      "since": 1,
+      "params": [
+        {
+          "symbol": "defend.group",
+          "feature": "combat",
+          "name": "group",
+          "positional": true,
+          "named": true,
+          "default": "True",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Also defend the owner's in-room group members."
+        },
+        {
+          "symbol": "defend.priority",
+          "feature": "combat",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     },
@@ -7082,6 +7239,17 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Percentages (0..100) by vital, built with vitals(...)."
+        },
+        {
+          "symbol": "flee.priority",
+          "feature": "combat",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     },
@@ -7100,6 +7268,16 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Who to follow: 'players', 'mobs', or label patterns."
+        },
+        {
+          "symbol": "follow.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     },
@@ -7132,6 +7310,24 @@
       ]
     },
     {
+      "symbol": "heel",
+      "name": "heel",
+      "doc": "Behavior: follows its owner by the shortest path, however far. Does nothing for a mob without an owner in the world.",
+      "since": 1,
+      "params": [
+        {
+          "symbol": "heel.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
+        }
+      ]
+    },
+    {
       "symbol": "pursue",
       "name": "pursue",
       "doc": "Behavior: heads for the nearest matching actor anywhere in the world.",
@@ -7146,6 +7342,16 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Who to pursue: 'players', 'mobs', or label patterns."
+        },
+        {
+          "symbol": "pursue.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     },
@@ -7154,7 +7360,18 @@
       "name": "scavenge",
       "doc": "Behavior: picks up items lying within reach.",
       "since": 1,
-      "params": []
+      "params": [
+        {
+          "symbol": "scavenge.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
+        }
+      ]
     },
     {
       "symbol": "sentinel",
@@ -7188,6 +7405,16 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Percent chance of taking a step on each think, 0 to 100."
+        },
+        {
+          "symbol": "wander.priority",
+          "name": "priority",
+          "positional": true,
+          "named": true,
+          "default": "None",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Proposal priority; higher wins. None uses the behavior's default."
         }
       ]
     }
@@ -7229,6 +7456,12 @@
           "feature": "track",
           "name": "band",
           "doc": "'melee', 'near' or 'far' between actor and target, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.behaviors",
+          "name": "behaviors",
+          "doc": "The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.",
           "since": 1
         },
         {
@@ -7618,6 +7851,15 @@
         "return_type": "dict[str, any]",
         "ctx_fields": ["actor", "target", "room", "pulse", "rng"],
         "doc": "Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int, 'level_loss': int}; vitals sets the respawned character's current vitals.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:owned_behaviors",
+        "name": "owned_behaviors",
+        "signature": "owned_behaviors(ctx)",
+        "return_type": "list",
+        "ctx_fields": ["actor", "target", "behaviors", "room", "pulse", "rng"],
+        "doc": "The behaviors a mob runs while a player owns it; ctx.actor is the mob, ctx.target its owner.",
         "since": 1
       },
       {
@@ -8106,6 +8348,12 @@
           "symbol": "p.name",
           "name": "name",
           "doc": "The entity's display name.",
+          "since": 1
+        },
+        {
+          "symbol": "p.owner",
+          "name": "owner",
+          "doc": "The in-world player that owns this mob (a pet), or None.",
           "since": 1
         },
         {
@@ -11172,6 +11420,70 @@
       "placeholders": [],
       "required": [],
       "default": "You can't go that way.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.cant",
+      "id": "order.cant",
+      "placeholders": ["pet"],
+      "required": [],
+      "default": "{pet} can't do that right now.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.dropped",
+      "id": "order.dropped",
+      "placeholders": ["pet"],
+      "required": [],
+      "default": "{pet} hesitates without you nearby.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.given",
+      "id": "order.given",
+      "placeholders": ["pet", "command"],
+      "required": [],
+      "default": "You order {pet} to '{command}'.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.no_pet",
+      "id": "order.no_pet",
+      "placeholders": ["name"],
+      "required": [],
+      "default": "You have no pet here called {name}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.no_pets",
+      "id": "order.no_pets",
+      "placeholders": [],
+      "required": [],
+      "default": "You have no pets here.",
+      "since": 1
+    },
+    {
+      "symbol": "message:order.usage",
+      "id": "order.usage",
+      "placeholders": [],
+      "required": [],
+      "default": "Order whom to do what?",
+      "since": 1
+    },
+    {
+      "symbol": "message:pet.arrives",
+      "id": "pet.arrives",
+      "placeholders": ["pet", "owner"],
+      "required": [],
+      "default": "{pet} arrives with {owner}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:pet.leaves",
+      "id": "pet.leaves",
+      "placeholders": ["pet", "owner"],
+      "required": [],
+      "default": "{pet} leaves with {owner}.",
       "since": 1
     },
     {

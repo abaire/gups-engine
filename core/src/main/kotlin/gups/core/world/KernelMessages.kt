@@ -189,6 +189,16 @@ object KernelMsg : MsgGroup(null) {
   val TAKEN_OVER = msg("session.taken_over", "Someone else has taken over this character.")
   val NO_CHARACTER = msg("session.no_character", "You are not playing a character.")
 
+  val ORDER_USAGE = msg("order.usage", "Order whom to do what?")
+  val ORDER_NO_PET = msg("order.no_pet", "You have no pet here called {name}.", "name")
+  val ORDER_NO_PETS = msg("order.no_pets", "You have no pets here.")
+  val ORDER_GIVEN = msg("order.given", "You order {pet} to '{command}'.", "pet,command")
+  val ORDER_CANT = msg("order.cant", "{pet} can't do that right now.", "pet")
+  val ORDER_DROPPED = msg("order.dropped", "{pet} hesitates without you nearby.", "pet")
+
+  val PET_LEAVES = msg("pet.leaves", "{pet} leaves with {owner}.", "pet,owner")
+  val PET_ARRIVES = msg("pet.arrives", "{pet} arrives with {owner}.", "pet,owner")
+
   /** The state word a door or container in [state] is described with. */
   fun stateWord(state: DoorState): String = state.name.lowercase()
 }

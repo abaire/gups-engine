@@ -29,6 +29,7 @@ import gups.core.world.ZoneCommand
 import gups.core.world.applyPrototypes
 import gups.core.world.findActor
 import gups.core.world.opponentsOf
+import gups.core.world.refreshAllOwnedBehaviors
 import gups.core.world.roomOfEntity
 import gups.core.world.send
 import net.starlark.java.eval.Dict
@@ -530,6 +531,7 @@ class StarlarkHost(
       }
     }
     cleared.forEach(::unquarantine)
+    world.refreshAllOwnedBehaviors()
     for (room in report.created.sortedBy { it.id }) invokeHook(
       world,
       room,
@@ -675,6 +677,8 @@ class StarlarkHost(
     budget: Long? = null,
     /** False to leave a failure to the caller, who gets its message in [CallResult.Failed]. */
     recordErrors: Boolean = true,
+    /** Runs on the new thread before the call, to attach thread-locals. */
+    onThread: (StarlarkThread) -> Unit = {},
   ): CallResult {
     if (site.pkg in quarantinedSet) return CallResult.Skipped
     val fn =
@@ -714,6 +718,7 @@ class StarlarkHost(
       thread.setPrintHandler { _, msg -> trace(site, world.pulse, "  print: $msg") }
       val frame = Frame(this, world, thread, site, root, remaining)
       thread.setThreadLocal(ViewScope::class.java, frame)
+      onThread(thread)
       trace(site, world.pulse, "${site.hook} on ${site.label ?: site.pkg} at pulse ${world.pulse}")
       stack += frame
       var failure: EvalException? = null

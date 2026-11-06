@@ -42,6 +42,7 @@ import gups.core.world.callHook
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
 import gups.core.world.clearContributions
+import gups.core.world.clearOwner
 import gups.core.world.damage
 import gups.core.world.destroy
 import gups.core.world.echo
@@ -77,6 +78,7 @@ import gups.core.world.setAnchor
 import gups.core.world.setCharges
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
+import gups.core.world.setOwner
 import gups.core.world.setSkill
 import gups.core.world.spawnItem
 import gups.core.world.stack
@@ -188,10 +190,28 @@ internal constructor(
   )
   fun target(): Any = field { v(hc.target ?: hc.targetItem ?: extras.commandTarget) }
 
-  @StarlarkMethod(name = "targets", structField = true, doc = "Opponents, for on_combat_tick.")
+  @StarlarkMethod(
+    name = "targets",
+    structField = true,
+    doc = "Opponents for on_combat_tick, or summoned mobs for on_summon.",
+  )
   fun targets(): Any = field {
-    extras.targets?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE
+    (hc.mobs ?: extras.targets)?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE
   }
+
+  @StarlarkMethod(
+    name = "label",
+    structField = true,
+    doc = "The prototype label of mobs being summoned, for before_summon.",
+  )
+  fun label(): Any = field { hc.summonLabel?.v ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "count",
+    structField = true,
+    doc = "How many mobs are being summoned, for before_summon.",
+  )
+  fun count(): Any = field { hc.count?.let(::sInt) ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "item",
@@ -242,7 +262,7 @@ internal constructor(
     name = "event",
     structField = true,
     doc =
-      "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_disengage: 'flee', 'death' or 'stop'.",
+      "For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_owner_change: 'set' or 'clear'. For on_disengage: 'flee', 'death' or 'stop'.",
   )
   fun event(): Any = field { hc.event ?: Starlark.NONE }
 
@@ -2097,6 +2117,36 @@ internal constructor(
   )
   fun clearActive(entity: Any, reason: Any): Any =
     reason(entity, reason, "clear_active") { e, r -> world.clearActive(e, r) }
+
+  @StarlarkMethod(
+    name = "set_owner",
+    doc =
+      "Makes a player the owner of a mob, replacing any owner it had. The mob then runs its owned behaviors, leaves its spawn rule and stops fighting its owner's side. Returns whether anything changed.",
+    parameters =
+      [
+        Param(name = "mob", named = true, doc = "The mob that becomes a pet."),
+        Param(name = "player", named = true, doc = "The in-world player that owns it."),
+      ],
+  )
+  fun setOwner(mob: Any, player: Any): Any =
+    verb("set_owner") {
+      val m = (mob as? ActorView)?.actor as? Mob ?: fail("set_owner(mob): must be a mob")
+      val p =
+        (player as? ActorView)?.actor?.takeIf { it is Player && it.inWorld } as? Player
+          ?: fail("set_owner(player): must be a player in the world")
+      world.setOwner(m, p)
+    }
+
+  @StarlarkMethod(
+    name = "clear_owner",
+    doc = "Removes a mob's owner. Returns whether it had one.",
+    parameters = [Param(name = "mob", named = true, doc = "The mob to release.")],
+  )
+  fun clearOwner(mob: Any): Any =
+    verb("clear_owner") {
+      val m = (mob as? ActorView)?.actor as? Mob ?: fail("clear_owner(mob): must be a mob")
+      world.clearOwner(m)
+    }
 
   @StarlarkMethod(
     name = "set_anchor",

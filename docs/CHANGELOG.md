@@ -4,6 +4,72 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Pets and owners
+
+- `summon` (the effect primitive and the verb) now sets the owner of each mob it spawns to the caster when the caster is
+  an in-world player. `summonedBy` and the owner are set before the mob's `on_spawn` runs.
+- **Breaking:** a mob's owner is its own `owner` field, no longer its `summonedBy` or `leader`. A mob that merely
+  follows a player is no longer that player's pet for `xp_share`, groups or `allies_near`.
+
+```python
+# Before: a mob following a player counted as that player's pet in xp_share, group_of and allies_near.
+# After: only a mob whose owner is set counts.
+ctx.set_owner(wolf, player)
+```
+
+- `ctx.set_owner(mob, player)` and `ctx.clear_owner(mob)` set and remove a mob's owner. An owned mob gets the active
+  reason `owner:<player_id>` while its owner is in the world, leaves its spawn rule, and stops fighting its owner's
+  side. Both return whether anything changed.
+- The actor view has an `owner` field: the view of the in-world player that owns the actor, or `None`. Because `owner`
+  is now an actor view field, it can no longer be a stat or vital name.
+- `on_owner_change` is a global hook that fires after each change of a mob's owner, with `ctx.actor` the mob,
+  `ctx.target` the owner gained or lost and `ctx.event` `"set"` or `"clear"`.
+- A mob's `owner` is saved with it.
+- Every built-in behavior that has a priority takes `priority=` (`wander`, `aggressive`, `assist`, `flee`, `follow`,
+  `pursue`, `scavenge`); the old fixed values are now the defaults. Proposals sort by priority, then declaration order.
+- `heel(priority=30)` follows the mob's owner by the shortest path, however far. `defend(group=True, priority=50)`
+  attacks whatever the owner, or with `group` the owner's in-room group members, are fighting (`combat` feature).
+- A mob with an owner runs an owned behavior list instead of its prototype's `behaviors`: by default the prototype's
+  `flee` and `sentinel` behaviors, then `heel()`, then `defend()` with `combat`. An owned mob's `aggressive` and
+  `assist` never pick its owner, the owner's group members, or a pet of any of them.
+- `owned_behaviors(ctx)` is a new optional rules export that returns the list of behaviors an owned mob runs, with
+  `ctx.actor` the mob, `ctx.target` the owner (`None` while the owner is offline) and `ctx.behaviors` the prototype's
+  behaviors. Behavior constructors may be called inside it. A rules error keeps the default list, and the list is
+  recomputed after a reload. When defined, the load-time dry run calls it with a throwaway mob and player.
+- `PluginRegistry.addOwnedBehaviors(doc, adjust)` allows plugins to adjust a mob's owned behavior list after the
+  `owned_behaviors` rules export, in plugin-id order, receiving and returning behaviors as plain descriptor maps.
+- **Breaking:** when a mob with an owner becomes engaged with an actor, its owner in the same room is engaged with that
+  actor too. When the owner's engagement with an opponent ends (by fleeing, leaving the room, `stop_combat`, death or
+  quit), its in-room pets engaged with that opponent are disengaged as well and receive `on_disengage` with the owner's
+  event.
+
+```python
+# Before: ordering or letting a pet fight left its owner out of the fight.
+# After: the owner is engaged with whatever its pet fights in the same room,
+# and the pet leaves the fight when its owner does.
+```
+
+- `order <pet> <command>` queues a command line on one of the player's pets in the room, with the pet paying its own
+  warmup and lag and the player paying none. `order pets <command>` orders each of the player's pets in the room, in
+  ascending id. Ordered actions are checked again when they run: if the owner is no longer in the room or no longer owns
+  the pet, the action is dropped.
+- `before_order` is a vetoable hook on Mob (the pet) and Room evaluated before an order is queued, with `ctx.actor` the
+  owner, `ctx.target` the pet and `ctx.text` the command line.
+- `PluginRestrictionPoint.ORDER` allows plugins to restrict ordering pets.
+- `before_summon` is a vetoable hook on Room and Mob (observer) evaluated before mobs are summoned by the `summon`
+  primitive or `ctx.summon`, with `ctx.actor` the caster, `ctx.label` the prototype label and `ctx.count` the count. A
+  veto stops the summon and `ctx.summon` returns `[]`.
+- `on_summon` is an observer hook on Room and Mob that fires after all mobs of a summon have spawned and any
+  `on_owner_change` has fired, with `ctx.actor` the caster and `ctx.targets` the new mobs in spawn order.
+- `ctx.label` and `ctx.count` expose the prototype label and count in `before_summon`; `ctx.targets` also lists the
+  summoned mobs in `on_summon`.
+- Pets are stored with their owner across logout and restart: on quit, each pet leaves the world with what it carries
+  and is saved in the player's immediate checkpoint. At login each pet is restored beside the player in ascending id,
+  with its items, active `owner:` reason and owned behaviors. A held pet whose owner's character or prototype no longer
+  exists is dropped with a log note.
+- The tutorial zone defines a summonable spectral familiar (a pet with default owned behaviors) and the arcane school
+  adds the `familiar` spell.
+
 ### Groups and shared experience
 
 - Each actor holds a transient record of the damage, healing and support other actors do toward fights against it, kept

@@ -7,6 +7,7 @@ import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.Room
@@ -30,6 +31,7 @@ import gups.core.world.recentInputs
 import gups.core.world.respawnDeadlines
 import gups.core.world.restoreItem
 import gups.core.world.restoreMob
+import gups.core.world.restorePet
 import gups.core.world.restorePlayer
 import gups.core.world.setRespawn
 import gups.core.world.setZoneReset
@@ -83,6 +85,9 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   val writer = CheckpointWriter(db::write, log)
 
   private val entityRows = HashMap<Long, EntityRow>()
+
+  /** The owner of each saved mob row that has one, so lookups don't decode every mob payload. */
+  private val petOwners = HashMap<Long, Long>()
   private val playerRows = HashMap<Long, PlayerRow>()
   private val zoneRows = HashMap<String, String>()
   private var lastCapturePulse = 0L
@@ -115,7 +120,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     worldCommit = db.meta()["world_commit"]
     worldSchema = db.meta()["world_schema"]
     worldFeatures = db.meta()["world_features"]
-    db.entityRows().forEach { entityRows[it.id] = it }
+    db.entityRows().forEach(::putRow)
     db.playerRows().forEach { playerRows[it.id] = it }
     zoneRows.putAll(db.zoneStates())
     lastCapturePulse = db.meta()["pulse"]?.toLongOrNull() ?: 0
@@ -219,16 +224,29 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     var restored = 0
     val owned =
       entityRows.values
-        .filter { it.kind == "item" && ownerOf(it) != null }
+        .filter { (it.kind == "item" && ownerOf(it) != null) || it.id in petOwners }
         .mapTo(HashSet()) { it.id }
     val world0 = entityRows.values.filter { it.id !in owned }.sortedBy { it.id }
+    // Held pets whose owner's character is gone, and what they hold, go even on a fresh start:
+    // nobody can ever log in to bring them back.
+    val orphans = petOwners.filterValues { it !in playerRows }
+    val goneOwners = orphans.values.toSet()
+    val deleted = LinkedHashSet<Long>()
+    for (id in orphans.keys.sorted()) {
+      deleted += id
+      notes += "pet ${entityRows.getValue(id).protoLabel} #$id dropped: its owner is gone"
+    }
+    if (goneOwners.isNotEmpty()) {
+      for (row in entityRows.values) {
+        if (row.kind == "item" && ownerOf(row)?.let { it in goneOwners } == true) deleted += row.id
+      }
+    }
     if (fresh) {
-      pendingDeletes += world0.map { it.id }
+      pendingDeletes += world0.map { it.id } + deleted
       for (pkg in zoneRows.keys) zoneRows[pkg] = ""
       notes += "--fresh: discarded ${world0.size} saved world rows"
       return RestoreReport(0, world0.size, 0, notes)
     }
-    val deleted = LinkedHashSet<Long>()
     for (row in world0.filter { it.kind == "room" }) {
       val room = world.roomOrNull(Label(row.protoLabel))
       if (room == null || room.id.v != row.id) {
@@ -285,12 +303,26 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     return RestoreReport(restored, deleted.size, 0, notes)
   }
 
-  /** The player whose custody an item row's location chain ends in, by id. */
+  private fun putRow(row: EntityRow) {
+    entityRows[row.id] = row
+    val owner =
+      if (row.kind == "mob") JSON.decodeFromString(MobPayload.serializer(), row.payload).owner
+      else null
+    if (owner != null) petOwners[row.id] = owner else petOwners.remove(row.id)
+  }
+
+  /**
+   * The player whose custody an item row's location chain ends in, by id: directly, or through a
+   * pet of theirs.
+   */
   private fun ownerOf(row: EntityRow, seen: Int = 0): Long? {
     val loc =
       row.location?.let { JSON.decodeFromString(LocationJson.serializer(), it) } ?: return null
     val holder = loc.carried ?: loc.equipped
-    if (holder != null) return holder.takeIf { it in playerRows }
+    if (holder != null) {
+      if (holder in playerRows) return holder
+      return petOwners[holder]
+    }
     val c = loc.contained ?: return null
     if (seen > 64) return null
     return entityRows[c]?.let { ownerOf(it, seen + 1) }
@@ -308,6 +340,28 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     applyPlayer(world, player, p)
     val notes = mutableListOf<String>()
     val deleted = LinkedHashSet<Long>()
+
+    val petRows =
+      petOwners.filterValues { it == row.id }.keys.sorted().map { entityRows.getValue(it) }
+
+    val restoredPets = mutableListOf<Mob>()
+    for (mobRow in petRows) {
+      val proto = world.protos.mobs[Label(mobRow.protoLabel)]
+      if (proto == null) {
+        deleted += mobRow.id
+        notes += "pet ${mobRow.protoLabel} #${mobRow.id} dropped: its prototype is gone"
+        continue
+      }
+      val m = world.restoreMob(EntityId(mobRow.id), proto, room, player.trackIndex)
+      val payload = JSON.decodeFromString(MobPayload.serializer(), mobRow.payload)
+      applyMob(world, m, payload)
+      m.protoVersion = mobRow.protoVersion
+      world.upgrade(m, proto.version)
+      m.dirty = m.protoVersion != mobRow.protoVersion
+      world.restorePet(m, player)
+      restoredPets += m
+    }
+
     placeItems(
       world,
       entityRows.values.filter { it.kind == "item" && ownerOf(it) == row.id },
@@ -317,6 +371,10 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     )
     world.forgetActorSlots(player)
     world.clampVitals(player)
+    for (m in restoredPets) {
+      world.forgetActorSlots(m)
+      world.clampVitals(m)
+    }
     pendingDeletes += deleted
     notes.forEach(log)
     player.dirty = room.label.v != p.room
@@ -347,7 +405,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         val row = world.encode(e)
         if (row != null) {
           b.entities[row.id] = row
-          entityRows[row.id] = row
+          putRow(row)
         }
       }
       e.dirty = false
@@ -356,6 +414,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       if (id in entityRows || id in b.entities) {
         b.entities[id] = null
         entityRows.remove(id)
+        petOwners.remove(id)
       }
     }
     pendingDeletes.clear()

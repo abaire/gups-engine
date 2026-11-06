@@ -86,6 +86,11 @@ class HeritagePluginTest {
       blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
     ) = TODO()
 
+    override fun addOwnedBehaviors(
+      doc: String,
+      adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
+    ) = TODO()
+
     override fun addHook(
       name: String,
       doc: String,

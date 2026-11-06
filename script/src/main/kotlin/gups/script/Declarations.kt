@@ -46,6 +46,7 @@ import gups.core.world.ActorFilter
 import gups.core.world.Aggressive
 import gups.core.world.Assist
 import gups.core.world.Behavior
+import gups.core.world.Defend
 import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.Feature
 import gups.core.world.Features
@@ -53,8 +54,18 @@ import gups.core.world.Flee
 import gups.core.world.Follow
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.Guard
+import gups.core.world.Heel
 import gups.core.world.HookName
 import gups.core.world.Lane
+import gups.core.world.PRIORITY_AGGRESSIVE
+import gups.core.world.PRIORITY_ASSIST
+import gups.core.world.PRIORITY_DEFEND
+import gups.core.world.PRIORITY_FLEE
+import gups.core.world.PRIORITY_FOLLOW
+import gups.core.world.PRIORITY_HEEL
+import gups.core.world.PRIORITY_PURSUE
+import gups.core.world.PRIORITY_SCAVENGE
+import gups.core.world.PRIORITY_WANDER
 import gups.core.world.Pursue
 import gups.core.world.Scavenge
 import gups.core.world.Sentinel
@@ -255,6 +266,20 @@ internal object HookCatalog {
         doc = "Fires before casting begins; return ctx.deny(msg) to veto.",
       ),
       HookSpec(
+        hook = HookName.BEFORE_ORDER,
+        signature = "fn(ctx)",
+        attachTo = listOf(M, R),
+        ctxFields = listOf("self", "actor", "target", "text", "room", "pulse", "rng"),
+        doc = "Fires before a pet is ordered; return ctx.deny(msg) to veto.",
+      ),
+      HookSpec(
+        hook = HookName.BEFORE_SUMMON,
+        signature = "fn(ctx)",
+        attachTo = listOf(R, M),
+        ctxFields = listOf("self", "actor", "label", "count", "room", "pulse", "rng"),
+        doc = "Fires before mobs are summoned; return ctx.deny(msg) to veto.",
+      ),
+      HookSpec(
         hook = HookName.ON_CAST_START,
         signature = "fn(ctx)",
         attachTo = listOf(M, I, R),
@@ -267,6 +292,13 @@ internal object HookCatalog {
         attachTo = listOf(M, I, R),
         ctxFields = listOf("self", "actor", "skill", "target", "room", "pulse", "rng"),
         doc = "Fires after a skill resolves.",
+      ),
+      HookSpec(
+        hook = HookName.ON_SUMMON,
+        signature = "fn(ctx)",
+        attachTo = listOf(R, M),
+        ctxFields = listOf("self", "actor", "targets", "room", "pulse", "rng"),
+        doc = "Fires once every mob of the summon has spawned.",
       ),
       HookSpec(
         hook = HookName.ON_DAMAGE,
@@ -324,6 +356,14 @@ internal object HookCatalog {
         ctxFields = listOf("self", "actor", "event", "group", "room", "pulse", "rng"),
         doc =
           "Global hook: fires for each player-group change, with ctx.event the 'join', 'leave', 'leader' or 'disband'.",
+      ),
+      HookSpec(
+        hook = HookName.ON_OWNER_CHANGE,
+        signature = "fn(ctx)",
+        attachTo = emptyList(),
+        ctxFields = listOf("self", "actor", "target", "event", "room", "pulse", "rng"),
+        doc =
+          "Global hook: fires after a mob's owner is set or cleared, with ctx.actor the mob, ctx.target the owner and ctx.event 'set' or 'clear'.",
       ),
       HookSpec(
         hook = HookName.ON_COMBAT_TICK,
@@ -471,6 +511,21 @@ private fun loadCtx(thread: StarlarkThread, fn: String): LoadCtx {
       ?: fail("$fn() can only be called while a package loads, not from a hook")
   ctx.tick()
   return ctx
+}
+
+/** Marks a rules call that may build behaviors, in the rules package [pkg]. */
+internal class OwnedBehaviorsMarker(val pkg: String)
+
+/**
+ * The package path label patterns in a behavior builtin resolve against: the loading package, or
+ * the rules package while `owned_behaviors` runs.
+ */
+private fun behaviorCtx(thread: StarlarkThread, fn: String): String {
+  if (thread.getThreadLocal(LoadCtx::class.java) != null) return contentCtx(thread, fn).pkg.path
+  val marker =
+    thread.getThreadLocal(OwnedBehaviorsMarker::class.java)
+      ?: fail("$fn() can only be used in a package's .star files or in rules.owned_behaviors")
+  return marker.pkg
 }
 
 private fun contentCtx(thread: StarlarkThread, fn: String): LoadCtx {
@@ -667,6 +722,9 @@ internal class DeclarationBuiltins(
   private val features: Features = Features.ALL,
   private val knownTraits: () -> Set<String> = { emptySet() },
 ) {
+  private fun priorityArg(v: Any, default: Int, what: String): Int =
+    if (isNone(v)) default else int(v, what)
+
   /** Fails with "<name> needs the <feature> feature" if the world has [symbol]'s feature off. */
   private fun need(symbol: String, name: String = symbol) {
     FeatureOwnership.refused(symbol, name, features)?.let { fail(it) }
@@ -1557,14 +1615,26 @@ internal class DeclarationBuiltins(
           defaultValue = "10",
           doc = "Percent chance of taking a step on each think, 0 to 100.",
         ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun wander(radius: Any, chance: Any, thread: StarlarkThread): Any {
-    contentCtx(thread, "wander")
+  fun wander(radius: Any, chance: Any, priority: Any, thread: StarlarkThread): Any {
+    behaviorCtx(thread, "wander")
     val r =
       int(radius, "wander(radius)").also { if (it < 0) fail("wander(radius): can't be negative") }
-    return BehaviorDecl(Wander(r, percent(chance, "wander(chance)")))
+    return BehaviorDecl(
+      Wander(
+        r,
+        percent(chance, "wander(chance)"),
+        priorityArg(priority, PRIORITY_WANDER, "wander(priority)"),
+      )
+    )
   }
 
   @StarlarkMethod(
@@ -1604,6 +1674,12 @@ internal class DeclarationBuiltins(
           doc =
             "The channel, or list of channels, the mob notices targets on; built in or declared.",
         ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
@@ -1613,9 +1689,10 @@ internal class DeclarationBuiltins(
     unlessLevelBelow: Any,
     chance: Any,
     via: Any,
+    priority: Any,
     thread: StarlarkThread,
   ): Any {
-    val ctx = contentCtx(thread, "aggressive")
+    val pkgPath = behaviorCtx(thread, "aggressive")
     need("aggressive", "aggressive()")
     if (!isNone(unlessLevelAbove))
       need("aggressive.unless_level_above", "aggressive(unless_level_above)")
@@ -1634,11 +1711,12 @@ internal class DeclarationBuiltins(
     val viaChannels = names.map { Channel(choice(it, "aggressive(via)", known)) }
     return BehaviorDecl(
       Aggressive(
-        actorFilter(toward, "aggressive(toward)", ctx.pkg.path),
+        actorFilter(toward, "aggressive(toward)", pkgPath),
         intOrNull(unlessLevelAbove, "aggressive(unless_level_above)"),
         intOrNull(unlessLevelBelow, "aggressive(unless_level_below)"),
         percent(chance, "aggressive(chance)"),
         viaChannels,
+        priorityArg(priority, PRIORITY_AGGRESSIVE, "aggressive(priority)"),
       )
     )
   }
@@ -1652,14 +1730,25 @@ internal class DeclarationBuiltins(
           name = "allies",
           named = true,
           doc = "Allies to help, as label patterns such as 'goblin_*'.",
-        )
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun assist(allies: Any, thread: StarlarkThread): Any {
-    val ctx = contentCtx(thread, "assist")
+  fun assist(allies: Any, priority: Any, thread: StarlarkThread): Any {
+    val pkgPath = behaviorCtx(thread, "assist")
     need("assist", "assist()")
-    return BehaviorDecl(Assist(actorFilter(allies, "assist(allies)", ctx.pkg.path)))
+    return BehaviorDecl(
+      Assist(
+        actorFilter(allies, "assist(allies)", pkgPath),
+        priorityArg(priority, PRIORITY_ASSIST, "assist(priority)"),
+      )
+    )
   }
 
   @StarlarkMethod(
@@ -1671,17 +1760,23 @@ internal class DeclarationBuiltins(
           name = "below",
           named = true,
           doc = "Percentages (0..100) by vital, built with vitals(...).",
-        )
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun flee(below: Any, thread: StarlarkThread): Any {
-    contentCtx(thread, "flee")
+  fun flee(below: Any, priority: Any, thread: StarlarkThread): Any {
+    behaviorCtx(thread, "flee")
     need("flee", "flee()")
     val pcts = typed(below, TypedKind.VITALS, "flee(below)")
     if (pcts.isEmpty()) fail("flee(below): name at least one vital")
     for ((vital, pct) in pcts) if (pct !in 0..100) fail("flee(below): $vital must be 0..100")
-    return BehaviorDecl(Flee(pcts))
+    return BehaviorDecl(Flee(pcts, priorityArg(priority, PRIORITY_FLEE, "flee(priority)")))
   }
 
   @StarlarkMethod(
@@ -1701,11 +1796,11 @@ internal class DeclarationBuiltins(
     useStarlarkThread = true,
   )
   fun guard(exit: Any, allies: Any, thread: StarlarkThread): Any {
-    val ctx = contentCtx(thread, "guard")
+    val pkgPath = behaviorCtx(thread, "guard")
     return BehaviorDecl(
       Guard(
         Direction.parse(str(exit, "guard(exit)")),
-        actorFilter(allies, "guard(allies)", ctx.pkg.path),
+        actorFilter(allies, "guard(allies)", pkgPath),
       )
     )
   }
@@ -1720,13 +1815,24 @@ internal class DeclarationBuiltins(
           name = "target",
           named = true,
           doc = "Who to follow: 'players', 'mobs', or label patterns.",
-        )
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun follow(target: Any, thread: StarlarkThread): Any {
-    val ctx = contentCtx(thread, "follow")
-    return BehaviorDecl(Follow(actorFilter(target, "follow(target)", ctx.pkg.path)))
+  fun follow(target: Any, priority: Any, thread: StarlarkThread): Any {
+    val pkgPath = behaviorCtx(thread, "follow")
+    return BehaviorDecl(
+      Follow(
+        actorFilter(target, "follow(target)", pkgPath),
+        priorityArg(priority, PRIORITY_FOLLOW, "follow(priority)"),
+      )
+    )
   }
 
   @StarlarkMethod(
@@ -1738,13 +1844,24 @@ internal class DeclarationBuiltins(
           name = "target",
           named = true,
           doc = "Who to pursue: 'players', 'mobs', or label patterns.",
-        )
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun pursue(target: Any, thread: StarlarkThread): Any {
-    val ctx = contentCtx(thread, "pursue")
-    return BehaviorDecl(Pursue(actorFilter(target, "pursue(target)", ctx.pkg.path)))
+  fun pursue(target: Any, priority: Any, thread: StarlarkThread): Any {
+    val pkgPath = behaviorCtx(thread, "pursue")
+    return BehaviorDecl(
+      Pursue(
+        actorFilter(target, "pursue(target)", pkgPath),
+        priorityArg(priority, PRIORITY_PURSUE, "pursue(priority)"),
+      )
+    )
   }
 
   @StarlarkMethod(
@@ -1753,18 +1870,79 @@ internal class DeclarationBuiltins(
     useStarlarkThread = true,
   )
   fun sentinel(thread: StarlarkThread): Any {
-    contentCtx(thread, "sentinel")
+    behaviorCtx(thread, "sentinel")
     return BehaviorDecl(Sentinel)
   }
 
   @StarlarkMethod(
     name = "scavenge",
     doc = "Behavior: picks up items lying within reach.",
+    parameters =
+      [
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        )
+      ],
     useStarlarkThread = true,
   )
-  fun scavenge(thread: StarlarkThread): Any {
-    contentCtx(thread, "scavenge")
-    return BehaviorDecl(Scavenge)
+  fun scavenge(priority: Any, thread: StarlarkThread): Any {
+    behaviorCtx(thread, "scavenge")
+    return BehaviorDecl(Scavenge(priorityArg(priority, PRIORITY_SCAVENGE, "scavenge(priority)")))
+  }
+
+  @StarlarkMethod(
+    name = "heel",
+    doc =
+      "Behavior: follows its owner by the shortest path, however far. Does nothing for a mob without an owner in the world.",
+    parameters =
+      [
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        )
+      ],
+    useStarlarkThread = true,
+  )
+  fun heel(priority: Any, thread: StarlarkThread): Any {
+    behaviorCtx(thread, "heel")
+    return BehaviorDecl(Heel(priorityArg(priority, PRIORITY_HEEL, "heel(priority)")))
+  }
+
+  @StarlarkMethod(
+    name = "defend",
+    doc =
+      "Behavior: attacks whatever its owner is fighting; with group, whatever the owner's in-room group members are fighting.",
+    parameters =
+      [
+        Param(
+          name = "group",
+          named = true,
+          defaultValue = "True",
+          doc = "Also defend the owner's in-room group members.",
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun defend(group: Any, priority: Any, thread: StarlarkThread): Any {
+    behaviorCtx(thread, "defend")
+    need("defend", "defend()")
+    return BehaviorDecl(
+      Defend(
+        bool(group, "defend(group)"),
+        priorityArg(priority, PRIORITY_DEFEND, "defend(priority)"),
+      )
+    )
   }
 
   @StarlarkMethod(
@@ -1809,10 +1987,11 @@ internal class DeclarationBuiltins(
         name != "on_level_change" &&
           name != "on_encumbrance_change" &&
           name != "on_group_change" &&
+          name != "on_owner_change" &&
           name != "on_disengage"
       )
         fail(
-          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change and on_disengage can"
+          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change and on_disengage can"
         )
       val fn = hookRef(d["fn"], "global_hook(fn)")
       if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })
@@ -2297,6 +2476,8 @@ internal class DeclarationBuiltins(
         "pursue",
         "sentinel",
         "scavenge",
+        "heel",
+        "defend",
       )
 
     val PACKAGE_SPEC =
@@ -3255,7 +3436,7 @@ internal class DeclarationBuiltins(
             DeclParam(
               "name",
               "str",
-              "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change' or 'on_disengage'.",
+              "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change' or 'on_disengage'.",
               positional = true,
               keyword = true,
               required = true,

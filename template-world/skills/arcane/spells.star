@@ -1,5 +1,6 @@
 # The arcane school's spells. spark lashes a single enemy; mend mends the caster's wounds.
 # soothe heals an ally, and ward hardens an ally's armor for a while.
+# familiar summons a spectral companion to the caster's side.
 
 skill("spark",
       kind = "spell",
@@ -42,4 +43,14 @@ skill("ward",
           stat_deltas = stats(armor = 2),
           expire_msg = "Your ward fades.",
       ),
+)
+
+# Calls a spectral familiar that follows its caster and defends them in combat.
+skill("familiar",
+      kind = "spell",
+      cost = vitals(mana = 12),
+      lag = 4,
+      range = "self",
+      target = "self",
+      effect = summon("//zones/tutorial:familiar", duration = 600),
 )

@@ -226,4 +226,14 @@ fun World.enterGame(session: Session, p: Player, welcome: String?) {
   flushImmediate()
   if (welcome == null) echo(p.room, msg(KernelMsg.RECONNECTED_ROOM, "name" to p.name), p)
   send(p, describeRoom(p))
+  if (welcome != null) {
+    for (pet in petsOf(p)) {
+      tellSight(
+        p.room,
+        "enter",
+        pet,
+        msg(KernelMsg.PET_ARRIVES, "pet" to pet.name.cap(), "owner" to p.name),
+      )
+    }
+  }
 }
