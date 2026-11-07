@@ -728,4 +728,20 @@ class LevelingTest {
       assertFalse("You are ready to advance." in out3, "$mode")
     }
   }
+
+  @Test
+  fun `who shows each player's level`() {
+    val f = Fixture()
+    val ann = f.player("Ann")
+    val ben = f.player("Ben")
+    val cal = f.player("Cal")
+    ben.level = 2
+    f.w.disconnect(cal.session!!)
+    f.input(ann, "who")
+    f.run(4)
+    val out = f.out(ann)
+    assertContains(out, "[1] Ann")
+    assertContains(out, "[2] Ben")
+    assertTrue(out.lines().any { it.trim().startsWith("[1] Cal") && it.endsWith("(link-dead)") })
+  }
 }

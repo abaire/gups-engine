@@ -84,6 +84,11 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .traits-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .skills-panel { margin-top: 1rem; }
 .skills-list { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.group-panel { margin-top: 1rem; }
+.group-list { list-style: none; margin: 0; padding: 0; }
+.group-list .member { margin-bottom: 0.5rem; }
+.group-list .member.away { opacity: 0.5; }
+.member-name { font-size: 0.85rem; }
 .choices-list { font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
 .choices-list .title { color: var(--muted); }
 
@@ -114,11 +119,15 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .bar.tone1 .fill { background: var(--mana); }
 .bar.tone2 .fill { background: var(--move); }
 .bar.tone3 .fill { background: var(--tone3); }
+.bar.mini { margin-bottom: 0.15rem; }
+.bar.mini .label { font-size: 0.7rem; }
+.bar.mini .track { height: 0.3rem; }
 
 .affects { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; }
 .band { margin-bottom: 0.5rem; }
 .band .name { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
 .band .who { font-size: 0.85rem; }
+.band .who.group { color: var(--accent); }
 .band .item { color: var(--muted); }
 
 .b { font-weight: bold; }

@@ -22,6 +22,7 @@ import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
@@ -133,6 +134,7 @@ class WebClientTest {
         .body()
     val prefix = Regex("/assets/[0-9a-f]+").find(index)!!.value
     assertContains(index, "skills-panel")
+    assertContains(index, "group-panel")
     for (file in listOf("app.js", "markup.js", "panels.js", "style.css")) {
       assertEquals(
         200,
@@ -269,6 +271,7 @@ class WebClientTest {
           )
         )
         assertTrue(driver.findElement(By.id("room-name")).text.isNotEmpty())
+        assertFalse(driver.findElement(By.id("group-panel")).isDisplayed)
       } finally {
         driver.quit()
       }

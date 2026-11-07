@@ -182,6 +182,7 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-leveling.ready"><td><code>leveling.ready</code> <span class="badge feature">feature: leveling</span></td><td></td><td><code>You feel ready to advance.</code></td></tr>
 <tr id="message-leveling.score"><td><code>leveling.score</code> <span class="badge feature">feature: leveling</span></td><td><code>{level}</code>, <code>{xp}</code></td><td><code>Level {level} ({xp} xp)</code></td></tr>
 <tr id="message-leveling.score_ready"><td><code>leveling.score_ready</code> <span class="badge feature">feature: leveling</span></td><td></td><td><code>You are ready to advance.</code></td></tr>
+<tr id="message-leveling.who_level"><td><code>leveling.who_level</code> <span class="badge feature">feature: leveling</span></td><td><code>{level}</code></td><td><code>[{level}] </code></td></tr>
 <tr id="message-login.account_disabled"><td><code>login.account_disabled</code></td><td></td><td><code>This account is disabled.</code></td></tr>
 <tr id="message-login.account_gone"><td><code>login.account_gone</code></td><td></td><td><code>That account no longer exists.</code></td></tr>
 <tr id="message-login.account_now_disabled"><td><code>login.account_now_disabled</code></td><td></td><td><code>This account has been disabled.</code></td></tr>
@@ -283,6 +284,7 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-say.self"><td><code>say.self</code></td><td><code>{text}</code> (required)</td><td><code>You say, '{text}'</code></td></tr>
 <tr id="message-say.what"><td><code>say.what</code></td><td></td><td><code>Say what?</code></td></tr>
 <tr id="message-score.choice"><td><code>score.choice</code></td><td><code>{title}</code>, <code>{label}</code></td><td><code>{title}: {label}</code></td></tr>
+<tr id="message-score.group"><td><code>score.group</code></td><td><code>{leader}</code>, <code>{count}</code></td><td><code>Group: {leader}'s, {count} members</code></td></tr>
 <tr id="message-score.resists"><td><code>score.resists</code></td><td><code>{resists}</code> (required)</td><td><code>Resists: {resists}</code></td></tr>
 <tr id="message-score.traits"><td><code>score.traits</code></td><td><code>{traits}</code></td><td><code>Traits: {traits}</code></td></tr>
 <tr id="message-session.link_lost"><td><code>session.link_lost</code></td><td><code>{name}</code></td><td><code>{name} has lost their link.</code></td></tr>
@@ -339,10 +341,11 @@ Actions: {actions}, and any exit name</code></td></tr>
 <tr id="message-whisper.self"><td><code>whisper.self</code></td><td><code>{target}</code>, <code>{text}</code> (required)</td><td><code>You whisper to {target}, '{text}'</code></td></tr>
 <tr id="message-whisper.target"><td><code>whisper.target</code></td><td><code>{actor}</code>, <code>{text}</code> (required)</td><td><code>{actor} whispers to you, '{text}'</code></td></tr>
 <tr id="message-whisper.usage"><td><code>whisper.usage</code></td><td></td><td><code>Whisper what to whom?</code></td></tr>
-<tr id="message-who.linkdead"><td><code>who.linkdead</code></td><td><code>{name}</code> (required)</td><td><code>  {name} (link-dead)</code></td></tr>
+<tr id="message-who.group"><td><code>who.group</code></td><td><code>{leader}</code></td><td><code> [{leader}'s group]</code></td></tr>
+<tr id="message-who.linkdead"><td><code>who.linkdead</code></td><td><code>{level}</code>, <code>{name}</code> (required), <code>{group}</code></td><td><code>  {level}{name}{group} (link-dead)</code></td></tr>
 <tr id="message-who.list"><td><code>who.list</code></td><td><code>{players}</code> (required)</td><td><code>Players:
 {players}</code></td></tr>
-<tr id="message-who.player"><td><code>who.player</code></td><td><code>{name}</code> (required)</td><td><code>  {name}</code></td></tr>
+<tr id="message-who.player"><td><code>who.player</code></td><td><code>{level}</code>, <code>{name}</code> (required), <code>{group}</code></td><td><code>  {level}{name}{group}</code></td></tr>
 <tr id="message-wield.room"><td><code>wield.room</code></td><td><code>{actor}</code>, <code>{item}</code></td><td><code>{actor} wields {item}.</code></td></tr>
 <tr id="message-wield.self"><td><code>wield.self</code></td><td><code>{item}</code></td><td><code>You wield {item}.</code></td></tr>
 <tr id="message-world.shifts"><td><code>world.shifts</code></td><td></td><td><code>The world shifts around you.</code></td></tr>

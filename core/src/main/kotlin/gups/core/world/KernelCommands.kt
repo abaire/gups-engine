@@ -422,8 +422,9 @@ internal object KernelCommands {
   /**
    * `score`: the name, the effective stats as `<label> <value>` and vitals as `<label> cur/max` in
    * schema order, and the effective resists. With `leveling`, the level and XP, followed on the
-   * next line by the ready line while levels are pending in either level mode. Then each known
-   * creation choice in choice order and the carried traits in name order.
+   * next line by the ready line while levels are pending in either level mode. While grouped, the
+   * group leader and member count. Then each known creation choice in choice order and the carried
+   * traits in name order.
    */
   private fun score(c: CommandCall) {
     val a = c.actor
@@ -445,6 +446,12 @@ internal object KernelCommands {
       lines += w.msg(LevelingMsg.SCORE_LEVEL, "level" to a.level, "xp" to a.xp)
       if (w.pendingLevels(a) > 0) {
         lines += w.msg(LevelingMsg.SCORE_READY)
+      }
+    }
+    if (a is Player) {
+      w.groupOf(a)?.let { g ->
+        lines +=
+          w.msg(KernelMsg.SCORE_GROUP, "leader" to g.leader.name, "count" to w.groupMembers(a).size)
       }
     }
     if (a is Player && w.creation != null) {
@@ -525,9 +532,16 @@ internal object KernelCommands {
     val w = c.world
     val lines =
       w.players.map { p ->
+        val level =
+          if (Feature.LEVELING in w.features) w.msg(LevelingMsg.WHO_LEVEL, "level" to p.level)
+          else ""
+        val group =
+          w.groupOf(p)?.let { w.msg(KernelMsg.WHO_GROUP, "leader" to it.leader.name) } ?: ""
         w.msg(
           if (p.session == null) KernelMsg.WHO_LINKDEAD else KernelMsg.WHO_PLAYER,
+          "level" to level,
           "name" to p.name,
+          "group" to group,
         )
       }
     w.tell(c.actor, KernelMsg.WHO_LIST, "players" to lines.joinToString("\n"))

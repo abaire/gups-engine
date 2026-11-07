@@ -194,4 +194,12 @@ class FeaturesOffTest {
     assertTrue(ann.inWorld)
     assertTrue(ann.current(f.fs.health) > 0)
   }
+
+  @Test
+  fun `who shows no level without leveling`() {
+    val f = Fixture(features = without(Feature.LEVELING))
+    val p = f.player("Ann")
+    val out = f.say(p, "who")
+    assertTrue(out.lines().any { it == "  Ann" }, "expected '  Ann' in lines: $out")
+  }
 }

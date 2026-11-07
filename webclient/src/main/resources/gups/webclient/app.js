@@ -5,7 +5,7 @@
 //   client: {"t":"auth","d":token} {"t":"input","d":"..."} {"t":"gmcp","p":"Core.Supports.Set","d":[...]}
 
 import { render } from "./markup.js";
-import { drawAffects, drawBands, drawCreation, drawRoom, drawSkills, drawTraits, drawVitals } from "./panels.js";
+import { drawAffects, drawBands, drawCreation, drawGroup, drawRoom, drawSkills, drawTraits, drawVitals } from "./panels.js";
 
 const $ = (id) => document.getElementById(id);
 const output = $("output");
@@ -56,19 +56,32 @@ function sendFrame(frame) {
 /** @type {import("./panels.js").Schema} */
 let schema = { stats: [], vitals: [], damage_types: [], features: [] };
 let lastVitals = null;
+let lastBands = null;
+let lastGroup = null;
+
+const groupNames = () => new Set((lastGroup?.members ?? []).map((m) => m.name));
 
 function onGmcp(pkg, data) {
   switch (pkg) {
     case "Char.Schema":
       schema = data;
       if (lastVitals) drawVitals($("vitals"), schema, lastVitals);
+      if (lastGroup) drawGroup($("group-panel"), $("group-list"), schema, lastGroup);
       break;
     case "Char.Vitals":
       lastVitals = data;
       drawVitals($("vitals"), schema, data);
       break;
+    case "Char.Group":
+      lastGroup = data;
+      drawGroup($("group-panel"), $("group-list"), schema, data);
+      if (lastBands) drawBands($("bands"), lastBands, groupNames());
+      break;
     case "Char.Affects": drawAffects($("affects"), data); break;
-    case "Room.Bands": drawBands($("bands"), data); break;
+    case "Room.Bands":
+      lastBands = data;
+      drawBands($("bands"), data, groupNames());
+      break;
     case "Room.Info": drawRoom($("room-name"), data); break;
     case "Comm.Channel.Text": break; // The text arrives as a text frame too.
     case "Gups.Trace": print(data.line, "trace"); break;
@@ -115,7 +128,10 @@ function connect() {
   ws.addEventListener("close", () => {
     if (socket !== ws) return;
     socket = null;
+    lastGroup = null;
+    lastBands = null;
     drawCreation($("creation"), null, () => {});
+    drawGroup($("group-panel"), $("group-list"), schema, null);
     if (playing) print("Disconnected. Reload the page to connect again.", "notice");
     else showLogin($("login-error").textContent);
   });
@@ -238,7 +254,10 @@ $("logout").addEventListener("click", async () => {
   const ws = socket;
   socket = null;
   ws?.close();
+  lastGroup = null;
+  lastBands = null;
   drawCreation($("creation"), null, () => {});
+  drawGroup($("group-panel"), $("group-list"), schema, null);
   output.replaceChildren();
   showLogin("You have logged out.");
 });

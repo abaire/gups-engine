@@ -65,6 +65,7 @@ object KernelMsg : MsgGroup(null) {
   val WHISPER_ROOM = msg("whisper.room", "{actor} whispers something to {target}.", "actor,target")
 
   val SCORE_RESISTS = msg("score.resists", "Resists: {resists}", "resists", "resists")
+  val SCORE_GROUP = msg("score.group", "Group: {leader}'s, {count} members", "leader,count")
   val SCORE_CHOICE = msg("score.choice", "{title}: {label}", "title,label")
   val SCORE_TRAITS = msg("score.traits", "Traits: {traits}", "traits")
   val INVENTORY_EMPTY = msg("inventory.empty", "You are carrying nothing.")
@@ -78,8 +79,10 @@ object KernelMsg : MsgGroup(null) {
   val EQUIPMENT_INACTIVE =
     msg("equipment.inactive", "  <{slot}> {item} (inactive)", "slot,item", "item")
   val WHO_LIST = msg("who.list", "Players:\n{players}", "players", "players")
-  val WHO_PLAYER = msg("who.player", "  {name}", "name", "name")
-  val WHO_LINKDEAD = msg("who.linkdead", "  {name} (link-dead)", "name", "name")
+  val WHO_PLAYER = msg("who.player", "  {level}{name}{group}", "level,name,group", "name")
+  val WHO_LINKDEAD =
+    msg("who.linkdead", "  {level}{name}{group} (link-dead)", "level,name,group", "name")
+  val WHO_GROUP = msg("who.group", " [{leader}'s group]", "leader")
   val HELP_LIST =
     msg("help.list", "Instant: {instant}\nActions: {actions}, and any exit name", "instant,actions")
   val STOP_PLANS = msg("stop.plans", "You clear your plans.")

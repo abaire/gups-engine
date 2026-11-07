@@ -5211,6 +5211,15 @@
       "since": 1
     },
     {
+      "symbol": "message:leveling.who_level",
+      "feature": "leveling",
+      "id": "leveling.who_level",
+      "placeholders": ["level"],
+      "required": [],
+      "default": "[{level}] ",
+      "since": 1
+    },
+    {
       "symbol": "message:login.account_disabled",
       "id": "login.account_disabled",
       "placeholders": [],
@@ -6019,6 +6028,14 @@
       "since": 1
     },
     {
+      "symbol": "message:score.group",
+      "id": "score.group",
+      "placeholders": ["leader", "count"],
+      "required": [],
+      "default": "Group: {leader}'s, {count} members",
+      "since": 1
+    },
+    {
       "symbol": "message:score.resists",
       "id": "score.resists",
       "placeholders": ["resists"],
@@ -6481,11 +6498,19 @@
       "since": 1
     },
     {
+      "symbol": "message:who.group",
+      "id": "who.group",
+      "placeholders": ["leader"],
+      "required": [],
+      "default": " [{leader}'s group]",
+      "since": 1
+    },
+    {
       "symbol": "message:who.linkdead",
       "id": "who.linkdead",
-      "placeholders": ["name"],
+      "placeholders": ["level", "name", "group"],
       "required": ["name"],
-      "default": "  {name} (link-dead)",
+      "default": "  {level}{name}{group} (link-dead)",
       "since": 1
     },
     {
@@ -6499,9 +6524,9 @@
     {
       "symbol": "message:who.player",
       "id": "who.player",
-      "placeholders": ["name"],
+      "placeholders": ["level", "name", "group"],
       "required": ["name"],
-      "default": "  {name}",
+      "default": "  {level}{name}{group}",
       "since": 1
     },
     {

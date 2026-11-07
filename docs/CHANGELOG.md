@@ -4,6 +4,13 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Groups and levels in who and score
+
+- `who` shows each player's level (with `leveling`) and group leader: new entries `leveling.who_level` and `who.group`,
+  and new `{level}` and `{group}` placeholders in `who.player` and `who.linkdead`. Override a fragment to `""` in
+  `MESSAGES.gups` to hide it.
+- `score` shows `score.group` while the character is in a group.
+
 ### Standing and factions
 
 - The optional `standing` feature module introduces factions, declared opinions and standing history. Leaving `features`

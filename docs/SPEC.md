@@ -1895,9 +1895,14 @@ uses the default names. Every player-facing message here is the default text of 
   out!", nobody hears anything, and no `on_say` or `on_tell` fires.
 - **`quit`** is refused while engaged: "No way! You're fighting for your life!" The link-dead auto-quit ignores combat.
 - **`score`** shows the character a summary of its own state: its stats, vitals and resists, its progression with the
-  `leveling` feature, and its choices and traits (§4.19). Which lines it prints and how they are laid out is not fixed
-  here; the lines are engine messages (§4.18). Clients read the same state as structured data from the GMCP
-  `Char.Vitals`, `Char.Status`, `Char.Traits` and `Char.Skills` packages (§4.10).
+  `leveling` feature, its group while it is in one (`score.group`, `"Group: {leader}'s, {count} members"`, where `count`
+  counts the players in the group, the character included), and its choices and traits (§4.19). Which lines it prints
+  and how they are laid out is not fixed here; the lines are engine messages (§4.18). Clients read the same state as
+  structured data from the GMCP `Char.Vitals`, `Char.Status`, `Char.Traits` and `Char.Skills` packages (§4.10).
+- **`who`** lists every player in the world, link-dead ones marked. Each line is `who.player` or `who.linkdead` with two
+  optional slots, each filled by a catalog fragment or left empty: `{level}` is `leveling.who_level` (`"[{level}] "`)
+  with the `leveling` feature, and `{group}` is `who.group` (`" [{leader}'s group]"`) for a player in a group (§3.3). A
+  world hides levels or groups from `who` by setting the fragment to `""` (§4.18).
 - **`skills`** (`skills` feature) lists the skills the character knows, sorted by name, each with its kind and
   proficiency, or says it knows none. The lines are engine messages (§4.18). Clients read the same list from
   `Char.Skills` (§4.10).
@@ -2268,7 +2273,8 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     in name order. It is recomputed in every phase-7 flush, like `Char.Status`.
   - `Char.Group`: `members` lists the leader first, then ascending id, and includes the recipient. `in_room` is whether
     the member is in the recipient's room. `vitals` has the keys of `Char.Vitals`. A client with no group gets `null`
-    once, then nothing until it changes.
+    once, then nothing until it changes. The bundled web client draws it as a group panel (each member's vitals bars,
+    the leader marked, members elsewhere dimmed) and marks group members in its band view.
 - **WebSocket framing:** One JSON message per frame: `{"t":"text","d":"..."}` |
   `{"t":"gmcp","p":"Char.Vitals","d":{...}}` | `{"t":"input","d":"..."}`.
   - Also from the server: `prompt`, `hide` (true or false, for password prompts), and `error` before a close. Also from
@@ -2921,8 +2927,13 @@ mechanics ("You begin casting" becomes "Your implant spins up").
   defaults are the texts this specification gives. Ids are grouped by the feature that sends them; an id of a feature
   that is off is never sent.
   - Leveling entries include `leveling.level_down` (`"You have fallen to level {level}."`, placeholders `level`,
-    `count`), `leveling.ready` (`"You feel ready to advance."`, no placeholders) and `leveling.score_ready` (`"You are
-    ready to advance."`, no placeholders).
+    `count`), `leveling.ready` (`"You feel ready to advance."`, no placeholders), `leveling.score_ready` (`"You are
+    ready to advance."`, no placeholders) and `leveling.who_level` (`"[{level}] "`, placeholder `level`).
+  - `who` and group entries include `who.player` (`{level}{name}{group}`, indented two spaces) and `who.linkdead`
+    (`{level}{name}{group} (link-dead)`, indented two spaces), both with placeholders `level`, `name`, `group` and
+    required `name`; `who.group` (a space, then `[{leader}'s group]`; placeholder `leader`); and `score.group` (`"Group:
+    {leader}'s, {count} members"`, placeholders `leader`, `count`). Fragments that fill a slot have no required
+    placeholders, so an override may empty them.
   - Cast resistance entries include `cast.resisted.self` (`"{target} resists your {skill}."`, placeholders `target`,
     `skill`), `cast.resisted.target` (`"You resist {actor}'s {skill}."`, placeholders `actor`, `skill`), and
     `cast.resisted.room` (`"{target} resists {actor}'s {skill}."`, placeholders `target`, `actor`, `skill`).
@@ -4325,3 +4336,4 @@ template's `.github/workflows/gates.yml`.
 | **M37**   | The contribution ledger and `clear_contributions`; the `xp_share` export; session-scoped player groups with the group verbs, queries and `on_group_change`; `on_disengage`; groups in `allies_near`; and the template-world reference.                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **M38**   | Pet ownership: the `owner` field with `set_owner`/`clear_owner` and `on_owner_change`; `summon` ownership; behavior priorities, `heel`, `defend` and owned behavior lists with the `owned_behaviors` export and the `addOwnedBehaviors` plugin seam; the `order` command with `before_order`, the `ORDER` restriction and its run-time re-check; owner and pet engagement coupling; `before_summon` and `on_summon`; pets stored with their owner; and the template-world familiar.                                                                                                                                                    |
 | **M39**   | The `standing` feature: factions (`faction`, `mob(factions=)`, the `factions` export), standing records with history, disposition and the `disposition` and `standing_change` exports and `standing_delta`, built-in and world standing events, the standing and disposition verbs and queries, behavior disposition thresholds, saved standing, the `addDispositionModifier` and `addFactions` plugin seams, and the template-world reference.                                                                                                                                                                                        |
+| **M40**   | Levels and groups in `who` (the `leveling.who_level` and `who.group` fragments), the `score.group` line, and the web client's group panel and band marker.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

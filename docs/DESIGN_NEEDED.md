@@ -109,17 +109,6 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
-## Social and communication
-
-### Showing groups in `who`, `score` and clients
-
-**Spec:** §3.3 (Groups), §4.9 (`who`, `score`), §4.10 (`Char.Status`, `Char.Group`). **Today (after M37):** groups
-exist, `Char.Group` describes a player's group, and `//lib:group.star` lists it with `group`. `who`, `score` and
-`Char.Status` show nothing about groups, and the bundled web client ignores `Char.Group`. **Questions:** - Should `who`
-mark grouped players or their leader, and should `score` name the player's group? - Should `Char.Status` carry the group
-id, or is `Char.Group` enough? - How should the web client show the group (a panel with members' vitals, a marker in the
-room list)?
-
 ## Economy and crafting
 
 ### Crafting

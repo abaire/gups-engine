@@ -5,6 +5,7 @@ import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Player
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -386,5 +387,58 @@ class GroupTest(private val fs: FixtureSchema) {
     val byName = g.fixture.w.contributorsOf(victim, owner).associateBy { it.actor.name }
     assertTrue(byName.containsKey("Ben"), "a pet's owner's group member is listed")
     assertEquals(owner.groupId, byName.getValue("Ben").groupId)
+  }
+
+  @Test
+  fun `who marks each grouped player with its leader and leaves ungrouped players plain`() {
+    val g = GroupFixture()
+    val ann = g.fixture.player("Ann")
+    val ben = g.fixture.player("Ben")
+    val cal = g.fixture.player("Cal")
+    g.fixture.w.groupAdd(ben, ann)
+    g.fixture.input(cal, "who")
+    g.fixture.run(4)
+    val out = g.fixture.out(cal)
+    assertContains(out, "Ann [Ann's group]")
+    assertContains(out, "Ben [Ann's group]")
+    assertTrue(out.lines().any { it.trim().endsWith("Cal") && "group" !in it }, out)
+  }
+
+  @Test
+  fun `score names the group and its size only while grouped`() {
+    val g = GroupFixture()
+    val ann = g.fixture.player("Ann")
+    val ben = g.fixture.player("Ben")
+    g.fixture.input(ann, "score")
+    g.fixture.run(4)
+    val solo = g.fixture.out(ann)
+    assertContains(solo, "Ann")
+    assertFalse("Group:" in solo)
+
+    g.fixture.w.groupAdd(ben, ann)
+    g.fixture.input(ben, "score")
+    g.fixture.run(4)
+    assertContains(g.fixture.out(ben), "Group: Ann's, 2 members")
+
+    g.fixture.w.groupRemove(ben)
+    g.fixture.input(ben, "score")
+    g.fixture.run(4)
+    val after = g.fixture.out(ben)
+    assertContains(after, "Ben")
+    assertFalse("Group:" in after)
+  }
+
+  @Test
+  fun `a world that empties who_group hides groups from who`() {
+    val f = Fixture(messages = mapOf("who.group" to ""))
+    val ann = f.player("Ann")
+    val ben = f.player("Ben")
+    f.w.groupAdd(ben, ann)
+    f.input(ann, "who")
+    f.run(4)
+    val out = f.out(ann)
+    assertContains(out, "Ann")
+    assertContains(out, "Ben")
+    assertFalse("group" in out)
   }
 }

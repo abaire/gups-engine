@@ -1,9 +1,11 @@
-// The side panel, drawn from GMCP: vitals bars, affects and bands.
+// The side panel, drawn from GMCP: vitals bars, group, affects and bands.
 
 /**
  * @typedef {{name: string, label: string}} Named
  * @typedef {{stats: Named[], vitals: Named[], damage_types: string[], features: string[]}} Schema
  * @typedef {Object<string, number>} Vitals The current and maximum of each vital: `hp` and `maxhp`.
+ * @typedef {{name: string, leader: boolean, in_room: boolean, level?: number, vitals: Vitals}} GroupMember
+ * @typedef {{id: number, leader: string, members: GroupMember[]}} GroupData
  * @typedef {{name: string, remaining: number, flags: string[]}} Affect
  * @typedef {{id: number, name: string, kind: "actor" | "item"}} BandEntry
  * @typedef {{melee: BandEntry[], near: BandEntry[], far: BandEntry[]}} Bands
@@ -20,6 +22,28 @@ const el = (tag, cls, text) => {
   return e;
 };
 
+/** One vital bar; `mini` bars (the group panel's) carry no data attributes and no number label. */
+function vitalBar(name, label, index, now, max, mini) {
+  const bar = el("div", mini ? `bar mini tone${index % TONES}` : `bar tone${index % TONES}`);
+  if (!mini) {
+    bar.dataset.vital = name;
+    bar.dataset.value = `${now}/${max}`;
+  }
+  const top = el("div", "label");
+  if (mini) {
+    top.append(el("span", "", label));
+    top.title = `${now}/${max}`;
+  } else {
+    top.append(el("span", "", label), el("span", "", `${now}/${max}`));
+  }
+  const track = el("div", "track");
+  const fill = el("div", "fill");
+  fill.style.width = `${Math.max(0, Math.min(100, (100 * now) / max))}%`;
+  track.append(fill);
+  bar.append(top, track);
+  return bar;
+}
+
 /**
  * One bar per vital in schema order, labeled with the schema's label.
  * @param {HTMLElement} box
@@ -31,18 +55,39 @@ export function drawVitals(box, schema, v) {
   schema.vitals.forEach(({ name, label }, i) => {
     const now = v[name] ?? 0;
     const max = v["max" + name] || 1;
-    const bar = el("div", `bar tone${i % TONES}`);
-    bar.dataset.vital = name;
-    bar.dataset.value = `${now}/${max}`;
-    const top = el("div", "label");
-    top.append(el("span", "", label), el("span", "", `${now}/${max}`));
-    const track = el("div", "track");
-    const fill = el("div", "fill");
-    fill.style.width = `${Math.max(0, Math.min(100, (100 * now) / max))}%`;
-    track.append(fill);
-    bar.append(top, track);
-    box.append(bar);
+    box.append(vitalBar(name, label, i, now, max, false));
   });
+}
+
+/**
+ * The group panel: one row per member, leader first, hidden with no group.
+ * @param {HTMLElement} panel
+ * @param {HTMLElement} list
+ * @param {Schema} schema
+ * @param {GroupData|null} data
+ */
+export function drawGroup(panel, list, schema, data) {
+  if (!data || !data.members || data.members.length === 0) {
+    panel.hidden = true;
+    list.replaceChildren();
+    return;
+  }
+  panel.hidden = false;
+  list.replaceChildren(
+    ...data.members.map((m) => {
+      const li = el("li", m.in_room ? "member" : "member away");
+      let nameText = m.name;
+      if (m.leader) nameText += " ★";
+      if (typeof m.level === "number") nameText += ` L${m.level}`;
+      li.append(el("div", "member-name", nameText));
+      schema.vitals.forEach(({ name, label }, i) => {
+        const now = m.vitals?.[name] ?? 0;
+        const max = m.vitals?.["max" + name] || 1;
+        li.append(vitalBar(name, label, i, now, max, true));
+      });
+      return li;
+    }),
+  );
 }
 
 /**
@@ -59,15 +104,19 @@ export function drawAffects(list, affects) {
  * Who and what is in melee, near and far, from the player's own place in the room.
  * @param {HTMLElement} box
  * @param {Bands} bands
+ * @param {Set<string>} [groupNames] names of group members, marked with the `group` class
  */
-export function drawBands(box, bands) {
+export function drawBands(box, bands, groupNames = new Set()) {
   box.replaceChildren();
   for (const band of ["melee", "near", "far"]) {
     const entries = bands[band] || [];
     const row = el("div", "band");
     row.append(el("div", "name", band));
     if (entries.length === 0) row.append(el("div", "who", "-"));
-    for (const e of entries) row.append(el("div", `who ${e.kind}`, e.name));
+    for (const e of entries) {
+      const isGroup = e.kind === "actor" && groupNames.has(e.name);
+      row.append(el("div", isGroup ? "who actor group" : `who ${e.kind}`, e.name));
+    }
     box.append(row);
   }
 }
