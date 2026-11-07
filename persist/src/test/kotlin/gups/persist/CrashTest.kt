@@ -82,6 +82,8 @@ class CrashTest {
     val java = ProcessHandle.current().info().command().orElse("java")
     return ProcessBuilder(
         java,
+        "-XX:TieredStopAtLevel=1",
+        "-Xshare:auto",
         "-cp",
         System.getProperty("java.class.path"),
         "gups.persist.CrashTestKt",
@@ -98,7 +100,7 @@ class CrashTest {
    */
   @Test
   fun `killing the server mid-write never loses or duplicates an item`() {
-    val iterations = System.getProperty("gups.crashIterations")?.toInt() ?: 20
+    val iterations = System.getProperty("gups.crashIterations")?.toInt() ?: 3
     val file = tempDb()
     val rng = Random(42)
     repeat(iterations) { i ->

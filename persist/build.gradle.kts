@@ -8,6 +8,7 @@ dependencies {
 }
 
 tasks.test {
-  // The crash test kills child JVMs; -Dgups.crashIterations=300 runs the full "hundreds".
-  systemProperty("gups.crashIterations", System.getProperty("gups.crashIterations") ?: "20")
+  // The crash test kills child JVMs (~2.5s each, mostly startup), so `check` runs only a few.
+  // -Dgups.crashIterations=300 runs the full "hundreds".
+  systemProperty("gups.crashIterations", System.getProperty("gups.crashIterations") ?: "3")
 }

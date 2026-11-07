@@ -81,13 +81,15 @@ class ProdOptions(
   val forceCommit: Boolean = false,
   /** How long a shutdown waits for the final checkpoint (`shutdown_timeout`). */
   val shutdownTimeoutMs: Long = SHUTDOWN_WAIT_MS,
+  /** `/healthz` fails once the world thread hasn't pulsed for this long. */
+  val stallMs: Long = STALL_MS,
 )
 
 /** Where the admin port listens, and its bearer token (null: only `/healthz` works). */
 class AdminListener(val host: String, val port: Int, val token: String?)
 
-/** `/healthz` fails once the world thread hasn't pulsed for this long. */
-private const val STALL_NANOS = 5_000_000_000L
+/** Default for [ProdOptions.stallMs]. */
+private const val STALL_MS = 5_000L
 
 /** Where telnet over TLS listens, and its certificate. */
 class TlsListener(val host: String, val port: Int, val tls: ServerTls)
@@ -472,7 +474,7 @@ class GupsServer(
     object : gups.net.Admin {
       override fun health(): Pair<Boolean, Map<String, Any?>> {
         val writerOk = persistence?.writer?.healthy ?: true
-        val stalled = System.nanoTime() - lastPulseNanos > STALL_NANOS
+        val stalled = System.nanoTime() - lastPulseNanos > (prod?.stallMs ?: STALL_MS) * 1_000_000
         return (writerOk && !stalled) to
           mapOf(
             "pulse" to lastPulse,

@@ -112,10 +112,20 @@ class OperationsTest {
     }
   }
 
-  private fun withServer(repo: Repo, force: Boolean = false, play: (Running) -> Unit) {
+  private fun withServer(
+    repo: Repo,
+    force: Boolean = false,
+    stallMs: Long? = null,
+    play: (Running) -> Unit,
+  ) {
     val logs = StringBuffer()
     val prod =
-      ProdOptions("127.0.0.1", admin = AdminListener("127.0.0.1", 0, token), forceCommit = force)
+      ProdOptions(
+        "127.0.0.1",
+        admin = AdminListener("127.0.0.1", 0, token),
+        forceCommit = force,
+        stallMs = stallMs ?: 5_000L,
+      )
     val server =
       GupsServer(WorldDir(repo.world), port = 0, prod = prod) { logs.append(it).append('\n') }
     assertTrue(server.boot(), logs.toString())
@@ -362,10 +372,14 @@ class OperationsTest {
   @Test
   fun `metrics have the spec's names after one pulse, and healthz fails while the world stalls`() {
     val repo = Repo()
-    withServer(repo) { r ->
+    withServer(repo, stallMs = 300) { r ->
       r.onWorld { it.pulse }
-      Thread.sleep(1500)
-      val text = get("${r.admin}/metrics").body()
+      var text = get("${r.admin}/metrics").body()
+      val seen = System.nanoTime() + 5_000_000_000
+      while ("gups_pulse_duration_seconds_count" !in text && System.nanoTime() < seen) {
+        Thread.sleep(20)
+        text = get("${r.admin}/metrics").body()
+      }
       for (name in
         listOf(
           "gups_pulse_duration_seconds_bucket",
@@ -389,17 +403,20 @@ class OperationsTest {
       val health = get("${r.admin}/healthz", auth = false)
       assertEquals(200, health.statusCode())
       assertContains(health.body(), "\"writer_healthy\":true")
-      r.server.world.post!!(WorldControlEvent.Task { Thread.sleep(7_000) })
-      val deadline = System.nanoTime() + 9_000_000_000
+      r.server.world.post!!(WorldControlEvent.Task { Thread.sleep(1_500) })
+      val deadline = System.nanoTime() + 3_000_000_000
       var status = 200
       while (status == 200 && System.nanoTime() < deadline) {
-        Thread.sleep(250)
+        Thread.sleep(50)
         status = get("${r.admin}/healthz", auth = false).statusCode()
       }
       assertEquals(503, status, "a stalled world thread is unhealthy")
-      r.onWorld { it.pulse }
-      Thread.sleep(500)
-      assertEquals(200, get("${r.admin}/healthz", auth = false).statusCode())
+      val recovery = System.nanoTime() + 3_000_000_000
+      while (status != 200 && System.nanoTime() < recovery) {
+        Thread.sleep(20)
+        status = get("${r.admin}/healthz", auth = false).statusCode()
+      }
+      assertEquals(200, status, "a pulsing world is healthy again")
     }
   }
 
