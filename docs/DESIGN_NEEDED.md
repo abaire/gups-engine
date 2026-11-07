@@ -77,7 +77,9 @@ only `players`, `mobs`, `all` and label patterns. **Questions:** - Should `aggre
 such as `prefer=...`, that orders candidates by something other than id? - If so, what does it match on: plugin traits,
 tags, a role model, or built-in orderings such as `weakest` and `strongest`? - Is the preference data with value
 equality (behaviors are compared by the version-bump lint, §7.3), or can it be a script function? - How does it relate
-to a hate list and factions ("Hostility and factions"), which would also change whom a mob prefers? - Should an
+to a hate list and factions ("Hostility and factions"), which would also change whom a mob prefers? That design gives
+each mob a `standing` integer from -100 (absolute hatred) to 100 (beloved ally) toward every actor; should a preference
+such as "lowest standing first" order candidates by it, and how does it combine with the other orderings? - Should an
 aggressive mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
 
 ## Items
