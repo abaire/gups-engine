@@ -25,7 +25,7 @@ class WorldFeaturesTest {
     assertEquals(Features.ALL, module("").features)
     assertEquals(
       Features.ALL,
-      module("features = [\"leveling\", \"skills\", \"track\", \"combat\"]").features,
+      module("features = [\"leveling\", \"skills\", \"track\", \"combat\", \"standing\"]").features,
     )
     val some = module("features = [\"skills\"]")
     assertEquals(listOf("skills"), some.features.ids)

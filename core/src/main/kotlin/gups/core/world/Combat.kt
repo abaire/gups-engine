@@ -28,7 +28,9 @@ import gups.core.saturatingAdd
 
 // ---- Engagement ------------------------------------------------------------------------------
 
-fun World.startCombat(a: Actor, b: Actor) {
+fun World.startCombat(a: Actor, b: Actor) = startCombat(a, b, coupled = false)
+
+internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
   if (Feature.COMBAT !in features) return
   if (a === b || !a.inWorld || !b.inWorld || a.room !== b.room) return
   // An actor whose death is being run is about to be removed or respawned; engaging it now would
@@ -58,9 +60,12 @@ fun World.startCombat(a: Actor, b: Actor) {
       if (pet is Mob) {
         val owner = ownerOf(pet)
         if (owner != null && owner.room === pet.room && owner !== foe) {
-          startCombat(owner, foe)
+          startCombat(owner, foe, coupled = true)
         }
       }
+    }
+    if (!coupled) {
+      raiseStandingEvent(StandingEvent("attack", affected = b, actor = a))
     }
   }
 }
@@ -310,7 +315,25 @@ fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null)
   if (!target.inWorld || amount <= 0) return
   val effective = minOf(amount, maxOf(0, target.max(vital) - target.current(vital)))
   changeVital(target, vital, amount)
-  if (source != null) recordHealing(target, source, effective)
+  if (source != null) {
+    recordHealing(target, source, effective)
+    if (source !== target && effective > 0) {
+      raiseStandingEvent(
+        StandingEvent("heal", affected = target, actor = source, amount = effective.toLong())
+      )
+      for (opp in opponentsOf(target).filter { it !== source }.sortedBy { it.id }) {
+        raiseStandingEvent(
+          StandingEvent(
+            "assist",
+            affected = opp,
+            actor = source,
+            amount = effective.toLong(),
+            helped = target,
+          )
+        )
+      }
+    }
+  }
 }
 
 /** True while [a]'s death is being run, before it is removed or respawned. */
@@ -371,6 +394,10 @@ private fun World.runDeath(victim: Actor) {
     if (killer != null && pool > 0)
       rules.xpShare(RulesContext(this, killer, victim, xp = pool, contributors = snapshot))
     else emptyMap()
+
+  if (killer != null && killer !== victim) {
+    raiseStandingEvent(StandingEvent("kill", affected = victim, actor = killer))
+  }
 
   val corpse =
     spawnItem(
@@ -486,7 +513,21 @@ fun World.applyAffect(
       power = power,
     )
   target.affects += affect
-  if (source != null && source !== target) recordSupport(target, source, hostile)
+  if (source != null && source !== target) {
+    recordSupport(target, source, hostile)
+    if (!isBane(target, source, hostile)) {
+      if (target.isEngaged) {
+        raiseStandingEvent(
+          StandingEvent("help", affected = target, actor = source, affect = affect)
+        )
+      }
+      for (opp in opponentsOf(target).filter { it !== source }.sortedBy { it.id }) {
+        raiseStandingEvent(
+          StandingEvent("assist", affected = opp, actor = source, affect = affect, helped = target)
+        )
+      }
+    }
+  }
   target.dirty = true
   if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
   disabledChanged(target, wasDisabled)

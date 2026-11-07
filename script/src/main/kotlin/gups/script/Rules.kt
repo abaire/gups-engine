@@ -20,7 +20,10 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.RoomProto
+import gups.core.model.STANDING_MAX
+import gups.core.model.STANDING_MIN
 import gups.core.model.SkillProto
+import gups.core.model.StandingDelta
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.rules.Contributor
@@ -29,13 +32,18 @@ import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
+import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Behavior
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.KernelMsg
 import gups.core.world.World
 import gups.core.world.WorldConfig
+import gups.core.world.dispositionParts
+import gups.core.world.factionsOf
 import gups.core.world.msg
+import gups.core.world.standing
+import gups.core.world.standingHistory
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -348,6 +356,136 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
     if (!frame.site.vetoable)
       fail("deny() is only valid in cast_allowed (this is ${frame.site.hook})")
     Denial(checkString(str(msg, "deny(msg)"), "deny(msg)", frame.host.limits))
+  }
+
+  @StarlarkMethod(
+    name = "disposition_parts",
+    structField = true,
+    doc =
+      "In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.",
+  )
+  fun dispositionParts(): Any = field {
+    c.dispositionParts?.let { p ->
+      StructValue(
+        linkedMapOf(
+          "declared" to sInt(p.declared),
+          "faction_to_actor" to sInt(p.factionToActor),
+          "faction_to_faction" to sInt(p.factionToFaction),
+          "personal" to sInt(p.personal),
+          "total" to sInt(p.total),
+        )
+      )
+    } ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "amount",
+    structField = true,
+    doc = "In standing_change, the healing done or the count given; otherwise None.",
+  )
+  fun amount(): Any = field { c.amount?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "helped",
+    structField = true,
+    doc = "In an assist standing event, the actor helped; None elsewhere.",
+  )
+  fun helped(): Any = field { v(c.helped) }
+
+  @StarlarkMethod(
+    name = "pet",
+    structField = true,
+    doc = "In a standing event raised for a pet's owner, the pet; None elsewhere.",
+  )
+  fun pet(): Any = field { v(c.pet) }
+
+  @StarlarkMethod(
+    name = "standing",
+    doc =
+      "The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.",
+    parameters =
+      [
+        Param(name = "holder", named = true, doc = "Mob view or faction label holding the record."),
+        Param(
+          name = "subject",
+          named = true,
+          doc = "Actor view or faction label the record is about.",
+        ),
+      ],
+  )
+  fun standing(holder: Any, subject: Any): Any = field {
+    val pkg = frame.site.pkg
+    val h = toStandingHolder(holder, pkg, "standing", c.world.protos)
+    sInt(c.world.standing(h, toStandingSubject(subject, pkg, "standing", c.world.protos, h)))
+  }
+
+  @StarlarkMethod(
+    name = "factions_of",
+    doc = "The faction labels actor belongs to, as a list of strings.",
+    parameters = [Param(name = "actor", named = true, doc = "The actor.")],
+  )
+  fun factionsOf(actor: Any): Any = field {
+    val a =
+      (actor as? ActorView)?.actor
+        ?: fail("factions_of(): actor must be an actor view, got ${typeName(actor)}")
+    val factions =
+      try {
+        c.world.factionsOf(a)
+      } catch (e: IllegalStateException) {
+        fail("factions_of(): ${e.message}")
+      }
+    sList(factions.map { it.v })
+  }
+
+  @StarlarkMethod(
+    name = "standing_history",
+    doc = "Queries standing history for holder and subject since a pulse.",
+    parameters =
+      [
+        Param(
+          name = "holder",
+          named = true,
+          doc = "Mob view or faction label holding the opinion.",
+        ),
+        Param(
+          name = "subject",
+          named = true,
+          doc = "Actor view or faction label the opinion is about.",
+        ),
+        Param(name = "since", defaultValue = "0", named = true, doc = "Start pulse for the query."),
+        Param(
+          name = "via",
+          defaultValue = "None",
+          named = true,
+          doc = "Optional mob view filtering the event source.",
+        ),
+        Param(
+          name = "event",
+          defaultValue = "None",
+          named = true,
+          doc = "Optional event name filter.",
+        ),
+      ],
+  )
+  fun standingHistory(holder: Any, subject: Any, since: Any, via: Any, event: Any): Any = field {
+    val pkg = frame.site.pkg
+    val holderObj = toStandingHolder(holder, pkg, "standing_history", c.world.protos)
+    val subjectObj = toStandingSubject(subject, pkg, "standing_history", c.world.protos, holderObj)
+
+    val sincePulse = int(since, "standing_history(since)").toLong().coerceAtLeast(0L)
+    val viaId =
+      if (isNone(via)) {
+        null
+      } else {
+        val viaActor = (via as? ActorView)?.actor
+        if (viaActor !is Mob)
+          fail("standing_history(): via must be a mob view, got ${typeName(via)}")
+        viaActor.id
+      }
+    val eventName = if (isNone(event)) null else str(event, "standing_history(event)")
+
+    val totals = c.world.standingHistory(holderObj, subjectObj, sincePulse, viaId, eventName)
+    StructValue(linkedMapOf("gained" to sInt(totals.gained), "lost" to sInt(totals.lost)))
   }
 
   override fun isImmutable(): Boolean = true
@@ -800,6 +938,54 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     }
   }
 
+  override fun factions(c: RulesContext): List<Label>? {
+    if (!defines(RulesExport.FACTIONS)) return null
+    return run(RulesExport.FACTIONS, c, ctxArgs(c)) { v ->
+      val what = "rules.factions return value"
+      val list = v as? StarlarkList<*> ?: fail("$what: must be a list, got ${typeName(v)}")
+      list.map { elem ->
+        val s = elem as? String ?: fail("$what: elements must be strings, got ${typeName(elem)}")
+        val label = label(s, pkg, what)
+        if (!c.world.protos.isFaction(label)) {
+          val known =
+            c.world.protos.factions.keys.map { it.v } + c.world.protos.mobs.keys.map { it.v }
+          fail("$what: '$s' does not name a faction or mob prototype${didYouMean(label.v, known)}")
+        }
+        label
+      }
+    }
+  }
+
+  override fun disposition(c: RulesContext): Int? {
+    if (!defines(RulesExport.DISPOSITION)) return null
+    return run(RulesExport.DISPOSITION, c, ctxArgs(c)) { v ->
+      int(v, "rules.disposition return value").coerceIn(STANDING_MIN, STANDING_MAX)
+    }
+  }
+
+  override fun standingChange(c: RulesContext): List<StandingDelta>? {
+    if (!defines(RulesExport.STANDING_CHANGE)) return null
+    return run(
+      RulesExport.STANDING_CHANGE,
+      c,
+      ctxArgs(c),
+      onThread = {
+        it.setThreadLocal(
+          StandingChangeMarker::class.java,
+          StandingChangeMarker(pkg, c.world.protos),
+        )
+      },
+    ) { v ->
+      val what = "rules.standing_change return value"
+      val list = v as? StarlarkList<*> ?: fail("$what: must be a list, got ${typeName(v)}")
+      if (list.size > 32) fail("$what: at most 32 deltas allowed, got ${list.size}")
+      list.map {
+        (it as? StandingDeltaValue)?.delta
+          ?: fail("$what: elements must be standing_delta(...) values, got ${typeName(it)}")
+      }
+    }
+  }
+
   override fun xpToLevel(c: RulesContext, level: Int): Long =
     run(RulesExport.XP_TO_LEVEL, c, ctxArgs(c, sInt(level))) { v ->
       int(v, "rules.xp_to_level return value").toLong().also {
@@ -902,6 +1088,9 @@ enum class RulesExport(val scriptName: String) {
   XP_FOR_KILL("xp_for_kill"),
   XP_SHARE("xp_share"),
   OWNED_BEHAVIORS("owned_behaviors"),
+  FACTIONS("factions"),
+  DISPOSITION("disposition"),
+  STANDING_CHANGE("standing_change"),
   XP_TO_LEVEL("xp_to_level"),
   ON_LEVEL_UP("on_level_up"),
   ON_PLAYER_DEATH("on_player_death"),
@@ -1172,6 +1361,43 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       ctxFields = listOf("actor", "target", "behaviors", "room", "pulse", "rng"),
       doc =
         "The behaviors a mob runs while a player owns it; ctx.actor is the mob, ctx.target its owner.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.FACTIONS,
+      signature = "factions(ctx)",
+      returnType = "list[str]",
+      ctxFields = listOf("actor", "room", "pulse", "rng"),
+      doc = "The faction labels of ctx.actor.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.DISPOSITION,
+      signature = "disposition(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "target", "disposition_parts", "room", "pulse", "rng"),
+      doc = "What ctx.actor thinks of ctx.target, an int in -100..100.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.STANDING_CHANGE,
+      signature = "standing_change(ctx)",
+      returnType = "list",
+      ctxFields =
+        listOf(
+          "actor",
+          "target",
+          "event",
+          "amount",
+          "item",
+          "affect",
+          "helped",
+          "pet",
+          "room",
+          "pulse",
+          "rng",
+        ),
+      doc = "The changes a standing event makes, as a list of standing_delta(...) values.",
       hasDefault = true,
     ),
     RulesExportSpec(
@@ -1537,7 +1763,12 @@ internal fun dryRunRules(
   rules.collected = problems
   val dryExit = ExitProto(Direction.NORTH, Label("//engine:dry_run"), door = DoorProto())
   val room = RoomProto(Label("//engine:dry_run"), "The dry run", exits = listOf(dryExit))
-  val protos = Prototypes(rooms = listOf(room), mobs = result.prototypes().mobs.values.toList())
+  val protos =
+    Prototypes(
+      rooms = listOf(room),
+      mobs = result.prototypes().mobs.values.toList(),
+      factions = result.prototypes().factions.values.toList(),
+    )
   val world =
     World(
         protos,
@@ -1595,6 +1826,34 @@ internal fun dryRunRules(
     if (rules.defines(RulesExport.OWNED_BEHAVIORS)) {
       mobs.firstOrNull()?.let {
         rules.ownedBehaviors(RulesContext(world, it, player, behaviors = it.proto.behaviors))
+      }
+    }
+    if (Feature.STANDING in features) {
+      val dryMob = mobs.firstOrNull()
+      if (dryMob != null) {
+        if (rules.defines(RulesExport.FACTIONS)) {
+          rules.factions(RulesContext(world, dryMob))
+          rules.factions(RulesContext(world, player))
+        }
+        if (rules.defines(RulesExport.DISPOSITION)) {
+          val parts1 = world.dispositionParts(dryMob, player)
+          rules.disposition(RulesContext(world, dryMob, player, dispositionParts = parts1))
+          val parts2 = world.dispositionParts(player, dryMob)
+          rules.disposition(RulesContext(world, player, dryMob, dispositionParts = parts2))
+        }
+        if (rules.defines(RulesExport.STANDING_CHANGE)) {
+          for (evt in BUILTIN_STANDING_EVENTS) {
+            rules.standingChange(
+              RulesContext(
+                world,
+                actor = dryMob,
+                target = player,
+                event = evt,
+                amount = if (evt in setOf("heal", "give")) 10L else null,
+              )
+            )
+          }
+        }
       }
     }
     val actors = listOf(player, foe) + mobs

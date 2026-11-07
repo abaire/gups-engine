@@ -314,6 +314,20 @@ object DocExamples {
                 t.eq(s.resists.slash, 0)
             """,
         ),
+      "faction" to
+        ex(
+          pkg =
+            """
+                faction("goblins", standing = {":orcs": -80})
+                faction("orcs")
+
+                room("clearing",
+                    name = "Forest Clearing",
+                    desc = "A quiet clearing between the trees.",
+                    flags = ["dead_end_ok"],
+                )
+            """
+        ),
       "region" to
         ex(
           pkg =
@@ -424,6 +438,15 @@ object DocExamples {
 
                 # Other files load(":example.star", "loud") and call loud.shout(ctx, "hi").
                 loud = struct(shout = _shout)
+            """
+        ),
+      "standing_delta" to
+        ex(
+          pkg =
+            """
+                # Helper for rules.standing_change:
+                def _change(ctx):
+                    return [standing_delta(ctx.actor, ctx.target, -25)]
             """
         ),
 
@@ -1000,6 +1023,179 @@ object DocExamples {
                 w.spawn_player("Quinn", at = ":camp")
                 p.do("join Quinn")
                 t.contains(p.do("roster"), "roster 2")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.standing" to
+        ex(
+          pkg =
+            """
+                faction("townsfolk", standing = {":guards": 50})
+                faction("guards")
+
+                def _check(ctx):
+                    ctx.adjust_standing(":townsfolk", ":guards", -10)
+                    val = ctx.standing(":townsfolk", ":guards")
+                    ctx.send(ctx.actor, "record=%d" % val)
+
+                room("town", name = "Town", desc = "Town.", flags = ["dead_end_ok"],
+                     commands = {"check": _check})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":town")
+                t.contains(p.do("check"), "record=-10")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.disposition" to
+        ex(
+          pkg =
+            """
+                faction("townsfolk")
+                mob("guard", name = "Guard", factions = [":townsfolk"])
+
+                def _check(ctx):
+                    guard = ctx.here("guard")
+                    ctx.adjust_standing(":townsfolk", ctx.actor, 30)
+                    ctx.adjust_standing(guard, ctx.actor, 15)
+                    ctx.send(ctx.actor, "disposition=%d" % ctx.disposition(guard, ctx.actor))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"check": _check})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("check"), "disposition=45")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.factions_of" to
+        ex(
+          pkg =
+            """
+                faction("townsfolk")
+                mob("guard", name = "Guard", factions = [":townsfolk"])
+
+                def _check(ctx):
+                    guard = ctx.here("guard")
+                    factions = ctx.factions_of(guard)
+                    ctx.send(ctx.actor, "factions=" + ",".join(factions))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"check": _check})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("check"), "factions=//zones/ex:townsfolk")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.standing_history" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _history(ctx):
+                    guard = ctx.here("guard")
+                    ctx.adjust_standing(guard, ctx.actor, 25)
+                    h = ctx.standing_history(guard, ctx.actor)
+                    ctx.send(ctx.actor, "gained=%d lost=%d" % (h.gained, h.lost))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"history": _history})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("history"), "gained=25 lost=0")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.standing_event" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _event(ctx):
+                    guard = ctx.here("guard")
+                    ctx.standing_event(guard, ctx.actor, "custom_event")
+                    ctx.send(ctx.actor, "event raised")
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"event": _event})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("event"), "event raised")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.adjust_standing" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _adjust(ctx):
+                    guard = ctx.here("guard")
+                    ctx.adjust_standing(guard, ctx.actor, 15)
+                    ctx.send(ctx.actor, "standing=%d" % ctx.standing(guard, ctx.actor))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"adjust": _adjust})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("adjust"), "standing=15")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.clear_standing" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _wipe(ctx):
+                    guard = ctx.here("guard")
+                    ctx.adjust_standing(guard, ctx.actor, 20)
+                    ctx.clear_standing(guard, ctx.actor)
+                    ctx.send(ctx.actor, "standing=%d" % ctx.standing(guard, ctx.actor))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"wipe": _wipe})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("wipe"), "standing=0")
                 for d in w.diagnostics():
                     t.fail("%s" % d.message)
             """,

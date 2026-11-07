@@ -70,6 +70,11 @@ persistence, and linking to official specifications and generated API references
     * Tuning the template formula
     * Player groups: `invite`, `accept`, `leave`, `kick`, `leader`, `disband`, `group` and `gtell`
     * Clearing contributions from `on_disengage`
+11. **[11. Standing and Factions: Opinions, Grudges, and Disposition Thresholds](11_standing_and_factions.md)**
+    * Declaring factions with `faction()` and mob memberships with `mob(factions = [...])`
+    * Standing records, and disposition: `declared`, `faction_to_actor`, `faction_to_faction`, and `personal`
+    * The `standing_change` rules export, a gratitude ceiling, and history rate capping
+    * Behavior disposition thresholds (`aggressive`, `guard`, `assist`, `follow`, `pursue`)
 
 ---
 

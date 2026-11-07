@@ -238,7 +238,7 @@ class GmcpTest(private val fs: FixtureSchema) {
         "stats" to fs.schema.stats.map { mapOf("name" to it.name, "label" to it.label) },
         "vitals" to fs.schema.vitals.map { mapOf("name" to it.name, "label" to it.label) },
         "damage_types" to fs.schema.damageTypes,
-        "features" to listOf("combat", "track", "skills", "leveling"),
+        "features" to listOf("combat", "track", "skills", "leveling", "standing"),
       ),
       sent.first().second,
     )

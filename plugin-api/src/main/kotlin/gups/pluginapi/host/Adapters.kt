@@ -11,14 +11,19 @@ import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
 import gups.core.model.Trait
 import gups.core.model.TraitModifier
+import gups.core.model.didYouMean
 import gups.core.world.ContainmentFilter
 import gups.core.world.Diagnostic
+import gups.core.world.DispositionModifier
+import gups.core.world.FactionAdjuster
 import gups.core.world.OwnedBehaviorAdjuster
 import gups.core.world.World
 import gups.core.world.behaviorOf
 import gups.core.world.descriptor
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
+import gups.pluginapi.PluginDispositionCall
+import gups.pluginapi.PluginFactionsCall
 import gups.pluginapi.PluginModifierCall
 import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginOwnedBehaviorsCall
@@ -311,6 +316,70 @@ internal fun ownedBehaviorsAdapter(
         Diagnostic(w.pulse, "plugin", "plugin '$pluginId': owned behaviors adjuster failed: $e", e)
       )
       behaviors
+    }
+  }
+}
+
+internal fun dispositionModifierAdapter(
+  world: World,
+  pluginId: String,
+  adjust: (PluginDispositionCall) -> Int,
+): DispositionModifier {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return DispositionModifier { w, holder, subject, value ->
+    val call =
+      PluginDispositionCall(
+        world = facade,
+        holder = ActorFacade(holder, w),
+        subject = ActorFacade(subject, w),
+        disposition = value,
+      )
+    try {
+      adjust(call)
+    } catch (e: Throwable) {
+      w.record(
+        Diagnostic(w.pulse, "plugin", "plugin '$pluginId': disposition modifier failed: $e", e)
+      )
+      value
+    }
+  }
+}
+
+internal fun factionAdjusterAdapter(
+  world: World,
+  pluginId: String,
+  adjust: (PluginFactionsCall) -> List<String>,
+): FactionAdjuster {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return FactionAdjuster { w, actor, factions ->
+    val call =
+      PluginFactionsCall(
+        world = facade,
+        actor = ActorFacade(actor, w),
+        factions = factions.map { it.v },
+      )
+    try {
+      val returned = adjust(call)
+      val result = mutableListOf<Label>()
+      for (str in returned) {
+        val l = runCatching { Label(str) }.getOrNull()
+        if (l != null && w.protos.isFaction(l)) {
+          result.add(l)
+        } else {
+          val known = w.protos.factions.keys.map { it.v } + w.protos.mobs.keys.map { it.v }
+          w.record(
+            Diagnostic(
+              w.pulse,
+              "plugin",
+              "plugin '$pluginId': unknown faction '$str'${didYouMean(str, known)}",
+            )
+          )
+        }
+      }
+      result
+    } catch (e: Throwable) {
+      w.record(Diagnostic(w.pulse, "plugin", "plugin '$pluginId': faction adjuster failed: $e", e))
+      factions
     }
   }
 }

@@ -262,6 +262,48 @@ class DocsRendererTest {
   }
 
   @Test
+  fun `plugins html renders disposition modifiers with anchors`() {
+    val plugin =
+      PluginDocSpec(
+        id = "honor",
+        doc = "Honor system.",
+        dispositionModifiers =
+          listOf(
+            PluginDispositionModifierDocSpec("Adds chivalry bonus."),
+            PluginDispositionModifierDocSpec("Penalizes dishonor."),
+          ),
+      )
+    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val html = pages.getValue("plugins.html")
+    assertContains(html, "<h3>Disposition modifiers</h3>")
+    assertContains(html, "<tr id=\"plugin-honor.disposition-1\">")
+    assertContains(html, "Adds chivalry bonus.")
+    assertContains(html, "<tr id=\"plugin-honor.disposition-2\">")
+    assertContains(html, "Penalizes dishonor.")
+  }
+
+  @Test
+  fun `plugins html renders faction adjusters with anchors`() {
+    val plugin =
+      PluginDocSpec(
+        id = "guild",
+        doc = "Guild affiliations.",
+        factions =
+          listOf(
+            PluginFactionAdjusterDocSpec("Adds thieves guild."),
+            PluginFactionAdjusterDocSpec("Adds merchants guild."),
+          ),
+      )
+    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val html = pages.getValue("plugins.html")
+    assertContains(html, "<h3>Faction adjusters</h3>")
+    assertContains(html, "<tr id=\"plugin-guild.factions-1\">")
+    assertContains(html, "Adds thieves guild.")
+    assertContains(html, "<tr id=\"plugin-guild.factions-2\">")
+    assertContains(html, "Adds merchants guild.")
+  }
+
+  @Test
   fun `markdown renders CommonMark with raw HTML escaped and links as text`() {
     val html =
       markdownToHtml(

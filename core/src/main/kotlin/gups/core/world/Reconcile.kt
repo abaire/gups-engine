@@ -133,6 +133,9 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   inboundCache = null
   slotCache = null
   slotFamilyCache = null
+  factionCache.clear()
+  dispositionMemo.clear()
+  notes += dropOrphanStanding(checkActors = false)
   for (a in actorIndex.values) {
     forgetActorSlots(a)
     askWearRestriction(a)

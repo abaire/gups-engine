@@ -28,21 +28,43 @@ fun Behavior.descriptor(): Map<String, Any?> =
         put("unless_level_below", unlessLevelBelow?.toLong())
         put("chance", chance.toLong())
         put("via", via.map { it.name })
+        dispositionBelow?.let { put("disposition_below", it.toLong()) }
         put("priority", priority.toLong())
       }
     is Assist ->
-      mapOf("kind" to "assist", "allies" to allies.patterns, "priority" to priority.toLong())
+      buildMap {
+        put("kind", "assist")
+        put("allies", allies.patterns)
+        dispositionAbove?.let { put("disposition_above", it.toLong()) }
+        put("priority", priority.toLong())
+      }
     is Flee ->
       mapOf(
         "kind" to "flee",
         "below" to below.mapValues { it.value.toLong() },
         "priority" to priority.toLong(),
       )
-    is Guard -> mapOf("kind" to "guard", "exit" to exit.name, "allies" to allies.patterns)
+    is Guard ->
+      buildMap {
+        put("kind", "guard")
+        put("exit", exit.name)
+        put("allies", allies.patterns)
+        dispositionAbove?.let { put("disposition_above", it.toLong()) }
+      }
     is Follow ->
-      mapOf("kind" to "follow", "target" to target.patterns, "priority" to priority.toLong())
+      buildMap {
+        put("kind", "follow")
+        put("target", target.patterns)
+        dispositionAbove?.let { put("disposition_above", it.toLong()) }
+        put("priority", priority.toLong())
+      }
     is Pursue ->
-      mapOf("kind" to "pursue", "target" to target.patterns, "priority" to priority.toLong())
+      buildMap {
+        put("kind", "pursue")
+        put("target", target.patterns)
+        dispositionBelow?.let { put("disposition_below", it.toLong()) }
+        put("priority", priority.toLong())
+      }
     Sentinel -> mapOf("kind" to "sentinel")
     is Scavenge -> mapOf("kind" to "scavenge", "priority" to priority.toLong())
     is Heel -> mapOf("kind" to "heel", "priority" to priority.toLong())
@@ -61,13 +83,14 @@ private val ALLOWED_KEYS =
         "unless_level_below",
         "chance",
         "via",
+        "disposition_below",
         "priority",
       ),
-    "assist" to setOf("kind", "allies", "priority"),
+    "assist" to setOf("kind", "allies", "disposition_above", "priority"),
     "flee" to setOf("kind", "below", "priority"),
-    "guard" to setOf("kind", "exit", "allies"),
-    "follow" to setOf("kind", "target", "priority"),
-    "pursue" to setOf("kind", "target", "priority"),
+    "guard" to setOf("kind", "exit", "allies", "disposition_above"),
+    "follow" to setOf("kind", "target", "disposition_above", "priority"),
+    "pursue" to setOf("kind", "target", "disposition_below", "priority"),
     "sentinel" to setOf("kind"),
     "scavenge" to setOf("kind", "priority"),
     "heel" to setOf("kind", "priority"),
@@ -184,13 +207,21 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
         } else {
           listOf(Channel.SIGHT)
         }
+      val dispositionBelow = intArg("disposition_below", required = false)
+      if (dispositionBelow != null && dispositionBelow !in -100..100) {
+        throw IllegalArgumentException("disposition_below must be in -100..100")
+      }
       val priority = priorityArg(PRIORITY_AGGRESSIVE)
-      Aggressive(toward, unlessAbove, unlessBelow, chance, via, priority)
+      Aggressive(toward, unlessAbove, unlessBelow, chance, via, dispositionBelow, priority)
     }
     "assist" -> {
       val allies = actorFilterArg("allies")
+      val dispositionAbove = intArg("disposition_above", required = false)
+      if (dispositionAbove != null && dispositionAbove !in -100..100) {
+        throw IllegalArgumentException("disposition_above must be in -100..100")
+      }
       val priority = priorityArg(PRIORITY_ASSIST)
-      Assist(allies, priority)
+      Assist(allies, dispositionAbove, priority)
     }
     "flee" -> {
       val v =
@@ -215,17 +246,29 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
       val exitStr = d["exit"] as? String ?: throw IllegalArgumentException("exit must be a string")
       val dir = Direction.parse(exitStr)
       val allies = actorFilterArg("allies", default = listOf("mobs"))
-      Guard(dir, allies)
+      val dispositionAbove = intArg("disposition_above", required = false)
+      if (dispositionAbove != null && dispositionAbove !in -100..100) {
+        throw IllegalArgumentException("disposition_above must be in -100..100")
+      }
+      Guard(dir, allies, dispositionAbove)
     }
     "follow" -> {
       val target = actorFilterArg("target")
+      val dispositionAbove = intArg("disposition_above", required = false)
+      if (dispositionAbove != null && dispositionAbove !in -100..100) {
+        throw IllegalArgumentException("disposition_above must be in -100..100")
+      }
       val priority = priorityArg(PRIORITY_FOLLOW)
-      Follow(target, priority)
+      Follow(target, dispositionAbove, priority)
     }
     "pursue" -> {
       val target = actorFilterArg("target")
+      val dispositionBelow = intArg("disposition_below", required = false)
+      if (dispositionBelow != null && dispositionBelow !in -100..100) {
+        throw IllegalArgumentException("disposition_below must be in -100..100")
+      }
       val priority = priorityArg(PRIORITY_PURSUE)
-      Pursue(target, priority)
+      Pursue(target, dispositionBelow, priority)
     }
     "sentinel" -> Sentinel
     "scavenge" -> {

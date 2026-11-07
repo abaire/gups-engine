@@ -80,6 +80,12 @@ data class PluginFilterDocSpec(val doc: String)
 /** An owned-behaviors adjuster a plugin registers, for `plugins.html`. */
 data class PluginOwnedBehaviorsDocSpec(val doc: String)
 
+/** A disposition modifier a plugin registers, for `plugins.html`. */
+data class PluginDispositionModifierDocSpec(val doc: String)
+
+/** A faction adjuster a plugin registers, for `plugins.html`. */
+data class PluginFactionAdjusterDocSpec(val doc: String)
+
 /** What `plugins.html` shows about one plugin. */
 data class PluginDocSpec(
   val id: String,
@@ -94,6 +100,8 @@ data class PluginDocSpec(
   val choices: List<PluginChoiceDocSpec> = emptyList(),
   val containmentFilters: List<PluginFilterDocSpec> = emptyList(),
   val ownedBehaviors: List<PluginOwnedBehaviorsDocSpec> = emptyList(),
+  val dispositionModifiers: List<PluginDispositionModifierDocSpec> = emptyList(),
+  val factions: List<PluginFactionAdjusterDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -739,6 +747,42 @@ object DocsRenderer {
               .append(badge)
               .append("</td><td>")
               .append(esc(b.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.dispositionModifiers.isNotEmpty()) {
+          append(
+            "<h3>Disposition modifiers</h3>\n<table>\n<thead><tr><th>Modifier</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for ((i, m) in p.dispositionModifiers.withIndex()) {
+            val n = i + 1
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".disposition-")
+              .append(n)
+              .append("\"><td><code>disposition</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(m.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.factions.isNotEmpty()) {
+          append(
+            "<h3>Faction adjusters</h3>\n<table>\n<thead><tr><th>Adjuster</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for ((i, f) in p.factions.withIndex()) {
+            val n = i + 1
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".factions-")
+              .append(n)
+              .append("\"><td><code>factions</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(f.doc))
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")

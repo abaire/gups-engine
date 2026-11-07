@@ -125,19 +125,19 @@ class FuzzWalker(
     }
 
     val host = StarlarkHost(loadResult, ScriptLimits.HARNESS, loader)
+    val (mod) = WorldModule.read(dir)
     val world =
       World(
         loadResult.prototypes(),
         loader.schema,
         host.rules(),
         host,
-        WorldModule.read(dir)
-          .first
-          .config(
-            WorldConfig(seed = seed, bubble = false, checkInvariants = true),
-            WorldMessages.read(dir).first,
-          ),
-        levelMode = WorldModule.read(dir).first.levelMode,
+        mod.config(
+          WorldConfig(seed = seed, bubble = false, checkInvariants = true),
+          WorldMessages.read(dir).first,
+        ),
+        levelMode = mod.levelMode,
+        standingHistoryPulses = mod.standingHistoryPulses,
       )
     plugins.install(world)
     host.install(world)

@@ -1708,6 +1708,7 @@ class RulesTest {
         host,
         WorldConfig(seed = 3, strict = true),
         levelMode = loader.module.levelMode,
+        standingHistoryPulses = loader.module.standingHistoryPulses,
       )
     host.install(w)
     return w

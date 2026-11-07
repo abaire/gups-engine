@@ -216,8 +216,18 @@ data class MobProto(
   val loot: List<LootRule> = emptyList(),
   /** Innate traits granted to mobs created from this prototype. */
   val traits: Set<String> = emptySet(),
+  /** Faction labels this mob belongs to, or null for its implicit prototype faction. */
+  val factions: List<Label>? = null,
   /** Content schema version of this mob prototype, defaulting to 1. */
   val version: Int = 1,
+)
+
+/** Prototype definition for a declared faction. */
+data class FactionProto(
+  val label: Label,
+  /** Declared opinion of other factions, by faction label, each in -100..100. */
+  val standing: Map<Label, Int> = emptyMap(),
+  val doc: String = "",
 )
 
 /** Prototype definition for an item capable of containing other items. */
@@ -474,6 +484,7 @@ class Prototypes(
   skills: List<SkillProto> = emptyList(),
   zones: List<ZoneProto> = emptyList(),
   regions: List<RegionProto> = emptyList(),
+  factions: List<FactionProto> = emptyList(),
 ) {
   /** Zone prototypes indexed by package path. */
   val zones: Map<String, ZoneProto> = zones.associateBy { it.pkg }
@@ -495,6 +506,12 @@ class Prototypes(
 
   /** Skill prototypes indexed by canonical label. */
   val skills: Map<Label, SkillProto> = unique("skill", skills) { it.label }
+
+  /** Faction prototypes indexed by canonical label. */
+  val factions: Map<Label, FactionProto> = unique("faction", factions) { it.label }
+
+  /** True when [label] names a declared faction or a mob prototype's implicit faction. */
+  fun isFaction(label: Label): Boolean = label in factions || label in mobs
 
   /** Looks up a mob prototype by [label], throwing [NoSuchElementException] if absent. */
   fun mob(label: Label): MobProto =

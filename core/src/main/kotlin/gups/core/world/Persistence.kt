@@ -56,6 +56,12 @@ interface Persistence {
   fun savedCharacter(name: String): SavedCharacter? = null
 
   /**
+   * True if [id] is an actor saved in persistence: a character, or a mob such as a pet held out of
+   * the world while its owner is offline.
+   */
+  fun isSavedActor(id: EntityId): Boolean = false
+
+  /**
    * Account storage interface, or null if this persistence configuration does not manage accounts.
    */
   val accounts: AccountStore?

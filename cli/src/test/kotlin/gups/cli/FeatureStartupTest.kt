@@ -112,7 +112,7 @@ class FeatureStartupTest {
     val features = without(Feature.LEVELING)
     val db = tempDb()
     assertTrue(boot(world(features), db).first)
-    assertEquals("combat,track,skills", recorded(db))
+    assertEquals("combat,track,skills,standing", recorded(db))
     assertTrue(boot(world(features), db).first)
   }
 
@@ -126,7 +126,7 @@ class FeatureStartupTest {
     assertContains(log, "--wipe")
     val (wiped, wipeLog) = boot(world(without(Feature.LEVELING)), db, wipe = true)
     assertTrue(wiped, wipeLog)
-    assertEquals("combat,track,skills", recorded(db))
+    assertEquals("combat,track,skills,standing", recorded(db))
     assertTrue(boot(world(without(Feature.LEVELING)), db).first)
   }
 

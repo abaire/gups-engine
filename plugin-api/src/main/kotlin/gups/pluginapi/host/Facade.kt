@@ -8,22 +8,31 @@ import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.Item
+import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.model.StandingHolder
+import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HeldAffect
+import gups.core.world.STANDING_EVENT_NAME
+import gups.core.world.StandingEvent
 import gups.core.world.World
 import gups.core.world.addItemTag
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
+import gups.core.world.applyStanding
 import gups.core.world.awardXp
 import gups.core.world.custodian
 import gups.core.world.damage
+import gups.core.world.disposition
 import gups.core.world.echo
+import gups.core.world.factionsOf
 import gups.core.world.gmcp
 import gups.core.world.gmcpWithin
 import gups.core.world.grantTrait
@@ -33,6 +42,7 @@ import gups.core.world.isInactive
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.pendingLevels
+import gups.core.world.raiseStandingEvent
 import gups.core.world.removeAffect
 import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
@@ -42,6 +52,7 @@ import gups.core.world.send
 import gups.core.world.setCharges
 import gups.core.world.setChoices
 import gups.core.world.setSkill
+import gups.core.world.standing
 import gups.core.world.takeXp
 import gups.core.world.teleport
 import gups.core.world.transformItem
@@ -624,6 +635,114 @@ internal class WorldFacade(
     needs(world, Feature.LEVELING, "levelDown")
     require(count >= 1) { "levelDown(count): must be at least 1" }
     return world.levelDown(actorOf(actor, "levelDown(actor)"), count)
+  }
+
+  override fun disposition(holder: PluginActor, subject: PluginActor): Int {
+    needs(world, Feature.STANDING, "disposition")
+    return world.disposition(
+      actorOf(holder, "disposition(holder)"),
+      actorOf(subject, "disposition(subject)"),
+    )
+  }
+
+  override fun standing(holder: Any, subject: Any): Int {
+    needs(world, Feature.STANDING, "standing")
+    val h = standingHolder(holder, "standing")
+    return world.standing(h, standingSubject(subject, h, "standing"))
+  }
+
+  override fun factionsOf(actor: PluginActor): List<String> {
+    needs(world, Feature.STANDING, "factionsOf")
+    val a = actorOf(actor, "factionsOf(actor)")
+    return world.factionsOf(a).map { it.v }
+  }
+
+  override fun raiseStandingEvent(
+    affected: PluginActor,
+    actor: PluginActor,
+    event: String,
+    amount: Long,
+    item: PluginItem?,
+  ) {
+    needs(world, Feature.STANDING, "raiseStandingEvent")
+    val aff = actorOf(affected, "raiseStandingEvent(affected)")
+    val act = actorOf(actor, "raiseStandingEvent(actor)")
+    if (event in BUILTIN_STANDING_EVENTS) {
+      throw IllegalArgumentException("raiseStandingEvent(): '$event' is a built-in event")
+    }
+    if (!STANDING_EVENT_NAME.matches(event)) {
+      throw IllegalArgumentException(
+        "raiseStandingEvent(): event name must match [a-z][a-z0-9_]*, got '$event'"
+      )
+    }
+    if (amount < 0) {
+      throw IllegalArgumentException(
+        "raiseStandingEvent(amount): must be non-negative, got $amount"
+      )
+    }
+    val itm = item?.let { itemOf(it, "raiseStandingEvent(item)") }
+    world.raiseStandingEvent(
+      StandingEvent(event = event, affected = aff, actor = act, amount = amount, item = itm)
+    )
+  }
+
+  override fun adjustStanding(holder: Any, subject: Any, amount: Int) {
+    needs(world, Feature.STANDING, "adjustStanding")
+    val h = standingHolder(holder, "adjustStanding")
+    world.applyStanding(
+      h,
+      standingSubject(subject, h, "adjustStanding"),
+      amount,
+      event = "adjust",
+      via = null,
+    )
+  }
+
+  private fun standingHolder(holder: Any, fn: String): StandingHolder =
+    when (holder) {
+      is PluginActor ->
+        when (val a = actorOf(holder, "$fn(holder)")) {
+          is Mob -> StandingHolder.Personal(a)
+          is Player ->
+            throw IllegalArgumentException(
+              "$fn(): a player has no personal standing; name a faction"
+            )
+        }
+      is String -> StandingHolder.Faction(resolveFactionLabel(holder, fn, "holder"))
+      else ->
+        throw IllegalArgumentException(
+          "$fn(): holder must be a mob or faction label, got ${holder::class.simpleName}"
+        )
+    }
+
+  private fun standingSubject(subject: Any, holder: StandingHolder, fn: String): StandingSubject =
+    when (subject) {
+      is PluginActor -> StandingSubject.Of(actorOf(subject, "$fn(subject)").id)
+      is String -> {
+        if (holder is StandingHolder.Personal) {
+          throw IllegalArgumentException(
+            "$fn(): a personal standing record cannot have a faction subject"
+          )
+        }
+        StandingSubject.Faction(resolveFactionLabel(subject, fn, "subject"))
+      }
+      else ->
+        throw IllegalArgumentException(
+          "$fn(): subject must be an actor or faction label, got ${subject::class.simpleName}"
+        )
+    }
+
+  private fun resolveFactionLabel(labelStr: String, fnName: String, paramName: String): Label {
+    val l =
+      runCatching { Label(labelStr) }.getOrNull()
+        ?: throw IllegalArgumentException("$fnName($paramName): '$labelStr' is not a valid label")
+    if (!world.protos.isFaction(l)) {
+      val known = world.protos.factions.keys.map { it.v } + world.protos.mobs.keys.map { it.v }
+      throw IllegalArgumentException(
+        "$fnName(): unknown faction '$labelStr'${didYouMean(l.v, known)}"
+      )
+    }
+    return l
   }
 
   private fun key(key: String, write: Boolean, what: String): String {

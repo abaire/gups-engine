@@ -96,6 +96,8 @@ data class WorldModule(
    * How earned levels apply: automatically upon eligibility or deferred until explicitly advanced.
    */
   val levelMode: LevelMode = LevelMode.AUTO,
+  /** How long the engine keeps the history of standing changes, in pulses. */
+  val standingHistoryPulses: Long = DEFAULT_STANDING_HISTORY_PULSES,
 ) {
   /** The features the world has on. Unknown ids are left out here and reported by [problems]. */
   val features: Features = featuresOf(featureIds)
@@ -220,6 +222,7 @@ data class WorldModule(
   companion object {
     const val FILE = "MODULE.gups"
     const val DEFAULT_CHECKPOINT_MINUTES = 30
+    const val DEFAULT_STANDING_HISTORY_PULSES = 14_400L
     val PLUGIN_ID = Regex("[a-z][a-z0-9_]*")
     val CHECKSUM = Regex("sha256:[0-9a-f]{64}")
 
@@ -357,8 +360,8 @@ data class WorldModule(
             DeclParam(
               "features",
               "list[str]",
-              "The engine features the world uses: combat, track, skills and leveling. Fixed per database; changing it needs --wipe.",
-              default = "['combat', 'track', 'skills', 'leveling']",
+              "The engine features the world uses: combat, track, skills, leveling and standing. Fixed per database; changing it needs --wipe.",
+              default = "['combat', 'track', 'skills', 'leveling', 'standing']",
             ),
             DeclParam(
               "rename",
@@ -372,6 +375,12 @@ data class WorldModule(
               "How earned levels apply: 'auto' (immediately) or 'deferred' (waiting for ctx.level_up). Not fixed per database; changing it needs only a restart.",
               default = "'auto'",
               allowedValues = listOf("auto", "deferred"),
+            ),
+            DeclParam(
+              "standing_history_pulses",
+              "int",
+              "How long the engine keeps the history of standing changes, in pulses; at least 1. Not fixed per database; changing it needs only a restart.",
+              default = "$DEFAULT_STANDING_HISTORY_PULSES",
             ),
           ),
       )
@@ -477,6 +486,17 @@ data class WorldModule(
             "deferred" -> LevelMode.DEFERRED
             else -> LevelMode.AUTO
           }
+        if (d["standing_history_pulses"] != null) {
+          FeatureOwnership.refused(
+              "module.standing_history_pulses",
+              "module(standing_history_pulses)",
+              featuresOf(features),
+            )
+            ?.let { fail(it) }
+        }
+        val standingHistoryPulses =
+          d.int("standing_history_pulses")?.toLong() ?: DEFAULT_STANDING_HISTORY_PULSES
+        if (standingHistoryPulses < 1) fail("module(standing_history_pulses): must be at least 1")
         val rename =
           d.dict("rename").mapValues { (old, v) ->
             v as? String ?: fail("module(rename): the new name of '$old' must be a string")
@@ -503,6 +523,7 @@ data class WorldModule(
             featureIds = features,
             rename = rename,
             levelMode = levelMode,
+            standingHistoryPulses = standingHistoryPulses,
           )
         Starlark.NONE
       }

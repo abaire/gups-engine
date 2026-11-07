@@ -56,6 +56,7 @@ fun world(
       host,
       WorldConfig(seed = seed, checkInvariants = true, features = features),
       levelMode = loader.module.levelMode,
+      standingHistoryPulses = loader.module.standingHistoryPulses,
     )
   plugins.install(world)
   host.install(world)

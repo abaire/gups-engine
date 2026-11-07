@@ -1,6 +1,13 @@
 package gups.script
 
+import com.google.common.collect.ImmutableMap
 import gups.core.EngineInfo
+import gups.core.Label
+import gups.core.model.FactionProto
+import gups.core.model.MobProto
+import gups.core.model.Prototypes
+import gups.core.model.WorldSchema
+import gups.core.world.Features
 import java.nio.file.Files
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -9,6 +16,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import net.starlark.java.annot.StarlarkBuiltin
+import net.starlark.java.eval.Module
+import net.starlark.java.eval.Mutability
+import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkThread
+import net.starlark.java.syntax.ParserInput
 
 class ApiModelTest {
   private val model = ScriptApi.model(harness = emptyList())
@@ -267,6 +279,8 @@ class ApiModelTest {
       "skill" to Case(zone, { "skill(\"s\"${it.after()})" }) { it.pkg(zone).skillList.single() },
       "region" to
         Case("lib", { "region(\"g\"${it.after()})" }) { it.pkg("lib").regionList.single() },
+      "faction" to
+        Case("lib", { "faction(\"f\"${it.after()})" }) { it.pkg("lib").factionList.single() },
       "global_command" to
         Case("lib", { "def _f(ctx):\n    pass\n\nglobal_command(\"wave\", _f${it.after()})" }) {
           it.pkg("lib").commandList.single()
@@ -312,6 +326,35 @@ class ApiModelTest {
         val (c, err) = ServerConfig.read(file)
         return if (err == null) Result.success(c) else Result.failure(AssertionError(err.message))
       }
+      "standing_delta" -> {
+        val protos =
+          Prototypes(
+            factions = listOf(FactionProto(Label("//rules:f"))),
+            mobs = listOf(MobProto(Label("//rules:m"), name = "M", keywords = listOf("m"))),
+          )
+        val thread = StarlarkThread(Mutability.create("test"), SEMANTICS)
+        thread.setThreadLocal(
+          StandingChangeMarker::class.java,
+          StandingChangeMarker("rules", protos),
+        )
+        val builtins = DeclarationBuiltins(WorldSchema.EMPTY, Features.ALL)
+        val call =
+          if (extra == null) {
+            "standing_delta(\"//rules:f\", \"//rules:m\", 10)"
+          } else {
+            "standing_delta(\"//rules:f\", \"//rules:m\", 10, $extra)"
+          }
+        val env =
+          ImmutableMap.builder<String, Any>().apply { Starlark.addMethods(this, builtins) }.build()
+        val module = Module.withPredeclared(SEMANTICS, env)
+        return try {
+          val res =
+            Starlark.eval(ParserInput.fromString(call, "a.star"), FILE_OPTIONS, module, thread)
+          Result.success(res)
+        } catch (e: Exception) {
+          Result.failure(e)
+        }
+      }
     }
     val case = cases.getValue(spec.name)
     val files =
@@ -330,7 +373,10 @@ class ApiModelTest {
 
   @Test
   fun `every declaration has a test case`() {
-    assertEquals(allSpecs.map { it.name }.toSet() - setOf("module", "server"), cases.keys)
+    assertEquals(
+      allSpecs.map { it.name }.toSet() - setOf("module", "server", "standing_delta"),
+      cases.keys,
+    )
   }
 
   @Test

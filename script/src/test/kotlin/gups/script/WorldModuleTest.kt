@@ -387,6 +387,43 @@ class WorldModuleTest {
     assertEquals(LevelMode.DEFERRED, fDeferred.w.levelMode)
   }
 
+  @Test
+  fun `standing_history_pulses defaults to 14400 and can be set`() {
+    val (defaultMod, errDefault) = read(mod())
+    assertNull(errDefault)
+    assertEquals(14_400L, defaultMod.standingHistoryPulses)
+
+    val (customMod, errCustom) = read(mod("standing_history_pulses = 7200"))
+    assertNull(errCustom)
+    assertEquals(7_200L, customMod.standingHistoryPulses)
+  }
+
+  @Test
+  fun `standing_history_pulses must be at least 1`() {
+    val error = assertNotNull(read(mod("standing_history_pulses = 0")).second)
+    assertContains(error.message, "module(standing_history_pulses): must be at least 1")
+  }
+
+  @Test
+  fun `standing_history_pulses without standing fails to load naming the feature`() {
+    val error =
+      assertNotNull(read(mod("features = [\"combat\"], standing_history_pulses = 7200")).second)
+    assertContains(error.message, "module(standing_history_pulses) needs the standing feature")
+  }
+
+  @Test
+  fun `world receives standing_history_pulses from module`() {
+    val fDefault = ScriptFixture(mapOf("MODULE.gups" to TestWorlds.module("")), listOf("zones/z"))
+    assertEquals(14_400L, fDefault.w.standingHistoryPulses)
+
+    val fCustom =
+      ScriptFixture(
+        mapOf("MODULE.gups" to TestWorlds.module("standing_history_pulses = 7200")),
+        listOf("zones/z"),
+      )
+    assertEquals(7_200L, fCustom.w.standingHistoryPulses)
+  }
+
   private companion object {
     const val SCHEMA =
       "stats = [\"str\"], vitals = [\"hp\", \"mana\"], damage_types = [\"fire\"], unarmed_damage_type = \"fire\""

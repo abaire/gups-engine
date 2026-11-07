@@ -178,6 +178,36 @@ interface PluginWorld : PluginGmcpWorld {
    */
   fun levelDown(actor: PluginActor, count: Int = 1): Int
 
+  // Standing (`standing` feature).
+
+  /**
+   * Returns what [holder] thinks of [subject] (-100 to 100): the default sum of its parts or the
+   * world's `disposition` rules export, then the disposition modifiers.
+   */
+  fun disposition(holder: PluginActor, subject: PluginActor): Int
+
+  /**
+   * Returns the amount of [holder]'s standing record about [subject], or 0 when there is none.
+   * [holder] is a mob [PluginActor] or a faction label string, [subject] a [PluginActor] or a
+   * faction label string. Declared faction opinions are not records.
+   */
+  fun standing(holder: Any, subject: Any): Int
+
+  /** Returns the faction labels [actor] belongs to. */
+  fun factionsOf(actor: PluginActor): List<String>
+
+  /** Raises a custom standing event on [affected] by [actor]. */
+  fun raiseStandingEvent(
+    affected: PluginActor,
+    actor: PluginActor,
+    event: String,
+    amount: Long = 0,
+    item: PluginItem? = null,
+  )
+
+  /** Adjusts standing directly for [holder] and [subject] by [amount]. */
+  fun adjustStanding(holder: Any, subject: Any, amount: Int)
+
   /** The world's seeded RNG. Draws change the world's repro, so it stays off the read-only view. */
   val rng: PluginRng
 }

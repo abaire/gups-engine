@@ -12,8 +12,12 @@ import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.model.SchemaNames
+import gups.core.model.StandingChange
+import gups.core.model.StandingRecord
+import gups.core.model.StandingSubject
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
+import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.ItemHistory
 import gups.core.world.Persistence
@@ -25,8 +29,10 @@ import gups.core.world.clearInputs
 import gups.core.world.custodian
 import gups.core.world.drainItemEvents
 import gups.core.world.drainRemoved
+import gups.core.world.dropOrphanStanding
 import gups.core.world.fillMissingSpawns
 import gups.core.world.forgetActorSlots
+import gups.core.world.pruneStanding
 import gups.core.world.recentInputs
 import gups.core.world.respawnDeadlines
 import gups.core.world.restoreItem
@@ -40,6 +46,7 @@ import gups.core.world.tombstone
 import gups.core.world.upgrade
 import gups.core.world.zoneResetDeadlines
 import java.nio.file.Path
+import kotlinx.serialization.builtins.ListSerializer
 
 /** What a server wipe removed, for the startup log. */
 data class WipeSummary(val backup: Path, val characters: Int, val items: Int)
@@ -300,6 +307,29 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     }
     world.fillMissingSpawns()
     pendingDeletes += deleted
+    if (!fresh && Feature.STANDING in world.features) {
+      val rows = db.standings()
+      world.factionStanding.clear()
+      for (row in rows) {
+        val holder = Label(row.holder)
+        val subject =
+          if (row.subject.startsWith("actor:")) {
+            StandingSubject.Of(EntityId(row.subject.removePrefix("actor:").toLong()))
+          } else {
+            StandingSubject.Faction(Label(row.subject))
+          }
+        val record = StandingRecord()
+        record.amount = row.amount
+        record.updatedPulse = row.updatedPulse
+        val historyList =
+          JSON.decodeFromString(ListSerializer(StandingChangeJson.serializer()), row.historyJson)
+        for (h in historyList) {
+          record.history.add(StandingChange(h.pulse, h.amount, h.event, h.via?.let(::EntityId)))
+        }
+        world.factionStanding[holder to subject] = record
+      }
+      notes += world.dropOrphanStanding(checkActors = true)
+    }
     return RestoreReport(restored, deleted.size, 0, notes)
   }
 
@@ -441,6 +471,24 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
           zoneRows[pkg] = json
         }
       }
+      if (Feature.STANDING in world.features) {
+        world.pruneStanding()
+        world.dropOrphanStanding(checkActors = true)
+        b.standings =
+          world.factionStanding.map { (key, record) ->
+            val (holder, subject) = key
+            val subjectStr =
+              when (subject) {
+                is StandingSubject.Of -> "actor:${subject.actor.v}"
+                is StandingSubject.Faction -> subject.label.v
+              }
+            val historyList =
+              record.history.map { StandingChangeJson(it.pulse, it.amount, it.event, it.via?.v) }
+            val historyJson =
+              JSON.encodeToString(ListSerializer(StandingChangeJson.serializer()), historyList)
+            StandingRow(holder.v, subjectStr, record.amount, record.updatedPulse, historyJson)
+          }
+      }
       lastCapturePulse = world.pulse
       world.clearInputs()
     }
@@ -504,6 +552,9 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     playerRows.values
       .firstOrNull { it.name.equals(name, ignoreCase = true) }
       ?.let { SavedCharacter(it.name, it.accountId) }
+
+  override fun isSavedActor(id: EntityId): Boolean =
+    id.v in playerRows || entityRows[id.v]?.kind == "mob"
 
   private val accountStore = lazy { SqliteAccountStore.through(db.file, writer) }
 

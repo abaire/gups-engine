@@ -75,6 +75,26 @@ object FeatureOwnership {
     owns(Feature.TRACK, "view:actor.track_index", "view:actor.band_of")
     owns(Feature.TRACK, "view:room.size", "view:room.track_size", "view:exit.entry_index")
     owns(Feature.TRACK, "view:item.range", "view:location.index")
+    owns(
+      Feature.STANDING,
+      "mob.factions",
+      "module.standing_history_pulses",
+      "rules:factions",
+      "rules:disposition",
+      "rules:standing_change",
+      "rules_ctx.disposition_parts",
+      "rules_ctx.amount",
+      "rules_ctx.helped",
+      "rules_ctx.pet",
+      "rules_ctx.standing",
+      "rules_ctx.factions_of",
+      "rules_ctx.standing_history",
+      "aggressive.disposition_below",
+      "pursue.disposition_below",
+      "assist.disposition_above",
+      "guard.disposition_above",
+      "follow.disposition_above",
+    )
   }
 
   /** Entries whose parameters and fields are owned along with them. */
@@ -88,6 +108,18 @@ object FeatureOwnership {
     owns(Feature.COMBAT, "ctx.enemies_near", "ctx.allies_near")
     owns(Feature.COMBAT, "proc", "outcome")
     owns(Feature.TRACK, "knockback", "pull")
+    owns(
+      Feature.STANDING,
+      "faction",
+      "standing_delta",
+      "ctx.disposition",
+      "ctx.standing",
+      "ctx.factions_of",
+      "ctx.standing_history",
+      "ctx.standing_event",
+      "ctx.adjust_standing",
+      "ctx.clear_standing",
+    )
   }
 
   /** The requirement of the entry named by [symbol] in `api.json`, or null for the kernel. */

@@ -64,6 +64,7 @@ class ScriptFixture(
           WorldMessages.read(WorldDir(root)).first,
         ),
         levelMode = loader.module.levelMode,
+        standingHistoryPulses = loader.module.standingHistoryPulses,
       )
       .also {
         host.install(it)

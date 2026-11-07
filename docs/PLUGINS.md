@@ -482,6 +482,30 @@ invalid map, or an adjuster that throws, records a `"plugin"` diagnostic and lea
 The list is computed when a mob gains an owner, when a pet is restored at its owner's login, and after a reload, so an
 adjuster should depend only on the mob, its owner and the list it is given.
 
+### Standing and factions
+
+Plugins take part in standing (§5.14 of the spec) through `addDispositionModifier` and `addFactions`:
+
+- `addDispositionModifier(doc, adjust)`: adjusts what one actor thinks of another after the rules `disposition` export,
+  in plugin-id order. Handlers receive `call.world`, `call.holder`, `call.subject` and `call.disposition`, and return
+  the adjusted value, which is clamped to `-100..100`.
+- `addFactions(doc, adjust)`: adjusts an actor's faction list after the rules `factions` export, in plugin-id order.
+  Handlers receive `call.world`, `call.actor`, and `call.factions`, and return the replacement list of faction label
+  strings. Unknown faction labels are dropped with a `"plugin"` diagnostic.
+
+A handler that throws, or that asks for the disposition or the factions it is adjusting, records a `"plugin"` diagnostic
+and leaves the value unchanged.
+
+`PluginWorld` provides:
+
+- `disposition(holder, subject)`: what one `PluginActor` thinks of another, after the rules export and the modifiers.
+- `standing(holder, subject)`: the amount of one standing record, or 0. The holder is a mob `PluginActor` or a faction
+  label string, the subject a `PluginActor` or a faction label string. Declared faction opinions are not records.
+- `factionsOf(actor)`: the faction labels `actor` belongs to.
+- `raiseStandingEvent(affected, actor, event, amount = 0, item = null)`: raises a world standing event on `affected` by
+  `actor`.
+- `adjustStanding(holder, subject, amount)`: changes a standing record directly.
+
 ### World start
 
 `onWorldStarted` callbacks run once the world has loaded, in plugin-id order.

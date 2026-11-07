@@ -68,6 +68,16 @@ class CursePluginTest {
       adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
     ) = TODO()
 
+    override fun addDispositionModifier(
+      doc: String,
+      adjust: (gups.pluginapi.PluginDispositionCall) -> Int,
+    ) = TODO()
+
+    override fun addFactions(
+      doc: String,
+      adjust: (gups.pluginapi.PluginFactionsCall) -> List<String>,
+    ) = TODO()
+
     override fun addHook(name: String, doc: String, handle: (PluginHookCall) -> Any?) {
       hooks.add(name to handle)
     }
@@ -265,6 +275,22 @@ class CursePluginTest {
     override fun levelUp(actor: PluginActor): Boolean = false
 
     override fun levelDown(actor: PluginActor, count: Int): Int = 0
+
+    override fun disposition(holder: PluginActor, subject: PluginActor): Int = TODO()
+
+    override fun standing(holder: Any, subject: Any): Int = TODO()
+
+    override fun factionsOf(actor: PluginActor): List<String> = TODO()
+
+    override fun raiseStandingEvent(
+      affected: PluginActor,
+      actor: PluginActor,
+      event: String,
+      amount: Long,
+      item: PluginItem?,
+    ) = TODO()
+
+    override fun adjustStanding(holder: Any, subject: Any, amount: Int) = TODO()
 
     override fun rooms(): List<PluginRoom> = emptyList()
 

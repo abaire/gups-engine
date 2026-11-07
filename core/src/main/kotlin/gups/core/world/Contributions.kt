@@ -35,6 +35,9 @@ internal fun World.recordHealing(healed: Actor, source: Actor, effective: Int) {
   }
 }
 
+internal fun isBane(target: Actor, source: Actor, hostile: Boolean?): Boolean =
+  hostile ?: (source.id in target.fighting)
+
 /**
  * Credits [source] with one support affect on [target]. [hostile] is true for a bane (the victim's
  * own ledger), false for help (each of the victim's opponents' ledgers), and null when the caller
@@ -43,7 +46,7 @@ internal fun World.recordHealing(healed: Actor, source: Actor, effective: Int) {
  */
 internal fun World.recordSupport(target: Actor, source: Actor, hostile: Boolean?) {
   if (source === target || !source.inWorld || !target.inWorld) return
-  val bane = hostile ?: (source.id in target.fighting)
+  val bane = isBane(target, source, hostile)
   val ledgers = if (bane) listOf(target) else opponentsOf(target).filter { it !== source }
   for (victim in ledgers) {
     val entry = victim.contributions.computeIfAbsent(source.id) { Contribution() }

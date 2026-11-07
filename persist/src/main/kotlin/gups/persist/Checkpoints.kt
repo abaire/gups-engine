@@ -43,6 +43,7 @@ class Batch(
   val diagnostics: MutableList<DiagnosticRow> = mutableListOf(),
   /** Account changes, written before the world rows in the same transaction. */
   val accounts: MutableList<AccountOp> = mutableListOf(),
+  var standings: List<StandingRow>? = null,
 ) {
   /** Completed once this batch is committed. */
   val done: CompletableFuture<Unit> = CompletableFuture()
@@ -55,6 +56,7 @@ class Batch(
     zones.putAll(next.zones)
     events += next.events
     diagnostics += next.diagnostics
+    next.standings?.let { standings = it }
   }
 }
 

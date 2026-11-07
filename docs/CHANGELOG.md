@@ -4,6 +4,50 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Standing and factions
+
+- The optional `standing` feature module introduces factions, declared opinions and standing history. Leaving `features`
+  out in `MODULE.gups` enables it along with all other features.
+- `faction(name, standing = {}, doc = "")` declares a content faction `//<package>:<name>` and its declared opinions of
+  other factions (each in -100..100). A faction with the same label as a mob prototype in the same package configures
+  that prototype's implicit faction.
+- `mob(factions = [...])` specifies the factions a mob prototype belongs to; when omitted, it defaults to its own
+  prototype label.
+- `module(standing_history_pulses = 14400)` sets how long the engine keeps standing history in pulses (at least 1; needs
+  `standing`).
+- Personal standing records on mobs, faction standing records on the world, history queries, and pruning. A mob's
+  disposition toward an actor (what it thinks of them) defaults to the sum of the declared, faction-to-actor,
+  faction-to-faction, and personal parts, clamped to -100..100.
+- Optional rules exports `rules:factions(ctx)`, `rules:disposition(ctx)` and `rules:standing_change(ctx)`, with
+  `rules_ctx.disposition_parts`, `rules_ctx.amount`, `rules_ctx.helped`, and `rules_ctx.pet`.
+- `standing_delta(holder, subject, amount)` constructs a delta value inside `rules.standing_change`.
+- Rules `ctx` query methods `factions_of(actor)`, `standing(holder, subject)` (a record's amount) and
+  `standing_history(holder, subject, since = 0, via = None, event = None)`.
+- Built-in standing events: mobs remember attackers when `standing` is on, and the engine automatically raises `attack`,
+  `kill`, `heal`, `help`, `assist`, and `give` events.
+- Script hook context queries `ctx.disposition(holder, subject)`, `ctx.standing(holder, subject)` (a record's amount,
+  not including declared faction opinions) and `ctx.factions_of(actor)`.
+- Script hook context verbs `ctx.standing_history(holder, subject, since = 0, via = None, event = None)`,
+  `ctx.standing_event(affected, actor, event, amount = 0, item = None)`, `ctx.adjust_standing(holder, subject, amount)`,
+  and `ctx.clear_standing(holder, subject = None)`.
+- Disposition thresholds on behaviors: `disposition_below` on `aggressive` and `pursue`, and `disposition_above` on
+  `assist`, `guard` and `follow`.
+- Saved standing: faction standing records in the `standings` database table, personal standing records with history in
+  the mob payload, checkpoint pruning, and dropping of orphaned records on restore and reload.
+- `PluginRegistry.addDispositionModifier(doc, adjust)` allows plugins to adjust a disposition after the rules export in
+  plugin-id order; `PluginRegistry.addFactions(doc, adjust)` allows plugins to adjust an actor's faction labels in
+  plugin-id order.
+- `PluginWorld` exposes `disposition(holder, subject)`, `standing(holder, subject)`, `factionsOf(actor)`,
+  `raiseStandingEvent(affected, actor, event, amount, item)` and `adjustStanding(holder, subject, amount)`.
+- An actor's cached factions are forgotten when its owner changes, so a `factions` export may base a pet's factions on
+  its owner. Asking for the factions or the disposition being worked out (`ctx.factions_of` of the same actor inside the
+  `factions` export, or a plugin handler asking for the value it adjusts) is an error instead of endless recursion.
+- Faction records about a pet held out of the world while its owner is offline are kept at checkpoints and on restore.
+- The `standings` table is part of the base database schema; databases created before it need `--wipe`.
+- The template world demonstrates standing and factions with `template-world/lib/factions.star` (`townsfolk` and
+  `goblins`), `template-world/rules/standing.star` deltas with a gratitude ceiling and rate caps, disposition thresholds
+  on tutorial mobs, and tutorial 11 on standing and factions.
+
 ### Pets and owners
 
 - `summon` (the effect primitive and the verb) now sets the owner of each mob it spawns to the caster when the caster is

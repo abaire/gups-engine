@@ -5,7 +5,8 @@ enum class Feature(val id: String, val requires: Set<Feature>) {
   COMBAT("combat", emptySet()),
   TRACK("track", setOf(COMBAT)),
   SKILLS("skills", emptySet()),
-  LEVELING("leveling", emptySet());
+  LEVELING("leveling", emptySet()),
+  STANDING("standing", emptySet());
 
   companion object {
     fun byId(id: String): Feature? = entries.firstOrNull { it.id == id }

@@ -41,6 +41,7 @@ internal constructor(
   private val schema: WorldSchema = WorldSchema.EMPTY,
   /** How earned levels apply in the test worlds. */
   private val levelMode: LevelMode = LevelMode.AUTO,
+  private val standingHistoryPulses: Long = 14_400L,
   /** Records the players' commands and output when running a scenario. */
   private val transcript: Transcript? = null,
 ) : StarlarkValue {
@@ -120,6 +121,7 @@ internal constructor(
           bubble = (bubble as? Boolean) ?: evalFail("world(bubble): expected True or False"),
         ),
         levelMode = levelMode,
+        standingHistoryPulses = standingHistoryPulses,
       )
     plugins.install(world)
     host.install(world)

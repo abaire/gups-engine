@@ -34,12 +34,45 @@ class BehaviorDescriptorsTest {
         Heel(priority = 32),
         Defend(group = true, priority = 52),
         Defend(group = false, priority = 50),
+        Aggressive(toward = ActorFilter("players"), dispositionBelow = -30),
+        Assist(allies = ActorFilter("mobs"), dispositionAbove = 15),
+        Guard(exit = Direction.NORTH, dispositionAbove = 25),
+        Follow(target = ActorFilter("players"), dispositionAbove = 40),
+        Pursue(target = ActorFilter("players"), dispositionBelow = -15),
       )
 
     for (b in behaviors) {
       val descriptor = b.descriptor()
       val restored = f.w.behaviorOf(descriptor)
       assertEquals(b, restored, "Round-trip mismatch for $b")
+    }
+  }
+
+  @Test
+  fun `rejection on invalid standing thresholds`() {
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "aggressive", "disposition_below" to 101L))
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "aggressive", "disposition_below" to -101L))
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(
+        mapOf("kind" to "assist", "allies" to listOf("mobs"), "disposition_above" to 101L)
+      )
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "guard", "exit" to "north", "disposition_above" to -101L))
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(
+        mapOf("kind" to "follow", "target" to listOf("players"), "disposition_above" to 200L)
+      )
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(
+        mapOf("kind" to "pursue", "target" to listOf("players"), "disposition_below" to -150L)
+      )
     }
   }
 

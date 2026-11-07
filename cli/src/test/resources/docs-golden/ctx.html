@@ -150,6 +150,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.adjust_standing" class="entry">
+<h4><code>adjust_standing(holder, subject, amount)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>Adjusts standing directly for holder and subject by amount.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.adjust_standing.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Mob view or faction label holding the opinion.</td></tr>
+<tr id="ctx.adjust_standing.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Actor view or faction label the opinion is about.</td></tr>
+<tr id="ctx.adjust_standing.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Integer amount to adjust.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.after" class="entry">
 <h4><code>after(pulses, fn, **args)</code> <span class="since">since api_version 1</span></h4>
 <p>Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.</p>
@@ -275,6 +287,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.clear_standing" class="entry">
+<h4><code>clear_standing(holder, subject = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>Clears standing records for holder, optionally restricted to subject.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.clear_standing.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Mob view or faction label holding the opinion.</td></tr>
+<tr id="ctx.clear_standing.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Actor view or faction label, or None to clear all records for holder.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.close_container" class="entry">
 <h4><code>close_container(item)</code> <span class="since">since api_version 1</span></h4>
 <p>Closes an open container; a locked one stays locked.</p>
@@ -342,6 +365,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.disposition" class="entry">
+<h4><code>disposition(holder, subject)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>What holder thinks of subject, -100 to 100: the default sum of its parts or the world's disposition export, then plugins.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.disposition.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The actor holding the opinion.</td></tr>
+<tr id="ctx.disposition.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The actor the opinion is about.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.echo" class="entry">
 <h4><code>echo(room, text, exclude = [])</code> <span class="since">since api_version 1</span></h4>
 <p>Sends text to everyone in a room, except the actors in exclude.</p>
@@ -388,6 +422,16 @@
 <tbody>
 <tr id="ctx.enemies_near.actor"><td><code>actor</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The actor whose opponents are wanted.</td></tr>
 <tr id="ctx.enemies_near.band"><td><code>band</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Maximum distance: 'melee', 'near' or 'far'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.factions_of" class="entry">
+<h4><code>factions_of(actor)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>The faction labels actor belongs to, as a list of strings.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.factions_of.actor"><td><code>actor</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The actor.</td></tr>
 </tbody>
 </table>
 </article>
@@ -805,6 +849,45 @@
 <tr id="ctx.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
 <tr id="ctx.spawn.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
 <tr id="ctx.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.standing" class="entry">
+<h4><code>standing(holder, subject)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.standing.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Mob view or faction label holding the record.</td></tr>
+<tr id="ctx.standing.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Actor view or faction label the record is about.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.standing_event" class="entry">
+<h4><code>standing_event(affected, actor, event, amount = 0, item = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>Raises a custom standing event on affected by actor.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.standing_event.affected"><td><code>affected</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The actor affected.</td></tr>
+<tr id="ctx.standing_event.actor"><td><code>actor</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The actor who acted.</td></tr>
+<tr id="ctx.standing_event.event"><td><code>event</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>The event name.</td></tr>
+<tr id="ctx.standing_event.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>0</code></td><td>Optional positive amount.</td></tr>
+<tr id="ctx.standing_event.item"><td><code>item</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Optional item view.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.standing_history" class="entry">
+<h4><code>standing_history(holder, subject, since = 0, via = None, event = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>Queries standing history for holder and subject since a pulse.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.standing_history.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Mob view or faction label holding the opinion.</td></tr>
+<tr id="ctx.standing_history.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td></td><td>Actor view or faction label the opinion is about.</td></tr>
+<tr id="ctx.standing_history.since"><td><code>since</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>0</code></td><td>Start pulse for the query.</td></tr>
+<tr id="ctx.standing_history.via"><td><code>via</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Optional mob view filtering the event source.</td></tr>
+<tr id="ctx.standing_history.event"><td><code>event</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
 </tbody>
 </table>
 </article>

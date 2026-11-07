@@ -860,6 +860,8 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
     restrictions = p.restrictions.map { PluginRestrictionDocSpec(it.point, it.doc) },
     containmentFilters = p.containmentFilters.map { PluginFilterDocSpec(it.doc) },
     ownedBehaviors = p.ownedBehaviors.map { PluginOwnedBehaviorsDocSpec(it.doc) },
+    dispositionModifiers = p.dispositionModifiers.map { PluginDispositionModifierDocSpec(it.doc) },
+    factions = p.factions.map { PluginFactionAdjusterDocSpec(it.doc) },
     choices =
       p.choices.map { c ->
         PluginChoiceDocSpec(

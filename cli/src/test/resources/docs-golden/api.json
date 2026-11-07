@@ -270,9 +270,9 @@
           "positional": false,
           "keyword": true,
           "required": false,
-          "default": "['combat', 'track', 'skills', 'leveling']",
+          "default": "['combat', 'track', 'skills', 'leveling', 'standing']",
           "allowed_values": [],
-          "doc": "The engine features the world uses: combat, track, skills and leveling. Fixed per database; changing it needs --wipe.",
+          "doc": "The engine features the world uses: combat, track, skills, leveling and standing. Fixed per database; changing it needs --wipe.",
           "since": 1
         },
         {
@@ -298,6 +298,19 @@
           "default": "'auto'",
           "allowed_values": ["auto", "deferred"],
           "doc": "How earned levels apply: 'auto' (immediately) or 'deferred' (waiting for ctx.level_up). Not fixed per database; changing it needs only a restart.",
+          "since": 1
+        },
+        {
+          "symbol": "module.standing_history_pulses",
+          "feature": "standing",
+          "name": "standing_history_pulses",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "14400",
+          "allowed_values": [],
+          "doc": "How long the engine keeps the history of standing changes, in pulses; at least 1. Not fixed per database; changing it needs only a restart.",
           "since": 1
         }
       ]
@@ -773,6 +786,48 @@
         ]
       },
       {
+        "symbol": "ctx.adjust_standing",
+        "feature": "standing",
+        "name": "adjust_standing",
+        "doc": "Adjusts standing directly for holder and subject by amount.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.adjust_standing.holder",
+            "feature": "standing",
+            "name": "holder",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob view or faction label holding the opinion."
+          },
+          {
+            "symbol": "ctx.adjust_standing.subject",
+            "feature": "standing",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor view or faction label the opinion is about."
+          },
+          {
+            "symbol": "ctx.adjust_standing.amount",
+            "feature": "standing",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Integer amount to adjust."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.after",
         "name": "after",
         "doc": "Calls fn(ctx, **args) on this hook's owner after some pulses. fn must be a top-level function; args must be storable.",
@@ -1208,6 +1263,37 @@
         ]
       },
       {
+        "symbol": "ctx.clear_standing",
+        "feature": "standing",
+        "name": "clear_standing",
+        "doc": "Clears standing records for holder, optionally restricted to subject.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.clear_standing.holder",
+            "feature": "standing",
+            "name": "holder",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob view or faction label holding the opinion."
+          },
+          {
+            "symbol": "ctx.clear_standing.subject",
+            "feature": "standing",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor view or faction label, or None to clear all records for holder."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.close_container",
         "name": "close_container",
         "doc": "Closes an open container; a locked one stays locked.",
@@ -1386,6 +1472,37 @@
         ]
       },
       {
+        "symbol": "ctx.disposition",
+        "feature": "standing",
+        "name": "disposition",
+        "doc": "What holder thinks of subject, -100 to 100: the default sum of its parts or the world's disposition export, then plugins.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.disposition.holder",
+            "feature": "standing",
+            "name": "holder",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor holding the opinion."
+          },
+          {
+            "symbol": "ctx.disposition.subject",
+            "feature": "standing",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor the opinion is about."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.echo",
         "name": "echo",
         "doc": "Sends text to everyone in a room, except the actors in exclude.",
@@ -1547,6 +1664,26 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Maximum distance: 'melee', 'near' or 'far'."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.factions_of",
+        "feature": "standing",
+        "name": "factions_of",
+        "doc": "The faction labels actor belongs to, as a list of strings.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.factions_of.actor",
+            "feature": "standing",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor."
           }
         ]
       },
@@ -2612,6 +2749,165 @@
         ]
       },
       {
+        "symbol": "ctx.standing",
+        "feature": "standing",
+        "name": "standing",
+        "doc": "The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.standing.holder",
+            "feature": "standing",
+            "name": "holder",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob view or faction label holding the record."
+          },
+          {
+            "symbol": "ctx.standing.subject",
+            "feature": "standing",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor view or faction label the record is about."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.standing_event",
+        "feature": "standing",
+        "name": "standing_event",
+        "doc": "Raises a custom standing event on affected by actor.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.standing_event.affected",
+            "feature": "standing",
+            "name": "affected",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor affected."
+          },
+          {
+            "symbol": "ctx.standing_event.actor",
+            "feature": "standing",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The actor who acted."
+          },
+          {
+            "symbol": "ctx.standing_event.event",
+            "feature": "standing",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The event name."
+          },
+          {
+            "symbol": "ctx.standing_event.amount",
+            "feature": "standing",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional positive amount."
+          },
+          {
+            "symbol": "ctx.standing_event.item",
+            "feature": "standing",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional item view."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.standing_history",
+        "feature": "standing",
+        "name": "standing_history",
+        "doc": "Queries standing history for holder and subject since a pulse.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.standing_history.holder",
+            "feature": "standing",
+            "name": "holder",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Mob view or faction label holding the opinion."
+          },
+          {
+            "symbol": "ctx.standing_history.subject",
+            "feature": "standing",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor view or faction label the opinion is about."
+          },
+          {
+            "symbol": "ctx.standing_history.since",
+            "feature": "standing",
+            "name": "since",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Start pulse for the query."
+          },
+          {
+            "symbol": "ctx.standing_history.via",
+            "feature": "standing",
+            "name": "via",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional mob view filtering the event source."
+          },
+          {
+            "symbol": "ctx.standing_history.event",
+            "feature": "standing",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional event name filter."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.start_combat",
         "feature": "combat",
         "name": "start_combat",
@@ -3023,6 +3319,13 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.amount",
+          "feature": "standing",
+          "name": "amount",
+          "doc": "In standing_change, the healing done or the count given; otherwise None.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.attacker",
           "name": "attacker",
           "doc": "For attack calls, the same as actor.",
@@ -3078,6 +3381,13 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.disposition_parts",
+          "feature": "standing",
+          "name": "disposition_parts",
+          "doc": "In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.encumbrance_level",
           "name": "encumbrance_level",
           "doc": "The level encumbrance_level just gave; None outside encumbrance.",
@@ -3096,6 +3406,13 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.helped",
+          "feature": "standing",
+          "name": "helped",
+          "doc": "In an assist standing event, the actor helped; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.intensity",
           "name": "intensity",
           "doc": "For can_perceive and perceive_message: the event's strength where it happened.",
@@ -3111,6 +3428,13 @@
           "symbol": "rules_ctx.limit",
           "name": "limit",
           "doc": "The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.pet",
+          "feature": "standing",
+          "name": "pet",
+          "doc": "In a standing event raised for a pet's owner, the pet; None elsewhere.",
           "since": 1
         },
         {
@@ -3212,6 +3536,25 @@
           ]
         },
         {
+          "symbol": "rules_ctx.factions_of",
+          "feature": "standing",
+          "name": "factions_of",
+          "doc": "The faction labels actor belongs to, as a list of strings.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.factions_of.actor",
+              "name": "actor",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "The actor."
+            }
+          ]
+        },
+        {
           "symbol": "rules_ctx.roll",
           "name": "roll",
           "doc": "Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.",
@@ -3226,6 +3569,94 @@
               "varargs": false,
               "kwargs": false,
               "doc": "Dice expression such as '2d6+1'."
+            }
+          ]
+        },
+        {
+          "symbol": "rules_ctx.standing",
+          "feature": "standing",
+          "name": "standing",
+          "doc": "The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.standing.holder",
+              "name": "holder",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Mob view or faction label holding the record."
+            },
+            {
+              "symbol": "rules_ctx.standing.subject",
+              "name": "subject",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor view or faction label the record is about."
+            }
+          ]
+        },
+        {
+          "symbol": "rules_ctx.standing_history",
+          "feature": "standing",
+          "name": "standing_history",
+          "doc": "Queries standing history for holder and subject since a pulse.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.standing_history.holder",
+              "name": "holder",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Mob view or faction label holding the opinion."
+            },
+            {
+              "symbol": "rules_ctx.standing_history.subject",
+              "name": "subject",
+              "positional": true,
+              "named": true,
+              "default": null,
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Actor view or faction label the opinion is about."
+            },
+            {
+              "symbol": "rules_ctx.standing_history.since",
+              "name": "since",
+              "positional": true,
+              "named": true,
+              "default": "0",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Start pulse for the query."
+            },
+            {
+              "symbol": "rules_ctx.standing_history.via",
+              "name": "via",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Optional mob view filtering the event source."
+            },
+            {
+              "symbol": "rules_ctx.standing_history.event",
+              "name": "event",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Optional event name filter."
             }
           ]
         }

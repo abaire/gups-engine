@@ -69,6 +69,7 @@ fun World.isInactive(item: Item): Boolean {
 /** Forgets [a]'s cached slots, so the next [actorSlots] asks the rules again. */
 fun World.forgetActorSlots(a: Actor) {
   a.slotCache = null
+  forgetFactions(a)
 }
 
 /** [family]'s slots that [a] has, in family order. */

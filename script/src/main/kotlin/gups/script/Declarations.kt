@@ -20,6 +20,7 @@ import gups.core.model.Effect
 import gups.core.model.EmptyAction
 import gups.core.model.EquipAffect
 import gups.core.model.ExitProto
+import gups.core.model.FactionProto
 import gups.core.model.Interrupt
 import gups.core.model.ItemAffect
 import gups.core.model.ItemProto
@@ -31,11 +32,15 @@ import gups.core.model.Proc
 import gups.core.model.ProcOutcome
 import gups.core.model.ProcTarget
 import gups.core.model.ProcTrigger
+import gups.core.model.Prototypes
 import gups.core.model.RegionProto
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.SpawnRule
+import gups.core.model.StandingDelta
+import gups.core.model.StandingHolder
+import gups.core.model.StandingSubject
 import gups.core.model.TAG_REGEX
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
@@ -74,6 +79,7 @@ import gups.core.world.ZoneCommand
 import gups.core.world.gmcpOverlaps
 import gups.core.world.gmcpWithin
 import net.starlark.java.annot.Param
+import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
@@ -113,6 +119,11 @@ internal class LoadCtx(
   fun wearRef(item: Label, param: String, wear: String, thread: StarlarkThread) {
     val loc = thread.callerLocation
     pkg.wearRefs += WearRef(item, param, wear, loc?.file(), loc?.line(), loc?.column())
+  }
+
+  fun factionRef(label: Label, thread: StarlarkThread) {
+    val loc = thread.callerLocation
+    pkg.factionRefs += FactionRef(label, loc?.file(), loc?.line(), loc?.column())
   }
 }
 
@@ -516,6 +527,36 @@ private fun loadCtx(thread: StarlarkThread, fn: String): LoadCtx {
 /** Marks a rules call that may build behaviors, in the rules package [pkg]. */
 internal class OwnedBehaviorsMarker(val pkg: String)
 
+/** Marks a rules call that may build standing deltas, in the rules package [pkg]. */
+internal class StandingChangeMarker(val pkg: String, val protos: Prototypes)
+
+private fun standingChangeCtx(thread: StarlarkThread, fn: String): StandingChangeMarker =
+  thread.getThreadLocal(StandingChangeMarker::class.java)
+    ?: fail("$fn() can only be used in rules.standing_change")
+
+@StarlarkBuiltin(name = "standing_delta", doc = "A standing change delta.")
+class StandingDeltaValue(val delta: StandingDelta) : StarlarkValue {
+  override fun isImmutable(): Boolean = true
+
+  override fun repr(printer: Printer) {
+    printer.append(toString())
+  }
+
+  override fun toString(): String {
+    val holder =
+      when (val h = delta.holder) {
+        is StandingHolder.Personal -> "#${h.mob.id.v}"
+        is StandingHolder.Faction -> "'${h.label.v}'"
+      }
+    val subject =
+      when (val s = delta.subject) {
+        is StandingSubject.Of -> "#${s.actor.v}"
+        is StandingSubject.Faction -> "'${s.label.v}'"
+      }
+    return "standing_delta($holder, $subject, ${delta.amount})"
+  }
+}
+
 /**
  * The package path label patterns in a behavior builtin resolve against: the loading package, or
  * the rules package while `owned_behaviors` runs.
@@ -539,7 +580,17 @@ private fun contentCtx(thread: StarlarkThread, fn: String): LoadCtx {
 private fun declName(fn: String, d: ParsedDecl, ctx: LoadCtx): String {
   val name = d.reqStr("id", "$fn() name")
   label(name.let { ":$it" }, ctx.pkg.path, "$fn() name")
-  if (!ctx.pkg.names.add(name)) fail("$fn(): '$name' is already declared in //${ctx.pkg.path}")
+  val existing = ctx.pkg.declKinds.getOrPut(name) { mutableSetOf() }
+  val conflict =
+    if (fn == "faction") {
+      "faction" in existing || existing.any { it != "mob" }
+    } else if (fn == "mob") {
+      "mob" in existing || existing.any { it != "faction" }
+    } else {
+      existing.isNotEmpty()
+    }
+  if (conflict) fail("$fn(): '$name' is already declared in //${ctx.pkg.path}")
+  existing += fn
   return name
 }
 
@@ -1196,6 +1247,17 @@ internal class DeclarationBuiltins(
               ?: def.dormantRecovery,
           loot = loot,
           traits = parseMobTraits(d, knownTraits()),
+          factions =
+            if (d["factions"] != null) {
+              need("mob.factions", "mob(factions)")
+              d.strList("factions").map {
+                val f = label(it, pkg, d.what("factions"))
+                ctx.factionRef(f, thread)
+                f
+              }
+            } else {
+              null
+            },
           version = version(d),
         )
       if (proto.thinkEvery < 1) fail("mob(think_every): must be at least 1")
@@ -1595,6 +1657,55 @@ internal class DeclarationBuiltins(
     }
   }
 
+  @StarlarkMethod(
+    name = "faction",
+    doc = "Declares a faction and its declared opinion of other factions.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun faction(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    val ctx = contentCtx(thread, "faction")
+    need("faction", "faction()")
+    return FACTION_SPEC.bind(args, kwargs, features = features) { d ->
+      val id = declName("faction", d, ctx)
+      val pkg = ctx.pkg.path
+      val label = Label("//$pkg:$id")
+      val standing =
+        d.dict("standing").entries.associate { (k, v) ->
+          val target = label(k, pkg, d.what("standing"))
+          ctx.factionRef(target, thread)
+          val opinion = int(v, "faction(standing[\"$k\"])")
+          if (opinion !in -100..100) fail("faction(): standing of $target must be in -100..100")
+          target to opinion
+        }
+      val proto = FactionProto(label = label, standing = standing, doc = d.str("doc") ?: "")
+      ctx.pkg.factionList += proto
+      Starlark.NONE
+    }
+  }
+
+  @StarlarkMethod(
+    name = "standing_delta",
+    doc = "Builds a standing delta for rules.standing_change.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun standingDelta(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    val marker = standingChangeCtx(thread, "standing_delta")
+    need("standing_delta", "standing_delta()")
+    return STANDING_DELTA_SPEC.bind(args, kwargs, features = features) { d ->
+      val holder = d["holder"] ?: fail("standing_delta(): 'holder' is required")
+      val subject = d["subject"] ?: fail("standing_delta(): 'subject' is required")
+      val holderObj = toStandingHolder(holder, marker.pkg, "standing_delta", marker.protos)
+      val subjectObj =
+        toStandingSubject(subject, marker.pkg, "standing_delta", marker.protos, holderObj)
+      val amt = d.int("amount") ?: fail("standing_delta(): amount must be an int")
+      StandingDeltaValue(StandingDelta(holderObj, subjectObj, amt))
+    }
+  }
+
   // ---- Behaviors --------------------------------------------------------------------------------
 
   @StarlarkMethod(
@@ -1675,6 +1786,13 @@ internal class DeclarationBuiltins(
             "The channel, or list of channels, the mob notices targets on; built in or declared.",
         ),
         Param(
+          name = "disposition_below",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Attack only targets whose disposition is strictly below this threshold (-100..100).",
+        ),
+        Param(
           name = "priority",
           named = true,
           defaultValue = "None",
@@ -1689,6 +1807,7 @@ internal class DeclarationBuiltins(
     unlessLevelBelow: Any,
     chance: Any,
     via: Any,
+    dispositionBelow: Any,
     priority: Any,
     thread: StarlarkThread,
   ): Any {
@@ -1698,6 +1817,15 @@ internal class DeclarationBuiltins(
       need("aggressive.unless_level_above", "aggressive(unless_level_above)")
     if (!isNone(unlessLevelBelow))
       need("aggressive.unless_level_below", "aggressive(unless_level_below)")
+    val dispositionBelowInt =
+      if (!isNone(dispositionBelow)) {
+        need("aggressive.disposition_below", "aggressive(disposition_below)")
+        val sb = int(dispositionBelow, "aggressive(disposition_below)")
+        if (sb !in -100..100) fail("aggressive(disposition_below): must be in -100..100")
+        sb
+      } else {
+        null
+      }
     val names =
       when (via) {
         is String -> listOf(via)
@@ -1716,6 +1844,7 @@ internal class DeclarationBuiltins(
         intOrNull(unlessLevelBelow, "aggressive(unless_level_below)"),
         percent(chance, "aggressive(chance)"),
         viaChannels,
+        dispositionBelowInt,
         priorityArg(priority, PRIORITY_AGGRESSIVE, "aggressive(priority)"),
       )
     )
@@ -1732,6 +1861,13 @@ internal class DeclarationBuiltins(
           doc = "Allies to help, as label patterns such as 'goblin_*'.",
         ),
         Param(
+          name = "disposition_above",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Help allies and spare opponents whose disposition is strictly above this threshold (-100..100).",
+        ),
+        Param(
           name = "priority",
           named = true,
           defaultValue = "None",
@@ -1740,12 +1876,22 @@ internal class DeclarationBuiltins(
       ],
     useStarlarkThread = true,
   )
-  fun assist(allies: Any, priority: Any, thread: StarlarkThread): Any {
+  fun assist(allies: Any, dispositionAbove: Any, priority: Any, thread: StarlarkThread): Any {
     val pkgPath = behaviorCtx(thread, "assist")
     need("assist", "assist()")
+    val dispositionAboveInt =
+      if (!isNone(dispositionAbove)) {
+        need("assist.disposition_above", "assist(disposition_above)")
+        val sa = int(dispositionAbove, "assist(disposition_above)")
+        if (sa !in -100..100) fail("assist(disposition_above): must be in -100..100")
+        sa
+      } else {
+        null
+      }
     return BehaviorDecl(
       Assist(
         actorFilter(allies, "assist(allies)", pkgPath),
+        dispositionAboveInt,
         priorityArg(priority, PRIORITY_ASSIST, "assist(priority)"),
       )
     )
@@ -1792,15 +1938,32 @@ internal class DeclarationBuiltins(
           defaultValue = "'mobs'",
           doc = "Who may pass: 'players', 'mobs', 'all', or label patterns.",
         ),
+        Param(
+          name = "disposition_above",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Actors whose disposition is strictly above this threshold (-100..100) are allowed through.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun guard(exit: Any, allies: Any, thread: StarlarkThread): Any {
+  fun guard(exit: Any, allies: Any, dispositionAbove: Any, thread: StarlarkThread): Any {
     val pkgPath = behaviorCtx(thread, "guard")
+    val dispositionAboveInt =
+      if (!isNone(dispositionAbove)) {
+        need("guard.disposition_above", "guard(disposition_above)")
+        val sa = int(dispositionAbove, "guard(disposition_above)")
+        if (sa !in -100..100) fail("guard(disposition_above): must be in -100..100")
+        sa
+      } else {
+        null
+      }
     return BehaviorDecl(
       Guard(
         Direction.parse(str(exit, "guard(exit)")),
         actorFilter(allies, "guard(allies)", pkgPath),
+        dispositionAboveInt,
       )
     )
   }
@@ -1817,6 +1980,13 @@ internal class DeclarationBuiltins(
           doc = "Who to follow: 'players', 'mobs', or label patterns.",
         ),
         Param(
+          name = "disposition_above",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Follow only leaders whose disposition is strictly above this threshold (-100..100).",
+        ),
+        Param(
           name = "priority",
           named = true,
           defaultValue = "None",
@@ -1825,11 +1995,21 @@ internal class DeclarationBuiltins(
       ],
     useStarlarkThread = true,
   )
-  fun follow(target: Any, priority: Any, thread: StarlarkThread): Any {
+  fun follow(target: Any, dispositionAbove: Any, priority: Any, thread: StarlarkThread): Any {
     val pkgPath = behaviorCtx(thread, "follow")
+    val dispositionAboveInt =
+      if (!isNone(dispositionAbove)) {
+        need("follow.disposition_above", "follow(disposition_above)")
+        val sa = int(dispositionAbove, "follow(disposition_above)")
+        if (sa !in -100..100) fail("follow(disposition_above): must be in -100..100")
+        sa
+      } else {
+        null
+      }
     return BehaviorDecl(
       Follow(
         actorFilter(target, "follow(target)", pkgPath),
+        dispositionAboveInt,
         priorityArg(priority, PRIORITY_FOLLOW, "follow(priority)"),
       )
     )
@@ -1846,6 +2026,13 @@ internal class DeclarationBuiltins(
           doc = "Who to pursue: 'players', 'mobs', or label patterns.",
         ),
         Param(
+          name = "disposition_below",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Pursue only targets whose disposition is strictly below this threshold (-100..100).",
+        ),
+        Param(
           name = "priority",
           named = true,
           defaultValue = "None",
@@ -1854,11 +2041,21 @@ internal class DeclarationBuiltins(
       ],
     useStarlarkThread = true,
   )
-  fun pursue(target: Any, priority: Any, thread: StarlarkThread): Any {
+  fun pursue(target: Any, dispositionBelow: Any, priority: Any, thread: StarlarkThread): Any {
     val pkgPath = behaviorCtx(thread, "pursue")
+    val dispositionBelowInt =
+      if (!isNone(dispositionBelow)) {
+        need("pursue.disposition_below", "pursue(disposition_below)")
+        val sb = int(dispositionBelow, "pursue(disposition_below)")
+        if (sb !in -100..100) fail("pursue(disposition_below): must be in -100..100")
+        sb
+      } else {
+        null
+      }
     return BehaviorDecl(
       Pursue(
         actorFilter(target, "pursue(target)", pkgPath),
+        dispositionBelowInt,
         priorityArg(priority, PRIORITY_PURSUE, "pursue(priority)"),
       )
     )
@@ -3046,6 +3243,12 @@ internal class DeclarationBuiltins(
               default = "[]",
             ),
             DeclParam(
+              "factions",
+              "list[label]",
+              "Faction labels the mob belongs to; when absent, its own prototype label.",
+              default = "None",
+            ),
+            DeclParam(
               "version",
               "int",
               "Prototype schema version for persisted state migration.",
@@ -3370,6 +3573,31 @@ internal class DeclarationBuiltins(
           ),
       )
 
+    val FACTION_SPEC =
+      DeclSpec(
+        name = "faction",
+        doc = "Declares a faction and its declared opinion of other factions.",
+        positionalError = "faction() takes the declaration name as its only positional argument",
+        params =
+          listOf(
+            DeclParam(
+              "id",
+              "str",
+              "The faction's declaration name within the package.",
+              positional = true,
+              keyword = false,
+              required = true,
+            ),
+            DeclParam(
+              "standing",
+              "dict[label, int]",
+              "Declared opinion of other factions, by faction label, each in -100..100.",
+              default = "{}",
+            ),
+            DeclParam("doc", "str", "Documentation describing the faction.", default = "''"),
+          ),
+      )
+
     val GMCP_PACKAGE_SPEC =
       DeclSpec(
         name = "gmcp_package",
@@ -3461,6 +3689,30 @@ internal class DeclarationBuiltins(
         params = emptyList(),
       )
 
+    val STANDING_DELTA_SPEC =
+      DeclSpec(
+        name = "standing_delta",
+        doc = "Builds a standing delta for rules.standing_change.",
+        params =
+          listOf(
+            DeclParam(
+              "holder",
+              "Actor | str",
+              "Mob or faction label holding the opinion.",
+              positional = true,
+              required = true,
+            ),
+            DeclParam(
+              "subject",
+              "Actor | str",
+              "Actor or faction label the opinion is about.",
+              positional = true,
+              required = true,
+            ),
+            DeclParam("amount", "int", "Change in standing.", positional = true, required = true),
+          ),
+      )
+
     val DECLARATION_SPECS: List<DeclSpec> =
       listOf(
         PACKAGE_SPEC,
@@ -3477,10 +3729,12 @@ internal class DeclarationBuiltins(
         ITEM_SPEC,
         SKILL_SPEC,
         REGION_SPEC,
+        FACTION_SPEC,
         GMCP_PACKAGE_SPEC,
         GLOBAL_COMMAND_SPEC,
         GLOBAL_HOOK_SPEC,
         STRUCT_SPEC,
+        STANDING_DELTA_SPEC,
       ) + SCHEMA_SPECS
   }
 }

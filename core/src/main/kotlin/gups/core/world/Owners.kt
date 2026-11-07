@@ -17,6 +17,7 @@ fun World.setOwner(mob: Mob, owner: Player): Boolean {
   if (mob.owner == owner.id) return false
   val old = mob.owner
   assignOwner(mob, owner)
+  forgetFactions(mob)
   if (old != null) (actor(old) as? Player)?.let { announceOwner(mob, it, "clear") }
   announceOwner(mob, owner, "set")
   return true
@@ -29,6 +30,7 @@ fun World.clearOwner(mob: Mob): Boolean {
   mob.owner = null
   mob.ownedBehaviors = null
   mob.dirty = true
+  forgetFactions(mob)
   (actor(old) as? Player)?.let { announceOwner(mob, it, "clear") }
   return true
 }

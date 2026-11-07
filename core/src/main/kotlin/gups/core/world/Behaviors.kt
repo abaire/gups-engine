@@ -103,6 +103,10 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
   return seen.keys
 }
 
+private fun World.below(mob: Mob, a: Actor, n: Int?): Boolean = n == null || disposition(mob, a) < n
+
+private fun World.above(mob: Mob, a: Actor, n: Int?): Boolean = n == null || disposition(mob, a) > n
+
 /**
  * `aggressive(toward, unless_level_above, unless_level_below, chance, via)`: on each think, with
  * probability [chance] percent, attacks the first matching actor in the room the mob notices on any
@@ -114,6 +118,7 @@ data class Aggressive(
   val unlessLevelBelow: Int? = null,
   val chance: Int = 100,
   val via: List<Channel> = listOf(Channel.SIGHT),
+  val dispositionBelow: Int? = null,
   val priority: Int = PRIORITY_AGGRESSIVE,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
@@ -124,6 +129,7 @@ data class Aggressive(
         toward.matches(it) &&
           levelOk(it) &&
           !world.isOwnerSide(mob, it) &&
+          world.below(mob, it, dispositionBelow) &&
           world.notices(mob, it, via)
       } ?: return null
     return Proposal(
@@ -159,14 +165,22 @@ private fun World.notices(mob: Mob, who: Actor, via: List<Channel>): Boolean =
   }
 
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
-data class Assist(val allies: ActorFilter, val priority: Int = PRIORITY_ASSIST) : Behavior {
+data class Assist(
+  val allies: ActorFilter,
+  val dispositionAbove: Int? = null,
+  val priority: Int = PRIORITY_ASSIST,
+) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     for (ally in world.others(mob)) {
-      if (!allies.matches(ally) || !ally.isEngaged) continue
+      if (!allies.matches(ally) || !ally.isEngaged || !world.above(mob, ally, dispositionAbove))
+        continue
       val foes =
         world.opponentsOf(ally).filter {
-          it !== mob && !allies.matches(it) && !world.isOwnerSide(mob, it)
+          it !== mob &&
+            !allies.matches(it) &&
+            !world.isOwnerSide(mob, it) &&
+            !(dispositionAbove != null && world.disposition(mob, it) > dispositionAbove)
         }
       val foe = foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.firstOrNull() ?: continue
       return Proposal(
@@ -203,13 +217,18 @@ data class Flee(val below: Map<String, Int>, val priority: Int = PRIORITY_FLEE) 
  * `guard(exit)`: denies [exit] to everyone but [allies] while the guard is in the room and able to
  * act. A built-in `before_exit` observer, not a proposal.
  */
-data class Guard(val exit: Direction, val allies: ActorFilter = ActorFilter("mobs")) : Behavior {
+data class Guard(
+  val exit: Direction,
+  val allies: ActorFilter = ActorFilter("mobs"),
+  val dispositionAbove: Int? = null,
+) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? = null
 
   fun denies(world: World, guard: Mob, actor: Actor, dir: Direction): Boolean =
     dir == exit &&
       actor !== guard &&
       !allies.matches(actor) &&
+      !(dispositionAbove != null && world.disposition(guard, actor) > dispositionAbove) &&
       world.canAct(guard) &&
       world.isSimulated(guard)
 }
@@ -228,12 +247,24 @@ internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String
  * `follow(target)`: picks the first matching actor in its room as leader, then follows it along the
  * shortest path while it is within [BUBBLE_RADIUS] exits; farther away, it gives up.
  */
-data class Follow(val target: ActorFilter, val priority: Int = PRIORITY_FOLLOW) : Behavior {
+data class Follow(
+  val target: ActorFilter,
+  val dispositionAbove: Int? = null,
+  val priority: Int = PRIORITY_FOLLOW,
+) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
     val leader = mob.leader?.let(world::actor)?.takeIf { it.inWorld && target.matches(it) }
+    if (leader != null && !world.above(mob, leader, dispositionAbove)) {
+      mob.leader = null
+      return null
+    }
     if (leader == null) {
-      mob.leader = world.others(mob).firstOrNull { target.matches(it) }?.id
+      mob.leader =
+        world
+          .others(mob)
+          .firstOrNull { target.matches(it) && world.above(mob, it, dispositionAbove) }
+          ?.id
       return null
     }
     if (leader.room === mob.room) return null
@@ -247,14 +278,25 @@ data class Follow(val target: ActorFilter, val priority: Int = PRIORITY_FOLLOW) 
 }
 
 /** `pursue(target)`: heads for the nearest matching actor anywhere in the world by `path_to`. */
-data class Pursue(val target: ActorFilter, val priority: Int = PRIORITY_PURSUE) : Behavior {
+data class Pursue(
+  val target: ActorFilter,
+  val dispositionBelow: Int? = null,
+  val priority: Int = PRIORITY_PURSUE,
+) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
-    if (world.others(mob).any { target.matches(it) }) return null
+    if (world.others(mob).any { target.matches(it) && world.below(mob, it, dispositionBelow) })
+      return null
     val best =
       world.actors
         .asSequence()
-        .filter { it !== mob && it.inWorld && target.matches(it) && world.isSimulated(it) }
+        .filter {
+          it !== mob &&
+            it.inWorld &&
+            target.matches(it) &&
+            world.below(mob, it, dispositionBelow) &&
+            world.isSimulated(it)
+        }
         .mapNotNull { t ->
           world.pathTo(mob.room, t.room)?.takeIf { it.isNotEmpty() }?.let { t to it }
         }

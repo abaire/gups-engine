@@ -9,11 +9,13 @@ import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.DamageType
 import gups.core.model.Direction
+import gups.core.model.DispositionParts
 import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
+import gups.core.model.StandingDelta
 import gups.core.world.Behavior
 import gups.core.world.World
 
@@ -78,6 +80,14 @@ class RulesContext(
   val contributors: List<Contributor>? = null,
   /** The prototype's behaviors, in owned_behaviors; null elsewhere. */
   val behaviors: List<Behavior>? = null,
+  /** The parts of the default disposition, in disposition; null elsewhere. */
+  val dispositionParts: DispositionParts? = null,
+  /** Event amount (heal amount, item count), in standing_change; null elsewhere. */
+  val amount: Long? = null,
+  /** The helped actor, in an assist standing event; null elsewhere. */
+  val helped: Actor? = null,
+  /** The pet mob whose action raised an event for its owner; null elsewhere. */
+  val pet: Actor? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -116,6 +126,10 @@ class RulesContext(
       xp = xp,
       contributors = contributors,
       behaviors = behaviors,
+      dispositionParts = dispositionParts,
+      amount = amount,
+      helped = helped,
+      pet = pet,
     )
 
   /**
@@ -146,9 +160,16 @@ class RulesContext(
       damageType = damageType,
       slot = slot,
       affect = a,
+      limit = limit,
+      carried = carried,
+      encumbranceLevel = encumbranceLevel,
       xp = xp,
       contributors = contributors,
       behaviors = behaviors,
+      dispositionParts = dispositionParts,
+      amount = amount,
+      helped = helped,
+      pet = pet,
     )
 
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
@@ -320,6 +341,15 @@ interface RulesEngine {
    * The owned behavior list for [c]`actor` (a mob) owned by [c]`target`, or null for the default.
    */
   fun ownedBehaviors(c: RulesContext): List<Behavior>? = null
+
+  /** The factions of [c]`actor`, or null for the default. */
+  fun factions(c: RulesContext): List<Label>? = null
+
+  /** What [c]`actor` thinks of [c]`target`, or null for the default. */
+  fun disposition(c: RulesContext): Int? = null
+
+  /** The standing changes produced by a standing event, or null for the default deltas. */
+  fun standingChange(c: RulesContext): List<StandingDelta>? = null
 
   /** Who is awarded what of [c]`xp` for the kill; the default pays the killer all of it. */
   fun xpShare(c: RulesContext): Map<Actor, Long> =

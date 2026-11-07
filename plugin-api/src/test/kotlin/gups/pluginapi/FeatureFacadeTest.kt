@@ -23,9 +23,9 @@ class FeatureFacadeTest {
   @Test
   fun `PluginWorld features lists the enabled ids`() {
     val all = WorldFacade(world(), "p") {}
-    assertEquals(setOf("combat", "track", "skills", "leveling"), all.features)
+    assertEquals(setOf("combat", "track", "skills", "leveling", "standing"), all.features)
     val some = WorldFacade(world(zone, features = noLevel), "p") {}
-    assertEquals(setOf("combat", "track", "skills"), some.features)
+    assertEquals(setOf("combat", "track", "skills", "standing"), some.features)
   }
 
   @Test

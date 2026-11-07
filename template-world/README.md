@@ -84,6 +84,10 @@ To learn how to create zones, rooms, mobs, items, and quests using Starlark, see
 5. [Mobs, Spawns, and Behaviors](docs/tutorials/05_mobs_and_behaviors.md)
 6. [Hooks, Perception, and Interactivity](docs/tutorials/06_hooks_and_interactivity.md)
 7. [Testing and Verifying Your Zone](docs/tutorials/07_testing_your_zone.md)
+8. [Shops](docs/tutorials/08_shops.md)
+9. [Trainers](docs/tutorials/09_trainers.md)
+10. [Groups and Shared Experience](docs/tutorials/10_groups_and_shared_experience.md)
+11. [Standing and Factions](docs/tutorials/11_standing_and_factions.md)
 
 The canonical, working reference zone is located at [`zones/tutorial/`](zones/tutorial).
 

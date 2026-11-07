@@ -27,6 +27,8 @@ val MIGRATIONS: List<Migration> =
         """CREATE TABLE world_entities (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, proto_label TEXT NOT NULL,
                 proto_version INTEGER NOT NULL, location_json TEXT, payload_json TEXT NOT NULL, updated_pulse INTEGER NOT NULL)""",
         "CREATE TABLE zone_states (package TEXT PRIMARY KEY, payload_json TEXT NOT NULL)",
+        """CREATE TABLE standings (holder TEXT NOT NULL, subject TEXT NOT NULL, amount INTEGER NOT NULL,
+                updated_pulse INTEGER NOT NULL, history_json TEXT NOT NULL, PRIMARY KEY (holder, subject))""",
         """CREATE TABLE item_events (id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL, pulse INTEGER NOT NULL,
                 wall_time INTEGER NOT NULL, from_json TEXT, to_json TEXT, cause TEXT NOT NULL)""",
         "CREATE INDEX item_events_item ON item_events (item_id)",
@@ -82,6 +84,15 @@ data class ItemEventRow(
   val fromJson: String?,
   val toJson: String?,
   val cause: String,
+)
+
+/** A `standings` row. */
+data class StandingRow(
+  val holder: String,
+  val subject: String,
+  val amount: Int,
+  val updatedPulse: Long,
+  val historyJson: String,
 )
 
 /**
@@ -206,6 +217,11 @@ class Database private constructor(val file: Path, private val conn: Connection)
   fun zoneStates(): Map<String, String> =
     query("SELECT package, payload_json FROM zone_states") { it.getString(1) to it.getString(2) }
       .toMap()
+
+  fun standings(): List<StandingRow> =
+    query("SELECT holder, subject, amount, updated_pulse, history_json FROM standings") {
+      StandingRow(it.getString(1), it.getString(2), it.getInt(3), it.getLong(4), it.getString(5))
+    }
 
   fun itemEvents(itemId: Long): List<ItemEventRow> =
     query(
@@ -480,6 +496,22 @@ class Database private constructor(val file: Path, private val conn: Connection)
         st.addBatch()
       }
       st.executeBatch()
+    }
+    b.standings?.let { standings ->
+      conn.createStatement().use { st -> st.executeUpdate("DELETE FROM standings") }
+      prepare(
+        "INSERT INTO standings (holder, subject, amount, updated_pulse, history_json) VALUES (?, ?, ?, ?, ?)"
+      ) { st ->
+        for (row in standings) {
+          st.setString(1, row.holder)
+          st.setString(2, row.subject)
+          st.setInt(3, row.amount)
+          st.setLong(4, row.updatedPulse)
+          st.setString(5, row.historyJson)
+          st.addBatch()
+        }
+        st.executeBatch()
+      }
     }
     prepare(
       "INSERT INTO item_events (item_id, pulse, wall_time, from_json, to_json, cause) VALUES (?, ?, ?, ?, ?, ?)"

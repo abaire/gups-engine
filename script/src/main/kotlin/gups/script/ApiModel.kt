@@ -538,6 +538,7 @@ object ScriptApi {
       RngView::class.java,
       RoomView::class.java,
       SkillView::class.java,
+      StandingDeltaValue::class.java,
     )
 
   /** Every `@StarlarkBuiltin` class in `:script` that the model describes. */

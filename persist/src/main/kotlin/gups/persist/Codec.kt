@@ -25,6 +25,8 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
+import gups.core.model.StandingChange
+import gups.core.model.StandingRecord
 import gups.core.world.VitalState
 import gups.core.world.World
 import gups.core.world.restoreActorNumbers
@@ -224,6 +226,22 @@ data class MobPayload(
   val affects: List<AffectJson> = emptyList(),
   val active: List<String> = emptyList(),
   val anchor: List<String> = emptyList(),
+  @SerialName("personal_standing") val personalStanding: Map<Long, StandingRecordJson>? = null,
+)
+
+@Serializable
+data class StandingChangeJson(
+  val pulse: Long,
+  val amount: Int,
+  val event: String,
+  val via: Long? = null,
+)
+
+@Serializable
+data class StandingRecordJson(
+  val amount: Int,
+  @SerialName("updated_pulse") val updatedPulse: Long,
+  val history: List<StandingChangeJson> = emptyList(),
 )
 
 /** A container prototype's settings, kept so a tombstone can still hold what it held. */
@@ -497,6 +515,18 @@ internal fun World.encode(e: Entity): EntityRow? =
           affects = affectsJson(e),
           active = e.activeReasons.toList(),
           anchor = e.anchorReasons.toList(),
+          personalStanding =
+            e.personalStanding
+              .takeIf { it.isNotEmpty() }
+              ?.map { (k, v) ->
+                k.v to
+                  StandingRecordJson(
+                    v.amount,
+                    v.updatedPulse,
+                    v.history.map { StandingChangeJson(it.pulse, it.amount, it.event, it.via?.v) },
+                  )
+              }
+              ?.toMap(),
         )
       EntityRow(
         e.id.v,
@@ -633,6 +663,16 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   m.affects += restoreAffects(p.affects)
   restoreReasons(m, p.active, p.anchor)
   world.restoreOwner(m, p.owner?.let(::EntityId))
+  m.personalStanding.clear()
+  p.personalStanding?.forEach { (id, r) ->
+    val record = StandingRecord()
+    record.amount = r.amount
+    record.updatedPulse = r.updatedPulse
+    r.history.forEach { h ->
+      record.history.add(StandingChange(h.pulse, h.amount, h.event, h.via?.let(::EntityId)))
+    }
+    m.personalStanding[EntityId(id)] = record
+  }
 }
 
 internal fun containerJson(c: ContainerProto) =

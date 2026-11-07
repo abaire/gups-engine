@@ -3,6 +3,13 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.model.Actor
+import gups.core.model.Mob
+import gups.core.model.Player
+import gups.core.model.Prototypes
+import gups.core.model.StandingHolder
+import gups.core.model.StandingSubject
+import gups.core.model.didYouMean
 import gups.core.world.EntityRef
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
@@ -406,4 +413,65 @@ fun gmcpValue(v: Any?): Any =
     is Iterable<*> -> StarlarkList.immutableCopyOf(v.map(::gmcpValue))
     is Array<*> -> StarlarkList.immutableCopyOf(v.map(::gmcpValue))
     else -> v.toString()
+  }
+
+internal fun resolveFactionLabel(
+  labelStr: String,
+  pkg: String?,
+  fnName: String,
+  paramName: String,
+  protos: Prototypes,
+): Label {
+  val l = label(labelStr, pkg, "$fnName($paramName)")
+  if (!protos.isFaction(l)) {
+    val known = protos.factions.keys.map { it.v } + protos.mobs.keys.map { it.v }
+    fail("$fnName(): unknown faction '$labelStr'${didYouMean(l.v, known)}")
+  }
+  return l
+}
+
+/**
+ * A standing holder from a script value: a mob view (its personal opinion) or a faction label.
+ * [actorOf] turns a view into its actor, so a caller can refuse actors that left the world.
+ */
+internal fun toStandingHolder(
+  holder: Any,
+  pkg: String?,
+  fnName: String,
+  protos: Prototypes,
+  actorOf: (ActorView) -> Actor = { it.actor },
+): StandingHolder =
+  when (holder) {
+    is ActorView -> {
+      when (val a = actorOf(holder)) {
+        is Mob -> StandingHolder.Personal(a)
+        is Player -> fail("$fnName(): a player has no personal standing; name a faction")
+      }
+    }
+    is String -> {
+      val l = resolveFactionLabel(holder, pkg, fnName, "holder", protos)
+      StandingHolder.Faction(l)
+    }
+    else -> fail("$fnName(): holder must be a mob or faction label, got ${typeName(holder)}")
+  }
+
+/** A standing subject from a script value: an actor view or a faction label. */
+internal fun toStandingSubject(
+  subject: Any,
+  pkg: String?,
+  fnName: String,
+  protos: Prototypes,
+  holder: StandingHolder? = null,
+  actorOf: (ActorView) -> Actor = { it.actor },
+): StandingSubject =
+  when (subject) {
+    is ActorView -> StandingSubject.Of(actorOf(subject).id)
+    is String -> {
+      if (holder is StandingHolder.Personal) {
+        fail("$fnName(): a personal standing record cannot have a faction subject")
+      }
+      val l = resolveFactionLabel(subject, pkg, fnName, "subject", protos)
+      StandingSubject.Faction(l)
+    }
+    else -> fail("$fnName(): subject must be an actor or faction label, got ${typeName(subject)}")
   }

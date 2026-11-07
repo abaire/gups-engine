@@ -168,6 +168,12 @@ interface PluginRegistry {
    * exception thrown by [adjust] logs a diagnostic and leaves the list unchanged.
    */
   fun addOwnedBehaviors(doc: String, adjust: (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>)
+
+  /** Adjusts a disposition after the world's disposition rules export, in plugin-id order. */
+  fun addDispositionModifier(doc: String, adjust: (PluginDispositionCall) -> Int)
+
+  /** Adjusts an actor's faction labels after the factions rules export, in plugin-id order. */
+  fun addFactions(doc: String, adjust: (PluginFactionsCall) -> List<String>)
 }
 
 /** Mirrors core's command lanes. */
@@ -375,4 +381,17 @@ data class PluginOwnedBehaviorsCall(
   val mob: PluginActor,
   val owner: PluginActor?,
   val behaviors: List<Map<String, Any?>>,
+)
+
+data class PluginDispositionCall(
+  val world: PluginWorld,
+  val holder: PluginActor,
+  val subject: PluginActor,
+  val disposition: Int,
+)
+
+data class PluginFactionsCall(
+  val world: PluginWorld,
+  val actor: PluginActor,
+  val factions: List<String>,
 )

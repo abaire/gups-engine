@@ -250,7 +250,7 @@ class AccountStoreTest {
       }
     }
     val sp = SqlitePersistence.open(file)
-    assertEquals(4, sp.db.schemaVersion)
+    assertEquals(MIGRATIONS.size, sp.db.schemaVersion)
     val ann = sp.accounts.byLogin("ann")!!
     assertFalse(ann.disabled)
     assertNull(ann.disabledBy)

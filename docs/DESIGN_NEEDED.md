@@ -57,17 +57,10 @@ friendly fire from area skills only? Allowing it for area skills is a possible d
 harm is refused, is a direct attack vetoed with a message while an area skill silently skips the ally, or does the world
 choose? - When harm to an ally is allowed, does it engage the ally, start a fight with it, and record a contribution, or
 does it only deal the damage? - Does the rule need information from the caller, such as whether the harm is deliberate
-(a targeted attack) or incidental (an area effect)?
+(a targeted attack) or incidental (an area effect)? - Should the ally rule ask `standing` (§5.14), for example treating
+an actor the attacker's standing toward is above a threshold as an ally?
 
 ## Mobs and AI
-
-### Hostility and factions
-
-**Spec:** §4.7 (`aggressive(toward)`, `assist(allies)`, `guard`), §3.7 (the example `faction` shared namespace).
-**Today:** "hostile" means "engaged with" (D-027). Behaviors pick targets by `players`, `mobs` or label pattern (D-121).
-Nothing remembers who attacked whom once a fight ends. **Questions:** - Is there a faction or reputation model the
-engine understands, or is it only a `//lib` convention on shared attributes? - Should mobs remember attackers (a hate
-list) after a flee or a disengage?
 
 ### Target preference for aggressive mobs
 
@@ -77,10 +70,9 @@ only `players`, `mobs`, `all` and label patterns. **Questions:** - Should `aggre
 such as `prefer=...`, that orders candidates by something other than id? - If so, what does it match on: plugin traits,
 tags, a role model, or built-in orderings such as `weakest` and `strongest`? - Is the preference data with value
 equality (behaviors are compared by the version-bump lint, §7.3), or can it be a script function? - How does it relate
-to a hate list and factions ("Hostility and factions"), which would also change whom a mob prefers? That design gives
-each mob a `standing` integer from -100 (absolute hatred) to 100 (beloved ally) toward every actor; should a preference
-such as "lowest standing first" order candidates by it, and how does it combine with the other orderings? - Should an
-aggressive mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
+to standing (§5.14), which already filters candidates with `aggressive(disposition_below=)`? Should a preference such as
+"lowest standing first" order candidates by it, and how does it combine with the other orderings? - Should an aggressive
+mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
 
 ## Items
 

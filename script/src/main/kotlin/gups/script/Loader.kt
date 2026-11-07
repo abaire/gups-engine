@@ -98,6 +98,7 @@ internal constructor(
       skills = ps.flatMap { it.skills },
       zones = ps.map { ZoneProto(it.path, it.title, it.resetPulses, it.modifiers) },
       regions = ps.flatMap { it.regions },
+      factions = ps.flatMap { it.factions },
     )
   }
 
@@ -226,6 +227,7 @@ class ScriptLoader(
         st.contentDone = true
         for (file in contentFiles(p)) loadFile(file, st)
         for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
+        for (ref in st.pkg.factionRefs) dependOn(st, ref.label.pkg)
         findMigrate(st)
         if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
       }
@@ -483,6 +485,7 @@ class ScriptLoader(
     fun finish(): LoadResult {
       propagate()
       resolveLabels()
+      checkFactions()
       propagate()
       checkNamespaces()
       checkRegions()
@@ -580,6 +583,31 @@ class ScriptLoader(
                 "${ref.label} doesn't resolve: //${ref.label.pkg} declares no ${ref.kind.word} named '${ref.label.name}'" +
                   fixtureNote(ref.label)
             }
+          st.errors +=
+            LoadError(
+              st.pkg.path,
+              "label",
+              why,
+              ref.file,
+              ref.line,
+              ref.column,
+              snippet(ref.file, ref.line, ref.column),
+            )
+        }
+      }
+    }
+
+    /** Every faction reference in mob(factions=) or faction(standing=) resolves. */
+    fun checkFactions() {
+      val declaredFactions = live.flatMap { it.pkg.factions.map { f -> f.label } }.toSet()
+      val mobFactions = live.flatMap { it.pkg.mobs.map { m -> m.label } }.toSet()
+      val knownFactionLabels = declaredFactions + mobFactions
+      val knownStrings = knownFactionLabels.map { it.v }
+      for (st in live) {
+        for (ref in st.pkg.factionRefs) {
+          if (ref.label in knownFactionLabels) continue
+          val why =
+            "${ref.label} doesn't resolve: it is neither a declared faction nor a mob prototype${didYouMean(ref.label.v, knownStrings)}"
           st.errors +=
             LoadError(
               st.pkg.path,

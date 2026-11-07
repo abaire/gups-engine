@@ -108,6 +108,7 @@ class MigrationChecker(
           config,
           boot = boot,
           levelMode = loader.module.levelMode,
+          standingHistoryPulses = loader.module.standingHistoryPulses,
         )
       plugins.install(world)
       host.install(world)

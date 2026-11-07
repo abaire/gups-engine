@@ -229,6 +229,7 @@ class TestRunner(
         settings = settings,
         schema = loader.schema,
         levelMode = loader.module.levelMode,
+        standingHistoryPulses = loader.module.standingHistoryPulses,
         transcript = transcript,
       )
     val printed = StringBuilder()

@@ -123,6 +123,7 @@ class TraitScriptTest {
         host,
         loader.module.config(WorldConfig(seed = 1, checkInvariants = true, strict = true)),
         levelMode = loader.module.levelMode,
+        standingHistoryPulses = loader.module.standingHistoryPulses,
       )
       .also {
         wiring.install(it)

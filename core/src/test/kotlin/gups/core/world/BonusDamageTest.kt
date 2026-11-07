@@ -11,6 +11,7 @@ import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
+import gups.core.model.DispositionParts
 import gups.core.model.Effect
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
@@ -467,6 +468,10 @@ class BonusDamageTest {
         xp = 10,
         contributors = listOf(Contributor(d, 1, 2, 3, 4L, null, null, true)),
         behaviors = listOf(Heel()),
+        dispositionParts = DispositionParts(1, 2, 3, 4),
+        amount = 5L,
+        helped = d,
+        pet = d,
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

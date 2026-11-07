@@ -729,6 +729,9 @@ class Mob(
   /** Absolute pulse when this debug mob will despawn automatically, or null. */
   var debugUntil: Long? = null
     internal set
+
+  /** Personal standing records toward other actors, saved with the mob. */
+  val personalStanding: java.util.TreeMap<EntityId, StandingRecord> = java.util.TreeMap()
 }
 
 /**

@@ -21,6 +21,8 @@ import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
 import gups.core.model.SpawnRule
+import gups.core.model.StandingRecord
+import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
@@ -127,6 +129,14 @@ fun interface PluginEffectRunner {
   )
 }
 
+fun interface DispositionModifier {
+  fun adjust(world: World, holder: Actor, subject: Actor, value: Int): Int
+}
+
+fun interface FactionAdjuster {
+  fun adjust(world: World, actor: Actor, factions: List<Label>): List<Label>
+}
+
 class World(
   protos: Prototypes,
   /** The names this world's actors are measured by; fixed for the life of the world. */
@@ -140,6 +150,8 @@ class World(
    * deferred until a script advances them.
    */
   var levelMode: LevelMode = LevelMode.AUTO,
+  /** How long the engine keeps the history of standing changes, in pulses. */
+  var standingHistoryPulses: Long = 14_400,
 ) {
   /** The live prototype table; a reload swaps it. */
   var protos: Prototypes = protos
@@ -217,6 +229,12 @@ class World(
   /** Plugin owned-behavior adjusters, in plugin id order. */
   var ownedBehaviorAdjusters: List<OwnedBehaviorAdjuster> = emptyList()
 
+  /** Plugin disposition modifiers, in plugin id order. */
+  var dispositionModifiers: List<DispositionModifier> = emptyList()
+
+  /** Plugin faction adjusters, in plugin id order. */
+  var factionAdjusters: List<FactionAdjuster> = emptyList()
+
   /** Plugin GMCP state packages by name, recomputed in phase 7 like the engine's. */
   val pluginGmcp: MutableMap<String, (Player) -> Any?> = LinkedHashMap()
 
@@ -245,6 +263,12 @@ class World(
 
   internal var slotCache: List<String>? = null
   internal var slotFamilyCache: Map<String, List<String>>? = null
+
+  val factionStanding: MutableMap<Pair<Label, StandingSubject>, StandingRecord> = HashMap()
+  internal val dispositionMemo: MutableMap<Pair<EntityId, EntityId>, Int> = HashMap()
+  internal val factionCache: MutableMap<EntityId, List<Label>> = HashMap()
+  internal val factionsInProgress: MutableSet<EntityId> = HashSet()
+  internal val dispositionInProgress: MutableSet<Pair<EntityId, EntityId>> = HashSet()
 
   val rng = Rng(config.seed)
   val features: Features
@@ -552,6 +576,7 @@ class World(
     a.room.actorIndex.remove(a.id)
     actorIndex.remove(a.id)
     entities.remove(a.id)
+    factionCache.remove(a.id)
     a.inWorld = false
     removedThisPhase += a.id
     // A player who quits keeps their row and their items' rows; a mob is gone for good unless
@@ -601,6 +626,7 @@ class World(
 
   /** Advances game time by one pulse and runs every phase in order. */
   fun runPulse() {
+    dispositionMemo.clear()
     pulse++
     runTimers()
     flushImmediate()

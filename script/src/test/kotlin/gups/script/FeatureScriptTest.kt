@@ -209,6 +209,31 @@ class FeatureScriptTest {
       "mob(\"m\", behaviors = [aggressive(unless_level_below = 3)])",
       "aggressive(unless_level_below)",
     )
+    refused(
+      Feature.STANDING,
+      "mob(\"m\", behaviors = [aggressive(disposition_below = -30)])",
+      "aggressive(disposition_below)",
+    )
+    refused(
+      Feature.STANDING,
+      "mob(\"m\", behaviors = [pursue(\"players\", disposition_below = -30)])",
+      "pursue(disposition_below)",
+    )
+    refused(
+      Feature.STANDING,
+      "mob(\"m\", behaviors = [assist(\"m\", disposition_above = 30)])",
+      "assist(disposition_above)",
+    )
+    refused(
+      Feature.STANDING,
+      "mob(\"m\", behaviors = [guard(\"north\", disposition_above = 30)])",
+      "guard(disposition_above)",
+    )
+    refused(
+      Feature.STANDING,
+      "mob(\"m\", behaviors = [follow(\"players\", disposition_above = 30)])",
+      "follow(disposition_above)",
+    )
   }
 
   @Test

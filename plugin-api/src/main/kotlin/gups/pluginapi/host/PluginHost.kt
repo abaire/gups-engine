@@ -36,9 +36,11 @@ import gups.pluginapi.PluginApi
 import gups.pluginapi.PluginCommandCall
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
+import gups.pluginapi.PluginDispositionCall
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginFactionsCall
 import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginHookCall
@@ -80,11 +82,17 @@ data class PluginInfo(
   val choices: List<PluginChoiceInfo> = emptyList(),
   val containmentFilters: List<PluginFilterInfo> = emptyList(),
   val ownedBehaviors: List<PluginOwnedBehaviorsInfo> = emptyList(),
+  val dispositionModifiers: List<PluginDispositionModifierInfo> = emptyList(),
+  val factions: List<PluginFactionAdjusterInfo> = emptyList(),
 )
 
 data class PluginFilterInfo(val doc: String)
 
 data class PluginOwnedBehaviorsInfo(val doc: String)
+
+data class PluginDispositionModifierInfo(val doc: String)
+
+data class PluginFactionAdjusterInfo(val doc: String)
 
 data class PluginTraitInfo(
   val name: String,
@@ -225,6 +233,8 @@ internal class PluginRegistryImpl(
   val filters = mutableListOf<Pair<String, (PluginContainmentCall) -> Boolean>>()
   val ownedBehaviors =
     mutableListOf<Pair<String, (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>>>()
+  val dispositionModifiers = mutableListOf<Pair<String, (PluginDispositionCall) -> Int>>()
+  val factionAdjusters = mutableListOf<Pair<String, (PluginFactionsCall) -> List<String>>>()
   private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
 
   private fun member(name: String, value: Any) {
@@ -438,6 +448,14 @@ internal class PluginRegistryImpl(
     ownedBehaviors.add(doc to adjust)
   }
 
+  override fun addDispositionModifier(doc: String, adjust: (PluginDispositionCall) -> Int) {
+    dispositionModifiers.add(doc to adjust)
+  }
+
+  override fun addFactions(doc: String, adjust: (PluginFactionsCall) -> List<String>) {
+    factionAdjusters.add(doc to adjust)
+  }
+
   private fun checkParams(name: String, params: List<PluginParam>) {
     val names = params.map { it.name }
     require(names.distinct().size == names.size) { "'$name' has duplicate parameter names" }
@@ -587,6 +605,22 @@ internal constructor(
       }
     }
     world.ownedBehaviorAdjusters = allAdjusters
+
+    val allDispositionModifiers = mutableListOf<gups.core.world.DispositionModifier>()
+    for (p in plugins) {
+      for ((_, adjust) in p.reg.dispositionModifiers) {
+        allDispositionModifiers.add(dispositionModifierAdapter(world, p.id, adjust))
+      }
+    }
+    world.dispositionModifiers = allDispositionModifiers
+
+    val allFactionAdjusters = mutableListOf<gups.core.world.FactionAdjuster>()
+    for (p in plugins) {
+      for ((_, adjust) in p.reg.factionAdjusters) {
+        allFactionAdjusters.add(factionAdjusterAdapter(world, p.id, adjust))
+      }
+    }
+    world.factionAdjusters = allFactionAdjusters
 
     for (p in plugins) {
       for (cat in p.reg.categories) {
@@ -744,6 +778,9 @@ internal constructor(
           },
         containmentFilters = p.reg.filters.map { (doc, _) -> PluginFilterInfo(doc) },
         ownedBehaviors = p.reg.ownedBehaviors.map { (doc, _) -> PluginOwnedBehaviorsInfo(doc) },
+        dispositionModifiers =
+          p.reg.dispositionModifiers.map { (doc, _) -> PluginDispositionModifierInfo(doc) },
+        factions = p.reg.factionAdjusters.map { (doc, _) -> PluginFactionAdjusterInfo(doc) },
         choices =
           p.reg.creation?.choices?.map { c ->
             PluginChoiceInfo(

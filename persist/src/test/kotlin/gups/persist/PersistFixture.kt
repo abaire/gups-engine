@@ -11,6 +11,7 @@ import gups.core.model.Direction
 import gups.core.model.DoorProto
 import gups.core.model.DoorState
 import gups.core.model.ExitProto
+import gups.core.model.FactionProto
 import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Player
@@ -61,6 +62,7 @@ object P {
     withBag: Boolean = true,
     withRat: Boolean = true,
     ratTraits: Set<String> = emptySet(),
+    extraFactions: List<FactionProto> = emptyList(),
   ) =
     Prototypes(
       rooms = if (withRat) rooms(ratHp) else rooms(ratHp).map { it.copy(spawns = emptyList()) },
@@ -91,6 +93,7 @@ object P {
           ),
         ),
       zones = listOf(ZoneProto("t", resetPulses = 600)),
+      factions = extraFactions,
     )
 }
 

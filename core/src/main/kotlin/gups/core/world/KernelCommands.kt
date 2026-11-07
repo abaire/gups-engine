@@ -1617,6 +1617,9 @@ private class GiveAction(private val spec: ItemSpec, private val targetStr: Stri
         actor,
         target,
       )
+      w.raiseStandingEvent(
+        StandingEvent("give", affected = target, actor = actor, item = moved, amount = n.toLong())
+      )
       w.dispatch(
         HookName.ON_GIVE,
         moved,

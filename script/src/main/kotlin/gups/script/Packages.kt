@@ -2,6 +2,7 @@ package gups.script
 
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.model.FactionProto
 import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Modifiers
@@ -162,14 +163,15 @@ class ScriptPackage internal constructor(val path: String) {
   internal val itemList = mutableListOf<ItemProto>()
   internal val skillList = mutableListOf<SkillProto>()
   internal val regionList = mutableListOf<RegionProto>()
+  internal val factionList = mutableListOf<FactionProto>()
   internal val gmcpList = mutableListOf<GmcpPackageDecl>()
   internal val commandList = mutableListOf<GlobalCommandDecl>()
   internal val hookList = mutableListOf<GlobalHookDecl>()
   internal val hookMap = LinkedHashMap<Label, Map<HookName, HookRef>>()
   internal val customHookMap = HashMap<Label, Map<String, HookRef>>()
 
-  /** Declaration names, unique across kinds within the package. */
-  internal val names = HashSet<String>()
+  /** Declaration names mapped to the declaration kinds (e.g. mob, room) declaring them. */
+  internal val declKinds = HashMap<String, MutableSet<String>>()
 
   /** The package's `migrate(old_version, attrs)`, if one of its files defines it. */
   var migrate: HookRef? = null
@@ -185,6 +187,9 @@ class ScriptPackage internal constructor(val path: String) {
 
   /** Labels this package refers to, checked once every package has loaded. */
   internal val refs = mutableListOf<LabelRef>()
+
+  /** Factions this package refers to, checked once every package has loaded. */
+  internal val factionRefs = mutableListOf<FactionRef>()
 
   /** The slots its items are worn in, checked once the rules have named the slots. */
   internal val wearRefs = mutableListOf<WearRef>()
@@ -203,6 +208,9 @@ class ScriptPackage internal constructor(val path: String) {
 
   val regions: List<RegionProto>
     get() = regionList
+
+  val factions: List<FactionProto>
+    get() = factionList
 
   val gmcpPackages: List<GmcpPackageDecl>
     get() = gmcpList
@@ -234,6 +242,16 @@ internal enum class RefKind(val word: String) {
 internal data class LabelRef(
   val label: Label,
   val kind: RefKind,
+  val file: String?,
+  val line: Int?,
+  val column: Int?,
+)
+
+/**
+ * A faction label referred to by a mob or faction, with where it was written for error messages.
+ */
+internal data class FactionRef(
+  val label: Label,
   val file: String?,
   val line: Int?,
   val column: Int?,

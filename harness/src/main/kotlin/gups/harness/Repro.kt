@@ -53,17 +53,17 @@ class ReproRunner(
     val result = loader.load(dir.packages())
     result.errors.forEach { notes += "load error: ${it.render()}" }
     val host = StarlarkHost(result, ScriptLimits.HARNESS, loader)
+    val (mod) = WorldModule.read(dir)
     val world =
       World(
         result.prototypes(),
         loader.schema,
         host.rules(),
         host,
-        WorldModule.read(dir)
-          .first
-          .config(WorldConfig(seed = seed, checkInvariants = true), WorldMessages.read(dir).first),
+        mod.config(WorldConfig(seed = seed, checkInvariants = true), WorldMessages.read(dir).first),
         Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
-        levelMode = WorldModule.read(dir).first.levelMode,
+        levelMode = mod.levelMode,
+        standingHistoryPulses = mod.standingHistoryPulses,
       )
     plugins.install(world)
     host.install(world)

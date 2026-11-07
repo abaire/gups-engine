@@ -168,7 +168,7 @@ class FeaturesOffTest {
     val f = Fixture(features = without(Feature.TRACK, Feature.SKILLS))
     val p = f.player("Ann")
     val schema = f.w.gmcpPayload(p, "Char.Schema") as Map<*, *>
-    assertEquals(listOf("combat", "leveling"), schema["features"])
+    assertEquals(listOf("combat", "leveling", "standing"), schema["features"])
     val sink = f.sink(p)
     assertNotNull(sink)
     f.run(2)

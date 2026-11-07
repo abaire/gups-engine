@@ -302,7 +302,16 @@ class GupsServer(
         messages = messages.texts,
       )
     world =
-      World(protos, module.schema, host.rules(), host, config, boot, levelMode = module.levelMode)
+      World(
+        protos,
+        module.schema,
+        host.rules(),
+        host,
+        config,
+        boot,
+        levelMode = module.levelMode,
+        standingHistoryPulses = module.standingHistoryPulses,
+      )
     plugins.install(world)
     host.install(world)
     if (saved != null) {
