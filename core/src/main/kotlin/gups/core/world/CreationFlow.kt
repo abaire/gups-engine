@@ -1,45 +1,52 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.model.CreationAttempt
 import gups.core.model.CreationChoice
 import gups.core.model.CreationOption
 import gups.core.model.CreationProvider
+import gups.core.model.CreationStep
 import gups.core.model.Player
+import gups.core.model.StepReply
 
 sealed interface CreationOutcome {
-  data class Created(val answers: Map<String, String>) : CreationOutcome
+  data class Created(val attempt: CreationAttempt) : CreationOutcome
 
   data class Completed(val answers: Map<String, String>) : CreationOutcome
 
   object Cancelled : CreationOutcome
 
-  /** Back from the first choice to the name prompt, with the answers given so far. */
-  data class BackToName(val answers: Map<String, String>) : CreationOutcome
+  /** Back from the first choice to the name prompt, with the attempt so far. */
+  data class BackToName(val attempt: CreationAttempt) : CreationOutcome
 
   object ProviderFailed : CreationOutcome
 }
 
 /**
- * Handles character creation steps over a session: choices, prompts, answer matching, confirmation,
- * and Char.Creation GMCP events.
+ * Handles character creation steps over a session: choices, custom steps, prompts, answer matching,
+ * confirmation, and Char.Creation GMCP events.
  */
 class CreationFlow(
   private val world: World,
   private val session: Session,
   private val name: String,
   private val newCharacter: Boolean,
-  initialAnswers: Map<String, String> = emptyMap(),
+  private val attempt: CreationAttempt,
   private val onOutcome: (CreationOutcome) -> Unit,
 ) {
   private val provider: CreationProvider =
     checkNotNull(world.creation) { "CreationFlow started without creation provider" }
 
-  val answers = LinkedHashMap<String, String>(initialAnswers)
+  val answers: MutableMap<String, String>
+    get() = attempt.answers
+
   private val history = mutableListOf<String>()
   private var currentStep: Step = Step.Confirm
 
   private sealed interface Step {
     data class Choice(val choiceId: String) : Step
+
+    data class Custom(val stepId: String) : Step
 
     object Confirm : Step
   }
@@ -52,6 +59,7 @@ class CreationFlow(
     val trimmed = line.trim()
     when (val step = currentStep) {
       is Step.Choice -> handleChoiceInput(step.choiceId, trimmed)
+      is Step.Custom -> handleCustomInput(step.stepId, trimmed)
       Step.Confirm -> handleConfirmInput(trimmed)
     }
   }
@@ -118,7 +126,26 @@ class CreationFlow(
       askChoice(c, options, answersSoFar)
       return
     }
-    // All available choices answered: confirmation step
+
+    if (newCharacter) {
+      for (step in provider.steps) {
+        val applies =
+          try {
+            step.applies(world, attempt)
+          } catch (e: Throwable) {
+            world.diagnose("plugin", "creation step '${step.id}' applies failed: ${e.message}", e)
+            endFlow(CreationOutcome.ProviderFailed)
+            return
+          }
+        if (!applies) continue
+        if (step.id in attempt.finished) continue
+        history.add(step.id)
+        showStep(step)
+        return
+      }
+    }
+
+    // All available choices and steps answered: confirmation step
     promptConfirm()
   }
 
@@ -172,19 +199,120 @@ class CreationFlow(
                 )
               },
           ),
+        "custom" to null,
         "answers" to buildAnswersGmcp(before),
+        "summaries" to emptyList<Map<String, Any?>>(),
       )
     )
   }
 
+  private fun showStep(step: CreationStep, message: String? = null) {
+    currentStep = Step.Custom(step.id)
+    if (message != null) {
+      world.sendSession(session, message)
+    }
+    val view =
+      try {
+        step.show(world, attempt)
+      } catch (e: Throwable) {
+        world.diagnose("plugin", "creation step '${step.id}' show failed: ${e.message}", e)
+        endFlow(CreationOutcome.ProviderFailed)
+        return
+      }
+    world.sendSession(session, view.text)
+    world.flush(session)
+    session.sink.prompt(world.msg(LoginMsg.CREATION_PROMPT))
+
+    sendGmcp(
+      mapOf(
+        "name" to name,
+        "step" to "custom",
+        "choice" to null,
+        "custom" to mapOf("id" to step.id, "title" to step.title, "data" to view.gmcp),
+        "answers" to buildAnswersGmcp(answers),
+        "summaries" to emptyList<Map<String, Any?>>(),
+      )
+    )
+  }
+
+  private fun handleCustomInput(stepId: String, text: String) {
+    val step = provider.steps.first { it.id == stepId }
+    when {
+      text.equals("cancel", ignoreCase = true) -> endFlow(CreationOutcome.Cancelled)
+      text.equals("back", ignoreCase = true) -> {
+        history.removeLast() // this step
+        if (history.isNotEmpty()) {
+          val prev = history.removeLast()
+          val prevStep = provider.steps.firstOrNull { it.id == prev }
+          if (prevStep != null) {
+            attempt.finished.remove(prev)
+            history.add(prev)
+            showStep(prevStep)
+          } else {
+            reask(prev)
+          }
+        } else {
+          if (newCharacter) endFlow(CreationOutcome.BackToName(attempt))
+          else endFlow(CreationOutcome.Cancelled)
+        }
+      }
+      else -> {
+        val reply =
+          try {
+            step.input(world, attempt, text)
+          } catch (e: Throwable) {
+            world.diagnose("plugin", "creation step '${step.id}' input failed: ${e.message}", e)
+            endFlow(CreationOutcome.ProviderFailed)
+            return
+          }
+        when (reply) {
+          is StepReply.Stay -> showStep(step, reply.message)
+          StepReply.Done -> {
+            attempt.finished.add(step.id)
+            advance()
+          }
+        }
+      }
+    }
+  }
+
   private fun promptConfirm() {
     currentStep = Step.Confirm
+    val summaries = mutableListOf<Map<String, String>>()
+    val summaryStrings = mutableListOf<String>()
+    if (newCharacter) {
+      for (step in provider.steps) {
+        val applies =
+          try {
+            step.applies(world, attempt)
+          } catch (e: Throwable) {
+            world.diagnose("plugin", "creation step '${step.id}' applies failed: ${e.message}", e)
+            endFlow(CreationOutcome.ProviderFailed)
+            return
+          }
+        if (!applies) continue
+        val sum =
+          try {
+            step.summary(world, attempt)
+          } catch (e: Throwable) {
+            world.diagnose("plugin", "creation step '${step.id}' summary failed: ${e.message}", e)
+            endFlow(CreationOutcome.ProviderFailed)
+            return
+          }
+        if (sum != null) {
+          summaries += mapOf("step" to step.id, "title" to step.title, "text" to sum)
+          summaryStrings += "${step.title} $sum"
+        }
+      }
+    }
+
     val answersList = mutableListOf<String>()
     for (c in provider.choices) {
       val optId = answers[c.id] ?: continue
       val opt = c.options.firstOrNull { it.id == optId } ?: continue
       answersList += "${c.title} ${opt.label}"
     }
+    answersList += summaryStrings
     val answersStr = answersList.joinToString(", ")
     val confirmText = world.msg(LoginMsg.CREATION_CONFIRM, "name" to name, "answers" to answersStr)
     world.sendSession(session, confirmText)
@@ -196,7 +324,9 @@ class CreationFlow(
         "name" to name,
         "step" to "confirm",
         "choice" to null,
+        "custom" to null,
         "answers" to buildAnswersGmcp(answers),
+        "summaries" to summaries,
       )
     )
   }
@@ -214,12 +344,13 @@ class CreationFlow(
       text.equals("cancel", ignoreCase = true) -> endFlow(CreationOutcome.Cancelled)
       text.equals("back", ignoreCase = true) -> {
         if (history.size <= 1) {
-          if (newCharacter) endFlow(CreationOutcome.BackToName(answers.toMap()))
+          if (newCharacter) endFlow(CreationOutcome.BackToName(attempt))
           else endFlow(CreationOutcome.Cancelled)
         } else {
           history.removeLast() // current choice
           val prevChoiceId = history.removeLast()
           clearAnswersFrom(prevChoiceId)
+          attempt.answersChanged()
           askChoice(prevChoiceId)
         }
       }
@@ -252,6 +383,7 @@ class CreationFlow(
         } else {
           answers[choiceId] = matched.id
           clearAnswersAfter(choiceId)
+          attempt.answersChanged()
           advance()
         }
       }
@@ -262,9 +394,41 @@ class CreationFlow(
     when {
       text.equals("cancel", ignoreCase = true) -> endFlow(CreationOutcome.Cancelled)
       text.equals("back", ignoreCase = true) -> {
+        if (newCharacter) {
+          var lastApplicableStep: CreationStep? = null
+          for (step in provider.steps.reversed()) {
+            val applies =
+              try {
+                step.applies(world, attempt)
+              } catch (e: Throwable) {
+                world.diagnose(
+                  "plugin",
+                  "creation step '${step.id}' applies failed: ${e.message}",
+                  e,
+                )
+                endFlow(CreationOutcome.ProviderFailed)
+                return
+              }
+            if (applies) {
+              lastApplicableStep = step
+              break
+            }
+          }
+          if (lastApplicableStep != null) {
+            attempt.finished.remove(lastApplicableStep.id)
+            while (history.isNotEmpty() && history.last() != lastApplicableStep.id) {
+              history.removeLast()
+            }
+            if (history.isEmpty()) {
+              history.add(lastApplicableStep.id)
+            }
+            showStep(lastApplicableStep)
+            return
+          }
+        }
         val last = lastAsked()
         if (last != null) reask(last)
-        else if (newCharacter) endFlow(CreationOutcome.BackToName(answers.toMap()))
+        else if (newCharacter) endFlow(CreationOutcome.BackToName(attempt))
         else endFlow(CreationOutcome.Cancelled)
       }
       text.equals("yes", ignoreCase = true) || text.equals("y", ignoreCase = true) -> {
@@ -281,7 +445,7 @@ class CreationFlow(
           val last = lastAsked()
           if (last != null) reask(last) else promptConfirm()
         } else {
-          if (newCharacter) endFlow(CreationOutcome.Created(answers.toMap()))
+          if (newCharacter) endFlow(CreationOutcome.Created(attempt))
           else endFlow(CreationOutcome.Completed(answers.toMap()))
         }
       }
@@ -300,6 +464,7 @@ class CreationFlow(
 
   private fun reask(choiceId: String) {
     clearAnswersFrom(choiceId)
+    attempt.answersChanged()
     askChoice(choiceId)
   }
 
@@ -388,4 +553,58 @@ fun World.hasMissingChoices(player: gups.core.model.Player): Boolean {
     answersSoFar[c.id] = ans
   }
   return false
+}
+
+sealed interface HeadlessSteps {
+  data object Finished : HeadlessSteps
+
+  data class Unfinished(val stepId: String) : HeadlessSteps
+
+  data class Failed(val stepId: String, val error: Throwable) : HeadlessSteps
+}
+
+/**
+ * Runs every applicable custom step of the provider for [attempt] without a session, feeding each
+ * the lines [linesFor] gives it. Stops at the first step that isn't done after its lines.
+ */
+fun World.runStepsHeadless(
+  attempt: CreationAttempt,
+  linesFor: (stepId: String) -> List<String>,
+): HeadlessSteps {
+  val steps = creation?.steps ?: return HeadlessSteps.Finished
+  for (step in steps) {
+    val applies =
+      try {
+        step.applies(this, attempt)
+      } catch (e: Throwable) {
+        return HeadlessSteps.Failed(step.id, e)
+      }
+    if (!applies) continue
+
+    try {
+      step.show(this, attempt)
+    } catch (e: Throwable) {
+      return HeadlessSteps.Failed(step.id, e)
+    }
+
+    val lines = linesFor(step.id)
+    var done = false
+    for (line in lines) {
+      val reply =
+        try {
+          step.input(this, attempt, line)
+        } catch (e: Throwable) {
+          return HeadlessSteps.Failed(step.id, e)
+        }
+      if (reply is StepReply.Done) {
+        attempt.finished.add(step.id)
+        done = true
+        break
+      }
+    }
+    if (!done) {
+      return HeadlessSteps.Unfinished(step.id)
+    }
+  }
+  return HeadlessSteps.Finished
 }

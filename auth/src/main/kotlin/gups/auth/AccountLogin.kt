@@ -7,6 +7,7 @@ import gups.core.PULSE_MS
 import gups.core.Role
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.CreationAttempt
 import gups.core.model.Player
 import gups.core.world.CreationFlow
 import gups.core.world.CreationOutcome
@@ -100,8 +101,8 @@ class AccountLogin(
     var pending = false
     val held = ArrayDeque<String>()
     var flow: CreationFlow? = null
-    /** Answers kept while a new character goes back to the name prompt. */
-    var answers: Map<String, String> = emptyMap()
+    /** Attempt kept while a new character goes back to the name prompt or retries a taken name. */
+    var attempt: CreationAttempt? = null
   }
 
   /** What [post] carries back: the work's continuation, for the connection that started it. */
@@ -486,7 +487,10 @@ class AccountLogin(
     // and a cancel leaves no trace; it is loaded again once they are confirmed.
     world.unload(p)
     world.sendSession(s, world.msg(LoginMsg.CREATION_HAS_CHOICES, "name" to p.name))
-    startFlow(world, s, c, p.name, newCharacter = false, p.choices.toMap()) { outcome ->
+    val attempt =
+      CreationAttempt(p.name, CreationAttempt.accountKey(a.id), a.creations, world.config.seed)
+        .apply { answers.putAll(p.choices) }
+    startFlow(world, s, c, p.name, newCharacter = false, attempt) { outcome ->
       if (outcome !is CreationOutcome.Completed) return@startFlow menu(world, s, c)
       playing(world, a)?.let {
         return@startFlow again(world, s, c, world.msg(LoginMsg.ALREADY_PLAYING, "name" to it.name))
@@ -516,12 +520,13 @@ class AccountLogin(
     c: Conn,
     name: String,
     newCharacter: Boolean,
-    answers: Map<String, String>,
+    attempt: CreationAttempt,
     onOutcome: (CreationOutcome) -> Unit,
   ) {
     c.step = Step.CREATION
+    attempt.start = start
     val flow =
-      CreationFlow(world, s, name, newCharacter, answers) { outcome ->
+      CreationFlow(world, s, name, newCharacter, attempt) { outcome ->
         c.flow = null
         onOutcome(outcome)
       }
@@ -566,15 +571,18 @@ class AccountLogin(
     if (world.creation == null) {
       val p = world.spawnPlayer(name, start, accountId = a.id)
       world.requestImmediate("create")
+      countCreation(world, c)
       return enter(world, s, c, p, world.msg(KernelMsg.WELCOME_NEW, "name" to name))
     }
-    val kept = c.answers
-    c.answers = emptyMap()
-    startFlow(world, s, c, name, newCharacter = true, kept) { outcome ->
+    val attempt =
+      c.attempt?.apply { this.name = name }
+        ?: CreationAttempt(name, CreationAttempt.accountKey(a.id), a.creations, world.config.seed)
+    c.attempt = null
+    startFlow(world, s, c, name, newCharacter = true, attempt) { outcome ->
       when (outcome) {
-        is CreationOutcome.Created -> created(world, s, c, a, name, outcome.answers)
+        is CreationOutcome.Created -> created(world, s, c, a, name, outcome.attempt)
         is CreationOutcome.BackToName -> {
-          c.answers = outcome.answers
+          c.attempt = outcome.attempt
           ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
         }
         else -> menu(world, s, c)
@@ -589,13 +597,13 @@ class AccountLogin(
     c: Conn,
     a: Account,
     name: String,
-    answers: Map<String, String>,
+    attempt: CreationAttempt,
   ) {
     if (
       world.players.any { it.name.equals(name, ignoreCase = true) } ||
         world.persistence.savedCharacter(name) != null
     ) {
-      c.answers = answers
+      c.attempt = attempt
       world.sendSession(s, world.msg(LoginMsg.NAME_TAKEN))
       return ask(world, s, c, Step.NAME, world.msg(LoginMsg.NAME_PROMPT))
     }
@@ -608,15 +616,41 @@ class AccountLogin(
     }
     val room =
       try {
-        world.creationStartRoom(answers, start)
+        world.creationStartRoom(attempt.answers, start)
       } catch (e: Exception) {
         world.diagnose("plugin", "creation provider startRoom() failed: ${e.message}", e)
         return again(world, s, c, world.msg(LoginMsg.CREATION_PROVIDER_FAILED))
       }
-    val p = world.spawnPlayer(name, room, accountId = a.id, choices = answers)
+    val p =
+      world.spawnPlayer(name, room, accountId = a.id, choices = attempt.answers, attempt = attempt)
     world.requestImmediate("create")
+    countCreation(world, c)
     enter(world, s, c, p, world.msg(KernelMsg.WELCOME_NEW, "name" to name))
     world.creation?.created(world, p, newCharacter = true)
+  }
+
+  /**
+   * Counts a new character: the connection's copy of the account at once, so a second creation on
+   * it gets the next seed, and the stored counter in the background, as nothing waits for it.
+   */
+  private fun countCreation(world: World, c: Conn) {
+    val a = c.account!!
+    c.account = a.copy(creations = a.creations + 1)
+    try {
+      background.execute {
+        try {
+          accounts.store.countCreation(a.id)
+        } catch (e: Exception) {
+          post(
+            WorldControlEvent.Task { w ->
+              w.record(Diagnostic(w.pulse, "engine", "countCreation(${a.id}) failed: $e", e))
+            }
+          )
+        }
+      }
+    } catch (e: RejectedExecutionException) {
+      world.record(Diagnostic(world.pulse, "engine", "countCreation(${a.id}) rejected: $e", e))
+    }
   }
 
   private fun enter(world: World, s: Session, c: Conn, p: Player, welcome: String?) {

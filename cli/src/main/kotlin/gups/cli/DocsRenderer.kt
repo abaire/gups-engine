@@ -71,6 +71,9 @@ data class PluginChoiceDocSpec(
   val options: List<PluginOptionDocSpec>,
 )
 
+/** A custom step a plugin creation provider declares, for `plugins.html`. */
+data class PluginStepDocSpec(val id: String, val title: String)
+
 /** A restriction a plugin registers, for `plugins.html`. */
 data class PluginRestrictionDocSpec(val point: String, val doc: String)
 
@@ -102,6 +105,7 @@ data class PluginDocSpec(
   val ownedBehaviors: List<PluginOwnedBehaviorsDocSpec> = emptyList(),
   val dispositionModifiers: List<PluginDispositionModifierDocSpec> = emptyList(),
   val factions: List<PluginFactionAdjusterDocSpec> = emptyList(),
+  val steps: List<PluginStepDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -832,6 +836,23 @@ object DocsRenderer {
               }
               append("</tbody>\n</table>\n")
             }
+            append("</article>\n")
+          }
+        }
+        if (p.steps.isNotEmpty()) {
+          append("<h3>Character creation steps</h3>\n")
+          for (s in p.steps) {
+            append("<article id=\"plugin-")
+              .append(esc(p.id))
+              .append(".step-")
+              .append(esc(s.id))
+              .append("\">\n")
+            append("<h4><code>")
+              .append(esc(s.id))
+              .append("</code> ")
+              .append(badge)
+              .append("</h4>\n")
+            append("<p><strong>").append(esc(s.title)).append("</strong></p>\n")
             append("</article>\n")
           }
         }

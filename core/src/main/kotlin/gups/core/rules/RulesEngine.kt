@@ -88,6 +88,7 @@ class RulesContext(
   val helped: Actor? = null,
   /** The pet mob whose action raised an event for its owner; null elsewhere. */
   val pet: Actor? = null,
+  private val rngOverride: Rng? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
   fun requireActor(): Actor = checkNotNull(actor) { "This rules call has no actor" }
@@ -130,6 +131,7 @@ class RulesContext(
       amount = amount,
       helped = helped,
       pet = pet,
+      rngOverride = rngOverride,
     )
 
   /**
@@ -170,6 +172,7 @@ class RulesContext(
       amount = amount,
       helped = helped,
       pet = pet,
+      rngOverride = rngOverride,
     )
 
   /** Attacking actor in a combat rules call (alias for [requireActor]). */
@@ -182,7 +185,7 @@ class RulesContext(
 
   /** Deterministic pseudo-random number generator provided by the world simulation. */
   val rng: Rng
-    get() = world.rng
+    get() = rngOverride ?: world.rng
 }
 
 /** One actor's part in a kill, as `xp_share` sees it. */

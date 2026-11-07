@@ -142,6 +142,15 @@ interface PluginWorld : PluginGmcpWorld {
 
   fun removeSkill(actor: PluginActor, skill: String): Boolean
 
+  fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? =
+    throw UnsupportedOperationException("setBaseStat is not supported")
+
+  fun setBaseMaxVital(actor: PluginActor, vital: String, value: Int): String? =
+    throw UnsupportedOperationException("setBaseMaxVital is not supported")
+
+  fun setBaseResist(actor: PluginActor, type: String, value: Int): String? =
+    throw UnsupportedOperationException("setBaseResist is not supported")
+
   // Leveling (`leveling` feature).
 
   /**

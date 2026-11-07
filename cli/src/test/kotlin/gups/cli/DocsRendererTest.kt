@@ -160,7 +160,14 @@ class DocsRendererTest {
         .findAll(guide)
         .map { it.groupValues[1] }
         .toList()
-    val fromSample = blocks.filter { "tasks.jar" !in it && "dependencies {" !in it }
+    val fromSample =
+      blocks.filter {
+        "tasks.jar" !in it &&
+          "dependencies {" !in it &&
+          "setBaseStat" !in it &&
+          "PluginCreationAttempt" !in it &&
+          "attempt.rng" !in it
+      }
     assertTrue(fromSample.size >= 10, "${fromSample.size} sample blocks")
     val weatherDedented = weatherSource.lines().joinToString("\n") { it.trimStart() }
     val heritageDedented = heritageSource.lines().joinToString("\n") { it.trimStart() }
@@ -217,6 +224,7 @@ class DocsRendererTest {
                 ),
             )
           ),
+        steps = listOf(PluginStepDocSpec("stats", "Attribute Assignment")),
       )
     val pages = DocsRenderer.render(full, "", listOf(heritage), emptyMap(), "# Guide\n")
     val html = pages.getValue("plugins.html")
@@ -225,6 +233,12 @@ class DocsRendererTest {
     assertContains(html, "<tr id=\"plugin-heritage.restrict-wear-2\">")
     assertContains(html, "<article id=\"plugin-heritage.choice-race\">")
     assertContains(html, "<tr id=\"plugin-heritage.choice-race.elf\">")
+    assertContains(html, "<article id=\"plugin-heritage.step-stats\">")
+    assertContains(
+      html,
+      "<h4><code>stats</code> <span class=\"badge plugin\">plugin: heritage</span></h4>",
+    )
+    assertContains(html, "<p><strong>Attribute Assignment</strong></p>")
   }
 
   @Test
@@ -437,6 +451,7 @@ class DocsRendererTest {
             PluginGmcpDocSpec("Weather.Set", "Set the weather.", kind = "input"),
           ),
         hooks = listOf(PluginHookDocSpec("shop_price", "Raises prices for the plugin's wares.")),
+        steps = listOf(PluginStepDocSpec("stats", "Attribute Assignment")),
       )
     val examples: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
     val guide = "# Writing Plugins\n\nA plugin is a `.jar`.\n"

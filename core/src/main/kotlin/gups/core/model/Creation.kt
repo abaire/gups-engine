@@ -1,6 +1,7 @@
 package gups.core.model
 
 import gups.core.Label
+import gups.core.Rng
 import gups.core.rules.RulesContext
 import gups.core.world.World
 
@@ -30,6 +31,27 @@ data class CreationChoice(
   val options: List<CreationOption>,
 )
 
+data class StepView(val text: String, val gmcp: Map<String, Any?> = emptyMap())
+
+sealed interface StepReply {
+  data class Stay(val message: String?) : StepReply
+
+  data object Done : StepReply
+}
+
+interface CreationStep {
+  val id: String
+  val title: String
+
+  fun applies(world: World, attempt: CreationAttempt): Boolean
+
+  fun show(world: World, attempt: CreationAttempt): StepView
+
+  fun input(world: World, attempt: CreationAttempt, line: String): StepReply
+
+  fun summary(world: World, attempt: CreationAttempt): String?
+}
+
 /**
  * Character creation lifecycle provider seam implemented by world plugins. At most one creation
  * provider exists per world instance.
@@ -37,6 +59,9 @@ data class CreationChoice(
 interface CreationProvider {
   /** Ordered list of character creation choices presented to players. */
   val choices: List<CreationChoice>
+
+  val steps: List<CreationStep>
+    get() = emptyList()
 
   /** Returns option IDs currently available for [choice] given previously selected [answers]. */
   fun available(world: World, choice: String, answers: Map<String, String>): List<String>
@@ -51,6 +76,8 @@ interface CreationProvider {
    * world start.
    */
   fun startRoom(world: World, answers: Map<String, String>): Label?
+
+  fun prepare(world: World, player: Player, attempt: CreationAttempt) {}
 
   /**
    * Callback invoked when character creation concludes; [newCharacter] is false when updating
@@ -156,4 +183,69 @@ fun interface Restriction {
    * Evaluates whether [r] is permitted; returns null to permit or a refusal message string to deny.
    */
   fun check(world: World, r: RestrictionRequest): String?
+}
+
+private fun fnv1a64(bytes: ByteArray): Long {
+  var hash = 0xcbf29ce484222325uL.toLong()
+  for (b in bytes) {
+    hash = hash xor (b.toLong() and 0xffL)
+    hash *= 0x100000001b3L
+  }
+  return hash
+}
+
+private fun splitMix64(z: Long): Long {
+  var x = z
+  x = (x xor (x ushr 30)) * 0xBF58476D1CE4E5B9uL.toLong()
+  x = (x xor (x ushr 27)) * 0x94D049BB133111EBuL.toLong()
+  return x xor (x ushr 31)
+}
+
+/**
+ * One attempt at creating a character. Its seed depends only on the world seed, [key] and [count],
+ * so cancelling and starting again replays the same draws.
+ */
+class CreationAttempt(var name: String, val key: String, val count: Int, worldSeed: Long) {
+  val seed: Long = splitMix64(fnv1a64("$key#$count".toByteArray(Charsets.UTF_8)) xor worldSeed)
+
+  /**
+   * Where the character starts when the provider names no start room. The preview is built where
+   * the character would start, so rules that read the room see the same one at the spawn.
+   */
+  var start: Label? = null
+
+  /** Answers given so far, kept in step with the flow. */
+  val answers: MutableMap<String, String> = LinkedHashMap()
+
+  /** Free-form plugin state for the steps; cleared when a choice is answered. */
+  val state: MutableMap<String, Any?> = LinkedHashMap()
+
+  /** Ids of the custom steps that returned Done; cleared with [state]. */
+  val finished: MutableSet<String> = LinkedHashSet()
+
+  /** The would-be character, built on demand; cleared with [state]. */
+  var preview: Player? = null
+
+  /** Set by the spawn when the provider's prepare threw; null otherwise. */
+  var prepareError: Throwable? = null
+
+  /** The generator `starting_stats` draws from for this attempt. Each call returns a fresh one. */
+  fun startingRng(): Rng = Rng(seed)
+
+  /** An independent deterministic stream for plugin draws. Each call returns a fresh one. */
+  fun rng(stream: Int): Rng =
+    Rng(splitMix64(seed xor ((stream.toLong() + 1) * 0x9E3779B97F4A7C15uL.toLong())))
+
+  /** Clears everything that depends on the answers: state, finished steps and the preview. */
+  fun answersChanged() {
+    state.clear()
+    finished.clear()
+    preview = null
+  }
+
+  companion object {
+    fun accountKey(accountId: Long) = "a:$accountId"
+
+    fun nameKey(name: String) = "n:${name.lowercase()}"
+  }
 }

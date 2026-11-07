@@ -33,6 +33,8 @@ data class Account(
   val disabledReason: String? = null,
   /** Wall-clock millisecond timestamp when the account was created. */
   val createdAt: Long = 0,
+  /** How many characters this account has ever created; never decreases. */
+  val creations: Int = 0,
 ) {
   /** Combined set of all package paths this account is authorized to modify. */
   val packages: Set<String>
@@ -129,6 +131,9 @@ interface AccountStore {
    * hash is not modified by this method.
    */
   fun update(account: Account)
+
+  /** Adds one to account [id]'s creation counter. */
+  fun countCreation(id: Long)
 
   /**
    * Disables or enables account [id] in one immediate database transaction. Disabling stores the

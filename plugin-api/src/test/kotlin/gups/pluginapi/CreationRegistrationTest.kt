@@ -4,8 +4,10 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.CreationAttempt
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.model.StepReply
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.World
@@ -399,7 +401,7 @@ class CreationRegistrationTest {
   fun `choice and option ids are checked`() {
     fun race(vararg opts: PluginOption) = PluginChoice("race", "Race", opts.toList())
     assertEquals(
-      "creation provider must declare at least one choice",
+      "creation provider must declare at least one choice or step",
       refusal { it.setCreation(creation()) },
     )
     assertEquals(
@@ -428,6 +430,232 @@ class CreationRegistrationTest {
         refusal { it.setCreation(creation(race(option(reserved)))) },
       )
     }
+  }
+
+  @Test
+  fun `custom creation step registration validation`() {
+    fun step(id: String, title: String = "Stats") =
+      object : PluginCreationStep {
+        override val id = id
+        override val title = title
+
+        override fun show(world: PluginWorld, attempt: PluginCreationAttempt) =
+          PluginStepView("text")
+
+        override fun input(world: PluginWorld, attempt: PluginCreationAttempt, line: String) =
+          PluginStepReply.Done
+      }
+
+    fun stepCreation(steps: List<PluginCreationStep>, choices: List<PluginChoice> = emptyList()) =
+      object : PluginCreation {
+        override val choices = choices
+        override val steps = steps
+      }
+
+    // A valid provider with steps and no choices registers
+    val host =
+      PluginHost.of(
+        plugin("valid") { it.setCreation(stepCreation(listOf(step("stats")))) },
+        schema = schema,
+      )
+    assertEquals(listOf("valid"), host.ids)
+    assertTrue(host.warnings.isEmpty())
+
+    // Bad step id
+    assertEquals(
+      "step id 'Bad-Id' must match [a-z][a-z0-9_]*",
+      refusal { it.setCreation(stepCreation(listOf(step("Bad-Id")))) },
+    )
+
+    // Duplicate step id
+    assertEquals(
+      "duplicate step id 'stats'",
+      refusal { it.setCreation(stepCreation(listOf(step("stats"), step("stats")))) },
+    )
+
+    // Step id equal to choice id
+    val statsChoice = PluginChoice("stats", "Stats", listOf(option("opt")))
+    assertEquals(
+      "step id 'stats' equals a choice id",
+      refusal { it.setCreation(stepCreation(listOf(step("stats")), listOf(statsChoice))) },
+    )
+
+    // Blank title
+    assertEquals(
+      "step 'stats' title cannot be blank",
+      refusal { it.setCreation(stepCreation(listOf(step("stats", title = "   ")))) },
+    )
+  }
+
+  @Test
+  fun `CreationStepAdapter delegates and wraps exceptions`() {
+    var receivedShowLine: String? = null
+    var receivedInputLine: String? = null
+    var receivedSummary = false
+    var shouldThrow = false
+
+    val pluginStep =
+      object : PluginCreationStep {
+        override val id = "stats"
+        override val title = "Stats"
+
+        override fun applies(world: PluginWorld, attempt: PluginCreationAttempt): Boolean {
+          if (shouldThrow) throw RuntimeException("applies boom")
+          return true
+        }
+
+        override fun show(world: PluginWorld, attempt: PluginCreationAttempt): PluginStepView {
+          if (shouldThrow) throw RuntimeException("show boom")
+          receivedShowLine = attempt.name
+          return PluginStepView("stats for ${attempt.name}", mapOf("key" to "val"))
+        }
+
+        override fun input(
+          world: PluginWorld,
+          attempt: PluginCreationAttempt,
+          line: String,
+        ): PluginStepReply {
+          if (shouldThrow) throw RuntimeException("input boom")
+          receivedInputLine = line
+          return if (line == "done") PluginStepReply.Done else PluginStepReply.Stay("more")
+        }
+
+        override fun summary(world: PluginWorld, attempt: PluginCreationAttempt): String? {
+          if (shouldThrow) throw RuntimeException("summary boom")
+          receivedSummary = true
+          return "Stats summary"
+        }
+      }
+
+    val pluginCreation =
+      object : PluginCreation {
+        override val choices = listOf(PluginChoice("race", "Race", listOf(option("elf", "elf"))))
+        override val steps = listOf(pluginStep)
+
+        override fun prepare(
+          world: PluginWorld,
+          actor: PluginActor,
+          attempt: PluginCreationAttempt,
+        ) {
+          if (shouldThrow) throw RuntimeException("prepare boom")
+          world.setBaseStat(actor, "str", 15)
+        }
+      }
+
+    val testWorld =
+      world(
+        plugins =
+          PluginHost.of(
+            plugin("her") {
+              it.addTrait(PluginTrait("elf", statDeltas = mapOf("dex" to 2)))
+              it.setCreation(pluginCreation)
+            },
+            schema = schema,
+          )
+      )
+
+    val provider = testWorld.creation!!
+    assertEquals(1, provider.steps.size)
+    val step = provider.steps.first()
+    assertEquals("stats", step.id)
+    assertEquals("Stats", step.title)
+
+    val attempt = CreationAttempt("Hero", "n:hero", 0, 42L)
+    attempt.start = Label("//zones/z:a")
+    attempt.answers["race"] = "elf"
+
+    // Normal delegation
+    assertTrue(step.applies(testWorld, attempt))
+    val view = step.show(testWorld, attempt)
+    assertEquals("stats for Hero", view.text)
+    assertEquals(mapOf("key" to "val"), view.gmcp)
+    assertEquals("Hero", receivedShowLine)
+
+    val replyStay = step.input(testWorld, attempt, "stay")
+    assertEquals(StepReply.Stay("more"), replyStay)
+    assertEquals("stay", receivedInputLine)
+
+    val replyDone = step.input(testWorld, attempt, "done")
+    assertEquals(StepReply.Done, replyDone)
+
+    assertEquals("Stats summary", step.summary(testWorld, attempt))
+    assertTrue(receivedSummary)
+
+    // AttemptFacade rng and preview
+    var facadeAttempt: PluginCreationAttempt? = null
+    val probeStep =
+      object : PluginCreationStep {
+        override val id = "probe"
+        override val title = "Probe"
+
+        override fun show(world: PluginWorld, attempt: PluginCreationAttempt): PluginStepView {
+          facadeAttempt = attempt
+          return PluginStepView("probe")
+        }
+
+        override fun input(world: PluginWorld, attempt: PluginCreationAttempt, line: String) =
+          PluginStepReply.Done
+      }
+    val probeWorld =
+      world(
+        plugins =
+          PluginHost.of(
+            plugin("probe_p") {
+              it.addTrait(PluginTrait("elf", statDeltas = mapOf("dex" to 2)))
+              it.setCreation(
+                object : PluginCreation {
+                  override val choices =
+                    listOf(PluginChoice("race", "Race", listOf(option("elf", "elf"))))
+                  override val steps = listOf(probeStep)
+                }
+              )
+            },
+            schema = schema,
+          )
+      )
+    val probeAdapter = probeWorld.creation!!.steps.first()
+    probeAdapter.show(probeWorld, attempt)
+
+    val fa = facadeAttempt!!
+    val s0a = fa.rng(0)
+    val s0b = attempt.rng(0)
+    assertEquals(List(3) { s0b.int(1, 100) }, List(3) { s0a.int(1, 100) })
+    // Preview has answers' traits applied (elf gives dex + 2)
+    assertEquals(10 + 2, fa.preview.stat("dex"))
+
+    // Exception wrapping
+    shouldThrow = true
+    val errApplies = assertFailsWith<IllegalStateException> { step.applies(testWorld, attempt) }
+    assertContains(
+      errApplies.message!!,
+      "plugin 'her': step 'stats' applies failed: java.lang.RuntimeException: applies boom",
+    )
+
+    val errShow = assertFailsWith<IllegalStateException> { step.show(testWorld, attempt) }
+    assertContains(
+      errShow.message!!,
+      "plugin 'her': step 'stats' show failed: java.lang.RuntimeException: show boom",
+    )
+
+    val errInput = assertFailsWith<IllegalStateException> { step.input(testWorld, attempt, "x") }
+    assertContains(
+      errInput.message!!,
+      "plugin 'her': step 'stats' input failed: java.lang.RuntimeException: input boom",
+    )
+
+    val errSummary = assertFailsWith<IllegalStateException> { step.summary(testWorld, attempt) }
+    assertContains(
+      errSummary.message!!,
+      "plugin 'her': step 'stats' summary failed: java.lang.RuntimeException: summary boom",
+    )
+
+    val dummyPlayer = testWorld.spawnPlayer("Dummy", Label("//zones/z:a"))
+    val errPrepare =
+      assertFailsWith<IllegalStateException> { provider.prepare(testWorld, dummyPlayer, attempt) }
+    assertContains(
+      errPrepare.message!!,
+      "plugin 'her': prepare failed: java.lang.RuntimeException: prepare boom",
+    )
   }
 
   @Test

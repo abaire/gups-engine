@@ -4,15 +4,18 @@ import gups.core.CapturingSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Condition
+import gups.core.model.CreationAttempt
 import gups.core.model.Player
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
+import gups.core.world.HeadlessSteps
 import gups.core.world.InvariantViolation
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
 import gups.core.world.handle
 import gups.core.world.restoreVitals
+import gups.core.world.runStepsHeadless
 import gups.core.world.session
 import gups.core.world.submit
 import gups.script.PackageKind
@@ -147,6 +150,7 @@ class FuzzWalker(
     val rng = Random(seed)
     val bots = mutableListOf<Player>()
     val botStartRooms = mutableMapOf<gups.core.EntityId, gups.core.Label>()
+    val botAttempts = mutableMapOf<String, CreationAttempt>()
     var nextSession = 1L
 
     for (zone in changedZones) {
@@ -155,7 +159,12 @@ class FuzzWalker(
       val startRoom = zoneRooms[rng.nextInt(zoneRooms.size)]
       val botName = "Bot_${zone.replace('/', '_').replace('-', '_')}"
       val botChoices = drawBotChoices(world, rng)
-      val bot = world.spawnPlayer(botName, startRoom.label, level = 1, choices = botChoices)
+      val bot =
+        when (val spawned = spawnBot(world, botName, startRoom.label, botChoices, botAttempts)) {
+          is BotSpawn.Ok -> spawned.bot
+          is BotSpawn.Failed ->
+            return creationFailure(world, spawned, 0, bots.size, changedZones, botStartRooms, seed)
+        }
       bot.idleExempt = true
 
       val sessId = SessionId(nextSession++)
@@ -185,7 +194,20 @@ class FuzzWalker(
           val zoneRooms = world.rooms.filter { it.label.pkg == zone }.toList()
           if (zoneRooms.isNotEmpty()) {
             val room = zoneRooms[rng.nextInt(zoneRooms.size)]
-            val newBot = world.spawnPlayer(bot.name, room.label, level = 1, choices = bot.choices)
+            val newBot =
+              when (val spawned = spawnBot(world, bot.name, room.label, bot.choices, botAttempts)) {
+                is BotSpawn.Ok -> spawned.bot
+                is BotSpawn.Failed ->
+                  return creationFailure(
+                    world,
+                    spawned,
+                    pulseIndex,
+                    bots.size,
+                    changedZones,
+                    botStartRooms,
+                    seed,
+                  )
+              }
             newBot.idleExempt = true
             val sessId = bot.session ?: SessionId(nextSession++)
             if (world.session(sessId) == null) {
@@ -346,6 +368,75 @@ class FuzzWalker(
       }
     }
   }
+
+  private sealed interface BotSpawn {
+    data class Ok(val bot: Player) : BotSpawn
+
+    data class Failed(val message: String, val cause: Throwable) : BotSpawn
+  }
+
+  /**
+   * Spawns a bot the way a player is created: with a creation provider, through an attempt keyed by
+   * the bot's name, its custom steps answered only with `done`, and `prepare`. A respawned bot
+   * reuses its attempt with its current choices, so it gets the same numbers again.
+   */
+  private fun spawnBot(
+    world: World,
+    name: String,
+    at: gups.core.Label,
+    choices: Map<String, String>,
+    attempts: MutableMap<String, CreationAttempt>,
+  ): BotSpawn {
+    val attempt =
+      world.creation?.let {
+        attempts
+          .getOrPut(name) {
+            CreationAttempt(name, CreationAttempt.nameKey(name), 0, world.config.seed)
+          }
+          .apply {
+            start = at
+            answers.clear()
+            answers.putAll(choices)
+            answersChanged()
+          }
+      }
+    if (attempt != null) {
+      val steps = world.runStepsHeadless(attempt) { listOf("done") }
+      if (steps is HeadlessSteps.Failed) {
+        return BotSpawn.Failed(
+          "Creation step '${steps.stepId}' failed: ${steps.error.message}",
+          steps.error,
+        )
+      }
+    }
+    val bot = world.spawnPlayer(name, at, level = 1, choices = choices, attempt = attempt)
+    attempt?.prepareError?.let {
+      return BotSpawn.Failed("Creation prepare failed: ${it.message}", it)
+    }
+    return BotSpawn.Ok(bot)
+  }
+
+  private fun creationFailure(
+    world: World,
+    failed: BotSpawn.Failed,
+    pulsesRun: Int,
+    bots: Int,
+    zones: List<String>,
+    botStartRooms: Map<gups.core.EntityId, gups.core.Label>,
+    seed: Long,
+  ): Outcome =
+    Outcome(
+      ok = false,
+      pulsesRun = pulsesRun,
+      bots = bots,
+      zones = zones,
+      failureMessage = failed.message,
+      failedPulse = world.pulse,
+      diagnostic =
+        Diagnostic(world.pulse, "plugin", failed.message, cause = failed.cause, seed = seed),
+      world = world,
+      botStartRooms = botStartRooms,
+    )
 
   private fun drawBotChoices(world: World, rng: Random): Map<String, String> {
     val creation = world.creation ?: return emptyMap()

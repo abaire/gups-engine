@@ -5,6 +5,7 @@ import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
 import gups.pluginapi.PluginChoice
 import gups.pluginapi.PluginCreation
+import gups.pluginapi.PluginCreationAttempt
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifier
 import gups.pluginapi.PluginModifierPoint
@@ -106,6 +107,8 @@ class HeritagePlugin : GupsPlugin {
             PluginChoice("class", "Class", CLASS_OPTIONS),
           )
 
+        override val steps = listOf(StatsStep())
+
         override fun available(
           world: PluginWorld,
           choice: String,
@@ -125,6 +128,20 @@ class HeritagePlugin : GupsPlugin {
           } else null
 
         override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
+
+        override fun prepare(
+          world: PluginWorld,
+          actor: PluginActor,
+          attempt: PluginCreationAttempt,
+        ) {
+          @Suppress("UNCHECKED_CAST")
+          val spend = (attempt.state["spend"] as? Map<String, Int>) ?: emptyMap()
+          for ((stat, delta) in spend) {
+            if (delta != 0) {
+              world.setBaseStat(actor, stat, actor.baseStat(stat) + delta)
+            }
+          }
+        }
 
         override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
           if (newCharacter) {

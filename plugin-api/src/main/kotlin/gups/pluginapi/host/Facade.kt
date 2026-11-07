@@ -2,6 +2,7 @@ package gups.pluginapi.host
 
 import gups.core.AttrValue
 import gups.core.Label
+import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.AffectScope
 import gups.core.model.Channel
@@ -49,6 +50,9 @@ import gups.core.world.removeItemTag
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.send
+import gups.core.world.setBaseMaxVital
+import gups.core.world.setBaseResist
+import gups.core.world.setBaseStat
 import gups.core.world.setCharges
 import gups.core.world.setChoices
 import gups.core.world.setSkill
@@ -355,10 +359,14 @@ internal class SkillFacade(val skill: gups.core.model.SkillProto) : PluginSkill 
     get() = skill.tags.sorted()
 }
 
-internal class RngFacade(private val world: World) : PluginRng {
-  override fun int(min: Int, max: Int): Int = world.rng.int(min, max)
+internal class RngFacade(private val rngSupplier: () -> Rng) : PluginRng {
+  constructor(world: World) : this({ world.rng })
 
-  override fun chance(pct: Int): Boolean = world.rng.chance(pct)
+  constructor(rng: Rng) : this({ rng })
+
+  override fun int(min: Int, max: Int): Int = rngSupplier().int(min, max)
+
+  override fun chance(pct: Int): Boolean = rngSupplier().chance(pct)
 }
 
 /**
@@ -379,6 +387,16 @@ internal class WorldFacade(
     return actor
   }
 
+  private fun preparedActorOf(a: PluginActor, what: String): Actor {
+    val actor =
+      (a as? ActorFacade)?.actor
+        ?: throw IllegalArgumentException("$what: not an actor of this world")
+    require(actor.inWorld || world.preparing === actor) {
+      "$what: ${actor.name} is no longer in the world"
+    }
+    return actor
+  }
+
   private fun roomOf(r: PluginRoom, what: String): Room =
     (r as? RoomFacade)?.room ?: throw IllegalArgumentException("$what: not a room of this world")
 
@@ -392,6 +410,15 @@ internal class WorldFacade(
   private fun entityOf(e: PluginEntity, what: String): Entity =
     when (e) {
       is ActorFacade -> actorOf(e, what)
+      is ItemFacade -> itemOf(e, what)
+      else ->
+        (e as? EntityFacade)?.entity
+          ?: throw IllegalArgumentException("$what: not an entity of this world")
+    }
+
+  private fun preparedEntityOf(e: PluginEntity, what: String): Entity =
+    when (e) {
+      is ActorFacade -> preparedActorOf(e, what)
       is ItemFacade -> itemOf(e, what)
       else ->
         (e as? EntityFacade)?.entity
@@ -582,13 +609,13 @@ internal class WorldFacade(
 
   override fun grantTrait(actor: PluginActor, trait: String): String? {
     require(trait in world.traits) { "grantTrait(trait): unknown trait '$trait'" }
-    val a = actorOf(actor, "grantTrait(actor)")
+    val a = preparedActorOf(actor, "grantTrait(actor)")
     return world.grantTrait(a, trait)
   }
 
   override fun removeTrait(actor: PluginActor, trait: String): String? {
     require(trait in world.traits) { "removeTrait(trait): unknown trait '$trait'" }
-    val a = actorOf(actor, "removeTrait(actor)")
+    val a = preparedActorOf(actor, "removeTrait(actor)")
     return world.removeTrait(a, trait)
   }
 
@@ -601,7 +628,7 @@ internal class WorldFacade(
     require(proficiency in 0..100) {
       "setSkill(proficiency): proficiency must be 0..100, got $proficiency"
     }
-    val a = actorOf(actor, "setSkill(actor)")
+    val a = preparedActorOf(actor, "setSkill(actor)")
     return world.setSkill(a, label, proficiency)
   }
 
@@ -610,8 +637,29 @@ internal class WorldFacade(
     val label =
       runCatching { Label(skill) }.getOrNull()
         ?: throw IllegalArgumentException("removeSkill(skill): invalid skill label '$skill'")
-    val a = actorOf(actor, "removeSkill(actor)")
+    val a = preparedActorOf(actor, "removeSkill(actor)")
     return world.removeSkill(a, label)
+  }
+
+  override fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? {
+    declared(stat, world.schema.statNames, "stat", "setBaseStat(stat)")
+    val a = preparedActorOf(actor, "setBaseStat(actor)")
+    world.setBaseStat(a, stat, value)
+    return null
+  }
+
+  override fun setBaseMaxVital(actor: PluginActor, vital: String, value: Int): String? {
+    declared(vital, world.schema.vitalNames, "vital", "setBaseMaxVital(vital)")
+    val a = preparedActorOf(actor, "setBaseMaxVital(actor)")
+    world.setBaseMaxVital(a, vital, value)
+    return null
+  }
+
+  override fun setBaseResist(actor: PluginActor, type: String, value: Int): String? {
+    val dt = declared(type, world.schema.damageTypes, "damage type", "setBaseResist(type)")
+    val a = preparedActorOf(actor, "setBaseResist(actor)")
+    world.setBaseResist(a, DamageType(dt), value)
+    return null
   }
 
   override fun awardXp(actor: PluginActor, amount: Long) {
@@ -771,7 +819,7 @@ internal class WorldFacade(
       ?.let(::fromAttr) ?: default
 
   override fun setAttr(entity: PluginEntity, key: String, value: Any?) {
-    val e = entityOf(entity, "set_attr(entity)")
+    val e = preparedEntityOf(entity, "set_attr(entity)")
     val k = key(key, write = true, "set_attr(key)")
     if (value == null) e.customAttributes.remove(k)
     else e.customAttributes[k] = toAttr(value, "set_attr(value)")
@@ -779,7 +827,7 @@ internal class WorldFacade(
   }
 
   override fun delAttr(entity: PluginEntity, key: String) {
-    val e = entityOf(entity, "del_attr(entity)")
+    val e = preparedEntityOf(entity, "del_attr(entity)")
     if (e.customAttributes.remove(key(key, write = true, "del_attr(key)")) != null) e.dirty = true
   }
 

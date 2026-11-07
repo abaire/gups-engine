@@ -5,6 +5,7 @@ import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Actor
+import gups.core.model.CreationAttempt
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
@@ -13,6 +14,7 @@ import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.StartingStats
 import gups.core.world.Diagnostic
+import gups.core.world.HeadlessSteps
 import gups.core.world.World
 import gups.core.world.act
 import gups.core.world.attach
@@ -26,6 +28,7 @@ import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
+import gups.core.world.runStepsHeadless
 import gups.core.world.setChoices
 import gups.core.world.setSkill
 import gups.core.world.spawnItem
@@ -184,6 +187,13 @@ internal constructor(
           defaultValue = "None",
           doc = "GMCP packages this test client supports, or None for none.",
         ),
+        Param(
+          name = "steps",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Lines for the creation provider's custom steps by step id, or None to skip the steps.",
+        ),
       ],
     useStarlarkThread = true,
   )
@@ -197,6 +207,7 @@ internal constructor(
     index: Any,
     choices: Any,
     gmcp: Any,
+    steps: Any,
     thread: StarlarkThread,
   ): Any {
     val room = roomArg(at, "spawn_player(at)", thread)
@@ -248,6 +259,51 @@ internal constructor(
         evalFail("spawn_player(choices): world has no character creation provider")
       }
     }
+    var attempt: CreationAttempt? = null
+    if (!isNone(steps)) {
+      val creation =
+        world.creation ?: evalFail("spawn_player(steps): world has no character creation provider")
+      val stepsDict = steps as? Dict<*, *> ?: evalFail("spawn_player(steps): expected a dict")
+      val playerName = str(name, "spawn_player(name)")
+      val att =
+        CreationAttempt(playerName, CreationAttempt.nameKey(playerName), 0, world.config.seed)
+      att.start = room.label
+      att.answers.putAll(choicesMap)
+
+      val stepLines = LinkedHashMap<String, List<String>>()
+      for ((k, v) in stepsDict.entries) {
+        val stepId = str(k, "spawn_player(steps)")
+        val lines =
+          (v as? Sequence<*>
+              ?: v as? List<*>
+              ?: evalFail("spawn_player(steps): expected a list of strings for step '$stepId'"))
+            .map { str(it, "spawn_player(steps)") }
+        stepLines[stepId] = lines
+      }
+
+      for ((stepId, _) in stepLines) {
+        val step = creation.steps.firstOrNull { it.id == stepId }
+        val applies =
+          try {
+            step?.applies(world, att) == true
+          } catch (e: Exception) {
+            evalFail("spawn_player(steps): step '$stepId' failed: ${e.message}")
+          }
+        if (!applies) {
+          evalFail("spawn_player(steps): step '$stepId' doesn't apply")
+        }
+      }
+
+      val outcome = world.runStepsHeadless(att) { stepId -> stepLines[stepId] ?: emptyList() }
+      when (outcome) {
+        is HeadlessSteps.Finished -> {}
+        is HeadlessSteps.Unfinished ->
+          evalFail("spawn_player(steps): step '${outcome.stepId}' isn't done after its lines")
+        is HeadlessSteps.Failed ->
+          evalFail("spawn_player(steps): step '${outcome.stepId}' failed: ${outcome.error.message}")
+      }
+      attempt = att
+    }
     val p =
       guard("spawn_player") {
         world.spawnPlayer(
@@ -257,8 +313,12 @@ internal constructor(
           StartingStats(overrideStats, overrideVitals, overrideVitals),
           int(index, "spawn_player(index)"),
           choices = choicesMap,
+          attempt = attempt,
         )
       }
+    if (attempt?.prepareError != null) {
+      evalFail("spawn_player(steps): prepare failed: ${attempt.prepareError!!.message}")
+    }
     // The harness has no idle clock; tests may run for hours of game time.
     p.idleExempt = true
     if (!isNone(skills)) {

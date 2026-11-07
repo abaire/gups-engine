@@ -3,6 +3,7 @@ package gups.script
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.Entity
 import gups.core.model.Item
@@ -78,6 +79,7 @@ internal class Frame(
   /** The absolute step count at which this call's thread must stop. */
   var maxSteps: Long,
 ) : ViewScope {
+  override var rng: Rng = world.rng
   var valid = true
 
   /** Set when a think hook enqueued an action for its own mob. */

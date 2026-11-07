@@ -69,6 +69,8 @@ sealed interface AccountOp {
 
   class Update(val account: Account) : AccountOp
 
+  class CountCreation(val id: Long) : AccountOp
+
   /** Also revokes the account's session tokens. */
   class SetPassword(val id: Long, val pwHash: String?) : AccountOp
 

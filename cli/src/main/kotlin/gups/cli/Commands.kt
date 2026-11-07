@@ -871,6 +871,7 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
           c.options.map { o -> PluginOptionDocSpec(o.id, o.label, o.summary, o.help, o.traits) },
         )
       },
+    steps = p.steps.map { PluginStepDocSpec(it.id, it.title) },
   )
 }
 

@@ -344,7 +344,7 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
       } catch (e: IllegalArgumentException) {
         fail("roll(): ${e.message}")
       }
-    sInt(d.roll(c.world.rng))
+    sInt(d.roll(c.rng))
   }
 
   @StarlarkMethod(
@@ -668,8 +668,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
         w,
         site,
         ref,
-        { f -> c?.let { RulesCtx(f, it) } ?: Starlark.NONE },
-        positional = args,
+        { f ->
+          if (c != null) f.rng = c.rng
+          c?.let { RulesCtx(f, it) } ?: Starlark.NONE
+        },
+        positional = { f ->
+          if (c != null) f.rng = c.rng
+          args(f)
+        },
         budget = host.limits.rulesSteps,
         recordErrors = sink == null,
         onThread = onThread,

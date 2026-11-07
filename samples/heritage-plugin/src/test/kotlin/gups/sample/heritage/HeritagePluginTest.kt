@@ -26,6 +26,7 @@ import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginSkill
+import gups.pluginapi.PluginStepReply
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import gups.pluginapi.host.PluginLoader
@@ -201,6 +202,16 @@ class HeritagePluginTest {
     override val items = emptyList<PluginItem>()
   }
 
+  private class FakeAttempt(
+    override val name: String = "Tester",
+    override val answers: Map<String, String> = emptyMap(),
+    override val seed: Long = 12345L,
+    override val state: MutableMap<String, Any?> = mutableMapOf(),
+    override val preview: PluginActor = FakeActor(),
+  ) : gups.pluginapi.PluginCreationAttempt {
+    override fun rng(stream: Int): PluginRng = TODO()
+  }
+
   private class FakeItem(override val tags: List<String> = emptyList()) : PluginItem {
     override val id = 50L
     override val label = "//zones/test:item"
@@ -243,6 +254,7 @@ class HeritagePluginTest {
 
     val sent = mutableListOf<String>()
     val setChoicesCalls = mutableListOf<Pair<PluginActor, Map<String, String?>>>()
+    val setBaseStatCalls = mutableListOf<Triple<PluginActor, String, Int>>()
 
     override fun send(target: PluginActor, text: String) {
       sent += text
@@ -252,6 +264,11 @@ class HeritagePluginTest {
 
     override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
       setChoicesCalls += actor to changes
+      return null
+    }
+
+    override fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? {
+      setBaseStatCalls += Triple(actor, stat, value)
       return null
     }
 
@@ -780,8 +797,14 @@ class HeritagePluginTest {
 
     world.handle(ClientInputEvent(sess, "mage", 0))
 
+    // Prompts for stats step
+    assertContains(sink.all, "Str 10 → 10 (+0)")
+    assertContains(sink.all, "Points left: 6.")
+    world.handle(ClientInputEvent(sess, "done", 0))
+
     // Prompts for confirmation
     assertContains(sink.all, "Create this character? (yes, back or cancel)")
+    assertContains(sink.all, "Stats Str 10 Dex 10 Con 10 Int 10 Wis 10 Cha 10")
     world.handle(ClientInputEvent(sess, "yes", 0))
 
     // Player enters
@@ -793,5 +816,79 @@ class HeritagePluginTest {
     assertTrue(player.hasTrait("elf"))
     assertTrue(player.hasTrait("mage"))
     assertContains(sink.all, "Welcome, Eldrin.")
+  }
+
+  @Test
+  fun `stats step parsing, adjustments, limits, reset, done, summary and prepare`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val creation = reg.creation!!
+    val step = creation.steps.single() as StatsStep
+    val fw = FakeWorld()
+
+    val attempt = FakeAttempt()
+
+    // initial show
+    val initialView = step.show(fw, attempt)
+    assertContains(initialView.text, "Str 10 → 10 (+0)")
+    assertContains(initialView.text, "Points left: 6.")
+
+    // parsing str +2
+    val r1 = step.input(fw, attempt, "str +2")
+    assertTrue(r1 is PluginStepReply.Stay)
+    assertNull(r1.message)
+    assertEquals(mapOf("str" to 2), attempt.state["spend"])
+
+    // parsing case-insensitive STR+1
+    val r2 = step.input(fw, attempt, "STR+1")
+    assertTrue(r2 is PluginStepReply.Stay)
+    assertEquals(mapOf("str" to 3), attempt.state["spend"])
+
+    // prefix co +1
+    val r3 = step.input(fw, attempt, "co +1")
+    assertTrue(r3 is PluginStepReply.Stay)
+    assertEquals(mapOf("str" to 3, "con" to 1), attempt.state["spend"])
+
+    // refund wis -1
+    val r4 = step.input(fw, attempt, "wis -1")
+    assertTrue(r4 is PluginStepReply.Stay)
+    assertEquals(mapOf("str" to 3, "con" to 1, "wis" to -1), attempt.state["spend"])
+
+    // overspending refused (spent 3, budget 6, 3 left; dex +4 exceeds budget)
+    val rOver = step.input(fw, attempt, "dex +4")
+    assertTrue(rOver is PluginStepReply.Stay)
+    assertContains(rOver.message.orEmpty(), "Not enough points")
+
+    // cap refused: str is +3; cap is 4; +2 would be +5 > CAP
+    val rCap = step.input(fw, attempt, "str +2")
+    assertTrue(rCap is PluginStepReply.Stay)
+    assertContains(rCap.message.orEmpty(), "Cannot raise str above +4")
+
+    // floor refused: wis is -1; floor is -2; -2 would be -3 < FLOOR
+    val rFloor = step.input(fw, attempt, "wis -2")
+    assertTrue(rFloor is PluginStepReply.Stay)
+    assertContains(rFloor.message.orEmpty(), "Cannot lower wis below -2")
+
+    // summary text
+    assertEquals("Str 13 Dex 10 Con 11 Int 10 Wis 9 Cha 10", step.summary(fw, attempt))
+
+    // reset
+    val rReset = step.input(fw, attempt, "reset")
+    assertTrue(rReset is PluginStepReply.Stay)
+    assertTrue(attempt.state["spend"] == null || (attempt.state["spend"] as Map<*, *>).isEmpty())
+
+    // re-add some points and done
+    step.input(fw, attempt, "str +2")
+    step.input(fw, attempt, "int +3")
+    val rDone = step.input(fw, attempt, "done")
+    assertEquals(PluginStepReply.Done, rDone)
+
+    // prepare calls setBaseStat with the right values
+    val actor = FakeActor(statValue = 10)
+    creation.prepare(fw, actor, attempt)
+    assertEquals(
+      listOf<Triple<PluginActor, String, Int>>(Triple(actor, "str", 12), Triple(actor, "int", 13)),
+      fw.setBaseStatCalls,
+    )
   }
 }

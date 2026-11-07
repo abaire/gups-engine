@@ -56,6 +56,8 @@ val MIGRATIONS: List<Migration> =
         "ALTER TABLE accounts ADD COLUMN disabled_reason TEXT",
       ),
     ),
+    // Per-account counter of characters ever created.
+    Migration(5, listOf("ALTER TABLE accounts ADD COLUMN creations INTEGER NOT NULL DEFAULT 0")),
   )
 
 /** A diagnostics row. */
@@ -118,8 +120,9 @@ data class StandingRow(
  *    `next_handle` (for timer and affect IDs), `world_commit`, `world_schema`, `world_features`,
  *    and `snapshot_taken_at` (sanitized copies).
  * 2. `accounts`: User accounts (`id, login, pw_hash, roles_json, github_handle, disabled,
- *    disabled_by, disabled_at, disabled_reason, created_at`). Maintains Argon2id password hashes,
- *    assigned role and scopes (CODEOWNERS and manual builder scopes), and disable tracking.
+ *    disabled_by, disabled_at, disabled_reason, created_at, creations`). Maintains Argon2id
+ *    password hashes, assigned role and scopes (CODEOWNERS and manual builder scopes), disable
+ *    tracking, and creation counter.
  * 3. `session_tokens`: Web client session tokens (`token_hash TEXT PRIMARY KEY, account_id,
  *    expires_at`). Stores SHA-256 digests of active session tokens for the web client.
  * 4. `invites`: Registration invites and account setup codes (`code_hash TEXT PRIMARY KEY, role,
@@ -149,6 +152,7 @@ data class StandingRow(
  * - **Migration 3:** Creates `restrictions` table and index for per-account capability suspensions.
  * - **Migration 4:** Adds `disabled_by`, `disabled_at`, and `disabled_reason` columns to `accounts`
  *   for disable auditing.
+ * - **Migration 5:** Adds `creations` column to `accounts` to count characters created.
  */
 class Database private constructor(val file: Path, private val conn: Connection) : AutoCloseable {
   val schemaVersion: Int
@@ -300,6 +304,8 @@ class Database private constructor(val file: Path, private val conn: Connection)
             results += { op.result.complete(id) }
           }
         is AccountOp.Update ->
+          // Update writes only these columns; creations is not written so a stale Account copy can
+          // never lower the counter.
           prepare(
             "UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ?, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
           ) { st ->
@@ -313,6 +319,11 @@ class Database private constructor(val file: Path, private val conn: Connection)
             if (at == null) st.setNull(5, java.sql.Types.INTEGER) else st.setLong(5, at)
             st.setString(6, a.disabledReason)
             st.setLong(7, a.id)
+            st.executeUpdate()
+          }
+        is AccountOp.CountCreation ->
+          prepare("UPDATE accounts SET creations = creations + 1 WHERE id = ?") { st ->
+            st.setLong(1, op.id)
             st.executeUpdate()
           }
         is AccountOp.SetPassword -> {

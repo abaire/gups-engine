@@ -337,6 +337,13 @@ r.setCreation(
 
         override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
 
+        override fun prepare(world: PluginWorld, actor: PluginActor, attempt: PluginCreationAttempt) {
+            val bonus = attempt.state["bonus_str"] as? Int ?: 0
+            if (bonus > 0) {
+                world.setBaseStat(actor, "str", actor.baseStat("str") + bonus)
+            }
+        }
+
         override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
             if (newCharacter) {
                 val skill =
@@ -357,6 +364,69 @@ r.setCreation(
     }
 )
 ```
+
+##### prepare
+
+`prepare` runs before a new character enters the world, after traits and `starting_stats` have been applied. While
+`prepare` runs, base-value setters (`setBaseStat`, `setBaseMaxVital`, `setBaseResist`), trait verbs (`grantTrait`,
+`removeTrait`), skill verbs (`setSkill`, `removeSkill`), and attributes (`setAttr`, `delAttr`) accept the pre-entry
+character. Any vital whose current value was not explicitly specified by `starting_stats` is refilled to its effective
+maximum once `prepare` returns. Read stats from `actor.baseStat(...)` rather than `preview` so adjustments stack on top
+of the world's `starting_stats`.
+
+##### Custom steps
+
+A provider may declare custom steps (`PluginCreationStep`) in its `steps` list, shown in order after the choices and
+before confirmation. Each step provides:
+
+- `id`: identifier `[a-z][a-z0-9_]*`, unique among steps and distinct from choice ids.
+- `title`: display heading (e.g. `"Stats"`).
+- `applies(world, attempt)`: whether the step runs for the current attempt. Skipped if false.
+- `show(world, attempt)`: returns `PluginStepView(text, gmcp)` to present prompts, instructions and state.
+- `input(world, attempt, line)`: handles player input lines, returning `PluginStepReply.Stay(message)` to redisplay with
+  an optional message or `PluginStepReply.Done` to advance to the next step.
+- `summary(world, attempt)`: optional single-line summary string appended to the confirmation prompt and GMCP summaries.
+
+Every step receives the `PluginCreationAttempt`:
+
+```kotlin
+interface PluginCreationAttempt {
+    val name: String
+    val answers: Map<String, String>
+    val seed: Long
+    val state: MutableMap<String, Any?>
+    val preview: PluginActor
+    fun rng(stream: Int): PluginRng
+}
+```
+
+The `state` map is shared across all steps and `prepare`. If a player navigates `back` to a choice or changes an answer,
+`state` is cleared, previous step progress is reset, and the `preview` actor is reconstructed.
+
+##### Adding rolls with attempt.rng
+
+While the heritage sample implements point-buy, providers can implement dice rolls or random attribute assignment using
+deterministic random streams from `attempt.rng(stream)`:
+
+```kotlin
+val rollRng = attempt.rng(0)
+val rolledStrength = rollRng.int(1, 6) + rollRng.int(1, 6) + rollRng.int(1, 6)
+attempt.state["rolled_str"] = rolledStrength
+```
+
+Best practices for random creation steps:
+
+- **Numbered streams:** Use stream 0 for initial rolls, stream 1 for the first reroll, stream 2 for the second, etc.
+- **Reroll limit:** Track reroll counts in `attempt.state` to enforce a hard cap.
+- **Anti-farming guarantee:** `attempt.seed` is derived deterministically from the world seed, account ID, and creation
+  counter. Canceling creation, typing `back`, or disconnecting replays the exact same random sequence, preventing
+  players from repeatedly reconnecting to farm optimal stats. The world seed is drawn anew when the server starts, so
+  the sequence changes only across server restarts, which players can't cause. Each call to `attempt.rng(stream)` within
+  one step call continues the same stream; the next call (the next line the player types) starts it again.
+- **Pre-entry application:** Apply the rolled values in `prepare` with `world.setBaseStat` and `world.setBaseMaxVital`.
+
+For a full step-by-step walkthrough, see the
+[Character Creation Provider Tutorial](../samples/heritage-plugin/docs/tutorials/02_character_creation_provider.md#10-adding-rolls-with-attemptrng).
 
 #### Restrictions
 
@@ -412,6 +482,19 @@ r.addBuiltin(
     world.setChoices(actor, mapOf(choice to option))
 }
 ```
+
+#### Base values
+
+A plugin can set an actor's base stats, base vital maxima, and base resistances directly using `setBaseStat`,
+`setBaseMaxVital`, and `setBaseResist`. For example, a trainer command or builtin can train a character's base strength:
+
+```kotlin
+val currentBase = actor.baseStat("str")
+world.setBaseStat(actor, "str", currentBase + 1)
+```
+
+Lowering a vital maximum caps `current` at the new effective maximum; raising it leaves `current` untouched. Changes
+refresh encumbrance and equipment fit and persist with the actor.
 
 ### Item affects, tags and transform
 

@@ -5,6 +5,7 @@ import gups.core.model.Mob
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.harness.FuzzWalker
+import gups.harness.TestRunner
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.PluginLoader
 import gups.script.ScriptLimits
@@ -94,6 +95,36 @@ class HeritageWorldTest {
     assertEquals(firstBots, secondBots)
     assertEquals(first.botStartRooms, second.botStartRooms)
     assertEquals(first.world!!.pulse, second.world!!.pulse)
+  }
+
+  @Test
+  fun `character creation with stats point-buy applies base stats and traits`() {
+    val dir =
+      worldDir(
+        mapOf(
+          "zones/tutorial/creation_test.star" to
+            """
+            def test_stats_step(t):
+                w = t.world(seed = 1)
+                p = w.spawn_player(
+                    "Alden",
+                    at = ":hall",
+                    choices = {"race": "elf", "class": "mage"},
+                    steps = {"stats": ["str +2", "int +3", "done"]},
+                )
+                t.eq(p.base.str, 12)
+                t.eq(p.str, 12)
+                t.eq(p.base.int, 13)
+                t.eq(p.int, 15)
+            """
+              .trimIndent()
+        )
+      )
+    val plugins = plugins(dir)
+    val report = TestRunner(dir, plugins = plugins).run(listOf("//zones/tutorial"))
+    assertEquals(0, report.failed, report.results.mapNotNull { it.message }.joinToString())
+    assertEquals(0, report.errors, report.results.mapNotNull { it.message }.joinToString())
+    assertTrue(report.passed > 0)
   }
 
   private val guildZone =

@@ -2,12 +2,17 @@ package gups.pluginapi
 
 import gups.core.CapturingSink
 import gups.core.ClientInputEvent
+import gups.core.EntityId
 import gups.core.Label
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.CreationAttempt
+import gups.core.model.CreationChoice
+import gups.core.model.CreationProvider
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.model.Trait
 import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
 import gups.core.world.LevelingMsg
@@ -20,6 +25,7 @@ import gups.core.world.moveItem
 import gups.core.world.quit
 import gups.core.world.spawnItem
 import gups.core.world.tombstone
+import gups.core.world.unload
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.Facades
 import gups.pluginapi.host.ItemFacade
@@ -31,6 +37,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -418,6 +425,36 @@ class FacadeTest {
     assertEquals(PluginNamed("hp", "Hit points"), s.vitals.first())
     assertEquals(listOf("hp", "mana", "move"), s.vitals.map { it.name })
     assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)
+  }
+
+  @Test
+  fun `setBaseStat, setBaseMaxVital, and setBaseResist happy path and errors`() {
+    assertNull(f.setBaseStat(ann, "str", 18))
+    assertEquals(18, ann.baseStat("str"))
+    assertEquals(18, ann.stat("str"))
+
+    assertNull(f.setBaseMaxVital(ann, "hp", 30))
+    assertEquals(30, ann.baseMaxVital("hp"))
+
+    assertNull(f.setBaseResist(ann, "fire", 20))
+    assertEquals(20, ann.baseResist("fire"))
+
+    // Unknown stat, vital, or damage type
+    val errStat = assertFailsWith<IllegalArgumentException> { f.setBaseStat(ann, "strr", 10) }
+    assertContains(errStat.message!!, "unknown stat 'strr'")
+
+    val errVital = assertFailsWith<IllegalArgumentException> { f.setBaseMaxVital(ann, "hpp", 10) }
+    assertContains(errVital.message!!, "unknown vital 'hpp'")
+
+    val errResist = assertFailsWith<IllegalArgumentException> { f.setBaseResist(ann, "fier", 10) }
+    assertContains(errResist.message!!, "unknown damage type 'fier'")
+
+    // Actor that left the world
+    val gone = ActorFacade(w.spawnPlayer("Gone", Label("//zones/z:a")), w)
+    w.quit(gone.actor as Player)
+    assertFailsWith<IllegalArgumentException> { f.setBaseStat(gone, "str", 10) }
+    assertFailsWith<IllegalArgumentException> { f.setBaseMaxVital(gone, "hp", 10) }
+    assertFailsWith<IllegalArgumentException> { f.setBaseResist(gone, "fire", 10) }
   }
 
   @Test
@@ -831,6 +868,61 @@ class FacadeTest {
         }
         call.container.hasTag("lead")
       }
+    }
+  }
+
+  @Test
+  fun `during prepare, base setters and grantTrait work while teleport and damage throw`() {
+    val room = w.room(Label("//zones/z:a"))
+    val notInWorld = Player(EntityId(999), "OtherHero", room, 0, room.protoLabel)
+    val otherFacade = ActorFacade(notInWorld, w)
+
+    var prepared: ActorFacade? = null
+    w.traits = mapOf("heroic" to Trait("heroic", statDeltas = mapOf("str" to 2)))
+    val oldCreation = w.creation
+    w.creation =
+      object : CreationProvider {
+        override val choices = emptyList<CreationChoice>()
+
+        override fun available(world: World, choice: String, answers: Map<String, String>) =
+          emptyList<String>()
+
+        override fun validate(world: World, answers: Map<String, String>) = null
+
+        override fun startRoom(world: World, answers: Map<String, String>) = null
+
+        override fun created(world: World, player: Player, newCharacter: Boolean) = Unit
+
+        override fun prepare(world: World, player: Player, attempt: CreationAttempt) {
+          val facadeActor = ActorFacade(player, w)
+          prepared = facadeActor
+          f.setBaseStat(facadeActor, "str", 15)
+          assertEquals(15, player.baseStat("str"))
+
+          f.grantTrait(facadeActor, "heroic")
+          assertEquals(17, player.stat("str"))
+
+          assertFailsWith<IllegalArgumentException> { f.teleport(facadeActor, glade) }
+          assertFailsWith<IllegalArgumentException> { f.damage(facadeActor, 5, "bludgeon", "hp") }
+
+          // A different not-in-world actor still fails during prepare
+          assertFailsWith<IllegalArgumentException> { f.setBaseStat(otherFacade, "str", 20) }
+        }
+      }
+
+    val attempt =
+      CreationAttempt("PreparingHero", CreationAttempt.nameKey("PreparingHero"), 0, w.config.seed)
+    try {
+      val p = w.spawnPlayer("PreparingHero", Label("//zones/z:a"), attempt = attempt)
+      val actor = assertNotNull(prepared)
+      assertFailsWith<IllegalArgumentException> { f.setBaseStat(otherFacade, "str", 20) }
+      // Once prepare has returned, the exemption is gone: the same actor out of the world is
+      // refused.
+      w.unload(p)
+      assertFailsWith<IllegalArgumentException> { f.setBaseStat(actor, "str", 20) }
+      assertFailsWith<IllegalArgumentException> { f.grantTrait(actor, "heroic") }
+    } finally {
+      w.creation = oldCreation
     }
   }
 

@@ -586,7 +586,8 @@ privileges of lower roles ([Role.kt](../core/src/main/kotlin/gups/core/Role.kt))
 - **Account records:** Managed via [Accounts.kt](../core/src/main/kotlin/gups/core/Accounts.kt), an account contains
   `id`, `login`, `pwHash` (Argon2id; absent until a roster account is set up), role and builder scopes, optional
   `githubHandle`, active status (`disabled` with provenance fields `disabledBy`, `disabledAt`, and `disabledReason`),
-  and `createdAt`.
+  and `createdAt`, and `creations`, the number of characters the account has ever created. It only grows: a wipe (§2.4)
+  keeps it, so a new character never reuses an earlier creation seed (§4.19).
   - Logins are 3–24 characters from `[a-z0-9_.-]`, unique case-insensitively and stored in lowercase.
   - An account has one role; the higher roles imply the lower, so builder roles record both CODEOWNERS and manual
     builder package scopes.
@@ -632,19 +633,19 @@ privileges of lower roles ([Role.kt](../core/src/main/kotlin/gups/core/Role.kt))
 The engine persists world state and account information to SQLite in WAL mode
 ([Database.kt](../persist/src/main/kotlin/gups/persist/Database.kt)).
 
-|      Table       |                                                          Columns (abridged)                                                          |                                                                                           Notes                                                                                            |
-|------------------|--------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `meta`           | `key`, `value`                                                                                                                       | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `world_schema` and `world_features` (§3.9), `snapshot_taken_at` (sanitized copies only) |
-| `accounts`       | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at`   | `roles_json` holds role, CODEOWNERS scope, and manual scope; `disabled_*` columns record disable provenance                                                                                |
-| `session_tokens` | `token_hash`, `account_id`, `expires_at`                                                                                             | web client session tokens; revocable                                                                                                                                                       |
-| `invites`        | `code_hash`, `role`, `expires_at`, `used_by`, `account_id`                                                                           | invite and account setup codes; `account_id` binds setup codes to specific accounts                                                                                                        |
-| `restrictions`   | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`                                | temporary and permanent account capability bans (§4.9)                                                                                                                                     |
-| `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                          | character stats, skills, affects, attributes, position, `choices`, `grantedTraits` (§4.19), and `levelGains`                                                                               |
-| `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                       | rooms, mobs, and **all items**, including carried and contained items                                                                                                                      |
-| `zone_states`    | `package`, `payload_json`                                                                                                            | reset and respawn deadlines, package quarantine flags                                                                                                                                      |
-| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                               | custody audit trail for player-involved items (cause: `spawn`, `move`, `split` for a new item moved off part of a stack, `reduce` for a stack destroyed in part, `destroy`)                |
-| `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json` | runtime script exceptions and diagnostics                                                                                                                                                  |
-| `standings`      | `holder`, `subject`, `amount`, `updated_pulse`, `history_json`                                                                       | faction standing records (§5.14); `subject` is `actor:<id>` or a faction label; history older than `standing_history_pulses` is pruned at each checkpoint                                  |
+|      Table       |                                                               Columns (abridged)                                                                |                                                                                           Notes                                                                                            |
+|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `meta`           | `key`, `value`                                                                                                                                  | `schema_version`, `pulse`, `next_entity_id`, `next_handle` (timer and affect ids), `world_commit`, `world_schema` and `world_features` (§3.9), `snapshot_taken_at` (sanitized copies only) |
+| `accounts`       | `id`, `login`, `pw_hash`, `roles_json`, `github_handle`, `disabled`, `disabled_by`, `disabled_at`, `disabled_reason`, `created_at`, `creations` | `roles_json` holds role, CODEOWNERS scope, and manual scope; `disabled_*` columns record disable provenance; `creations` counts characters ever created and never decreases                |
+| `session_tokens` | `token_hash`, `account_id`, `expires_at`                                                                                                        | web client session tokens; revocable                                                                                                                                                       |
+| `invites`        | `code_hash`, `role`, `expires_at`, `used_by`, `account_id`                                                                                      | invite and account setup codes; `account_id` binds setup codes to specific accounts                                                                                                        |
+| `restrictions`   | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`                                           | temporary and permanent account capability bans (§4.9)                                                                                                                                     |
+| `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                                     | character stats, skills, affects, attributes, position, `choices`, `grantedTraits` (§4.19), and `levelGains`                                                                               |
+| `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                                  | rooms, mobs, and **all items**, including carried and contained items                                                                                                                      |
+| `zone_states`    | `package`, `payload_json`                                                                                                                       | reset and respawn deadlines, package quarantine flags                                                                                                                                      |
+| `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                                          | custody audit trail for player-involved items (cause: `spawn`, `move`, `split` for a new item moved off part of a stack, `reduce` for a stack destroyed in part, `destroy`)                |
+| `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json`            | runtime script exceptions and diagnostics                                                                                                                                                  |
+| `standings`      | `holder`, `subject`, `amount`, `updated_pulse`, `history_json`                                                                                  | faction standing records (§5.14); `subject` is `actor:<id>` or a faction label; history older than `standing_history_pulses` is pruned at each checkpoint                                  |
 
 - **Single-location item invariant:** An item's location is stored **only** on its own `world_entities` row. Inventories
   and container contents are derived dynamically when the world loads. Player rows never list item IDs, preventing torn
@@ -1610,7 +1611,10 @@ dry run calls `factions` with the throwaway mob and a player, `disposition` both
   prototype's declared `stats`, `vitals` (as maxima) and `resists`. The result overrides those values. A `current` it
   doesn't give equals the maximum, so a vital that starts empty gives both: `max = vitals(rads = 100), current =
   vitals(rads = 0)`. A `senses` field (channel to a score of 0 or more) merges over the built-in `sight` and `sound` at
-  1. It runs before the actor enters the world, so it can randomize with `ctx.rng`.
+  1. It runs before the actor enters the world, so it can randomize with `ctx.rng`. For a character created through the
+     creation steps (§5.12), `ctx.rng` (and `ctx.roll`) draw from a generator seeded by the creation attempt (§4.19),
+     not from the world's, so the stats shown during creation are the ones the character gets and creating a character
+     doesn't change the world's later rolls. Mobs, and players spawned any other way, use the world's generator.
 - For a player, the answers and traits are already set (§4.19): `ctx.actor.choices` is readable, and effective values
   already include trait deltas. The result's `stats` and `max` are base values; the trait deltas apply on top, and "the
   maximum" above is the effective one.
@@ -2222,7 +2226,7 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   | `Room.Bands`        | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only                                                                                                                                        | When anything in the room moves, arrives or leaves                                               |
   | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}`                                                                                                                                                                                          | With each message                                                                                |
   | `Gups.Trace`        | `{"line"}`                                                                                                                                                                                                                                                        | Builders with `@trace` on, instead of the `[trace]` text lines                                   |
-  | `Char.Creation`     | `{"name", "step": "choice"/"confirm", "choice": {"id", "title", "prompt", "options": [{"id", "label", "summary", "help"}]} or null, "answers": [{"choice", "title", "option", "label"}]}`, or `null`                                                              | With each creation prompt (§5.12), before the session has a character; `null` when the steps end |
+  | `Char.Creation`     | `{"name", "step": "choice"/"custom"/"confirm", "choice": {...} or null, "custom": {"id", "title", "data"} or null, "answers": [...], "summaries": [{"step", "title", "text"}]}`, or `null`                                                                        | With each creation prompt (§5.12), before the session has a character; `null` when the steps end |
   | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                     | When changed; only in worlds with a creation provider or a trait                                 |
   | `Char.Skills`       | `{"skills": [{"label", "name", "kind", "proficiency"}]}`, sorted by name; only with `skills`                                                                                                                                                                      | When changed                                                                                     |
   | `Char.Group`        | `null`, or `{"id", "leader", "members": [{"name", "leader", "in_room", "level", "vitals"}]}`; `leader` is the leader's name at the top and a bool in a member, and `level` appears only with `leveling`                                                           | When changed                                                                                     |
@@ -2275,10 +2279,11 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     where it is the text `perceive_message` returned for them.
   - `Gups.Trace`: `{"line"}` replaces the `[trace]` line, the per-pulse overflow summary included.
   - `Char.Creation` is an event, never cached. `name` is the character's name; `options` are the available ones, in
-    order; `help` is `""` when the option has none; `answers` are those given so far (all of them at `confirm`, where
-    `choice` is null). It is sent right after the prompt's text, so a client that ignores it still has the text. `null`
-    is sent once when the steps end, whether the character entered the world or the player cancelled. Clients answer
-    with ordinary input lines (an option id, `back`, `cancel`, `yes`), so nothing new is read from them.
+    order; `help` is `""` when the option has none; `custom.data` is the object the step supplies (empty when none);
+    `answers` are those given so far (all of them at `confirm`, where `choice` is null); `summaries` is empty except at
+    `confirm`. It is sent right after the prompt's text, so a client that ignores it still has the text. `null` is sent
+    once when the steps end, whether the character entered the world or the player cancelled. Clients answer with
+    ordinary input lines (an option id, `back`, `cancel`, `yes`), so nothing new is read from them.
   - `Char.Traits` is a state package: `choices` lists the known answers in choice order, `traits` the effective traits
     in name order. It is recomputed in every phase-7 flush, like `Char.Status`.
   - `Char.Group`: `members` lists the leader first, then ascending id, and includes the recipient. `in_room` is whether
@@ -2436,17 +2441,22 @@ maximum, with `type` defaulting to the unarmed damage type.
   are checked as at creation (known ids, availability in order, the provider's validation), and a refusal fails the test
   with its message. Missing choices are allowed, so a test can make an incomplete character; leaving `choices` out makes
   a player with none.
+- `spawn_player(..., steps = {"stats": ["str +2", "done"]})` runs the creation provider's custom steps (§4.19) that
+  apply, in order, giving each step its listed lines (none when the dict doesn't name it), then creates the character as
+  the creation steps do: `starting_stats` draws from the attempt's generator (keyed by the player's name) and the
+  provider's `prepare` runs before the player enters. The test fails if a named step doesn't apply, if a step isn't done
+  after its lines, or if a step or `prepare` throws. Without `steps`, no step or `prepare` runs.
 - `w.set_choices(player, {"class": "warrior"})` makes a change exactly as a plugin's `setChoices` does (`None` removes
   an answer) and returns the refusal message or `None`.
 - `w.grant_trait(actor, name)` and `w.remove_trait(actor, name)` do the same for granted traits, on players and mobs. A
   mob from `w.spawn` carries its prototype's traits.
 - Player handles have `choices`, `traits` and `has_trait` as view fields.
 
-|      Object       |                                                                                                                                                                                                                                                                              API                                                                                                                                                                                                                                                                              |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
-| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|      Object       |                                                                                                                                                                                                                                                                                    API                                                                                                                                                                                                                                                                                    |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None, steps=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use instead of `//rules`.
   `bubble=True` keeps a reality bubble; without it every room is always simulated, so a mob can flee with no player
@@ -2611,11 +2621,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP state packages and event packages, GMCP input handlers
   (`onGmcp`), custom hook handlers (`addHook`), world start callbacks (`onWorldStarted`), periodic work (`every`),
-  engine event listeners (`onEvent`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), action
-  restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`),
-  containment filters (`addContainmentFilter`), owned behaviors (`addOwnedBehaviors`), disposition modifiers
-  (`addDispositionModifier`) and faction lists (`addFactions`). See
-  [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
+  engine event listeners (`onEvent`), traits (`PluginTrait`), character creation definitions (`PluginCreation`, with
+  custom steps `PluginCreationStep` and the `prepare` callback), action restrictions (`PluginRestrictionPoint.WEAR`,
+  `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`), containment filters (`addContainmentFilter`),
+  owned behaviors (`addOwnedBehaviors`), disposition modifiers (`addDispositionModifier`) and faction lists
+  (`addFactions`). See [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
   ([Facade.kt](../plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt) and
@@ -2623,11 +2633,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   [PluginHost.kt](../plugin-api/src/main/kotlin/gups/pluginapi/host/PluginHost.kt). The facade exposes safe mutation
   verbs (`send`, `gmcp`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
   `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`,
-  `removeTrait`, `setSkill`, `removeSkill`, `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and
-  read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations
-  execute synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which
-  holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers
-  receive.
+  `removeTrait`, `setSkill`, `removeSkill`, `setBaseStat`, `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`,
+  `levelUp`, `levelDown`), query methods, RNG access, and read-only views of live entities (`PluginRoom`, `PluginActor`,
+  `PluginItem`, `PluginSkill`). All facade mutations execute synchronously on the world thread with invariant checking.
+  `PluginWorld` extends `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose`
+  and `log`; it is what GMCP input handlers receive.
 
 **Plugin capabilities and lifecycle:**
 
@@ -2738,6 +2748,14 @@ subsystems (`core` or `script`). It consists of three primary components:
   modifications.
 - **Skills and leveling:** `setSkill` enforces `LEARN` restrictions before applying skills. `awardXp`, `takeXp`,
   `levelUp`, and `levelDown` manage progression, throwing if the `leveling` feature is disabled.
+- **Base values:** `setBaseStat(actor, stat, value)`, `setBaseMaxVital(actor, vital, value)` and `setBaseResist(actor,
+  type, value)` set a player's or mob's base stat, base vital maximum or base resist. Trait, affect and equipment deltas
+  still apply on top. Lowering a maximum caps `current` at the new effective maximum; raising one leaves `current` as it
+  is. A change refreshes the actor's encumbrance and equipment fit and is saved with the actor. No hook or restriction
+  runs: a plugin that sells training (a stat trainer) enforces its own limits. Each returns `null`; an unknown name
+  throws as for the other verbs. While `prepare` runs, the character it is given is not yet in the world, but the
+  base-value setters, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`, `setAttr` and `delAttr` accept it. Every
+  other verb refuses it as an actor that isn't in the world.
 - **Attributes:** Keys without an explicit namespace prefix (`ns:`) default to the plugin's own ID namespace (§3.7).
   Plugins may read any namespace but may only write to their own. Values adhere to script-compatible attribute types.
 - **Schema validation:** Referencing undeclared stats, vitals, or damage types in verbs or trait deltas throws
@@ -2895,20 +2913,20 @@ file or a `.json` name is a usage error. With `--world` it includes that world's
 after checking its `MODULE.gups` and `MESSAGES.gups`, and leaves out entries of features the world has off; commands
 appear by their renamed names. The files, in order:
 
-|        File         |                                                                                                                                                                                                                                                                    Contents                                                                                                                                                                                                                                                                    |
-|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                                                                                                   |
-| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands, and the GMCP packages its `lib` and `rules` packages declare (name, doc and declaring package). Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                             |
-| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), custom hook handlers (name and doc), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits), badged `plugin: <id>`, or "No plugins are loaded." |
-| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|        File         |                                                                                                                                                                                                                                                                                      Contents                                                                                                                                                                                                                                                                                      |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `style.css`         | The one stylesheet, a dark theme matching the web client.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `index.html`        | `api_version`, engine version, a table linking every other page with its entry count, a link to `api.json`, "Writing plugins" (`plugins.html#guide`), and a link to the current version's changelog section.                                                                                                                                                                                                                                                                                                                                                                       |
+| `declarations.html` | Declarations, then settings (`module`, `server`), then constants.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `hooks.html`        | A summary table, then each hook with its signature, whether it is vetoable, what it attaches to, and its ctx fields, linked into `ctx.html`.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `ctx.html`          | `ctx`, then every view.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `effects.html`      | Effect primitives, then behaviors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `rules.html`        | `rules_ctx`, then the rules exports and modifier points with signatures, types and ctx fields.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `harness.html`      | `t`, `w`, `p`, `diagnostic`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `world.html`        | With `--world`: the world's schema (stats, vitals, damage types and channels, with labels), its features and renamed commands, and the GMCP packages its `lib` and `rules` packages declare (name, doc and declaring package). Always: the message catalog, with each id's placeholders and default text, and with `--world` the world's override.                                                                                                                                                                                                                                 |
+| `plugins.html`      | The engine-developer guide (`docs/PLUGINS.md`) as `<section id="guide">`, then `<h2 id="loaded-plugins">This world's plugins</h2>`: each plugin's builtins, effect primitives, commands, GMCP packages (with their kind: state, event or input), custom hook handlers (name and doc), traits (label, doc and effects), restrictions (point and doc), containment filters (doc) and, for the creation provider, its choices and options (title, labels, summaries, help and granted traits) and its custom steps (id and title), badged `plugin: <id>`, or "No plugins are loaded." |
+| `changelog.html`    | `docs/CHANGELOG.md` rendered as Markdown (§4.17).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `api.json`          | Byte for byte what `gups docs --json` writes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 - **Entries** show name, `since`, a `feature: <id>` badge for feature entries, doc, example if any, and parameters,
   fields and methods as tables (declaration parameters with type, positional/keyword, required, default, allowed values
@@ -3037,6 +3055,34 @@ no traits and no restrictions, and players see nothing new.
 - **Failures:** An exception from the provider records a `plugin` diagnostic. During creation the player is told
   "Character creation isn't working right now; please tell an instructor." and returned to the character menu. In a
   change (below) the change is refused with the same message.
+
+**Custom steps:**
+
+- A provider may also declare **custom steps**, in order. A step has an id (`[a-z][a-z0-9_]*`, unique among the steps
+  and not equal to any choice id) and a `title` ("Stats"). Steps are asked after the last choice and before the
+  confirmation, only when a new character is created, never for a saved character's missing choices. A provider may have
+  steps and no choices.
+- The provider says whether a step applies to the attempt; a step that doesn't is skipped. A step shows its own text and
+  handles each line the player types, except `back` and `cancel`, which the engine handles as for choices. On each line
+  the step either stays (optionally with a message, after which its text is shown again) or is done. A step may give a
+  one-line summary for the confirmation.
+- Every step call gets the **attempt**: the character's name, the answers, a seed, deterministic random streams derived
+  from it, a state map the steps share, and a **preview**: the would-be character with its answers, traits and
+  `rules.starting_stats` applied, not in the world. Answering a choice, even with the same option, clears the state, the
+  steps already done and the preview.
+- The seed depends only on the world seed, the account (or, without one, the character's name) and the account's
+  creation counter (§3.5), which goes up by one each time the account creates a character. Cancelling and starting
+  again, going back, or reconnecting gives the same seed, so a plugin that rolls numbers can't be farmed by restarting,
+  and no later character of the account gets an earlier seed again. The server (`--dev` too) draws a new world seed each
+  time it starts, so the seeds hold only for one run of the server: after a restart every attempt has a different seed.
+  Players can't restart the server, so this doesn't open a way to farm. The harness and the fuzz walker use a fixed
+  world seed.
+- Before a new character created through the steps enters the world, the provider's `prepare` runs with the character
+  and the attempt (§4.15), after its traits and `rules.starting_stats` are applied. A vital that `starting_stats` gave
+  no `current` for is then filled to its effective maximum. A `prepare` that throws records a `plugin` diagnostic, and
+  the character is created with the numbers it had. `created` still runs after the character enters.
+- The engine has no rolls or point-buy of its own: a provider builds them from steps, `prepare` and the base-value
+  setters (§4.15). A step that throws records a `plugin` diagnostic and is handled as any provider failure.
 
 **Answers on the character:**
 
@@ -3944,7 +3990,8 @@ Authentication and session management are implemented in
   becomes an anchor; new characters start in the provider's start room for their answers, or else the world's start room
   (§2.3). The role and idle exemption come from the account each time a character is entered. Loading a saved character
   is refused in maintenance mode.
-- **Creation steps:** one prompt per choice that has an available option, in order, then a confirmation:
+- **Creation steps:** one prompt per choice that has an available option, in order, then each custom step that applies
+  (§4.19), then a confirmation:
 
   ```
   > new
@@ -3971,18 +4018,22 @@ Authentication and session management are implemented in
   - `help <name>` shows that option's label and its `help` (or its summary when it has none), then asks again. `help`
     alone shows the hint line.
   - `back` goes to the previous step that was asked; from the first choice it goes back to the name prompt, keeping the
-    answers. Answering a choice again clears the answers after it, since what is available may change.
+    answers. Answering a choice again clears the answers after it, since what is available may change. `back` from the
+    first custom step goes to the last choice asked (as `back` from the first choice when none was asked); `back` at the
+    confirmation goes to the last custom step that applies, else the last choice.
   - `cancel` returns to the character menu and creates nothing.
-  - The confirmation lists every answer as `<title> <label>`, in choice order, separated by ", ". `yes` (or `y`) creates
-    the character, `back` returns to the last choice asked (for a new character whose answers were all kept, the last
-    one answered), and `cancel` returns to the menu. Anything else asks again. Kept answers last only until that attempt
-    ends: the next `new` starts with none.
+  - The confirmation lists every answer as `<title> <label>`, in choice order, then each custom step's summary as
+    `<title> <summary>`, separated by ", ". `yes` (or `y`) creates the character, `back` returns to the last choice
+    asked (for a new character whose answers were all kept, the last one answered), and `cancel` returns to the menu.
+    Anything else asks again. Kept answers last only until that attempt ends: the next `new` starts with none.
   - On `yes` the provider validates the answers. A refusal is shown and the player goes back to the last choice. The
     name is then checked again; if it was taken meanwhile the player is told and asked for another name, keeping the
     answers. Then come the character limit and maintenance checks, as for any creation.
-  - The character is built with its answers set, so its traits apply; then `rules.starting_stats` runs (§4.6). A vital
-    `starting_stats` gives no `current` for starts at its effective maximum. The character enters the world, and then
-    the provider's `created` callback runs (§4.15).
+    - On a name-taken retry, the answers and the attempt (§4.19) are kept, so steps already done aren't asked again.
+  - The character is built with its answers set, so its traits apply; then `rules.starting_stats` runs (§4.6), drawing
+    from the attempt's generator; then the provider's `prepare` runs (§4.19). A vital `starting_stats` gives no
+    `current` for starts at its effective maximum after `prepare`. The character enters the world, and then the
+    provider's `created` callback runs (§4.15).
   - Every step is a prompt for the 60-second idle rule. A line typed while the account step before it is still pending
     is held and replayed, as for the other prompts.
   - The engine texts are message catalog entries (§4.18), in the `login.creation.*` group: `hint`, `prompt` (`> `),
@@ -4311,14 +4362,16 @@ template's `.github/workflows/gates.yml`.
 - The fuzz walker runs 10,000 pulses through the changed zones with one bot player per changed zone. With a creation
   provider (§4.19), each bot gets complete answers drawn with the seeded RNG from the available options, in choice
   order, redrawn when the provider refuses (up to 10 tries, then the bot has no choices), and a respawned bot keeps
-  them. Each pulse, dead or absent bots respawn in a zone room, bots whose condition isn't `ok` or who have a vital
-  below a quarter of its maximum get every vital set to its maximum, and a bot whose `wait_state` exceeds 50 pulses has
-  it cleared. Idle bots pick randomly among exits, zone and item commands with empty arguments, get/drop/wear/use,
-  `kill` on a random actor (with the `combat` feature), and `say`.
-- It fails at once on an invariant violation or any diagnostic of kind `script_error`, `step_limit`, `wall_clock`,
-  `quarantine`, `alloc_limit`, `invariant` or `missing`. On failure it prints the exact rerun command (`gups fuzz --seed
-  S --pulses P <patterns>`) and exports a repro bundle with the bots' initial positions and all inputs, for `gups
-  repro`.
+  them. After its answers, each bot runs every custom step that applies, answering only `done`, and is created through
+  `prepare` (§4.19); a respawned bot runs them again with the same attempt, so it gets the same numbers. Each pulse,
+  dead or absent bots respawn in a zone room, bots whose condition isn't `ok` or who have a vital below a quarter of its
+  maximum get every vital set to its maximum, and a bot whose `wait_state` exceeds 50 pulses has it cleared. Idle bots
+  pick randomly among exits, zone and item commands with empty arguments, get/drop/wear/use, `kill` on a random actor
+  (with the `combat` feature), and `say`.
+- It fails at once on an invariant violation, any diagnostic of kind `script_error`, `step_limit`, `wall_clock`,
+  `quarantine`, `alloc_limit`, `invariant` or `missing`, or any exception from a creation step or `prepare`. On failure
+  it prints the exact rerun command (`gups fuzz --seed S --pulses P <patterns>`) and exports a repro bundle with the
+  bots' initial positions and all inputs, for `gups repro`.
 
 5. **Migration check:**
 

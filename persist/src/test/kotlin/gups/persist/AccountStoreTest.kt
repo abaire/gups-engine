@@ -366,4 +366,45 @@ class AccountStoreTest {
       SqliteAccountStore(target, d::write).use { s -> assertEquals(emptyList(), s.all()) }
     }
   }
+
+  @Test
+  fun `account creations counter increments and is immune to stale update`() {
+    val sp = SqlitePersistence.open(tempDb())
+    val s = sp.accounts
+    val ann = s.create(Account(0, "ann", "h", Role.PLAYER))!!
+    assertEquals(0, ann.creations)
+
+    s.countCreation(ann.id)
+    s.countCreation(ann.id)
+    val updated = s.byId(ann.id)!!
+    assertEquals(2, updated.creations)
+
+    // Stale update (with creations = 0) does not lower the counter
+    s.update(ann.copy(role = Role.BUILDER))
+    val afterUpdate = s.byId(ann.id)!!
+    assertEquals(2, afterUpdate.creations)
+    assertEquals(Role.BUILDER, afterUpdate.role)
+
+    assertTrue(sp.close())
+  }
+
+  @Test
+  fun `migration 5 adds creations column defaulting to 0`() {
+    val file = tempDb()
+    Database.open(file, MIGRATIONS.subList(0, 4)).close()
+    DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
+      c.createStatement().use {
+        it.execute(
+          "INSERT INTO accounts (id, login, pw_hash, roles_json, github_handle, disabled, created_at) VALUES (1, 'ann', 'h', '{\"role\":\"PLAYER\",\"scope\":[],\"manual\":[]}', NULL, 0, 100)"
+        )
+      }
+    }
+    // Opening with full persistence runs migration 5
+    val sp = SqlitePersistence.open(file)
+    val ann = sp.accounts.byId(1)!!
+    assertEquals(0, ann.creations)
+    sp.accounts.countCreation(1)
+    assertEquals(1, sp.accounts.byId(1)!!.creations)
+    assertTrue(sp.close())
+  }
 }

@@ -61,6 +61,8 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
 
   override fun update(account: Account) = submit(AccountOp.Update(account))
 
+  override fun countCreation(id: Long) = submit(AccountOp.CountCreation(id))
+
   override fun setDisabled(
     id: Long,
     disabled: Boolean,
@@ -176,7 +178,7 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
     synchronized(read) {
       read
         .prepareStatement(
-          "SELECT id, login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at FROM accounts $where ORDER BY id"
+          "SELECT id, login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at, creations FROM accounts $where ORDER BY id"
         )
         .use { st ->
           args.forEachIndexed { i, a -> st.setObject(i + 1, a) }
@@ -198,6 +200,7 @@ class SqliteAccountStore(file: Path, private val write: (Batch) -> Unit) :
                     disabledAt = rs.nullableLong(8),
                     disabledReason = rs.getString(9),
                     createdAt = rs.getLong(10),
+                    creations = rs.getInt(11),
                   )
                 )
               }

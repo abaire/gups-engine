@@ -5,10 +5,14 @@ import gups.core.Label
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.CreationAttempt
 import gups.core.model.CreationChoice
 import gups.core.model.CreationOption
 import gups.core.model.CreationProvider
+import gups.core.model.CreationStep
 import gups.core.model.Player
+import gups.core.model.StepReply
+import gups.core.model.StepView
 import gups.core.model.Trait
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -414,5 +418,326 @@ class CreationFlowTest {
     val out = c.send("Ann")
     assertFalse("choices to make" in out, out)
     assertEquals(c.id, w.players.single().session)
+  }
+
+  private class StepsProvider(
+    override val choices: List<CreationChoice> =
+      listOf(
+        CreationChoice("race", "Race", options = listOf(CreationOption("human", "Human", "")))
+      ),
+    override val steps: List<CreationStep> = emptyList(),
+  ) : CreationProvider {
+    override fun available(
+      world: World,
+      choice: String,
+      answers: Map<String, String>,
+    ): List<String> = choices.first { it.id == choice }.options.map { it.id }
+
+    override fun validate(world: World, answers: Map<String, String>): String? = null
+
+    override fun startRoom(world: World, answers: Map<String, String>): Label? = null
+
+    override fun created(world: World, player: Player, newCharacter: Boolean) {}
+  }
+
+  private class TestStep(
+    override val id: String,
+    override val title: String,
+    var appliesResult: (CreationAttempt) -> Boolean = { true },
+    var showResult: (CreationAttempt) -> StepView = { StepView("$id text", mapOf("step" to id)) },
+    var inputResult: (CreationAttempt, String) -> StepReply = { _, line ->
+      if (line == "no") StepReply.Stay("No.") else StepReply.Done
+    },
+    var summaryResult: (CreationAttempt) -> String? = { "$id summary" },
+  ) : CreationStep {
+    var shown = 0
+
+    override fun applies(world: World, attempt: CreationAttempt) = appliesResult(attempt)
+
+    override fun show(world: World, attempt: CreationAttempt): StepView {
+      shown++
+      return showResult(attempt)
+    }
+
+    override fun input(world: World, attempt: CreationAttempt, line: String) =
+      inputResult(attempt, line)
+
+    override fun summary(world: World, attempt: CreationAttempt) = summaryResult(attempt)
+  }
+
+  @Test
+  @Suppress("UNCHECKED_CAST")
+  fun `custom steps flow through show, input, stay, summaries, gmcp and back navigation`() {
+    val step1 = TestStep("step1", "Step One")
+    val step2 = TestStep("step2", "Step Two")
+    val provider = StepsProvider(steps = listOf(step1, step2))
+    w.creation = provider
+
+    val c = Conn(gmcp = true)
+    c.send("Hero") // Asks race choice
+    val out1 = c.send("human") // Answer choice, moves to step 1
+    assertEquals("step1 text\n[> ]", out1)
+
+    // Check GMCP payload for step 1
+    val gmcpStep1 = c.sink.creation.last() as Map<String, Any?>
+    assertEquals("Hero", gmcpStep1["name"])
+    assertEquals("custom", gmcpStep1["step"])
+    assertNull(gmcpStep1["choice"])
+    assertEquals(
+      mapOf("id" to "step1", "title" to "Step One", "data" to mapOf("step" to "step1")),
+      gmcpStep1["custom"],
+    )
+    assertEquals(
+      listOf(mapOf("choice" to "race", "title" to "Race", "option" to "human", "label" to "Human")),
+      gmcpStep1["answers"],
+    )
+    assertEquals(emptyList<Any?>(), gmcpStep1["summaries"])
+
+    // Stay sends message then text again
+    val outStay = c.send("no")
+    assertEquals("No.\nstep1 text\n[> ]", outStay)
+
+    // Done advances to step 2
+    step1.showResult = { attempt ->
+      attempt.state["step1_done"] = true
+      StepView("step1 advanced", mapOf("step" to "step1"))
+    }
+    val outDone1 = c.send("done")
+    assertEquals("step2 text\n[> ]", outDone1)
+
+    // Step 2 done advances to confirm
+    val outConfirm = c.send("done")
+    assertTrue(
+      outConfirm.contains("Race Human, Step One step1 summary, Step Two step2 summary"),
+      outConfirm,
+    )
+
+    val gmcpConfirm = c.sink.creation.last() as Map<String, Any?>
+    assertEquals("confirm", gmcpConfirm["step"])
+    assertNull(gmcpConfirm["custom"])
+    assertEquals(
+      listOf(
+        mapOf("step" to "step1", "title" to "Step One", "text" to "step1 summary"),
+        mapOf("step" to "step2", "title" to "Step Two", "text" to "step2 summary"),
+      ),
+      gmcpConfirm["summaries"],
+    )
+
+    // back from confirm returns to step 2 with step 1 still finished
+    val outBackConfirm = c.send("back")
+    assertEquals("step2 text\n[> ]", outBackConfirm)
+
+    // back from step 2 returns to step 1
+    val outBackStep2 = c.send("back")
+    assertEquals("step1 advanced\n[> ]", outBackStep2)
+
+    // back from step 1 returns to choice
+    val outBackStep1 = c.send("back")
+    assertTrue(outBackStep1.contains("Choose your race:"), outBackStep1)
+
+    // Re-answering race choice clears state and finished, so step 1 runs again
+    val outReanswer = c.send("human")
+    assertEquals("step1 advanced\n[> ]", outReanswer)
+  }
+
+  @Test
+  fun `unapplicable steps are skipped`() {
+    val step1 = TestStep("step1", "Step One", appliesResult = { false })
+    val step2 = TestStep("step2", "Step Two", appliesResult = { true })
+    w.creation = StepsProvider(steps = listOf(step1, step2))
+
+    val c = Conn()
+    c.send("Hero")
+    val out = c.send("human")
+    assertEquals("step2 text\n[> ]", out)
+  }
+
+  @Test
+  fun `throwing step ends with ProviderFailed and diagnostic`() {
+    for (fault in listOf("show", "input", "summary")) {
+      val step = TestStep("step1", "Step One")
+      when (fault) {
+        "show" -> step.showResult = { throw RuntimeException("show boom") }
+        "input" -> step.inputResult = { _, _ -> throw RuntimeException("input boom") }
+        "summary" -> step.summaryResult = { throw RuntimeException("summary boom") }
+      }
+      w.creation = StepsProvider(steps = listOf(step))
+      val c = Conn()
+      c.send("Hero$fault")
+      val out = c.send("human")
+      if (fault == "show") {
+        assertTrue(out.contains("Character creation isn't working right now"), out)
+      } else if (fault == "input") {
+        val outInput = c.send("something")
+        assertTrue(outInput.contains("Character creation isn't working right now"), outInput)
+      } else if (fault == "summary") {
+        val outDone = c.send("ok")
+        assertTrue(outDone.contains("Character creation isn't working right now"), outDone)
+      }
+      assertTrue(w.diagnostics.any { it.kind == "plugin" && it.message.contains(fault) })
+    }
+  }
+
+  @Test
+  fun `provider with steps and no choices goes straight to steps`() {
+    val step = TestStep("only", "Only Step")
+    w.creation = StepsProvider(choices = emptyList(), steps = listOf(step))
+
+    val c = Conn()
+    val out = c.send("NoChoicesHero")
+    assertEquals("only text\n[> ]", out)
+
+    // back from only step goes to name prompt
+    val outBack = c.send("back")
+    assertEquals(namePrompt, outBack)
+  }
+
+  private class SavedChoices(val saved: MutableMap<String, Map<String, String>>) : Persistence {
+    override fun checkpoint(world: World, cause: String, immediate: Boolean) {}
+
+    override fun savedCharacter(name: String) = saved[name]?.let { SavedCharacter(name, null) }
+
+    override fun loadCharacter(world: World, name: String): Player? {
+      val choices = saved[name] ?: return null
+      return world.spawnPlayer(name, T.HALL, choices = choices)
+    }
+  }
+
+  @Test
+  fun `newCharacter false never shows steps`() {
+    val step = TestStep("step1", "Step One")
+    val prov =
+      StepsProvider(
+        choices =
+          listOf(
+            CreationChoice("race", "Race", options = listOf(CreationOption("human", "Human", ""))),
+            CreationChoice(
+              "class",
+              "Class",
+              options = listOf(CreationOption("warrior", "Warrior", "")),
+            ),
+          ),
+        steps = listOf(step),
+      )
+    w.creation = prov
+    w.persistence = SavedChoices(mutableMapOf("Hero" to mapOf("race" to "human")))
+
+    // Login Hero - missing choices should be asked, but custom steps should NOT be run
+    val c = Conn()
+    val outLogin = c.send("Hero")
+    assertTrue(outLogin.contains("Choose your class:"), outLogin)
+    val outAnswer = c.send("warrior")
+    // Should go straight to confirm without showing step1
+    assertTrue(outAnswer.contains("Race Human, Class Warrior. Create this character?"), outAnswer)
+    assertFalse("step1 text" in outAnswer)
+  }
+
+  @Test
+  fun `runStepsHeadless returns Finished and marks steps finished when all applicable steps complete`() {
+    val step1 = TestStep("s1", "Step 1")
+    val step2 = TestStep("s2", "Step 2")
+    w.creation = StepsProvider(steps = listOf(step1, step2))
+    val attempt = CreationAttempt("Bob", CreationAttempt.nameKey("Bob"), 0, 123L)
+
+    val result =
+      w.runStepsHeadless(attempt) { stepId ->
+        when (stepId) {
+          "s1" -> listOf("ok")
+          "s2" -> listOf("invalid", "ok")
+          else -> emptyList()
+        }
+      }
+
+    assertEquals(HeadlessSteps.Finished, result)
+    assertEquals(setOf("s1", "s2"), attempt.finished)
+    assertEquals(1, step1.shown)
+    assertEquals(1, step2.shown)
+  }
+
+  @Test
+  fun `runStepsHeadless skips non-applicable steps`() {
+    val step1 = TestStep("s1", "Step 1", appliesResult = { false })
+    val step2 = TestStep("s2", "Step 2", appliesResult = { true })
+    w.creation = StepsProvider(steps = listOf(step1, step2))
+    val attempt = CreationAttempt("Bob", CreationAttempt.nameKey("Bob"), 0, 123L)
+
+    val result = w.runStepsHeadless(attempt) { listOf("ok") }
+
+    assertEquals(HeadlessSteps.Finished, result)
+    assertEquals(setOf("s2"), attempt.finished)
+    assertEquals(0, step1.shown)
+    assertEquals(1, step2.shown)
+  }
+
+  @Test
+  fun `runStepsHeadless returns Unfinished when lines run out before Done`() {
+    val step1 =
+      TestStep(
+        "s1",
+        "Step 1",
+        inputResult = { _, line ->
+          if (line == "stay") StepReply.Stay("staying") else StepReply.Done
+        },
+      )
+    val step2 = TestStep("s2", "Step 2")
+    w.creation = StepsProvider(steps = listOf(step1, step2))
+    val attempt = CreationAttempt("Bob", CreationAttempt.nameKey("Bob"), 0, 123L)
+
+    val result =
+      w.runStepsHeadless(attempt) { stepId ->
+        when (stepId) {
+          "s1" -> listOf("stay")
+          else -> listOf("ok")
+        }
+      }
+
+    assertEquals(HeadlessSteps.Unfinished("s1"), result)
+    assertEquals(emptySet(), attempt.finished)
+    assertEquals(0, step2.shown)
+  }
+
+  @Test
+  fun `runStepsHeadless returns Failed when step throws in applies show or input`() {
+    val stepThrowsShow =
+      object : CreationStep {
+        override val id = "err"
+        override val title = "Err"
+
+        override fun applies(world: World, attempt: CreationAttempt) = true
+
+        override fun show(world: World, attempt: CreationAttempt): StepView = error("boom show")
+
+        override fun input(world: World, attempt: CreationAttempt, line: String): StepReply =
+          StepReply.Done
+
+        override fun summary(world: World, attempt: CreationAttempt): String? = null
+      }
+    w.creation = StepsProvider(steps = listOf(stepThrowsShow))
+    val attempt = CreationAttempt("Bob", CreationAttempt.nameKey("Bob"), 0, 123L)
+
+    val res1 = w.runStepsHeadless(attempt) { listOf("ok") }
+    assertTrue(res1 is HeadlessSteps.Failed)
+    assertEquals("err", res1.stepId)
+    assertEquals("boom show", res1.error.message)
+
+    val stepThrowsInput =
+      object : CreationStep {
+        override val id = "err2"
+        override val title = "Err 2"
+
+        override fun applies(world: World, attempt: CreationAttempt) = true
+
+        override fun show(world: World, attempt: CreationAttempt) = StepView("text")
+
+        override fun input(world: World, attempt: CreationAttempt, line: String): StepReply =
+          error("boom input")
+
+        override fun summary(world: World, attempt: CreationAttempt): String? = null
+      }
+    w.creation = StepsProvider(steps = listOf(stepThrowsInput))
+    val res2 = w.runStepsHeadless(attempt) { listOf("ok") }
+    assertTrue(res2 is HeadlessSteps.Failed)
+    assertEquals("err2", res2.stepId)
+    assertEquals("boom input", res2.error.message)
   }
 }

@@ -2,6 +2,7 @@ package gups.script
 
 import com.google.common.collect.ImmutableCollection
 import com.google.common.collect.ImmutableList
+import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
@@ -46,6 +47,8 @@ import net.starlark.java.eval.Structure
 /** Where views come from: a hook's ctx (valid only while the hook runs) or the harness. */
 interface ViewScope {
   val world: World
+  val rng: Rng
+    get() = world.rng
 
   /** The package reading through these views; its own attribute keys appear by short name. */
   val pkg: String?
@@ -1215,7 +1218,7 @@ class RngView internal constructor(private val scope: ViewScope) : StarlarkValue
     val a = gups.script.int(lo, "rng.int(lo)")
     val b = gups.script.int(hi, "rng.int(hi)")
     if (a > b) fail("rng.int($a, $b): lo must not exceed hi")
-    return sInt(scope.world.rng.int(a, b))
+    return sInt(scope.rng.int(a, b))
   }
 
   @StarlarkMethod(
@@ -1225,7 +1228,7 @@ class RngView internal constructor(private val scope: ViewScope) : StarlarkValue
   )
   fun chance(pct: Any): Any {
     scope.check()
-    return scope.world.rng.chance(gups.script.int(pct, "rng.chance(pct)"))
+    return scope.rng.chance(gups.script.int(pct, "rng.chance(pct)"))
   }
 
   @StarlarkMethod(
@@ -1237,7 +1240,7 @@ class RngView internal constructor(private val scope: ViewScope) : StarlarkValue
     scope.check()
     val l = list(items, "rng.choice(items)")
     if (l.isEmpty()) fail("rng.choice(): the list is empty")
-    return scope.world.rng.choice(l)
+    return scope.rng.choice(l)
   }
 
   override fun isImmutable(): Boolean = true

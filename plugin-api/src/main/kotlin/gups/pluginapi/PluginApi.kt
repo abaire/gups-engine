@@ -320,6 +320,9 @@ data class PluginChoice(
 interface PluginCreation {
   val choices: List<PluginChoice>
 
+  val steps: List<PluginCreationStep>
+    get() = emptyList()
+
   fun available(world: PluginWorld, choice: String, answers: Map<String, String>): List<String> =
     choices.first { it.id == choice }.options.map { it.id }
 
@@ -327,7 +330,40 @@ interface PluginCreation {
 
   fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
 
+  fun prepare(world: PluginWorld, actor: PluginActor, attempt: PluginCreationAttempt) {}
+
   fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {}
+}
+
+interface PluginCreationStep {
+  val id: String
+  val title: String
+
+  fun applies(world: PluginWorld, attempt: PluginCreationAttempt): Boolean = true
+
+  fun show(world: PluginWorld, attempt: PluginCreationAttempt): PluginStepView
+
+  fun input(world: PluginWorld, attempt: PluginCreationAttempt, line: String): PluginStepReply
+
+  fun summary(world: PluginWorld, attempt: PluginCreationAttempt): String? = null
+}
+
+data class PluginStepView(val text: String, val gmcp: Map<String, Any?> = emptyMap())
+
+sealed interface PluginStepReply {
+  data class Stay(val message: String? = null) : PluginStepReply
+
+  data object Done : PluginStepReply
+}
+
+interface PluginCreationAttempt {
+  val name: String
+  val answers: Map<String, String>
+  val seed: Long
+  val state: MutableMap<String, Any?>
+  val preview: PluginActor
+
+  fun rng(stream: Int): PluginRng
 }
 
 data class PluginTrait(

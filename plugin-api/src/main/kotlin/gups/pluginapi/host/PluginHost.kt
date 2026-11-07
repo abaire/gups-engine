@@ -92,7 +92,10 @@ data class PluginInfo(
   val ownedBehaviors: List<PluginOwnedBehaviorsInfo> = emptyList(),
   val dispositionModifiers: List<PluginDispositionModifierInfo> = emptyList(),
   val factions: List<PluginFactionAdjusterInfo> = emptyList(),
+  val steps: List<PluginStepInfo> = emptyList(),
 )
+
+data class PluginStepInfo(val id: String, val title: String)
 
 data class PluginFilterInfo(val doc: String)
 
@@ -908,6 +911,9 @@ internal constructor(
                 c.options.map { o -> PluginOptionInfo(o.id, o.label, o.summary, o.help, o.traits) },
             )
           } ?: emptyList(),
+        steps =
+          p.reg.creation?.steps?.map { s -> PluginStepInfo(id = s.id, title = s.title) }
+            ?: emptyList(),
       )
     }
 
@@ -1102,7 +1108,9 @@ object PluginLoader {
       try {
         plugin.register(reg)
         reg.creation?.let { c ->
-          require(c.choices.isNotEmpty()) { "creation provider must declare at least one choice" }
+          require(c.choices.isNotEmpty() || c.steps.isNotEmpty()) {
+            "creation provider must declare at least one choice or step"
+          }
           val choiceIds = mutableSetOf<String>()
           val reserved = setOf("back", "cancel", "help", "yes", "no")
           for (choice in c.choices) {
@@ -1130,6 +1138,15 @@ object PluginLoader {
                 }
               }
             }
+          }
+          val stepIds = mutableSetOf<String>()
+          for (step in c.steps) {
+            require(PluginRegistryImpl.MEMBER.matches(step.id)) {
+              "step id '${step.id}' must match [a-z][a-z0-9_]*"
+            }
+            require(stepIds.add(step.id)) { "duplicate step id '${step.id}'" }
+            require(step.id !in choiceIds) { "step id '${step.id}' equals a choice id" }
+            require(step.title.isNotBlank()) { "step '${step.id}' title cannot be blank" }
           }
         }
         loaded +=

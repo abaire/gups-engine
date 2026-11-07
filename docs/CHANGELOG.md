@@ -4,6 +4,16 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Custom creation steps and base values
+
+- Plugins can set base stats, base vital maxima and base resists with `setBaseStat`, `setBaseMaxVital` and
+  `setBaseResist`.
+- Creation providers can declare custom steps (`PluginCreationStep`) shown after the choices, with a per-attempt seed,
+  random streams, shared state and a preview actor, and a `prepare` callback that runs before a new character enters the
+  world.
+- `spawn_player(steps = {...})` runs a world's custom creation steps in tests.
+- `starting_stats` draws from a per-attempt generator while a character is created through the creation steps.
+
 ### Feature-sized plugins
 
 - `global_hook("on_death", fn)` fires once per death, after the victim's, room's and observers' `on_death` hooks and

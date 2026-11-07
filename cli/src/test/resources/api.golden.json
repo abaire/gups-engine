@@ -10130,6 +10130,16 @@
               "varargs": false,
               "kwargs": false,
               "doc": "GMCP packages this test client supports, or None for none."
+            },
+            {
+              "symbol": "w.spawn_player.steps",
+              "name": "steps",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Lines for the creation provider's custom steps by step id, or None to skip the steps."
             }
           ]
         },

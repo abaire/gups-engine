@@ -1,14 +1,19 @@
 package gups.pluginapi.host
 
 import gups.core.Label
+import gups.core.Rng
 import gups.core.model.Channel
+import gups.core.model.CreationAttempt
 import gups.core.model.CreationChoice
 import gups.core.model.CreationOption
 import gups.core.model.CreationProvider
+import gups.core.model.CreationStep
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
+import gups.core.model.StepReply
+import gups.core.model.StepView
 import gups.core.model.Trait
 import gups.core.model.TraitModifier
 import gups.core.model.didYouMean
@@ -20,8 +25,11 @@ import gups.core.world.OwnedBehaviorAdjuster
 import gups.core.world.World
 import gups.core.world.behaviorOf
 import gups.core.world.descriptor
+import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
+import gups.pluginapi.PluginCreationAttempt
+import gups.pluginapi.PluginCreationStep
 import gups.pluginapi.PluginDispositionCall
 import gups.pluginapi.PluginFactionsCall
 import gups.pluginapi.PluginModifierCall
@@ -29,8 +37,11 @@ import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginOwnedBehaviorsCall
 import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
+import gups.pluginapi.PluginRng
+import gups.pluginapi.PluginStepReply
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
+import java.util.Collections
 
 internal class CreationProviderAdapter(
   private val world: World,
@@ -58,6 +69,9 @@ internal class CreationProviderAdapter(
           },
       )
     }
+
+  override val steps: List<CreationStep> =
+    creation.steps.map { CreationStepAdapter(world, pluginId, it) }
 
   override fun available(world: World, choice: String, answers: Map<String, String>): List<String> {
     val choiceDef = choices.firstOrNull { it.id == choice } ?: return emptyList()
@@ -115,6 +129,84 @@ internal class CreationProviderAdapter(
       world.record(Diagnostic(world.pulse, "plugin", "plugin '$pluginId': created failed: $e", e))
     }
   }
+
+  override fun prepare(world: World, player: Player, attempt: CreationAttempt) {
+    try {
+      creation.prepare(facade, ActorFacade(player, world), AttemptFacade(attempt, world))
+    } catch (e: Exception) {
+      throw IllegalStateException("plugin '$pluginId': prepare failed: $e", e)
+    }
+  }
+}
+
+internal class CreationStepAdapter(
+  private val world: World,
+  private val pluginId: String,
+  private val step: PluginCreationStep,
+) : CreationStep {
+  private val facade: PluginWorld
+    get() = WorldFacade(world, pluginId, Facades.logOf(world))
+
+  override val id: String
+    get() = step.id
+
+  override val title: String
+    get() = step.title
+
+  override fun applies(world: World, attempt: CreationAttempt): Boolean =
+    try {
+      step.applies(facade, AttemptFacade(attempt, world))
+    } catch (e: Exception) {
+      throw IllegalStateException("plugin '$pluginId': step '$id' applies failed: $e", e)
+    }
+
+  override fun show(world: World, attempt: CreationAttempt): StepView =
+    try {
+      val view = step.show(facade, AttemptFacade(attempt, world))
+      StepView(view.text, view.gmcp)
+    } catch (e: Exception) {
+      throw IllegalStateException("plugin '$pluginId': step '$id' show failed: $e", e)
+    }
+
+  override fun input(world: World, attempt: CreationAttempt, line: String): StepReply =
+    try {
+      when (val reply = step.input(facade, AttemptFacade(attempt, world), line)) {
+        is PluginStepReply.Stay -> StepReply.Stay(reply.message)
+        PluginStepReply.Done -> StepReply.Done
+      }
+    } catch (e: Exception) {
+      throw IllegalStateException("plugin '$pluginId': step '$id' input failed: $e", e)
+    }
+
+  override fun summary(world: World, attempt: CreationAttempt): String? =
+    try {
+      step.summary(facade, AttemptFacade(attempt, world))
+    } catch (e: Exception) {
+      throw IllegalStateException("plugin '$pluginId': step '$id' summary failed: $e", e)
+    }
+}
+
+internal class AttemptFacade(private val attempt: CreationAttempt, private val world: World) :
+  PluginCreationAttempt {
+  override val name: String
+    get() = attempt.name
+
+  override val answers: Map<String, String>
+    get() = Collections.unmodifiableMap(attempt.answers)
+
+  override val seed: Long
+    get() = attempt.seed
+
+  override val state: MutableMap<String, Any?>
+    get() = attempt.state
+
+  override val preview: PluginActor
+    get() = ActorFacade(world.previewPlayer(attempt), world)
+
+  private val rngStreams = mutableMapOf<Int, Rng>()
+
+  override fun rng(stream: Int): PluginRng =
+    RngFacade(rngStreams.getOrPut(stream) { attempt.rng(stream) })
 }
 
 internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {

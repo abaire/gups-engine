@@ -65,7 +65,14 @@ class MemoryAccountStore : AccountStore {
   @Synchronized
   override fun update(account: Account) {
     val old = accounts.getValue(account.id)
-    accounts[account.id] = account.copy(pwHash = old.pwHash, login = old.login)
+    accounts[account.id] =
+      account.copy(pwHash = old.pwHash, login = old.login, creations = old.creations)
+  }
+
+  @Synchronized
+  override fun countCreation(id: Long) {
+    val old = accounts.getValue(id)
+    accounts[id] = old.copy(creations = old.creations + 1)
   }
 
   @Synchronized

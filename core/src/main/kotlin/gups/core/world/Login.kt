@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.Label
 import gups.core.Role
 import gups.core.SessionId
+import gups.core.model.CreationAttempt
 import gups.core.model.Player
 
 /**
@@ -124,7 +125,7 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
     }
 
     if (world.creation == null) {
-      create(world, session, name, start, emptyMap())
+      create(world, session, name, start)
       return
     }
     startFlow(world, session, name, newCharacter = true, emptyMap()) { outcome ->
@@ -142,13 +143,13 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
       }
       val room =
         try {
-          world.creationStartRoom(outcome.answers, start)
+          world.creationStartRoom(outcome.attempt.answers, start)
         } catch (e: Exception) {
           world.diagnose("plugin", "creation provider startRoom() failed: ${e.message}", e)
           world.sendSession(session, world.msg(LoginMsg.CREATION_PROVIDER_FAILED))
           return@startFlow askName(world, session)
         }
-      val p = create(world, session, name, room, outcome.answers)
+      val p = create(world, session, name, room, outcome.attempt)
       world.creation?.created(world, p, newCharacter = true)
     }
   }
@@ -161,8 +162,13 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
     answers: Map<String, String>,
     onOutcome: (CreationOutcome) -> Unit,
   ) {
+    val attempt =
+      CreationAttempt(name, CreationAttempt.nameKey(name), 0, world.config.seed).apply {
+        this.answers.putAll(answers)
+        this.start = this@DevLogin.start
+      }
     val flow =
-      CreationFlow(world, session, name, newCharacter, answers) { outcome ->
+      CreationFlow(world, session, name, newCharacter, attempt) { outcome ->
         flows.remove(session.id)
         onOutcome(outcome)
       }
@@ -175,9 +181,16 @@ class DevLogin(private val start: Label, private val accountId: Long? = null) : 
     session: Session,
     name: String,
     room: Label,
-    answers: Map<String, String>,
+    attempt: CreationAttempt? = null,
   ): Player {
-    val p = world.spawnPlayer(name, room, accountId = accountId, choices = answers)
+    val p =
+      world.spawnPlayer(
+        name,
+        room,
+        accountId = accountId,
+        choices = attempt?.answers ?: emptyMap(),
+        attempt = attempt,
+      )
     world.requestImmediate("create")
     claim(p)
     world.enterGame(session, p, world.msg(KernelMsg.WELCOME_NEW, "name" to p.name))

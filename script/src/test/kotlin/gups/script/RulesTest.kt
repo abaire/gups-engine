@@ -1694,6 +1694,22 @@ class RulesTest {
     assertTrue(result.ok, result.report())
   }
 
+  @Test
+  fun `starting_stats uses custom rng from RulesContext`() {
+    val f =
+      world(
+        """
+        def starting_stats(ctx):
+            return struct(stats = stats(str = ctx.rng.int(100, 200)))
+        """
+      )
+    val p = f.player()
+    val customRng = gups.core.Rng(42L)
+    val expected = gups.core.Rng(42L).int(100, 200)
+    val stats = f.w.rules.startingStats(RulesContext(f.w, p, rngOverride = customRng))
+    assertEquals(expected, stats.stats["str"])
+  }
+
   private fun loadTemplateWorld(): World {
     val dir = WorldDir(java.nio.file.Path.of("../template-world"))
     val loader = ScriptLoader(dir, ScriptLimits.HARNESS)

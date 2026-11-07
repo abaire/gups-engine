@@ -5,6 +5,7 @@ import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Channel
 import gups.core.model.ContainerState
+import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Item
@@ -381,4 +382,29 @@ fun World.setContainerState(item: Item, state: DoorState) {
   require(state != DoorState.LOCKED || c.key != null) { "$item has no lock" }
   c.state = state
   item.dirty = true
+}
+
+fun World.setBaseStat(actor: Actor, stat: String, value: Int) {
+  require(schema.hasStat(stat)) { "Unknown stat '$stat'" }
+  actor.baseStats[stat] = value
+  refreshHoldings(actor)
+  clampVitals(actor)
+  actor.dirty = true
+}
+
+fun World.setBaseMaxVital(actor: Actor, vital: String, value: Int) {
+  require(vital in actor.vitalMap) { "Unknown vital '$vital'" }
+  require(value >= 0) { "Vital maximum cannot be negative" }
+  actor.vitalMap.getValue(vital).max = value
+  refreshHoldings(actor)
+  clampVitals(actor)
+  actor.dirty = true
+}
+
+fun World.setBaseResist(actor: Actor, type: DamageType, value: Int) {
+  require(schema.hasDamageType(type.name)) { "Unknown damage type '${type.name}'" }
+  actor.resists[type] = value
+  refreshHoldings(actor)
+  clampVitals(actor)
+  actor.dirty = true
 }

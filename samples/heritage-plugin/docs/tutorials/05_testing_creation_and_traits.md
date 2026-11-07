@@ -177,6 +177,19 @@ def test_guild_entry(t):
     res_warrior = t.walk(warrior, "north")
     assert_eq(res_warrior.error, "Only Mages may enter.")
 
+def test_creation_with_custom_steps(t):
+    # Spawn a player with choices and custom point-buy steps
+    player = t.spawn_player(
+        "Hero",
+        choices = {"race": "human", "class": "warrior"},
+        steps = {"stats": ["str +2", "dex -1", "done"]},
+    )
+    # Check base stats set by point-buy custom step (starting base 10 + delta)
+    assert_eq(player.base.str, 12)
+    assert_eq(player.base.dex, 9)
+    # Effective stats reflect base stats plus any trait deltas
+    assert_eq(player.str, 12)
+
 def test_mob_prototype_traits(t):
     # Spawn a wandering NPC mob declared with traits = ["mage"]
     trainer = t.spawn_mob("//zones:archmage")
@@ -189,6 +202,8 @@ def test_mob_prototype_traits(t):
 ### Key Assertions Demonstrated:
 
 * **Harness Helper `t.spawn_player(choices = ...)`:** Creates a player with pre-selected choices.
+* **Custom Steps `t.spawn_player(..., steps = ...)`:** Feeds scripted lines to custom creation steps (such as point-buy
+  stats), asserting on base stats via `actor.base.<stat>` and effective stats via `actor.<stat>` or `actor.stat(...)`.
 * **Mob Trait Consistency:** Mobs declared with `traits = ["mage"]` successfully walk into `guild_mage` rooms while
   warrior mobs are rejected.
 * **Effective Stats:** Asserting that `actor.stat("int")` reflects the `+2 int` bonus from the `mage` trait and

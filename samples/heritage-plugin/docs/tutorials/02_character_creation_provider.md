@@ -264,14 +264,35 @@ The engine automatically bridges `PluginCreation` across all communication proto
 
 ### 1. Telnet Login Experience
 
-Over Telnet or raw socket connections, the engine formats choices into clear numbered lists:
+Over Telnet or raw socket connections, the engine formats choices into clear numbered lists, followed by custom steps
+and the final confirmation:
 
 ```text
 Choose your race:
   1. Human  - Adaptable and well-rounded.
   2. Elf    - Graceful and attuned to magic.
   3. Dwarf  - Sturdy folk with deep constitution.
-[1-3, help <name>, back, cancel]:
+[1-3, help <name>, back, cancel]: 2
+
+Choose your class:
+  1. Warrior - Masters of weapons and armor.
+  2. Mage    - Scholars of arcane destruction.
+  3. Cleric  - Holy servants of divine recovery.
+[1-3, help <name>, back, cancel]: 2
+
+ Str 10 → 10 (+0)
+ Dex 10 → 10 (+0)
+ Con 10 → 10 (+0)
+ Int 10 → 10 (+0)
+ Wis 10 → 10 (+0)
+ Cha 10 → 10 (+0)
+Points left: 6. Type '<stat> +N', '<stat> -N', 'reset' or 'done'. Unspent points are lost.
+> int +3
+> str +2
+> done
+
+Race Elf, Class Mage, Stats Str 12 Dex 10 Con 10 Int 13 Wis 10 Cha 10. Create this character? (yes, back or cancel)
+> yes
 ```
 
 * **Flexible Input:** Players can select options by:
@@ -281,7 +302,7 @@ Choose your race:
   * Unique prefix: `el`
 * **Navigation Commands:**
   * `help <option>`: Prints the detailed `help` text for that option.
-  * `back`: Steps backward to the previous choice, discarding later answers.
+  * `back`: Steps backward to the previous choice or step, discarding later answers.
   * `cancel`: Aborts character creation and returns to the main menu.
   * Final confirmation prompt: `confirm` or `yes` to finalize.
 
@@ -314,6 +335,113 @@ add a new `deity` choice in a future update?
 2. The player is told: `"Your character has choices to make before playing."`
 3. The engine guides the player **only through the missing choices**, keeping all existing answers intact.
 4. Once completed, `created(world, actor, newCharacter = false)` is called, and the player enters the world seamlessly.
+   Custom creation steps never run for missing choices.
+
+---
+
+## 9. Custom Steps: Point-Buy
+
+After choices are answered, a creation provider can present custom steps (`PluginCreationStep`). In `HeritagePlugin`,
+[`StatsStep.kt`](../../src/main/kotlin/gups/sample/heritage/StatsStep.kt) provides a point-buy attribute allocation
+step:
+
+```kotlin
+class StatsStep : PluginCreationStep {
+  override val id = "stats"
+  override val title = "Stats"
+
+  override fun show(world: PluginWorld, attempt: PluginCreationAttempt): PluginStepView {
+    // Shows the current stats and remaining points
+  }
+
+  override fun input(
+    world: PluginWorld,
+    attempt: PluginCreationAttempt,
+    line: String,
+  ): PluginStepReply {
+    // Parses <stat> +N, <stat> -N, reset, help, done
+  }
+
+  override fun summary(world: PluginWorld, attempt: PluginCreationAttempt): String {
+    // Formats the final numbers for confirmation: Str 12 Dex 10 ...
+  }
+}
+```
+
+### Key Concepts
+
+* **`attempt.state`:** A shared mutable map across all custom steps of the attempt. In `StatsStep`, `state["spend"]`
+  stores a `Map<String, Int>` of deltas from base.
+* **`attempt.preview`:** A read-only preview actor reflecting chosen options, granted traits, and
+  `rules.starting_stats`, before entering the world. `StatsStep` uses `attempt.preview.baseStat(stat)` to calculate base
+  numbers and previews.
+* **`summary()`:** Returns a concise summary displayed on the confirmation screen after the choices.
+* **`prepare()` callback:** Runs on `PluginCreation` before the character enters the world. It applies the deltas to the
+  pre-entry character:
+
+```kotlin
+override fun prepare(world: PluginWorld, actor: PluginActor, attempt: PluginCreationAttempt) {
+  @Suppress("UNCHECKED_CAST")
+  val spend = (attempt.state["spend"] as? Map<String, Int>) ?: emptyMap()
+  for ((stat, delta) in spend) {
+    if (delta != 0) {
+      world.setBaseStat(actor, stat, actor.baseStat(stat) + delta)
+    }
+  }
+}
+```
+
+---
+
+## 10. Adding Rolls with `attempt.rng`
+
+Plugins that want randomized stat rolls rather than deterministic point-buy can draw from deterministic random streams
+keyed to the creation attempt using `attempt.rng(stream: Int)`:
+
+```kotlin
+class RollStatsStep : PluginCreationStep {
+  override val id = "roll"
+  override val title = "Rolls"
+
+  private fun rolls(attempt: PluginCreationAttempt): Map<String, Int> {
+    // Stream 0 is the first roll, stream 1 the first reroll, and so on.
+    val rng = attempt.rng((attempt.state["rerolls"] as? Int) ?: 0)
+    return STATS.associateWith { rng.int(1, 6) + rng.int(1, 6) + rng.int(1, 6) }
+  }
+
+  override fun show(world: PluginWorld, attempt: PluginCreationAttempt) =
+    PluginStepView("Rolled: ${rolls(attempt)}. Type 'reroll' (up to $MAX_REROLLS) or 'done'.")
+
+  override fun input(world: PluginWorld, attempt: PluginCreationAttempt, line: String): PluginStepReply {
+    val rerolls = (attempt.state["rerolls"] as? Int) ?: 0
+    if (line.equals("reroll", ignoreCase = true) && rerolls < MAX_REROLLS) {
+      attempt.state["rerolls"] = rerolls + 1
+      return PluginStepReply.Stay()
+    }
+    if (!line.equals("done", ignoreCase = true)) return PluginStepReply.Stay("Type 'reroll' or 'done'.")
+    attempt.state["rolls"] = rolls(attempt)
+    return PluginStepReply.Done
+  }
+}
+```
+
+`prepare` then reads `attempt.state["rolls"]` and applies each number with `world.setBaseStat()` (and a rolled hit point
+maximum with `world.setBaseMaxVital()`).
+
+### Determinism and Anti-Farming
+
+The attempt's seed is derived from the world seed, the player's account ID (or the character name without accounts), and
+the account's lifetime creation counter. Because of this:
+
+* Cancelling and starting again with `new`, typing `back`, or reconnecting reproduces the **exact same rolls**: the
+  reroll count is cleared with the rest of the state, and stream 0 gives the same first roll again. Players can't farm
+  high rolls by restarting character creation.
+* When a character is created, the account's counter goes up, so the next character gets a fresh seed.
+* The server draws a new world seed each time it starts, so rolls change only across server restarts, which players
+  can't cause.
+
+Luck-based starting stats encourage players to spend their time rerolling rather than playing the game. That's why
+neither the engine nor the `heritage-plugin` sample ships dice rolls; the sample uses point-buy.
 
 ---
 

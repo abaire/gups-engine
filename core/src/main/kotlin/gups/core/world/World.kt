@@ -11,6 +11,7 @@ import gups.core.SessionId
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Actor
 import gups.core.model.Condition
+import gups.core.model.CreationAttempt
 import gups.core.model.Entity
 import gups.core.model.Group
 import gups.core.model.Item
@@ -28,6 +29,8 @@ import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
 import java.util.TreeMap
+
+private val PREVIEW_ID = EntityId(0)
 
 data class WorldConfig(
   val seed: Long = 0,
@@ -452,6 +455,10 @@ class World(
 
   // ---- Spawning ---------------------------------------------------------------------------
 
+  /** The player `prepare` is running for, which some facade verbs accept before it enters. */
+  var preparing: Player? = null
+    internal set
+
   /**
    * Creates a player with the numbers `rules.starting_stats` gives, then [overrides] on top: a stat
    * or maximum it names replaces the rules' value, and so does a current value.
@@ -464,25 +471,44 @@ class World(
     index: Int = 0,
     accountId: Long? = null,
     choices: Map<String, String> = emptyMap(),
+    attempt: CreationAttempt? = null,
   ): Player {
     require(players.none { it.name.equals(name, ignoreCase = true) }) {
       "A player named $name is already in the world"
     }
+    require(attempt == null || choices.isEmpty() || choices == attempt.answers) {
+      "choices must match attempt.answers when attempt is provided"
+    }
+    val effectiveChoices = attempt?.answers ?: choices
     val room = room(at)
-    val p =
-      Player(
+    val (p, result) =
+      buildPlayer(
         allocateId(),
         name,
         room,
-        index.coerceIn(0, room.trackSize - 1),
-        recallRoom = at,
-        accountId = accountId,
+        level,
+        index,
+        accountId,
+        effectiveChoices,
+        startingRng = attempt?.startingRng(),
       )
-    p.level = level
-    p.choices.putAll(choices)
-    initVitals(p)
-    p.recomputeTraits(this)
-    applyStartingStats(p, startingStatsOf(p))
+    if (attempt != null) {
+      attempt.prepareError = null
+      preparing = p
+      try {
+        creation?.prepare(this, p, attempt)
+      } catch (e: Exception) {
+        attempt.prepareError = e
+        diagnose("plugin", "creation provider prepare() failed: ${e.message}", e)
+      } finally {
+        preparing = null
+      }
+      for ((vitalName, vital) in p.vitalMap) {
+        if (vitalName !in result.current.keys) {
+          vital.current = p.max(vitalName)
+        }
+      }
+    }
     applyStartingStats(p, overrides, keepCurrent = true)
     settleNewCondition(p, "starting_stats")
     p.lastInputPulse = pulse
@@ -490,6 +516,69 @@ class World(
     forgetActorSlots(p)
     refreshFit(p)
     clampVitals(p)
+    return p
+  }
+
+  /**
+   * A player with its answers, traits and starting stats, not yet in the world, and the
+   * starting_stats result.
+   */
+  internal fun buildPlayer(
+    id: EntityId,
+    name: String,
+    at: Room,
+    level: Int,
+    index: Int,
+    accountId: Long?,
+    choices: Map<String, String>,
+    startingRng: Rng?,
+  ): Pair<Player, StartingStats> {
+    val p =
+      Player(
+        id,
+        name,
+        at,
+        index.coerceIn(0, at.trackSize - 1),
+        recallRoom = at.protoLabel,
+        accountId = accountId,
+      )
+    p.level = level
+    p.choices.putAll(choices)
+    initVitals(p)
+    p.recomputeTraits(this)
+    val result = startingStatsOf(p, startingRng)
+    applyStartingStats(p, result)
+    return p to result
+  }
+
+  /**
+   * The would-be character of [attempt], built once per set of answers and never entered. It stands
+   * in the room the character would start in, so it needs [CreationAttempt.start].
+   */
+  fun previewPlayer(attempt: CreationAttempt): Player {
+    attempt.preview?.let {
+      return it
+    }
+    val default = checkNotNull(attempt.start) { "The creation attempt has no start room" }
+    val at =
+      try {
+        creationStartRoom(attempt.answers, default)
+      } catch (e: Exception) {
+        diagnose("plugin", "creation provider startRoom() failed: ${e.message}", e)
+        default
+      }
+    val (p, _) =
+      buildPlayer(
+        PREVIEW_ID,
+        attempt.name,
+        room(at),
+        1,
+        0,
+        null,
+        attempt.answers,
+        attempt.startingRng(),
+      )
+    attempt.preview = p
     return p
   }
 
@@ -540,7 +629,8 @@ class World(
     }
   }
 
-  private fun startingStatsOf(a: Actor): StartingStats = rules.startingStats(RulesContext(this, a))
+  private fun startingStatsOf(a: Actor, rng: Rng? = null): StartingStats =
+    rules.startingStats(RulesContext(this, a, rngOverride = rng))
 
   /**
    * Applies a `starting_stats` result: stats and maxima it gives replace the actor's, and a current

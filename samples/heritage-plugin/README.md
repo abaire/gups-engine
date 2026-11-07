@@ -12,6 +12,9 @@ enforce operational **restrictions**:
 * **Character Creation Provider:** Declaring a multi-step login creation sequence (`PluginCreation`) with `race` and
   `class` choices, progressive dynamic availability (e.g. forbidding dwarf mages), whole-set validation, and
   post-creation skill assignment (`created`).
+* **Custom Creation Steps:** Implementing interactive post-choice creation steps (`PluginCreationStep`), demonstrated
+  with a point-buy attribute step using attempt state, character preview inspection, and a `prepare` callback adjusting
+  base stats.
 * **Operational Restrictions:** Enforcing game rules across four core lifecycle points (`WEAR`, `CAST`, `ENTER`,
   `LEARN`) using character traits and content `tags` on items, rooms, and skills.
 * **In-Game Re-spec & Verbs:** Allowing runtime choice modifications via `world.setChoices()`, Starlark script calls via
@@ -35,7 +38,8 @@ samples/heritage-plugin/
 │       └── 05_testing_creation_and_traits.md
 └── src/
     ├── main/kotlin/gups/sample/heritage/
-    │   └── HeritagePlugin.kt   # Complete plugin implementation
+    │   ├── HeritagePlugin.kt   # Complete plugin implementation
+    │   └── StatsStep.kt        # Point-buy custom creation step
     ├── plugin/META-INF/services/
     │   └── gups.pluginapi.GupsPlugin  # Java ServiceLoader SPI declaration
     └── test/kotlin/gups/sample/heritage/

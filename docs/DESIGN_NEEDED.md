@@ -31,17 +31,6 @@ attempts itself; skill procs skip `skill_check` and `skill_power`, so decide whe
 whether a passive skill that only a rules export reads, such as one feeding `item_power`, can advance, and what event
 counts as using it.
 
-### Rerolls and point-buy at character creation
-
-**Spec:** §4.6 (`starting_stats`), §4.19, §5.12. **Today (after M11):** creation offers only discrete choices from the
-world's creation provider. `rules.starting_stats` sets the numbers once, possibly randomized, and the player never sees
-them before confirming or gets to change them. **Questions:** - Should the confirmation show the rolled stats and offer
-`reroll`? Is the number of rerolls limited, and who sets the limit (the rules module or the provider)? How do rerolls
-stay deterministic for replays and the fuzz walker? - Should point-buy exist, as a new kind of creation step that takes
-free-form input (`str +2`, `done`) instead of picking an option? Would the provider handle that input, or the rules
-module through a new export such as `point_buy(ctx, spend)`? - How would a point-buy or rerolled result reach
-`starting_stats`: as input in `ctx`, or as replacing its result?
-
 ### Friendly fire and area-of-effect harm to allies
 
 **Spec:** §5.4 (Engagement: a hostile skill, including each actor in the room for a `room`-range skill, engages its
