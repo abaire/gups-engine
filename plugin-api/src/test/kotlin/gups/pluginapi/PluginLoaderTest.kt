@@ -4,10 +4,23 @@ import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginNamespace
 import gups.pluginapi.host.PluginRegistryImpl
+import gups.pluginapi.testplugins.BadNameProvider
+import gups.pluginapi.testplugins.CombatProvider
 import gups.pluginapi.testplugins.CoreEventPlugin
 import gups.pluginapi.testplugins.CoreGmcpPlugin
+import gups.pluginapi.testplugins.CtxProvider
+import gups.pluginapi.testplugins.EatClash
+import gups.pluginapi.testplugins.EatConsumer
+import gups.pluginapi.testplugins.HungerChainB
+import gups.pluginapi.testplugins.HungerChainC
+import gups.pluginapi.testplugins.HungerConsumer
+import gups.pluginapi.testplugins.HungerProvider
+import gups.pluginapi.testplugins.HungerProviderB
 import gups.pluginapi.testplugins.LookPlugin
 import gups.pluginapi.testplugins.MisnamedPlugin
+import gups.pluginapi.testplugins.RefusingHungerProvider
+import gups.pluginapi.testplugins.RefusingHungerZ
+import gups.pluginapi.testplugins.SchemaReader
 import gups.pluginapi.testplugins.ShopEventClashPlugin
 import gups.pluginapi.testplugins.ShopGmcpPlugin
 import gups.pluginapi.testplugins.ShopInputRepeatPlugin
@@ -344,5 +357,150 @@ class PluginFeatureTest {
 
     val cmd = w.commands.pluginCommands.first { it.name == "smith" }
     assertEquals("trades", cmd.category)
+  }
+}
+
+class PluginProvidedFeatureTest {
+  private val root = Files.createTempDirectory("gups-plugins")
+  private val plugins = root.resolve("plugins")
+
+  /** The template world's vitals, declared as a world schema. */
+  private val schema =
+    gups.core.model.WorldSchema(
+      stats = emptyList(),
+      vitals = listOf("hp", "mana", "move").map { gups.core.model.SchemaName(it, it) },
+      damageTypes = emptyList(),
+      unarmedDamageType = "",
+    )
+
+  private fun pin(id: String, vararg classes: kotlin.reflect.KClass<out GupsPlugin>) =
+    id to buildPluginJar(plugins.resolve("$id.jar"), *classes)
+
+  private fun load(module: WorldModule, log: (String) -> Unit = {}) =
+    PluginLoader.load(WorldDir(root), module, log = log)
+
+  @Test
+  fun `a provided feature satisfies a dependent plugin's requirement`() {
+    val pins = linkedMapOf(pin("a", HungerProvider::class), pin("b", HungerConsumer::class))
+    load(WorldModule(plugins = pins)).use { host ->
+      assertEquals(listOf("a", "b"), host.ids)
+      assertEquals(setOf("hunger"), host.providedFeatures)
+      assertEquals(emptyList(), host.warnings)
+    }
+  }
+
+  @Test
+  fun `a plugin whose required provided feature is absent is skipped`() {
+    load(WorldModule(plugins = linkedMapOf(pin("b", HungerConsumer::class)))).use { host ->
+      assertEquals(emptyList(), host.ids)
+      assertEquals(listOf("plugin 'b': needs the 'hunger' feature"), host.warnings)
+    }
+  }
+
+  @Test
+  fun `a checksum failure cascades through every dependent plugin`() {
+    val pins =
+      linkedMapOf(
+        "a" to
+          "sha256:" +
+            "0".repeat(64).also { buildPluginJar(plugins.resolve("a.jar"), HungerProvider::class) },
+        pin("b", HungerChainB::class),
+        pin("c", HungerChainC::class),
+      )
+    load(WorldModule(plugins = pins)).use { host ->
+      assertEquals(emptyList(), host.ids)
+      assertTrue(host.warnings.any { it.startsWith("plugin 'a': checksum mismatch") })
+      assertTrue(host.warnings.any { it == "plugin 'b': needs the 'hunger' feature" })
+      assertTrue(host.warnings.any { it == "plugin 'c': needs the 'thirst' feature" })
+    }
+  }
+
+  @Test
+  fun `two plugins that provide the same feature skip the larger id`() {
+    val pins = linkedMapOf(pin("a", HungerProvider::class), pin("b", HungerProviderB::class))
+    load(WorldModule(plugins = pins)).use { host ->
+      assertEquals(listOf("a"), host.ids)
+      assertTrue(
+        host.warnings.any { it == "plugin 'b': feature 'hunger' is already provided by plugin 'a'" }
+      )
+    }
+  }
+
+  @Test
+  fun `a provided feature may not be an engine feature id, a reserved id or malformed`() {
+    val cases =
+      listOf(
+        CombatProvider::class to "combat",
+        CtxProvider::class to "ctx",
+        BadNameProvider::class to "Bad-Name",
+      )
+    for ((cls, name) in cases) {
+      load(WorldModule(plugins = linkedMapOf(pin("a", cls)))).use { host ->
+        assertEquals(emptyList(), host.ids, "provider '$name'")
+        assertEquals(
+          listOf("plugin 'a': provides invalid feature '$name'"),
+          host.warnings,
+          "provider '$name'",
+        )
+      }
+    }
+  }
+
+  @Test
+  fun `a plugin that refuses the world adds nothing and its dependents are dropped`() {
+    load(
+        WorldModule(
+          plugins =
+            linkedMapOf(pin("a", RefusingHungerProvider::class), pin("b", HungerConsumer::class)),
+          schema = schema,
+        )
+      )
+      .use { host ->
+        assertEquals(emptyList(), host.ids)
+        assertTrue(host.warnings.any { it == "plugin 'a': refused: no satiety vital" })
+        assertTrue(host.warnings.any { it == "plugin 'b': needs the 'hunger' feature" })
+        assertEquals(emptyMap(), host.globals)
+        val w = world(plugins = host)
+        assertTrue(
+          w.commands.pluginCommands.none { it.name in setOf("grub", "eat") },
+          "the refused plugin's commands and the dependent's command are absent",
+        )
+      }
+  }
+
+  @Test
+  fun `register sees the world's schema and the engine and plugin features`() {
+    load(WorldModule(plugins = linkedMapOf(pin("a", SchemaReader::class)), schema = schema)).use {
+      host ->
+      assertEquals(listOf("a"), host.ids)
+    }
+    assertEquals(listOf("hp", "mana", "move"), SchemaReader.seenVitals)
+    assertEquals(
+      setOf("combat", "hunger", "leveling", "skills", "standing", "track"),
+      SchemaReader.seenFeatures,
+    )
+  }
+
+  @Test
+  fun `a clash is not revisited when the post-register cascade drops its victim`() {
+    val pins =
+      linkedMapOf(
+        pin("a", EatConsumer::class),
+        pin("b", EatClash::class),
+        pin("z", RefusingHungerZ::class),
+      )
+    load(WorldModule(plugins = pins)).use { host ->
+      assertEquals(emptyList(), host.ids)
+      val warnings = host.warnings
+      assertTrue(
+        warnings.any {
+          it ==
+            "plugin 'b': register failed: command 'eat': plugin command 'eat' is already registered"
+        }
+      )
+      assertTrue(warnings.any { it == "plugin 'z': refused: no satiety vital" })
+      assertTrue(warnings.any { it == "plugin 'a': needs the 'hunger' feature" })
+      assertEquals(3, warnings.size)
+    }
   }
 }

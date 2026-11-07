@@ -16,13 +16,16 @@ import gups.core.world.CustomHookHandler
 import gups.core.world.Diagnostic
 import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.EntityRef
+import gups.core.world.EventListener
 import gups.core.world.FastCommand
 import gups.core.world.Feature
 import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.GmcpInput
+import gups.core.world.HookContext
 import gups.core.world.HookName
+import gups.core.world.PeriodicWork
 import gups.core.world.PluginEffectRunner
 import gups.core.world.RESERVED_GMCP_ROOTS
 import gups.core.world.TickCommand
@@ -40,18 +43,23 @@ import gups.pluginapi.PluginDispositionCall
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginEventCall
 import gups.pluginapi.PluginFactionsCall
 import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginHookCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifierPoint
+import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginOwnedBehaviorsCall
 import gups.pluginapi.PluginParam
+import gups.pluginapi.PluginRefused
 import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRole
+import gups.pluginapi.PluginSchema
+import gups.pluginapi.PluginTickCall
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import gups.script.WorldDir
@@ -204,12 +212,24 @@ internal class PluginRegistryImpl(
   private val takenGmcp: Set<String>,
   private val takenTraits: Set<String> = emptySet(),
   private val hasCreation: Boolean = false,
-  private val schema: WorldSchema = WorldSchema.EMPTY,
-  private val features: Features = Features.ALL,
+  private val worldSchema: WorldSchema = WorldSchema.EMPTY,
+  private val engineFeatures: Features = Features.ALL,
+  /** Enabled engine features plus every feature provided by a plugin that is loading. */
+  override val features: Set<String> = emptySet(),
   /** The world's engine commands, renames applied, which a plugin command may not shadow. */
   commandCheck: CommandRegistry = CommandRegistry(),
   private val log: (World) -> (String) -> Unit,
 ) : PluginRegistry {
+  override val schema: PluginSchema
+    get() =
+      worldSchema.let { s ->
+        PluginSchema(
+          s.stats.map { PluginNamed(it.name, it.label) },
+          s.vitals.map { PluginNamed(it.name, it.label) },
+          s.damageTypes,
+        )
+      }
+
   val members = LinkedHashMap<String, Any>()
   val builtinInfo = mutableListOf<PluginMemberInfo>()
   val effects = mutableListOf<EffectReg>()
@@ -220,6 +240,8 @@ internal class PluginRegistryImpl(
   val gmcpInputs = mutableListOf<GmcpInputReg>()
   val hooks = mutableListOf<HookReg>()
   val started = mutableListOf<(PluginWorld) -> Unit>()
+  val periodic = mutableListOf<Triple<Int, String, (PluginTickCall) -> Unit>>()
+  val events = mutableListOf<Triple<String, String, (PluginEventCall) -> Unit>>()
   val traits = mutableMapOf<String, PluginTrait>()
   private var _creation: PluginCreation? = null
   val creation: PluginCreation?
@@ -390,30 +412,46 @@ internal class PluginRegistryImpl(
     started += fn
   }
 
+  override fun every(pulses: Int, doc: String, fn: (PluginTickCall) -> Unit) {
+    require(pulses >= 8) { "every(): pulses must be at least 8, got $pulses" }
+    periodic += Triple(pulses, doc, fn)
+  }
+
+  override fun onEvent(name: String, doc: String, fn: (PluginEventCall) -> Unit) {
+    require(name in EVENT_NAMES) {
+      "onEvent(): '$name' is not an event; expected one of ${EVENT_NAMES.joinToString(", ")}"
+    }
+    events += Triple(name, doc, fn)
+  }
+
   override fun addTrait(trait: PluginTrait) {
     require(MEMBER.matches(trait.name)) { "trait name '${trait.name}' must match [a-z][a-z0-9_]*" }
     require(trait.name !in traits && trait.name !in takenTraits) {
       "trait '${trait.name}' is already registered"
     }
     for (s in trait.statDeltas.keys) {
-      require(s in schema.statNames) { "unknown stat '$s'${didYouMean(s, schema.statNames)}" }
+      require(s in worldSchema.statNames) {
+        "unknown stat '$s'${didYouMean(s, worldSchema.statNames)}"
+      }
     }
-    val channelNames = schema.allChannels.map { it.name }
+    val channelNames = worldSchema.allChannels.map { it.name }
     for (c in trait.senseDeltas.keys) {
       require(c in channelNames) { "unknown channel '$c'${didYouMean(c, channelNames)}" }
     }
     for (v in trait.maxVitalDeltas.keys) {
-      require(v in schema.vitalNames) { "unknown vital '$v'${didYouMean(v, schema.vitalNames)}" }
+      require(v in worldSchema.vitalNames) {
+        "unknown vital '$v'${didYouMean(v, worldSchema.vitalNames)}"
+      }
     }
     for (d in trait.resistDeltas.keys) {
-      require(d in schema.damageTypes) {
-        "unknown damage type '$d'${didYouMean(d, schema.damageTypes)}"
+      require(d in worldSchema.damageTypes) {
+        "unknown damage type '$d'${didYouMean(d, worldSchema.damageTypes)}"
       }
     }
     require("stunned" !in trait.flags) { "trait '${trait.name}': flags cannot contain 'stunned'" }
     for (p in trait.modifiers.keys) {
       val needed = MODIFIER_POINT_FEATURES[p] ?: continue
-      require(needed.satisfiedBy(features)) {
+      require(needed.satisfiedBy(engineFeatures)) {
         "trait '${trait.name}': modifier point $p needs the ${needed.text} ${needed.noun}"
       }
     }
@@ -432,7 +470,9 @@ internal class PluginRegistryImpl(
     check: (PluginRestrictionCall) -> String?,
   ) {
     if (point in setOf(PluginRestrictionPoint.CAST, PluginRestrictionPoint.LEARN)) {
-      require(Feature.SKILLS in features) { "restriction point $point needs the skills feature" }
+      require(Feature.SKILLS in engineFeatures) {
+        "restriction point $point needs the skills feature"
+      }
     }
     restrictions.getOrPut(point) { mutableListOf() }.add(doc to check)
   }
@@ -469,6 +509,18 @@ internal class PluginRegistryImpl(
 
     /** The script names the engine fires itself; a custom hook may not use one. */
     val CATALOG_HOOKS = HookName.entries.mapTo(HashSet()) { it.scriptName }
+
+    /** The global-hookable engine events a plugin may listen to, in declaration order. */
+    val EVENT_NAMES =
+      listOf(
+          HookName.ON_LEVEL_CHANGE,
+          HookName.ON_ENCUMBRANCE_CHANGE,
+          HookName.ON_GROUP_CHANGE,
+          HookName.ON_OWNER_CHANGE,
+          HookName.ON_DISENGAGE,
+          HookName.ON_DEATH,
+        )
+        .map { it.scriptName }
   }
 }
 
@@ -478,6 +530,8 @@ internal class LoadedPlugin(
   val doc: String,
   val reg: PluginRegistryImpl,
   val loader: URLClassLoader?,
+  val requiredFeatures: Set<String> = emptySet(),
+  val providedFeatures: Set<String> = emptySet(),
 )
 
 /**
@@ -518,6 +572,10 @@ internal constructor(
   val ids: List<String>
     get() = plugins.map { it.id }
 
+  /** The features provided by the plugins that loaded; scripts test them with `ctx.has_feature`. */
+  val providedFeatures: Set<String>
+    get() = plugins.flatMap { it.providedFeatures }.toSet()
+
   private fun facade(world: World, id: String) = WorldFacade(world, id, log)
 
   private fun guard(world: World, id: String, what: String, block: () -> Unit) {
@@ -527,6 +585,35 @@ internal constructor(
       world.record(Diagnostic(world.pulse, "plugin", "plugin '$id': $what failed: $e", e))
     }
   }
+
+  /** The event's ctx fields as plain values, per hook. Ints are Longs; actors are PluginActors. */
+  private fun fieldsOf(w: World, hook: HookName, ctx: HookContext): Map<String, Any?> =
+    when (hook) {
+      HookName.ON_LEVEL_CHANGE ->
+        mapOf("old_level" to ctx.oldLevel?.toLong(), "new_level" to ctx.newLevel?.toLong())
+      HookName.ON_ENCUMBRANCE_CHANGE ->
+        mapOf(
+          "old_encumbrance_level" to ctx.oldEncumbranceLevel?.toLong(),
+          "new_encumbrance_level" to ctx.newEncumbranceLevel?.toLong(),
+        )
+      HookName.ON_GROUP_CHANGE -> {
+        val g = ctx.group!!
+        mapOf(
+          "event" to ctx.event,
+          "group" to
+            mapOf(
+              "id" to g.id.toLong(),
+              "leader" to ActorFacade(g.leader, w),
+              "members" to g.members.map { ActorFacade(it, w) },
+            ),
+        )
+      }
+      HookName.ON_OWNER_CHANGE ->
+        mapOf("target" to ctx.target?.let { ActorFacade(it, w) }, "event" to ctx.event)
+      HookName.ON_DISENGAGE -> mapOf("event" to ctx.event)
+      HookName.ON_DEATH -> mapOf("killer" to ctx.actor?.let { ActorFacade(it, w) })
+      else -> emptyMap()
+    }
 
   /** One handler run: read-only world, wrapped entity, plain arguments (views as facades). */
   private fun hookCall(
@@ -622,6 +709,17 @@ internal constructor(
     }
     world.factionAdjusters = allFactionAdjusters
 
+    world.pluginPeriodic =
+      plugins.flatMap { p ->
+        p.reg.periodic.map { (pulses, _, fn) ->
+          PeriodicWork(pulses) { w, actors ->
+            guard(w, p.id, "every($pulses)") {
+              fn(PluginTickCall(facade(w, p.id), actors.map { ActorFacade(it, w) }))
+            }
+          }
+        }
+      }
+
     for (p in plugins) {
       for (cat in p.reg.categories) {
         world.commands.registerCategory(
@@ -682,6 +780,7 @@ internal constructor(
       }
     }
     world.pluginHooks.clear()
+    world.pluginFeatures = providedFeatures
     for (p in plugins) {
       for (h in p.reg.hooks) {
         world.pluginHooks.getOrPut(h.name) { mutableListOf() } +=
@@ -696,6 +795,24 @@ internal constructor(
             }
             out
           }
+      }
+    }
+    world.pluginEvents.clear()
+    for (p in plugins) {
+      for ((name, _, fn) in p.reg.events) {
+        val hook = HookName.entries.first { it.scriptName == name }
+        world.pluginEvents.getOrPut(hook) { mutableListOf() } += EventListener { w, subject, ctx ->
+          guard(w, p.id, "onEvent '$name'") {
+            fn(
+              PluginEventCall(
+                facade(w, p.id),
+                name,
+                ActorFacade(subject, w),
+                fieldsOf(w, hook, ctx),
+              )
+            )
+          }
+        }
       }
     }
     val effects =
@@ -806,7 +923,12 @@ internal constructor(
       features: Features = Features.ALL,
       log: (String) -> Unit = {},
     ): PluginHost =
-      PluginLoader.register(plugins.map { it to null }, log, schema = schema, features = features)
+      PluginLoader.register(
+        plugins.map { it to null },
+        log,
+        engineFeatures = features,
+        worldSchema = schema,
+      )
   }
 }
 
@@ -868,7 +990,12 @@ object PluginLoader {
           loader.close()
           continue
         }
-      val missing = missingFeature(plugin, module.features)
+      val badProvided =
+        plugin.providedFeatures.firstOrNull {
+          !WorldModule.PLUGIN_ID.matches(it) ||
+            Feature.byId(it) != null ||
+            it in WorldModule.reservedPluginIds
+        }
       when {
         plugin.id != id ->
           skip("the jar's plugin id is '${plugin.id}', but MODULE.gups pins it as '$id'")
@@ -876,7 +1003,7 @@ object PluginLoader {
           skip(
             "built for plugin API version ${plugin.pluginApiVersion}; this engine has version ${PluginApi.VERSION}"
           )
-        missing != null -> skip("needs the '$missing' feature")
+        badProvided != null -> skip("provides invalid feature '$badProvided'")
         else -> {
           found += plugin to loader
           continue
@@ -884,27 +1011,73 @@ object PluginLoader {
       }
       loader.close()
     }
-    val host = register(found, log, warnings, module.features, module.rename, module.schema)
+    val survivors = resolve(found, module.features, ::warn)
+    val host = register(survivors, log, warnings, module.features, module.rename, module.schema)
     return host
   }
 
-  /** The first feature [plugin] requires that [features] lacks, whether unknown or off. */
-  private fun missingFeature(plugin: GupsPlugin, features: Features): String? =
-    plugin.requiredFeatures.sorted().firstOrNull { id ->
-      Feature.byId(id).let { it == null || it !in features }
+  /**
+   * Resolves provided features and required-feature dependencies among [found], in id order. A
+   * plugin providing a feature an earlier one already provides, or requiring a feature no survivor
+   * provides, is skipped with a warning and its loader closed. Returns the survivors.
+   */
+  private fun resolve(
+    found: List<Pair<GupsPlugin, URLClassLoader>>,
+    engine: Features,
+    warn: (String) -> Unit,
+  ): List<Pair<GupsPlugin, URLClassLoader>> {
+    val providedBy = mutableMapOf<String, String>()
+    val survivors = mutableListOf<Pair<GupsPlugin, URLClassLoader>>()
+    for ((plugin, loader) in found.sortedBy { it.first.id }) {
+      val clash = plugin.providedFeatures.firstOrNull { it in providedBy }
+      if (clash != null) {
+        warn(
+          "plugin '${plugin.id}': feature '$clash' is already provided by plugin '${providedBy[clash]}'"
+        )
+        loader.close()
+        continue
+      }
+      plugin.providedFeatures.forEach { providedBy[it] = plugin.id }
+      survivors += plugin to loader
     }
+    var skippedAny = true
+    while (skippedAny) {
+      skippedAny = false
+      val available = engine.ids + survivors.flatMap { it.first.providedFeatures }.toSet()
+      val kept = mutableListOf<Pair<GupsPlugin, URLClassLoader>>()
+      for ((plugin, loader) in survivors) {
+        val missing = missingAmong(plugin.requiredFeatures, available)
+        if (missing != null) {
+          warn("plugin '${plugin.id}': needs the '$missing' feature")
+          loader.close()
+          skippedAny = true
+        } else {
+          kept += plugin to loader
+        }
+      }
+      survivors.clear()
+      survivors += kept
+    }
+    return survivors
+  }
 
-  /** Runs each plugin's `register` in id order; a throwing or clashing one is skipped. */
+  /** The first feature in [required] that is not in [available], sorted. */
+  private fun missingAmong(required: Set<String>, available: Collection<String>): String? =
+    required.sorted().firstOrNull { it !in available }
+
+  /** Runs each plugin's `register` in id order; a throwing, clashing or refusing one is skipped. */
   internal fun register(
     plugins: List<Pair<GupsPlugin, URLClassLoader?>>,
     log: (String) -> Unit,
     warnings: MutableList<String> = mutableListOf(),
-    features: Features = Features.ALL,
+    engineFeatures: Features = Features.ALL,
     rename: Map<String, String> = emptyMap(),
-    schema: WorldSchema = WorldSchema.EMPTY,
+    worldSchema: WorldSchema = WorldSchema.EMPTY,
   ): PluginHost {
     val loaded = mutableListOf<LoadedPlugin>()
     val logOf: (World) -> (String) -> Unit = { w -> Facades.logOf(w) }
+    val allFeatures =
+      (engineFeatures.ids + plugins.flatMap { it.first.providedFeatures }.toSet()).toSet()
     for ((plugin, loader) in plugins.sortedBy { it.first.id }) {
       val reg =
         PluginRegistryImpl(
@@ -920,10 +1093,11 @@ object PluginLoader {
               .toSet(),
           takenTraits = loaded.flatMap { p -> p.reg.traits.keys }.toSet(),
           hasCreation = loaded.any { it.reg.creation != null },
-          schema = schema,
-          features = features,
+          worldSchema = worldSchema,
+          engineFeatures = engineFeatures,
+          features = allFeatures,
           log = logOf,
-          commandCheck = CommandRegistry(features = features, rename = rename),
+          commandCheck = CommandRegistry(features = engineFeatures, rename = rename),
         )
       try {
         plugin.register(reg)
@@ -958,13 +1132,48 @@ object PluginLoader {
             }
           }
         }
-        loaded += LoadedPlugin(plugin.id, plugin.doc, reg, loader)
+        loaded +=
+          LoadedPlugin(
+            plugin.id,
+            plugin.doc,
+            reg,
+            loader,
+            plugin.requiredFeatures,
+            plugin.providedFeatures,
+          )
+      } catch (e: PluginRefused) {
+        val text = "plugin '${plugin.id}': refused: ${e.reason}"
+        warnings += text
+        log(text)
+        runCatching { loader?.close() }
       } catch (e: Throwable) {
         val text = "plugin '${plugin.id}': register failed: ${e.message ?: e}"
         warnings += text
         log(text)
         runCatching { loader?.close() }
       }
+    }
+    // A provider that refused or threw no longer provides its features, so its dependents drop.
+    // Clashes are not revisited: a plugin skipped for clashing stays skipped.
+    var skippedAny = true
+    while (skippedAny) {
+      skippedAny = false
+      val available = engineFeatures.ids + loaded.flatMap { it.providedFeatures }.toSet()
+      val kept = mutableListOf<LoadedPlugin>()
+      for (lp in loaded) {
+        val missing = missingAmong(lp.requiredFeatures, available)
+        if (missing != null) {
+          val text = "plugin '${lp.id}': needs the '$missing' feature"
+          warnings += text
+          log(text)
+          runCatching { lp.loader?.close() }
+          skippedAny = true
+        } else {
+          kept += lp
+        }
+      }
+      loaded.clear()
+      loaded += kept
     }
     return PluginHost(loaded, warnings.toList(), log)
   }

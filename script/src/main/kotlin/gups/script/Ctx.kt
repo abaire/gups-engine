@@ -2564,19 +2564,15 @@ internal constructor(
 
   @StarlarkMethod(
     name = "has_feature",
-    doc = "Whether the world has the named feature module on.",
+    doc =
+      "Whether the world has the named feature: an engine feature that is on, or one a loaded plugin provides.",
     parameters = [Param(name = "name", named = true, doc = "Feature id, such as 'combat'.")],
   )
   fun hasFeature(name: Any): Any =
     verb("has_feature", "$name") {
       val id = str(name, "has_feature(name)")
-      val f =
-        Feature.byId(id)
-          ?: fail(
-            "has_feature(): unknown feature '$id'; expected one of " +
-              Feature.entries.joinToString { it.id }
-          )
-      f in world.features
+      if (!FEATURE_ID.matches(id)) fail("has_feature(): '$id' is not a feature name")
+      Feature.byId(id)?.let { it in world.features } ?: (id in world.pluginFeatures)
     }
 
   @StarlarkMethod(
@@ -2659,6 +2655,7 @@ internal constructor(
 
   companion object {
     private val ACTION_KEYS = setOf("name", "pre", "effects", "cost")
+    private val FEATURE_ID = Regex("[a-z][a-z0-9_]*")
   }
 }
 

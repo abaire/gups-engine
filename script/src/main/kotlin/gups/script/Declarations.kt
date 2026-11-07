@@ -335,7 +335,7 @@ internal object HookCatalog {
         signature = "fn(ctx)",
         attachTo = listOf(M, R),
         ctxFields = listOf("self", "actor", "target", "room", "pulse", "rng"),
-        doc = "Fires when an actor dies.",
+        doc = "Fires when an actor dies; also a global hook (lib and rules packages).",
       ),
       HookSpec(
         hook = HookName.ON_LEVEL_CHANGE,
@@ -2185,10 +2185,11 @@ internal class DeclarationBuiltins(
           name != "on_encumbrance_change" &&
           name != "on_group_change" &&
           name != "on_owner_change" &&
-          name != "on_disengage"
+          name != "on_disengage" &&
+          name != "on_death"
       )
         fail(
-          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change and on_disengage can"
+          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage and on_death can"
         )
       val fn = hookRef(d["fn"], "global_hook(fn)")
       if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })

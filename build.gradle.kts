@@ -20,6 +20,7 @@ val allowedModuleDeps: Map<String, Set<String>?> =
     ":samples:weather-plugin" to setOf(":plugin-api"),
     ":samples:heritage-plugin" to setOf(":plugin-api"),
     ":samples:curse-plugin" to setOf(":plugin-api"),
+    ":samples:hunger-plugin" to setOf(":plugin-api"),
     ":cli" to null,
   )
 

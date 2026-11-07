@@ -137,6 +137,9 @@ fun interface FactionAdjuster {
   fun adjust(world: World, actor: Actor, factions: List<Label>): List<Label>
 }
 
+/** Plugin work that runs every [period] pulses. */
+class PeriodicWork(val period: Int, val run: (World, List<Actor>) -> Unit)
+
 class World(
   protos: Prototypes,
   /** The names this world's actors are measured by; fixed for the life of the world. */
@@ -243,6 +246,15 @@ class World(
 
   /** Plugin handlers per custom hook name, in plugin-id order. */
   val pluginHooks: MutableMap<String, MutableList<CustomHookHandler>> = LinkedHashMap()
+
+  /** Features provided by loaded plugins. */
+  var pluginFeatures: Set<String> = emptySet()
+
+  /** Plugin periodic work, in plugin id order then registration order. */
+  var pluginPeriodic: List<PeriodicWork> = emptyList()
+
+  /** Plugin event listeners per global-hookable hook, in plugin id then registration order. */
+  val pluginEvents: MutableMap<HookName, MutableList<EventListener>> = LinkedHashMap()
 
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
@@ -636,6 +648,7 @@ class World(
     if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
     flushImmediate()
     if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
+    runPluginPeriodic()
     deliverPerceptions()
     flushImmediate()
     guarded("bubble maintenance") { maintainBubble() }
@@ -815,6 +828,16 @@ class World(
     if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))
     checkpointExclusions = broken.mapNotNullTo(HashSet()) { it.entity }
     if (pulse - lastCheckpoint >= config.checkpointPulses) checkpointNow("scheduled")
+  }
+
+  /** Plugin periodic work due this pulse, then the output it sent, before perceptions. */
+  private fun runPluginPeriodic() {
+    if (pluginPeriodic.isEmpty()) return
+    val due = pluginPeriodic.filter { pulse % it.period == 0L }
+    if (due.isEmpty()) return
+    val actors = actorIndex.values.filter { isSimulated(it) && it.inWorld }.sortedBy { it.id }
+    guarded("plugin periodic work") { for (w in due) w.run(this, actors) }
+    flushImmediate()
   }
 
   private var lastCheckpoint = boot.pulse

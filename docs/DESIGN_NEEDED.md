@@ -142,15 +142,6 @@ entry. **Questions:** - Should the operator also agree in `MODULE.gups` (for exa
 (a plugin adding a sub-command to another's), attribute namespaces, or calling another plugin's builtins? - Does a
 dependency between plugins need a declared version range, and how does that relate to `PluginApi.VERSION`?
 
-### Feature modules and the plugin interface
-
-**Spec:** §3.10, §4.15. **Today (after M10):** feature modules are an enabled set with guards inside `core`, not a
-registration interface, and plugins register through `PluginRegistry`. The two don't share a mechanism. **Questions:** -
-Should features become registered modules behind an interface, and should that interface become the public plugin
-interface, so plugins and built-in features register the same way? - That would put the feature interface under the
-plugins' "no compatibility promises" policy. Is that acceptable, and what would a plugin-provided feature need
-(commands, actor state, phase work, rules exports, GMCP, load checks)?
-
 ### In-game character respec and choice changes
 
 **Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no

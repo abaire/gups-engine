@@ -4,6 +4,27 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Feature-sized plugins
+
+- `global_hook("on_death", fn)` fires once per death, after the victim's, room's and observers' `on_death` hooks and
+  before the corpse and XP award, with `ctx.self` the victim and `ctx.actor` the killer.
+- `ctx.has_feature(name)` also reports features provided by plugins, and returns `False` (instead of raising an error)
+  for a well-formed name that is not a known feature.
+
+  Before:
+
+  ```python
+  ctx.has_feature("hunger")  # raises: unknown feature 'hunger'
+  ```
+
+  After, with no plugin providing `hunger`:
+
+  ```python
+  ctx.has_feature("hunger")  # False
+  ```
+- Plugins can provide features, refuse a world at load, run periodic work and listen to engine events; see
+  [`docs/PLUGINS.md`](PLUGINS.md).
+
 ### Groups and levels in who and score
 
 - `who` shows each player's level (with `leveling`) and group leader: new entries `leveling.who_level` and `who.group`,

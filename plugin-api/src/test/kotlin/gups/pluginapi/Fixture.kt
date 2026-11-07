@@ -42,6 +42,7 @@ fun world(
   plugins: WorldPluginWiring = WorldPluginWiring.NONE,
   seed: Long = 7,
   features: gups.core.world.Features = gups.core.world.Features.ALL,
+  bubble: Boolean = false,
 ): World {
   val dir = WorldDir(tempWorld(files))
   val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
@@ -54,7 +55,7 @@ fun world(
       loader.schema,
       host.rules(),
       host,
-      WorldConfig(seed = seed, checkInvariants = true, features = features),
+      WorldConfig(seed = seed, checkInvariants = true, features = features, bubble = bubble),
       levelMode = loader.module.levelMode,
       standingHistoryPulses = loader.module.standingHistoryPulses,
     )

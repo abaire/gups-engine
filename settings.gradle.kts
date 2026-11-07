@@ -19,4 +19,5 @@ include(
   "samples:weather-plugin",
   "samples:heritage-plugin",
   "samples:curse-plugin",
+  "samples:hunger-plugin",
 )

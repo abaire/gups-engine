@@ -357,3 +357,134 @@ class LevelReaderPlugin : GupsPlugin {
       call.world.send(call.actor, "level ${call.actor.level}")
     }
 }
+
+/** Provides the `hunger` feature. */
+class HungerProvider : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Requires the `hunger` feature and registers `eat`. */
+class HungerConsumer : GupsPlugin {
+  override val id = "b"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) = r.addCommand("eat", PluginLane.FAST, doc = "Eats.") {}
+}
+
+/** Requires what `a` provides and provides what `c` requires. */
+class HungerChainB : GupsPlugin {
+  override val id = "b"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("hunger")
+  override val providedFeatures = setOf("thirst")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Requires the `thirst` feature the chain's middle plugin provides. */
+class HungerChainC : GupsPlugin {
+  override val id = "c"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("thirst")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Provides `hunger`, like the `a` plugin, so the two clash. */
+class HungerProviderB : GupsPlugin {
+  override val id = "b"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Provides an engine feature id. */
+class CombatProvider : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("combat")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Provides a reserved id. */
+class CtxProvider : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("ctx")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Provides a malformed name. */
+class BadNameProvider : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("Bad-Name")
+
+  override fun register(r: PluginRegistry) = Unit
+}
+
+/** Registers a command and a builtin, then refuses a world without a satiety vital. */
+class RefusingHungerProvider : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) {
+    r.addCommand("grub", PluginLane.FAST, doc = "Grub.") {}
+    r.addBuiltin("grubbed", "A builtin.") { _, _, _ -> 1 }
+    if (r.schema.vitals.none { it.name == "satiety" }) r.refuse("no satiety vital")
+  }
+}
+
+/** Captures at registration time what `r.schema` and `r.features` show. */
+class SchemaReader : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("hunger")
+
+  companion object {
+    val seenVitals = mutableListOf<String>()
+    val seenFeatures = mutableSetOf<String>()
+  }
+
+  override fun register(r: PluginRegistry) {
+    seenVitals.clear()
+    seenVitals += r.schema.vitals.map { it.name }
+    seenFeatures.clear()
+    seenFeatures += r.features
+  }
+}
+
+/** Requires `hunger` and registers `eat`; loads first of the three. */
+class EatConsumer : GupsPlugin {
+  override val id = "a"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val requiredFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) = r.addCommand("eat", PluginLane.FAST, doc = "Eats.") {}
+}
+
+/** Registers `eat` too, clashing with the earlier plugin. */
+class EatClash : GupsPlugin {
+  override val id = "b"
+  override val pluginApiVersion = PluginApi.VERSION
+
+  override fun register(r: PluginRegistry) = r.addCommand("eat", PluginLane.FAST, doc = "Eats.") {}
+}
+
+/** Provides `hunger` and then refuses the world. */
+class RefusingHungerZ : GupsPlugin {
+  override val id = "z"
+  override val pluginApiVersion = PluginApi.VERSION
+  override val providedFeatures = setOf("hunger")
+
+  override fun register(r: PluginRegistry) = r.refuse("no satiety vital")
+}

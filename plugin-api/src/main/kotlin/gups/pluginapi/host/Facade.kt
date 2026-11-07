@@ -399,7 +399,7 @@ internal class WorldFacade(
     }
 
   override val features: Set<String>
-    get() = world.features.ids.toSet()
+    get() = world.features.ids.toSet() + world.pluginFeatures
 
   override fun send(target: PluginActor, text: String) =
     world.send(actorOf(target, "send(target)"), text)

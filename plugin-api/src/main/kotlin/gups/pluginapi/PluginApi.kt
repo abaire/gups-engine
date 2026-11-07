@@ -27,9 +27,13 @@ object PluginApi {
  *   plugins, must not collide with reserved engine builtins, and must match the key declared in
  *   `MODULE.gups`.
  * - **API version:** [pluginApiVersion] must strictly match [PluginApi.VERSION].
- * - **Required features:** [requiredFeatures] specifies engine features (`combat`, `track`,
- *   `skills`, `leveling`) that must be active in the world. If any required feature is disabled,
- *   the plugin is skipped with a warning.
+ * - **Required features:** [requiredFeatures] names engine features (`combat`, `track`, `skills`,
+ *   `leveling`, `standing`) or features other plugins provide ([providedFeatures]). If any required
+ *   feature is neither enabled nor provided by a plugin that loads, the plugin is skipped with a
+ *   warning.
+ * - **Provided features:** [providedFeatures] are well-formed feature names this plugin offers;
+ *   scripts test them with `ctx.has_feature` and other plugins may name them in [requiredFeatures].
+ *   They may not equal an engine feature id or a reserved id.
  * - **Atomic registration:** [register] is executed atomically against [PluginRegistry]. If
  *   registration throws an exception or violates a constraint, all contributions from the plugin
  *   are discarded.
@@ -45,10 +49,18 @@ interface GupsPlugin {
     get() = ""
 
   /**
-   * Engine features (`combat`, `track`, `skills`, `leveling`) the world must have on. A plugin
-   * whose features are off is skipped with an error.
+   * Features the world must have: engine features (`combat`, `track`, `skills`, `leveling`,
+   * `standing`) or features other plugins provide. A plugin whose features are unavailable is
+   * skipped with a warning.
    */
   val requiredFeatures: Set<String>
+    get() = emptySet()
+
+  /**
+   * Feature names this plugin provides, `[a-z][a-z0-9_]*`. Scripts test them with `ctx.has_feature`
+   * and other plugins may name them in [requiredFeatures].
+   */
+  val providedFeatures: Set<String>
     get() = emptySet()
 
   /**
@@ -57,6 +69,9 @@ interface GupsPlugin {
    */
   fun register(r: PluginRegistry)
 }
+
+/** Thrown by [PluginRegistry.refuse]; the loader skips the plugin with [reason]. */
+class PluginRefused(val reason: String) : RuntimeException(reason)
 
 /**
  * Registration coordinator passed to [GupsPlugin.register].
@@ -139,6 +154,16 @@ interface PluginRegistry {
 
   fun onWorldStarted(fn: (PluginWorld) -> Unit)
 
+  /** Runs [fn] every [pulses] pulses (at least 8), after the world tick's work. */
+  fun every(pulses: Int, doc: String, fn: (PluginTickCall) -> Unit) {}
+
+  /**
+   * Listens to a global-hookable engine event; runs after the scripts' global hooks and can't veto
+   * or change the event. One of on_level_change, on_encumbrance_change, on_group_change,
+   * on_owner_change, on_disengage and on_death; any other name fails register.
+   */
+  fun onEvent(name: String, doc: String, fn: (PluginEventCall) -> Unit) {}
+
   fun addTrait(trait: PluginTrait)
 
   fun setCreation(creation: PluginCreation)
@@ -174,6 +199,17 @@ interface PluginRegistry {
 
   /** Adjusts an actor's faction labels after the factions rules export, in plugin-id order. */
   fun addFactions(doc: String, adjust: (PluginFactionsCall) -> List<String>)
+
+  /** The world's declared stats, vitals and damage types. */
+  val schema: PluginSchema
+    get() = PluginSchema(emptyList(), emptyList(), emptyList())
+
+  /** Enabled engine features plus every feature provided by a plugin that is loading. */
+  val features: Set<String>
+    get() = emptySet()
+
+  /** Refuses this world: the plugin is skipped and adds nothing. */
+  fun refuse(reason: String): Nothing = throw PluginRefused(reason)
 }
 
 /** Mirrors core's command lanes. */
@@ -200,6 +236,24 @@ data class PluginParam(
 )
 
 data class PluginCommandCall(val world: PluginWorld, val actor: PluginActor, val args: String)
+
+/** One run of a plugin's periodic work. */
+data class PluginTickCall(
+  val world: PluginWorld,
+  /** Simulated actors in the world, sorted by id. */
+  val actors: List<PluginActor>,
+)
+
+/** One run of a plugin's engine event listener, after the scripts' global hooks. */
+data class PluginEventCall(
+  val world: PluginWorld,
+  /** The event: on_level_change, on_encumbrance_change, ... or on_death. */
+  val event: String,
+  /** The actor the event is about: the global hook's ctx.self. */
+  val actor: PluginActor,
+  /** The event's ctx fields as plain values. */
+  val fields: Map<String, Any?>,
+)
 
 /** One GMCP message from a player's client. */
 interface PluginGmcpCall {

@@ -2797,7 +2797,7 @@
       "vetoable": false,
       "attach_to": ["mob", "room"],
       "ctx_fields": ["self", "actor", "target", "room", "pulse", "rng"],
-      "doc": "Fires when an actor dies.",
+      "doc": "Fires when an actor dies; also a global hook (lib and rules packages).",
       "since": 1
     },
     {
@@ -4645,7 +4645,7 @@
       {
         "symbol": "ctx.has_feature",
         "name": "has_feature",
-        "doc": "Whether the world has the named feature module on.",
+        "doc": "Whether the world has the named feature: an engine feature that is on, or one a loaded plugin provides.",
         "since": 1,
         "params": [
           {

@@ -818,7 +818,13 @@ is the same as leaving it out.
   - Its rules exports are neither required nor allowed (§4.6).
   - Its GMCP packages and fields aren't sent.
   - Scripts can test for a feature with `ctx.has_feature(name)` (§4.5), so a library can serve worlds with and without
-    it.
+    it. Plugins can provide features of their own (§4.15), which `has_feature` reports the same way. A plugin's
+    namespace exists only while the plugin loads, so a file that calls its builtins fails to load without it whatever
+    `has_feature` guards; `has_feature` lets a library react to a plugin feature through the plugin's attributes.
+- **Built-in features are not plugins:** they reach into the world's own state and phases, so they stay inside the
+  engine. A plugin provides new features or requires them with `providedFeatures` and `requiredFeatures` (§4.15), and a
+  script tests a provided feature with `ctx.has_feature(name)` (§4.5). A plugin's feature is not recorded in
+  `meta.world_features`; adding or removing a plugin needs only a restart.
 - **Shared ownership:** a few entries belong to more than one feature. The `to_hit` export and the `to_hit` and
   `defend_hit` modifier points belong to `combat` or `skills`, because auto-attacks and enemy spells both roll them.
   Such an entry exists while any one of its features is on. An entry can instead need all of its features, and then
@@ -1160,7 +1166,7 @@ other return value means "allow". The return values of `on_*` hooks are ignored.
 | `before_order`                                                | ✓         | Mob (the pet), Room                   | `actor` (the owner), `target` (the pet), `text` (the command line)                  |
 | `before_summon` / `on_summon`                                 | ✓ / —     | Room, Mob (observer)                  | `actor` (the caster), `label`, `count` / `actor`, `targets` (the summoned mobs)     |
 | `on_damage`                                                   | —         | Mob, Item (equipped)                  | `actor` (source), `target`, `amount`, `type`, `losses`, `parts`                     |
-| `on_death`                                                    | —         | Mob, Room                             | `actor` (killer), `target`                                                          |
+| `on_death`                                                    | —         | Mob, Room, global (§4.9)              | `actor` (killer), `target`                                                          |
 | `on_level_change`                                             | —         | Mob, Room, Item (carried or equipped) | `actor`, `old_level`, `new_level`                                                   |
 | `on_encumbrance_change`                                       | —         | Global only (§4.9)                    | `actor`, `old_encumbrance_level`, `new_encumbrance_level`                           |
 | `on_group_change`                                             | —         | Global only (§4.9)                    | `actor`, `group`, `event` (`"join"`, `"leave"`, `"leader"` or `"disband"`)          |
@@ -1376,8 +1382,9 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 - **Features:** `start_combat`, `stop_combat`, `enemies_near` and `act_attack` need `combat`; `act_cast` needs `skills`;
   `set_skill`, `remove_skill` and `skill_info` need `skills`; `act_advance`, `act_retreat` and the `index` arguments of
   `teleport`, `spawn` and `move_item` need `track` (§3.10). `has_feature(name)` belongs to the kernel and works in every
-  world: it returns whether the world has the feature `name` on (`"combat"`, `"track"`, `"skills"` or `"leveling"`), and
-  any other name raises an error.
+  world: it returns whether the world has the feature `name`: an engine feature that is on (`"combat"`, `"track"`,
+  `"skills"`, `"leveling"` or `"standing"`), or a feature a loaded plugin provides (§4.15). Any other name of the form
+  `[a-z][a-z0-9_]*` returns `False`; a malformed name raises an error.
 - **Items:**
   - `spawn` returns a view, or a list when it makes several entities. For items, `at` may be a room or room label
     (ground, at `index`), an actor (carried) or a container.
@@ -1993,14 +2000,17 @@ uses the default names. Every player-facing message here is the default text of 
 is how `//lib:quest.star` provides `quests`, which lists active and finished quests.
 
 **Global hooks:** Privileged packages may register a hook that fires for every actor, wherever it is:
-`global_hook("on_level_change", fn)`. `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`
-and `on_disengage` are the hooks that can be global. A global `on_disengage` fires after that actor's `on_disengage`
-hooks on mobs and rooms, with the same ctx fields. `on_level_change` fires once per level step for every actor, players
-and mobs, after that step's `on_level_change` hooks on mobs, rooms and items, with the same ctx fields; `ctx.self` is
-the actor. `on_encumbrance_change`, `on_group_change` and `on_owner_change` belong to the kernel, so they fire in every
-world. Global hooks run in package label order, then in the order they were registered. In a world without `leveling`
-(for `on_level_change`) or `combat` (for `on_disengage`) the declaration loads and the hook never fires, so a library
-can serve worlds with and without it.
+`global_hook("on_level_change", fn)`. `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`,
+`on_disengage` and `on_death` are the hooks that can be global. A global `on_disengage` fires after that actor's
+`on_disengage` hooks on mobs and rooms, with the same ctx fields. A global `on_death` fires once for every actor that
+dies, players and mobs, after that death's `on_death` hooks on the victim, the room and observers, and before the corpse
+is made and XP is awarded; `ctx.self` and `ctx.target` are the victim and `ctx.actor` the killer, or `None`.
+`on_level_change` fires once per level step for every actor, players and mobs, after that step's `on_level_change` hooks
+on mobs, rooms and items, with the same ctx fields; `ctx.self` is the actor. `on_encumbrance_change`, `on_group_change`,
+`on_owner_change` and `on_death` belong to the kernel, so they fire in every world. Global hooks run in package label
+order, then in the order they were registered. In a world without `leveling` (for `on_level_change`) or `combat` (for
+`on_disengage`) the declaration loads and the hook never fires, so a library can serve worlds with and without it.
+Plugin event listeners (§4.15) run after them.
 
 **Reserved exit names:** an exit's direction or custom name may not be the name or alias of an engine command the world
 has (after `rename`, §3.10), or the name of any global command. Such an exit fails its package's load with a diagnostic
@@ -2595,16 +2605,17 @@ subsystems (`core` or `script`). It consists of three primary components:
 
 - **`GupsPlugin`:** The entry point for plugins discovered via `ServiceLoader`. Each plugin declares a unique lowercase
   `id`, a required engine API version (`pluginApiVersion`, matching `PluginApi.VERSION`), doc text, required feature
-  flags, and a `register(r: PluginRegistry)` method. See
+  flags, the features it provides (`providedFeatures`), and a `register(r: PluginRegistry)` method. See
   [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **`PluginRegistry`:** The registration interface passed to `GupsPlugin.register`. It allows plugins to register
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP state packages and event packages, GMCP input handlers
-  (`onGmcp`), custom hook handlers (`addHook`), world start callbacks (`onWorldStarted`), traits (`PluginTrait`),
-  character creation definitions (`PluginCreation`), action restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`,
-  `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`), containment filters (`addContainmentFilter`), owned
-  behaviors (`addOwnedBehaviors`), disposition modifiers (`addDispositionModifier`) and faction lists (`addFactions`).
-  See [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
+  (`onGmcp`), custom hook handlers (`addHook`), world start callbacks (`onWorldStarted`), periodic work (`every`),
+  engine event listeners (`onEvent`), traits (`PluginTrait`), character creation definitions (`PluginCreation`), action
+  restrictions (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`),
+  containment filters (`addContainmentFilter`), owned behaviors (`addOwnedBehaviors`), disposition modifiers
+  (`addDispositionModifier`) and faction lists (`addFactions`). See
+  [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
   ([Facade.kt](../plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt) and
@@ -2660,8 +2671,27 @@ subsystems (`core` or `script`). It consists of three primary components:
   returned `Int` becomes a `Long` and an iterable a list; a float or any other value counts as a throw. A handler that
   throws records a `plugin` diagnostic and leaves the result unchanged. Names follow the custom hook rules; a plugin
   registers a name once.
+- **Periodic work:** `every(pulses, doc, fn)` runs `fn` on each pulse where `pulse % pulses == 0`; `pulses` is at least
+  8 (one combat round). It runs after the world tick's work (§5.1 phase order) and before perceptions are delivered, in
+  plugin-id order then registration order. The call carries a `PluginWorld` and `actors`, every simulated actor in the
+  world sorted by id, so dormant mobs are left alone as regen leaves them. A plugin may register several. A throw
+  records a `plugin` diagnostic; the next run happens as scheduled.
+- **Event listeners:** `onEvent(name, doc, fn)` listens to one of the events that can be global hooks (§4.9):
+  `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`, `on_disengage` and `on_death`. Any
+  other name fails `register`. A listener runs each time the event's global hooks run, after them, in plugin-id then
+  registration order, and can't veto or change the event. The call carries a `PluginWorld`, the event name, `actor` (the
+  global hook's `ctx.self`) and `fields`, the event's `ctx` fields as plain values: `old_level` and `new_level`;
+  `old_encumbrance_level` and `new_encumbrance_level`; `event` and `group` (a map with `id`, `leader` and `members`);
+  `target` and `event`; `event`; and `killer` (or null) for `on_death`. Ints are `Long`s and actors `PluginActor`s. A
+  listener for an event whose feature is off registers and never runs. A throw records a `plugin` diagnostic.
 - **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, custom hook
-  handlers, or `onWorldStarted` hooks are caught and logged as `plugin` diagnostics while world execution continues.
+  handlers, periodic work, event listeners, or `onWorldStarted` hooks are caught and logged as `plugin` diagnostics
+  while world execution continues.
+- **World checks:** `register` can read `r.schema` (the world's stats, vitals and damage types) and `r.features`
+  (enabled engine features and every feature provided by a plugin that passed the static checks). A plugin that can't
+  run in the world calls `r.refuse(reason)`; it is skipped like a plugin that fails a check (warning `plugin '<id>':
+  refused: <reason>`, a `plugin` diagnostic and a `plugin_load` alert), and the cascade then skips its dependents. At
+  run time `PluginWorld.features` lists the enabled engine features and the features of the plugins that loaded.
 - **Traits (`addTrait`):** Declares permanent bundles of stat, max vital, resist, and sense deltas, flags, and modifier
   chain functions (`PluginModifierPoint`: `TO_HIT`, `DAMAGE`, `BONUS_DAMAGE`, `DEFEND_HIT`, `RECEIVE_DAMAGE`,
   `MITIGATE`, `INITIATIVE`, `MOVE_COST`, `REGEN`, `ADVANCE_LAG`, `RETREAT_LAG`, `RETREAT_FAIL_LAG`, `FLEE_FAIL_LAG`,
@@ -2726,6 +2756,8 @@ subsystems (`core` or `script`). It consists of three primary components:
 - `Effect.Plugin(pluginId, name, args)`: One case of the sealed `Effect`, holding only plain values so prototypes still
   compare by value on reload. `World.pluginEffects` applies it.
 - `World.pluginGmcp`: Stores plugin GMCP producers by package name.
+- `World.pluginPeriodic`: Plugin periodic work, each with its period, run by `runPulse`.
+- `World.pluginEvents`: plugin event listeners by hook name, run by `dispatchGlobal` after the script global hooks.
 - `CommandRegistry.registerPlugin` and `pluginCommands`: Registers plugin commands; `clearGlobals()` clears only script
   global commands, preserving plugin commands.
 - `WorldPluginWiring` (in `script`): Manages `globals` (plugin namespaces by id, predeclared in every package, test
@@ -2747,8 +2779,17 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Class loading:** One `URLClassLoader` per jar, with the engine's class loader as parent. `ServiceLoader` locates the
   plugin provider.
 - **Checks:** Evaluated per pinned ID in alphabetical order: jar presence, SHA-256 checksum match, single `GupsPlugin`
-  provider, matching `plugin.id`, matching `pluginApiVersion`, and satisfied `requiredFeatures`. A plugin failing any
+  provider, matching `plugin.id`, matching `pluginApiVersion`, and well-formed `providedFeatures`. A plugin failing any
   check is skipped with a warning, its class loader is closed, and other plugins continue loading.
+- **Provided features and dependencies:** a provided feature is `[a-z][a-z0-9_]*` and may not equal an engine feature id
+  (enabled or not) or a reserved id. When two plugins that passed their checks provide the same feature, the one with
+  the larger id is skipped. `requiredFeatures` may name engine features and provided features. A plugin is skipped while
+  any feature it requires is neither an enabled engine feature nor provided by a plugin still loading; this repeats
+  until nothing more is skipped. `register` then runs in id order, and the same cascade runs once more over the plugins
+  whose `register` succeeded, so a plugin whose provider refused or threw is skipped and its registrations are
+  discarded. `register` runs once per plugin: a plugin skipped for clashing with an earlier plugin stays skipped even if
+  the cascade later drops that earlier plugin. Each skip warns `plugin '<id>': needs the '<feature>' feature`, naming
+  the first missing feature alphabetically.
 - **Order:** Unpinned-jar warnings appear first, followed by plugins in ID order. `register` runs after all jars are
   verified, also in ID order.
 - **Warnings and diagnostics:** Skipped plugins record a `plugin` diagnostic and a `plugin_load` alert. CLI commands
@@ -2785,10 +2826,15 @@ subsystems (`core` or `script`). It consists of three primary components:
   behind a `warded` container), `put` only when the destination is outside the actor's custody; adds `curse.lift()` and
   `curse.bestow()` primitives for item skills; and registers a containment filter that stops cursed items' carried
   affects behind containers tagged `warded`.
+- **Hunger Plugin ([samples/hunger-plugin](../samples/hunger-plugin/README.md)):** a feature-sized plugin. It provides
+  the `hunger` feature, refuses worlds without an `hp` vital, raises each simulated player's hunger every world tick
+  with `every(120)` and warns them as it grows, resets it from an `on_death` event listener, and adds a
+  `hunger.eat(actor, amount)` builtin for item `on_use` hooks.
 
 **The guide:** [PLUGINS.md](PLUGINS.md) covers building plugins against `plugin-api` (Gradle setup, `GupsPlugin`,
 `PluginApi.VERSION`, service descriptors), facade operations, extension points with `WeatherPlugin` as a running
-example, jar pinning via SHA-256, and character creation traits and restrictions with `HeritagePlugin`.
+example, jar pinning via SHA-256, character creation traits and restrictions with `HeritagePlugin`, and feature-sized
+plugins (periodic work, event listeners, provided features and world checks) with `HungerPlugin`.
 
 ### 4.16 The API Model and Reference Docs
 
@@ -3149,7 +3195,12 @@ Pulse boundaries come from `System.nanoTime()`.
      - Process zone resets and respawns that are due.
      - Advance item decay.
      - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11).
+
+     Plugin periodic work is not a numbered phase: the plugins' `every` callbacks due this pulse run between phases 4
+     and 5, after the world tick's work and before perceptions are delivered (§4.15), and their output is then flushed.
+
   5. **Deferred perception:** Dispatch the `on_perceive` events queued during this pulse (§5.7).
+
   6. **Bubble maintenance:** Apply bubble changes recorded during this pulse (§5.9).
 
      Session expiry is not a numbered phase: link-dead and idle auto-quit run between phases 6 and 7, before the output
@@ -3352,13 +3403,14 @@ and work with or without it (§3.10). Combat resolution is implemented in
   owed level at once. In `deferred` mode it tells the player "You feel ready to advance." and applies a level only when
   `level_up` is called. Applying a level raises `level` by one, calls `on_level_up`, adds its `stats` and `max` to the
   base values and remembers them in `levelGains` under the new level, adds its `current` to the vitals, tells the actor,
-  and fires `on_level_change`. Losing a level (`level_down`, or `level_loss` at death) subtracts the remembered gains of
-  that level, lowers `level`, caps the vitals at the new maxima, sets `xp` to at most one below `xp_to_level(ctx,
-  level)`, and fires `on_level_change`; the rules are not called. A level with nothing remembered unwinds nothing. Each
-  level's entry belongs to that level alone: applying a level replaces whatever was remembered for it, and a level that
-  gives no `stats` or `max` remembers nothing, so a later loss of it never subtracts gains it did not give. Entries for
-  other levels are never touched. One call applies at most 100 levels. A player whose level changes, up or down, is sent
-  `Char.Status` at once, with the message, rather than at the end of the pulse.
+  and fires `on_level_change`, which a plugin listener (§4.15) sees. Losing a level (`level_down`, or `level_loss` at
+  death) subtracts the remembered gains of that level, lowers `level`, caps the vitals at the new maxima, sets `xp` to
+  at most one below `xp_to_level(ctx, level)`, and fires `on_level_change`; the rules are not called. A level with
+  nothing remembered unwinds nothing. Each level's entry belongs to that level alone: applying a level replaces whatever
+  was remembered for it, and a level that gives no `stats` or `max` remembers nothing, so a later loss of it never
+  subtracts gains it did not give. Entries for other levels are never touched. One call applies at most 100 levels. A
+  player whose level changes, up or down, is sent `Char.Status` at once, with the message, rather than at the end of the
+  pulse.
 - **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves the world. The rule refills
   to `count` at the first world tick at or after the deadline. A fresh world's rooms fill their spawns when the world
   starts (§4.11).

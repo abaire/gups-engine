@@ -787,12 +787,20 @@ class FeatureScriptTest {
   }
 
   @Test
-  fun `has_feature rejects an unknown name`() {
-    val unknown = runtimeError(Feature.COMBAT, "ctx.has_feature(\"magic\")")
-    assertTrue(unknown != null && "unknown feature 'magic'" in unknown, unknown)
+  fun `has_feature returns False for a well-formed name no feature has`() {
+    val (out, err) = featureProbe(Features.ALL, "ctx.send(a, str(ctx.has_feature(\"hunger\")))")
+    assertTrue(err == null, "a plain world answers: $err")
+    assertContains(out, "False")
+    assertFalse("True" in out, "a plain world has no 'hunger' feature: $out")
+  }
+
+  @Test
+  fun `has_feature rejects a malformed name`() {
+    val bad = runtimeError(Feature.COMBAT, "ctx.has_feature(\"Bad-Name\")")
+    assertTrue(bad != null && "has_feature(): 'Bad-Name' is not a feature name" in bad, bad)
     val badType = runtimeError(Feature.COMBAT, "ctx.has_feature(3)")
     assertTrue(
-      badType != null && "expected a string" in badType && "unknown feature" !in badType,
+      badType != null && "expected a string" in badType && "feature name" !in badType,
       badType,
     )
   }

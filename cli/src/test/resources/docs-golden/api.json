@@ -1950,7 +1950,7 @@
       {
         "symbol": "ctx.has_feature",
         "name": "has_feature",
-        "doc": "Whether the world has the named feature module on.",
+        "doc": "Whether the world has the named feature: an engine feature that is on, or one a loaded plugin provides.",
         "since": 1,
         "params": [
           {

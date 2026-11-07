@@ -41,11 +41,12 @@ class WeatherPlugin : GupsPlugin {
 - `id` matches `[a-z][a-z0-9_]*`. Scripts reach the plugin's builtins and effects as fields of a global with that name
   (`weather.now(room)`), so it can't be a predeclared name such as `room`.
 - `pluginApiVersion` must equal `PluginApi.VERSION`.
-- `requiredFeatures` (default none) lists the engine features the plugin needs, such as `setOf("leveling")`. A world
-  that has one of them off, or that names an unknown one, skips the plugin with `plugin '<id>': needs the '<feature>'
-  feature`. `PluginWorld.features` lists the features the world has on, for a plugin that only uses some of them
-  optionally; `PluginActor.level` throws an `IllegalStateException` naming `leveling`, and `PluginRoom.size` one naming
-  `track`, when the feature is off.
+- `requiredFeatures` (default none) lists the features the plugin needs: engine features such as `setOf("leveling")`, or
+  features another plugin provides ([Feature-sized plugins](#feature-sized-plugins)). A world that has one of them off,
+  or that names one neither the engine nor a loading plugin has, skips the plugin with `plugin '<id>': needs the
+  '<feature>' feature`. `PluginWorld.features` lists the features the world has (the engine features that are on and
+  those loaded plugins provide), for a plugin that only uses some of them optionally; `PluginActor.level` throws an
+  `IllegalStateException` naming `leveling`, and `PluginRoom.size` one naming `track`, when the feature is off.
 - Command names are checked against the world's engine commands after `rename`: a plugin command may take a name the
   world renamed away (or whose feature is off), and may not take the new name.
 - `register(r)` adds everything through the `PluginRegistry`. It is atomic: if it throws, or registers an invalid or
@@ -517,8 +518,110 @@ r.onWorldStarted { world ->
 }
 ```
 
-A failure in a command, effect, GMCP producer, GMCP input handler or start callback is recorded as a `"plugin"`
-diagnostic and the pulse goes on. An exception from a builtin is a script error in the calling hook.
+A failure in a command, effect, GMCP producer, GMCP input handler, start callback, periodic work or event listener is
+recorded as a `"plugin"` diagnostic and the pulse goes on. An exception from a builtin is a script error in the calling
+hook.
+
+## Feature-sized plugins
+
+The samples above each add one mechanic. A feature-sized plugin is a complete system: it provides a named feature a
+world can have on, refuses a world that can't support it, does periodic work, listens to engine events and offers a
+builtin for hooks. `samples/hunger-plugin` ([hunger sample](../samples/hunger-plugin/README.md)) is one: it provides the
+`hunger` feature, refuses a world with no `hp` vital, raises each player's hunger once per world tick, warns them as it
+grows, resets it on death and adds `hunger.eat`. Its `register` reads the schema, runs the world checks and adds the
+periodic work, the event listener and the builtin.
+
+### Provided and required features
+
+A plugin declares the features it provides with `providedFeatures`. A provided feature is `[a-z][a-z0-9_]*`, and may not
+be an engine feature id (`combat`, `track`, `skills`, `leveling`, `standing`) or a reserved name; a plugin that breaks
+this is skipped with `provides invalid feature '<name>'`. If two plugins provide the same feature, the one with the
+larger id is skipped. A script tests a provided feature with `ctx.has_feature("hunger")`, which returns `False` when no
+loaded plugin provides it. A plugin's namespace (`hunger.eat`) exists only while the plugin loads, so a file that calls
+it fails to load without the plugin whatever `has_feature` guards; the guard is for code that only reads the plugin's
+attributes, such as `ctx.get_attr(ctx.actor, "hunger:hunger", 0)`.
+
+Another plugin may name a provided feature in its `requiredFeatures`, next to engine features. A plugin is skipped with
+`needs the '<feature>' feature` when a feature it requires is neither an enabled engine feature nor provided by a plugin
+that is loading, and that skip cascades: a plugin whose provider failed a check, refused the world or threw from
+`register` is skipped too, and its registrations are discarded.
+
+Built-in features are not plugins: they reach into the world's own state and phases (the combat round, track slots, XP
+loss at death), so they stay inside the engine and are turned on in `MODULE.gups`. A plugin adds a feature through the
+plugin interface instead. A plugin's feature is not recorded in the world's saved features; adding or removing a plugin
+needs only a restart.
+
+```kotlin
+override val providedFeatures: Set<String> = setOf("hunger")
+```
+
+### World checks and refusal
+
+`r.schema` is the world's `MODULE.gups` schema (stats, vitals and damage types, in declaration order) and `r.features`
+the enabled engine features plus every feature a loading plugin provides. A plugin that needs a particular vital, stat
+or damage type checks the schema and calls `r.refuse(reason)`, which skips the plugin with the warning `plugin '<id>':
+refused: <reason>`, a `plugin` diagnostic and a `plugin_load` alert. Anything it registered before refusing is
+discarded. Refusing is better than silently doing nothing: a world that turns off the vital hunger needs gets a loud
+warning.
+
+```kotlin
+if ("hp" !in r.schema.vitals.map { it.name }) r.refuse("needs an 'hp' vital")
+if (r.schema.damageTypes.isEmpty()) r.refuse("needs a damage type")
+```
+
+### Periodic work
+
+`every(pulses, doc, callback)` runs the callback on every pulse where `pulse % pulses == 0`; `pulses` is at least 8 (one
+combat round), and a smaller value fails `register`. It runs after the world tick's work and before perceptions are
+delivered, in plugin-id order and then registration order. The callback gets a `PluginTickCall` with `world` and
+`actors`: every simulated actor in the world, sorted by id, so mobs in dormant rooms are left alone. A failure is
+recorded as a `"plugin"` diagnostic, and the next run happens as scheduled.
+
+```kotlin
+r.every(120, "Raises hunger once per world tick.") { call ->
+    for (actor in call.actors) {
+        if (!actor.isPlayer) continue
+        val hunger = ((call.world.getAttr(actor, "hunger", 0L) as? Long) ?: 0L) + 1
+        val next = hunger.coerceAtMost(STARVING)
+        call.world.setAttr(actor, "hunger", next)
+        when (next) {
+            HUNGRY -> call.world.send(actor, "You are getting hungry.")
+            STARVING -> {
+                call.world.send(actor, "You are starving.")
+                call.world.damage(actor, 1, damageType, "hp")
+            }
+        }
+    }
+}
+```
+
+### Engine event listeners
+
+`onEvent(name, doc, listener)` listens to an engine event and runs after the scripts' global hook for it. The listener
+gets a `PluginEventCall` with `world`, `event`, the `actor` and the event's `fields`. The six events are
+`on_level_change` (with `old_level` and `new_level`), `on_encumbrance_change` (with `old_encumbrance_level` and
+`new_encumbrance_level`), `on_group_change` (with `event` and a `group`), `on_owner_change` (with `target` and `event`),
+`on_disengage` (with `event`) and `on_death` (with `killer`, or null). Any other name fails `register`. Ints arrive as
+`Long`s and actors as `PluginActor`s. A listener can't veto or change the event, but may change the world as a script
+global hook may; listeners run in plugin-id order, then registration order. A listener for an event whose feature is
+off, such as `on_level_change` without `leveling`, registers and never runs. At `on_death` the victim is still in the
+world, so the listener can still change it.
+
+```kotlin
+r.onEvent("on_death", "Death resets hunger.") { call ->
+    call.world.setAttr(call.actor, "hunger", null)
+}
+```
+
+### The builtin
+
+`hunger.eat(actor, amount)` lowers an actor's hunger by `amount`, not below 0, and returns the new value. A builtin runs
+only from a hook or command, so an item's `on_use` hook calls it to feed the actor:
+
+```python
+def _feed(ctx):
+    hunger.eat(ctx.actor, 3)
+```
 
 ## Installing a plugin
 

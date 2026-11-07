@@ -5,7 +5,10 @@ package gups.pluginapi
  * handlers get only this view, and act through [PluginGmcpCall.command].
  */
 interface PluginGmcpWorld {
-  /** The engine features this world has on: `combat`, `track`, `skills`, `leveling`. */
+  /**
+   * The features this world has: the engine features that are on (`combat`, `track`, `skills`,
+   * `leveling`, `standing`) and the features loaded plugins provide.
+   */
   val features: Set<String>
     get() = setOf("combat", "track", "skills", "leveling")
 

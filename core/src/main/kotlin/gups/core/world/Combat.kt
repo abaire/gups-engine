@@ -381,6 +381,9 @@ private fun World.runDeath(victim: Actor) {
   )
   perceive("death", Channel.SOUND, room, victim, intensity = COMBAT_INTENSITY)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
+  // The global hook sees the victim's belongings and level as at death, before the corpse is made
+  // and XP is priced.
+  dispatchGlobal(HookName.ON_DEATH, HookContext(actor = killer, target = victim), subject = victim)
   // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
   // worth nothing either and drops no loot, so it can't be farmed.
   val summoned = victim is Mob && victim.summonedBy != null

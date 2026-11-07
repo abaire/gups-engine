@@ -288,6 +288,11 @@ fun interface CustomHookHandler {
   fun handle(world: World, entity: Entity, args: Map<String, Any?>, result: Any?): Any?
 }
 
+/** A plugin listener for a global-hookable event: the actor the event is about and its context. */
+fun interface EventListener {
+  fun handle(world: World, subject: Actor, ctx: HookContext)
+}
+
 /**
  * Script execution engine seam connecting the world loop to Starlark script environments.
  *
@@ -319,8 +324,11 @@ interface ScriptHost {
    */
   fun hasHook(owner: Entity, hook: HookName): Boolean = true
 
-  /** Runs every global [hook] registered by loaded packages, with [ctx]. */
-  fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) = Unit
+  /**
+   * Runs every global [hook] registered by loaded packages, with [ctx], whose `ctx.self` is
+   * [subject].
+   */
+  fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) = Unit
 
   /** Evaluates rules modifier [ref] for [point], returning modified value or [base] on error. */
   fun modify(
@@ -430,13 +438,29 @@ internal fun World.invokeOn(owner: Entity, hook: HookName, ctx: HookContext) {
   }
 }
 
-/** Runs every global [hook] registered by loaded packages, with [ctx]. */
-internal fun World.dispatchGlobal(hook: HookName, ctx: HookContext) {
+/**
+ * Runs every global [hook] registered by loaded packages, with [ctx] and [subject] as `ctx.self`; a
+ * null [subject] returns without dispatching. Most hooks pass their actor as [subject] through the
+ * default.
+ */
+internal fun World.dispatchGlobal(hook: HookName, ctx: HookContext, subject: Actor? = ctx.actor) {
+  if (subject == null) return
   withCascadeGuard(hook.scriptName) {
     try {
-      scripts.invokeGlobal(this, hook, ctx)
+      scripts.invokeGlobal(this, hook, subject, ctx)
     } catch (e: Exception) {
       diagnose("script", "${hook.scriptName} failed: ${e.message}", e)
+    }
+    // Plugin listeners run after the script global hooks. on_level_change fires only when leveling
+    // is on, mirroring the gate in the script layer.
+    if (hook != HookName.ON_LEVEL_CHANGE || Feature.LEVELING in features) {
+      for (listener in pluginEvents[hook].orEmpty()) {
+        try {
+          listener.handle(this, subject, ctx)
+        } catch (e: Exception) {
+          diagnose("plugin", "${hook.scriptName} listener failed: ${e.message}", e)
+        }
+      }
     }
   }
 }

@@ -2,6 +2,7 @@ package gups.script
 
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
+import gups.core.model.Actor
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.world.HookContext
@@ -38,9 +39,9 @@ class HookCtxFieldsTest {
       return inner.invokeHook(world, owner, hook, ctx)
     }
 
-    override fun invokeGlobal(world: World, hook: HookName, ctx: HookContext) {
+    override fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) {
       calls += hook to ctx
-      inner.invokeGlobal(world, hook, ctx)
+      inner.invokeGlobal(world, hook, subject, ctx)
     }
   }
 
