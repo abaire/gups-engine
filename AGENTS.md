@@ -2,8 +2,8 @@
 
 ## Working from the spec
 
-The engine is built milestone by milestone from [docs/SPEC.md](docs/SPEC.md) (milestones are in §7.4). The spec is the
-source of truth, but it doesn't settle every detail.
+The engine is built milestone by milestone from [docs/SPEC.md](docs/SPEC.md); each milestone is planned in its own
+`docs/MILESTONE_NN.md`. The spec is the source of truth, but it doesn't settle every detail.
 
 **`docs/DECISIONS.md` is only added to when an agent makes decisions to fill gaps in the spec without asking for
 approval first.** It is a mechanism to allow humans to review those decisions and adjust or ratify them before

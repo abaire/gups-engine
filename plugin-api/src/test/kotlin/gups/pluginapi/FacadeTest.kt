@@ -15,6 +15,8 @@ import gups.core.model.Player
 import gups.core.model.Trait
 import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
+import gups.core.world.Feature
+import gups.core.world.Features
 import gups.core.world.LevelingMsg
 import gups.core.world.World
 import gups.core.world.attach
@@ -924,6 +926,50 @@ class FacadeTest {
     } finally {
       w.creation = oldCreation
     }
+  }
+
+  @Test
+  fun `reportSkillUse fires the on_skill_use hook with report, and errors name their cause`() {
+    val w =
+      world(
+        ZONE +
+          mapOf(
+            "zones/z/skills.star" to
+              """
+              skill("zap", target = "enemy", effect = damage(dice = "1d2"))
+              """,
+            "lib/package.star" to "package(api_version = 1, kind = \"lib\")",
+            "lib/g.star" to
+              """
+              def _log(ctx):
+                  ctx.set_attr(ctx.self.room, "use_log", ctx.get_attr(ctx.self.room, "use_log", "") + ctx.outcome)
+              global_hook("on_skill_use", _log)
+              """,
+          )
+      )
+    val f = WorldFacade(w, "p") {}
+    val ann = ActorFacade(w.spawnPlayer("Ann", Label("//zones/z:a")), w)
+    f.reportSkillUse(ann, "//zones/z:zap")
+    assertEquals("report", f.getAttr(f.room("//zones/z:a")!!, "lib:use_log"))
+    assertEquals(
+      "reportSkillUse(skill): unknown skill '//zones/z:nope'",
+      assertFailsWith<IllegalArgumentException> { f.reportSkillUse(ann, "//zones/z:nope") }.message,
+    )
+    assertEquals(
+      "reportSkillUse(skill): invalid skill label 'zap'",
+      assertFailsWith<IllegalArgumentException> { f.reportSkillUse(ann, "zap") }.message,
+    )
+  }
+
+  @Test
+  fun `reportSkillUse without skills names the feature`() {
+    val w = world(ZONE, features = Features(Feature.entries.toSet() - Feature.SKILLS))
+    val f = WorldFacade(w, "p") {}
+    val ann = ActorFacade(w.spawnPlayer("Ann", Label("//zones/z:a")), w)
+    assertEquals(
+      "reportSkillUse needs the skills feature",
+      assertFailsWith<IllegalStateException> { f.reportSkillUse(ann, "//zones/z:zap") }.message,
+    )
   }
 
   private fun connect(w: World, p: Player): CapturingSink {

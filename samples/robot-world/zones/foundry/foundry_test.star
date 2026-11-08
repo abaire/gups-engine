@@ -145,7 +145,7 @@ def test_failed_skill_check_costs_power_and_emits_failure(t):
     sanity = drone.sanity
     power = p.power
     out = p.do("invoke mind_lash drone")
-    t.contains(out, "You fail to cast mind_lash.")
+    t.contains(out, "Your mind_lash routine crashes.")
     t.eq(p.power, power - 10)
     t.eq(drone.sanity, sanity)
 

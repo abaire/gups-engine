@@ -377,6 +377,26 @@ internal object HookCatalog {
           "Global hook: fires after a mob's owner is set or cleared, with ctx.actor the mob, ctx.target the owner and ctx.event 'set' or 'clear'.",
       ),
       HookSpec(
+        hook = HookName.ON_SKILL_USE,
+        signature = "fn(ctx)",
+        attachTo = emptyList(),
+        ctxFields =
+          listOf(
+            "self",
+            "actor",
+            "skill",
+            "target",
+            "item",
+            "targets",
+            "outcome",
+            "room",
+            "pulse",
+            "rng",
+          ),
+        doc =
+          "Global hook: fires for each use of a skill, with ctx.outcome 'fail', 'resist', 'success' or 'report'.",
+      ),
+      HookSpec(
         hook = HookName.ON_COMBAT_TICK,
         signature = "fn(ctx)",
         attachTo = listOf(M, I),
@@ -2186,10 +2206,11 @@ internal class DeclarationBuiltins(
           name != "on_group_change" &&
           name != "on_owner_change" &&
           name != "on_disengage" &&
-          name != "on_death"
+          name != "on_death" &&
+          name != "on_skill_use"
       )
         fail(
-          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage and on_death can"
+          "global_hook(): '$name' can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage, on_death and on_skill_use can"
         )
       val fn = hookRef(d["fn"], "global_hook(fn)")
       if (ctx.pkg.hookList.any { it.hook == name && it.fn == fn })
@@ -3665,7 +3686,7 @@ internal class DeclarationBuiltins(
             DeclParam(
               "name",
               "str",
-              "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change' or 'on_disengage'.",
+              "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change', 'on_disengage', 'on_death' or 'on_skill_use'.",
               positional = true,
               keyword = true,
               required = true,

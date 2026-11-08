@@ -142,6 +142,18 @@ interface PluginWorld : PluginGmcpWorld {
 
   fun removeSkill(actor: PluginActor, skill: String): Boolean
 
+  /**
+   * Reports a use of [skill] by [actor] to on_skill_use, with outcome "report", as
+   * `ctx.report_skill_use` does. A skill only rules read advances this way. `target` may be the
+   * actor itself. Needs the `skills` feature.
+   */
+  fun reportSkillUse(
+    actor: PluginActor,
+    skill: String,
+    target: PluginActor? = null,
+    item: PluginItem? = null,
+  ): Unit = throw UnsupportedOperationException("reportSkillUse is not supported")
+
   fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? =
     throw UnsupportedOperationException("setBaseStat is not supported")
 

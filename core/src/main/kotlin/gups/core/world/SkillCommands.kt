@@ -258,6 +258,7 @@ internal class CastAction(
         w.msg(SkillMsg.FAILED_ROOM, "actor" to actor.name.cap()),
         actor,
       )
+      w.reportCastUse(actor, skill, target, targetItem, "fail", emptyList())
       return skill.lag
     }
     val power = w.skillPowerChain(c)
@@ -297,10 +298,16 @@ internal class CastAction(
     if (onItem != null && onItem.id in w.entities)
       skill.effect?.let { w.applyItemEffect(it, actor, onItem, power = power) }
     onRoom?.let { r -> skill.effect?.let { w.applyRoomEffect(it, actor, r, power = power) } }
+    // The victims the cast reached, and the ones it landed on, for the on_skill_use report.
+    var reached = 0
+    val landed = mutableListOf<Actor>()
     for (each in targets) {
       val hostile = skill.target == TargetKind.ENEMY && each != null && each !== actor
       // An enemy skill engages whatever it is cast at, whether or not it lands.
-      if (hostile) w.startCombat(actor, each)
+      if (hostile) {
+        reached++
+        w.startCombat(actor, each)
+      }
       if (hostile && !w.spellLands(actor, each, skill)) {
         w.send(
           actor,
@@ -322,6 +329,7 @@ internal class CastAction(
         )
         continue
       }
+      if (each != null) landed += each
       // An item or room skill's effect already ran on the item or the room.
       if (onItem == null && onRoom == null)
         skill.effect?.let { w.applyEffect(it, actor, each, skill, power = power) }
@@ -333,8 +341,28 @@ internal class CastAction(
       actor.room,
       HookContext(actor = actor, target = t, skill = skill, targetItem = onItem),
     )
+    val outcome =
+      if (skill.target == TargetKind.ENEMY && reached > 0 && landed.isEmpty()) "resist"
+      else "success"
+    w.reportCastUse(actor, skill, t, onItem, outcome, landed)
     return skill.lag
   }
+}
+
+/**
+ * Reports a resolved cast to the global on_skill_use hook: once per resolve, only while the user is
+ * still in the world. A cast aimed at the user carries no target.
+ */
+private fun World.reportCastUse(
+  actor: Actor,
+  skill: SkillProto,
+  target: Actor?,
+  item: Item?,
+  outcome: String,
+  landed: List<Actor>,
+) {
+  if (!actor.inWorld) return
+  dispatchSkillUse(actor, skill, target?.takeIf { it !== actor }, item, outcome, landed)
 }
 
 /**

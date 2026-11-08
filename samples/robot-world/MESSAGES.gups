@@ -8,6 +8,8 @@ messages({
     "cast.on_what": "Invoke {skill} on what?",
     "cast.at_whom": "Invoke {skill} at whom?",
     "cast.not_enough": "Your routine needs more {vital}.",
+    "cast.failed.self": "Your {skill} routine crashes.",
+    "cast.failed.room": "{actor}'s implant sputters and goes quiet.",
     "cast.begin.self": "Your implant spins up {skill}.",
     "cast.begin.known": "{actor}'s implant whines as it spins up {skill}.",
     "cast.begin.unknown": "{actor}'s implant whines.",

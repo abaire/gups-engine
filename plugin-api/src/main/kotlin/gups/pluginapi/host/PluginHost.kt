@@ -522,6 +522,7 @@ internal class PluginRegistryImpl(
           HookName.ON_OWNER_CHANGE,
           HookName.ON_DISENGAGE,
           HookName.ON_DEATH,
+          HookName.ON_SKILL_USE,
         )
         .map { it.scriptName }
   }
@@ -615,6 +616,14 @@ internal constructor(
         mapOf("target" to ctx.target?.let { ActorFacade(it, w) }, "event" to ctx.event)
       HookName.ON_DISENGAGE -> mapOf("event" to ctx.event)
       HookName.ON_DEATH -> mapOf("killer" to ctx.actor?.let { ActorFacade(it, w) })
+      HookName.ON_SKILL_USE ->
+        mapOf(
+          "skill" to ctx.skill!!.label.v,
+          "outcome" to ctx.outcome,
+          "target" to ctx.target?.let { ActorFacade(it, w) },
+          "item" to ctx.item?.let { ItemFacade(it, w) },
+          "targets" to ctx.landed.orEmpty().map { ActorFacade(it, w) },
+        )
       else -> emptyMap()
     }
 

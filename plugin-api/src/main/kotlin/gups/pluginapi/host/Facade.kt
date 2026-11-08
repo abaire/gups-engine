@@ -49,6 +49,7 @@ import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
+import gups.core.world.reportSkillUse
 import gups.core.world.send
 import gups.core.world.setBaseMaxVital
 import gups.core.world.setBaseResist
@@ -639,6 +640,25 @@ internal class WorldFacade(
         ?: throw IllegalArgumentException("removeSkill(skill): invalid skill label '$skill'")
     val a = preparedActorOf(actor, "removeSkill(actor)")
     return world.removeSkill(a, label)
+  }
+
+  override fun reportSkillUse(
+    actor: PluginActor,
+    skill: String,
+    target: PluginActor?,
+    item: PluginItem?,
+  ) {
+    needs(world, Feature.SKILLS, "reportSkillUse")
+    val label =
+      runCatching { Label(skill) }.getOrNull()
+        ?: throw IllegalArgumentException("reportSkillUse(skill): invalid skill label '$skill'")
+    require(world.protos.skills.containsKey(label)) {
+      "reportSkillUse(skill): unknown skill '$skill'"
+    }
+    val a = actorOf(actor, "reportSkillUse(actor)")
+    val t = target?.let { actorOf(it, "reportSkillUse(target)") }
+    val i = item?.let { itemOf(it, "reportSkillUse(item)") }
+    world.reportSkillUse(a, world.protos.skills.getValue(label), t, i)
   }
 
   override fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? {

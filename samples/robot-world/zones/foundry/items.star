@@ -32,3 +32,29 @@ skill("overload",
     lag = 4,
     effect = damage(dice = "3d4", type = DAMAGE.energy),
 )
+
+skill("self_repair",
+    kind = "routine",
+    cost = vitals(power = 5),
+    lag = 4,
+    target = "self",
+    effect = heal(dice = "1d6", vital = "integrity"),
+)
+
+def _on_use_chip(ctx):
+    if "//zones/foundry:self_repair" in ctx.actor.skills:
+        ctx.send(ctx.actor, "You already run that routine.")
+        return
+    refusal = ctx.set_skill(ctx.actor, ":self_repair", 1)
+    if refusal == None:
+        ctx.send(ctx.actor, "The chip installs self_repair. (1%)")
+    else:
+        ctx.send(ctx.actor, refusal)
+
+item("repair_chip",
+    name = "a repair chip",
+    keywords = ["chip", "repair"],
+    kind = "consumable",
+    charges = 1,
+    on_use = _on_use_chip,
+)

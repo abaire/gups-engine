@@ -311,7 +311,7 @@
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change' or 'on_disengage'.",
+          "doc": "The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change', 'on_disengage', 'on_death' or 'on_skill_use'.",
           "since": 1
         },
         {
@@ -2963,6 +2963,17 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_skill_use",
+      "feature": "skills",
+      "name": "on_skill_use",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": [],
+      "ctx_fields": ["self", "actor", "skill", "target", "item", "targets", "outcome", "room", "pulse", "rng"],
+      "doc": "Global hook: fires for each use of a skill, with ctx.outcome 'fail', 'resist', 'success' or 'report'.",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_spawn",
       "name": "on_spawn",
       "signature": "fn(ctx)",
@@ -3163,6 +3174,13 @@
         "since": 1
       },
       {
+        "symbol": "ctx.outcome",
+        "feature": "skills",
+        "name": "outcome",
+        "doc": "How a skill use went, for on_skill_use: 'fail', 'resist', 'success' or 'report'.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.parts",
         "name": "parts",
         "doc": "The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.",
@@ -3233,7 +3251,7 @@
       {
         "symbol": "ctx.targets",
         "name": "targets",
-        "doc": "Opponents for on_combat_tick, or summoned mobs for on_summon.",
+        "doc": "Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.",
         "since": 1
       },
       {
@@ -5109,6 +5127,55 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Tag to remove."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.report_skill_use",
+        "feature": "skills",
+        "name": "report_skill_use",
+        "doc": "Reports a use of a skill to the global on_skill_use hook, with outcome 'report'. Needs the skills feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.report_skill_use.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who used the skill."
+          },
+          {
+            "symbol": "ctx.report_skill_use.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
+          },
+          {
+            "symbol": "ctx.report_skill_use.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Target actor, or None."
+          },
+          {
+            "symbol": "ctx.report_skill_use.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item involved, or None."
           }
         ]
       },

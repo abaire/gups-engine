@@ -158,10 +158,10 @@ instrumentation be integrated for distributed metrics and tracing?
 
 ### Dedicated multi-client load testing
 
-**Spec:** §7.1, §7.4 (M6). **Today:** headless harness tests and fuzz walkers verify state transitions and game rules,
-but end-to-end load tests with hundreds of simulated telnet/web clients were deferred. **Questions:** - What tool or
-harness should drive synthetic player traffic to validate the 200-player and tick-latency targets of §7.1? - How should
-load testing be incorporated into CI without exceeding runner resource limits?
+**Spec:** §7.1. **Today:** headless harness tests and fuzz walkers verify state transitions and game rules, but
+end-to-end load tests with hundreds of simulated telnet/web clients were deferred. **Questions:** - What tool or harness
+should drive synthetic player traffic to validate the 200-player and tick-latency targets of §7.1? - How should load
+testing be incorporated into CI without exceeding runner resource limits?
 
 ### Automated api_version bump in release jobs
 

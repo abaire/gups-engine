@@ -60,6 +60,7 @@ class HookCtxFieldsTest {
           "targetItem" -> "target"
           "summonLabel" -> "label"
           "mobs" -> "targets"
+          "landed" -> "targets"
           else -> f.name.replace(Regex("[A-Z]")) { "_" + it.value.lowercase() }
         }
     }
@@ -99,6 +100,7 @@ class HookCtxFieldsTest {
                     item("lead", weight = 80)
                     skill("zap", range = "far", warmup = 1, effect = damage(dice = "1d2"))
                     skill("conjure", kind = "spell", range = "self", target = "self", warmup = 0, effect = summon(":wolf", count = 1))
+                    skill("mark", target = "item", effect = apply_affect(name = "marked", duration = 5, applies = "carried"))
                 """,
         ),
         bubble = true,
@@ -112,6 +114,7 @@ class HookCtxFieldsTest {
     f.w.setOwner(pet, p)
     p.skills[Label("//zones/z:zap")] = 100
     p.skills[Label("//zones/z:conjure")] = 100
+    p.skills[Label("//zones/z:mark")] = 100
     f.w.spawnItem(Label("//zones/z:rock"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
@@ -141,6 +144,7 @@ class HookCtxFieldsTest {
         "south",
         "cast zap wolf",
         "cast conjure",
+        "cast mark key",
       )) {
       f.input(p, line)
       f.run(3)

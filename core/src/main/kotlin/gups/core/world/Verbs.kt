@@ -287,6 +287,45 @@ fun World.removeSkill(actor: Actor, skillLabel: Label): Boolean {
   return removed
 }
 
+/** Reports a use of [skill] by [actor] to the global on_skill_use hook, with outcome "report". */
+fun World.reportSkillUse(
+  actor: Actor,
+  skill: SkillProto,
+  target: Actor? = null,
+  item: Item? = null,
+) {
+  check(Feature.SKILLS in features) { "Skills feature is disabled" }
+  require(actor.inWorld) { "$actor is no longer in the world" }
+  require(target == null || target.inWorld) { "$target is no longer in the world" }
+  require(item == null || item(item.id) === item) { "$item is no longer in the world" }
+  dispatchSkillUse(actor, skill, target, item, "report", emptyList())
+}
+
+/**
+ * The one on_skill_use dispatch: fires the global hook for [actor]'s use of [skill], with [outcome]
+ * and the actors the cast [landed] on. A report's target may be the actor itself.
+ */
+internal fun World.dispatchSkillUse(
+  actor: Actor,
+  skill: SkillProto,
+  target: Actor?,
+  item: Item?,
+  outcome: String,
+  landed: List<Actor>,
+) {
+  dispatchGlobal(
+    HookName.ON_SKILL_USE,
+    HookContext(
+      actor = actor,
+      target = target,
+      item = item,
+      skill = skill,
+      outcome = outcome,
+      landed = landed,
+    ),
+  )
+}
+
 /** Adds [tag] to [item]'s effective tags; false if it already had it. */
 fun World.addItemTag(item: Item, tag: String): Boolean {
   require(item.id in entities) { "$item is not in the world" }

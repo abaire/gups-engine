@@ -160,7 +160,7 @@ interface PluginRegistry {
   /**
    * Listens to a global-hookable engine event; runs after the scripts' global hooks and can't veto
    * or change the event. One of on_level_change, on_encumbrance_change, on_group_change,
-   * on_owner_change, on_disengage and on_death; any other name fails register.
+   * on_owner_change, on_disengage, on_death and on_skill_use; any other name fails register.
    */
   fun onEvent(name: String, doc: String, fn: (PluginEventCall) -> Unit) {}
 

@@ -8,6 +8,16 @@
 #
 # Arriving robots start at the gate.
 
+# A server loads every package, but a test world or scenario that loads only this zone gets
+# //lib (and its on_skill_use hook) only through a load. Nothing here reads the constant.
+load("//lib:skill_gain.star", "USE_WINDOW_PULSES")
+
+def _stock_gate(ctx):
+    # Keep a repair chip on the floor so a new chassis can learn to self-repair.
+    on_floor = [i for i in ctx.self.items() if i.label == "//zones/foundry:repair_chip"]
+    if not on_floor:
+        ctx.spawn(":repair_chip", ctx.self)
+
 room("gate",
     name = "The Foundry Gate",
     desc = "Rusted gates stand open on a yard of scrap.",
@@ -16,6 +26,8 @@ room("gate",
         exit(DIR.east, to = ":assembly"),
         exit(DIR.south, to = ":furnace"),
     ],
+    on_load = _stock_gate,
+    on_reset = _stock_gate,
 )
 
 room("scrapyard",

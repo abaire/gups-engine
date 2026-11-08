@@ -52,6 +52,7 @@
 <tr id="ctx.new_level"><td><code>new_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level after the change.</td></tr>
 <tr id="ctx.old_encumbrance_level"><td><code>old_encumbrance_level</code></td><td>1</td><td>For on_encumbrance_change: the actor's encumbrance level before the change.</td></tr>
 <tr id="ctx.old_level"><td><code>old_level</code> <span class="badge feature">feature: leveling</span></td><td>1</td><td>For on_level_change: the actor's level before the change.</td></tr>
+<tr id="ctx.outcome"><td><code>outcome</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>How a skill use went, for on_skill_use: 'fail', 'resist', 'success' or 'report'.</td></tr>
 <tr id="ctx.parts"><td><code>parts</code></td><td>1</td><td>The damage event's parts, the hit's type first, as struct(type, losses), for on_damage.</td></tr>
 <tr id="ctx.power"><td><code>power</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>In a skill's resolve, the cast's power; None elsewhere.</td></tr>
 <tr id="ctx.proposals"><td><code>proposals</code></td><td>1</td><td>For think: behavior proposals, best first.</td></tr>
@@ -63,7 +64,7 @@
 <tr id="ctx.skill"><td><code>skill</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_perceive: the room the event happened in.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
-<tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, or summoned mobs for on_summon.</td></tr>
+<tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.</td></tr>
 <tr id="ctx.text"><td><code>text</code></td><td>1</td><td>Spoken text, for on_say and on_tell.</td></tr>
 <tr id="ctx.to_room"><td><code>to_room</code></td><td>1</td><td>The room the actor is going to, for exit hooks.</td></tr>
 <tr id="ctx.type"><td><code>type</code></td><td>1</td><td>The damage type, for on_damage.</td></tr>
@@ -726,6 +727,19 @@
 <tbody>
 <tr id="ctx.remove_tag.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to untag.</td></tr>
 <tr id="ctx.remove_tag.tag"><td><code>tag</code></td><td>positional or named</td><td></td><td>Tag to remove.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.report_skill_use" class="entry">
+<h4><code>report_skill_use(actor, skill, target = None, item = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Reports a use of a skill to the global on_skill_use hook, with outcome 'report'. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.report_skill_use.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who used the skill.</td></tr>
+<tr id="ctx.report_skill_use.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+<tr id="ctx.report_skill_use.target"><td><code>target</code></td><td>positional or named</td><td><code>None</code></td><td>Target actor, or None.</td></tr>
+<tr id="ctx.report_skill_use.item"><td><code>item</code></td><td>positional or named</td><td><code>None</code></td><td>Item involved, or None.</td></tr>
 </tbody>
 </table>
 </article>

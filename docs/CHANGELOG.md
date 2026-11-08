@@ -4,6 +4,17 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Skill advancement through use
+
+- The global `on_skill_use` hook (feature `skills`): every cast that resolves reports `"fail"`, `"resist"` or
+  `"success"`, so a world can advance skills through use.
+- `ctx.report_skill_use(actor, skill, target=None, item=None)` fires `on_skill_use` with `"report"`, for skills that
+  only rules read, such as an artificer's.
+- Plugins: `PluginWorld.reportSkillUse` fires `on_skill_use` with `"report"`, and `onEvent("on_skill_use", ...)`
+  delivers `skill`, `outcome`, `target`, `item` and `targets` after the script global hooks.
+- The robot world has a sample `//lib:skill_gain.star`: deterministic advancement through use with a tunable curve, and
+  a `self_repair` routine learned from a repair chip.
+
 ### Custom creation steps and base values
 
 - Plugins can set base stats, base vital maxima and base resists with `setBaseStat`, `setBaseMaxVital` and

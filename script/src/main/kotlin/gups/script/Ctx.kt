@@ -78,6 +78,7 @@ import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
 import gups.core.world.removeRoomAffect
 import gups.core.world.removeSkill
+import gups.core.world.reportSkillUse
 import gups.core.world.roomOfEntity
 import gups.core.world.say
 import gups.core.world.send
@@ -203,10 +204,11 @@ internal constructor(
   @StarlarkMethod(
     name = "targets",
     structField = true,
-    doc = "Opponents for on_combat_tick, or summoned mobs for on_summon.",
+    doc =
+      "Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.",
   )
   fun targets(): Any = field {
-    (hc.mobs ?: extras.targets)?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE
+    (hc.mobs ?: hc.landed ?: extras.targets)?.let { t -> sList(t.map { v(it) }) } ?: Starlark.NONE
   }
 
   @StarlarkMethod(
@@ -418,6 +420,13 @@ internal constructor(
 
   @StarlarkMethod(name = "rng", structField = true, doc = "The seeded random number generator.")
   fun rng(): Any = field { RngView(frame) }
+
+  @StarlarkMethod(
+    name = "outcome",
+    structField = true,
+    doc = "How a skill use went, for on_skill_use: 'fail', 'resist', 'success' or 'report'.",
+  )
+  fun outcome(): Any = field { hc.outcome ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "old_level",
@@ -1150,6 +1159,31 @@ internal constructor(
     verb("skill_info") {
       val l = skillArg(label, "skill_info", thread)
       world.protos.skills[l]?.let { SkillView(it, world.schema) } ?: Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "report_skill_use",
+    doc =
+      "Reports a use of a skill to the global on_skill_use hook, with outcome 'report'. " +
+        "Needs the skills feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor who used the skill."),
+        Param(name = "skill", named = true, doc = "Skill label, or the skill's view."),
+        Param(name = "target", named = true, defaultValue = "None", doc = "Target actor, or None."),
+        Param(name = "item", named = true, defaultValue = "None", doc = "Item involved, or None."),
+      ],
+    useStarlarkThread = true,
+  )
+  fun reportSkillUse(actor: Any, skill: Any, target: Any, item: Any, thread: StarlarkThread): Any =
+    verb("report_skill_use") {
+      val a = actorArg(actor, "report_skill_use(actor)")
+      val l = skillArg(skill, "report_skill_use", thread)
+      val proto = world.protos.skills[l] ?: fail("report_skill_use(skill): unknown skill '${l.v}'")
+      val t = if (isNone(target)) null else actorArg(target, "report_skill_use(target)")
+      val i = if (isNone(item)) null else itemArg(item, "report_skill_use(item)")
+      world.reportSkillUse(a, proto, t, i)
+      Starlark.NONE
     }
 
   @StarlarkMethod(

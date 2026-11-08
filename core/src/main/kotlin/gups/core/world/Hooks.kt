@@ -136,6 +136,16 @@ enum class HookName(
    */
   ON_OWNER_CHANGE("on_owner_change"),
 
+  /**
+   * Invoked, as a global hook only, once for each use of a skill: a cast that resolves, or a
+   * script's or plugin's report.
+   *
+   * [HookContext.actor] is the user, [HookContext.skill] the skill, [HookContext.target] the target
+   * actor, [HookContext.item] the item, [HookContext.landed] the actors a cast landed on, and
+   * [HookContext.outcome] "fail", "resist", "success" or "report".
+   */
+  ON_SKILL_USE("on_skill_use"),
+
   /** Invoked on engaged combatants during each combat round tick. */
   ON_COMBAT_TICK("on_combat_tick"),
 
@@ -261,6 +271,10 @@ data class HookContext(
   val count: Int? = null,
   /** The mobs just summoned, for on_summon. */
   val mobs: List<Actor>? = null,
+  /** How a skill use went, for on_skill_use: "fail", "resist", "success" or "report". */
+  val outcome: String? = null,
+  /** The actors a cast landed on, for on_skill_use. */
+  val landed: List<Actor>? = null,
 )
 
 /** Outcome result of a package reload operation. */

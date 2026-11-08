@@ -681,14 +681,15 @@ r.every(120, "Raises hunger once per world tick.") { call ->
 ### Engine event listeners
 
 `onEvent(name, doc, listener)` listens to an engine event and runs after the scripts' global hook for it. The listener
-gets a `PluginEventCall` with `world`, `event`, the `actor` and the event's `fields`. The six events are
+gets a `PluginEventCall` with `world`, `event`, the `actor` and the event's `fields`. The seven events are
 `on_level_change` (with `old_level` and `new_level`), `on_encumbrance_change` (with `old_encumbrance_level` and
 `new_encumbrance_level`), `on_group_change` (with `event` and a `group`), `on_owner_change` (with `target` and `event`),
-`on_disengage` (with `event`) and `on_death` (with `killer`, or null). Any other name fails `register`. Ints arrive as
-`Long`s and actors as `PluginActor`s. A listener can't veto or change the event, but may change the world as a script
-global hook may; listeners run in plugin-id order, then registration order. A listener for an event whose feature is
-off, such as `on_level_change` without `leveling`, registers and never runs. At `on_death` the victim is still in the
-world, so the listener can still change it.
+`on_disengage` (with `event`), `on_death` (with `killer`, or null) and `on_skill_use` (with `skill`, `outcome`,
+`target`, `item`, and `targets`, the landed actors). Any other name fails `register`. Ints arrive as `Long`s and actors
+as `PluginActor`s. A listener can't veto or change the event, but may change the world as a script global hook may;
+listeners run in plugin-id order, then registration order. A listener for an event whose feature is off, such as
+`on_level_change` without `leveling`, registers and never runs. At `on_death` the victim is still in the world, so the
+listener can still change it.
 
 ```kotlin
 r.onEvent("on_death", "Death resets hunger.") { call ->

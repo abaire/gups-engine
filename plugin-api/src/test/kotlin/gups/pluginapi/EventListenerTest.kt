@@ -1,13 +1,19 @@
 package gups.pluginapi
 
+import gups.core.CapturingSink
 import gups.core.Label
+import gups.core.SessionId
+import gups.core.WorldControlEvent
 import gups.core.model.DamageType
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.HookName
+import gups.core.world.attach
 import gups.core.world.awardXp
 import gups.core.world.damage
 import gups.core.world.groupAdd
+import gups.core.world.handle
+import gups.core.world.submit
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.WorldFacade
@@ -232,6 +238,80 @@ class EventListenerTest {
       )
     val w = world(zone, plugins = PluginHost.of(plugin))
     kill(w)
+    assertTrue(
+      w.diagnostics.none { it.kind == "plugin" },
+      w.diagnostics.joinToString("\n") { it.message },
+    )
+  }
+
+  @Test
+  fun `an on_skill_use listener runs after the script global hook, with outcome, skill and the landed actor`() {
+    var calls = 0
+    var seen: String? = null
+    var outcomeSeen: Any? = null
+    var skillSeen: Any? = null
+    var targetsSeen: List<PluginActor>? = null
+    val plugin =
+      eventPlugin(
+        "skilluse",
+        listOf(
+          "on_skill_use" to
+            { call ->
+              calls++
+              seen = call.world.getAttr(call.actor.room, "lib:use_log", "") as String?
+              outcomeSeen = call.fields["outcome"]
+              skillSeen = call.fields["skill"]
+              targetsSeen = (call.fields["targets"] as? List<*>)?.map { it as PluginActor }
+            }
+        ),
+      )
+    val w =
+      world(
+        zone +
+          mapOf(
+            "zones/z/skills.star" to
+              """
+              skill("mend", target = "self", effect = heal(dice = "2d4", vital = "hp"))
+              """,
+            "lib/package.star" to "package(api_version = 1, kind = \"lib\")",
+            "lib/g.star" to
+              """
+              def _g(ctx):
+                  ctx.set_attr(ctx.self.room, "use_log", ctx.get_attr(ctx.self.room, "use_log", "") + "script," + ctx.outcome)
+              global_hook("on_skill_use", _g)
+              """,
+          ),
+        plugins = PluginHost.of(plugin),
+      )
+    val p = w.spawnPlayer("Ann", Label("//zones/z:a"))
+    p.skills[Label("//zones/z:mend")] = 100
+    val sink = CapturingSink()
+    w.handle(WorldControlEvent.Connect(SessionId(1), sink))
+    w.attach(SessionId(1), p)
+    w.submit(p, "cast mend")
+    w.runPulse()
+    assertEquals(1, calls, "the on_skill_use listener must run exactly once")
+    assertEquals("script,success", seen, "the plugin must run after the script global hook")
+    assertEquals("success", outcomeSeen)
+    assertEquals("//zones/z:mend", skillSeen)
+    assertEquals(listOf("Ann"), targetsSeen?.map { it.name })
+  }
+
+  @Test
+  fun `an on_skill_use listener registers without skills but never runs`() {
+    var ran = false
+    val plugin = eventPlugin("su", listOf("on_skill_use" to { _ -> ran = true }))
+    val w =
+      world(
+        zone,
+        plugins = PluginHost.of(plugin),
+        features = Features(Feature.entries.filter { it != Feature.SKILLS }.toSet()),
+      )
+    assertTrue(
+      w.pluginEvents[HookName.ON_SKILL_USE].orEmpty().isNotEmpty(),
+      "the listener must be installed",
+    )
+    assertFalse(ran, "with skills off the listener must never run")
     assertTrue(
       w.diagnostics.none { it.kind == "plugin" },
       w.diagnostics.joinToString("\n") { it.message },
