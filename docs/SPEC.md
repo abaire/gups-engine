@@ -765,6 +765,9 @@ module(
   only adds XP and waits for `ctx.level_up` (§5.4). It needs the `leveling` feature, and isn't recorded per database.
 - **`standing_history_pulses`:** how long the engine keeps the history of standing changes (§5.14), in pulses; default
   14400 (one hour). An int of at least 1. It needs the `standing` feature, and isn't recorded per database.
+- **`memory_pulses`:** how long a mob keeps a combat memory (§5.8) after it last happened, in pulses; default 0, which
+  keeps none. An int of at least 0. A mob's `memory_pulses` overrides it. It needs the `combat` feature, and isn't
+  recorded per database.
 - **Typed values.** Wherever the API takes or returns numbers keyed by schema names, it uses a constructor that checks
   its keywords against the schema, with a suggestion for a misspelling. A plain dict in their place is an error that
   names the constructor.
@@ -804,7 +807,7 @@ is the same as leaving it out.
 |      Feature       |                                                                                                                                                                                                                                                                                                                                                                                                                                                               Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Requires |
 |--------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
 | kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect`, `remove_affect` and `summon` verbs, `before_summon` and `on_summon`), pet ownership (`set_owner`, `clear_owner`, `on_owner_change`), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, the `order` command, `before_order` and the `ORDER` restriction point, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                      | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `aggressive(prefer=)`, `assist(prefer=)`, `retarget`, the `target_order` export, combat memory with `memory_pulses` (module and mob), `memories`, `remember` and `forget`; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                           | —        |
 | `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `combat` |
 | `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, warmups and `CastState`, interrupts, `cast_allowed`, `interrupt_check`, `skill_check`, `skill_power`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, the global `on_skill_use` hook, `act_cast`, the `set_skill`, `remove_skill`, `skill_info` and `report_skill_use` verbs, `casting` in `Char.Status`, the `skills` command, `Char.Skills`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | —        |
 | `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_share`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`, global `on_level_change` hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | —        |
@@ -912,6 +915,7 @@ mob("goblin_scout",
     vitals=vitals(hp=30), resists=resists(fire=-10),  # schema-checked (§3.9)
     skills={"//skills/martial:kick": 40},
     senses={"sound": 3},  # merged over sight/sound = 1; sight stays 1, sound is boosted (§5.7)
+    memory_pulses=None,  # combat memory window; None uses the world's (§5.8)
     behaviors=[wander(radius=4, chance=10), aggressive(toward="players"),
                assist(allies=["goblin_*"]), flee(below=vitals(hp=20))],
     think=_scout_think, think_every=4,
@@ -1022,6 +1026,8 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   A name no loaded plugin defines fails the package's load with a "did you mean" suggestion, as a skipped plugin's
   builtins do; every tool that loads packages registers the plugins first, so `gups lint` checks it too. The traits'
   deltas apply on top of the mob's declared `stats`, `vitals` and `resists`, which stay base values.
+- **Mob memory:** `mob(memory_pulses = n)` sets how long this mob keeps combat memories (§5.8), overriding the world's
+  `memory_pulses`; `0` keeps none. Needs `combat`.
 - **Containers:** `container(capacity, max_weight, state, key)` makes an item a container. `capacity` counts items;
   `max_weight` weighs the contents.
 - **Regions:** `region(name, modifiers = {...})` declares a region's modifiers. Region names are lowercase words and
@@ -1321,8 +1327,8 @@ power percentage, or `None` elsewhere; `skills` feature), `pulse`, `rng`.
 - **Position:** `room`, `track_index` and `band_of(other)` (`track` feature), `home_room`, `recall_room`.
 - **State:** `attrs`, `affects`, `slots` (the slots `actor_slots` returned), `skills` and `is_casting`/`casting`
   (`skills` feature), `flags`, `has_flag(flag)`, `equipped(slot)`, `inventory()`, `carried_weight`, `encumbrance_level`
-  (the level `rules.encumbrance_level` last gave; 0 while that rule is running), `has_item(label)`, `fighting()`
-  (`combat` feature), `wait_state`.
+  (the level `rules.encumbrance_level` last gave; 0 while that rule is running), `has_item(label)`, `fighting()` and
+  `primary_target` (the actor it is attacking, or `None`; `combat` feature), `wait_state`.
 
 **Room view:**
 
@@ -1344,28 +1350,28 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 
 **Verbs (v0):**
 
-|       Group       |                                                                                                                                                                                                                                                                                  Verbs                                                                                                                                                                                                                                                                                   |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Messaging         | `say(speaker, text)`, `emote(actor, text)`, `send(target, text)` (one recipient), `echo(room, text, exclude=[])`, `gmcp(player, package, data)`                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players.                                                                                                                                                                                                                                                                                   |
-| Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital, source=None)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor, an item or a room), `summon(caster, label, count=1, duration=None)`, `clear_contributions(victim, contributor=None)`                                                                                                                                                                                                                       |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                                                                                                                                                                                                                                                                                      |
-| Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                                                                                                                                                                                                                                                                                                             |
-| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Pets              | `set_owner(mob, player)`, `clear_owner(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Standing          | `standing_event(affected, actor, event, amount=0, item=None)`, `adjust_standing(holder, subject, amount)`, `clear_standing(holder, subject=None)`                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`, `skill_info(label) -> skill | None`, `group_of(actor) -> group | None`, `group_members(actor) -> [actor]`, `plan(facts, actions, goal, max_expansions=1024) -> [name] | None`, `disposition(holder, subject) -> int`, `standing(holder, subject) -> int`, `factions_of(actor) -> [str]`, `standing_history(holder, subject, since=0, via=None, event=None) -> struct(gained, lost)` |
-| Randomness        | `rng.int(lo, hi)`, `rng.chance(pct)`, `rng.choice(list)`. Seeded and deterministic; there is no other source of randomness.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Leveling          | `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Skills            | `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `report_skill_use(actor, skill, target=None, item=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Groups            | `group_add(member, to)`, `group_remove(member)`, `group_set_leader(member)`, `group_disband(member)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|       Group       |                                                                                                                                                                                                                                                                                                            Verbs                                                                                                                                                                                                                                                                                                             |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Messaging         | `say(speaker, text)`, `emote(actor, text)`, `send(target, text)` (one recipient), `echo(room, text, exclude=[])`, `gmcp(player, package, data)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players.                                                                                                                                                                                                                                                                                                                                       |
+| Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital, source=None)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor, an item or a room), `summon(caster, label, count=1, duration=None)`, `clear_contributions(victim, contributor=None)`, `remember(mob, subject, event, skill=None, amount=None, target=None)`, `forget(mob, subject=None, event=None)`                                                                                                                                                           |
+| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`                                                                                                                                                                                                                                                                                                                                          |
+| Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Timers            | `after(pulses, fn, **args) -> timer_id`, `cancel(timer_id)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Pets              | `set_owner(mob, player)`, `clear_owner(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Standing          | `standing_event(affected, actor, event, amount=0, item=None)`, `adjust_standing(holder, subject, amount)`, `clear_standing(holder, subject=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`, `skill_info(label) -> skill | None`, `group_of(actor) -> group | None`, `group_members(actor) -> [actor]`, `plan(facts, actions, goal, max_expansions=1024) -> [name] | None`, `disposition(holder, subject) -> int`, `standing(holder, subject) -> int`, `factions_of(actor) -> [str]`, `standing_history(holder, subject, since=0, via=None, event=None) -> struct(gained, lost)`, `memories(mob, subject=None, event=None, since=0)` |
+| Randomness        | `rng.int(lo, hi)`, `rng.chance(pct)`, `rng.choice(list)`. Seeded and deterministic; there is no other source of randomness.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Leveling          | `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Skills            | `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `report_skill_use(actor, skill, target=None, item=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Groups            | `group_add(member, to)`, `group_remove(member)`, `group_set_leader(member)`, `group_disband(member)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 **Verb semantics:**
 
@@ -1386,6 +1392,18 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
   actor that applied the affect is credited while it is in the world.
 - **`clear_contributions`:** empties the actor's contribution record, or removes one contributor's entry. The engine
   never expires the record itself.
+- **`memories`:** the live combat memories (§5.8) of `mob`, newest first (latest `pulse`, then subject id, then event),
+  optionally only those about `subject`, named `event`, or with `pulse` at or after `since`. Each is a struct with
+  `subject` and `target` (actor views, or `None` when absent or no longer in the world), `event`, `skill` (an absolute
+  skill label, or `None`), `first_pulse`, `pulse`, `count`, `amount` and `channel` (a channel name, or `None`). A mob
+  with no memory window has none. Needs `combat`.
+- **`remember`:** adds to `mob`'s combat memory as the engine does, merging with a memory of the same subject, event,
+  skill and target; returns `None` and does nothing when the mob keeps no memory. `event` matches `[a-z][a-z0-9_]*` and
+  may be a built-in name. `skill` is a skill label (absolute or relative to the calling package) and needs `skills`.
+  `amount` is an int of at least 0. The memory's channel is `None`. Needs `combat`; any package may call it.
+- **`forget`:** removes `mob`'s combat memories about `subject` (an actor view), named `event`, or both; with neither it
+  removes them all. Returns the number removed. A charm, a pacify spell or a bribe uses it to make a mob let go of
+  someone. It changes no standing (§5.14). Needs `combat`; any package may call it.
 - **`summon`:** spawns `count` (1 or more) mobs of prototype `label` beside `caster`, each with `summonedBy` set to
   `caster`. With a `duration` (1 or more) each gets a `summoned` affect; when it ends, the mob fades away as for the
   `summon` primitive (§4.3). Returns the mobs as a list. It is not scaled by power. When `caster` is an in-world player,
@@ -1509,12 +1527,12 @@ rules as the functions below. Rules execution, synthetic dry runs, and modifier 
 package; defining it in two is a load error naming both files. A missing export is reported once for the package, after
 all its files have loaded, since it belongs to no file; a forbidden export or a public function that isn't an export is
 reported at its file and line. The engine has no built-in ruleset and nothing to fall back to: every export that an
-enabled feature uses (the "Feature" column) must be defined, and an export of a feature that is off must not be. Five
+enabled feature uses (the "Feature" column) must be defined, and an export of a feature that is off must not be. Six
 exports are optional: `xp_share`, whose default pays the killer the whole pool, `owned_behaviors`, whose default is
-described in §4.7, and `factions`, `standing` and `standing_change`, whose defaults are described in §5.14. The engine
-calls them with a rules `ctx` that is read-only, apart from `deny`. Any other public top-level function in a rules file
-(one whose name doesn't start with `_`) is a load error for the rules package. A misspelled export can't be silently
-ignored; helpers take a `_` prefix.
+described in §4.7, `target_order`, without which behaviors choose as §4.7 describes, and `factions`, `standing` and
+`standing_change`, whose defaults are described in §5.14. The engine calls them with a rules `ctx` that is read-only,
+apart from `deny`. Any other public top-level function in a rules file (one whose name doesn't start with `_`) is a load
+error for the rules package. A misspelled export can't be silently ignored; helpers take a `_` prefix.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the other actor, if any: the
 defender, the pinner, the killed or the killer, or the actor advanced on or retreated from), `weapon`, `item`, `band` (a
@@ -1529,14 +1547,21 @@ for a proc of an item's instance affect, that affect; `None` everywhere else), `
 without an item, in `encumbrance_level` and `encumbrance`; `None` elsewhere, and in `carry_limit`'s own call), `carried`
 (the carried and worn weight, containers' contents included, in `encumbrance_level` and `encumbrance`; `None`
 elsewhere), `encumbrance_level` (the level just computed, in `encumbrance`; `None` elsewhere), `behaviors` (in
-`owned_behaviors`, the mob's prototype behaviors as behavior values; `None` elsewhere), `disposition_parts` (in
-`disposition`, a struct with `declared`, `faction_to_actor`, `faction_to_faction`, `personal` and `total`), `amount` (in
-`standing_change`, the healing done or the count given; otherwise `None`), `helped` (in an `assist` standing event, the
-actor helped), `pet` (in a standing event raised for a pet's owner, the pet), `pulse`, `rng`, `roll(dice)`, and
-`deny(msg)`, valid only in `cast_allowed` and its modifiers. It has helper queries `factions_of(actor)` and
-`standing_history(holder, subject, since = 0, via = None, event = None)` and `standing(holder, subject)`, the record
-reads of §4.5. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` and `has_trait`
-(§4.19).
+`owned_behaviors`, the mob's prototype behaviors as behavior values; `None` elsewhere), `behavior` (in `target_order`,
+the behavior asking: `"aggressive"`, `"assist"` or `"retarget"`; otherwise `None`), `prefer` (in `target_order`, the
+behavior's `prefer`; otherwise `None`), `candidates` (in `target_order`, the actors to choose from, in ascending id;
+otherwise `None`), `current` (in `target_order`, the mob's primary target for `retarget` and the ally's for `assist`, or
+`None`), `current_since` (in `target_order` for `retarget`, the pulse the mob's primary target last changed; otherwise
+`None`), `dispositions` (in `target_order` with the `standing` feature, the mob's disposition toward each candidate, in
+the same order; otherwise `None`), `ally` (in `target_order` for `assist`, the ally being helped; otherwise `None`),
+`disposition_parts` (in `disposition`, a struct with `declared`, `faction_to_actor`, `faction_to_faction`, `personal`
+and `total`), `amount` (in `standing_change`, the healing done or the count given; otherwise `None`), `helped` (in an
+`assist` standing event, the actor helped), `pet` (in a standing event raised for a pet's owner, the pet), `pulse`,
+`rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its modifiers. It has helper queries
+`factions_of(actor)` and `standing_history(holder, subject, since = 0, via = None, event = None)` and `standing(holder,
+subject)`, the record reads of §4.5, and the helper query `memories(subject = None, event = None, since = 0)`, the
+combat memories of `ctx.actor` as `ctx.memories` gives them (§4.5), or `[]` when `ctx.actor` is not a mob. It has no
+verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 
 |                   Function                    |       Feature        |                                                                                                       Returns                                                                                                       |
 |-----------------------------------------------|----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -1575,6 +1600,7 @@ reads of §4.5. It has no verbs. Its actor views have the schema fields of §4.5
 | `xp_for_kill(ctx)`, `xp_to_level(ctx, level)` | `leveling`           | Ints.                                                                                                                                                                                                               |
 | `xp_share(ctx)`                               | `leveling`           | Dict `{actor: int}`. Splits the pool among actors; see the death bullet.                                                                                                                                            |
 | `owned_behaviors(ctx)`                        | kernel               | List of behaviors that `ctx.actor`, a mob, runs while `ctx.target` owns it.                                                                                                                                         |
+| `target_order(ctx)`                           | `combat`             | One actor of `ctx.candidates` for `ctx.actor`, a mob, to attack, or `None` for nobody (§4.7).                                                                                                                       |
 | `on_level_up(ctx)`                            | `leveling`           | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                                    |
 | `factions(ctx)`                               | `standing`           | `list[str]`, the faction labels of `ctx.actor` (§5.14).                                                                                                                                                             |
 | `disposition(ctx)`                            | `standing`           | Int in -100..100: what `ctx.actor` thinks of `ctx.target`. `ctx.disposition_parts`.                                                                                                                                 |
@@ -1593,6 +1619,11 @@ owned mob after a reload. The result is cached on the mob and not saved. Behavio
 inside it and nowhere else at run time. A rules error keeps the default list. Plugins then adjust the result (§4.15).
 When defined, the load-time dry run calls it with the throwaway mob and a player, and checks it returns a list of
 behaviors.
+
+**`target_order`**: called by a behavior with `prefer` (§4.7) once per proposal, when it has at least one candidate. A
+return that is not one of `ctx.candidates`, or an error, is logged as a rules diagnostic and the behavior chooses as if
+it had no `prefer`. The dry run calls it once with the throwaway mob as `ctx.actor`, the dry-run player as the only
+candidate, `ctx.behavior = "aggressive"` and `ctx.prefer = "dry_run"`.
 
 **Standing exports** (§5.14): `factions` is cached per actor until its traits, affects, level, choices or owner change,
 a reload or a restore. `disposition` is asked at most once per holder and subject in a pulse; its result is clamped.
@@ -1847,8 +1878,9 @@ Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin
 |                                                                    Behavior                                                                    | Default priority |                                                                                                           What it does                                                                                                            |
 |------------------------------------------------------------------------------------------------------------------------------------------------|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `wander(radius=3, chance=10, priority=10)`                                                                                                     | 10               | Moves randomly within `radius` exits of the home room, counted through open doors. `chance` is the percent probability per think.                                                                                                 |
-| `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, via="sight", disposition_below=None, priority=60)` | 60               | Looks for a target on each think with probability `chance` percent. Attacks the lowest-id matching target it notices. `combat` feature; the level arguments also need `leveling`.                                                 |
-| `assist(allies, disposition_above=None, priority=50)`                                                                                          | 50               | Attacks an ally's primary target, or else its lowest-id opponent. `combat` feature.                                                                                                                                               |
+| `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, disposition_below=None, prefer=None, priority=60)` | 60               | Looks for a target on each think with probability `chance` percent. Attacks the matching target it notices that `target_order` picks, or else the lowest-id one. `combat` feature; the level arguments also need `leveling`.      |
+| `assist(allies, disposition_above=None, prefer=None, priority=50)`                                                                             | 50               | Attacks an ally's primary target, or else its lowest-id opponent; with `prefer`, the opponent `target_order` picks. `combat` feature.                                                                                             |
+| `retarget(prefer, toward="players", disposition_below=None, chance=100, priority=55)`                                                          | 55               | While engaged, with probability `chance` percent on each think, asks `target_order` (§4.6) whom to fight and attacks its pick if that is not its primary target. `combat` feature.                                                |
 | `flee(below=vitals(...), priority=100)`                                                                                                        | 100              | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature.                                                                                    |
 | `guard(exit, allies="mobs", disposition_above=None)`                                                                                           | —                | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act.                                            |
 | `follow(target, disposition_above=None, priority=30)`                                                                                          | 30               | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader.                                                                                                                            |
@@ -1862,8 +1894,8 @@ Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin
 - **Owned mobs:** while a mob has an owner (§4.5 `set_owner`), it runs its owned behavior list instead of its
   prototype's `behaviors`. Unless the world's rules say otherwise (§4.6 `owned_behaviors`), that list is the prototype's
   `flee` and `sentinel` behaviors, in declaration order, then `heel()`, then `defend()` with `combat`. Whatever the
-  list, an owned mob's `aggressive` and `assist` never pick its owner, its owner's group members, or a pet of any of
-  them.
+  list, an owned mob's `aggressive`, `assist` and `retarget` never pick its owner, its owner's group members, or a pet
+  of any of them.
 - **Whom they mean:** `players`, `mobs`, `all`, or label patterns with `*`, as a string or a list. A pattern without a
   package (`goblin_*`) matches the label name in any package; `:goblin_*` means this package.
 - **Disposition** (the `standing` feature, §5.14): `disposition_below = n` keeps only candidates the mob's disposition
@@ -1871,16 +1903,53 @@ Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin
   and never against a foe above `n`; `guard` with it also lets through anyone above `n`; `follow` with it drops a leader
   that falls to `n` or below. The disposition is asked once per candidate that matches the behavior's other filters. The
   owned-mob rule above still applies.
-- **Noticing:** `aggressive` asks `rules.can_perceive` (§4.6) once per candidate and channel in `via`, as the mob, about
-  event `notice` with intensity 1 and the candidate as `ctx.source`. A candidate is noticed if any channel passes.
-  Stealth and invisibility are world rules: decide them when the actor hides, keep the result on an affect, and read it
-  in `can_perceive`. Rolling inside `can_perceive` gives the mob a fresh roll on every look; `chance` sets how often it
-  looks.
-- **`via`:** one channel or a list, each built in or declared (§3.9). A mob that senses a channel nothing else hides on
-  can't be hidden from.
-- **Engagement:** behaviors other than `flee` propose nothing while engaged.
+- **Preference:** `prefer` is a string, int or bool, or a list or dict of those (dict keys are strings), at most 4 deep
+  and 64 values in all. The engine gives it no meaning: when a behavior has one, it asks the world's `target_order`
+  export (§4.6) once per proposal to choose among the candidates that passed the behavior's other filters, and plugins'
+  `addTargetOrder` handlers after it (§4.15). `None` from the export means nobody this think. Without `prefer`, or
+  without the export, or when the export fails or returns an actor that isn't a candidate, the behavior chooses as
+  described in the table. Like every behavior argument, `prefer` is plain data compared by value (§7.3).
+- **`retarget`:** its candidates are every actor the mob is engaged with in its room, with no other filter, and the
+  actors in the room it isn't engaged with that match `toward`, pass `disposition_below` and are noticed, all in
+  ascending id. `prefer` is required. With no candidates, or when `target_order` returns `None`, isn't defined, fails,
+  or picks the primary target, it proposes nothing. Otherwise it proposes `kill` on the pick, which costs no lag and
+  engages an actor not yet in the fight. An owned mob's `retarget` never picks its owner, its owner's group members, or
+  a pet of any of them.
+- **Noticing:** a mob notices a candidate when, for some channel on which the mob's effective sense is above 0,
+  `rules.can_perceive` (§4.6) passes, asked as the mob about event `notice` with intensity 1 and the candidate as
+  `ctx.source`. Channels are asked in the world's perception order (§3.9), stopping at the first that passes, so a mob
+  asks at most once per channel it senses. A mob's senses come from `mob(senses=)` and its sense deltas (§5.7): a mob
+  with `sight` 0 never notices by sight, and a blinding affect stops it while it lasts. Stealth and invisibility are
+  world rules: decide them when the actor hides, keep the result on an affect, and read it in `can_perceive`. Rolling
+  inside `can_perceive` gives the mob a fresh roll on every look; `chance` sets how often it looks.
+- **Engagement:** behaviors other than `flee` and `retarget` propose nothing while engaged; `retarget` proposes only
+  while engaged.
 - **Failures:** a behavior that throws is logged as an engine diagnostic and proposes nothing.
 - Built-in behaviors are data values with value equality, so the version-bump lint (§7.3) can compare them.
+
+**The template's `target_order`** (`rules/targeting.star`) reads `prefer` as a strategy name, a list of them, or a dict:
+
+- `"weakest"` and `"strongest"` order by the lowest and highest hit points as a share of maximum, and `"hated"` by the
+  lowest disposition. In a list, each later name breaks the earlier ties, then the lowest id.
+- `"threat"` scores each candidate from the mob's combat memory, each memory worth its event's weight times its amount
+  (or its count when the amount is 0), fading linearly to nothing over `THREAT_PULSES`.
+- Any other name is ignored.
+- A dict may give `order` (a name or list, as above), `weights` (event to weight, over the defaults), `delay` (spare a
+  candidate until that many pulses after it arrived: the first `enter` the mob remembers of it, or the mob's own latest
+  `arrive` if that is later), `switch_margin` (for `retarget`, the percent by which a challenger's threat must beat the
+  current target's) and `min_dwell` (for `retarget`, pulses after a switch before another).
+- It is a sample for worlds to tune.
+
+**The template's `pacify`** (`//skills/arcane:pacify`) is a sample of `ctx.forget`. It is cast as an `ally` spell, so it
+never engages its target.
+
+- **The roll:** a 1d100 roll at or under the caster's power (`ctx.power`), less 10 for each level the target has over
+  the caster, clamped to 5..95.
+- **On success, on a mob:** it ends the mob's engagement with the caster alone, makes it forget everything it remembers
+  about the caster, and gives it a `pacified` affect for `PACIFY_PULSES` (40).
+- **While pacified:** the template's `can_perceive` refuses `notice`, so the mob starts no fight and retargets nobody.
+  It still joins an ally's fight through `assist`.
+- **What it doesn't touch:** standing, so a grudge held there returns when the affect ends.
 
 Each behavior produces at most one `Proposal(commandLine, priority, source, action)` per think cycle. The `action` fixes
 the target the behavior chose; `commandLine` describes it and is what `ctx.proposals[i].command` shows.
@@ -2756,11 +2825,18 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Owned behaviors (`addOwnedBehaviors`):** adjusts the owned behavior list of a mob (§4.7) after the world's
   `owned_behaviors` rules export, in plugin-id order. A handler gets a read-only `PluginWorld`, the mob, the owner (or
   null while the owner is offline) and the list so far as descriptors, and returns the new list. A descriptor is a map
-  with `kind` (the behavior's builtin name) and its builtin arguments by name: ints as `Long`,
-  `toward`/`allies`/`target` as a list of strings (a label pattern is absolute, `//pkg:name*`, or a bare `name*` that
-  matches in any package; a `:`-relative one is invalid), `below` as a map of vital names to `Long`, `exit` as a
-  direction name. An invalid descriptor, or a handler that throws, records a `plugin` diagnostic and leaves the list
-  unchanged.
+  with `kind` (the behavior's builtin name, including `retarget`) and its builtin arguments by name: ints as `Long`,
+  `prefer` as plain values (`Long`, `String`, `Boolean`, `List`, `Map`), `toward`/`allies`/`target` as a list of strings
+  (a label pattern is absolute, `//pkg:name*`, or a bare `name*` that matches in any package; a `:`-relative one is
+  invalid), `below` as a map of vital names to `Long`, `exit` as a direction name. An invalid descriptor, or a handler
+  that throws, records a `plugin` diagnostic and leaves the list unchanged.
+- **Target order (`addTargetOrder`):** adjusts the choice a behavior with `prefer` (§4.7) makes, after the world's
+  `target_order` export, in plugin-id order. A handler gets a read-only `PluginWorld`, the mob, the behavior name,
+  `prefer` as plain values (`Long`, `String`, `Boolean`, `List`, `Map`), the candidates in ascending id, the current
+  target and ally (or null), and the choice so far. It returns `PluginTargetChoice.Default` (choose as without
+  `prefer`), `Nobody`, or `Pick(actor)` with one of the candidates; returning the choice it was given keeps it. A pick
+  that isn't a candidate, or a handler that throws, records a `plugin` diagnostic and keeps the choice so far. Must be
+  fast and side-effect free.
 - **Standing (`addDispositionModifier`, `addFactions`):** `addDispositionModifier` adjusts a disposition (§5.14) after
   the rules export, in plugin-id order; a handler gets a read-only `PluginWorld`, the holder, the subject and the value
   so far, and returns an int, which is clamped. `addFactions` adjusts an actor's faction labels after the `factions`
@@ -2769,6 +2845,8 @@ subsystems (`core` or `script`). It consists of three primary components:
   adjusting. `PluginWorld` has `disposition(holder, subject)`, `standing(holder, subject)`, `factionsOf(actor)`,
   `raiseStandingEvent(affected, actor, event, amount, item)` and `adjustStanding(holder, subject, amount)`, with the
   rules of the matching `ctx` methods (§4.5); a record's holder or subject is a `PluginActor` or a faction label string.
+  It also has `memories(mob, subject, event, since)`, `remember(mob, subject, event, skill, amount, target)` and
+  `forget(mob, subject, event)`, with the same meaning as `ctx.memories`, `ctx.remember` and `ctx.forget` (§4.5).
 
 **Facade operations:**
 
@@ -3641,21 +3719,21 @@ exit it crosses. Every simulated actor it reaches, player or mob, is asked wheth
 - **Events:** each has a channel, an intensity, a room, an optional actor (who caused it and never perceives it) and
   optional text:
 
-|                 Event                 |      Channel      |        Intensity        |
-|---------------------------------------|-------------------|-------------------------|
-| `say`                                 | `sound`           | 1                       |
-| `emote`                               | `sight`           | 1                       |
-| `enter`, `exit` (visible movement)    | `sight`           | 1                       |
-| `combat_start`, `combat`, `death`     | `sound`           | 2                       |
-| `shout`                               | `sound`           | 3                       |
-| `open`, `close`, `lock`, `unlock`     | `sound`           | `rules.door_intensity`  |
-| `ctx.emit(channel, event, intensity)` | any               | the script's, default 1 |
-| `notice` (asked by `aggressive`)      | the `via` channel | 1                       |
-| `whisper`, `tell`                     | —                 | never perceived         |
+|                 Event                 |           Channel           |        Intensity        |
+|---------------------------------------|-----------------------------|-------------------------|
+| `say`                                 | `sound`                     | 1                       |
+| `emote`                               | `sight`                     | 1                       |
+| `enter`, `exit` (visible movement)    | `sight`                     | 1                       |
+| `combat_start`, `combat`, `death`     | `sound`                     | 2                       |
+| `shout`                               | `sound`                     | 3                       |
+| `open`, `close`, `lock`, `unlock`     | `sound`                     | `rules.door_intensity`  |
+| `ctx.emit(channel, event, intensity)` | any                         | the script's, default 1 |
+| `notice` (asked by `aggressive`)      | each channel the mob senses | 1                       |
+| `whisper`, `tell`                     | —                           | never perceived         |
 
-`whisper` and `tell` are never propagated or sent to `on_perceive`. `notice` is asked by `aggressive` once per candidate
-per channel in its `via`, as the mob, about the candidate as `ctx.source`; it is never propagated and never sent to
-`on_perceive`, only used to decide whether the candidate is attacked.
+`whisper` and `tell` are never propagated or sent to `on_perceive`. `notice` is asked by the behaviors that look for
+targets (§4.7) once per candidate and per channel the mob senses, as the mob, about the candidate as `ctx.source`; it is
+never propagated and never sent to `on_perceive`, only used to decide whether the candidate is noticed.
 
 - **In-room messages:** the built-in commands tell the players of the event's own room through the same
   `rules.can_perceive` check, so senses apply there too. Each player is tried channel by channel in `channel_priority`
@@ -3734,6 +3812,27 @@ Autonomous NPC behavior and think cycles are implemented in
      overrides it, and `"idle"` skips the turn.
   4. Without `think`, the top proposal is enqueued.
 - **Scope:** Thinking only happens for mobs in the bubble or marked active.
+
+**Combat memory** (`combat` feature). Each mob keeps a transient record of what it has experienced and witnessed, never
+saved and gone when the mob leaves the world. Its window is the mob's `memory_pulses`, or else the world's (§3.9); with
+a window of 0 the mob records nothing.
+
+- **A memory** is about one subject (an actor) and one event, with an optional skill and target. Repeats of the same
+  subject, event, skill and target merge into one memory: `first_pulse` stays, `pulse` becomes the latest, `count` goes
+  up by one, `amount` adds up, and `channel` is the latest. A memory is forgotten once more than the window has passed
+  since its `pulse`. A mob keeps at most 256 memories; past that the one with the oldest `pulse` is forgotten.
+- **About itself,** with no perception check: `attack` (the subject started a fight with it), `damage` (with the amount,
+  credited as for contributions), and `arrive` (the mob entered a room or was spawned; the subject is the mob itself).
+- **Perceived events:** each event with an actor that reaches the mob and that `rules.can_perceive` lets it perceive
+  (§5.7) is a memory named after the event, with the channel it was perceived on. An `enter` in the mob's own room is
+  recorded as it happens instead (below), so a mob that thinks later in the same pulse already remembers it.
+- **Witnessed in the subject's room, as it happens:** `enter` (the subject came into the room), `cast_start` and `cast`
+  (the skill and its target; `cast` is recorded just before the effects and `resolve` run, so `resolve` can forget it),
+  `heal` (the target and the effective amount, above 0), `help` (the target of a helpful affect another actor applied)
+  and `kill` (the victim as target). A mob witnesses one when `rules.can_perceive`, asked as the mob about that event
+  with the subject as `ctx.source` and intensity 1, passes on a channel it senses, in perception order. The subject
+  never witnesses its own event, and only simulated mobs witness.
+- Scripts and plugins read memory and add to it (§4.5, §4.6, §4.15).
 
 ### 5.9 Reality Bubble
 

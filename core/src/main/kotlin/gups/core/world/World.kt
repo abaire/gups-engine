@@ -158,6 +158,8 @@ class World(
   var levelMode: LevelMode = LevelMode.AUTO,
   /** How long the engine keeps the history of standing changes, in pulses. */
   var standingHistoryPulses: Long = 14_400,
+  /** Default combat memory window for mobs, in pulses; 0 keeps none. */
+  var memoryPulses: Long = 0,
 ) {
   /** The live prototype table; a reload swaps it. */
   var protos: Prototypes = protos
@@ -234,6 +236,9 @@ class World(
 
   /** Plugin owned-behavior adjusters, in plugin id order. */
   var ownedBehaviorAdjusters: List<OwnedBehaviorAdjuster> = emptyList()
+
+  /** Plugin target-order adjusters, in plugin id order then registration order. */
+  var targetOrderAdjusters: List<TargetOrderAdjuster> = emptyList()
 
   /** Plugin disposition modifiers, in plugin id order. */
   var dispositionModifiers: List<DispositionModifier> = emptyList()
@@ -593,6 +598,7 @@ class World(
     forgetActorSlots(m)
     refreshFit(m)
     clampVitals(m)
+    remember(m, m, "arrive")
     val full =
       m.vitalMap.filter { (name, v) -> v.current == m.max(name) }.mapValues { it.value.current }
     invokeOn(m, HookName.ON_SPAWN, HookContext(room = at))

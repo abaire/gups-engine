@@ -438,6 +438,10 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   /** Entity ID of the actor's primary combat target, or null. */
   var primaryTarget: EntityId? = null
 
+  /** Pulse at which [primaryTarget] last changed. */
+  var primaryTargetSince: Long = 0
+    internal set
+
   /** Initiative score rolled for the current combat round, or null if unengaged during rolls. */
   var initiative: Int? = null
     internal set
@@ -732,6 +736,9 @@ class Mob(
 
   /** Personal standing records toward other actors, saved with the mob. */
   val personalStanding: java.util.TreeMap<EntityId, StandingRecord> = java.util.TreeMap()
+
+  /** Combat memories by key, in insertion order; transient, never saved. */
+  internal val memories: LinkedHashMap<MemoryKey, Memory> = LinkedHashMap()
 }
 
 /**

@@ -69,9 +69,11 @@ import gups.core.world.PRIORITY_FLEE
 import gups.core.world.PRIORITY_FOLLOW
 import gups.core.world.PRIORITY_HEEL
 import gups.core.world.PRIORITY_PURSUE
+import gups.core.world.PRIORITY_RETARGET
 import gups.core.world.PRIORITY_SCAVENGE
 import gups.core.world.PRIORITY_WANDER
 import gups.core.world.Pursue
+import gups.core.world.Retarget
 import gups.core.world.Scavenge
 import gups.core.world.Sentinel
 import gups.core.world.Wander
@@ -1232,6 +1234,11 @@ internal class DeclarationBuiltins(
           skill to prof
         }
       val senses = senses(d["senses"], d.what("senses"), schema, allowNegative = false)
+      val memoryPulses =
+        d.int("memory_pulses")?.let {
+          if (it < 0) fail("mob(memory_pulses): must be at least 0")
+          it.toLong()
+        }
       val loot =
         d.list("loot").map {
           (it as? LootDecl)?.rule ?: fail("mob(loot): expected loot(...), got ${typeName(it)}")
@@ -1253,6 +1260,7 @@ internal class DeclarationBuiltins(
             },
           skills = skills,
           senses = senses,
+          memoryPulses = memoryPulses,
           think = d["think"]?.let { ScriptThink(hookRef(it, d.what("think")), pkg) },
           thinkEvery = d.int("think_every") ?: def.thinkEvery,
           behaviors =
@@ -1799,18 +1807,17 @@ internal class DeclarationBuiltins(
           doc = "Percent chance of looking for a target on each think, 0 to 100.",
         ),
         Param(
-          name = "via",
-          named = true,
-          defaultValue = "'sight'",
-          doc =
-            "The channel, or list of channels, the mob notices targets on; built in or declared.",
-        ),
-        Param(
           name = "disposition_below",
           named = true,
           defaultValue = "None",
           doc =
             "Attack only targets whose disposition is strictly below this threshold (-100..100).",
+        ),
+        Param(
+          name = "prefer",
+          named = true,
+          defaultValue = "None",
+          doc = "Plain data passed to the world's target_order; None chooses as described.",
         ),
         Param(
           name = "priority",
@@ -1826,8 +1833,8 @@ internal class DeclarationBuiltins(
     unlessLevelAbove: Any,
     unlessLevelBelow: Any,
     chance: Any,
-    via: Any,
     dispositionBelow: Any,
+    prefer: Any,
     priority: Any,
     thread: StarlarkThread,
   ): Any {
@@ -1846,25 +1853,15 @@ internal class DeclarationBuiltins(
       } else {
         null
       }
-    val names =
-      when (via) {
-        is String -> listOf(via)
-        else -> strList(via, "aggressive(via)")
-      }
-    if (names.isEmpty()) fail("aggressive(via): needs at least one channel")
-    names
-      .firstOrNull { n -> names.count { it == n } > 1 }
-      ?.let { fail("aggressive(via): duplicate channel '$it'") }
-    val known = schema.allChannels.map { it.name }
-    val viaChannels = names.map { Channel(choice(it, "aggressive(via)", known)) }
+    val preferVal = preferArg(prefer, "aggressive(prefer)")
     return BehaviorDecl(
       Aggressive(
         actorFilter(toward, "aggressive(toward)", pkgPath),
         intOrNull(unlessLevelAbove, "aggressive(unless_level_above)"),
         intOrNull(unlessLevelBelow, "aggressive(unless_level_below)"),
         percent(chance, "aggressive(chance)"),
-        viaChannels,
         dispositionBelowInt,
+        preferVal,
         priorityArg(priority, PRIORITY_AGGRESSIVE, "aggressive(priority)"),
       )
     )
@@ -1888,6 +1885,12 @@ internal class DeclarationBuiltins(
             "Help allies and spare opponents whose disposition is strictly above this threshold (-100..100).",
         ),
         Param(
+          name = "prefer",
+          named = true,
+          defaultValue = "None",
+          doc = "Plain data passed to the world's target_order; None chooses as described.",
+        ),
+        Param(
           name = "priority",
           named = true,
           defaultValue = "None",
@@ -1896,7 +1899,13 @@ internal class DeclarationBuiltins(
       ],
     useStarlarkThread = true,
   )
-  fun assist(allies: Any, dispositionAbove: Any, priority: Any, thread: StarlarkThread): Any {
+  fun assist(
+    allies: Any,
+    dispositionAbove: Any,
+    prefer: Any,
+    priority: Any,
+    thread: StarlarkThread,
+  ): Any {
     val pkgPath = behaviorCtx(thread, "assist")
     need("assist", "assist()")
     val dispositionAboveInt =
@@ -1908,11 +1917,87 @@ internal class DeclarationBuiltins(
       } else {
         null
       }
+    val preferVal = preferArg(prefer, "assist(prefer)")
     return BehaviorDecl(
       Assist(
         actorFilter(allies, "assist(allies)", pkgPath),
         dispositionAboveInt,
+        preferVal,
         priorityArg(priority, PRIORITY_ASSIST, "assist(priority)"),
+      )
+    )
+  }
+
+  @StarlarkMethod(
+    name = "retarget",
+    doc =
+      "Behavior: while engaged, asks target_order whom to fight and switches to its pick if that is not the primary target.",
+    parameters =
+      [
+        Param(
+          name = "prefer",
+          named = true,
+          defaultValue = "None",
+          doc = "Plain data passed to the world's target_order; required.",
+        ),
+        Param(
+          name = "toward",
+          named = true,
+          defaultValue = "'players'",
+          doc =
+            "Non-engaged actors in the room to consider: 'players', 'mobs', 'all', or label patterns.",
+        ),
+        Param(
+          name = "disposition_below",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "Consider only non-engaged targets whose disposition is strictly below this threshold (-100..100).",
+        ),
+        Param(
+          name = "chance",
+          named = true,
+          defaultValue = "100",
+          doc = "Percent chance of asking target_order on each think, 0 to 100.",
+        ),
+        Param(
+          name = "priority",
+          named = true,
+          defaultValue = "None",
+          doc = "Proposal priority; higher wins. None uses the behavior's default.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun retarget(
+    prefer: Any,
+    toward: Any,
+    dispositionBelow: Any,
+    chance: Any,
+    priority: Any,
+    thread: StarlarkThread,
+  ): Any {
+    val pkgPath = behaviorCtx(thread, "retarget")
+    need("retarget", "retarget()")
+    val preferVal =
+      preferArg(prefer, "retarget(prefer)")
+        ?: fail("retarget(prefer): required; retarget never switches without it")
+    val dispositionBelowInt =
+      if (!isNone(dispositionBelow)) {
+        need("retarget.disposition_below", "retarget(disposition_below)")
+        val sb = int(dispositionBelow, "retarget(disposition_below)")
+        if (sb !in -100..100) fail("retarget(disposition_below): must be in -100..100")
+        sb
+      } else {
+        null
+      }
+    return BehaviorDecl(
+      Retarget(
+        preferVal,
+        actorFilter(toward, "retarget(toward)", pkgPath),
+        dispositionBelowInt,
+        percent(chance, "retarget(chance)"),
+        priorityArg(priority, PRIORITY_RETARGET, "retarget(priority)"),
       )
     )
   }
@@ -2689,6 +2774,7 @@ internal class DeclarationBuiltins(
         "wander",
         "aggressive",
         "assist",
+        "retarget",
         "flee",
         "guard",
         "follow",
@@ -3227,6 +3313,12 @@ internal class DeclarationBuiltins(
               default = "{}",
             ),
             DeclParam(
+              "memory_pulses",
+              "int",
+              "Combat memory window in pulses, overriding module(memory_pulses); 0 keeps none, None uses the world's.",
+              default = "None",
+            ),
+            DeclParam(
               "think",
               "function",
               "Custom AI function fn(ctx) run on each think cycle.",
@@ -3759,6 +3851,35 @@ internal class DeclarationBuiltins(
         STANDING_DELTA_SPEC,
       ) + SCHEMA_SPECS
   }
+}
+
+internal fun preferArg(v: Any?, what: String): gups.core.AttrValue? {
+  if (v == null || isNone(v)) return null
+  var count = 0
+  fun convert(x: Any?, depth: Int): gups.core.AttrValue {
+    count++
+    if (count > 64) fail("$what: may contain at most 64 values")
+    return when (x) {
+      is StarlarkInt -> gups.core.AttrValue.I(x.toLong(what))
+      is String -> gups.core.AttrValue.S(x)
+      is Boolean -> gups.core.AttrValue.B(x)
+      is Sequence<*> -> {
+        if (depth >= 4) fail("$what: lists and dicts may nest at most 4 deep")
+        gups.core.AttrValue.L(x.map { convert(it, depth + 1) })
+      }
+      is Dict<*, *> -> {
+        if (depth >= 4) fail("$what: lists and dicts may nest at most 4 deep")
+        gups.core.AttrValue.M(
+          x.entries.associate { (k, item) ->
+            val key = k as? String ?: fail("$what: dict keys must be strings, got ${typeName(k)}")
+            key to convert(item, depth + 1)
+          }
+        )
+      }
+      else -> fail("$what: expected int, str, bool, list or dict, got ${typeName(x)}")
+    }
+  }
+  return convert(v, 0)
 }
 
 internal fun procList(v: Any?, what: String): List<Proc> {

@@ -1,5 +1,6 @@
 package gups.core.rules
 
+import gups.core.AttrValue
 import gups.core.Label
 import gups.core.Rng
 import gups.core.model.Actor
@@ -17,6 +18,7 @@ import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.StandingDelta
 import gups.core.world.Behavior
+import gups.core.world.TargetChoice
 import gups.core.world.World
 
 /**
@@ -88,6 +90,31 @@ class RulesContext(
   val helped: Actor? = null,
   /** The pet mob whose action raised an event for its owner; null elsewhere. */
   val pet: Actor? = null,
+  /**
+   * Behavior name (`"aggressive"`, `"assist"` or `"retarget"`) in `target_order`; null elsewhere.
+   */
+  val behavior: String? = null,
+  /** The behavior's `prefer` argument in `target_order`; null elsewhere. */
+  val prefer: AttrValue? = null,
+  /** Candidate targets in `target_order`, ordered by ascending id; null elsewhere. */
+  val candidates: List<Actor>? = null,
+  /**
+   * In `target_order`, the mob's primary target for `"retarget"` or the ally's for `"assist"`, when
+   * it is in the room; null elsewhere.
+   */
+  val current: Actor? = null,
+  /**
+   * In `target_order` for `"retarget"`, the pulse the mob's primary target last changed; null
+   * elsewhere.
+   */
+  val currentSince: Long? = null,
+  /**
+   * `actor`'s disposition toward each candidate in `target_order`; null elsewhere or without
+   * `standing`.
+   */
+  val dispositions: List<Int>? = null,
+  /** The ally being assisted in `target_order` for `"assist"`; null elsewhere. */
+  val ally: Actor? = null,
   private val rngOverride: Rng? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
@@ -131,6 +158,13 @@ class RulesContext(
       amount = amount,
       helped = helped,
       pet = pet,
+      behavior = behavior,
+      prefer = prefer,
+      candidates = candidates,
+      current = current,
+      currentSince = currentSince,
+      dispositions = dispositions,
+      ally = ally,
       rngOverride = rngOverride,
     )
 
@@ -172,6 +206,13 @@ class RulesContext(
       amount = amount,
       helped = helped,
       pet = pet,
+      behavior = behavior,
+      prefer = prefer,
+      candidates = candidates,
+      current = current,
+      currentSince = currentSince,
+      dispositions = dispositions,
+      ally = ally,
       rngOverride = rngOverride,
     )
 
@@ -353,6 +394,9 @@ interface RulesEngine {
 
   /** The standing changes produced by a standing event, or null for the default deltas. */
   fun standingChange(c: RulesContext): List<StandingDelta>? = null
+
+  /** Which candidate target a behavior should pick, or [TargetChoice.Default]. */
+  fun targetOrder(c: RulesContext): TargetChoice = TargetChoice.Default
 
   /** Who is awarded what of [c]`xp` for the kill; the default pays the killer all of it. */
   fun xpShare(c: RulesContext): Map<Actor, Long> =

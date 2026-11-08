@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.AttrValue
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
@@ -472,6 +473,13 @@ class BonusDamageTest {
         amount = 5L,
         helped = d,
         pet = d,
+        behavior = "aggressive",
+        prefer = AttrValue.S("weakest"),
+        candidates = listOf(d),
+        current = d,
+        currentSince = 6L,
+        dispositions = listOf(-10),
+        ally = d,
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

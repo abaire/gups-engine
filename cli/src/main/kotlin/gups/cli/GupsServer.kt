@@ -313,6 +313,7 @@ class GupsServer(
         boot,
         levelMode = module.levelMode,
         standingHistoryPulses = module.standingHistoryPulses,
+        memoryPulses = module.memoryPulses,
       )
     plugins.install(world)
     host.install(world)

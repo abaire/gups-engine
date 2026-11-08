@@ -228,7 +228,12 @@ internal fun World.deliverPerceptions() {
     // Only ask the rules when the answer would be used.
     val runsHook = a is Mob && scripts.hasHook(a, HookName.ON_PERCEIVE)
     val isTold = a is Player && (d.reach.via != null || ev.tellRoom)
-    if (!runsHook && !isTold) continue
+    val records =
+      a is Mob &&
+        ev.actor != null &&
+        memoryPulsesOf(a) > 0 &&
+        !(ev.event == "enter" && d.reach.origin === a.room)
+    if (!runsHook && !isTold && !records) continue
     val source = ev.actor?.takeIf { it.inWorld }
     val c =
       RulesContext(
@@ -246,6 +251,7 @@ internal fun World.deliverPerceptions() {
         text = ev.text,
       )
     if (!rules.canPerceive(c)) continue
+    if (records) remember(a, ev.actor, ev.event, channel = ev.channel)
     if (runsHook) {
       invokeOn(
         a,

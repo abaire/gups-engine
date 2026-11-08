@@ -35,17 +35,23 @@
 <tr id="rules_ctx.action"><td><code>action</code></td><td>1</td><td>For door_intensity: 'open', 'close', 'lock' or 'unlock'.</td></tr>
 <tr id="rules_ctx.actor"><td><code>actor</code></td><td>1</td><td>Whom the call is about: the attacker, caster, mover or regenerating actor.</td></tr>
 <tr id="rules_ctx.affect"><td><code>affect</code></td><td>1</td><td>In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.</td></tr>
+<tr id="rules_ctx.ally"><td><code>ally</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order for 'assist', the ally being helped; None elsewhere.</td></tr>
 <tr id="rules_ctx.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In standing_change, the healing done or the count given; otherwise None.</td></tr>
 <tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.behavior"><td><code>behavior</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, 'aggressive', 'assist' or 'retarget'; None elsewhere.</td></tr>
 <tr id="rules_ctx.behaviors"><td><code>behaviors</code></td><td>1</td><td>The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.</td></tr>
+<tr id="rules_ctx.candidates"><td><code>candidates</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the non-empty candidate actor list in ascending id order; None elsewhere.</td></tr>
 <tr id="rules_ctx.carried"><td><code>carried</code></td><td>1</td><td>The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
 <tr id="rules_ctx.contributors"><td><code>contributors</code></td><td>1</td><td>The victim's contributors, as contributor structs, in xp_share; None elsewhere.</td></tr>
 <tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
+<tr id="rules_ctx.current"><td><code>current</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the primary target when it is in candidates (the ally's for assist, the mob's for retarget); None elsewhere.</td></tr>
+<tr id="rules_ctx.current_since"><td><code>current_since</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order for 'retarget', the pulse the mob's primary target last changed; None elsewhere.</td></tr>
 <tr id="rules_ctx.damage_type"><td><code>damage_type</code></td><td>1</td><td>The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.</td></tr>
 <tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
 <tr id="rules_ctx.disposition_parts"><td><code>disposition_parts</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.</td></tr>
+<tr id="rules_ctx.dispositions"><td><code>dispositions</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order with the standing feature on, actor's disposition toward each candidate; None elsewhere.</td></tr>
 <tr id="rules_ctx.encumbrance_level"><td><code>encumbrance_level</code></td><td>1</td><td>The level encumbrance_level just gave; None outside encumbrance.</td></tr>
 <tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.</td></tr>
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
@@ -54,6 +60,7 @@
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
 <tr id="rules_ctx.limit"><td><code>limit</code></td><td>1</td><td>The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.pet"><td><code>pet</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In a standing event raised for a pet's owner, the pet; None elsewhere.</td></tr>
+<tr id="rules_ctx.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the behavior's prefer value; None elsewhere.</td></tr>
 <tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator; not available in xp_to_level.</td></tr>
 <tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>
@@ -87,6 +94,18 @@
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="rules_ctx.factions_of.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.memories" class="entry">
+<h4><code>memories(subject = None, event = None, since = 0)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
+<p>Queries combat memories of ctx.actor, newest first; [] when ctx.actor is not a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.memories.subject"><td><code>subject</code></td><td>positional or named</td><td><code>None</code></td><td>Optional actor view filter.</td></tr>
+<tr id="rules_ctx.memories.event"><td><code>event</code></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
+<tr id="rules_ctx.memories.since"><td><code>since</code></td><td>positional or named</td><td><code>0</code></td><td>Minimum pulse.</td></tr>
 </tbody>
 </table>
 </article>

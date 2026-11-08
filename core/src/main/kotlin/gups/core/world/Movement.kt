@@ -4,6 +4,7 @@ import gups.core.model.Actor
 import gups.core.model.Channel
 import gups.core.model.Direction
 import gups.core.model.Exit
+import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.rules.RulesContext
@@ -37,6 +38,7 @@ internal fun World.transition(
     exclude = arrayOf(actor),
   )
   placeActor(actor, to, entryIndexFor(exit, to))
+  if (actor is Mob) remember(actor, actor, "arrive")
   tellPerceivers(
     to,
     "enter",
@@ -47,6 +49,7 @@ internal fun World.transition(
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
   perceive("enter", Channel.SIGHT, to, actor)
+  witness(to, actor, "enter")
   fireDisengage(freed, reason)
   dispatch(
     HookName.ON_EXIT,
@@ -90,6 +93,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
       exclude = arrayOf(actor),
     )
     placeActor(actor, to, index ?: 0)
+    if (actor is Mob) remember(actor, actor, "arrive")
     tellPerceivers(
       to,
       "enter",
@@ -100,6 +104,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     if (actor is Player) send(actor, describeRoom(actor))
     perceive("exit", Channel.SIGHT, from, actor)
     perceive("enter", Channel.SIGHT, to, actor)
+    witness(to, actor, "enter")
     fireDisengage(freed, "stop")
     dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, toRoom = to))
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))

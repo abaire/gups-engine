@@ -298,13 +298,14 @@ class LinterTest {
   }
 
   @Test
-  fun `changing an aggressive chance or via requires a version bump`() {
-    fun content(chance: Int, via: String) =
+  fun `changing an aggressive chance or senses requires a version bump`() {
+    fun content(chance: Int, senses: String) =
       """
       mob(
           "rat",
           name = "Rat",
-          behaviors = [aggressive(toward = "players", chance = $chance, via = $via)],
+          senses = $senses,
+          behaviors = [aggressive(toward = "players", chance = $chance)],
           version = 1,
       )
       """
@@ -312,10 +313,7 @@ class LinterTest {
 
     val root =
       tempWorld(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/content.star" to content(100, "\"sight\""),
-        )
+        mapOf("zones/z/package.star" to zonePkg(), "zones/z/content.star" to content(100, "{}"))
       )
     val baseProtos =
       ScriptLoader(WorldDir(root), ScriptLimits.HARNESS)
@@ -324,10 +322,7 @@ class LinterTest {
 
     val chanceChanged =
       tempWorld(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/content.star" to content(50, "\"sight\""),
-        )
+        mapOf("zones/z/package.star" to zonePkg(), "zones/z/content.star" to content(50, "{}"))
       )
     val chanceReport = Linter(WorldDir(chanceChanged), basePrototypes = baseProtos).lint()
     assertFalse(chanceReport.ok)
@@ -337,17 +332,17 @@ class LinterTest {
       }
     )
 
-    val viaChanged =
+    val sensesChanged =
       tempWorld(
         mapOf(
           "zones/z/package.star" to zonePkg(),
-          "zones/z/content.star" to content(100, "[\"sight\", \"sound\"]"),
+          "zones/z/content.star" to content(100, "{\"sight\": 0}"),
         )
       )
-    val viaReport = Linter(WorldDir(viaChanged), basePrototypes = baseProtos).lint()
-    assertFalse(viaReport.ok)
+    val sensesReport = Linter(WorldDir(sensesChanged), basePrototypes = baseProtos).lint()
+    assertFalse(sensesReport.ok)
     assertTrue(
-      viaReport.errors.any {
+      sensesReport.errors.any {
         "mob prototype declaration changed since base without a version bump" in it.message
       }
     )

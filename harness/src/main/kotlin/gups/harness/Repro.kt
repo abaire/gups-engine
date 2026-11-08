@@ -64,6 +64,7 @@ class ReproRunner(
         Boot(pulse = startPulse, nextEntityId = firstFreeId, fillSpawns = false),
         levelMode = mod.levelMode,
         standingHistoryPulses = mod.standingHistoryPulses,
+        memoryPulses = mod.memoryPulses,
       )
     plugins.install(world)
     host.install(world)

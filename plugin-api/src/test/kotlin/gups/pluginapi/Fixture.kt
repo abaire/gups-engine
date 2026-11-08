@@ -58,6 +58,7 @@ fun world(
       WorldConfig(seed = seed, checkInvariants = true, features = features, bubble = bubble),
       levelMode = loader.module.levelMode,
       standingHistoryPulses = loader.module.standingHistoryPulses,
+      memoryPulses = loader.module.memoryPulses,
     )
   plugins.install(world)
   host.install(world)

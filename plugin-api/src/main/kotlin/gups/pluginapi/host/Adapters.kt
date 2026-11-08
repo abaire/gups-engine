@@ -22,9 +22,12 @@ import gups.core.world.Diagnostic
 import gups.core.world.DispositionModifier
 import gups.core.world.FactionAdjuster
 import gups.core.world.OwnedBehaviorAdjuster
+import gups.core.world.TargetChoice
+import gups.core.world.TargetOrderAdjuster
 import gups.core.world.World
 import gups.core.world.behaviorOf
 import gups.core.world.descriptor
+import gups.core.world.toPlain
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
@@ -39,6 +42,8 @@ import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginStepReply
+import gups.pluginapi.PluginTargetChoice
+import gups.pluginapi.PluginTargetOrderCall
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import java.util.Collections
@@ -472,6 +477,63 @@ internal fun factionAdjusterAdapter(
     } catch (e: Throwable) {
       w.record(Diagnostic(w.pulse, "plugin", "plugin '$pluginId': faction adjuster failed: $e", e))
       factions
+    }
+  }
+}
+
+internal fun targetOrderAdapter(
+  world: World,
+  pluginId: String,
+  choose: (PluginTargetOrderCall) -> PluginTargetChoice,
+): TargetOrderAdjuster {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return TargetOrderAdjuster { w, call, choice ->
+    val candidatesList = call.candidates.map { ActorFacade(it, w) }
+    val pluginChoice =
+      when (choice) {
+        is TargetChoice.Pick -> PluginTargetChoice.Pick(ActorFacade(choice.actor, w))
+        TargetChoice.Nobody -> PluginTargetChoice.Nobody
+        TargetChoice.Default -> PluginTargetChoice.Default
+      }
+    val pluginCall =
+      PluginTargetOrderCall(
+        world = facade,
+        mob = ActorFacade(call.actor, w),
+        behavior = call.behavior,
+        prefer = call.prefer?.toPlain(),
+        candidates = candidatesList,
+        current = call.current?.let { ActorFacade(it, w) },
+        ally = call.ally?.let { ActorFacade(it, w) },
+        choice = pluginChoice,
+      )
+    try {
+      when (val next = choose(pluginCall)) {
+        PluginTargetChoice.Default -> TargetChoice.Default
+        PluginTargetChoice.Nobody -> TargetChoice.Nobody
+        is PluginTargetChoice.Pick -> {
+          val pickedActor =
+            call.candidates.firstOrNull {
+              it === (next.actor as? ActorFacade)?.actor || it.id.v == next.actor.id
+            }
+          if (pickedActor == null) {
+            w.record(
+              Diagnostic(
+                w.pulse,
+                "plugin",
+                "plugin '$pluginId': target order adjuster returned actor '${next.actor.name}' not in candidates",
+              )
+            )
+            choice
+          } else {
+            TargetChoice.Pick(pickedActor)
+          }
+        }
+      }
+    } catch (e: Throwable) {
+      w.record(
+        Diagnostic(w.pulse, "plugin", "plugin '$pluginId': target order adjuster failed: $e", e)
+      )
+      choice
     }
   }
 }

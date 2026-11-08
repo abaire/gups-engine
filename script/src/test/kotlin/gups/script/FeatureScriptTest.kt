@@ -679,6 +679,11 @@ class FeatureScriptTest {
         Triple(Feature.COMBAT, "x = a.fighting()", "actor.fighting needs the combat feature"),
         Triple(
           Feature.COMBAT,
+          "x = a.primary_target",
+          "actor.primary_target needs the combat feature",
+        ),
+        Triple(
+          Feature.COMBAT,
           "ctx.start_combat(a, a)",
           "ctx.start_combat() needs the combat feature",
         ),

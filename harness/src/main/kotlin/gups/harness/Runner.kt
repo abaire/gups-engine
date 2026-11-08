@@ -230,6 +230,7 @@ class TestRunner(
         schema = loader.schema,
         levelMode = loader.module.levelMode,
         standingHistoryPulses = loader.module.standingHistoryPulses,
+        memoryPulses = loader.module.memoryPulses,
         transcript = transcript,
       )
     val printed = StringBuilder()

@@ -238,6 +238,7 @@ internal class CastAction(
         else w.msg(SkillMsg.BEGIN_UNKNOWN, "actor" to actor.name.cap()),
       )
     }
+    w.witness(actor.room, actor, "cast_start", skill = skill.label, target = target)
     w.dispatch(
       HookName.ON_CAST_START,
       actor,
@@ -290,6 +291,8 @@ internal class CastAction(
       },
       *listOfNotNull(actor, t).toTypedArray(),
     )
+    // Witnessed before the effects run, so a resolver can make a mob forget the cast.
+    w.witness(actor.room, actor, "cast", skill = skill.label, target = t)
     val targets =
       if (onRoom != null) listOf(null)
       else if (skill.range == SkillRange.ROOM)

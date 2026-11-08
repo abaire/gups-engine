@@ -98,6 +98,8 @@ data class WorldModule(
   val levelMode: LevelMode = LevelMode.AUTO,
   /** How long the engine keeps the history of standing changes, in pulses. */
   val standingHistoryPulses: Long = DEFAULT_STANDING_HISTORY_PULSES,
+  /** How long a mob keeps a combat memory after it last happened, in pulses; 0 keeps none. */
+  val memoryPulses: Long = 0,
 ) {
   /** The features the world has on. Unknown ids are left out here and reported by [problems]. */
   val features: Features = featuresOf(featureIds)
@@ -382,6 +384,12 @@ data class WorldModule(
               "How long the engine keeps the history of standing changes, in pulses; at least 1. Not fixed per database; changing it needs only a restart.",
               default = "$DEFAULT_STANDING_HISTORY_PULSES",
             ),
+            DeclParam(
+              "memory_pulses",
+              "int",
+              "How long a mob keeps a combat memory after it last happened, in pulses; 0 keeps none. Not fixed per database; changing it needs only a restart.",
+              default = "0",
+            ),
           ),
       )
 
@@ -497,6 +505,16 @@ data class WorldModule(
         val standingHistoryPulses =
           d.int("standing_history_pulses")?.toLong() ?: DEFAULT_STANDING_HISTORY_PULSES
         if (standingHistoryPulses < 1) fail("module(standing_history_pulses): must be at least 1")
+        if (d["memory_pulses"] != null) {
+          FeatureOwnership.refused(
+              "module.memory_pulses",
+              "module(memory_pulses)",
+              featuresOf(features),
+            )
+            ?.let { fail(it) }
+        }
+        val memoryPulses = d.int("memory_pulses")?.toLong() ?: 0L
+        if (memoryPulses < 0) fail("module(memory_pulses): must be at least 0")
         val rename =
           d.dict("rename").mapValues { (old, v) ->
             v as? String ?: fail("module(rename): the new name of '$old' must be a string")
@@ -524,6 +542,7 @@ data class WorldModule(
             rename = rename,
             levelMode = levelMode,
             standingHistoryPulses = standingHistoryPulses,
+            memoryPulses = memoryPulses,
           )
         Starlark.NONE
       }

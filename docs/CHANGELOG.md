@@ -4,6 +4,29 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Target preference, retargeting and combat memory
+
+- Breaking: `aggressive` no longer takes `via`. A mob notices on every channel it senses (its effective `senses` above
+  0), so declare a deaf or blind mob through `mob(senses=)` instead.
+- `aggressive(prefer=)` and `assist(prefer=)`, with the optional `target_order(ctx)` rules export that picks among the
+  candidates or returns `None` for nobody.
+- New behavior `retarget(prefer, ...)`: an engaged mob asks `target_order` whom to fight and switches to its pick,
+  including an actor not yet in the fight.
+- Combat memory: with `module(memory_pulses=)` or `mob(memory_pulses=)`, a mob remembers who attacked and damaged it and
+  when it arrived, merged per subject and event and forgotten after the window.
+- Combat memory also records the events a mob perceives, and the entrances, casts, heals, helpful affects and kills it
+  witnesses in its room.
+- `ctx.memories(mob, ...)`, `ctx.remember(mob, subject, event, ...)` and `ctx.forget(mob, subject=None, event=None)`.
+- The rules ctx `memories(...)`, so `target_order` and `can_perceive` can read what the mob remembers.
+- `actor.primary_target`: the actor an engaged actor is attacking, or `None` (feature `combat`).
+- Plugins: `addTargetOrder`, `PluginWorld.memories`, `PluginWorld.remember` and `PluginWorld.forget`.
+- The template world keeps combat memory for 5 minutes and ships a sample `target_order` (weakest, strongest, hated,
+  threat with fading weights, arrival delay and switch hysteresis). A hidden actor moves silently, but one who makes
+  noise can be noticed by sound for a moment.
+- The template world has a `pacify` spell: it ends a mob's fight with the caster, makes the mob forget the caster with
+  `ctx.forget`, and keeps it from noticing anyone for a while. A cast is now remembered before its effects and `resolve`
+  run, so `resolve` can make a mob forget it.
+
 ### Skill advancement through use
 
 - The global `on_skill_use` hook (feature `skills`): every cast that resolves reports `"fail"`, `"resist"` or

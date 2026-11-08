@@ -838,6 +838,103 @@ object DocExamples {
                     t.fail("%s" % d.message)
             """,
         ),
+      "ctx.memories" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _recall(ctx):
+                    guard = ctx.here("guard")
+                    ctx.remember(guard, ctx.actor, "taunt", amount = 5)
+                    mems = ctx.memories(guard, subject = ctx.actor)
+                    ctx.send(ctx.actor, "event=%s amount=%d" % (mems[0].event, mems[0].amount))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"recall": _recall})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("recall"), "event=taunt amount=5")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.remember" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _note(ctx):
+                    guard = ctx.here("guard")
+                    ctx.remember(guard, ctx.actor, "taunt", amount = 10)
+                    ctx.send(ctx.actor, "count=%d" % len(ctx.memories(guard, event = "taunt")))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"note": _note})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("note"), "count=1")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.forget" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard")
+
+                def _amnesia(ctx):
+                    guard = ctx.here("guard")
+                    ctx.remember(guard, ctx.actor, "taunt")
+                    removed = ctx.forget(guard, subject = ctx.actor, event = "taunt")
+                    ctx.send(ctx.actor, "removed=%d left=%d" % (removed, len(ctx.memories(guard, event = "taunt"))))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"amnesia": _amnesia})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("amnesia"), "removed=1 left=0")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "rules_ctx.memories" to
+        ex(
+          pkg =
+            """
+                mob("guard", name = "Guard", behaviors = [aggressive(prefer = "grudge")])
+
+                def _taunt(ctx):
+                    ctx.remember(ctx.here("guard"), ctx.actor, "taunt", amount = 10)
+                    ctx.send(ctx.actor, "mems=%d" % len(ctx.memories(ctx.here("guard"), event = "taunt")))
+
+                room("post", name = "Post", desc = "Post.", flags = ["dead_end_ok"],
+                     commands = {"taunt": _taunt})
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                w.spawn(":guard", at = ":post")
+                p = w.spawn_player("Tess", at = ":post")
+                t.contains(p.do("taunt"), "mems=1")
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
       "ctx.group_add" to
         ex(
           pkg =
@@ -1205,7 +1302,7 @@ object DocExamples {
         ex(
           pkg =
             """
-                mob("bandit", vitals = vitals(hp = 20), behaviors = [aggressive(toward = "players", unless_level_above = 5, chance = 50, via = ["sight", "sound"])])
+                mob("bandit", vitals = vitals(hp = 20), behaviors = [aggressive(toward = "players", unless_level_above = 5, chance = 50)])
             """
         ),
       "assist" to
@@ -1214,6 +1311,13 @@ object DocExamples {
             """
                 mob("goblin_scout", vitals = vitals(hp = 10))
                 mob("goblin_chief", vitals = vitals(hp = 30), behaviors = [assist(allies = ["goblin_*"])])
+            """
+        ),
+      "retarget" to
+        ex(
+          pkg =
+            """
+                mob("ogre", vitals = vitals(hp = 50), behaviors = [aggressive(prefer = "weakest"), retarget(prefer = "weakest", chance = 50)])
             """
         ),
       "flee" to

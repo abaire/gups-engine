@@ -202,6 +202,8 @@ data class MobProto(
   val skills: Map<Label, Int> = emptyMap(),
   /** Perception sense modifiers declared per channel. */
   val senses: Map<Channel, Int> = emptyMap(),
+  /** Combat memory window in pulses, or null to use the world's `memory_pulses`. */
+  val memoryPulses: Long? = null,
   /** Built-in autonomous behaviors executed in declaration order. */
   val behaviors: List<Behavior> = emptyList(),
   /** Custom script thinking callback, or null for default behaviors only. */

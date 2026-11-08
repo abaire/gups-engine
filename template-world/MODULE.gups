@@ -43,6 +43,11 @@ module(
     # them and skills can list them; the engine raises no events on them itself.
     channels = ["spell"],
 
+    # How many pulses a mob remembers what it experienced and witnessed in combat (who attacked
+    # it, who healed or cast, who walked in). rules/targeting.star reads these memories. Defaults
+    # to 0, which keeps none; a mob's own memory_pulses overrides it. 1200 pulses is 5 minutes.
+    memory_pulses = 1200,
+
     # The telnet prompt. {hp} is a vital's current value and {max_hp} its maximum. Without
     # this line the prompt lists every vital: <20hp 20mana 100move> .
     prompt = "<{hp}hp {mana}m {move}mv> ",

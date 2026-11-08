@@ -23,27 +23,10 @@ class AggressiveScriptTest {
       .load(listOf("zones/z"))
 
   @Test
-  fun `aggressive via rejects an unknown channel with the senses wording`() {
-    val r = load("mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(via = \"nope\")])")
+  fun `aggressive rejects via as an unexpected keyword`() {
+    val r = load("mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(via = \"sight\")])")
     assertFalse(r.ok)
-    assertContains(r.report(), "aggressive(via): 'nope' is not one of sight, sound, spell")
-  }
-
-  @Test
-  fun `aggressive via rejects an empty list`() {
-    val r = load("mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(via = [])])")
-    assertFalse(r.ok)
-    assertContains(r.report(), "aggressive(via): needs at least one channel")
-  }
-
-  @Test
-  fun `aggressive via rejects a duplicated channel`() {
-    val r =
-      load(
-        "mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(via = [\"sight\", \"sight\"])])"
-      )
-    assertFalse(r.ok)
-    assertContains(r.report(), "aggressive(via): duplicate channel")
+    assertContains(r.report(), "unexpected keyword argument 'via'")
   }
 
   @Test
@@ -54,17 +37,6 @@ class AggressiveScriptTest {
       r.report(),
       "aggressive(chance): must be a whole percent from 0 to 100, not a fraction (write 25 for 0.25)",
     )
-  }
-
-  @Test
-  fun `aggressive via accepts a declared channel and a list of built-ins`() {
-    val r = load("mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(via = \"spell\")])")
-    assertTrue(r.ok, r.report())
-    val r2 =
-      load(
-        "mob(\"m\", vitals = vitals(hp = 1), behaviors = [aggressive(toward = \"players\", chance = 50, via = [\"sight\", \"sound\"])])"
-      )
-    assertTrue(r2.ok, r2.report())
   }
 
   @Test

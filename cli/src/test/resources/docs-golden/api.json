@@ -312,6 +312,19 @@
           "allowed_values": [],
           "doc": "How long the engine keeps the history of standing changes, in pulses; at least 1. Not fixed per database; changing it needs only a restart.",
           "since": 1
+        },
+        {
+          "symbol": "module.memory_pulses",
+          "feature": "combat",
+          "name": "memory_pulses",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "0",
+          "allowed_values": [],
+          "doc": "How long a mob keeps a combat memory after it last happened, in pulses; 0 keeps none. Not fixed per database; changing it needs only a restart.",
+          "since": 1
         }
       ]
     }
@@ -1723,6 +1736,48 @@
         ]
       },
       {
+        "symbol": "ctx.forget",
+        "feature": "combat",
+        "name": "forget",
+        "doc": "Removes matching combat memories from mob; returns the number removed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.forget.mob",
+            "feature": "combat",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that forgets."
+          },
+          {
+            "symbol": "ctx.forget.subject",
+            "feature": "combat",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional actor filter."
+          },
+          {
+            "symbol": "ctx.forget.event",
+            "feature": "combat",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional event name filter."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.get_attr",
         "name": "get_attr",
         "doc": "Reads a value; your own keys by short name, other packages' by 'namespace:key'.",
@@ -2133,6 +2188,59 @@
         ]
       },
       {
+        "symbol": "ctx.memories",
+        "feature": "combat",
+        "name": "memories",
+        "doc": "Queries a mob's combat memories, newest first.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.memories.mob",
+            "feature": "combat",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob whose memories are queried."
+          },
+          {
+            "symbol": "ctx.memories.subject",
+            "feature": "combat",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional actor view filter."
+          },
+          {
+            "symbol": "ctx.memories.event",
+            "feature": "combat",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional event name filter."
+          },
+          {
+            "symbol": "ctx.memories.since",
+            "feature": "combat",
+            "name": "since",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Minimum pulse."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.merge_stack",
         "name": "merge_stack",
         "doc": "Merges an item into an identical stack in the same place; returns the stack that holds it.",
@@ -2336,6 +2444,81 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Search nodes to expand at most, 1 to 16384."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.remember",
+        "feature": "combat",
+        "name": "remember",
+        "doc": "Records or merges a combat memory on mob.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.remember.mob",
+            "feature": "combat",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob that remembers."
+          },
+          {
+            "symbol": "ctx.remember.subject",
+            "feature": "combat",
+            "name": "subject",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor the memory is about."
+          },
+          {
+            "symbol": "ctx.remember.event",
+            "feature": "combat",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Event name matching [a-z][a-z0-9_]*."
+          },
+          {
+            "symbol": "ctx.remember.skill",
+            "feature": "combat",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional skill label or view."
+          },
+          {
+            "symbol": "ctx.remember.amount",
+            "feature": "combat",
+            "name": "amount",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional non-negative amount to add."
+          },
+          {
+            "symbol": "ctx.remember.target",
+            "feature": "combat",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Optional target actor."
           }
         ]
       },
@@ -3375,6 +3558,13 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.ally",
+          "feature": "combat",
+          "name": "ally",
+          "doc": "In target_order for 'assist', the ally being helped; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.amount",
           "feature": "standing",
           "name": "amount",
@@ -3395,9 +3585,23 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.behavior",
+          "feature": "combat",
+          "name": "behavior",
+          "doc": "In target_order, 'aggressive', 'assist' or 'retarget'; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.behaviors",
           "name": "behaviors",
           "doc": "The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.candidates",
+          "feature": "combat",
+          "name": "candidates",
+          "doc": "In target_order, the non-empty candidate actor list in ascending id order; None elsewhere.",
           "since": 1
         },
         {
@@ -3425,6 +3629,20 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.current",
+          "feature": "combat",
+          "name": "current",
+          "doc": "In target_order, the primary target when it is in candidates (the ally's for assist, the mob's for retarget); None elsewhere.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.current_since",
+          "feature": "combat",
+          "name": "current_since",
+          "doc": "In target_order for 'retarget', the pulse the mob's primary target last changed; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.damage_type",
           "name": "damage_type",
           "doc": "The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.",
@@ -3441,6 +3659,13 @@
           "feature": "standing",
           "name": "disposition_parts",
           "doc": "In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.dispositions",
+          "feature": "combat",
+          "name": "dispositions",
+          "doc": "In target_order with the standing feature on, actor's disposition toward each candidate; None elsewhere.",
           "since": 1
         },
         {
@@ -3491,6 +3716,13 @@
           "feature": "standing",
           "name": "pet",
           "doc": "In a standing event raised for a pet's owner, the pet; None elsewhere.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.prefer",
+          "feature": "combat",
+          "name": "prefer",
+          "doc": "In target_order, the behavior's prefer value; None elsewhere.",
           "since": 1
         },
         {
@@ -3607,6 +3839,45 @@
               "varargs": false,
               "kwargs": false,
               "doc": "The actor."
+            }
+          ]
+        },
+        {
+          "symbol": "rules_ctx.memories",
+          "feature": "combat",
+          "name": "memories",
+          "doc": "Queries combat memories of ctx.actor, newest first; [] when ctx.actor is not a mob.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "rules_ctx.memories.subject",
+              "name": "subject",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Optional actor view filter."
+            },
+            {
+              "symbol": "rules_ctx.memories.event",
+              "name": "event",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Optional event name filter."
+            },
+            {
+              "symbol": "rules_ctx.memories.since",
+              "name": "since",
+              "positional": true,
+              "named": true,
+              "default": "0",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Minimum pulse."
             }
           ]
         },

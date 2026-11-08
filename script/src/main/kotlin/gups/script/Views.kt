@@ -344,6 +344,19 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     }
 
   @StarlarkMethod(
+    name = "primary_target",
+    structField = true,
+    doc = "The actor this one is attacking, or None when it has no target or is not engaged.",
+  )
+  fun primaryTarget(): Any =
+    read("actor.primary_target") {
+      actor.primaryTarget
+        ?.takeIf { it in actor.fighting }
+        ?.let { scope.world.actor(it) }
+        ?.let { ActorView(scope, it) } ?: Starlark.NONE
+    }
+
+  @StarlarkMethod(
     name = "is_casting",
     structField = true,
     doc = "True while the actor is in casting warmup.",

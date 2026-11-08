@@ -1,6 +1,6 @@
 package gups.core.world
 
-import gups.core.model.Channel
+import gups.core.AttrValue
 import gups.core.model.Direction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,11 +20,29 @@ class BehaviorDescriptorsTest {
           unlessLevelAbove = 10,
           unlessLevelBelow = 2,
           chance = 80,
-          via = listOf(Channel.SIGHT, Channel.SOUND),
+          prefer =
+            AttrValue.M(
+              mapOf(
+                "order" to AttrValue.S("lowest_hp"),
+                "weights" to AttrValue.L(listOf(AttrValue.I(1), AttrValue.B(true))),
+              )
+            ),
           priority = 65,
         ),
         Aggressive(toward = ActorFilter("players")),
-        Assist(allies = ActorFilter("//zones/caves:goblin_*"), priority = 55),
+        Assist(
+          allies = ActorFilter("//zones/caves:goblin_*"),
+          prefer = AttrValue.S("weakest"),
+          priority = 55,
+        ),
+        Retarget(
+          prefer = AttrValue.S("healer"),
+          toward = ActorFilter("players", "goblin_*"),
+          dispositionBelow = -10,
+          chance = 75,
+          priority = 58,
+        ),
+        Retarget(prefer = AttrValue.I(1)),
         Flee(below = mapOf("hp" to 25, "mana" to 10), priority = 105),
         Guard(exit = Direction.NORTH, allies = ActorFilter("//zones/caves:goblin_*", "mobs")),
         Follow(target = ActorFilter("players"), priority = 35),
@@ -90,6 +108,9 @@ class BehaviorDescriptorsTest {
     assertFailsWith<IllegalArgumentException> {
       f.w.behaviorOf(mapOf("kind" to "sentinel", "priority" to 10L))
     }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "aggressive", "via" to listOf("sight")))
+    }
   }
 
   @Test
@@ -131,6 +152,18 @@ class BehaviorDescriptorsTest {
     assertFailsWith<IllegalArgumentException> {
       f.w.behaviorOf(mapOf("kind" to "pursue", "target" to listOf("wolf pack")))
     }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "aggressive", "prefer" to 1.5))
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(
+        mapOf("kind" to "aggressive", "prefer" to listOf(listOf(listOf(listOf(listOf(1L))))))
+      )
+    }
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "aggressive", "prefer" to (1L..64L).toList()))
+    }
+    assertFailsWith<IllegalArgumentException> { f.w.behaviorOf(mapOf("kind" to "retarget")) }
   }
 
   @Test
@@ -151,12 +184,13 @@ class BehaviorDescriptorsTest {
 
   @Test
   fun `combat feature requirement`() {
-    for (kind in listOf("defend", "aggressive", "assist", "flee")) {
+    for (kind in listOf("defend", "aggressive", "assist", "retarget", "flee")) {
       val desc =
         when (kind) {
           "defend" -> mapOf("kind" to "defend")
           "aggressive" -> mapOf("kind" to "aggressive")
           "assist" -> mapOf("kind" to "assist", "allies" to listOf("players"))
+          "retarget" -> mapOf("kind" to "retarget", "prefer" to "weakest")
           "flee" -> mapOf("kind" to "flee", "below" to mapOf("hp" to 20L))
           else -> error("unreachable")
         }

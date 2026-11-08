@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.AttrValue
 import gups.core.BUBBLE_RADIUS
 import gups.core.Label
 import gups.core.model.Actor
@@ -22,6 +23,7 @@ const val PRIORITY_FLEE = 100
 const val PRIORITY_DEFEND = 50
 const val PRIORITY_HEEL = 30
 const val PRIORITY_AGGRESSIVE = 60
+const val PRIORITY_RETARGET = 55
 const val PRIORITY_ASSIST = 50
 const val PRIORITY_PURSUE = 40
 const val PRIORITY_FOLLOW = 30
@@ -107,31 +109,139 @@ private fun World.below(mob: Mob, a: Actor, n: Int?): Boolean = n == null || dis
 
 private fun World.above(mob: Mob, a: Actor, n: Int?): Boolean = n == null || disposition(mob, a) > n
 
+/** Result of `rules.target_order` or a plugin target-order adjuster. */
+sealed interface TargetChoice {
+  /** Export not defined or failed: use the behavior's default choice. */
+  data object Default : TargetChoice
+
+  /** Export returned `None`: propose nothing. */
+  data object Nobody : TargetChoice
+
+  /** Export returned a candidate actor. */
+  data class Pick(val actor: Actor) : TargetChoice
+}
+
+/** Arguments passed to `rules.target_order` and plugin target-order adjusters. */
+class TargetOrderCall(
+  val actor: Mob,
+  val behavior: String,
+  val prefer: AttrValue?,
+  val candidates: List<Actor>,
+  val current: Actor?,
+  val currentSince: Long?,
+  val dispositions: List<Int>?,
+  val ally: Actor?,
+)
+
+/** A plugin adjuster that can refine or override the target chosen for a behavior. */
+fun interface TargetOrderAdjuster {
+  fun adjust(world: World, call: TargetOrderCall, choice: TargetChoice): TargetChoice
+}
+
+internal fun World.chooseTarget(
+  actor: Mob,
+  behavior: String,
+  prefer: AttrValue?,
+  candidates: List<Actor>,
+  current: Actor? = null,
+  currentSince: Long? = null,
+  ally: Actor? = null,
+): TargetChoice {
+  val dispositions =
+    if (Feature.STANDING in features) candidates.map { disposition(actor, it) } else null
+  val call =
+    TargetOrderCall(
+      actor = actor,
+      behavior = behavior,
+      prefer = prefer,
+      candidates = candidates,
+      current = current,
+      currentSince = currentSince,
+      dispositions = dispositions,
+      ally = ally,
+    )
+  val c =
+    RulesContext(
+      world = this,
+      actor = actor,
+      room = actor.room,
+      behavior = behavior,
+      prefer = prefer,
+      candidates = candidates,
+      current = current,
+      currentSince = currentSince,
+      dispositions = dispositions,
+      ally = ally,
+    )
+  var choice = rules.targetOrder(c)
+  for (adjuster in targetOrderAdjusters) {
+    choice =
+      try {
+        val next = adjuster.adjust(this, call, choice)
+        if (next is TargetChoice.Pick && call.candidates.none { it === next.actor }) {
+          record(
+            Diagnostic(
+              pulse,
+              "plugin",
+              "target order adjuster returned actor '${next.actor.name}' not in candidates",
+            )
+          )
+          choice
+        } else {
+          next
+        }
+      } catch (e: Throwable) {
+        record(Diagnostic(pulse, "plugin", "target order adjuster failed: $e", e))
+        choice
+      }
+  }
+  return choice
+}
+
 /**
- * `aggressive(toward, unless_level_above, unless_level_below, chance, via)`: on each think, with
- * probability [chance] percent, attacks the first matching actor in the room the mob notices on any
- * channel in [via], sparing actors outside the level band.
+ * `aggressive(toward, unless_level_above, unless_level_below, chance)`: on each think, with
+ * probability [chance] percent, attacks the first matching actor in the room the mob notices,
+ * sparing actors outside the level band.
  */
 data class Aggressive(
   val toward: ActorFilter,
   val unlessLevelAbove: Int? = null,
   val unlessLevelBelow: Int? = null,
   val chance: Int = 100,
-  val via: List<Channel> = listOf(Channel.SIGHT),
   val dispositionBelow: Int? = null,
+  val prefer: AttrValue? = null,
   val priority: Int = PRIORITY_AGGRESSIVE,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     if (!world.rng.passes(chance)) return null
-    val target =
-      world.others(mob).firstOrNull {
+    val candidates =
+      world.others(mob).filter {
         toward.matches(it) &&
           levelOk(it) &&
           !world.isOwnerSide(mob, it) &&
           world.below(mob, it, dispositionBelow) &&
-          world.notices(mob, it, via)
-      } ?: return null
+          world.notices(mob, it)
+      }
+    if (candidates.isEmpty()) return null
+    val target =
+      if (prefer == null) {
+        candidates.first()
+      } else {
+        when (
+          val choice =
+            world.chooseTarget(
+              actor = mob,
+              behavior = "aggressive",
+              prefer = prefer,
+              candidates = candidates,
+            )
+        ) {
+          is TargetChoice.Pick -> choice.actor
+          TargetChoice.Default -> candidates.first()
+          TargetChoice.Nobody -> return null
+        }
+      }
     return Proposal(
       "${world.commands.nameOf("kill")} ${target.keywords.first()}",
       priority,
@@ -145,29 +255,44 @@ data class Aggressive(
       (unlessLevelBelow == null || a.level >= unlessLevelBelow)
 }
 
-/** Whether [mob] notices [who] in its own room on any channel in [via], as `aggressive` asks it. */
-private fun World.notices(mob: Mob, who: Actor, via: List<Channel>): Boolean =
-  via.any { ch ->
-    rules.canPerceive(
-      RulesContext(
-        this,
-        actor = mob,
-        target = mob,
-        source = who,
-        room = mob.room,
-        sourceRoom = mob.room,
-        channel = ch,
-        event = "notice",
-        intensity = 1,
-        cost = 0,
+/**
+ * The first channel, in the world's perception order, on which [mob] senses [who] for [event]: one
+ * `rules.can_perceive` call per channel whose effective sense is above 0. Null when none passes.
+ */
+internal fun World.sensedChannel(mob: Mob, who: Actor, event: String): Channel? {
+  for (ch in schema.perceptionOrder) {
+    if (mob.sense(ch) <= 0) continue
+    if (
+      rules.canPerceive(
+        RulesContext(
+          this,
+          actor = mob,
+          target = mob,
+          source = who,
+          room = mob.room,
+          sourceRoom = mob.room,
+          channel = ch,
+          event = event,
+          intensity = 1,
+          cost = 0,
+        )
       )
-    )
+    ) {
+      return ch
+    }
   }
+  return null
+}
+
+/** Whether [mob] notices [who] in its own room, as the target-seeking behaviors ask it. */
+internal fun World.notices(mob: Mob, who: Actor): Boolean =
+  sensedChannel(mob, who, "notice") != null
 
 /** `assist(allies)`: joins a fight an ally in the room is in, against the ally's opponent. */
 data class Assist(
   val allies: ActorFilter,
   val dispositionAbove: Int? = null,
+  val prefer: AttrValue? = null,
   val priority: Int = PRIORITY_ASSIST,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
@@ -182,7 +307,28 @@ data class Assist(
             !world.isOwnerSide(mob, it) &&
             !(dispositionAbove != null && world.disposition(mob, it) > dispositionAbove)
         }
-      val foe = foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.firstOrNull() ?: continue
+      if (foes.isEmpty()) continue
+      val foe =
+        if (prefer == null) {
+          foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.first()
+        } else {
+          val current = ally.primaryTarget?.let { id -> foes.firstOrNull { it.id == id } }
+          when (
+            val choice =
+              world.chooseTarget(
+                actor = mob,
+                behavior = "assist",
+                prefer = prefer,
+                candidates = foes,
+                current = current,
+                ally = ally,
+              )
+          ) {
+            is TargetChoice.Pick -> choice.actor
+            TargetChoice.Default -> foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.first()
+            TargetChoice.Nobody -> return null
+          }
+        }
       return Proposal(
         "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
         priority,
@@ -191,6 +337,57 @@ data class Assist(
       )
     }
     return null
+  }
+}
+
+/**
+ * `retarget(prefer, ...)`: while engaged, switches to the opponent or bystander target_order picks.
+ */
+data class Retarget(
+  val prefer: AttrValue,
+  val toward: ActorFilter = ActorFilter("players"),
+  val dispositionBelow: Int? = null,
+  val chance: Int = 100,
+  val priority: Int = PRIORITY_RETARGET,
+) : Behavior {
+  override fun propose(world: World, mob: Mob): Proposal? {
+    if (Feature.COMBAT !in world.features || !mob.isEngaged) return null
+    if (!world.rng.passes(chance)) return null
+    val others = world.others(mob)
+    val engaged = others.filter { it.id in mob.fighting && !world.isOwnerSide(mob, it) }
+    val bystanders =
+      others.filter {
+        it.id !in mob.fighting &&
+          toward.matches(it) &&
+          !world.isOwnerSide(mob, it) &&
+          world.below(mob, it, dispositionBelow) &&
+          world.notices(mob, it)
+      }
+    val candidates = (engaged + bystanders).sortedBy { it.id }
+    if (candidates.isEmpty()) return null
+    val current = mob.primaryTarget?.let { id -> others.firstOrNull { it.id == id } }
+    val choice =
+      world.chooseTarget(
+        actor = mob,
+        behavior = "retarget",
+        prefer = prefer,
+        candidates = candidates,
+        current = current,
+        currentSince = mob.primaryTargetSince,
+      )
+    val pick =
+      when (choice) {
+        is TargetChoice.Pick -> choice.actor
+        TargetChoice.Default,
+        TargetChoice.Nobody -> return null
+      }
+    if (pick === current) return null
+    return Proposal(
+      "${world.commands.nameOf("kill")} ${pick.keywords.first()}",
+      priority,
+      "retarget",
+      KillAction(pick),
+    )
   }
 }
 

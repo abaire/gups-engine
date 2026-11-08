@@ -42,6 +42,7 @@ internal constructor(
   /** How earned levels apply in the test worlds. */
   private val levelMode: LevelMode = LevelMode.AUTO,
   private val standingHistoryPulses: Long = 14_400L,
+  private val memoryPulses: Long = 0L,
   /** Records the players' commands and output when running a scenario. */
   private val transcript: Transcript? = null,
 ) : StarlarkValue {
@@ -122,6 +123,7 @@ internal constructor(
         ),
         levelMode = levelMode,
         standingHistoryPulses = standingHistoryPulses,
+        memoryPulses = memoryPulses,
       )
     plugins.install(world)
     host.install(world)

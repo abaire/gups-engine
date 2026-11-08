@@ -58,7 +58,7 @@ internal object CombatCommands {
 }
 
 /** `kill <target>`: engages and switches the primary target. */
-internal class KillAction(private val target: Actor) : Action {
+internal class KillAction(val target: Actor) : Action {
   override fun validate(w: World, actor: Actor): String? =
     when {
       target === actor -> w.msg(CombatMsg.KILL_SELF)
@@ -69,7 +69,7 @@ internal class KillAction(private val target: Actor) : Action {
 
   override fun resolve(w: World, actor: Actor): Int {
     w.startCombat(actor, target)
-    actor.primaryTarget = target.id
+    w.setPrimaryTarget(actor, target.id)
     w.tell(actor, CombatMsg.ATTACK_SELF, "target" to target.name)
     w.tell(target, CombatMsg.ATTACK_TARGET, "actor" to actor.name.cap())
     return 0

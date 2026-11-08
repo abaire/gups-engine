@@ -447,6 +447,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.forget" class="entry">
+<h4><code>forget(mob, subject = None, event = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
+<p>Removes matching combat memories from mob; returns the number removed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.forget.mob"><td><code>mob</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The mob that forgets.</td></tr>
+<tr id="ctx.forget.subject"><td><code>subject</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional actor filter.</td></tr>
+<tr id="ctx.forget.event"><td><code>event</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.get_attr" class="entry">
 <h4><code>get_attr(entity, key, default = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Reads a value; your own keys by short name, other packages' by 'namespace:key'.</p>
@@ -619,6 +631,19 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.memories" class="entry">
+<h4><code>memories(mob, subject = None, event = None, since = 0)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
+<p>Queries a mob's combat memories, newest first.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.memories.mob"><td><code>mob</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The mob whose memories are queried.</td></tr>
+<tr id="ctx.memories.subject"><td><code>subject</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional actor view filter.</td></tr>
+<tr id="ctx.memories.event"><td><code>event</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
+<tr id="ctx.memories.since"><td><code>since</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>0</code></td><td>Minimum pulse.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.merge_stack" class="entry">
 <h4><code>merge_stack(item)</code> <span class="since">since api_version 1</span></h4>
 <p>Merges an item into an identical stack in the same place; returns the stack that holds it.</p>
@@ -694,6 +719,21 @@
 <tr id="ctx.plan.actions"><td><code>actions</code></td><td>positional or named</td><td></td><td>List of dicts with name, pre, effects and cost.</td></tr>
 <tr id="ctx.plan.goal"><td><code>goal</code></td><td>positional or named</td><td></td><td>Dict of fact name to the value it must have.</td></tr>
 <tr id="ctx.plan.max_expansions"><td><code>max_expansions</code></td><td>positional or named</td><td><code>1024</code></td><td>Search nodes to expand at most, 1 to 16384.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.remember" class="entry">
+<h4><code>remember(mob, subject, event, skill = None, amount = None, target = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
+<p>Records or merges a combat memory on mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.remember.mob"><td><code>mob</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>The mob that remembers.</td></tr>
+<tr id="ctx.remember.subject"><td><code>subject</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor the memory is about.</td></tr>
+<tr id="ctx.remember.event"><td><code>event</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Event name matching [a-z][a-z0-9_]*.</td></tr>
+<tr id="ctx.remember.skill"><td><code>skill</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional skill label or view.</td></tr>
+<tr id="ctx.remember.amount"><td><code>amount</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional non-negative amount to add.</td></tr>
+<tr id="ctx.remember.target"><td><code>target</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Optional target actor.</td></tr>
 </tbody>
 </table>
 </article>

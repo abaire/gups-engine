@@ -28,6 +28,13 @@ import gups.core.saturatingAdd
 
 // ---- Engagement ------------------------------------------------------------------------------
 
+internal fun World.setPrimaryTarget(a: Actor, id: EntityId?) {
+  if (a.primaryTarget != id) {
+    a.primaryTarget = id
+    a.primaryTargetSince = pulse
+  }
+}
+
 fun World.startCombat(a: Actor, b: Actor) = startCombat(a, b, coupled = false)
 
 internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
@@ -39,8 +46,8 @@ internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
   val fresh = b.id !in a.fighting
   a.fighting += b.id
   b.fighting += a.id
-  if (a.primaryTarget == null) a.primaryTarget = b.id
-  if (b.primaryTarget == null) b.primaryTarget = a.id
+  if (a.primaryTarget == null) setPrimaryTarget(a, b.id)
+  if (b.primaryTarget == null) setPrimaryTarget(b, a.id)
   a.dirty = true
   b.dirty = true
   if (fresh) {
@@ -65,6 +72,7 @@ internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
       }
     }
     if (!coupled) {
+      (b as? Mob)?.let { remember(it, a, "attack") }
       raiseStandingEvent(StandingEvent("attack", affected = b, actor = a))
     }
   }
@@ -82,8 +90,8 @@ private fun World.unlink(a: Actor, b: Actor): List<Actor> {
   val bWas = b.isEngaged
   a.fighting -= b.id
   b.fighting -= a.id
-  if (a.primaryTarget == b.id) a.primaryTarget = null
-  if (b.primaryTarget == a.id) b.primaryTarget = null
+  if (a.primaryTarget == b.id) setPrimaryTarget(a, null)
+  if (b.primaryTarget == a.id) setPrimaryTarget(b, null)
   if (!a.isEngaged) a.initiative = null
   if (!b.isEngaged) b.initiative = null
 
@@ -128,7 +136,7 @@ internal fun World.unlinkAll(a: Actor): List<Actor> {
   val freed = LinkedHashSet<Actor>()
   for (id in a.fighting.toList()) actor(id)?.let { freed += unlink(a, it) }
   a.fighting.clear()
-  a.primaryTarget = null
+  setPrimaryTarget(a, null)
   a.initiative = null
   return freed.filter(::isSimulated)
 }
@@ -317,6 +325,9 @@ fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null)
   changeVital(target, vital, amount)
   if (source != null) {
     recordHealing(target, source, effective)
+    if (effective > 0) {
+      witness(source.room, source, "heal", amount = effective.toLong(), target = target)
+    }
     if (source !== target && effective > 0) {
       raiseStandingEvent(
         StandingEvent("heal", affected = target, actor = source, amount = effective.toLong())
@@ -399,6 +410,7 @@ private fun World.runDeath(victim: Actor) {
     else emptyMap()
 
   if (killer != null && killer !== victim) {
+    witness(killer.room, killer, "kill", target = victim)
     raiseStandingEvent(StandingEvent("kill", affected = victim, actor = killer))
   }
 
@@ -519,6 +531,7 @@ fun World.applyAffect(
   if (source != null && source !== target) {
     recordSupport(target, source, hostile)
     if (!isBane(target, source, hostile)) {
+      witness(source.room, source, "help", target = target)
       if (target.isEngaged) {
         raiseStandingEvent(
           StandingEvent("help", affected = target, actor = source, affect = affect)

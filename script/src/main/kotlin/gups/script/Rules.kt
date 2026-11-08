@@ -1,5 +1,6 @@
 package gups.script
 
+import gups.core.AttrValue
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
@@ -37,10 +38,13 @@ import gups.core.world.Behavior
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.KernelMsg
+import gups.core.world.TargetChoice
 import gups.core.world.World
 import gups.core.world.WorldConfig
+import gups.core.world.disposition
 import gups.core.world.dispositionParts
 import gups.core.world.factionsOf
+import gups.core.world.memoriesOf
 import gups.core.world.msg
 import gups.core.world.standing
 import gups.core.world.standingHistory
@@ -400,6 +404,61 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   fun pet(): Any = field { v(c.pet) }
 
   @StarlarkMethod(
+    name = "behavior",
+    structField = true,
+    doc = "In target_order, 'aggressive', 'assist' or 'retarget'; None elsewhere.",
+  )
+  fun behavior(): Any = field { c.behavior ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "prefer",
+    structField = true,
+    doc = "In target_order, the behavior's prefer value; None elsewhere.",
+  )
+  fun prefer(): Any = field { c.prefer?.let { fromAttr(it, null) } ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "candidates",
+    structField = true,
+    doc =
+      "In target_order, the non-empty candidate actor list in ascending id order; None elsewhere.",
+  )
+  fun candidates(): Any = field {
+    c.candidates?.let { sList(it.map { a -> v(a) }) } ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "current",
+    structField = true,
+    doc =
+      "In target_order, the primary target when it is in candidates (the ally's for assist, the mob's for retarget); None elsewhere.",
+  )
+  fun current(): Any = field { v(c.current) }
+
+  @StarlarkMethod(
+    name = "current_since",
+    structField = true,
+    doc =
+      "In target_order for 'retarget', the pulse the mob's primary target last changed; None elsewhere.",
+  )
+  fun currentSince(): Any = field { c.currentSince?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "dispositions",
+    structField = true,
+    doc =
+      "In target_order with the standing feature on, actor's disposition toward each candidate; None elsewhere.",
+  )
+  fun dispositions(): Any = field { c.dispositions?.let { sList(it.map(::sInt)) } ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "ally",
+    structField = true,
+    doc = "In target_order for 'assist', the ally being helped; None elsewhere.",
+  )
+  fun ally(): Any = field { v(c.ally) }
+
+  @StarlarkMethod(
     name = "standing",
     doc =
       "The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.",
@@ -486,6 +545,43 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
 
     val totals = c.world.standingHistory(holderObj, subjectObj, sincePulse, viaId, eventName)
     StructValue(linkedMapOf("gained" to sInt(totals.gained), "lost" to sInt(totals.lost)))
+  }
+
+  @StarlarkMethod(
+    name = "memories",
+    doc = "Queries combat memories of ctx.actor, newest first; [] when ctx.actor is not a mob.",
+    parameters =
+      [
+        Param(
+          name = "subject",
+          defaultValue = "None",
+          named = true,
+          doc = "Optional actor view filter.",
+        ),
+        Param(
+          name = "event",
+          defaultValue = "None",
+          named = true,
+          doc = "Optional event name filter.",
+        ),
+        Param(name = "since", defaultValue = "0", named = true, doc = "Minimum pulse."),
+      ],
+  )
+  fun memories(subject: Any, event: Any, since: Any): Any = field {
+    FeatureOwnership.refused("rules_ctx.memories", "ctx.memories()", c.world.features)?.let {
+      fail(it)
+    }
+    val m = c.actor as? Mob ?: return@field sList(emptyList())
+    val sub =
+      if (isNone(subject)) {
+        null
+      } else {
+        (subject as? ActorView)?.actor
+          ?: fail("memories(subject): expected an actor view, got ${typeName(subject)}")
+      }
+    val ev = if (isNone(event)) null else str(event, "memories(event)")
+    val sincePulse = int(since, "memories(since)").toLong().coerceAtLeast(0L)
+    sList(c.world.memoriesOf(m, sub, ev, sincePulse).map { memoryValue(frame, it) })
   }
 
   override fun isImmutable(): Boolean = true
@@ -992,6 +1088,25 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     }
   }
 
+  override fun targetOrder(c: RulesContext): TargetChoice {
+    if (!defines(RulesExport.TARGET_ORDER)) return TargetChoice.Default
+    return run(RulesExport.TARGET_ORDER, c, ctxArgs(c)) { v ->
+      val what = "rules.target_order return value"
+      if (isNone(v)) {
+        TargetChoice.Nobody
+      } else if (v is ActorView) {
+        val allowed = c.candidates.orEmpty()
+        if (allowed.any { it === v.actor }) {
+          TargetChoice.Pick(v.actor)
+        } else {
+          fail("$what: actor '${v.actor.name}' is not in ctx.candidates")
+        }
+      } else {
+        fail("$what: expected an actor in ctx.candidates or None, got ${typeName(v)}")
+      }
+    } ?: TargetChoice.Default
+  }
+
   override fun xpToLevel(c: RulesContext, level: Int): Long =
     run(RulesExport.XP_TO_LEVEL, c, ctxArgs(c, sInt(level))) { v ->
       int(v, "rules.xp_to_level return value").toLong().also {
@@ -1097,6 +1212,7 @@ enum class RulesExport(val scriptName: String) {
   FACTIONS("factions"),
   DISPOSITION("disposition"),
   STANDING_CHANGE("standing_change"),
+  TARGET_ORDER("target_order"),
   XP_TO_LEVEL("xp_to_level"),
   ON_LEVEL_UP("on_level_up"),
   ON_PLAYER_DEATH("on_player_death"),
@@ -1404,6 +1520,27 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
           "rng",
         ),
       doc = "The changes a standing event makes, as a list of standing_delta(...) values.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.TARGET_ORDER,
+      signature = "target_order(ctx)",
+      returnType = "actor",
+      ctxFields =
+        listOf(
+          "actor",
+          "behavior",
+          "prefer",
+          "candidates",
+          "current",
+          "current_since",
+          "dispositions",
+          "ally",
+          "room",
+          "pulse",
+          "rng",
+        ),
+      doc = "Which candidate ctx.actor attacks or switches to, or None to propose nothing.",
       hasDefault = true,
     ),
     RulesExportSpec(
@@ -1832,6 +1969,22 @@ internal fun dryRunRules(
     if (rules.defines(RulesExport.OWNED_BEHAVIORS)) {
       mobs.firstOrNull()?.let {
         rules.ownedBehaviors(RulesContext(world, it, player, behaviors = it.proto.behaviors))
+      }
+    }
+    if (Feature.COMBAT in features && rules.defines(RulesExport.TARGET_ORDER)) {
+      mobs.firstOrNull()?.let { dryMob ->
+        rules.targetOrder(
+          RulesContext(
+            world,
+            actor = dryMob,
+            room = dryMob.room,
+            behavior = "aggressive",
+            prefer = AttrValue.S("dry_run"),
+            candidates = listOf(player),
+            dispositions =
+              if (Feature.STANDING in features) listOf(world.disposition(dryMob, player)) else null,
+          )
+        )
       }
     }
     if (Feature.STANDING in features) {

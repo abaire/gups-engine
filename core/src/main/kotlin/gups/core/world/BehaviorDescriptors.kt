@@ -1,9 +1,19 @@
 package gups.core.world
 
-import gups.core.model.Channel
+import gups.core.AttrValue
 import gups.core.model.Direction
 import gups.core.model.Mob
 import gups.core.model.Player
+
+/** Converts an [AttrValue] to a plain value (`Long`, `String`, `Boolean`, `List`, `Map`). */
+fun AttrValue.toPlain(): Any =
+  when (this) {
+    is AttrValue.I -> v
+    is AttrValue.S -> v
+    is AttrValue.B -> v
+    is AttrValue.L -> v.map { it.toPlain() }
+    is AttrValue.M -> v.mapValues { it.value.toPlain() }
+  }
 
 /** A plugin adjuster that recomputes a mob's owned behavior list. */
 fun interface OwnedBehaviorAdjuster {
@@ -27,8 +37,8 @@ fun Behavior.descriptor(): Map<String, Any?> =
         put("unless_level_above", unlessLevelAbove?.toLong())
         put("unless_level_below", unlessLevelBelow?.toLong())
         put("chance", chance.toLong())
-        put("via", via.map { it.name })
         dispositionBelow?.let { put("disposition_below", it.toLong()) }
+        prefer?.let { put("prefer", it.toPlain()) }
         put("priority", priority.toLong())
       }
     is Assist ->
@@ -36,6 +46,16 @@ fun Behavior.descriptor(): Map<String, Any?> =
         put("kind", "assist")
         put("allies", allies.patterns)
         dispositionAbove?.let { put("disposition_above", it.toLong()) }
+        prefer?.let { put("prefer", it.toPlain()) }
+        put("priority", priority.toLong())
+      }
+    is Retarget ->
+      buildMap {
+        put("kind", "retarget")
+        put("prefer", prefer.toPlain())
+        put("toward", toward.patterns)
+        dispositionBelow?.let { put("disposition_below", it.toLong()) }
+        put("chance", chance.toLong())
         put("priority", priority.toLong())
       }
     is Flee ->
@@ -82,11 +102,12 @@ private val ALLOWED_KEYS =
         "unless_level_above",
         "unless_level_below",
         "chance",
-        "via",
         "disposition_below",
+        "prefer",
         "priority",
       ),
-    "assist" to setOf("kind", "allies", "disposition_above", "priority"),
+    "assist" to setOf("kind", "allies", "disposition_above", "prefer", "priority"),
+    "retarget" to setOf("kind", "prefer", "toward", "disposition_below", "chance", "priority"),
     "flee" to setOf("kind", "below", "priority"),
     "guard" to setOf("kind", "exit", "allies", "disposition_above"),
     "follow" to setOf("kind", "target", "disposition_above", "priority"),
@@ -97,7 +118,7 @@ private val ALLOWED_KEYS =
     "defend" to setOf("kind", "group", "priority"),
   )
 
-private val COMBAT_BEHAVIORS = setOf("defend", "aggressive", "assist", "flee")
+private val COMBAT_BEHAVIORS = setOf("defend", "aggressive", "assist", "retarget", "flee")
 
 private val FILTER_KEYWORDS = setOf("players", "mobs", "all", "anyone")
 
@@ -171,6 +192,48 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
     return ActorFilter(patterns)
   }
 
+  fun preferArg(): AttrValue? {
+    val raw = d["prefer"] ?: return null
+    var count = 0
+    fun parse(v: Any?, depth: Int): AttrValue {
+      count++
+      if (count > 64) {
+        throw IllegalArgumentException("prefer for '$kind' may contain at most 64 values")
+      }
+      return when (v) {
+        is Long -> AttrValue.I(v)
+        is String -> AttrValue.S(v)
+        is Boolean -> AttrValue.B(v)
+        is List<*> -> {
+          if (depth >= 4) {
+            throw IllegalArgumentException("prefer for '$kind' may nest at most 4 deep")
+          }
+          AttrValue.L(v.map { parse(it, depth + 1) })
+        }
+        is Map<*, *> -> {
+          if (depth >= 4) {
+            throw IllegalArgumentException("prefer for '$kind' may nest at most 4 deep")
+          }
+          AttrValue.M(
+            v.entries.associate { (k, item) ->
+              val key =
+                k as? String
+                  ?: throw IllegalArgumentException("prefer dict keys for '$kind' must be Strings")
+              key to parse(item, depth + 1)
+            }
+          )
+        }
+        else -> {
+          val typeName = v?.let { it::class.simpleName } ?: "null"
+          throw IllegalArgumentException(
+            "prefer for '$kind' must be a Long, String, Boolean, List or Map, got $typeName"
+          )
+        }
+      }
+    }
+    return parse(raw, 0)
+  }
+
   return when (kind) {
     "wander" -> {
       val radius = intArg("radius", required = true)!!
@@ -186,33 +249,13 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
       val unlessBelow = intArg("unless_level_below", required = false)
       val chance = intArg("chance", required = false) ?: 100
       if (chance !in 0..100) throw IllegalArgumentException("chance must be 0..100")
-      val via =
-        if ("via" in d && d["via"] != null) {
-          val v = d["via"]
-          if (v !is List<*>) throw IllegalArgumentException("via must be a list of channel strings")
-          if (v.isEmpty()) throw IllegalArgumentException("via must not be empty")
-          val channels = mutableListOf<Channel>()
-          val known = schema.allChannels.map { it.name }
-          for (item in v) {
-            if (item !is String) throw IllegalArgumentException("elements of via must be strings")
-            if (known.isNotEmpty() && item !in known) {
-              throw IllegalArgumentException("unknown channel '$item'")
-            }
-            channels.add(Channel(item))
-          }
-          if (channels.distinct().size != channels.size) {
-            throw IllegalArgumentException("via contains duplicate channels")
-          }
-          channels
-        } else {
-          listOf(Channel.SIGHT)
-        }
       val dispositionBelow = intArg("disposition_below", required = false)
       if (dispositionBelow != null && dispositionBelow !in -100..100) {
         throw IllegalArgumentException("disposition_below must be in -100..100")
       }
+      val prefer = preferArg()
       val priority = priorityArg(PRIORITY_AGGRESSIVE)
-      Aggressive(toward, unlessAbove, unlessBelow, chance, via, dispositionBelow, priority)
+      Aggressive(toward, unlessAbove, unlessBelow, chance, dispositionBelow, prefer, priority)
     }
     "assist" -> {
       val allies = actorFilterArg("allies")
@@ -220,8 +263,23 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
       if (dispositionAbove != null && dispositionAbove !in -100..100) {
         throw IllegalArgumentException("disposition_above must be in -100..100")
       }
+      val prefer = preferArg()
       val priority = priorityArg(PRIORITY_ASSIST)
-      Assist(allies, dispositionAbove, priority)
+      Assist(allies, dispositionAbove, prefer, priority)
+    }
+    "retarget" -> {
+      val prefer =
+        preferArg()
+          ?: throw IllegalArgumentException("missing required key 'prefer' for 'retarget'")
+      val toward = actorFilterArg("toward", default = listOf("players"))
+      val dispositionBelow = intArg("disposition_below", required = false)
+      if (dispositionBelow != null && dispositionBelow !in -100..100) {
+        throw IllegalArgumentException("disposition_below must be in -100..100")
+      }
+      val chance = intArg("chance", required = false) ?: 100
+      if (chance !in 0..100) throw IllegalArgumentException("chance must be 0..100")
+      val priority = priorityArg(PRIORITY_RETARGET)
+      Retarget(prefer, toward, dispositionBelow, chance, priority)
     }
     "flee" -> {
       val v =

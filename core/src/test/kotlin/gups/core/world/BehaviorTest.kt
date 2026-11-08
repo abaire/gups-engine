@@ -52,26 +52,26 @@ class BehaviorTest {
     see.runTo(3)
     assertTrue(a.id in seer.fighting, "sight 1 notices in the room")
 
-    // Sight 0 with the default via (sight) notices nothing.
+    // Both built-in senses at 0 notices nothing.
     val blind =
       fixture(
-        mob("blind", Aggressive(ActorFilter("players"))).copy(senses = mapOf(Channel.SIGHT to 0))
+        mob("blind", Aggressive(ActorFilter("players")))
+          .copy(senses = mapOf(Channel.SIGHT to 0, Channel.SOUND to 0))
       )
     val b = blind.mob(Label("//t:blind"))
     val bAnn = blind.player("Ann")
     blind.runTo(3)
-    assertFalse(bAnn.id in b.fighting, "sight 0, via sight: not noticed")
+    assertFalse(bAnn.id in b.fighting, "sight 0, sound 0: not noticed")
 
-    // The same senses with via sound (builtin sound 1) notice it.
+    // Sight 0 with builtin sound 1 notices it.
     val ear =
       fixture(
-        mob("ear", Aggressive(ActorFilter("players"), via = listOf(Channel.SOUND)))
-          .copy(senses = mapOf(Channel.SIGHT to 0))
+        mob("ear", Aggressive(ActorFilter("players"))).copy(senses = mapOf(Channel.SIGHT to 0))
       )
     val e = ear.mob(Label("//t:ear"))
     val eAnn = ear.player("Ann")
     ear.runTo(3)
-    assertTrue(eAnn.id in e.fighting, "sound 1, via sound: noticed")
+    assertTrue(eAnn.id in e.fighting, "sound 1 notices")
   }
 
   @Test
@@ -196,14 +196,10 @@ class BehaviorTest {
   }
 
   @Test
-  fun `aggressive tries via channels in order and stops at the first noticed`() {
+  fun `aggressive tries sensed channels in order and stops at the first noticed`() {
     // Only sound passes: sight is tried first and fails, then sound passes.
     val r = PerceiveRules { c -> c.channel == Channel.SOUND }
-    val f =
-      fixture(
-        mob("ear", Aggressive(ActorFilter("players"), via = listOf(Channel.SIGHT, Channel.SOUND))),
-        rules = r,
-      )
+    val f = fixture(mob("ear", Aggressive(ActorFilter("players"))), rules = r)
     val ear = f.mob(Label("//t:ear"))
     val ann = f.player("Ann")
     f.runTo(3)
@@ -216,11 +212,7 @@ class BehaviorTest {
 
     // Both channels pass: sight passes, so sound is never asked.
     val r2 = PerceiveRules { true }
-    val f2 =
-      fixture(
-        mob("seer", Aggressive(ActorFilter("players"), via = listOf(Channel.SIGHT, Channel.SOUND))),
-        rules = r2,
-      )
+    val f2 = fixture(mob("seer", Aggressive(ActorFilter("players"))), rules = r2)
     f2.mob(Label("//t:seer"))
     f2.player("Ann")
     f2.runTo(3)

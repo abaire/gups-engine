@@ -232,6 +232,35 @@ interface PluginWorld : PluginGmcpWorld {
   /** Adjusts standing directly for [holder] and [subject] by [amount]. */
   fun adjustStanding(holder: Any, subject: Any, amount: Int)
 
+  // Combat memory (`combat` feature).
+
+  /**
+   * Returns [mob]'s recorded memories, matching [subject] and/or [event] when specified, since
+   * [since] pulse.
+   */
+  fun memories(
+    mob: PluginActor,
+    subject: PluginActor? = null,
+    event: String? = null,
+    since: Long = 0,
+  ): List<PluginMemory>
+
+  /** Records a memory entry for [mob]. */
+  fun remember(
+    mob: PluginActor,
+    subject: PluginActor,
+    event: String,
+    skill: String? = null,
+    amount: Long = 0,
+    target: PluginActor? = null,
+  )
+
+  /**
+   * Forgets memories matching [subject] and/or [event] on [mob]. Returns the count of removed
+   * entries.
+   */
+  fun forget(mob: PluginActor, subject: PluginActor? = null, event: String? = null): Int
+
   /** The world's seeded RNG. Draws change the world's repro, so it stays off the read-only view. */
   val rng: PluginRng
 }

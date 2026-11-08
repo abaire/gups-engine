@@ -194,6 +194,12 @@ interface PluginRegistry {
    */
   fun addOwnedBehaviors(doc: String, adjust: (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>)
 
+  /**
+   * Adjusts the target a behavior with `prefer` chooses, after the world's `target_order` rules
+   * export, in plugin-id order.
+   */
+  fun addTargetOrder(doc: String, choose: (PluginTargetOrderCall) -> PluginTargetChoice)
+
   /** Adjusts a disposition after the world's disposition rules export, in plugin-id order. */
   fun addDispositionModifier(doc: String, adjust: (PluginDispositionCall) -> Int)
 
@@ -484,4 +490,35 @@ data class PluginFactionsCall(
   val world: PluginWorld,
   val actor: PluginActor,
   val factions: List<String>,
+)
+
+sealed interface PluginTargetChoice {
+  data object Default : PluginTargetChoice
+
+  data object Nobody : PluginTargetChoice
+
+  data class Pick(val actor: PluginActor) : PluginTargetChoice
+}
+
+data class PluginTargetOrderCall(
+  val world: PluginWorld,
+  val mob: PluginActor,
+  val behavior: String,
+  val prefer: Any?,
+  val candidates: List<PluginActor>,
+  val current: PluginActor?,
+  val ally: PluginActor?,
+  val choice: PluginTargetChoice,
+)
+
+data class PluginMemory(
+  val subject: PluginActor?,
+  val event: String,
+  val skill: String?,
+  val target: PluginActor?,
+  val firstPulse: Long,
+  val pulse: Long,
+  val count: Int,
+  val amount: Long,
+  val channel: String?,
 )

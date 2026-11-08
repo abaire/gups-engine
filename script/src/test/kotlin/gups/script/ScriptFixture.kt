@@ -65,6 +65,7 @@ class ScriptFixture(
         ),
         levelMode = loader.module.levelMode,
         standingHistoryPulses = loader.module.standingHistoryPulses,
+        memoryPulses = loader.module.memoryPulses,
       )
       .also {
         host.install(it)

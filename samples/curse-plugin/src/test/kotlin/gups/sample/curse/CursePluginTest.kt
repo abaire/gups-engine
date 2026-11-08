@@ -63,6 +63,11 @@ class CursePluginTest {
       containmentFilters.add(doc to blocks)
     }
 
+    override fun addTargetOrder(
+      doc: String,
+      choose: (gups.pluginapi.PluginTargetOrderCall) -> gups.pluginapi.PluginTargetChoice,
+    ) = TODO()
+
     override fun addOwnedBehaviors(
       doc: String,
       adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
@@ -291,6 +296,24 @@ class CursePluginTest {
     ) = TODO()
 
     override fun adjustStanding(holder: Any, subject: Any, amount: Int) = TODO()
+
+    override fun memories(
+      mob: PluginActor,
+      subject: PluginActor?,
+      event: String?,
+      since: Long,
+    ): List<gups.pluginapi.PluginMemory> = TODO()
+
+    override fun remember(
+      mob: PluginActor,
+      subject: PluginActor,
+      event: String,
+      skill: String?,
+      amount: Long,
+      target: PluginActor?,
+    ) = TODO()
+
+    override fun forget(mob: PluginActor, subject: PluginActor?, event: String?): Int = TODO()
 
     override fun rooms(): List<PluginRoom> = emptyList()
 

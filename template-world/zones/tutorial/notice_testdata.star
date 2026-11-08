@@ -29,9 +29,9 @@ mob("test_watcher",
 
 mob("test_blind",
     name = "the test blind",
-    desc = "A probe mob that senses no sight.",
+    desc = "A probe mob that senses neither sight nor sound.",
     vitals = vitals(hp = 20),
-    senses = {"sight": 0},
+    senses = {"sight": 0, "sound": 0},
     behaviors = [aggressive(toward = "players")],
 )
 
@@ -39,7 +39,16 @@ mob("test_listener",
     name = "the test listener",
     desc = "A probe mob that notices players by sound.",
     vitals = vitals(hp = 20),
-    behaviors = [aggressive(toward = "players", via = "sound")],
+    senses = {"sight": 0},
+    behaviors = [aggressive(toward = "players")],
+)
+
+mob("test_deaf",
+    name = "the test deaf",
+    desc = "A probe mob that senses no sound.",
+    vitals = vitals(hp = 20),
+    senses = {"sound": 0},
+    behaviors = [aggressive(toward = "players")],
 )
 
 mob("test_dozer",

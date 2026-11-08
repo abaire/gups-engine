@@ -68,9 +68,21 @@ object FeatureOwnership {
       "rules:initiative",
       "rules:flee_chance",
       "rules:flee_fail_lag",
+      "rules:target_order",
+      "aggressive.prefer",
+      "assist.prefer",
+      "rules_ctx.behavior",
+      "rules_ctx.prefer",
+      "rules_ctx.candidates",
+      "rules_ctx.current",
+      "rules_ctx.current_since",
+      "rules_ctx.dispositions",
+      "rules_ctx.ally",
+      "rules_ctx.memories",
     )
     owns(Feature.COMBAT, "modifier:initiative", "modifier:flee_fail_lag")
-    owns(Feature.COMBAT, "view:actor.fighting")
+    owns(Feature.COMBAT, "view:actor.fighting", "view:actor.primary_target")
+    owns(Feature.COMBAT, "module.memory_pulses", "mob.memory_pulses")
     owns(
       Feature.COMBAT,
       "item.procs",
@@ -103,6 +115,7 @@ object FeatureOwnership {
       "rules_ctx.factions_of",
       "rules_ctx.standing_history",
       "aggressive.disposition_below",
+      "retarget.disposition_below",
       "pursue.disposition_below",
       "assist.disposition_above",
       "guard.disposition_above",
@@ -116,9 +129,10 @@ object FeatureOwnership {
     fun owns(feature: Feature, vararg symbols: String) =
       owns(FeatureRequirement.of(feature), *symbols)
     owns(Feature.SKILLS, "skill", "view:skill")
-    owns(Feature.COMBAT, "aggressive", "assist", "flee", "defend")
+    owns(Feature.COMBAT, "aggressive", "assist", "retarget", "flee", "defend")
     owns(Feature.COMBAT, "ctx.start_combat", "ctx.stop_combat", "ctx.act_attack")
     owns(Feature.COMBAT, "ctx.enemies_near", "ctx.allies_near")
+    owns(Feature.COMBAT, "ctx.memories", "ctx.remember", "ctx.forget")
     owns(Feature.COMBAT, "proc", "outcome")
     owns(Feature.TRACK, "knockback", "pull")
     owns(

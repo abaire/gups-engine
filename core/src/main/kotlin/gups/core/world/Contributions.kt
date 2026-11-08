@@ -19,6 +19,7 @@ internal fun World.recordDamage(victim: Actor, source: Actor, amount: Int) {
   val entry = victim.contributions.computeIfAbsent(source.id) { Contribution() }
   entry.damage += amount
   entry.lastPulse = pulse
+  (victim as? Mob)?.let { remember(it, source, "damage", amount = amount.toLong()) }
 }
 
 /**

@@ -23,11 +23,24 @@ def sense_cost(ctx):
         cost += 2 if "heavy" in door.tags else 1
     return cost
 
+# How many pulses the noise a hidden actor makes gives it away.
+NOISE_PULSES = 8
+
 def can_perceive(ctx):
-    # Stealth is decided when the actor hides and stored as a flag on an affect; this only reads
-    # it, and never rolls. A hidden actor can't be noticed by sight; other channels still work.
-    if ctx.event == "notice" and ctx.channel == "sight" and ctx.source and ctx.source.has_flag("hidden"):
+    # A pacified mob notices nobody, so it starts no fight and retargets no one.
+    if ctx.event == "notice" and ctx.actor.has_flag("pacified"):
         return False
+    # Stealth is decided when the actor hides and stored as a flag on an affect; this only reads
+    # it, and never rolls. A hidden actor can't be seen at all, and it moves silently. It can be
+    # heard, but a mob only notices it by sound while the noise it made is still fresh in the mob's
+    # memory, so a hidden player who speaks, opens a door or casts is caught on the mob's next think.
+    if ctx.source and ctx.source.has_flag("hidden"):
+        if ctx.channel == "sight" or ctx.event in ("enter", "exit"):
+            return False
+        if ctx.event == "notice" and ctx.channel == "sound":
+            heard = [m for m in ctx.memories(subject = ctx.source, since = ctx.pulse - NOISE_PULSES) if m.channel == "sound"]
+            if not heard:
+                return False
     sense = ctx.actor.senses[ctx.channel]
     if sense <= 0:
         return False

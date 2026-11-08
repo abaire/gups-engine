@@ -22,9 +22,12 @@ class PerceptionScriptTest {
   private fun load(files: Map<String, String>) =
     ScriptLoader(WorldDir(tempWorld(files)), ScriptLimits.HARNESS).load(listOf("zones/z", "rules"))
 
-  /** [source] with the top-level `def fn` removed, and the removed text. */
+  /**
+   * [source] with the top-level `def fn` (and a constant right above it) removed, and the removed
+   * text.
+   */
   private fun extract(source: String, fn: String): Pair<String, String> {
-    val block = Regex("(?ms)^def $fn\\(.*?(?=^def |\\z)")
+    val block = Regex("(?ms)^(?:[A-Z_]+ = [^\\n]*\\n\\n)?def $fn\\(.*?(?=^def |\\z)")
     val text = block.find(source)!!.value
     return source.replace(text, "") to text
   }

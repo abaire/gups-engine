@@ -31,18 +31,6 @@ an actor the attacker's standing toward is above a threshold as an ally?
 
 ## Mobs and AI
 
-### Target preference for aggressive mobs
-
-**Spec:** §4.7 `aggressive(toward, ...)`. **Today:** an aggressive mob attacks the lowest-id actor that matches `toward`
-and passes its level and perception checks. The engine has no notion of a role such as healer, and `ActorFilter` matches
-only `players`, `mobs`, `all` and label patterns. **Questions:** - Should `aggressive` (or `assist`) take a preference,
-such as `prefer=...`, that orders candidates by something other than id? - If so, what does it match on: plugin traits,
-tags, a role model, or built-in orderings such as `weakest` and `strongest`? - Is the preference data with value
-equality (behaviors are compared by the version-bump lint, §7.3), or can it be a script function? - How does it relate
-to standing (§5.14), which already filters candidates with `aggressive(disposition_below=)`? Should a preference such as
-"lowest standing first" order candidates by it, and how does it combine with the other orderings? - Should an aggressive
-mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
-
 ### Movement speed and pursuit catch-up
 
 **Spec:** §5.5 (room transitions: walking costs one action and leaves no lag), §5.8 (think cycle, `thinkEvery`), §5.3

@@ -46,6 +46,10 @@ class ApiSurfaceTest {
       PluginContainmentCall::class,
       PluginSkill::class,
       PluginViews::class,
+      PluginTargetChoice::class,
+      PluginTargetChoice.Pick::class,
+      PluginTargetOrderCall::class,
+      PluginMemory::class,
     )
 
   private fun names(t: Type): List<String> =

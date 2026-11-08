@@ -564,7 +564,19 @@ invalid, since a plugin has no package), `below` as a map of vital names to `Lon
 invalid map, or an adjuster that throws, records a `"plugin"` diagnostic and leaves the list unchanged.
 
 The list is computed when a mob gains an owner, when a pet is restored at its owner's login, and after a reload, so an
-adjuster should depend only on the mob, its owner and the list it is given.
+adjuster should depend only on the mob, its owner and the list it is given. A descriptor's `prefer` is plain values, and
+`retarget` is a kind like the others.
+
+### Target order
+
+A behavior with `prefer` (`aggressive`, `assist`, `retarget`) asks the world's `target_order` rules export whom to
+attack. A plugin's `addTargetOrder(doc, choose)` handler adjusts that choice afterwards, in plugin-id order. The handler
+gets `call.world` (read-only), `call.mob`, `call.behavior`, `call.prefer` as plain values (`Long`, `String`, `Boolean`,
+`List`, `Map`), `call.candidates` in ascending id, `call.current`, `call.ally` and `call.choice`, the choice so far. It
+returns `PluginTargetChoice.Default` (choose as without `prefer`), `Nobody`, or `Pick(actor)` with one of the
+candidates; returning `call.choice` keeps it. A pick that isn't a candidate, or a handler that throws, records a
+`"plugin"` diagnostic and keeps the choice so far. Handlers aren't called for a behavior without `prefer`, and must be
+fast and side-effect free.
 
 ### Standing and factions
 
@@ -589,6 +601,13 @@ and leaves the value unchanged.
 - `raiseStandingEvent(affected, actor, event, amount = 0, item = null)`: raises a world standing event on `affected` by
   `actor`.
 - `adjustStanding(holder, subject, amount)`: changes a standing record directly.
+
+Combat memory (a mob's transient record of what it experienced and witnessed) is also on `PluginWorld`:
+
+- `memories(mob, subject = null, event = null, since = 0)`: the mob's memories, newest first, as `PluginMemory`.
+- `remember(mob, subject, event, skill = null, amount = 0, target = null)`: records a memory on a mob.
+- `forget(mob, subject = null, event = null)`: removes the matching memories (all when both filters are null) and
+  returns how many it removed.
 
 ### World start
 

@@ -34,6 +34,7 @@ import gups.core.world.damage
 import gups.core.world.disposition
 import gups.core.world.echo
 import gups.core.world.factionsOf
+import gups.core.world.forget
 import gups.core.world.gmcp
 import gups.core.world.gmcpWithin
 import gups.core.world.grantTrait
@@ -42,8 +43,10 @@ import gups.core.world.heldAffects
 import gups.core.world.isInactive
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
+import gups.core.world.memoriesOf
 import gups.core.world.pendingLevels
 import gups.core.world.raiseStandingEvent
+import gups.core.world.remember
 import gups.core.world.removeAffect
 import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
@@ -67,6 +70,7 @@ import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
+import gups.pluginapi.PluginMemory
 import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
@@ -764,6 +768,81 @@ internal class WorldFacade(
       event = "adjust",
       via = null,
     )
+  }
+
+  override fun memories(
+    mob: PluginActor,
+    subject: PluginActor?,
+    event: String?,
+    since: Long,
+  ): List<PluginMemory> {
+    needs(world, Feature.COMBAT, "memories")
+    val m = mobOf(mob, "memories(mob)")
+    require(since >= 0L) { "memories(since): must be non-negative, got $since" }
+    val sub = subject?.let { actorOf(it, "memories(subject)") }
+    return world.memoriesOf(m, sub, event, since).map { mem ->
+      PluginMemory(
+        subject =
+          world.actor(mem.key.subject)?.takeIf { it.inWorld }?.let { ActorFacade(it, world) },
+        event = mem.key.event,
+        skill = mem.key.skill?.v,
+        target =
+          mem.key.target?.let { tid ->
+            world.actor(tid)?.takeIf { it.inWorld }?.let { ActorFacade(it, world) }
+          },
+        firstPulse = mem.firstPulse,
+        pulse = mem.pulse,
+        count = mem.count,
+        amount = mem.amount,
+        channel = mem.channel?.name,
+      )
+    }
+  }
+
+  override fun remember(
+    mob: PluginActor,
+    subject: PluginActor,
+    event: String,
+    skill: String?,
+    amount: Long,
+    target: PluginActor?,
+  ) {
+    needs(world, Feature.COMBAT, "remember")
+    val m = mobOf(mob, "remember(mob)")
+    val sub = actorOf(subject, "remember(subject)")
+    if (!STANDING_EVENT_NAME.matches(event)) {
+      throw IllegalArgumentException("remember(event): must match [a-z][a-z0-9_]*, got '$event'")
+    }
+    val sk =
+      if (skill == null) {
+        null
+      } else {
+        val l =
+          runCatching { Label(skill) }.getOrNull()
+            ?: throw IllegalArgumentException("remember(skill): invalid skill label '$skill'")
+        if (l !in world.protos.skills) {
+          throw IllegalArgumentException("remember(skill): unknown skill '$skill'")
+        }
+        l
+      }
+    if (amount < 0L) {
+      throw IllegalArgumentException("remember(amount): must be non-negative, got $amount")
+    }
+    val tgt = target?.let { actorOf(it, "remember(target)") }
+    world.remember(m, sub, event, sk, amount, tgt)
+  }
+
+  override fun forget(mob: PluginActor, subject: PluginActor?, event: String?): Int {
+    needs(world, Feature.COMBAT, "forget")
+    val m = mobOf(mob, "forget(mob)")
+    val subId = subject?.let { actorOf(it, "forget(subject)").id }
+    return world.forget(m, subId, event)
+  }
+
+  private fun mobOf(a: PluginActor, what: String): Mob {
+    val actor = actorOf(a, what)
+    if (actor !is Mob) throw IllegalArgumentException("$what: ${actor.name} is not a mob")
+    return actor
   }
 
   private fun standingHolder(holder: Any, fn: String): StandingHolder =
