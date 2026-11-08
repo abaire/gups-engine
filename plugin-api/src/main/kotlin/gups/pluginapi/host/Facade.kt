@@ -778,9 +778,8 @@ internal class WorldFacade(
   ): List<PluginMemory> {
     needs(world, Feature.COMBAT, "memories")
     val m = mobOf(mob, "memories(mob)")
-    require(since >= 0L) { "memories(since): must be non-negative, got $since" }
     val sub = subject?.let { actorOf(it, "memories(subject)") }
-    return world.memoriesOf(m, sub, event, since).map { mem ->
+    return world.memoriesOf(m, sub, event, since.coerceAtLeast(0L)).map { mem ->
       PluginMemory(
         subject =
           world.actor(mem.key.subject)?.takeIf { it.inWorld }?.let { ActorFacade(it, world) },

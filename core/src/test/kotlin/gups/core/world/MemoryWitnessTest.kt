@@ -150,6 +150,42 @@ class MemoryWitnessTest {
   }
 
   @Test
+  fun `logging in is an enter that mobs in the room witness and nearby mobs perceive`() {
+    val f = fixture()
+    f.w.login = DevLogin(T.HALL)
+    val inRoom = f.mob(watcherLabel, at = T.HALL)
+    val nextDoor = f.mob(watcherLabel, at = T.YARD)
+    f.w.handle(
+      gups.core.WorldControlEvent.Connect(
+        gups.core.SessionId(9),
+        gups.core.CapturingSink(),
+        "127.0.0.1",
+        "telnet",
+      )
+    )
+    f.w.handle(gups.core.ClientInputEvent(gups.core.SessionId(9), "Tess", 0))
+    val tess = f.w.players.single()
+
+    assertEquals(1, f.w.memoriesOf(inRoom, subject = tess, event = "enter").single().count)
+    f.run(1)
+    assertEquals(1, f.w.memoriesOf(inRoom, subject = tess, event = "enter").single().count)
+    assertEquals(1, f.w.memoriesOf(nextDoor, subject = tess, event = "enter").size)
+  }
+
+  @Test
+  fun `respawning is an enter that mobs in the respawn room witness`() {
+    val f = fixture()
+    val watcher = f.mob(watcherLabel, at = T.HALL)
+    val killer = f.mob(watcherLabel, at = T.YARD)
+    val tess = f.player("Tess", at = T.YARD).also { it.recallRoom = T.HALL }
+    f.w.damage(tess, mapOf(f.fs.health to 10_000), slash, killer)
+    f.run(1)
+
+    assertEquals(T.HALL, tess.room.label)
+    assertEquals(1, f.w.memoriesOf(watcher, subject = tess, event = "enter").size)
+  }
+
+  @Test
   fun `cross-room say is remembered on sound and 50 says merge without evicting attack`() {
     val f = fixture()
     val watcher = f.mob(watcherLabel, at = T.YARD)

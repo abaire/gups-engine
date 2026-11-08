@@ -1393,10 +1393,10 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 - **`clear_contributions`:** empties the actor's contribution record, or removes one contributor's entry. The engine
   never expires the record itself.
 - **`memories`:** the live combat memories (§5.8) of `mob`, newest first (latest `pulse`, then subject id, then event),
-  optionally only those about `subject`, named `event`, or with `pulse` at or after `since`. Each is a struct with
-  `subject` and `target` (actor views, or `None` when absent or no longer in the world), `event`, `skill` (an absolute
-  skill label, or `None`), `first_pulse`, `pulse`, `count`, `amount` and `channel` (a channel name, or `None`). A mob
-  with no memory window has none. Needs `combat`.
+  optionally only those about `subject`, named `event`, or with `pulse` at or after `since` (a negative `since` counts
+  as 0). Each is a struct with `subject` and `target` (actor views, or `None` when absent or no longer in the world),
+  `event`, `skill` (an absolute skill label, or `None`), `first_pulse`, `pulse`, `count`, `amount` and `channel` (a
+  channel name, or `None`). A mob with no memory window has none. Needs `combat`.
 - **`remember`:** adds to `mob`'s combat memory as the engine does, merging with a memory of the same subject, event,
   skill and target; returns `None` and does nothing when the mob keeps no memory. `event` matches `[a-z][a-z0-9_]*` and
   may be a built-in name. `skill` is a skill label (absolute or relative to the calling package) and needs `skills`.
@@ -3752,7 +3752,9 @@ A `say` has no sight alternative, and `shout` has its own delivery.
 
 - **Event names and `ctx.actor`:** `say`, `emote` and `shout` carry their text, and the actor is the speaker.
   `combat_start`: the attacker. `combat` (once per room per round): no actor. `death`: the one who died. `enter` and
-  `exit`, including teleports: the mover. `open`, `close`, `lock` and `unlock`: whoever did it.
+  `exit`, including teleports: the mover. A character entering the game at login, its pets with it, and a player
+  respawning after death raise `enter` too, so an arrival by any means is perceived. `open`, `close`, `lock` and
+  `unlock`: whoever did it.
 - **Propagation:** a shortest-path search from the room of the event, up to `BUBBLE_RADIUS` exits
   ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). A hop from a room to a neighbour whose exit
   leads into it asks `rules.sense_cost` (§4.6) with the neighbour as `ctx.room` and that exit as `ctx.exit`. A negative
@@ -3826,12 +3828,12 @@ a window of 0 the mob records nothing.
 - **Perceived events:** each event with an actor that reaches the mob and that `rules.can_perceive` lets it perceive
   (§5.7) is a memory named after the event, with the channel it was perceived on. An `enter` in the mob's own room is
   recorded as it happens instead (below), so a mob that thinks later in the same pulse already remembers it.
-- **Witnessed in the subject's room, as it happens:** `enter` (the subject came into the room), `cast_start` and `cast`
-  (the skill and its target; `cast` is recorded just before the effects and `resolve` run, so `resolve` can forget it),
-  `heal` (the target and the effective amount, above 0), `help` (the target of a helpful affect another actor applied)
-  and `kill` (the victim as target). A mob witnesses one when `rules.can_perceive`, asked as the mob about that event
-  with the subject as `ctx.source` and intensity 1, passes on a channel it senses, in perception order. The subject
-  never witnesses its own event, and only simulated mobs witness.
+- **Witnessed in the subject's room, as it happens:** `enter` (the subject came into the room, including at login and on
+  respawn), `cast_start` and `cast` (the skill and its target; `cast` is recorded just before the effects and `resolve`
+  run, so `resolve` can forget it), `heal` (the target and the effective amount, above 0), `help` (the target of a
+  helpful affect another actor applied) and `kill` (the victim as target). A mob witnesses one when
+  `rules.can_perceive`, asked as the mob about that event with the subject as `ctx.source` and intensity 1, passes on a
+  channel it senses, in perception order. The subject never witnesses its own event, and only simulated mobs witness.
 - Scripts and plugins read memory and add to it (§4.5, §4.6, §4.15).
 
 ### 5.9 Reality Bubble

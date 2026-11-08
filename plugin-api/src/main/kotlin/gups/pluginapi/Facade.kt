@@ -236,7 +236,7 @@ interface PluginWorld : PluginGmcpWorld {
 
   /**
    * Returns [mob]'s recorded memories, matching [subject] and/or [event] when specified, since
-   * [since] pulse.
+   * [since] pulse; a negative [since] counts as 0.
    */
   fun memories(
     mob: PluginActor,

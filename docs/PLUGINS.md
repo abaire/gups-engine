@@ -604,7 +604,8 @@ and leaves the value unchanged.
 
 Combat memory (a mob's transient record of what it experienced and witnessed) is also on `PluginWorld`:
 
-- `memories(mob, subject = null, event = null, since = 0)`: the mob's memories, newest first, as `PluginMemory`.
+- `memories(mob, subject = null, event = null, since = 0)`: the mob's memories, newest first, as `PluginMemory`; a
+  negative `since` counts as 0.
 - `remember(mob, subject, event, skill = null, amount = 0, target = null)`: records a memory on a mob.
 - `forget(mob, subject = null, event = null)`: removes the matching memories (all when both filters are null) and
   returns how many it removed.

@@ -442,6 +442,7 @@ private fun World.runDeath(victim: Actor) {
       victim.condition = Condition.OK
       respawnVitals(victim, outcome.vitals)
       placeActor(victim, room(outcome.respawn), 0)
+      announceArrival(victim, victim.room)
       tellSight(
         victim.room,
         "enter",

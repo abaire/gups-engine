@@ -48,8 +48,7 @@ internal fun World.transition(
   )
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
-  perceive("enter", Channel.SIGHT, to, actor)
-  witness(to, actor, "enter")
+  announceArrival(actor, to)
   fireDisengage(freed, reason)
   dispatch(
     HookName.ON_EXIT,
@@ -103,8 +102,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     )
     if (actor is Player) send(actor, describeRoom(actor))
     perceive("exit", Channel.SIGHT, from, actor)
-    perceive("enter", Channel.SIGHT, to, actor)
-    witness(to, actor, "enter")
+    announceArrival(actor, to)
     fireDisengage(freed, "stop")
     dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, toRoom = to))
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))
@@ -162,4 +160,14 @@ internal class MoveAction(private val dir: Direction) : Action {
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit) }
     return 0
   }
+}
+
+/**
+ * The `enter` event of [actor] arriving in [room] by any means, including login and respawn:
+ * propagated for phase 5, and witnessed at once by the mobs in the room so one that thinks later
+ * this pulse already remembers it.
+ */
+internal fun World.announceArrival(actor: Actor, room: Room) {
+  perceive("enter", Channel.SIGHT, room, actor)
+  witness(room, actor, "enter")
 }

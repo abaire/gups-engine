@@ -240,7 +240,11 @@ fun World.enterGame(session: Session, p: Player, welcome: String?) {
   if (welcome == null) echo(p.room, msg(KernelMsg.RECONNECTED_ROOM, "name" to p.name), p)
   send(p, describeRoom(p))
   if (welcome != null) {
+    // A character loaded or created into the world arrives like any other mover, so it can't log
+    // out beside a mob and back in unseen.
+    announceArrival(p, p.room)
     for (pet in petsOf(p)) {
+      announceArrival(pet, pet.room)
       tellSight(
         p.room,
         "enter",

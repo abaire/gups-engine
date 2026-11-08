@@ -131,6 +131,7 @@ class MemoryPluginTest {
       pw.remember(guardFacade, aliceFacade, "taunt", skill = "//zones/z:unknown_skill")
     }
     assertFailsWith<IllegalArgumentException> { pw.memories(aliceFacade) }
-    assertFailsWith<IllegalArgumentException> { pw.memories(guardFacade, since = -1) }
+    pw.remember(guardFacade, aliceFacade, "taunt")
+    assertEquals(pw.memories(guardFacade), pw.memories(guardFacade, since = -1))
   }
 }

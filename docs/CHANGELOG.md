@@ -16,6 +16,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   when it arrived, merged per subject and event and forgotten after the window.
 - Combat memory also records the events a mob perceives, and the entrances, casts, heals, helpful affects and kills it
   witnesses in its room.
+- Logging in (with any pets) and respawning after death raise a perceived `enter` in the room, as walking in does, so
+  mobs there witness the arrival and `on_perceive` sees it.
 - `ctx.memories(mob, ...)`, `ctx.remember(mob, subject, event, ...)` and `ctx.forget(mob, subject=None, event=None)`.
 - The rules ctx `memories(...)`, so `target_order` and `can_perceive` can read what the mob remembers.
 - `actor.primary_target`: the actor an engaged actor is attacking, or `None` (feature `combat`).
