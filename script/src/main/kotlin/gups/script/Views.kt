@@ -26,6 +26,7 @@ import gups.core.world.World
 import gups.core.world.actorSlots
 import gups.core.world.heldAffects
 import gups.core.world.isInactive
+import gups.core.world.leash
 import gups.core.world.ownerOf
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
@@ -372,6 +373,20 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     doc = "A mob's home room label; None for players.",
   )
   fun homeRoom(): Any = read { (actor as? Mob)?.homeRoom?.v ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "leash",
+    structField = true,
+    doc = "A mob's effective leash in exits from home; None for no leash or a player.",
+  )
+  fun leash(): Any = read { (actor as? Mob)?.leash?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "leash_overridden",
+    structField = true,
+    doc = "True while a `set_leash` override is in place; False for players and unoverridden mobs.",
+  )
+  fun leashOverridden(): Any = read { (actor as? Mob)?.leashOverride != null }
 
   @StarlarkMethod(
     name = "recall_room",

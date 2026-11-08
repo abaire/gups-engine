@@ -783,6 +783,16 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.reset_leash" class="entry">
+<h4><code>reset_leash(mob)</code> <span class="since">since api_version 1</span></h4>
+<p>Drops a mob's leash override, so its prototype leash applies again, including a value a later reload brings. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.reset_leash.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to reset.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.roll" class="entry">
 <h4><code>roll(dice)</code> <span class="since">since api_version 1</span></h4>
 <p>Rolls dice such as '2d6+1'.</p>
@@ -857,6 +867,17 @@
 <tbody>
 <tr id="ctx.set_charges.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item with charges.</td></tr>
 <tr id="ctx.set_charges.charges"><td><code>charges</code></td><td>positional or named</td><td></td><td>Uses left; 0 doesn't run the empty action.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.set_leash" class="entry">
+<h4><code>set_leash(mob, leash)</code> <span class="since">since api_version 1</span></h4>
+<p>Overrides a mob's leash with an int of at least 0, or with None to unleash it. The override is saved with the mob and outlives reloads. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_leash.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to leash.</td></tr>
+<tr id="ctx.set_leash.leash"><td><code>leash</code></td><td>positional or named</td><td></td><td>Most exits from home, or None to unleash.</td></tr>
 </tbody>
 </table>
 </article>

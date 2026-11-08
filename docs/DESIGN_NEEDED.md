@@ -65,13 +65,6 @@ spell they don't know by watching the caster? - Is that check a rules export, su
 and does it run once per onlooker per cast? - Does the skill's `kind` or another field make some spells harder to
 recognize, or hide them entirely?
 
-### Cost of `pursue` and other world-wide searches
-
-**Spec:** §4.7 says `pursue` uses `path_to` across the whole world, and §5.9 caches paths. §7.1 sets the load-test
-targets. **Today:** `pursue` asks for a path to every matching actor on each think cycle, using cached BFS (D-121,
-D-124). With hundreds of players and many pursuers this may cost too much. **Question:** should `pursue` have a maximum
-range, or a slower think cadence?
-
 ### Global and cross-zone event subscriptions
 
 **Spec:** §4.6 (`rules.sense_cost`), §5.7 (Perception, `on_perceive`). **Today:** event propagation is sensory and

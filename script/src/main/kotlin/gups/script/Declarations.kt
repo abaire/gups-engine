@@ -1273,6 +1273,7 @@ internal class DeclarationBuiltins(
           dormantRecovery =
             d.choice("dormant_recovery")?.let { DormantRecovery.valueOf(it.uppercase()) }
               ?: def.dormantRecovery,
+          leash = d.int("leash"),
           loot = loot,
           traits = parseMobTraits(d, knownTraits()),
           factions =
@@ -1289,6 +1290,7 @@ internal class DeclarationBuiltins(
           version = version(d),
         )
       if (proto.thinkEvery < 1) fail("mob(think_every): must be at least 1")
+      proto.leash?.let { if (it < 0) fail("mob(leash): must be at least 0") }
       if (proto.keywords.isEmpty()) fail("mob(keywords): a mob needs at least one keyword")
       ctx.pkg.mobList += proto
       if (d.hooks.isNotEmpty()) ctx.pkg.hookMap[label] = d.hooks
@@ -2122,7 +2124,7 @@ internal class DeclarationBuiltins(
 
   @StarlarkMethod(
     name = "pursue",
-    doc = "Behavior: heads for the nearest matching actor anywhere in the world.",
+    doc = "Behavior: heads for the nearest matching actor within range exits.",
     parameters =
       [
         Param(
@@ -2143,10 +2145,22 @@ internal class DeclarationBuiltins(
           defaultValue = "None",
           doc = "Proposal priority; higher wins. None uses the behavior's default.",
         ),
+        Param(
+          name = "range",
+          named = true,
+          defaultValue = "10",
+          doc = "Exits searched from the mob's room; None searches the whole world.",
+        ),
       ],
     useStarlarkThread = true,
   )
-  fun pursue(target: Any, dispositionBelow: Any, priority: Any, thread: StarlarkThread): Any {
+  fun pursue(
+    target: Any,
+    dispositionBelow: Any,
+    priority: Any,
+    range: Any,
+    thread: StarlarkThread,
+  ): Any {
     val pkgPath = behaviorCtx(thread, "pursue")
     val dispositionBelowInt =
       if (!isNone(dispositionBelow)) {
@@ -2157,11 +2171,20 @@ internal class DeclarationBuiltins(
       } else {
         null
       }
+    val rangeInt =
+      if (!isNone(range)) {
+        val r = int(range, "pursue(range)")
+        if (r < 1) fail("pursue(range): must be at least 1")
+        r
+      } else {
+        null
+      }
     return BehaviorDecl(
       Pursue(
         actorFilter(target, "pursue(target)", pkgPath),
         dispositionBelowInt,
         priorityArg(priority, PRIORITY_PURSUE, "pursue(priority)"),
+        rangeInt,
       )
     )
   }
@@ -3325,6 +3348,12 @@ internal class DeclarationBuiltins(
               default = "None",
             ),
             DeclParam("think_every", "int", "Pulses between AI think cycles.", default = "4"),
+            DeclParam(
+              "leash",
+              "int | None",
+              "Most exits from its home room the mob's own movement goes; None for no leash.",
+              default = "None",
+            ),
             DeclParam(
               "hooks",
               "dict[str, function]",

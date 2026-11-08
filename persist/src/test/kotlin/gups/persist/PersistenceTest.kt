@@ -12,6 +12,7 @@ import gups.core.model.DoorState
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
+import gups.core.model.LeashOverride
 import gups.core.model.LevelGain
 import gups.core.model.Mob
 import gups.core.model.Prototypes
@@ -33,6 +34,7 @@ import gups.core.world.restoreVitals
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
+import gups.core.world.setLeash
 import gups.core.world.setOwner
 import gups.core.world.spawnItem
 import java.sql.DriverManager
@@ -527,6 +529,28 @@ class PersistenceTest {
     val second = PersistWorld(file)
     assertEquals(EntityId(42), (second.w.actor(rat.id) as Mob).summonedBy)
     assertNull((second.w.actor(other.id) as Mob).summonedBy)
+    second.close()
+  }
+
+  @Test
+  fun `leash overrides survive a restart`() {
+    val file = tempDb()
+    val first = PersistWorld(file)
+    val (r1, r2) = first.w.actors.filterIsInstance<Mob>()
+    val r3 = first.w.spawnMob(P.RAT, first.w.room(P.HALL), 2)
+    first.w.setLeash(r2, 3)
+    first.w.setLeash(r3, null)
+    first.save()
+    first.close()
+
+    val second = PersistWorld(file)
+    assertNull((second.w.actor(r1.id) as? Mob)?.leashOverride, "no override is not saved")
+    assertEquals(LeashOverride(3), (second.w.actor(r2.id) as Mob).leashOverride)
+    assertEquals(
+      LeashOverride(null),
+      (second.w.actor(r3.id) as Mob).leashOverride,
+      "an unleashed override is saved",
+    )
     second.close()
   }
 

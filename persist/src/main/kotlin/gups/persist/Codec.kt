@@ -19,6 +19,7 @@ import gups.core.model.DormantRecovery
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.LeashOverride
 import gups.core.model.LevelGain
 import gups.core.model.Mob
 import gups.core.model.ModifierPoint
@@ -68,11 +69,12 @@ import kotlinx.serialization.json.longOrNull
  *   direction name), custom attributes, script timers, and active/anchor simulation reasons.
  * - **Mobs ([MobPayload]):** Always persists position (room label, track index), current vitals
  *   (`cur`, and `max` only when overridden, plus `belowZeroSince`), life condition, xp, home room,
- *   spawn binding, summonedBy, and owner. Delta fields (level, stats, senses, resists, skills,
- *   `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if they equal prototype
- *   defaults, each stored as a whole value rather than per key. Prototype traits are never stored;
- *   only runtime `grantedTraits` are. `levelGains` is stored only when not empty. Active/anchor
- *   reasons, custom attributes, timers, and active affects are also stored.
+ *   spawn binding, summonedBy, owner, and the leash override (stored when set, including an
+ *   unleashed override that must not fall back to the prototype). Delta fields (level, stats,
+ *   senses, resists, skills, `thinkEvery`, `dormantRecovery`, and `grantedTraits`) are omitted if
+ *   they equal prototype defaults, each stored as a whole value rather than per key. Prototype
+ *   traits are never stored; only runtime `grantedTraits` are. `levelGains` is stored only when not
+ *   empty. Active/anchor reasons, custom attributes, timers, and active affects are also stored.
  * - **Items ([ItemPayload]):** Persists count, decay deadline pulse, display name override,
  *   container state (open, closed, locked), custom attributes, timers, active/anchor reasons,
  *   instance affects, added and removed tags, and the prototype's name, unit weight, stackability,
@@ -118,6 +120,8 @@ data class PlayerRow(
 )
 
 @Serializable data class RefJson(val file: String, val name: String)
+
+@Serializable data class LeashJson(val exits: Int? = null)
 
 @Serializable
 data class TimerJson(
@@ -219,6 +223,7 @@ data class MobPayload(
   val skills: Map<String, Int>? = null,
   val thinkEvery: Int? = null,
   val dormantRecovery: String? = null,
+  val leash: LeashJson? = null,
   val grantedTraits: List<String>? = null,
   val levelGains: Map<Int, LevelGainJson>? = null,
   val attrs: JsonObject = JsonObject(emptyMap()),
@@ -507,6 +512,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           skills = delta(e.skills.mapKeys { it.key.v }, p.skills.mapKeys { it.key.v }),
           thinkEvery = delta(e.thinkEvery, p.thinkEvery),
           dormantRecovery = delta(e.dormantRecovery, p.dormantRecovery)?.name?.lowercase(),
+          leash = e.leashOverride?.let { LeashJson(it.exits) },
           grantedTraits = e.grantedTraits.toList().sorted().takeIf { it.isNotEmpty() },
           levelGains =
             e.levelGains.toSortedMap().mapValues { it.value.toJson() }.takeIf { it.isNotEmpty() },
@@ -639,6 +645,7 @@ internal fun applyMob(world: World, m: Mob, p: MobPayload) {
   }
   p.thinkEvery?.let { m.thinkEvery = it }
   p.dormantRecovery?.let { m.dormantRecovery = DormantRecovery.valueOf(it.uppercase()) }
+  m.leashOverride = p.leash?.let { LeashOverride(it.exits) }
   p.home?.let { m.homeRoom = Label(it) }
   m.summonedBy = p.summonedBy?.let(::EntityId)
   m.grantedTraits = p.grantedTraits?.toSet() ?: emptySet()

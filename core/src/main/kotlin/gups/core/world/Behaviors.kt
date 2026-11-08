@@ -27,8 +27,11 @@ const val PRIORITY_RETARGET = 55
 const val PRIORITY_ASSIST = 50
 const val PRIORITY_PURSUE = 40
 const val PRIORITY_FOLLOW = 30
+const val PRIORITY_RETURN = 20
 const val PRIORITY_WANDER = 10
 const val PRIORITY_SCAVENGE = 5
+
+const val PURSUE_DEFAULT_RANGE = 10
 
 /**
  * Whom a behavior means: `players`, `mobs`, `all`, or label patterns such as
@@ -67,17 +70,23 @@ private fun World.others(mob: Mob): List<Actor> =
 
 /**
  * `wander(radius, chance)`: with probability [chance] percent per think, steps through a random
- * open exit that stays within [radius] exits of home.
+ * open exit that stays within [radius] exits of home and never past the mob's leash. Outside that
+ * area it steps toward home instead.
  */
 data class Wander(val radius: Int, val chance: Int, val priority: Int = PRIORITY_WANDER) :
   Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged || !world.rng.passes(chance)) return null
     val home = world.roomOrNull(mob.homeRoom) ?: mob.room
-    val near = world.within(home, radius)
+    val r = world.leashArea(mob)?.let { minOf(radius, mob.leash!!) } ?: radius
+    val area = world.homeArea(home, r)
+    if (mob.room !in area) {
+      val step = world.pathTo(mob.room, home)?.firstOrNull() ?: return null
+      return Proposal(step.name, priority, "wander", MoveAction(step))
+    }
     val exits =
       mob.room.exits.values.filter {
-        it.passable && world.roomOrNull(it.to) in near && it.to != mob.room.label
+        it.passable && world.roomOrNull(it.to) in area && it.to != mob.room.label
       }
     if (exits.isEmpty()) return null
     val exit = world.rng.choice(exits)
@@ -103,6 +112,49 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
     }
   }
   return seen.keys
+}
+
+/**
+ * The first step toward the nearest room within [range] exits of [from] that holds an actor
+ * [accept] takes, with that actor (lowest id among those at the nearest distance). Breadth-first in
+ * exit declaration order through passable exits, entering only rooms in [allowed] when it is
+ * non-null. [from] itself is not searched.
+ */
+internal fun World.nearestBy(
+  from: Room,
+  range: Int?,
+  allowed: Set<Room>?,
+  accept: (Actor) -> Boolean,
+): Pair<Actor, Direction>? {
+  val firstStep = HashMap<Room, Direction>()
+  val seen = hashSetOf(from)
+  var level = listOf(from)
+  var depth = 0
+  while (level.isNotEmpty() && (range == null || depth < range)) {
+    depth++
+    val next = mutableListOf<Room>()
+    for (room in level) {
+      for (exit in room.exits.values) {
+        if (!exit.passable) continue
+        val r = roomOrNull(exit.to) ?: continue
+        if (r in seen) continue
+        if (allowed != null && r !in allowed) continue
+        seen.add(r)
+        firstStep[r] = if (room === from) exit.direction else firstStep.getValue(room)
+        next.add(r)
+      }
+    }
+    var best: Pair<Actor, Direction>? = null
+    for (room in next) {
+      for (a in room.actors) {
+        if (!accept(a)) continue
+        if (best == null || a.id < best.first.id) best = a to firstStep.getValue(room)
+      }
+    }
+    if (best != null) return best
+    level = next
+  }
+  return null
 }
 
 private fun World.below(mob: Mob, a: Actor, n: Int?): Boolean = n == null || disposition(mob, a) < n
@@ -442,7 +494,9 @@ internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String
 
 /**
  * `follow(target)`: picks the first matching actor in its room as leader, then follows it along the
- * shortest path while it is within [BUBBLE_RADIUS] exits; farther away, it gives up.
+ * shortest path while it is within [BUBBLE_RADIUS] exits; farther away, it gives up. While the mob
+ * or its leader is outside its leash it proposes nothing, so the mob heads home, and it follows
+ * again if the leader comes back inside it.
  */
 data class Follow(
   val target: ActorFilter,
@@ -470,38 +524,54 @@ data class Follow(
       mob.leader = null
       return null
     }
+    // Checking the leader's room, not just the next step, keeps the mob from stepping out after
+    // its leader and being sent straight back by the return proposal.
+    val area = world.leashArea(mob)
+    if (area != null && (mob.room !in area || leader.room !in area)) return null
     return Proposal(path.first().name, priority, "follow", MoveAction(path.first()))
+  }
+
+  override fun holdsReturn(world: World, mob: Mob): Boolean {
+    val leader = mob.leader?.let(world::actor) ?: return false
+    return leader.inWorld &&
+      leader.room === mob.room &&
+      target.matches(leader) &&
+      world.leashArea(mob)?.contains(mob.room) != false
   }
 }
 
-/** `pursue(target)`: heads for the nearest matching actor anywhere in the world by `path_to`. */
+/**
+ * `pursue(target, range=10)`: heads for the nearest simulated matching actor within `range` exits,
+ * searching only rooms inside the mob's leash.
+ */
 data class Pursue(
   val target: ActorFilter,
   val dispositionBelow: Int? = null,
   val priority: Int = PRIORITY_PURSUE,
+  /** Exits searched from the pursuer's room; null searches the whole world. */
+  val range: Int? = PURSUE_DEFAULT_RANGE,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
     if (world.others(mob).any { target.matches(it) && world.below(mob, it, dispositionBelow) })
       return null
-    val best =
-      world.actors
-        .asSequence()
-        .filter {
-          it !== mob &&
-            it.inWorld &&
-            target.matches(it) &&
-            world.below(mob, it, dispositionBelow) &&
-            world.isSimulated(it)
-        }
-        .mapNotNull { t ->
-          world.pathTo(mob.room, t.room)?.takeIf { it.isNotEmpty() }?.let { t to it }
-        }
-        .minWithOrNull(compareBy<Pair<Actor, List<Direction>>>({ it.second.size }, { it.first.id }))
-        ?: return null
-    val step = best.second.first()
+    val area = world.leashArea(mob)
+    if (area != null && mob.room !in area) return null
+    val (_, step) =
+      world.nearestBy(mob.room, range, area) {
+        it !== mob &&
+          it.inWorld &&
+          it.condition != Condition.DEAD &&
+          target.matches(it) &&
+          world.isSimulated(it) &&
+          world.below(mob, it, dispositionBelow)
+      } ?: return null
     return Proposal(step.name, priority, "pursue", MoveAction(step))
   }
+
+  override fun holdsReturn(world: World, mob: Mob): Boolean =
+    world.leashArea(mob)?.contains(mob.room) != false &&
+      world.others(mob).any { target.matches(it) && world.below(mob, it, dispositionBelow) }
 }
 
 /** `heel()`: follows the mob's owner by the shortest path, however far. */

@@ -4,6 +4,18 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Mob leashes and bounded pursuit
+
+- `pursue` takes `range` (default 10 exits, `None` for no limit) and searches once per think instead of pathing to every
+  match in the world; it no longer considers dead actors.
+- Mobs have a `leash`: `mob(leash=)` (default `None`), the `set_leash` / `reset_leash` verbs, and the `leash` /
+  `leash_overridden` view fields.
+- `wander`, `follow` and `pursue` stay within a mob's leash.
+- A leashed mob outside its home ground walks all the way home once nothing outranks it (an engine proposal at priority
+  20, source `leash`). It stays put while its `follow` leader or `pursue` quarry shares its room inside the leash.
+- `wander` outside its radius now heads home instead of standing still.
+- New optional rules export `leash_return(ctx)` decides when a leashed mob heads home (`ctx.away`, `ctx.past_leash`).
+
 ### Target preference, retargeting and combat memory
 
 - Breaking: `aggressive` no longer takes `via`. A mob notices on every channel it senses (its effective `senses` above

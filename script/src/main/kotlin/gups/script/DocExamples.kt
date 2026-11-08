@@ -1077,6 +1077,59 @@ object DocExamples {
                     t.fail("%s" % d.message)
             """,
         ),
+      "ctx.set_leash" to
+        ex(
+          pkg =
+            """
+                def _unleash(ctx):
+                    ctx.set_leash(ctx.here("wolf"), None)
+                    ctx.send(ctx.actor, "unleashed")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"unleash": _unleash})
+                mob("wolf", name = "a wolf", keywords = ["wolf"], vitals = vitals(hp = 10), leash = 4)
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                wolf = w.spawn(":wolf", at = ":camp")
+                t.eq(wolf.leash, 4)
+                t.contains(p.do("unleash"), "unleashed")
+                t.eq(wolf.leash, None)
+                t.eq(wolf.leash_overridden, True)
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
+      "ctx.reset_leash" to
+        ex(
+          pkg =
+            """
+                def _set(ctx):
+                    ctx.set_leash(ctx.here("wolf"), 1)
+                def _reset(ctx):
+                    ctx.reset_leash(ctx.here("wolf"))
+                    ctx.send(ctx.actor, "reset")
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"set": _set, "reset": _reset})
+                mob("wolf", name = "a wolf", keywords = ["wolf"], vitals = vitals(hp = 10), leash = 4)
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                wolf = w.spawn(":wolf", at = ":camp")
+                p.do("set")
+                t.eq(wolf.leash, 1)
+                t.contains(p.do("reset"), "reset")
+                t.eq(wolf.leash, 4)
+                t.eq(wolf.leash_overridden, False)
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
       "ctx.group_of" to
         ex(
           pkg =

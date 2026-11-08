@@ -672,6 +672,9 @@ class Player(
     role.atLeast(Role.INSTRUCTOR) || (role.atLeast(Role.BUILDER) && pkg in scope)
 }
 
+/** A per-instance leash; [exits] null means unleashed. */
+data class LeashOverride(val exits: Int?)
+
 /** Live non-player mobile entity. */
 class Mob(
   id: EntityId,
@@ -705,6 +708,12 @@ class Mob(
 
   /** Vital recovery behavior when waking from dormancy. */
   var dormantRecovery: DormantRecovery = proto.dormantRecovery
+
+  /** A script's leash override; null when the prototype's leash applies. */
+  var leashOverride: LeashOverride? = null
+
+  /** The pulse since which the mob has been eligible to go home, or null. Not saved. */
+  var awaySince: Long? = null
 
   /** Leader actor ID that this mob follows through a `follow` behavior, or null if unled. */
   var leader: EntityId? = null

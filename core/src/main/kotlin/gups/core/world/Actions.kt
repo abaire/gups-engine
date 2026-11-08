@@ -158,6 +158,12 @@ data class Proposal(
 /** A built-in behavior. Proposes at most one action per think cycle. */
 fun interface Behavior {
   fun propose(world: World, mob: Mob): Proposal?
+
+  /**
+   * Whether the mob is already with what this behavior is after, inside its leash, so it stays
+   * rather than taking the engine's step toward home.
+   */
+  fun holdsReturn(world: World, mob: Mob): Boolean = false
 }
 
 sealed interface ThinkResult {
@@ -202,6 +208,17 @@ internal fun World.think(mob: Mob) {
             null
           }
         p?.let { i to it }
+      }
+      .let { pairs ->
+        val returnProposal =
+          try {
+            returnProposal(mob)?.let { behaviors.size to it }
+          } catch (e: Exception) {
+            if (config.strict) throw e
+            diagnose("engine", "return proposal of $mob failed: ${e.message}", e)
+            null
+          }
+        if (returnProposal != null) pairs + returnProposal else pairs
       }
       .filter { (_, p) -> Sentinel !in behaviors || Sentinel.allows(p) }
       .sortedWith(

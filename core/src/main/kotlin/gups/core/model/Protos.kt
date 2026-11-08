@@ -214,6 +214,8 @@ data class MobProto(
    * Vital recovery behavior when waking from a dormant state, defaulting to [DormantRecovery.FULL].
    */
   val dormantRecovery: DormantRecovery = DormantRecovery.FULL,
+  /** Most exits from its home room the mob's own movement goes; null for no leash. */
+  val leash: Int? = null,
   /** Loot generation rules evaluated when the mob is killed. */
   val loot: List<LootRule> = emptyList(),
   /** Innate traits granted to mobs created from this prototype. */

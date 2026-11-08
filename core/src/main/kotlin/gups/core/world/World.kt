@@ -345,10 +345,12 @@ class World(
    */
   internal val pathCache = HashMap<Pair<EntityId, EntityId>, List<gups.core.model.Direction>?>()
   internal var inboundCache: HashMap<Room, MutableList<Pair<Room, gups.core.model.Exit>>>? = null
+  internal val homeAreaCache = HashMap<Pair<EntityId, Int>, Set<Room>>()
 
   /** Forgets everything derived from the room graph, after doors, exits or rooms change. */
   internal fun graphChanged() {
     pathCache.clear()
+    homeAreaCache.clear()
   }
 
   var shutdownAt: Long? = null

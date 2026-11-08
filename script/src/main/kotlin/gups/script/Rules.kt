@@ -216,6 +216,20 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   }
 
   @StarlarkMethod(
+    name = "away",
+    structField = true,
+    doc = "Pulses since ctx.actor became eligible to go home, in leash_return; None elsewhere.",
+  )
+  fun away(): Any = field { c.away?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "past_leash",
+    structField = true,
+    doc = "True in leash_return when ctx.actor stands past its leash; None elsewhere.",
+  )
+  fun pastLeash(): Any = field { c.pastLeash ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "contributors",
     structField = true,
     doc = "The victim's contributors, as contributor structs, in xp_share; None elsewhere.",
@@ -1040,6 +1054,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     }
   }
 
+  override fun leashReturn(c: RulesContext): Boolean? {
+    if (!defines(RulesExport.LEASH_RETURN)) return null
+    return run(RulesExport.LEASH_RETURN, c, ctxArgs(c)) { v ->
+      val what = "rules.leash_return return value"
+      v as? Boolean ?: fail("$what: must be a bool, got ${typeName(v)}")
+    }
+  }
+
   override fun factions(c: RulesContext): List<Label>? {
     if (!defines(RulesExport.FACTIONS)) return null
     return run(RulesExport.FACTIONS, c, ctxArgs(c)) { v ->
@@ -1209,6 +1231,7 @@ enum class RulesExport(val scriptName: String) {
   XP_FOR_KILL("xp_for_kill"),
   XP_SHARE("xp_share"),
   OWNED_BEHAVIORS("owned_behaviors"),
+  LEASH_RETURN("leash_return"),
   FACTIONS("factions"),
   DISPOSITION("disposition"),
   STANDING_CHANGE("standing_change"),
@@ -1483,6 +1506,14 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       ctxFields = listOf("actor", "target", "behaviors", "room", "pulse", "rng"),
       doc =
         "The behaviors a mob runs while a player owns it; ctx.actor is the mob, ctx.target its owner.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.LEASH_RETURN,
+      signature = "leash_return(ctx)",
+      returnType = "bool",
+      ctxFields = listOf("actor", "away", "past_leash", "room", "pulse", "rng"),
+      doc = "Whether a leashed mob outside its home ground heads home this think.",
       hasDefault = true,
     ),
     RulesExportSpec(
@@ -1969,6 +2000,11 @@ internal fun dryRunRules(
     if (rules.defines(RulesExport.OWNED_BEHAVIORS)) {
       mobs.firstOrNull()?.let {
         rules.ownedBehaviors(RulesContext(world, it, player, behaviors = it.proto.behaviors))
+      }
+    }
+    if (rules.defines(RulesExport.LEASH_RETURN)) {
+      mobs.firstOrNull()?.let {
+        rules.leashReturn(RulesContext(world, it, null, away = 0L, pastLeash = false))
       }
     }
     if (Feature.COMBAT in features && rules.defines(RulesExport.TARGET_ORDER)) {

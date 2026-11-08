@@ -115,6 +115,10 @@ class RulesContext(
   val dispositions: List<Int>? = null,
   /** The ally being assisted in `target_order` for `"assist"`; null elsewhere. */
   val ally: Actor? = null,
+  /** Pulses since the mob became eligible to go home, in `leash_return`; null elsewhere. */
+  val away: Long? = null,
+  /** Whether the mob in `leash_return` stands past its leash; null elsewhere. */
+  val pastLeash: Boolean? = null,
   private val rngOverride: Rng? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
@@ -165,6 +169,8 @@ class RulesContext(
       currentSince = currentSince,
       dispositions = dispositions,
       ally = ally,
+      away = away,
+      pastLeash = pastLeash,
       rngOverride = rngOverride,
     )
 
@@ -213,6 +219,8 @@ class RulesContext(
       currentSince = currentSince,
       dispositions = dispositions,
       ally = ally,
+      away = away,
+      pastLeash = pastLeash,
       rngOverride = rngOverride,
     )
 
@@ -385,6 +393,12 @@ interface RulesEngine {
    * The owned behavior list for [c]`actor` (a mob) owned by [c]`target`, or null for the default.
    */
   fun ownedBehaviors(c: RulesContext): List<Behavior>? = null
+
+  /**
+   * Whether a leashed mob outside its home ground heads home this think; null for the default,
+   * which sends it home at once.
+   */
+  fun leashReturn(c: RulesContext): Boolean? = null
 
   /** The factions of [c]`actor`, or null for the default. */
   fun factions(c: RulesContext): List<Label>? = null

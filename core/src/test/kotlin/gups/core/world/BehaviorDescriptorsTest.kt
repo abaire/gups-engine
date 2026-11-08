@@ -5,6 +5,7 @@ import gups.core.model.Direction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class BehaviorDescriptorsTest {
   private val f = Fixture()
@@ -63,6 +64,36 @@ class BehaviorDescriptorsTest {
       val descriptor = b.descriptor()
       val restored = f.w.behaviorOf(descriptor)
       assertEquals(b, restored, "Round-trip mismatch for $b")
+    }
+  }
+
+  @Test
+  fun `pursue range round trips and validates`() {
+    // The default range is written as an explicit 10 and reads back.
+    val default = Pursue(target = ActorFilter("players"))
+    assertEquals(10, default.range)
+    assertEquals(default, f.w.behaviorOf(default.descriptor()))
+
+    // An explicit range round trips.
+    val bounded = Pursue(target = ActorFilter("players"), range = 3)
+    assertEquals(bounded, f.w.behaviorOf(bounded.descriptor()))
+
+    // A null (unlimited) range is written as an explicit null and round trips.
+    val unlimited = Pursue(target = ActorFilter("players"), range = null)
+    val descriptor = unlimited.descriptor()
+    assertTrue("range" in descriptor, "range is always written")
+    assertEquals(null, descriptor["range"], "an unlimited range is written as null")
+    assertEquals(unlimited, f.w.behaviorOf(descriptor))
+
+    // A descriptor without the key parses to the default range.
+    assertEquals(
+      Pursue(target = ActorFilter("players")),
+      f.w.behaviorOf(mapOf("kind" to "pursue", "target" to listOf("players"))),
+    )
+
+    // A present-but-invalid range throws.
+    assertFailsWith<IllegalArgumentException> {
+      f.w.behaviorOf(mapOf("kind" to "pursue", "target" to listOf("players"), "range" to 0L))
     }
   }
 

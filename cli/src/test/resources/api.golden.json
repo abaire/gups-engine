@@ -1127,6 +1127,18 @@
           "since": 1
         },
         {
+          "symbol": "mob.leash",
+          "name": "leash",
+          "type": "int | None",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Most exits from its home room the mob's own movement goes; None for no leash.",
+          "since": 1
+        },
+        {
           "symbol": "mob.hooks",
           "name": "hooks",
           "type": "dict[str, function]",
@@ -5376,6 +5388,24 @@
         ]
       },
       {
+        "symbol": "ctx.reset_leash",
+        "name": "reset_leash",
+        "doc": "Drops a mob's leash override, so its prototype leash applies again, including a value a later reload brings. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.reset_leash.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to reset."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.roll",
         "name": "roll",
         "doc": "Rolls dice such as '2d6+1'.",
@@ -5568,6 +5598,34 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Uses left; 0 doesn't run the empty action."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.set_leash",
+        "name": "set_leash",
+        "doc": "Overrides a mob's leash with an int of at least 0, or with None to unleash it. The override is saved with the mob and outlives reloads. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_leash.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to leash."
+          },
+          {
+            "symbol": "ctx.set_leash.leash",
+            "name": "leash",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Most exits from home, or None to unleash."
           }
         ]
       },
@@ -6223,6 +6281,18 @@
           "symbol": "view:actor.label",
           "name": "label",
           "doc": "The prototype label.",
+          "since": 1
+        },
+        {
+          "symbol": "view:actor.leash",
+          "name": "leash",
+          "doc": "A mob's effective leash in exits from home; None for no leash or a player.",
+          "since": 1
+        },
+        {
+          "symbol": "view:actor.leash_overridden",
+          "name": "leash_overridden",
+          "doc": "True while a `set_leash` override is in place; False for players and unoverridden mobs.",
           "since": 1
         },
         {
@@ -8073,7 +8143,7 @@
     {
       "symbol": "pursue",
       "name": "pursue",
-      "doc": "Behavior: heads for the nearest matching actor anywhere in the world.",
+      "doc": "Behavior: heads for the nearest matching actor within range exits.",
       "since": 1,
       "params": [
         {
@@ -8106,6 +8176,16 @@
           "varargs": false,
           "kwargs": false,
           "doc": "Proposal priority; higher wins. None uses the behavior's default."
+        },
+        {
+          "symbol": "pursue.range",
+          "name": "range",
+          "positional": true,
+          "named": true,
+          "default": "10",
+          "varargs": false,
+          "kwargs": false,
+          "doc": "Exits searched from the mob's room; None searches the whole world."
         }
       ]
     },
@@ -8284,6 +8364,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.away",
+          "name": "away",
+          "doc": "Pulses since ctx.actor became eligible to go home, in leash_return; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.band",
           "feature": "track",
           "name": "band",
@@ -8415,6 +8501,12 @@
           "symbol": "rules_ctx.limit",
           "name": "limit",
           "doc": "The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.past_leash",
+          "name": "past_leash",
+          "doc": "True in leash_return when ctx.actor stands past its leash; None elsewhere.",
           "since": 1
         },
         {
@@ -8875,6 +8967,15 @@
         "return_type": "int",
         "ctx_fields": ["actor", "target", "item", "skill", "event", "affect", "room", "pulse", "rng"],
         "doc": "Percent strength of what ctx.item does for ctx.actor: use or proc.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:leash_return",
+        "name": "leash_return",
+        "signature": "leash_return(ctx)",
+        "return_type": "bool",
+        "ctx_fields": ["actor", "away", "past_leash", "room", "pulse", "rng"],
+        "doc": "Whether a leashed mob outside its home ground heads home this think.",
         "since": 1
       },
       {
@@ -9417,6 +9518,18 @@
           "symbol": "p.label",
           "name": "label",
           "doc": "The prototype label.",
+          "since": 1
+        },
+        {
+          "symbol": "p.leash",
+          "name": "leash",
+          "doc": "A mob's effective leash in exits from home; None for no leash or a player.",
+          "since": 1
+        },
+        {
+          "symbol": "p.leash_overridden",
+          "name": "leash_overridden",
+          "doc": "True while a `set_leash` override is in place; False for players and unoverridden mobs.",
           "since": 1
         },
         {

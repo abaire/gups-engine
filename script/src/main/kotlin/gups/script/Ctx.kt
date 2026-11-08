@@ -83,6 +83,7 @@ import gups.core.world.removeItemTag
 import gups.core.world.removeRoomAffect
 import gups.core.world.removeSkill
 import gups.core.world.reportSkillUse
+import gups.core.world.resetLeash
 import gups.core.world.roomOfEntity
 import gups.core.world.say
 import gups.core.world.send
@@ -91,6 +92,7 @@ import gups.core.world.setAnchor
 import gups.core.world.setCharges
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
+import gups.core.world.setLeash
 import gups.core.world.setOwner
 import gups.core.world.setSkill
 import gups.core.world.spawnItem
@@ -2539,6 +2541,46 @@ internal constructor(
     verb("clear_owner") {
       val m = (mob as? ActorView)?.actor as? Mob ?: fail("clear_owner(mob): must be a mob")
       world.clearOwner(m)
+    }
+
+  @StarlarkMethod(
+    name = "set_leash",
+    doc =
+      "Overrides a mob's leash with an int of at least 0, or with None to unleash it. The override is saved with the mob and outlives reloads. Returns None.",
+    parameters =
+      [
+        Param(name = "mob", named = true, doc = "The mob to leash."),
+        Param(name = "leash", named = true, doc = "Most exits from home, or None to unleash."),
+      ],
+  )
+  fun setLeash(mob: Any, leash: Any): Any =
+    verb("set_leash") {
+      val m = (mob as? ActorView)?.actor as? Mob ?: fail("set_leash(mob): must be a mob")
+      val n =
+        when (leash) {
+          Starlark.NONE -> null
+          is StarlarkInt -> {
+            val v = leash.toInt("set_leash(leash)")
+            if (v < 0) fail("set_leash(leash): must be an int of at least 0 or None")
+            v
+          }
+          else -> fail("set_leash(leash): must be an int of at least 0 or None")
+        }
+      world.setLeash(m, n)
+      Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "reset_leash",
+    doc =
+      "Drops a mob's leash override, so its prototype leash applies again, including a value a later reload brings. Returns None.",
+    parameters = [Param(name = "mob", named = true, doc = "The mob to reset.")],
+  )
+  fun resetLeash(mob: Any): Any =
+    verb("reset_leash") {
+      val m = (mob as? ActorView)?.actor as? Mob ?: fail("reset_leash(mob): must be a mob")
+      world.resetLeash(m)
+      Starlark.NONE
     }
 
   @StarlarkMethod(

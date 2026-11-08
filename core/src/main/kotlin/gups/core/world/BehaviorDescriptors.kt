@@ -84,6 +84,8 @@ fun Behavior.descriptor(): Map<String, Any?> =
         put("target", target.patterns)
         dispositionBelow?.let { put("disposition_below", it.toLong()) }
         put("priority", priority.toLong())
+        // range's null is "unlimited", not the default, so the key is always written.
+        put("range", range?.toLong())
       }
     Sentinel -> mapOf("kind" to "sentinel")
     is Scavenge -> mapOf("kind" to "scavenge", "priority" to priority.toLong())
@@ -111,7 +113,7 @@ private val ALLOWED_KEYS =
     "flee" to setOf("kind", "below", "priority"),
     "guard" to setOf("kind", "exit", "allies", "disposition_above"),
     "follow" to setOf("kind", "target", "disposition_above", "priority"),
-    "pursue" to setOf("kind", "target", "disposition_below", "priority"),
+    "pursue" to setOf("kind", "target", "disposition_below", "priority", "range"),
     "sentinel" to setOf("kind"),
     "scavenge" to setOf("kind", "priority"),
     "heel" to setOf("kind", "priority"),
@@ -326,7 +328,22 @@ fun World.behaviorOf(d: Map<String, Any?>): Behavior {
         throw IllegalArgumentException("disposition_below must be in -100..100")
       }
       val priority = priorityArg(PRIORITY_PURSUE)
-      Pursue(target, dispositionBelow, priority)
+      // A missing key means the default range; a present null means "unlimited".
+      val range =
+        if ("range" in d) {
+          when (val v = d["range"]) {
+            null -> null
+            is Long -> {
+              if (v < 1) throw IllegalArgumentException("range must be at least 1")
+              v.toInt()
+            }
+            else ->
+              throw IllegalArgumentException(
+                "range must be a Long or null, got ${v::class.simpleName}"
+              )
+          }
+        } else PURSUE_DEFAULT_RANGE
+      Pursue(target, dispositionBelow, priority, range)
     }
     "sentinel" -> Sentinel
     "scavenge" -> {

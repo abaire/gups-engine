@@ -38,6 +38,7 @@
 <tr id="rules_ctx.ally"><td><code>ally</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order for 'assist', the ally being helped; None elsewhere.</td></tr>
 <tr id="rules_ctx.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In standing_change, the healing done or the count given; otherwise None.</td></tr>
 <tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
+<tr id="rules_ctx.away"><td><code>away</code></td><td>1</td><td>Pulses since ctx.actor became eligible to go home, in leash_return; None elsewhere.</td></tr>
 <tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
 <tr id="rules_ctx.behavior"><td><code>behavior</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, 'aggressive', 'assist' or 'retarget'; None elsewhere.</td></tr>
 <tr id="rules_ctx.behaviors"><td><code>behaviors</code></td><td>1</td><td>The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.</td></tr>
@@ -59,6 +60,7 @@
 <tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
 <tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
 <tr id="rules_ctx.limit"><td><code>limit</code></td><td>1</td><td>The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.</td></tr>
+<tr id="rules_ctx.past_leash"><td><code>past_leash</code></td><td>1</td><td>True in leash_return when ctx.actor stands past its leash; None elsewhere.</td></tr>
 <tr id="rules_ctx.pet"><td><code>pet</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In a standing event raised for a pet's owner, the pet; None elsewhere.</td></tr>
 <tr id="rules_ctx.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the behavior's prefer value; None elsewhere.</td></tr>
 <tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time; not available in xp_to_level.</td></tr>

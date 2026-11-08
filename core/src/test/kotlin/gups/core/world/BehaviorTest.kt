@@ -2,10 +2,14 @@ package gups.core.world
 
 import gups.core.Label
 import gups.core.model.Channel
+import gups.core.model.Condition
 import gups.core.model.Direction
+import gups.core.model.ExitProto
 import gups.core.model.ItemLocation
+import gups.core.model.Mob
 import gups.core.model.MobProto
 import gups.core.model.Prototypes
+import gups.core.model.RoomProto
 import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -389,6 +393,266 @@ class BehaviorTest {
     g.player("Bea", at = C.r(6))
     g.runTo(60)
     assertEquals(C.r(6), h.room.label)
+  }
+
+  @Test
+  fun `pursue ignores matches beyond its range`() {
+    val protos = C.protos(n = 8)
+    val hunter =
+      MobProto(
+        Label("//c:hunter_range"),
+        "hunter_range",
+        listOf("hunter_range"),
+        behaviors = listOf(Pursue(ActorFilter("players"), range = 3)),
+      )
+    val f =
+      Fixture(
+        protos =
+          Prototypes(
+            protos.rooms.values.toList(),
+            listOf(hunter),
+            zones = protos.zones.values.toList(),
+          )
+      )
+    val h = f.w.spawnMob(hunter.label, f.w.room(C.r(0)))
+    f.player("Bea", at = C.r(6))
+    f.runTo(60)
+    assertEquals(C.r(0), h.room.label, "a match 6 away is beyond range 3")
+
+    val protos2 = C.protos(n = 8)
+    val hunter6 =
+      MobProto(
+        Label("//c:hunter_range6"),
+        "hunter_range6",
+        listOf("hunter_range6"),
+        behaviors = listOf(Pursue(ActorFilter("players"), range = 6)),
+      )
+    val g =
+      Fixture(
+        protos =
+          Prototypes(
+            protos2.rooms.values.toList(),
+            listOf(hunter6),
+            zones = protos2.zones.values.toList(),
+          )
+      )
+    val h2 = g.w.spawnMob(hunter6.label, g.w.room(C.r(0)))
+    g.player("Bea", at = C.r(6))
+    g.runTo(60)
+    assertEquals(C.r(6), h2.room.label, "range 6 reaches a match 6 away")
+  }
+
+  @Test
+  fun `pursue with no range crosses the world`() {
+    val protos = C.protos(n = 16)
+    val hunter =
+      MobProto(
+        Label("//c:hunter_norange"),
+        "hunter_norange",
+        listOf("hunter_norange"),
+        behaviors = listOf(Pursue(ActorFilter("players"), range = null)),
+      )
+    val f =
+      Fixture(
+        protos =
+          Prototypes(
+            protos.rooms.values.toList(),
+            listOf(hunter),
+            zones = protos.zones.values.toList(),
+          )
+      )
+    val h = f.w.spawnMob(hunter.label, f.w.room(C.r(0)))
+    f.player("Bea", at = C.r(15))
+    f.runTo(120)
+    assertEquals(C.r(15), h.room.label, "no range searches the whole world")
+  }
+
+  private fun diamondRooms() =
+    listOf(
+      RoomProto(
+        Label("//c:p0"),
+        "P0",
+        exits =
+          listOf(
+            ExitProto(Direction.EAST, Label("//c:p1")),
+            ExitProto(Direction.NORTH, Label("//c:p2")),
+            ExitProto(Direction.SOUTH, Label("//c:p3")),
+          ),
+      ),
+      RoomProto(
+        Label("//c:p1"),
+        "P1",
+        exits =
+          listOf(
+            ExitProto(Direction.WEST, Label("//c:p0")),
+            ExitProto(Direction.EAST, Label("//c:p4")),
+          ),
+      ),
+      RoomProto(
+        Label("//c:p2"),
+        "P2",
+        exits =
+          listOf(
+            ExitProto(Direction.SOUTH, Label("//c:p0")),
+            ExitProto(Direction.NORTH, Label("//c:p5")),
+          ),
+      ),
+      RoomProto(Label("//c:p3"), "P3", exits = listOf(ExitProto(Direction.NORTH, Label("//c:p0")))),
+      RoomProto(Label("//c:p4"), "P4", exits = listOf(ExitProto(Direction.WEST, Label("//c:p1")))),
+      RoomProto(Label("//c:p5"), "P5", exits = listOf(ExitProto(Direction.SOUTH, Label("//c:p2")))),
+    )
+
+  /** The first room the mob enters after [start], watching up to 10 pulses. */
+  private fun Fixture.firstRoomEntered(m: Mob, start: Label, pulses: Int = 10): Label? {
+    var first: Label? = null
+    repeat(pulses) {
+      run()
+      if (first == null && m.room.label != start) first = m.room.label
+    }
+    return first
+  }
+
+  @Test
+  fun `pursue picks the nearest, then the lowest id`() {
+    // Two players two exits away over different routes: the lower-id one wins the first step.
+    val h1 =
+      MobProto(
+        Label("//c:h1"),
+        "h1",
+        listOf("h1"),
+        behaviors = listOf(Pursue(ActorFilter("players"))),
+      )
+    val f1 = Fixture(protos = Prototypes(diamondRooms(), listOf(h1)))
+    val m1 = f1.w.spawnMob(h1.label, f1.w.room(Label("//c:p0")))
+    val ann = f1.player("Ann", at = Label("//c:p4"))
+    val bea = f1.player("Bea", at = Label("//c:p5"))
+    assertTrue(ann.id < bea.id, "Ann has the lower id")
+    assertEquals(
+      Label("//c:p1"),
+      f1.firstRoomEntered(m1, Label("//c:p0")),
+      "the first step heads toward the lower-id player at the same distance",
+    )
+
+    // A nearer player is reached first whatever the ids.
+    val h2 =
+      MobProto(
+        Label("//c:h2"),
+        "h2",
+        listOf("h2"),
+        behaviors = listOf(Pursue(ActorFilter("players"))),
+      )
+    val f2 = Fixture(protos = Prototypes(diamondRooms(), listOf(h2)))
+    val m2 = f2.w.spawnMob(h2.label, f2.w.room(Label("//c:p0")))
+    f2.player("Ann", at = Label("//c:p4"))
+    f2.player("Bea", at = Label("//c:p5"))
+    f2.player("Cy", at = Label("//c:p3"))
+    assertEquals(
+      Label("//c:p3"),
+      f2.firstRoomEntered(m2, Label("//c:p0")),
+      "the nearer player wins over both",
+    )
+  }
+
+  @Test
+  fun `pursue skips dead candidates`() {
+    val protos = C.protos(n = 8)
+    val hunter =
+      MobProto(
+        Label("//c:hunter_dead"),
+        "hunter_dead",
+        listOf("hunter_dead"),
+        behaviors = listOf(Pursue(ActorFilter("players"), range = 3)),
+      )
+    val f =
+      Fixture(
+        protos =
+          Prototypes(
+            protos.rooms.values.toList(),
+            listOf(hunter),
+            zones = protos.zones.values.toList(),
+          )
+      )
+    val h = f.w.spawnMob(hunter.label, f.w.room(C.r(0)))
+    val p = f.player("Bea", at = C.r(2))
+    p.condition = Condition.DEAD
+    f.runTo(40)
+    assertEquals(C.r(0), h.room.label, "the hunter ignores the dead player and stays put")
+  }
+
+  @Test
+  fun `pursue first step matches path_to`() {
+    // Two equal-length routes from r0 to the target room.
+    val r0 = Label("//c:q0")
+    val rooms =
+      listOf(
+        RoomProto(
+          r0,
+          "Q0",
+          exits =
+            listOf(
+              ExitProto(Direction.EAST, Label("//c:qA")),
+              ExitProto(Direction.NORTH, Label("//c:qB")),
+            ),
+        ),
+        RoomProto(
+          Label("//c:qA"),
+          "QA",
+          exits = listOf(ExitProto(Direction.WEST, r0), ExitProto(Direction.EAST, Label("//c:qT"))),
+        ),
+        RoomProto(
+          Label("//c:qB"),
+          "QB",
+          exits = listOf(ExitProto(Direction.SOUTH, r0), ExitProto(Direction.EAST, Label("//c:qT"))),
+        ),
+        RoomProto(
+          Label("//c:qT"),
+          "QT",
+          exits =
+            listOf(
+              ExitProto(Direction.WEST, Label("//c:qA")),
+              ExitProto(Direction.WEST, Label("//c:qB")),
+            ),
+        ),
+      )
+    val hunter =
+      MobProto(
+        Label("//c:q_h"),
+        "q_h",
+        listOf("q_h"),
+        behaviors = listOf(Pursue(ActorFilter("players"))),
+      )
+    val f = Fixture(protos = Prototypes(rooms, listOf(hunter)))
+    val h = f.w.spawnMob(hunter.label, f.w.room(r0))
+    val p = f.player("Bea", at = Label("//c:qT"))
+    val proposed = Pursue(ActorFilter("players")).propose(f.w, h)!!
+    assertEquals(f.w.pathTo(h.room, p.room)!!.first().name, proposed.commandLine)
+  }
+
+  @Test
+  fun `pursue stays local however many players are online`() {
+    val protos = C.protos(n = 12)
+    val hunter =
+      MobProto(
+        Label("//c:hunter_many"),
+        "hunter_many",
+        listOf("hunter_many"),
+        behaviors = listOf(Pursue(ActorFilter("players"), range = 3)),
+      )
+    val f =
+      Fixture(
+        protos =
+          Prototypes(
+            protos.rooms.values.toList(),
+            listOf(hunter),
+            zones = protos.zones.values.toList(),
+          )
+      )
+    val h = f.w.spawnMob(hunter.label, f.w.room(C.r(0)))
+    repeat(20) { i -> f.player("P$i", at = C.r(4 + (i % 8))) }
+    f.w.pathCache.clear()
+    f.runTo(40)
+    assertTrue(f.w.pathCache.isEmpty(), "the search never calls pathTo, so pathCache stays empty")
+    assertEquals(C.r(0), h.room.label, "no match in range, the hunter stays put")
   }
 
   @Test
