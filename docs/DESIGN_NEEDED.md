@@ -43,6 +43,20 @@ to standing (§5.14), which already filters candidates with `aggressive(disposit
 "lowest standing first" order candidates by it, and how does it combine with the other orderings? - Should an aggressive
 mob wait a number of pulses after a target arrives before attacking, which needs per-mob memory of arrivals?
 
+### Movement speed and pursuit catch-up
+
+**Spec:** §5.5 (room transitions: walking costs one action and leaves no lag), §5.8 (think cycle, `thinkEvery`), §5.3
+(action lifecycle), §4.7 (`pursue`, `follow`, `heel`). **Today:** a player running exit to exit moves one room per
+pulse. A mob moves one room per think, and thinks only when idle and `thinkEvery` pulses (default 4) have passed, so a
+pursuer covers a room every 4 pulses; even `think_every = 1` only ties a player. No pursuer can catch a player who keeps
+moving, and there is no way to make a fast creature (a cheetah) outrun a person. **Questions:** - Should actors have a
+walking pace, for example a rules export giving recovery lag after a room transition, so ordinary walkers pause between
+rooms and fast creatures pause less? Or a mob speed attribute, or actions that take a mob through several exits at once?
+\- If one action can cross several exits, how do the rooms in between behave: `before_exit` and guards, doors,
+`move_cost`, perception of arrivals and departures, and the edge of the reality bubble? - Does a pace apply to players
+too, and how does it interact with `flee`, `follow`, `heel`, and pets keeping up with their owners? - Should a mob that
+is chasing think more often than its `think_every`, or is pace enough?
+
 ## Items
 
 ### Corpses and looting
