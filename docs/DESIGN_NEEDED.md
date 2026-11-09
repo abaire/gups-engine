@@ -106,6 +106,20 @@ entry. **Questions:** - Should the operator also agree in `MODULE.gups` (for exa
 (a plugin adding a sub-command to another's), attribute namespaces, or calling another plugin's builtins? - Does a
 dependency between plugins need a declared version range, and how does that relate to `PluginApi.VERSION`?
 
+### More trait event callbacks
+
+**Spec:** §4.15 (traits, event listeners), §4.19 (effects of traits), §4.4. **Today:** players carry no hooks, and a
+`PluginTrait` changes only numbers and flags through deltas and pure modifier functions. The recognizing-a-skill
+milestone adds `PluginTrait.on`, a map from `PluginTraitEvent` to a handler that may change the world, run for each
+bearer of the trait, with a single event, `SKILL_RECOGNIZED`. Per-character plugin behavior (a vampire that feeds on a
+kill, a berserker that rages when hurt) has nowhere else to live. **Questions:** - Which events come next: being
+damaged, landing a kill, dying, being healed, gaining or losing an affect, levelling, entering a room? - When a handler
+reacts to damage by dealing damage, or to a death by killing, how is re-entrancy bounded, and does the handler run
+inline or deferred to the end of the action, as `SKILL_RECOGNIZED` is? - How do trait handlers order against the
+entity's own hooks (`on_damage`, `on_death`), global hooks and plugin `onEvent` listeners for the same event? - How do
+they relate to affect and item `procs`, which already fire on `hit`, `struck` and `avoid`? - Should world content get a
+way to declare traits, or player-scoped hooks, so the same behavior doesn't need a plugin?
+
 ### In-game character respec and choice changes
 
 **Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no
