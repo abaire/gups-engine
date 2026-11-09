@@ -3,6 +3,10 @@
 The GUPS text MUD engine. The design lives in [docs/SPEC.md](docs/SPEC.md); decisions made where the spec is silent are
 logged in [docs/DECISIONS.md](docs/DECISIONS.md) until they are folded back in.
 
+This project is a combination of an experiment using local LLMs (a Qwen 3.8 27B fine tune) to generate a complex project
+with minimal oversight and a possible teaching tool. Much/most of the code has not been reviewed in detail and should
+not be taken as a good example of best practices.
+
 ## Overview
 
 GUPS splits the work into three layers, each in its own language:
