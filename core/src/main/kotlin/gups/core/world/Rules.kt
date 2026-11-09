@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.HookRef
+import gups.core.MOVE_PACE_MIN
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.DamageType
@@ -308,6 +309,30 @@ fun World.castAllowed(c: RulesContext): String? {
 
 fun World.moveCost(c: RulesContext): Map<String, Int> =
   chain(ModifierPoint.MOVE_COST, c, rules.moveCost(c)) { it.show() }.value
+
+/**
+ * The walking pace, in hundredths of a pulse per room, for `c.actor`: the export with its default,
+ * then its modifier chain, clamped at `MOVE_PACE_MIN`. While the chain runs, the actor's
+ * `move_pace` view field reads 100, so a rule that reads it does not recurse.
+ */
+fun World.movePaceOf(c: RulesContext): Int {
+  val actor = c.actor ?: return 100
+  if (actor.movePaceInProgress) return 100
+  actor.movePaceInProgress = true
+  return try {
+    val base = rules.movePace(c) ?: 100
+    val r = chain(ModifierPoint.MOVE_PACE, c, base) { "$it" }
+    if (r.value < MOVE_PACE_MIN) {
+      traceRules(c.actor, "${r.text} → clamp $MOVE_PACE_MIN")
+      MOVE_PACE_MIN
+    } else {
+      traceRules(c.actor, r.text)
+      r.value
+    }
+  } finally {
+    actor.movePaceInProgress = false
+  }
+}
 
 fun World.regenOf(c: RulesContext): Map<String, Int> =
   traced(c, chain(ModifierPoint.REGEN, c, rules.regen(c)) { it.show() })

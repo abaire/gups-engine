@@ -23,6 +23,8 @@ class FixtureSchema(
   val mind: List<String>,
   /** A stat that soaks damage, if the schema has one. */
   val armor: String?,
+  /** A stat that sets how fast an actor walks, if the schema has one. */
+  val speed: String? = null,
   /** A damage type that is not the unarmed one. */
   val magic: String,
   /** The vital's maximum a new player gets, by vital; the others start at 0. */
@@ -59,6 +61,7 @@ object FixtureSchemas {
               SchemaName("int", "Intelligence"),
               SchemaName("wis", "Wisdom"),
               SchemaName("cha", "Charisma"),
+              SchemaName("speed", "Speed"),
               SchemaName("armor", "Armor"),
             ),
           vitals =
@@ -80,6 +83,7 @@ object FixtureSchemas {
       toughness = "con",
       mind = listOf("int", "wis"),
       armor = "armor",
+      speed = "speed",
       magic = "fire",
       playerMax = mapOf("hp" to 20, "mana" to 20, "move" to 100),
       mobMax = mapOf("hp" to 10, "mana" to 0, "move" to 100),

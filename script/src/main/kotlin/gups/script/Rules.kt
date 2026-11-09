@@ -230,6 +230,20 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   fun pastLeash(): Any = field { c.pastLeash ?: Starlark.NONE }
 
   @StarlarkMethod(
+    name = "command",
+    structField = true,
+    doc = "In chain_think, the command line of the action that finished; None elsewhere.",
+  )
+  fun command(): Any = field { c.command ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "chain",
+    structField = true,
+    doc = "In chain_think, how many chained thinks in a row led to that action; None elsewhere.",
+  )
+  fun chain(): Any = field { c.chain?.let(::sInt) ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "contributors",
     structField = true,
     doc = "The victim's contributors, as contributor structs, in xp_share; None elsewhere.",
@@ -945,6 +959,11 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     run(RulesExport.MOVE_COST, c, ctxArgs(c), convert = vitalsOf(RulesExport.MOVE_COST))
       ?.mapValues { it.value.coerceAtLeast(0) } ?: emptyMap()
 
+  override fun movePace(c: RulesContext): Int? {
+    if (!defines(RulesExport.MOVE_PACE)) return null
+    return run(RulesExport.MOVE_PACE, c, ctxArgs(c), convert = intOf(RulesExport.MOVE_PACE))
+  }
+
   override fun regen(c: RulesContext): Map<String, Int> =
     run(RulesExport.REGEN, c, ctxArgs(c), convert = vitalsOf(RulesExport.REGEN)) ?: emptyMap()
 
@@ -1058,6 +1077,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     if (!defines(RulesExport.LEASH_RETURN)) return null
     return run(RulesExport.LEASH_RETURN, c, ctxArgs(c)) { v ->
       val what = "rules.leash_return return value"
+      v as? Boolean ?: fail("$what: must be a bool, got ${typeName(v)}")
+    }
+  }
+
+  override fun chainThink(c: RulesContext): Boolean? {
+    if (!defines(RulesExport.CHAIN_THINK)) return null
+    return run(RulesExport.CHAIN_THINK, c, ctxArgs(c)) { v ->
+      val what = "rules.chain_think return value"
       v as? Boolean ?: fail("$what: must be a bool, got ${typeName(v)}")
     }
   }
@@ -1218,6 +1245,7 @@ enum class RulesExport(val scriptName: String) {
   RETREAT_CHECK("retreat_check"),
   FLEE_CHANCE("flee_chance"),
   MOVE_COST("move_cost"),
+  MOVE_PACE("move_pace"),
   REGEN("regen"),
   CARRY_LIMIT("carry_limit"),
   ENCUMBRANCE_LEVEL("encumbrance_level"),
@@ -1232,6 +1260,7 @@ enum class RulesExport(val scriptName: String) {
   XP_SHARE("xp_share"),
   OWNED_BEHAVIORS("owned_behaviors"),
   LEASH_RETURN("leash_return"),
+  CHAIN_THINK("chain_think"),
   FACTIONS("factions"),
   DISPOSITION("disposition"),
   STANDING_CHANGE("standing_change"),
@@ -1410,6 +1439,15 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       doc = "The vitals spent when leaving a room.",
     ),
     RulesExportSpec(
+      export = RulesExport.MOVE_PACE,
+      signature = "move_pace(ctx)",
+      returnType = "int",
+      ctxFields = listOf("actor", "room", "exit", "pulse", "rng"),
+      doc =
+        "Hundredths of a pulse per room for ctx.actor walking through ctx.exit; 100 is one room per pulse.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
       export = RulesExport.REGEN,
       signature = "regen(ctx)",
       returnType = "vitals",
@@ -1514,6 +1552,14 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "bool",
       ctxFields = listOf("actor", "away", "past_leash", "room", "pulse", "rng"),
       doc = "Whether a leashed mob outside its home ground heads home this think.",
+      hasDefault = true,
+    ),
+    RulesExportSpec(
+      export = RulesExport.CHAIN_THINK,
+      signature = "chain_think(ctx)",
+      returnType = "bool",
+      ctxFields = listOf("actor", "behavior", "command", "exit", "chain", "room", "pulse", "rng"),
+      doc = "Whether ctx.actor, a mob, thinks again as soon as it can act.",
       hasDefault = true,
     ),
     RulesExportSpec(
@@ -1831,6 +1877,14 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
       doc = "Adjusts the vitals spent for leaving a room.",
     ),
     ModifierPointSpec(
+      point = ModifierPoint.MOVE_PACE,
+      signature = "fn(ctx, base)",
+      valueType = "int",
+      ctxFields = listOf("actor", "room", "exit", "pulse", "rng"),
+      doc =
+        "Adjusts the walking pace in hundredths of a pulse per room. The final result is clamped to at least 100 / MOVES_PER_PULSE_MAX (25).",
+    ),
+    ModifierPointSpec(
       point = ModifierPoint.REGEN,
       signature = "fn(ctx, base)",
       valueType = "vitals",
@@ -1911,8 +1965,8 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  *   `retreat_fail_lag`, and `get_lag` across all range bands.
  * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed`,
  *   `interrupt_check`, `skill_check`, and `skill_power`.
- * - Tests `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `regen`, and
- *   `move_cost`.
+ * - Tests `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `regen`, `move_cost`,
+ *   and `move_pace`.
  * - Tests `mitigate` for each damage type declared in the world [schema].
  * - For player actors, tests `on_player_death`.
  * - Tests sensory perception exports (`sense_cost`, `can_perceive`, `perceive_message`) for each
@@ -2005,6 +2059,18 @@ internal fun dryRunRules(
     if (rules.defines(RulesExport.LEASH_RETURN)) {
       mobs.firstOrNull()?.let {
         rules.leashReturn(RulesContext(world, it, null, away = 0L, pastLeash = false))
+      }
+    }
+    if (rules.defines(RulesExport.MOVE_PACE)) {
+      mobs.firstOrNull()?.let {
+        rules.movePace(RulesContext(world, it, room = it.room, exit = null))
+      }
+    }
+    if (rules.defines(RulesExport.CHAIN_THINK)) {
+      mobs.firstOrNull()?.let {
+        rules.chainThink(
+          RulesContext(world, it, null, behavior = "pursue", command = "north", chain = 0)
+        )
       }
     }
     if (Feature.COMBAT in features && rules.defines(RulesExport.TARGET_ORDER)) {

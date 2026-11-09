@@ -461,7 +461,8 @@ object DocExamples {
                     stats = [
                         stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
                         stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
-                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"), "armor",
+                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"),
+                        stat("speed", label = "Speed"), "armor",
                     ],
                     vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
                     damage_types = ["bludgeon", "slash", "pierce", "fire"],
@@ -483,7 +484,8 @@ object DocExamples {
                     stats = [
                         stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
                         stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
-                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"), "armor",
+                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"),
+                        stat("speed", label = "Speed"), "armor",
                     ],
                     vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
                     damage_types = ["bludgeon", "slash", "pierce", "fire"],
@@ -505,7 +507,8 @@ object DocExamples {
                     stats = [
                         stat("str", label = "Strength"), stat("dex", label = "Dexterity"),
                         stat("con", label = "Constitution"), stat("int", label = "Intelligence"),
-                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"), "armor",
+                        stat("wis", label = "Wisdom"), stat("cha", label = "Charisma"),
+                        stat("speed", label = "Speed"), "armor",
                     ],
                     vitals = [vital("hp", label = "Hit points"), "mana", vital("move", label = "Movement")],
                     damage_types = ["bludgeon", "slash", "pierce", "fire"],

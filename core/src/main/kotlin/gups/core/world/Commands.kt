@@ -115,15 +115,16 @@ class TickCommand(
     if (role != Role.PLAYER || name.startsWith("@")) CommandCategory.SPECIAL
     else CommandCategory.GENERAL,
   help: String = "",
+  val moves: Boolean = false,
   val plan: (CommandCall) -> Action?,
 ) : CommandDef(name, aliases, role, category, help) {
   override val lane: Lane
     get() = Lane.TICK
 
   override fun withAliases(extra: List<String>) =
-    TickCommand(name, aliases + extra, role, category, help, plan)
+    TickCommand(name, aliases + extra, role, category, help, moves, plan)
 
-  override fun renamed(to: String) = TickCommand(to, aliases, role, category, help, plan)
+  override fun renamed(to: String) = TickCommand(to, aliases, role, category, help, moves, plan)
 }
 
 /**

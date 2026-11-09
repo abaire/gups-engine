@@ -17,6 +17,7 @@ import gups.core.model.StepView
 import gups.core.model.Trait
 import gups.core.model.TraitModifier
 import gups.core.model.didYouMean
+import gups.core.world.ChainThinkAdjuster
 import gups.core.world.ContainmentFilter
 import gups.core.world.Diagnostic
 import gups.core.world.DispositionModifier
@@ -29,6 +30,7 @@ import gups.core.world.behaviorOf
 import gups.core.world.descriptor
 import gups.core.world.toPlain
 import gups.pluginapi.PluginActor
+import gups.pluginapi.PluginChainThinkCall
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
 import gups.pluginapi.PluginCreationAttempt
@@ -253,6 +255,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               ModifierPoint.DEFEND_HIT,
               ModifierPoint.RECEIVE_DAMAGE,
               ModifierPoint.INITIATIVE,
+              ModifierPoint.MOVE_PACE,
               ModifierPoint.ADVANCE_LAG,
               ModifierPoint.RETREAT_LAG,
               ModifierPoint.RETREAT_FAIL_LAG,
@@ -534,6 +537,34 @@ internal fun targetOrderAdapter(
         Diagnostic(w.pulse, "plugin", "plugin '$pluginId': target order adjuster failed: $e", e)
       )
       choice
+    }
+  }
+}
+
+internal fun chainThinkAdapter(
+  world: World,
+  pluginId: String,
+  decide: (PluginChainThinkCall) -> Boolean,
+): ChainThinkAdjuster {
+  val facade = WorldFacade(world, pluginId, Facades.logOf(world))
+  return ChainThinkAdjuster { w, call, chained ->
+    val pluginCall =
+      PluginChainThinkCall(
+        world = facade,
+        mob = ActorFacade(call.mob, w),
+        source = call.source,
+        command = call.command,
+        exit = call.exit?.direction?.name,
+        chain = call.chain,
+        chained = chained,
+      )
+    try {
+      decide(pluginCall)
+    } catch (e: Throwable) {
+      w.record(
+        Diagnostic(w.pulse, "plugin", "plugin '$pluginId': chain think adjuster failed: $e", e)
+      )
+      chained
     }
   }
 }

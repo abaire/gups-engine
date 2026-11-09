@@ -56,7 +56,7 @@ def starting_stats(ctx):
     a = ctx.actor
     if a.is_player:
         return struct(
-            stats = stats(str = 10, dex = 10, con = 10, int = 10, wis = 10, cha = 10, armor = 0),
+            stats = stats(str = 10, dex = 10, con = 10, int = 10, wis = 10, cha = 10, speed = 100, armor = 0),
             max = vitals(hp = 20, mana = 20, move = 100),
         )
     return struct(
@@ -67,6 +67,7 @@ def starting_stats(ctx):
             int = _or(a.base.int, 10),
             wis = _or(a.base.wis, 10),
             cha = _or(a.base.cha, 10),
+            speed = _or(a.base.speed, 100),
             armor = a.base.armor,
         ),
         max = vitals(

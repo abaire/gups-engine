@@ -200,6 +200,16 @@ interface PluginRegistry {
    */
   fun addTargetOrder(doc: String, choose: (PluginTargetOrderCall) -> PluginTargetChoice)
 
+  /**
+   * Adjusts whether a mob thinks again as soon as it can act, after the world's `chain_think` rules
+   * export, in plugin-id order.
+   *
+   * [decide] receives the mob, the behavior that ended, the command it ran, the exit it last
+   * crossed (or null), the chain count so far, and the answer so far, and returns the new answer. A
+   * handler that throws records a `plugin` diagnostic and leaves the answer unchanged.
+   */
+  fun addChainThink(doc: String, decide: (PluginChainThinkCall) -> Boolean)
+
   /** Adjusts a disposition after the world's disposition rules export, in plugin-id order. */
   fun addDispositionModifier(doc: String, adjust: (PluginDispositionCall) -> Int)
 
@@ -394,6 +404,7 @@ enum class PluginModifierPoint {
   MITIGATE,
   INITIATIVE,
   MOVE_COST,
+  MOVE_PACE,
   REGEN,
   ADVANCE_LAG,
   RETREAT_LAG,
@@ -509,6 +520,16 @@ data class PluginTargetOrderCall(
   val current: PluginActor?,
   val ally: PluginActor?,
   val choice: PluginTargetChoice,
+)
+
+data class PluginChainThinkCall(
+  val world: PluginWorld,
+  val mob: PluginActor,
+  val source: String,
+  val command: String,
+  val exit: String?,
+  val chain: Int,
+  val chained: Boolean,
 )
 
 data class PluginMemory(

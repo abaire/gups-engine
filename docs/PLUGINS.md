@@ -578,6 +578,24 @@ candidates; returning `call.choice` keeps it. A pick that isn't a candidate, or 
 `"plugin"` diagnostic and keeps the choice so far. Handlers aren't called for a behavior without `prefer`, and must be
 fast and side-effect free.
 
+### Chained thinks
+
+A mob whose think chose a tick-lane action is, once that action finishes, asked whether to think again as soon as it can
+act, ignoring `think_every` (the `chain_think` rules export, §4.6). The built-in chasers (`pursue`, `follow`, `heel`,
+`leash`) chain by default, so they keep moving at their `move_pace`. A plugin's `addChainThink(doc, decide)` handler
+adjusts that answer afterwards, in plugin-id order. The handler gets `call.world` (read-only), `call.mob`, `call.source`
+(the behavior that ended), `call.command`, `call.exit` (the direction name last crossed, or `null` for a non-move
+action), `call.chain` (how many chained thinks this mob has done in a row) and `call.chained`, the answer so far, and
+returns the new answer. A handler that throws records a `"plugin"` diagnostic and keeps the answer so far. Handlers must
+be fast and side-effect free. The weather sample makes a storm wash out the trail, so a chaser caught in one goes back
+to its cadence:
+
+```kotlin
+r.addChainThink("Storms wash out the trail, so chasers stop chaining.") { call ->
+  call.chained && stateFor(call.world, call.mob.room) != "storm"
+}
+```
+
 ### Standing and factions
 
 Plugins take part in standing (§5.14 of the spec) through `addDispositionModifier` and `addFactions`:

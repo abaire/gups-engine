@@ -4,6 +4,7 @@
 #     load("//lib:shop.star", "shop")      # shops, currency and stock containers
 #     load("//lib:trainer.star", "trainer")  # trainers and practice sessions
 #     load("//lib:ai.star", "ai")          # behavior trees and planning
+#     load("//lib:pursuit.star", "cut_off")  # a fast hunter cutting its quarry off
 #
 # group.star exports nothing to load: its commands (group, invite, accept, gtell, ...) and hooks
 # register in every world that includes lib.

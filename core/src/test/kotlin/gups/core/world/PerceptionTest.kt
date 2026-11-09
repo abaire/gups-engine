@@ -67,6 +67,7 @@ class PerceptionTest {
       toughness,
       mind,
       armor,
+      speed,
       magic,
       playerMax,
       mobMax,

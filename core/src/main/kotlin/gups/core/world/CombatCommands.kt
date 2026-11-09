@@ -43,6 +43,7 @@ internal object CombatCommands {
         "flee",
         category = CommandCategory.COMBAT,
         help = "Flee from combat to an adjacent room.\nUsage: flee",
+        moves = true,
       ) {
         FleeAction
       },
@@ -97,6 +98,7 @@ internal object FleeAction : Action {
     }
     w.tell(actor, CombatMsg.FLEE_SELF, "direction" to exit.direction)
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) {
+      w.chargeMove(actor, exit)
       w.transition(actor, exit, CombatMsg.FLEE_ROOM, reason = "flee")
     }
     return 0

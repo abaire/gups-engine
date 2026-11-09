@@ -92,6 +92,11 @@ class HeritagePluginTest {
       choose: (gups.pluginapi.PluginTargetOrderCall) -> gups.pluginapi.PluginTargetChoice,
     ) = TODO()
 
+    override fun addChainThink(
+      doc: String,
+      decide: (gups.pluginapi.PluginChainThinkCall) -> Boolean,
+    ) = TODO()
+
     override fun addOwnedBehaviors(
       doc: String,
       adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,

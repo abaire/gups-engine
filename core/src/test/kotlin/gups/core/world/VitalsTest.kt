@@ -404,7 +404,11 @@ class VitalsTest(private val fs: FixtureSchema) {
       assertEquals(max, p.max(name), name)
       assertEquals(if (name in fs.startsEmpty) 0 else max, p.current(name), name)
     }
-    for (stat in fs.stats) assertEquals(if (stat == fs.armor) 0 else 10, p.stat(stat), stat)
+    for (stat in fs.stats) assertEquals(
+      if (stat == fs.armor) 0 else if (stat == fs.speed) 100 else 10,
+      p.stat(stat),
+      stat,
+    )
   }
 
   @Test

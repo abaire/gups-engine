@@ -266,6 +266,18 @@ class CastState(
   val endsAt: Long,
   /** The owner who ordered this cast, or null when the actor chose it itself. */
   val orderedBy: EntityId? = null,
+  /** The think that chose this cast, so it can be asked to chain when the cast resolves. */
+  val thinkOrigin: ThinkOrigin? = null,
+)
+
+/** Which think queued an action, so the finished action can be asked whether to chain. */
+data class ThinkOrigin(
+  /** The source of the proposal that ran: a behavior name, "leash", or "think". */
+  val source: String,
+  /** The command line of the action. */
+  val command: String,
+  /** Whether the action was a move, copied from the queued command. */
+  val moves: Boolean,
 )
 
 /** An action command waiting in an actor's tick-lane queue. */
@@ -279,6 +291,9 @@ class QueuedAction(
 ) {
   /** The owner who ordered this action, or null when the actor chose it itself. */
   var orderedBy: EntityId? = null
+
+  /** The think that queued this action, so it can be asked to chain when the action finishes. */
+  var thinkOrigin: ThinkOrigin? = null
 
   override fun toString(): String = "$verb $args".trim()
 }
@@ -500,6 +515,31 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   var encumbranceLevel: Int = 0
     internal set
 
+  /**
+   * True while this actor's move pace is being worked out, so its view reads 100 instead of
+   * recursing.
+   */
+  var movePaceInProgress: Boolean = false
+    internal set
+
+  /**
+   * The absolute time, in hundredths of a pulse, when this actor's next move is free. Not saved.
+   */
+  var moveFreeAt: Long = 0
+    internal set
+
+  /** The last pulse in which this actor moved; [Long.MIN_VALUE]/2 if never. Not saved. */
+  var lastMovePulse: Long = Long.MIN_VALUE / 2
+    internal set
+
+  /** The exit this actor took on [lastMovePulse]; named only for that action. Not saved. */
+  var lastMoveExit: Exit? = null
+    internal set
+
+  /** The last pulse whose step ran a non-move action; [Long.MIN_VALUE]/2 if never. Not saved. */
+  var lastNonMovePulse: Long = Long.MIN_VALUE / 2
+    internal set
+
   /** What the actor's items contribute; kept current by `refreshHoldings`. */
   var heldEffects: HeldEffects = HeldEffects.EMPTY
     internal set
@@ -701,6 +741,16 @@ class Mob(
 
   /** Absolute pulse when this mob last executed AI thinking. */
   var lastThink: Long = Long.MIN_VALUE / 2
+    internal set
+
+  /** Whether a chained think is due, after an action the mob's think chose finished. Not saved. */
+  var chainDue: Boolean = false
+    internal set
+
+  /**
+   * How many chained thinks in a row led to the mob's current action; 0 after an ordinary think.
+   */
+  var chainCount: Int = 0
     internal set
 
   /** Home room label where this mob was originally spawned. */

@@ -48,6 +48,7 @@ class WeatherPluginTest {
     val gmcpEvents = mutableMapOf<String, String>()
     val gmcpInputs = mutableMapOf<String, (PluginGmcpCall) -> Unit>()
     val started = mutableListOf<(PluginWorld) -> Unit>()
+    val chainThinks = mutableListOf<(gups.pluginapi.PluginChainThinkCall) -> Boolean>()
 
     override fun addBuiltin(name: String, value: StarlarkValue, doc: String) = TODO()
 
@@ -117,6 +118,13 @@ class WeatherPluginTest {
       doc: String,
       choose: (gups.pluginapi.PluginTargetOrderCall) -> gups.pluginapi.PluginTargetChoice,
     ) = TODO()
+
+    override fun addChainThink(
+      doc: String,
+      decide: (gups.pluginapi.PluginChainThinkCall) -> Boolean,
+    ) {
+      chainThinks += decide
+    }
 
     override fun addOwnedBehaviors(
       doc: String,
@@ -390,6 +398,33 @@ class WeatherPluginTest {
       state,
       registry.builtins.getValue("now")(w, listOf(meadow), mapOf("room" to meadow)),
     )
+  }
+
+  @Test
+  fun `a storm breaks a chase, and other weather leaves the answer alone`() {
+    val decide = registry.chainThinks.single()
+    fun pulseWith(state: String) =
+      (0L until 100L)
+        .map { it * 240 }
+        .first { WeatherPlugin.stateFor(FakeWorld(pulse = it), meadow) == state }
+    fun ask(pulse: Long, room: PluginRoom, chained: Boolean) =
+      decide(
+        gups.pluginapi.PluginChainThinkCall(
+          FakeWorld(pulse = pulse),
+          FakeActor(room),
+          "pursue",
+          "east",
+          "east",
+          chain = 0,
+          chained = chained,
+        )
+      )
+    val storm = pulseWith("storm")
+    val clear = pulseWith("clear")
+    assertEquals(false, ask(storm, meadow, chained = true), "the storm washes the trail out")
+    assertEquals(true, ask(clear, meadow, chained = true), "clear weather keeps the chase")
+    assertEquals(true, ask(storm, cabin, chained = true), "indoors the storm doesn't reach")
+    assertEquals(false, ask(clear, meadow, chained = false), "weather never starts a chain")
   }
 
   @Test

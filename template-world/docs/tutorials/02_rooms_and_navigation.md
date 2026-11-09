@@ -165,6 +165,8 @@ def _blunted(ctx, base):
   * `MODIFIER.initiative`: Adjusts combat round turn order (`base`: `int`).
   * `MODIFIER.cast_allowed`: Vetoes spell casting (`return ctx.deny("...")` to cancel; `base`: `None`).
   * `MODIFIER.move_cost`: Adjusts vitals cost for leaving the room (`base`: `vitals(...)`).
+  * `MODIFIER.move_pace`: Adjusts the hundredths of a pulse an actor spends per room (`base`: `int`; `100` walks a room
+    a pulse, `50` two rooms a pulse, `200` a room every two pulses; the result is never below `25`).
   * `MODIFIER.regen`: Adjusts vital recovery per world pulse (`base`: `vitals(...)`).
 
 ### Attaching Modifiers to Rooms and Regions

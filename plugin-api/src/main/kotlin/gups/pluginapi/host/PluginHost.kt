@@ -36,6 +36,7 @@ import gups.core.world.submit
 import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
+import gups.pluginapi.PluginChainThinkCall
 import gups.pluginapi.PluginCommandCall
 import gups.pluginapi.PluginContainmentCall
 import gups.pluginapi.PluginCreation
@@ -93,6 +94,7 @@ data class PluginInfo(
   val containmentFilters: List<PluginFilterInfo> = emptyList(),
   val ownedBehaviors: List<PluginOwnedBehaviorsInfo> = emptyList(),
   val targetOrders: List<PluginTargetOrderInfo> = emptyList(),
+  val chainThinks: List<PluginChainThinkInfo> = emptyList(),
   val dispositionModifiers: List<PluginDispositionModifierInfo> = emptyList(),
   val factions: List<PluginFactionAdjusterInfo> = emptyList(),
   val steps: List<PluginStepInfo> = emptyList(),
@@ -105,6 +107,8 @@ data class PluginFilterInfo(val doc: String)
 data class PluginOwnedBehaviorsInfo(val doc: String)
 
 data class PluginTargetOrderInfo(val doc: String)
+
+data class PluginChainThinkInfo(val doc: String)
 
 data class PluginDispositionModifierInfo(val doc: String)
 
@@ -264,6 +268,7 @@ internal class PluginRegistryImpl(
   val ownedBehaviors =
     mutableListOf<Pair<String, (PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>>>()
   val targetOrders = mutableListOf<Pair<String, (PluginTargetOrderCall) -> PluginTargetChoice>>()
+  val chainThinks = mutableListOf<Pair<String, (PluginChainThinkCall) -> Boolean>>()
   val dispositionModifiers = mutableListOf<Pair<String, (PluginDispositionCall) -> Int>>()
   val factionAdjusters = mutableListOf<Pair<String, (PluginFactionsCall) -> List<String>>>()
   private val commandCheck = commandCheck.also { r -> takenCommands.forEach(r::registerPlugin) }
@@ -501,6 +506,10 @@ internal class PluginRegistryImpl(
     targetOrders.add(doc to choose)
   }
 
+  override fun addChainThink(doc: String, decide: (PluginChainThinkCall) -> Boolean) {
+    chainThinks.add(doc to decide)
+  }
+
   override fun addDispositionModifier(doc: String, adjust: (PluginDispositionCall) -> Int) {
     dispositionModifiers.add(doc to adjust)
   }
@@ -723,6 +732,14 @@ internal constructor(
     }
     world.targetOrderAdjusters = allTargetOrderAdjusters
 
+    val allChainThinkAdjusters = mutableListOf<gups.core.world.ChainThinkAdjuster>()
+    for (p in plugins) {
+      for ((_, decide) in p.reg.chainThinks) {
+        allChainThinkAdjusters.add(chainThinkAdapter(world, p.id, decide))
+      }
+    }
+    world.chainThinkAdjusters = allChainThinkAdjusters
+
     val allDispositionModifiers = mutableListOf<gups.core.world.DispositionModifier>()
     for (p in plugins) {
       for ((_, adjust) in p.reg.dispositionModifiers) {
@@ -926,6 +943,7 @@ internal constructor(
         containmentFilters = p.reg.filters.map { (doc, _) -> PluginFilterInfo(doc) },
         ownedBehaviors = p.reg.ownedBehaviors.map { (doc, _) -> PluginOwnedBehaviorsInfo(doc) },
         targetOrders = p.reg.targetOrders.map { (doc, _) -> PluginTargetOrderInfo(doc) },
+        chainThinks = p.reg.chainThinks.map { (doc, _) -> PluginChainThinkInfo(doc) },
         dispositionModifiers =
           p.reg.dispositionModifiers.map { (doc, _) -> PluginDispositionModifierInfo(doc) },
         factions = p.reg.factionAdjusters.map { (doc, _) -> PluginFactionAdjusterInfo(doc) },

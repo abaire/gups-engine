@@ -49,6 +49,18 @@ const val BUBBLE_RADIUS = 3
 const val ACTION_QUEUE_MAX = 10
 
 /**
+ * Most room transitions an actor makes in one pulse, so no actor is ever faster than four rooms a
+ * pulse.
+ */
+const val MOVES_PER_PULSE_MAX = 4
+
+/**
+ * Lowest walking pace, in hundredths of a pulse per room. A move costs at least this much movement
+ * debt, so the pace chain clamps at `100 / MOVES_PER_PULSE_MAX` or more.
+ */
+const val MOVE_PACE_MIN = 100 / MOVES_PER_PULSE_MAX
+
+/**
  * Maximum recursion depth for synchronous hook cascades (8 levels). Prevents runaway recursion when
  * hooks invoke actions that trigger nested hooks.
  */

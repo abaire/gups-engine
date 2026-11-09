@@ -54,6 +54,9 @@ enum class ModifierPoint(
   /** Modifies the vital costs required to move between rooms. */
   MOVE_COST("move_cost"),
 
+  /** Modifies the walking pace, in hundredths of a pulse per room. */
+  MOVE_PACE("move_pace"),
+
   /** Modifies vital recovery or loss applied during periodic world ticks. */
   REGEN("regen"),
 

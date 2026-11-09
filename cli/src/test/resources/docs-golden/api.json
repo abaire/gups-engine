@@ -3663,9 +3663,21 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.chain",
+          "name": "chain",
+          "doc": "In chain_think, how many chained thinks in a row led to that action; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.channel",
           "name": "channel",
           "doc": "For the perception calls: the channel name, such as 'sound'.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.command",
+          "name": "command",
+          "doc": "In chain_think, the command line of the action that finished; None elsewhere.",
           "since": 1
         },
         {

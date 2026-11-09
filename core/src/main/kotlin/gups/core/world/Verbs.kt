@@ -121,7 +121,13 @@ fun World.enqueue(actor: Actor, verb: String, action: Action): Boolean {
     tell(actor, KernelMsg.QUEUE_FULL)
     return false
   }
-  actor.actionQueue.addLast(QueuedAction(TickCommand(verb) { action }, verb, ""))
+  actor.actionQueue.addLast(
+    QueuedAction(
+      TickCommand(verb, moves = action is MoveAction || action === FleeAction) { action },
+      verb,
+      "",
+    )
+  )
   return true
 }
 

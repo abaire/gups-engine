@@ -5,6 +5,7 @@ import gups.core.COMBAT_ROUND_PULSES
 import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.MOVES_PER_PULSE_MAX
 import gups.core.PULSE_MS
 import gups.core.Rng
 import gups.core.SessionId
@@ -239,6 +240,9 @@ class World(
 
   /** Plugin target-order adjusters, in plugin id order then registration order. */
   var targetOrderAdjusters: List<TargetOrderAdjuster> = emptyList()
+
+  /** Plugin chained-think adjusters, in plugin id order then registration order. */
+  var chainThinkAdjusters: List<ChainThinkAdjuster> = emptyList()
 
   /** Plugin disposition modifiers, in plugin id order. */
   var dispositionModifiers: List<DispositionModifier> = emptyList()
@@ -743,6 +747,7 @@ class World(
     // Roll before phase 2 so a round-boundary action pulse uses the new initiative.
     if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) rollInitiative()
     runTiers(actorIndex.values.filter { isSimulated(it) }, ::actionPulse)
+    runMoveRounds()
     if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
     flushImmediate()
     if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
@@ -840,10 +845,50 @@ class World(
     when {
       c != null -> advanceCast(a, c)
       a.waitState > 0 -> a.waitState--
-      a.actionQueue.isNotEmpty() -> runQueued(a, a.actionQueue.removeFirst())
-      a is Mob && pulse - a.lastThink >= a.thinkEvery -> think(a)
+      a.actionQueue.isNotEmpty() -> {
+        val head = a.actionQueue.first()
+        // A move at the head waits for the movement debt to clear; a held move also keeps the
+        // queue non-empty, so the mob think branch below is reached only with an empty queue.
+        if (!(head.command.moves && !canMove(a))) runQueued(a, a.actionQueue.removeFirst())
+      }
+      a is Mob && ((a.chainDue && canMove(a)) || pulse - a.lastThink >= a.thinkEvery) -> think(a)
     }
   }
+
+  /**
+   * Up to `MOVES_PER_PULSE_MAX - 1` extra move rounds after the normal action pass. Each is its own
+   * `runTiers` call, so a round's deferred transitions commit before the next round starts. An
+   * actor joins a round when it moved earlier this pulse, ran no non-move step, is idle (no
+   * casting, no recovery lag) with debt below 100, and a move sits at its queue head.
+   */
+  private fun runMoveRounds() {
+    repeat(MOVES_PER_PULSE_MAX - 1) {
+      val participants = actorIndex.values.filter(::takesExtraMove)
+      if (participants.isEmpty()) return
+      // The initiative rolled for this pulse, if any, orders the round; never roll again. An
+      // earlier step of the round can lag, stun or clear the queue of a later participant, so each
+      // one is checked again when its turn comes.
+      runTiers(participants) { a ->
+        when {
+          !takesExtraMove(a) -> Unit
+          a is Mob && a.chainDue && a.actionQueue.isEmpty() -> think(a)
+          else -> runQueued(a, a.actionQueue.removeFirst())
+        }
+      }
+    }
+  }
+
+  /** Whether [a] steps in the current extra move round: its queued move, or a chained think. */
+  private fun takesExtraMove(a: Actor): Boolean =
+    isSimulated(a) &&
+      a.inWorld &&
+      a.lastMovePulse == pulse &&
+      a.lastNonMovePulse != pulse &&
+      a.casting == null &&
+      a.waitState == 0 &&
+      canMove(a) &&
+      (a.actionQueue.firstOrNull()?.command?.moves == true ||
+        a is Mob && a.chainDue && a.actionQueue.isEmpty())
 
   /** Rolls initiative for every engaged actor at a round boundary, before phase 2. */
   private fun rollInitiative() {
@@ -1046,6 +1091,12 @@ class World(
 
   fun canAct(a: Actor): Boolean = snapshot?.canAct(a) ?: (a.inWorld && !a.isDisabled)
 
+  /** [a]'s movement debt now, in hundredths of a pulse; 0 when it can walk. */
+  fun moveDebt(a: Actor): Long = maxOf(0L, a.moveFreeAt - pulse * 100)
+
+  /** True while [a]'s debt is below one pulse, so it may start a move. */
+  fun canMove(a: Actor): Boolean = moveDebt(a) < 100
+
   /** True if [a] is in the world and, for validation, in [room]. */
   fun isPresent(a: Actor, room: Room): Boolean = a.inWorld && roomOf(a) === room
 
@@ -1099,5 +1150,6 @@ internal class Deferred(val actor: Actor, val kind: Kind, val seq: Int, val run:
   enum class Kind {
     DEATH,
     TRANSITION,
+    CHAIN,
   }
 }

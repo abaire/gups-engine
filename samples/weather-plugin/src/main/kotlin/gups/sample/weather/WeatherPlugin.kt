@@ -76,6 +76,9 @@ class WeatherPlugin : GupsPlugin {
       if ((call.data as? Map<*, *>)?.get("describe") == true) call.command("weather")
       else call.world.gmcp(call.actor, "Gups.Forecast", forecast(call.world, call.actor.room))
     }
+    r.addChainThink("Storms wash out the trail, so chasers stop chaining.") { call ->
+      call.chained && stateFor(call.world, call.mob.room) != "storm"
+    }
     r.onWorldStarted { world ->
       val regions = world.regions()
       world.log("weather: tracking ${regions.size} region(s): ${regions.joinToString(", ")}")

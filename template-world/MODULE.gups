@@ -19,6 +19,7 @@ module(
         stat("int", label = "Intelligence"),
         stat("wis", label = "Wisdom"),
         stat("cha", label = "Charisma"),
+        stat("speed", label = "Speed"),
         "armor",
     ],
 

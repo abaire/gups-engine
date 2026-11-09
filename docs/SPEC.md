@@ -363,7 +363,8 @@ The engine defines its timing and capacity constants in
 - **Base heartbeat and cadences:** pulse duration (`PULSE_MS`), combat round interval (`COMBAT_ROUND_PULSES`), world
   tick interval (`WORLD_TICK_PULSES`), and default mob think cadence (`THINK_DEFAULT_PULSES`).
 - **Spatial and simulation bounds:** reality bubble and perception propagation radius (`BUBBLE_RADIUS`), per-actor
-  tick-lane action queue capacity (`ACTION_QUEUE_MAX`), and synchronous hook cascade depth (`CASCADE_MAX_DEPTH`).
+  tick-lane action queue capacity (`ACTION_QUEUE_MAX`), synchronous hook cascade depth (`CASCADE_MAX_DEPTH`), and the
+  most room transitions an actor makes in one pulse (`MOVES_PER_PULSE_MAX`).
 - **Session and entity timeouts:** link-dead grace period (`LINKDEAD_PULSES`), player idle auto-quit timeout
   (`IDLE_QUIT_PULSES`), and corpse decay duration (`CORPSE_DECAY_PULSES`).
 
@@ -1330,7 +1331,8 @@ power percentage, or `None` elsewhere; `skills` feature), `pulse`, `rng`.
 - **State:** `attrs`, `affects`, `slots` (the slots `actor_slots` returned), `skills` and `is_casting`/`casting`
   (`skills` feature), `flags`, `has_flag(flag)`, `equipped(slot)`, `inventory()`, `carried_weight`, `encumbrance_level`
   (the level `rules.encumbrance_level` last gave; 0 while that rule is running), `has_item(label)`, `fighting()` and
-  `primary_target` (the actor it is attacking, or `None`; `combat` feature), `wait_state`.
+  `primary_target` (the actor it is attacking, or `None`; `combat` feature), `wait_state`, `move_pace` (what
+  `rules.move_pace` and its modifier chain give the actor now, asked with `ctx.exit` `None`; 100 without the export).
 
 **Room view:**
 
@@ -1527,15 +1529,16 @@ Verbs without a player command (`say`, `emote`, door and exit-block setters, `pa
 ### 4.6 Rules Module and the Modifier Chain
 
 The rules package is required, and its `.star` files (the package is named `rules`, kind `rules`; `gups lint` reports
-its absence; the template splits them into `combat.star`, `perception.star` and `manipulation.star`) define the world's
-rules as the functions below. Rules execution, synthetic dry runs, and modifier chain dispatch are implemented in
-[Rules.kt](../script/src/main/kotlin/gups/script/Rules.kt). Each export is defined in exactly one non-test file of the
-package; defining it in two is a load error naming both files. A missing export is reported once for the package, after
-all its files have loaded, since it belongs to no file; a forbidden export or a public function that isn't an export is
-reported at its file and line. The engine has no built-in ruleset and nothing to fall back to: every export that an
-enabled feature uses (the "Feature" column) must be defined, and an export of a feature that is off must not be. Seven
-exports are optional: `xp_share`, whose default pays the killer the whole pool, `owned_behaviors` and `leash_return`,
-whose defaults are described in §4.7, `target_order`, without which behaviors choose as §4.7 describes, and `factions`,
+its absence; the template splits them into `combat.star`, `perception.star`, `manipulation.star` and `movement.star`)
+define the world's rules as the functions below. Rules execution, synthetic dry runs, and modifier chain dispatch are
+implemented in [Rules.kt](../script/src/main/kotlin/gups/script/Rules.kt). Each export is defined in exactly one
+non-test file of the package; defining it in two is a load error naming both files. A missing export is reported once
+for the package, after all its files have loaded, since it belongs to no file; a forbidden export or a public function
+that isn't an export is reported at its file and line. The engine has no built-in ruleset and nothing to fall back to:
+every export that an enabled feature uses (the "Feature" column) must be defined, and an export of a feature that is off
+must not be. Nine exports are optional: `xp_share`, whose default pays the killer the whole pool, `owned_behaviors` and
+`leash_return`, whose defaults are described in §4.7, `move_pace`, whose default is 100 (§5.5), `chain_think`, whose
+default is described in §5.8, `target_order`, without which behaviors choose as §4.7 describes, and `factions`,
 `standing` and `standing_change`, whose defaults are described in §5.14. The engine calls them with a rules `ctx` that
 is read-only, apart from `deny`. Any other public top-level function in a rules file (one whose name doesn't start with
 `_`) is a load error for the rules package. A misspelled export can't be silently ignored; helpers take a `_` prefix.
@@ -1545,31 +1548,35 @@ defender, the pinner, the killed or the killer, or the actor advanced on or retr
 word in the calls that set one, such as `get_lag` and the track lag exports; otherwise `None`, and always `None` without
 the `track` feature), `skill` (the skill being cast or evaluated; in `to_hit` and `defend_hit` it is set only for an
 enemy spell's roll, where `weapon`, `slot` and `damage_type` are `None`), `room` (the actor's, or the room the call is
-about), `damage_type` (the damage type as a string in auto-attack `to_hit` and `damage` calls, `damage`, `bonus_damage`,
-`receive_damage` and `mitigate` chains and `mitigate`, otherwise `None`), `slot` (the slot of the swinging item in an
-auto-attack swing, `"wield"` for an unarmed swing, otherwise `None`), `affect` (in a modifier contributed by an actor
-affect or an item's instance affect, that affect's view, so the modifier can read `ctx.affect.power`; in `item_power`
-for a proc of an item's instance affect, that affect; `None` everywhere else), `limit` (the actor's `carry_limit` asked
-without an item, in `encumbrance_level` and `encumbrance`; `None` elsewhere, and in `carry_limit`'s own call), `carried`
-(the carried and worn weight, containers' contents included, in `encumbrance_level` and `encumbrance`; `None`
-elsewhere), `encumbrance_level` (the level just computed, in `encumbrance`; `None` elsewhere), `behaviors` (in
-`owned_behaviors`, the mob's prototype behaviors as behavior values; `None` elsewhere), `away` and `past_leash` (in
-`leash_return`: pulses since the mob became eligible to go home, and whether it is past its leash; `None` elsewhere),
-`behavior` (in `target_order`, the behavior asking: `"aggressive"`, `"assist"` or `"retarget"`; otherwise `None`),
-`prefer` (in `target_order`, the behavior's `prefer`; otherwise `None`), `candidates` (in `target_order`, the actors to
-choose from, in ascending id; otherwise `None`), `current` (in `target_order`, the mob's primary target for `retarget`
-and the ally's for `assist`, or `None`), `current_since` (in `target_order` for `retarget`, the pulse the mob's primary
-target last changed; otherwise `None`), `dispositions` (in `target_order` with the `standing` feature, the mob's
-disposition toward each candidate, in the same order; otherwise `None`), `ally` (in `target_order` for `assist`, the
-ally being helped; otherwise `None`), `disposition_parts` (in `disposition`, a struct with `declared`,
-`faction_to_actor`, `faction_to_faction`, `personal` and `total`), `amount` (in `standing_change`, the healing done or
-the count given; otherwise `None`), `helped` (in an `assist` standing event, the actor helped), `pet` (in a standing
-event raised for a pet's owner, the pet), `pulse`, `rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed`
-and its modifiers. It has helper queries `factions_of(actor)` and `standing_history(holder, subject, since = 0, via =
-None, event = None)` and `standing(holder, subject)`, the record reads of §4.5, and the helper query `memories(subject =
-None, event = None, since = 0)`, the combat memories of `ctx.actor` as `ctx.memories` gives them (§4.5), or `[]` when
-`ctx.actor` is not a mob. It has no verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` and
-`has_trait` (§4.19).
+about), `exit` (in `move_pace`, the exit being taken, or `None` when the view field asks; in `chain_think`, the exit the
+action went through, or `None`), `damage_type` (the damage type as a string in auto-attack `to_hit` and `damage` calls,
+`damage`, `bonus_damage`, `receive_damage` and `mitigate` chains and `mitigate`, otherwise `None`), `slot` (the slot of
+the swinging item in an auto-attack swing, `"wield"` for an unarmed swing, otherwise `None`), `affect` (in a modifier
+contributed by an actor affect or an item's instance affect, that affect's view, so the modifier can read
+`ctx.affect.power`; in `item_power` for a proc of an item's instance affect, that affect; `None` everywhere else),
+`limit` (the actor's `carry_limit` asked without an item, in `encumbrance_level` and `encumbrance`; `None` elsewhere,
+and in `carry_limit`'s own call), `carried` (the carried and worn weight, containers' contents included, in
+`encumbrance_level` and `encumbrance`; `None` elsewhere), `encumbrance_level` (the level just computed, in
+`encumbrance`; `None` elsewhere), `behaviors` (in `owned_behaviors`, the mob's prototype behaviors as behavior values;
+`None` elsewhere), `away` and `past_leash` (in `leash_return`: pulses since the mob became eligible to go home, and
+whether it is past its leash; `None` elsewhere), `behavior` (in `target_order`, the behavior asking: `"aggressive"`,
+`"assist"` or `"retarget"`; in `chain_think`, the source of the proposal that ran: a behavior name such as `"pursue"`,
+`"leash"` for the return home, or `"think"` for an action `think` chose; otherwise `None`), `command` (in `chain_think`,
+the command line of the action that finished; otherwise `None`), `chain` (in `chain_think`, how many chained thinks in a
+row led to that action, 0 after an ordinary think; otherwise `None`), `prefer` (in `target_order`, the behavior's
+`prefer`; otherwise `None`), `candidates` (in `target_order`, the actors to choose from, in ascending id; otherwise
+`None`), `current` (in `target_order`, the mob's primary target for `retarget` and the ally's for `assist`, or `None`),
+`current_since` (in `target_order` for `retarget`, the pulse the mob's primary target last changed; otherwise `None`),
+`dispositions` (in `target_order` with the `standing` feature, the mob's disposition toward each candidate, in the same
+order; otherwise `None`), `ally` (in `target_order` for `assist`, the ally being helped; otherwise `None`),
+`disposition_parts` (in `disposition`, a struct with `declared`, `faction_to_actor`, `faction_to_faction`, `personal`
+and `total`), `amount` (in `standing_change`, the healing done or the count given; otherwise `None`), `helped` (in an
+`assist` standing event, the actor helped), `pet` (in a standing event raised for a pet's owner, the pet), `pulse`,
+`rng`, `roll(dice)`, and `deny(msg)`, valid only in `cast_allowed` and its modifiers. It has helper queries
+`factions_of(actor)` and `standing_history(holder, subject, since = 0, via = None, event = None)` and `standing(holder,
+subject)`, the record reads of §4.5, and the helper query `memories(subject = None, event = None, since = 0)`, the
+combat memories of `ctx.actor` as `ctx.memories` gives them (§4.5), or `[]` when `ctx.actor` is not a mob. It has no
+verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` and `has_trait` (§4.19).
 
 |                   Function                    |       Feature        |                                                                                                       Returns                                                                                                       |
 |-----------------------------------------------|----------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -1581,6 +1588,7 @@ None, event = None, since = 0)`, the combat memories of `ctx.actor` as `ctx.memo
 | `condition(ctx)`                              | kernel               | `"ok"`, `"incapacitated"` or `"dead"`.                                                                                                                                                                              |
 | `mitigate(ctx, amount, type)`                 | kernel               | `vitals(...)`, the vital losses that `amount` damage of `type` causes.                                                                                                                                              |
 | `move_cost(ctx)`                              | kernel               | `vitals(...)`, what a room transition spends.                                                                                                                                                                       |
+| `move_pace(ctx)`                              | kernel               | `int`, hundredths of a pulse per room for `ctx.actor` walking out of `ctx.room` through `ctx.exit` (§5.5).                                                                                                          |
 | `regen(ctx)`                                  | kernel               | `vitals(...)`, what each vital gains per world tick (negative to lose).                                                                                                                                             |
 | `carry_limit(ctx)`                            | kernel               | Weight.                                                                                                                                                                                                             |
 | `encumbrance_level(ctx)`                      | kernel               | Int, 0 or more; 0 means unencumbered.                                                                                                                                                                               |
@@ -1609,6 +1617,7 @@ None, event = None, since = 0)`, the combat memories of `ctx.actor` as `ctx.memo
 | `xp_share(ctx)`                               | `leveling`           | Dict `{actor: int}`. Splits the pool among actors; see the death bullet.                                                                                                                                            |
 | `owned_behaviors(ctx)`                        | kernel               | List of behaviors that `ctx.actor`, a mob, runs while `ctx.target` owns it.                                                                                                                                         |
 | `leash_return(ctx)`                           | kernel               | `bool`. `True` sends `ctx.actor`, a leashed mob outside its home ground, home this think (§4.7 **Going home**); `False` holds it there.                                                                             |
+| `chain_think(ctx)`                            | kernel               | `bool`. `True` lets `ctx.actor`, a mob, think again as soon as it can act, ignoring `think_every` (§5.8 **Chained thinks**).                                                                                        |
 | `target_order(ctx)`                           | `combat`             | One actor of `ctx.candidates` for `ctx.actor`, a mob, to attack, or `None` for nobody (§4.7).                                                                                                                       |
 | `on_level_up(ctx)`                            | `leveling`           | `None` or `struct(stats, max, current)`: deltas.                                                                                                                                                                    |
 | `factions(ctx)`                               | `standing`           | `list[str]`, the faction labels of `ctx.actor` (§5.14).                                                                                                                                                             |
@@ -1635,6 +1644,24 @@ return proposal. `ctx.away` counts pulses since the mob became eligible, without
 `False` doesn't). `ctx.past_leash` tells a mob past its leash from one only outside its home ground. Without the export,
 mobs go home at once. A world makes a mob linger (`return ctx.away >= 40`), hold a post longer, or never go back, by
 reading its label, flags, `attrs` or affects. A failing call counts as `True`, so a broken rule can't strand mobs.
+
+**`move_pace`**: asked whenever a script reads an actor's `move_pace` view field, with `ctx.exit` `None`; while the
+export or its chain is running, that view field reads 100, so a rule can't recurse into itself. It is also asked once
+for every room transition that adds movement debt (§5.5), from the room being left, with `ctx.exit` the exit taken. 100
+is one room per pulse, 200 is one room every two pulses, and 50 is two rooms per pulse. Without the export the base is
+100\. A failing call, or a result that isn't an int, counts as 100. A world reads speed from a stat, a tag or an affect;
+haste and slowing effects belong in the modifier chain. When defined, the load-time dry run calls it with the throwaway
+mob and checks that it returns an int.
+
+**`chain_think`**: asked when a tick-lane action that a mob's think chose finishes (§5.8 **Chained thinks**). Without
+the export, the answer is `True` when `ctx.exit` isn't `None` and `ctx.behavior` is `"pursue"`, `"follow"`, `"heel"` or
+`"leash"`, so chasers and mobs walking home keep moving at their pace. A world can chain other actions, for example
+looting after a kill, or limit chains with `ctx.chain`. It is asked once a move's transition has landed, at the end of
+its initiative tier, so `ctx.room` and `ctx.actor.room` are the room arrived in. A walk cancelled because the mob was
+pinned on the way out (§5.5) asks nothing. A failing call, or a result that isn't a bool, counts as the default.
+Plugins' `addChainThink` handlers then adjust the answer (§4.15). When defined, the load-time dry run calls it with the
+throwaway mob, `behavior = "pursue"`, `command = "north"`, `exit = None` and `chain = 0`, and checks that it returns a
+bool.
 
 **`target_order`**: called by a behavior with `prefer` (§4.7) once per proposal, when it has at least one candidate. A
 return that is not one of `ctx.candidates`, or an error, is logged as a rules diagnostic and the behavior chooses as if
@@ -1761,31 +1788,33 @@ doesn't reach is checked when it first runs.
 
 **Template ruleset.** The template world implements these exports for its default schema (§3.9), serving as the starting
 formulas for custom worlds. See [combat.star](../template-world/rules/combat.star),
-[perception.star](../template-world/rules/perception.star), and
-[manipulation.star](../template-world/rules/manipulation.star) in `template-world/rules/` for the complete reference
-formulas.
+[perception.star](../template-world/rules/perception.star),
+[manipulation.star](../template-world/rules/manipulation.star) and
+[movement.star](../template-world/rules/movement.star) in `template-world/rules/` for the complete reference formulas.
 
 **Modifier points (v0):** `to_hit`, `damage`, `bonus_damage`, `defend_hit`, `receive_damage`, `mitigate`, `initiative`,
-`cast_allowed`, `move_cost`, `regen`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`, `skill_check`,
-`skill_power`, `item_power`. The list grows with `api_version`. `get_lag` is not a modifier point. The `mitigate`
-modifier point adjusts the `mitigate` export's result; it is not a second export. Modifiers of `move_cost`, `regen` and
-`mitigate` take and return `vitals(...)` values; modifiers of `bonus_damage` take and return `damages(...)` values;
-modifiers of the four lag points take and return pulses as ints, and may go below 0 along the chain, but the chain's
-final value is clamped to 0; modifiers of `skill_check`, `skill_power` and `item_power` take and return ints, and a
-power chain's final value is clamped to 0, like the lag points. Modifier points of a feature that is off can't be named:
-the lag points belong to the feature of the export of the same name; `skill_check` and `skill_power` belong to `skills`;
-`item_power` is kernel. `to_hit` and `defend_hit` belong to `combat` or `skills`. The `damage`, `bonus_damage`,
-`receive_damage` and `mitigate` points are the exception: they belong to the kernel, because the `damage(...)` effect
-primitive runs their chains with any features, while the `damage` export belongs to `combat`. Without `combat`, these
-chains run only for the effect primitive, so `ctx.weapon`, `ctx.slot` and `ctx.band` are `None` in them.
+`cast_allowed`, `move_cost`, `move_pace`, `regen`, `advance_lag`, `retreat_lag`, `retreat_fail_lag`, `flee_fail_lag`,
+`skill_check`, `skill_power`, `item_power`. The list grows with `api_version`. `get_lag` is not a modifier point. The
+`mitigate` modifier point adjusts the `mitigate` export's result; it is not a second export. Modifiers of `move_cost`,
+`regen` and `mitigate` take and return `vitals(...)` values; modifiers of `bonus_damage` take and return `damages(...)`
+values; modifiers of the four lag points take and return pulses as ints, and may go below 0 along the chain, but the
+chain's final value is clamped to 0; modifiers of `skill_check`, `skill_power` and `item_power` take and return ints,
+and a power chain's final value is clamped to 0, like the lag points. Modifiers of `move_pace` take and return ints, and
+its chain's final value is clamped to at least `100 / MOVES_PER_PULSE_MAX` (25). Modifier points of a feature that is
+off can't be named: the lag points belong to the feature of the export of the same name; `skill_check` and `skill_power`
+belong to `skills`; `item_power` is kernel. `to_hit` and `defend_hit` belong to `combat` or `skills`. The `damage`,
+`bonus_damage`, `receive_damage` and `mitigate` points are the exception: they belong to the kernel, because the
+`damage(...)` effect primitive runs their chains with any features, while the `damage` export belongs to `combat`.
+Without `combat`, these chains run only for the effect primitive, so `ctx.weapon`, `ctx.slot` and `ctx.band` are `None`
+in them.
 
 **Whose chain:** the attacker's for `to_hit`, `damage` and `bonus_damage` (the caster is the attacker for an enemy
 spell's roll and for spell damage), the caster's for `cast_allowed`, `skill_check` and `skill_power`, the user's or
-bearer's for `item_power`, the mover's for `move_cost` (from the room being left), and the actor's own for `regen`,
-`initiative` and the four lag points (the actor that advanced, retreated or failed to flee). The defender's for
-`defend_hit`, `receive_damage` and `mitigate` (the target of a `damage(...)` effect is the defender; the caster is the
-attacker): these points run the chain of the actor being hit, with zone, regions and room those of that actor's room.
-The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.actor` are still the attacker, and
+bearer's for `item_power`, the mover's for `move_cost` and `move_pace` (from the room being left), and the actor's own
+for `regen`, `initiative` and the four lag points (the actor that advanced, retreated or failed to flee). The defender's
+for `defend_hit`, `receive_damage` and `mitigate` (the target of a `damage(...)` effect is the defender; the caster is
+the attacker): these points run the chain of the actor being hit, with zone, regions and room those of that actor's
+room. The rules `ctx` is the same as on the attacker's chain: `ctx.attacker` and `ctx.actor` are still the attacker, and
 `ctx.defender` is the actor whose modifiers run. "Zone" means the package of that actor's room, and the regions and room
 are those of that room too.
 
@@ -1923,6 +1952,9 @@ Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin
   a match its `pursue` would head for, shares its room inside its leash, it gets no return proposal. `sentinel` removes
   the proposal and `think` can override it. Reluctance to stray is world policy: a `think` can veto steps by distance
   from `home_room`. The world's `rules.leash_return` (§4.6) can hold the step back.
+- **Catching up:** a mob that moves for `pursue`, `follow` or `heel`, or walks home, keeps walking at its pace rather
+  than its think cadence (§5.8 **Chained thinks**). A pursuer with a lower `move_pace` than its quarry gains on it, and
+  a pet as fast as its owner doesn't fall further behind.
 - **Whom they mean:** `players`, `mobs`, `all`, or label patterns with `*`, as a string or a list. A pattern without a
   package (`goblin_*`) matches the label name in any package; `:goblin_*` means this package.
 - **Disposition** (the `standing` feature, §5.14): `disposition_below = n` keeps only candidates the mob's disposition
@@ -1995,6 +2027,7 @@ def _scout_think(ctx):
 
 - If `think` queued an action for its own mob through `ctx.act*`, the top proposal is not queued as well.
 - A failing `think` falls back to the top proposal.
+- The first queued action runs in the same pulse as the think (§5.8).
 
 The template world's `//lib:ai.star` builds behavior trees, a per-mob blackboard and goal-oriented planning (through
 `ctx.plan`) on top of `think`.
@@ -2753,8 +2786,9 @@ subsystems (`core` or `script`). It consists of three primary components:
   engine event listeners (`onEvent`), traits (`PluginTrait`), character creation definitions (`PluginCreation`, with
   custom steps `PluginCreationStep` and the `prepare` callback), action restrictions (`PluginRestrictionPoint.WEAR`,
   `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`), containment filters (`addContainmentFilter`),
-  owned behaviors (`addOwnedBehaviors`), disposition modifiers (`addDispositionModifier`) and faction lists
-  (`addFactions`). See [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
+  owned behaviors (`addOwnedBehaviors`), chained thinks (`addChainThink`), disposition modifiers
+  (`addDispositionModifier`) and faction lists (`addFactions`). See
+  [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
   ([Facade.kt](../plugin-api/src/main/kotlin/gups/pluginapi/Facade.kt) and
@@ -2866,6 +2900,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   `prefer`), `Nobody`, or `Pick(actor)` with one of the candidates; returning the choice it was given keeps it. A pick
   that isn't a candidate, or a handler that throws, records a `plugin` diagnostic and keeps the choice so far. Must be
   fast and side-effect free.
+- **Chained thinks (`addChainThink`):** adjusts whether a mob thinks again as soon as it can act, after the world's
+  `chain_think` export (§4.6, §5.8 **Chained thinks**), in plugin-id order. A handler gets a read-only `PluginWorld`,
+  the mob, the behavior that ended, the command it ran, the exit it last crossed (a direction name, or null for a
+  non-move action), the chain count so far, and the answer so far. It returns a bool. A handler that throws records a
+  `plugin` diagnostic and keeps the answer so far. Must be fast and side-effect free.
 - **Standing (`addDispositionModifier`, `addFactions`):** `addDispositionModifier` adjusts a disposition (§5.14) after
   the rules export, in plugin-id order; a handler gets a read-only `PluginWorld`, the holder, the subject and the value
   so far, and returns an int, which is clamped. `addFactions` adjusts an actor's faction labels after the `factions`
@@ -3360,8 +3399,17 @@ Pulse boundaries come from `System.nanoTime()`.
   2. **Action pulse:** For each active actor, in **initiative order** (§5.4.1):
      - If `casting`, advance it. When the warmup completes, resolve the action (§5.3).
      - Otherwise, if `waitState > 0`, decrement it.
-     - Otherwise, if the queue is non-empty, pop the head and execute it.
-     - Otherwise, if the actor is a mob whose think cadence is due, run the think cycle (§5.8).
+     - Otherwise, if the queue is non-empty, pop the head and execute it, unless the head is a move (a direction or
+       `flee`) and the actor's movement debt is 100 or more (§5.5): then it waits, and the actor does nothing this
+       pulse.
+     - Otherwise, if the actor is a mob whose think cadence is due, or which has a chained think due, run the think
+       cycle (§5.8) and start the action it chose.
+     - **Extra moves:** after every actor has had its step, up to `MOVES_PER_PULSE_MAX − 1` extra rounds run. Each round
+       runs in initiative order with its own tiers. An actor takes part in a round when it moved earlier in this pulse,
+       is not casting, has no recovery lag and has movement debt below 100, and the head of its queue is a move: it
+       takes that move. A mob with an empty queue and a chained think due also takes part: it thinks, and the action it
+       chose starts in that round; a non-move action started in a round ends the actor's rounds for the pulse. The
+       rounds stop early when one has no participants.
   3. **Combat round** (`pulse % COMBAT_ROUND_PULSES == 0`,
      [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)): Roll initiative for the new round
      (§5.4.1). Then, for each engaged active actor in initiative order, resolve its auto-attacks (§5.4) and fire
@@ -3677,19 +3725,31 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
   - **When pinned** (a hostile shares the actor's index), it requires a `retreat_check` roll against the first opponent
     at the actor's index. Failure applies the lag of `rules.retreat_fail_lag` and its modifier chain and no movement.
 - **Room transitions:**
-  - Non-combat movement costs one action plus the vitals `rules.move_cost` returns (§4.6). The action is the action
-    pulse itself: walking leaves no recovery lag.
+  - Non-combat movement costs one action plus the vitals `rules.move_cost` returns (§4.6). Walking leaves no recovery
+    lag, so an actor can attack or cast the moment it arrives.
+  - **Pace:** each successful walk, and each successful `flee`, adds `rules.move_pace` (§4.6) to the mover's *movement
+    debt*, in hundredths of a pulse. The debt drops by 100 every pulse, never below 0. The actor may start another move
+    only while its debt is below 100 (§5.1). A pace of 100 is one room per pulse, 200 one every two pulses, and 25 four
+    per pulse, the most there can be (`MOVES_PER_PULSE_MAX`). Fractions carry over, so a pace of 150 averages two rooms
+    every three pulses. Each move is a complete transition: guards, `before_exit`, `before_enter`, `move_cost`,
+    perception, `on_exit` and `on_enter` apply to every room passed. The debt holds back only moves, never other
+    actions, and it isn't saved. Moving with `teleport` adds none.
   - Arrivals are placed at the exit's `entryIndex`: by default `0`, and `-1` maps to `trackSize−1`. When the destination
     is smaller, the index is clamped.
 - **Pinning and exits:**
   - A normal exit command works from any index **unless a hostile is at the actor's index**.
   - A pinned actor must `retreat` first, or `flee`.
+  - **Pinned on the way out:** a walk leaves its room at the end of its initiative tier (§5.4.1), and it is checked
+    against pinning again then. If a hostile pinned the walker in the meantime (by attacking it in the same tier and
+    sharing its index), the walk is cancelled: the walker stays, spends no `move_cost`, adds no movement debt, and is
+    told it is pinned. Entity ids therefore never decide whether an attacked walker gets away. `flee` is never cancelled
+    this way.
 - **`flee`:**
   - Warmup 0. It rolls `flee_chance` and ignores pinning.
   - **On success:** the actor picks a random passable exit (closed or locked doors are excluded). The exit is then
     checked like a walk: guards (§4.7), then `before_exit` and `before_enter`. If they allow it, the actor leaves
     through it and engagement ends; a denial shows its message and counts as a failure, so combat can't be used to slip
-    past them.
+    past them. A successful flee adds movement debt like a walk, and a queued `flee` waits for the debt like a walk.
   - **On failure:** lag from `rules.flee_fail_lag` and its modifier chain (§4.6).
 - **Items on the ground:**
   - Items sit at the dropper's index.
@@ -3833,9 +3893,9 @@ Autonomous NPC behavior and think cycles are implemented in
 
 - A mob is "a player controlled by code". It acts only by enqueueing tick-lane actions, and pays the same warmup, lag,
   pinning, retreat, and flee costs.
-- **Think cycle:** It runs when the mob is idle (empty queue, `waitState == 0`, not casting) and `pulse − lastThink ≥
-  thinkEvery` (where `thinkEvery` defaults to `THINK_DEFAULT_PULSES`,
-  [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Each cycle:
+- **Think cycle:** It runs when the mob is idle (empty queue, `waitState == 0`, not casting) and either `pulse −
+  lastThink ≥ thinkEvery` or a chained think is due and its movement debt is below 100 (where `thinkEvery` defaults to
+  `THINK_DEFAULT_PULSES`, [TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Each cycle:
   1. Each behavior of the mob's current list (its prototype's, or its owned list while it has an owner) proposes at most
      one action. Then, for a leashed mob with no owner that isn't engaged, isn't standing with its `follow` leader or
      `pursue` quarry inside its leash, and is outside its home ground, the engine's return-home proposal (§4.7 **Going
@@ -3844,7 +3904,16 @@ Autonomous NPC behavior and think cycles are implemented in
   3. If `think` is defined, it's called with `ctx.proposals`. A `None` return enqueues the top proposal, an `act_*` call
      overrides it, and `"idle"` skips the turn.
   4. Without `think`, the top proposal is enqueued.
+  5. The first queued action then runs at once, in this step of the action pulse: a move at the head still waits for the
+     movement debt to clear (§5.1), and any further actions wait their turn.
 - **Scope:** Thinking only happens for mobs in the bubble or marked active.
+- **Chained thinks:** when a tick-lane action that a mob's think chose finishes, after any warmup, the engine asks
+  `rules.chain_think` (§4.6). `True` makes a *chained think* due: the mob thinks again as soon as it is idle and its
+  movement debt is below 100, ignoring `think_every`. That can be in an extra move round of the same pulse (§5.1), where
+  the action it chooses starts at once as in any think (a non-move action started there ends the mob's extra rounds for
+  the pulse), or on a later pulse. A failed or denied action, an interrupted cast, an action `think` ran in the fast
+  lane, or `False` asks nothing further: the mob is back on its cadence, counted from its last think. A chained think is
+  an ordinary think: every behavior proposes, the return home is added, and `think` runs.
 
 **Combat memory** (`combat` feature). Each mob keeps a transient record of what it has experienced and witnessed, never
 saved and gone when the mob leaves the world. Its window is the mob's `memory_pulses`, or else the world's (§3.9); with

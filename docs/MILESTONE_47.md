@@ -124,7 +124,6 @@
 ### Objective & Scope
 
 - **In Scope:**
-  - The `AGENTS.md` naming note.
   - `damage_type(name, label=None, adjective=None)` in `MODULE.gups`.
   - `WorldSchema` lookups for a damage type's label and adjective.
   - The §3.9 text.
@@ -141,7 +140,6 @@
   - `core/src/main/kotlin/gups/core/model/Schema.kt`: `WorldSchema`, `SchemaNames`.
   - `docs/SPEC.md` §3.9.
 - **Files to Modify / Create:**
-  - `AGENTS.md`
   - `core/src/main/kotlin/gups/core/model/Schema.kt`
   - `script/src/main/kotlin/gups/script/WorldModule.kt`
   - `script/src/main/kotlin/gups/script/DocExamples.kt`: only if the docs test asks for it.
@@ -150,15 +148,6 @@
 - **Do Not Touch:** `persist/` (`SchemaRecord` still records names only), `template-world/`, `samples/`.
 
 ### Specification & Decision Record Changes
-
-- **`AGENTS.md`**, a new section after "Working from the spec":
-
-  > ## Naming: skills, not spells
-  >
-  > Everything a character casts is a `skill()`, and its `kind` is free-form; "spell" is only one kind. Name engine and
-  > plugin identifiers (rules exports, `ctx` fields, hooks and events, plugin API types, message ids) with "skill":
-  > `recognizes_skill`, not `recognizes_spell`. Documentation of `cast` may talk about spells, and player-facing text
-  > may say "spell" where a world or a skill chooses that word.
 
 - **§3.9, the template example:** leave it as is. Phase 8 changes the real file, and this example then becomes:
   `damage_types=[damage_type("bludgeon", adjective="crushing"), damage_type("slash", adjective="slashing"),

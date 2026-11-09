@@ -423,7 +423,10 @@ class FacadeTest {
   @Test
   fun `the schema lists names and labels in declaration order`() {
     val s = f.schema
-    assertEquals(listOf("str", "dex", "con", "int", "wis", "cha", "armor"), s.stats.map { it.name })
+    assertEquals(
+      listOf("str", "dex", "con", "int", "wis", "cha", "speed", "armor"),
+      s.stats.map { it.name },
+    )
     assertEquals(PluginNamed("hp", "Hit points"), s.vitals.first())
     assertEquals(listOf("hp", "mana", "move"), s.vitals.map { it.name })
     assertEquals(listOf("bludgeon", "slash", "pierce", "fire"), s.damageTypes)

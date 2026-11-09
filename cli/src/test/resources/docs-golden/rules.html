@@ -44,7 +44,9 @@
 <tr id="rules_ctx.behaviors"><td><code>behaviors</code></td><td>1</td><td>The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.</td></tr>
 <tr id="rules_ctx.candidates"><td><code>candidates</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the non-empty candidate actor list in ascending id order; None elsewhere.</td></tr>
 <tr id="rules_ctx.carried"><td><code>carried</code></td><td>1</td><td>The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.</td></tr>
+<tr id="rules_ctx.chain"><td><code>chain</code></td><td>1</td><td>In chain_think, how many chained thinks in a row led to that action; None elsewhere.</td></tr>
 <tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
+<tr id="rules_ctx.command"><td><code>command</code></td><td>1</td><td>In chain_think, the command line of the action that finished; None elsewhere.</td></tr>
 <tr id="rules_ctx.contributors"><td><code>contributors</code></td><td>1</td><td>The victim's contributors, as contributor structs, in xp_share; None elsewhere.</td></tr>
 <tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
 <tr id="rules_ctx.current"><td><code>current</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the primary target when it is in candidates (the ally's for assist, the mob's for retarget); None elsewhere.</td></tr>

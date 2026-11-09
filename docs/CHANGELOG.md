@@ -4,6 +4,19 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Movement pace and pursuit catch-up
+
+- New optional rules export `move_pace(ctx)` and modifier point `move_pace`: hundredths of a pulse per room (default
+  100). Actor views gain `move_pace`.
+- Walking pace: each move adds `move_pace` to a movement debt, and an actor moves only while the debt is below 100. Fast
+  actors make up to four complete moves a pulse.
+- Breaking (timing): a mob's think now runs the action it chooses in the same pulse, so mob actions happen one pulse
+  sooner than before.
+- Chained thinks: the optional rules export `chain_think(ctx)` lets a mob think again as soon as its action finishes
+  (`ctx.behavior`, `ctx.command`, `ctx.exit`, `ctx.chain`). By default, `pursue`, `follow`, `heel` and walking home
+  chain, so pursuers catch up at their `move_pace`.
+- Plugins can adjust chained thinks with `addChainThink`.
+
 ### Mob leashes and bounded pursuit
 
 - `pursue` takes `range` (default 10 exits, `None` for no limit) and searches once per think instead of pathing to every

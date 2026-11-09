@@ -156,10 +156,30 @@ internal class MoveAction(private val dir: Direction) : Action {
 
   override fun resolve(w: World, actor: Actor): Int {
     val exit = w.roomOf(actor).exits.getValue(dir)
-    w.changeVitals(actor, w.moveCost(RulesContext(w, actor)).mapValues { -it.value })
-    w.deferRemoval(actor, Deferred.Kind.TRANSITION) { w.transition(actor, exit) }
+    w.deferRemoval(actor, Deferred.Kind.TRANSITION) {
+      if (!actor.inWorld) return@deferRemoval
+      // A hostile that pinned the walker in this tier cancels the walk: no vitals, no debt.
+      if (w.isPinned(actor)) {
+        w.send(actor, w.msg(TrackMsg.PINNED))
+        return@deferRemoval
+      }
+      w.changeVitals(actor, w.moveCost(RulesContext(w, actor)).mapValues { -it.value })
+      w.chargeMove(actor, exit)
+      w.transition(actor, exit)
+    }
     return 0
   }
+}
+
+/**
+ * Charges [actor]'s movement debt for a step through [exit], asking `move_pace` from the room being
+ * left, and records the step for the extra move rounds.
+ */
+internal fun World.chargeMove(actor: Actor, exit: Exit) {
+  val pace = movePaceOf(RulesContext(this, actor, room = actor.room, exit = exit))
+  actor.moveFreeAt = maxOf(actor.moveFreeAt, pulse * 100) + pace
+  actor.lastMovePulse = pulse
+  actor.lastMoveExit = exit
 }
 
 /**

@@ -482,6 +482,8 @@ class BonusDamageTest {
         ally = d,
         away = 7L,
         pastLeash = true,
+        command = "cast",
+        chain = 3,
       )
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)

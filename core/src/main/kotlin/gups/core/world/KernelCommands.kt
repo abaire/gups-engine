@@ -235,6 +235,7 @@ internal object KernelCommands {
       aliases = dirAliases,
       category = CommandCategory.MOVEMENT,
       help = "Move ${dir.name} through an exit.\nUsage: ${dir.name}",
+      moves = true,
     ) {
       MoveAction(dir)
     }

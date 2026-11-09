@@ -66,14 +66,16 @@ def test_steps_resets_on_failure(t):
 def test_run_hands_the_turn_back_on_failure(t):
     w = _world(t)
 
-    # Failure makes ai.run return None, so the top built-in proposal (wander) runs.
+    # Failure makes ai.run return None, so the top built-in proposal (wander) runs in the think's
+    # own pulse; one pulse moves the mob one room. Two would let the back-and-forth wander return
+    # it to the gate.
     failing = w.spawn(":test_ai_failing", at = ":gate")
-    w.run(pulses = 2)
+    w.run(pulses = 1)
     t.ne(failing.room.label, "//zones/tutorial:gate")
 
     # Success makes it return "idle", which suppresses the proposal.
     succeeding = w.spawn(":test_ai_succeeding", at = ":gate")
-    w.run(pulses = 2)
+    w.run(pulses = 1)
     t.eq(succeeding.room.label, "//zones/tutorial:gate")
 
 def test_blackboard_persists_and_is_saved_only_when_it_changes(t):

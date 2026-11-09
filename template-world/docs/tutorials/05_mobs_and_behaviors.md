@@ -228,7 +228,40 @@ AI that needs more speed than this belongs in a plugin builtin written in Kotlin
 
 ---
 
-## 5. Spawns and Zone Resets
+## 5. Movement Pace and Pursuit
+
+A mob's `speed` stat sets how fast it walks. The rules turn it into a **move pace** — the hundredths of a pulse the
+actor spends per room — with `10000 // max(speed, 10)`, capped at four rooms a pulse. A speed of `100` walks a room a
+pulse, `300` walks three, and `75` walks three rooms every four pulses. A faster pursuer closes the gap on a fleeing
+player; a slower one falls behind.
+
+```python
+mob("hunting_cat",
+    name="a hunting cat",
+    level=1,
+    vitals=vitals(hp=30, move=100),
+    stats=stats(speed=300),
+    behaviors=[aggressive(toward="players"), pursue("players")],
+    )
+```
+
+`pursue` takes one step toward its quarry per think. After that step the mob gets a **chained think**: it thinks again
+as soon as its pace allows instead of waiting for `think_every`, so a fast mob closes a gap of several rooms in a single
+pulse, and attacks the moment it arrives. The rules export `chain_think` decides which actions chain: the template's
+(`rules/movement.star`) returns true after a step taken for `pursue`, `follow`, `heel` or the walk home, so the mob
+keeps moving until it catches up. Plugins can adjust the decision with `addChainThink` (see
+[PLUGINS.md](../../../docs/PLUGINS.md)).
+
+To hand a player or mob a burst of speed, apply an affect that raises `speed`; the pace reads the stat after affects, so
+the burst lasts only for the affect:
+
+```python
+ctx.apply_affect(ctx.actor, "haste", 100, stat_deltas=stats(speed=50))
+```
+
+---
+
+## 6. Spawns and Zone Resets
 
 Mobs are placed into rooms through the `spawns` list on a `room()`:
 

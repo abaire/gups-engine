@@ -130,7 +130,8 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
       return it(c)
     }
     val a = c.requireActor()
-    val stats = fs.stats.associateWith { if (it == fs.armor) 0 else 10 }
+    val stats =
+      fs.stats.associateWith { if (it == fs.armor) 0 else if (it == fs.speed) 100 else 10 }
     return if (a is Player) {
       StartingStats(stats = stats, max = fs.playerMax, current = fs.startsEmpty.mapValues { 0 })
     } else {

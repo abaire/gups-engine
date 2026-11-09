@@ -119,6 +119,12 @@ class RulesContext(
   val away: Long? = null,
   /** Whether the mob in `leash_return` stands past its leash; null elsewhere. */
   val pastLeash: Boolean? = null,
+  /** The command line of the action that finished, in `chain_think`; null elsewhere. */
+  val command: String? = null,
+  /**
+   * How many chained thinks in a row led to that action, 0 after an ordinary think; null elsewhere.
+   */
+  val chain: Int? = null,
   private val rngOverride: Rng? = null,
 ) {
   /** Returns [actor], throwing an [IllegalStateException] if this rules call lacks an actor. */
@@ -171,6 +177,8 @@ class RulesContext(
       ally = ally,
       away = away,
       pastLeash = pastLeash,
+      command = command,
+      chain = chain,
       rngOverride = rngOverride,
     )
 
@@ -221,6 +229,8 @@ class RulesContext(
       ally = ally,
       away = away,
       pastLeash = pastLeash,
+      command = command,
+      chain = chain,
       rngOverride = rngOverride,
     )
 
@@ -365,6 +375,12 @@ interface RulesEngine {
   /** Calculates vital costs deducted when traversing an exit between rooms. */
   fun moveCost(c: RulesContext): Map<String, Int>
 
+  /**
+   * Walking pace, in hundredths of a pulse per room, for `c.actor` walking through `c.exit`; null
+   * for the default, one room per pulse.
+   */
+  fun movePace(c: RulesContext): Int? = null
+
   /** Calculates periodic vital recovery or loss applied on each world tick. */
   fun regen(c: RulesContext): Map<String, Int>
 
@@ -399,6 +415,12 @@ interface RulesEngine {
    * which sends it home at once.
    */
   fun leashReturn(c: RulesContext): Boolean? = null
+
+  /**
+   * Whether [c]`actor`, a mob, thinks again as soon as it can act, ignoring `think_every`, after
+   * the action its think chose finishes; null for the engine default.
+   */
+  fun chainThink(c: RulesContext): Boolean? = null
 
   /** The factions of [c]`actor`, or null for the default. */
   fun factions(c: RulesContext): List<Label>? = null

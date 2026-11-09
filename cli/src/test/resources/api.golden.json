@@ -763,7 +763,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "move_pace", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active while the item is worn.",
           "since": 1
         },
@@ -882,7 +882,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "move_pace", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active while the affect reaches the holder.",
           "since": 1
         },
@@ -1377,7 +1377,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "move_pace", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Zone-wide rules modifiers by modifier point name.",
           "since": 1
         },
@@ -1537,7 +1537,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "move_pace", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Rules modifiers active in rooms carrying this region tag.",
           "since": 1
         }
@@ -1701,7 +1701,7 @@
           "keyword": true,
           "required": false,
           "default": "{}",
-          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
+          "allowed_values": ["to_hit", "damage", "bonus_damage", "defend_hit", "receive_damage", "mitigate", "initiative", "cast_allowed", "move_cost", "move_pace", "regen", "advance_lag", "retreat_lag", "retreat_fail_lag", "flee_fail_lag", "skill_check", "skill_power", "item_power"],
           "doc": "Room rules modifiers by modifier point name.",
           "since": 1
         },
@@ -2612,7 +2612,7 @@
       "symbol": "MODIFIER",
       "name": "MODIFIER",
       "type": "struct",
-      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\", skill_check = \"skill_check\", skill_power = \"skill_power\", item_power = \"item_power\")",
+      "value": "struct(to_hit = \"to_hit\", damage = \"damage\", bonus_damage = \"bonus_damage\", defend_hit = \"defend_hit\", receive_damage = \"receive_damage\", mitigate = \"mitigate\", initiative = \"initiative\", cast_allowed = \"cast_allowed\", move_cost = \"move_cost\", move_pace = \"move_pace\", regen = \"regen\", advance_lag = \"advance_lag\", retreat_lag = \"retreat_lag\", retreat_fail_lag = \"retreat_fail_lag\", flee_fail_lag = \"flee_fail_lag\", skill_check = \"skill_check\", skill_power = \"skill_power\", item_power = \"item_power\")",
       "doc": "Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.",
       "since": 1
     },
@@ -6303,6 +6303,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.move_pace",
+          "name": "move_pace",
+          "doc": "Hundredths of a pulse per room this actor walks at now; 100 is one room per pulse.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.name",
           "name": "name",
           "doc": "The entity's display name.",
@@ -8403,9 +8409,21 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.chain",
+          "name": "chain",
+          "doc": "In chain_think, how many chained thinks in a row led to that action; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.channel",
           "name": "channel",
           "doc": "For the perception calls: the channel name, such as 'sound'.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.command",
+          "name": "command",
+          "doc": "In chain_think, the command line of the action that finished; None elsewhere.",
           "since": 1
         },
         {
@@ -8836,6 +8854,15 @@
         "since": 1
       },
       {
+        "symbol": "rules:chain_think",
+        "name": "chain_think",
+        "signature": "chain_think(ctx)",
+        "return_type": "bool",
+        "ctx_fields": ["actor", "behavior", "command", "exit", "chain", "room", "pulse", "rng"],
+        "doc": "Whether ctx.actor, a mob, thinks again as soon as it can act.",
+        "since": 1
+      },
+      {
         "symbol": "rules:condition",
         "name": "condition",
         "signature": "condition(ctx)",
@@ -8994,6 +9021,15 @@
         "return_type": "vitals",
         "ctx_fields": ["actor", "room", "pulse", "rng"],
         "doc": "The vitals spent when leaving a room.",
+        "since": 1
+      },
+      {
+        "symbol": "rules:move_pace",
+        "name": "move_pace",
+        "signature": "move_pace(ctx)",
+        "return_type": "int",
+        "ctx_fields": ["actor", "room", "exit", "pulse", "rng"],
+        "doc": "Hundredths of a pulse per room for ctx.actor walking through ctx.exit; 100 is one room per pulse.",
         "since": 1
       },
       {
@@ -9288,6 +9324,15 @@
         "since": 1
       },
       {
+        "symbol": "modifier:move_pace",
+        "name": "move_pace",
+        "signature": "fn(ctx, base)",
+        "value_type": "int",
+        "ctx_fields": ["actor", "room", "exit", "pulse", "rng"],
+        "doc": "Adjusts the walking pace in hundredths of a pulse per room. The final result is clamped to at least 100 / MOVES_PER_PULSE_MAX (25).",
+        "since": 1
+      },
+      {
         "symbol": "modifier:receive_damage",
         "name": "receive_damage",
         "signature": "fn(ctx, base)",
@@ -9536,6 +9581,12 @@
           "symbol": "p.level",
           "name": "level",
           "doc": "The actor's level.",
+          "since": 1
+        },
+        {
+          "symbol": "p.move_pace",
+          "name": "move_pace",
+          "doc": "Hundredths of a pulse per room this actor walks at now; 100 is one room per pulse.",
           "since": 1
         },
         {

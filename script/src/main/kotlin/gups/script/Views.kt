@@ -20,6 +20,7 @@ import gups.core.model.SkillProto
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.rules.Contributor
+import gups.core.rules.RulesContext
 import gups.core.world.HeldAffect
 import gups.core.world.Proposal
 import gups.core.world.World
@@ -27,6 +28,7 @@ import gups.core.world.actorSlots
 import gups.core.world.heldAffects
 import gups.core.world.isInactive
 import gups.core.world.leash
+import gups.core.world.movePaceOf
 import gups.core.world.ownerOf
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
@@ -366,6 +368,14 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
 
   @StarlarkMethod(name = "wait_state", structField = true, doc = "Recovery pulses left.")
   fun waitState(): Any = read { sInt(actor.waitState) }
+
+  @StarlarkMethod(
+    name = "move_pace",
+    structField = true,
+    doc = "Hundredths of a pulse per room this actor walks at now; 100 is one room per pulse.",
+  )
+  fun movePace(): Any =
+    read("actor.move_pace") { sInt(scope.world.movePaceOf(RulesContext(scope.world, actor))) }
 
   @StarlarkMethod(
     name = "home_room",
