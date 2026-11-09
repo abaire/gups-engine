@@ -416,7 +416,38 @@ enum class PluginTraitEvent {
    * `source` ([PluginActor], the caster), `skill` (the label), `outcome` (`success` or `resist`),
    * `target` ([PluginActor] or null) and `power` ([Long]).
    */
-  SKILL_RECOGNIZED
+  SKILL_RECOGNIZED,
+
+  /**
+   * The bearer took damage with a positive loss. Fields: `source` ([PluginActor] or null), `amount`
+   * ([Long]), `type` (the damage type's name), `losses` (`Map<String, Long>`, vital name to loss)
+   * and `parts` (`List<Map<String, Any?>>`, each with `type` and `losses`).
+   */
+  DAMAGED,
+
+  /**
+   * The bearer gained vital points from a heal. Fields: `source` ([PluginActor] or null), `vital`
+   * (the vital's name), `amount` ([Long], after the maximum cap, above 0) and `requested` ([Long]).
+   */
+  HEALED,
+
+  /** The bearer landed the killing blow. Field: `victim` ([PluginActor]). */
+  KILLED,
+
+  /** The bearer died. Field: `killer` ([PluginActor] or null). The handler can't prevent it. */
+  DIED,
+
+  /**
+   * The bearer gained or lost a level, once per step. Fields: `old_level` and `new_level` ([Long]).
+   * Only fires when leveling is enabled.
+   */
+  LEVEL_CHANGED,
+
+  /**
+   * The bearer arrived in a room by walking, fleeing or teleporting. Fields: `from_room`
+   * ([PluginRoom]) and `direction` (the exit's name, or null for a teleport).
+   */
+  ROOM_ENTERED,
 }
 
 data class PluginTraitCall(
@@ -424,7 +455,9 @@ data class PluginTraitCall(
   val event: PluginTraitEvent,
   /** The actor carrying the trait. */
   val bearer: PluginActor,
-  /** The event's fields as plain values: ints as Long, actors as PluginActor. */
+  /**
+   * The event's fields as plain values: ints as Long, actors as PluginActor, rooms as PluginRoom.
+   */
   val fields: Map<String, Any?>,
 )
 

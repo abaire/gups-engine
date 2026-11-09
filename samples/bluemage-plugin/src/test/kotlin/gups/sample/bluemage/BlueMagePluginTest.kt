@@ -591,4 +591,42 @@ class BlueMagePluginTest {
     assertTrue("Breath" in text && "Gaze" in text, text)
     assertEquals(2, text.lines().count { it.contains("Breath") || it.contains("Gaze") })
   }
+
+  // ---- Studying attackers -------------------------------------------------------------------
+
+  private fun damaged(world: FakeWorld, source: PluginActor?) {
+    registry.traits
+      .getValue("blue_mage")
+      .on
+      .getValue(PluginTraitEvent.DAMAGED)
+      .handle(
+        PluginTraitCall(
+          world,
+          PluginTraitEvent.DAMAGED,
+          bearer,
+          mapOf("source" to source, "amount" to 3L, "type" to "fire"),
+        )
+      )
+  }
+
+  @Test
+  fun `a mob that hurts a blue mage is studied once`() {
+    val w = world()
+    damaged(w, mob)
+    damaged(w, mob)
+    assertEquals(
+      listOf<Pair<PluginActor, String>>(bearer to "You study how a drake fights."),
+      w.sent,
+    )
+    damaged(w, FakeActor(4L, "a wyvern", isPlayer = false))
+    assertEquals("You study how a wyvern fights.", w.sent.last().second)
+  }
+
+  @Test
+  fun `damage from a player or from nothing isn't studied`() {
+    val w = world()
+    damaged(w, FakeActor(3L, isPlayer = true))
+    damaged(w, null)
+    assertEquals(emptyList(), w.sent)
+  }
 }

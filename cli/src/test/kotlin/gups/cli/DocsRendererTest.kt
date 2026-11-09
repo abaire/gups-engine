@@ -154,6 +154,12 @@ class DocsRendererTest {
       docsDir
         .resolve("../samples/hunger-plugin/src/main/kotlin/gups/sample/hunger/HungerPlugin.kt")
         .readText()
+    val bluemageSource =
+      docsDir
+        .resolve(
+          "../samples/bluemage-plugin/src/main/kotlin/gups/sample/bluemage/BlueMagePlugin.kt"
+        )
+        .readText()
     val guide = docsDir.resolve("PLUGINS.md").readText()
     val blocks =
       Regex("```kotlin\n(.*?)\n```", RegexOption.DOT_MATCHES_ALL)
@@ -173,13 +179,15 @@ class DocsRendererTest {
     val heritageDedented = heritageSource.lines().joinToString("\n") { it.trimStart() }
     val curseDedented = curseSource.lines().joinToString("\n") { it.trimStart() }
     val hungerDedented = hungerSource.lines().joinToString("\n") { it.trimStart() }
+    val bluemageDedented = bluemageSource.lines().joinToString("\n") { it.trimStart() }
     for (b in fromSample) {
       val target = b.lines().joinToString("\n") { it.trimStart() }
       assertTrue(
         target in weatherDedented ||
           target in heritageDedented ||
           target in curseDedented ||
-          target in hungerDedented,
+          target in hungerDedented ||
+          target in bluemageDedented,
         "PLUGINS.md block isn't in a sample plugin source:\n$b",
       )
     }

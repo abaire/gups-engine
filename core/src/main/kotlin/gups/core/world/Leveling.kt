@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.model.Actor
 import gups.core.model.LevelGain
 import gups.core.model.Player
+import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
 
 /**
@@ -128,6 +129,13 @@ fun World.levelUp(a: Actor): Boolean {
 
   val levelCtx = HookContext(actor = a, oldLevel = a.level - 1, newLevel = a.level)
   dispatch(HookName.ON_LEVEL_CHANGE, a, a.room, levelCtx)
+  if (Feature.LEVELING in features) {
+    fireTraitEvent(
+      a,
+      TraitEvent.LEVEL_CHANGED,
+      mapOf("old_level" to a.level - 1, "new_level" to a.level),
+    )
+  }
   dispatchGlobal(HookName.ON_LEVEL_CHANGE, levelCtx)
 
   a.dirty = true
@@ -237,6 +245,13 @@ fun World.levelDownStep(a: Actor) {
 
   val levelCtx = HookContext(actor = a, oldLevel = a.level + 1, newLevel = a.level)
   dispatch(HookName.ON_LEVEL_CHANGE, a, a.room, levelCtx)
+  if (Feature.LEVELING in features) {
+    fireTraitEvent(
+      a,
+      TraitEvent.LEVEL_CHANGED,
+      mapOf("old_level" to a.level + 1, "new_level" to a.level),
+    )
+  }
   dispatchGlobal(HookName.ON_LEVEL_CHANGE, levelCtx)
 
   a.dirty = true

@@ -14,6 +14,8 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
   see the skill's `unrecognized` line or a new `cast.anon.*` message.
 - The warmup line now reaches only players who can see the caster.
 - Plugins: `PluginTrait.on` trait callbacks (`SKILL_RECOGNIZED`) and `PluginWorld.skill(label)`.
+- Plugin trait events `DAMAGED`, `HEALED`, `KILLED`, `DIED`, `LEVEL_CHANGED` and `ROOM_ENTERED` run synchronously for
+  players and mobs.
 - Plugins can declare optional rules exports (`addRulesExport`, `PluginWorld.rules`); rules calls gain `ctx.base` and
   `ctx.args`.
 - Template world: `recognizes_skill` (Intelligence and Wisdom; skills tagged `subtle` are never recognized), damage type

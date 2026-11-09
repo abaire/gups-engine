@@ -503,18 +503,7 @@ private fun World.fireSkillRecognized(
     val player = entities[id] as? Player ?: continue
     // An earlier handler may have removed the player or taught them the skill.
     if (!player.inWorld || skill.label in player.skills) continue
-    for (trait in player.traits) {
-      val handler = trait.handlers[TraitEvent.SKILL_RECOGNIZED] ?: continue
-      try {
-        handler.handle(this, player, TraitEvent.SKILL_RECOGNIZED, fields)
-      } catch (e: Exception) {
-        diagnose(
-          "plugin",
-          "trait '${trait.name}' handler ${TraitEvent.SKILL_RECOGNIZED} threw: ${e.message}",
-          e,
-        )
-      }
-    }
+    fireTraitEvent(player, TraitEvent.SKILL_RECOGNIZED, fields)
   }
 }
 

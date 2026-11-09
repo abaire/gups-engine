@@ -16,9 +16,9 @@ import gups.pluginapi.PluginWorld
 
 /**
  * Sample plugin showing trait callbacks and a plugin-declared rules export: a blue mage learns
- * skills tagged `blue` by recognizing them when mobs use them. The trait handles
- * `SKILL_RECOGNIZED`, the learning chance is tunable through the optional rules export
- * `bluemage_learn_chance`, and `bluemagic` lists what the character learned this way.
+ * skills tagged `blue` by recognizing them when mobs use them. The trait handles `SKILL_RECOGNIZED`
+ * (and `DAMAGED`, to study a new attacker), the learning chance is tunable through the optional
+ * rules export `bluemage_learn_chance`, and `bluemagic` lists what the character learned this way.
  */
 class BlueMagePlugin : GupsPlugin {
   override val id = "bluemage"
@@ -41,7 +41,11 @@ class BlueMagePlugin : GupsPlugin {
         name = "blue_mage",
         label = "Blue mage",
         doc = "Learns marked skills by watching mobs use them.",
-        on = mapOf(PluginTraitEvent.SKILL_RECOGNIZED to PluginTraitHandler(::onRecognized)),
+        on =
+          mapOf(
+            PluginTraitEvent.SKILL_RECOGNIZED to PluginTraitHandler(::onRecognized),
+            PluginTraitEvent.DAMAGED to PluginTraitHandler(::onDamaged),
+          ),
       )
     )
 
@@ -121,9 +125,19 @@ class BlueMagePlugin : GupsPlugin {
     world.setAttr(bearer, LEARNED, learned(world, bearer) + label)
   }
 
+  private fun onDamaged(call: PluginTraitCall) {
+    val world = call.world
+    val source = call.fields["source"] as? PluginActor ?: return
+    // Only the first blow from each new attacker, so a long fight doesn't repeat the line.
+    if (source.isPlayer || world.getAttr(call.bearer, STUDIED, null) == source.id) return
+    world.setAttr(call.bearer, STUDIED, source.id)
+    world.send(call.bearer, "You study how ${source.name} fights.")
+  }
+
   private companion object {
     const val TRAIT = "blue_mage"
     const val LEARNED = "learned"
+    const val STUDIED = "studied"
     const val MAX_CHANCE = 33L
     const val LEARNED_PROFICIENCY = 10
   }

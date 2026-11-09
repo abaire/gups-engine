@@ -7,7 +7,8 @@ It is a small demo of three extension points that the other samples don't cover:
 
 * **Trait callbacks:** the `blue_mage` trait registers a handler for `SKILL_RECOGNIZED`, which the engine fires for a
   player who recognizes a skill they don't know, on a cast that succeeded or was resisted. Unlike a trait's modifiers, a
-  handler may change the world.
+  handler may change the world. It also handles `DAMAGED`: the first blow from each new mob attacker tells the blue mage
+  "You study how ... fights.", remembered in the `bluemage:studied` attribute.
 * **A plugin-declared rules export:** `addRulesExport("bluemage_learn_chance", ...)` lets a world tune the learning
   chance in its rules package. A world that doesn't define it gets the plugin's own formula.
 * **Skill lookup:** `world.skill(label)` reads a loaded skill's name and tags.

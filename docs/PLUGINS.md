@@ -331,11 +331,42 @@ chains, and null otherwise. A `DEFEND_HIT` modifier returning `if (call.skill?.k
 bearer resist every enemy spell of kind `"spell"` cast at it, while swings roll as usual.
 
 Traits can also react. `on` maps an event to a `PluginTraitHandler` that runs for each bearer when the event happens to
-it, and unlike a modifier it may change the world through `call.world`. `SKILL_RECOGNIZED` fires for a player who
-recognized a skill they don't know, after a cast that succeeded or was resisted. The call carries the `bearer` and
-`fields`: `source` (a `PluginActor`), `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power` (a
-`Long`). `call.world.skill(label)` returns a loaded skill's view, or null. A handler that throws records a `plugin`
-diagnostic. See `samples/bluemage-plugin` for a trait that learns skills this way.
+it, and unlike a modifier it may change the world through `call.world`. The call carries the `bearer`, the `event` and
+its `fields`, where ints are `Long`, actors are `PluginActor` and rooms are `PluginRoom`:
+
+- `SKILL_RECOGNIZED`: a player recognized a skill they don't know, after a cast that succeeded or was resisted. Fields:
+  `source`, `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power`.
+- `DAMAGED`: the bearer took damage with a positive loss. Fields: `source` (a `PluginActor` or null), `amount`, `type`
+  (the damage type's name), `losses` (vital name to loss) and `parts` (a list of maps with `type` and `losses`).
+- `HEALED`: the bearer gained vital points from a heal. Fields: `source` (a `PluginActor` or null), `vital`, `amount`
+  (after the maximum cap) and `requested`.
+- `KILLED`: the bearer landed the killing blow. Field: `victim`.
+- `DIED`: the bearer died. Field: `killer` (a `PluginActor` or null). The handler can't prevent the death.
+- `LEVEL_CHANGED`: the bearer gained or lost a level, once per step, with leveling enabled. Fields: `old_level` and
+  `new_level`.
+- `ROOM_ENTERED`: the bearer arrived by walking, fleeing or teleporting. Fields: `from_room` (a `PluginRoom`) and
+  `direction` (a `String`, or null for a teleport).
+
+Handlers run synchronously where the event happens, right after the script hooks on entities, the room and items there.
+At death and at a level change they run before the global hooks and plugin event listeners. Bearers can be players or
+mobs, except for `SKILL_RECOGNIZED`, which is players only. A handler that causes another event (a `DAMAGED` handler
+that deals damage, say) is cut off by the cascade depth, with a `cascade` diagnostic. `call.world.skill(label)` returns
+a loaded skill's view, or null. A handler that throws records a `plugin` diagnostic. See `samples/bluemage-plugin` for a
+trait that learns skills from `SKILL_RECOGNIZED`.
+
+A trait that reacts when its bearer is hurt (from `samples/bluemage-plugin`, which registers it with
+`PluginTraitEvent.DAMAGED to PluginTraitHandler(::onDamaged)`):
+
+```kotlin
+private fun onDamaged(call: PluginTraitCall) {
+    val world = call.world
+    val source = call.fields["source"] as? PluginActor ?: return
+    // Only the first blow from each new attacker, so a long fight doesn't repeat the line.
+    if (source.isPlayer || world.getAttr(call.bearer, STUDIED, null) == source.id) return
+    world.setAttr(call.bearer, STUDIED, source.id)
+    world.send(call.bearer, "You study how ${source.name} fights.")
+}
+```
 
 #### Creation provider
 

@@ -13,6 +13,7 @@ import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
+import gups.core.model.Room
 import gups.core.model.StepReply
 import gups.core.model.StepView
 import gups.core.model.Trait
@@ -330,14 +331,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
               world = WorldFacade(w, pluginId, Facades.logOf(w)),
               event = PluginTraitEvent.valueOf(event.name),
               bearer = ActorFacade(bearer, w),
-              fields =
-                fields.mapValues { (_, v) ->
-                  when (v) {
-                    is Actor -> ActorFacade(v, w)
-                    is Int -> v.toLong()
-                    else -> v
-                  }
-                },
+              fields = fields.mapValues { (_, v) -> plainField(v, w) },
             )
           try {
             handler.handle(call)
@@ -366,6 +360,17 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
     handlers = handlers,
   )
 }
+
+/** [v] with actors, rooms and ints converted to plugin types, recursing into maps and lists. */
+private fun plainField(v: Any?, w: World): Any? =
+  when (v) {
+    is Actor -> ActorFacade(v, w)
+    is Room -> RoomFacade(v, w)
+    is Int -> v.toLong()
+    is Map<*, *> -> v.entries.associate { (k, x) -> k to plainField(x, w) }
+    is List<*> -> v.map { plainField(it, w) }
+    else -> v
+  }
 
 internal fun restrictionAdapter(
   world: World,

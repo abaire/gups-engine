@@ -15,6 +15,7 @@ import gups.core.model.Item
 import gups.core.model.ModifierPoint
 import gups.core.model.Room
 import gups.core.model.SkillProto
+import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
 
 /** Catalog of script lifecycle and action hooks. Only `before_*` hooks are vetoable. */
@@ -486,6 +487,31 @@ internal fun World.invokeRef(owner: Entity, ref: HookRef, ctx: HookContext) {
       scripts.invokeRef(this, owner, ref, ctx)
     } catch (e: Exception) {
       diagnose("script", "${ref.file}:${ref.name} on $owner failed: ${e.message}", e)
+    }
+  }
+}
+
+/**
+ * Runs [bearer]'s handlers for [event], in trait order. Skips a bearer the world isn't simulating
+ * or that has left the world. Each handler call is a guarded cascade entry; a throw is recorded as
+ * a `plugin` diagnostic and doesn't stop the others.
+ */
+internal fun World.fireTraitEvent(bearer: Actor, event: TraitEvent, fields: Map<String, Any?>) {
+  if (!bearer.inWorld || !isSimulated(bearer)) return
+  // The list is replaced on change, so a handler that grants or removes a trait can't disturb it.
+  val traits = bearer.traits
+  var first = true
+  for (trait in traits) {
+    val handler = trait.handlers[event] ?: continue
+    // An earlier handler may have removed the bearer.
+    if (!first && !bearer.inWorld) return
+    first = false
+    withCascadeGuard("trait '${trait.name}' $event") {
+      try {
+        handler.handle(this, bearer, event, fields)
+      } catch (e: Exception) {
+        diagnose("plugin", "trait '${trait.name}' handler $event threw: ${e.message}", e)
+      }
     }
   }
 }

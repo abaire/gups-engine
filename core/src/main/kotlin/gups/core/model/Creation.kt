@@ -117,7 +117,37 @@ enum class TraitEvent {
    * `source` (the caster), `skill` (its label), `outcome`, `target` (the cast's target actor or
    * null) and `power`.
    */
-  SKILL_RECOGNIZED
+  SKILL_RECOGNIZED,
+
+  /**
+   * The bearer took damage with a positive loss. Fields: `source` (Actor or null), `amount` (Int),
+   * `type` (damage type name), `losses` (Map<String, Int>) and `parts` (List of maps with `type`
+   * and `losses`).
+   */
+  DAMAGED,
+
+  /**
+   * The bearer gained vital points from `heal`. Fields: `source` (Actor or null), `vital`, `amount`
+   * (Int, after the maximum cap, above 0) and `requested` (Int).
+   */
+  HEALED,
+
+  /** The bearer landed the killing blow on `victim` (Actor). Not fired when there is no killer. */
+  KILLED,
+
+  /** The bearer died. Field: `killer` (Actor or null). The handler can't prevent the death. */
+  DIED,
+
+  /**
+   * The bearer gained or lost a level, once per step. Fields: `old_level` and `new_level` (Int).
+   */
+  LEVEL_CHANGED,
+
+  /**
+   * The bearer arrived in a room by walking, fleeing or teleporting. Fields: `from_room` (Room) and
+   * `direction` (String, or null for a teleport).
+   */
+  ROOM_ENTERED,
 }
 
 /** Callback contributed by a [Trait] for an event of its bearer. */

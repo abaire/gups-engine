@@ -7,6 +7,7 @@ import gups.core.model.Exit
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
 
 // Room transitions and the tactical track.
@@ -62,6 +63,11 @@ internal fun World.transition(
     to,
     HookContext(actor = actor, direction = exit.direction, fromRoom = from),
   )
+  fireTraitEvent(
+    actor,
+    TraitEvent.ROOM_ENTERED,
+    mapOf("from_room" to from, "direction" to exit.direction.name),
+  )
 }
 
 /** The `teleport` verb: engine-validated, fires the exit and enter hooks. */
@@ -106,6 +112,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     fireDisengage(freed, "stop")
     dispatch(HookName.ON_EXIT, null, from, HookContext(actor = actor, toRoom = to))
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))
+    fireTraitEvent(actor, TraitEvent.ROOM_ENTERED, mapOf("from_room" to from, "direction" to null))
   }
 }
 

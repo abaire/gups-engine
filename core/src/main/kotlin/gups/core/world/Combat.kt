@@ -23,6 +23,7 @@ import gups.core.model.ProcTrigger
 import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.TargetKind
+import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
 import gups.core.saturatingAdd
 
@@ -305,6 +306,17 @@ fun World.damage(
         parts = parts,
       ),
     )
+    fireTraitEvent(
+      target,
+      TraitEvent.DAMAGED,
+      mapOf(
+        "source" to source,
+        "amount" to total,
+        "type" to type.name,
+        "losses" to dealt,
+        "parts" to parts.map { mapOf("type" to it.type.name, "losses" to it.losses) },
+      ),
+    )
     val cast = target.casting
     if (
       cast != null &&
@@ -344,6 +356,13 @@ fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null)
         )
       }
     }
+  }
+  if (effective > 0) {
+    fireTraitEvent(
+      target,
+      TraitEvent.HEALED,
+      mapOf("source" to source, "vital" to vital, "amount" to effective, "requested" to amount),
+    )
   }
 }
 
@@ -392,6 +411,8 @@ private fun World.runDeath(victim: Actor) {
   )
   perceive("death", Channel.SOUND, room, victim, intensity = COMBAT_INTENSITY)
   dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
+  fireTraitEvent(victim, TraitEvent.DIED, mapOf("killer" to killer))
+  if (killer != null) fireTraitEvent(killer, TraitEvent.KILLED, mapOf("victim" to victim))
   // The global hook sees the victim's belongings and level as at death, before the corpse is made
   // and XP is priced.
   dispatchGlobal(HookName.ON_DEATH, HookContext(actor = killer, target = victim), subject = victim)

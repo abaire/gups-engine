@@ -1267,7 +1267,9 @@ veto spawns nothing: the caster is told the message and the verb returns `[]`. *
 the summon has spawned and any `on_owner_change` has fired, with `ctx.targets` the new mobs in order; the new mobs are
 in the room, so they see it as observers too.
 
-To react to one's own landed swing, or to being struck, use procs (§4.2): `on_damage` fires room-wide for any damage.
+To react to one's own landed swing, or to being struck, use procs (§4.2): `on_damage` fires room-wide for any damage. A
+plugin trait reacts to its bearer being damaged, by a swing or anything else, with the `DAMAGED` trait event (§4.15),
+which runs before that swing's procs.
 
 **`on_level_change`** needs `leveling`. It fires once per level step, after the gains or their unwinding and the gain
 record, so it sees the new state; a loss of three levels fires it three times. A level gained is announced before its
@@ -2241,7 +2243,8 @@ on mobs, rooms and items, with the same ctx fields; `ctx.self` is the actor. `on
 `on_owner_change` and `on_death` belong to the kernel, so they fire in every world. Global hooks run in package label
 order, then in the order they were registered. In a world without `leveling` (for `on_level_change`), `combat` (for
 `on_disengage`) or `skills` (for `on_skill_use`) the declaration loads and the hook never fires, so a library can serve
-worlds with and without it. Plugin event listeners (§4.15) run after them.
+worlds with and without it. At death and at a level change, the bearers' trait handlers (§4.15) run after the hooks on
+entities, the room and items, and before the global hooks. Plugin event listeners (§4.15) run after them.
 
 **Reserved exit names:** an exit's direction or custom name may not be the name or alias of an engine command the world
 has (after `rename`, §3.10), or the name of any global command. Such an exit fails its package's load with a diagnostic
@@ -2933,11 +2936,21 @@ subsystems (`core` or `script`). It consists of three primary components:
   skill's label), `outcome` (`"fail"`, `"resist"`, `"success"` or `"report"`), `target` (or null), `item` (or null) and
   `targets` (the landed actors). Ints are `Long`s and actors `PluginActor`s. A listener for an event whose feature is
   off registers and never runs. A throw records a `plugin` diagnostic.
-- **Trait callbacks:** `PluginTrait(on = mapOf(PluginTraitEvent.SKILL_RECOGNIZED to handler))` runs the handler for each
-  bearer of the trait when the event happens to it (§4.19). The call carries a `PluginWorld`, which may change the
-  world, along with the event, the `bearer` and `fields`. For `SKILL_RECOGNIZED`, the fields are `source` (a
-  `PluginActor`), `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power` (a `Long`). A throw
-  records a `plugin` diagnostic.
+- **Trait callbacks:** `PluginTrait(on = mapOf(event to handler))` runs the handler for each bearer of the trait when
+  the event happens to it (§4.19). Handlers run synchronously where the event happens, for each simulated bearer,
+  players and mobs (except `SKILL_RECOGNIZED`, which is players only). The call carries a `PluginWorld`, which may
+  change the world, along with the event, the `bearer` and `fields`. `LEVEL_CHANGED` needs leveling. A handler that
+  causes another event is cut off by the cascade depth cap. A throw records a `plugin` diagnostic. The events and their
+  fields, with ints as `Long`:
+  - `SKILL_RECOGNIZED`: `source` (`PluginActor`), `skill` (the label), `outcome`, `target` (`PluginActor` or null) and
+    `power`.
+  - `DAMAGED`: `source` (`PluginActor` or null), `amount`, `type` (a `String`), `losses` (`Map<String, Long>`) and
+    `parts` (a list of maps with `type` and `losses`).
+  - `HEALED`: `source` (`PluginActor` or null), `vital` (a `String`), `amount` and `requested`.
+  - `KILLED`: `victim` (`PluginActor`).
+  - `DIED`: `killer` (`PluginActor` or null).
+  - `LEVEL_CHANGED`: `old_level` and `new_level`.
+  - `ROOM_ENTERED`: `from_room` (`PluginRoom`) and `direction` (a `String`, or null for a teleport).
 - **Rules exports:** `addRulesExport(name, doc, type)` declares an optional rules export the world may define (§4.6).
   - **Names:** `name` must be `<id>_<snake_case>`. Registering a name twice fails `register`.
   - **Types:** `type` is `PluginRulesType.INT` or `BOOL`.
@@ -3905,8 +3918,8 @@ Event propagation and hook dispatch are handled by [Hooks.kt](../core/src/main/k
   - Verbs that cause events (`damage` → `on_damage` → `on_death` → loot `on_spawn`) dispatch synchronously, nested.
   - The maximum nesting depth is `CASCADE_MAX_DEPTH`
     ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)). Every script entry counts toward it:
-    dispatched events, self-only hooks (`on_tick`, `on_spawn`, …), and timer and affect callbacks. An entry that would
-    nest deeper is dropped with a diagnostic.
+    dispatched events, self-only hooks (`on_tick`, `on_spawn`, …), and timer and affect callbacks, and trait handlers.
+    An entry that would nest deeper is dropped with a diagnostic.
   - All nested hooks share the top-level event's step budget (§6.1).
 - **Quarantine:** Hooks of a quarantined package aren't invoked.
 
