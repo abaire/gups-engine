@@ -119,6 +119,12 @@ class RulesContext(
   val away: Long? = null,
   /** Whether the mob in `leash_return` stands past its leash; null elsewhere. */
   val pastLeash: Boolean? = null,
+  /** The cast's target actor, in `recognizes_skill`; null elsewhere. */
+  val castTarget: Actor? = null,
+  /** The plugin's own value, in a plugin-declared export; null elsewhere. */
+  val base: Any? = null,
+  /** Extra plugin fields, in a plugin-declared export; null elsewhere. */
+  val args: Map<String, Any?>? = null,
   /** The command line of the action that finished, in `chain_think`; null elsewhere. */
   val command: String? = null,
   /**
@@ -177,6 +183,9 @@ class RulesContext(
       ally = ally,
       away = away,
       pastLeash = pastLeash,
+      castTarget = castTarget,
+      base = base,
+      args = args,
       command = command,
       chain = chain,
       rngOverride = rngOverride,
@@ -229,6 +238,9 @@ class RulesContext(
       ally = ally,
       away = away,
       pastLeash = pastLeash,
+      castTarget = castTarget,
+      base = base,
+      args = args,
       command = command,
       chain = chain,
       rngOverride = rngOverride,
@@ -415,6 +427,18 @@ interface RulesEngine {
    * which sends it home at once.
    */
   fun leashReturn(c: RulesContext): Boolean? = null
+
+  /**
+   * Whether [c]`actor` recognizes [c]`skill` cast by [c]`source`; null when the world doesn't
+   * define it.
+   */
+  fun recognizesSkill(c: RulesContext): Boolean? = null
+
+  /**
+   * Runs the plugin-declared export [name], whose result is an `"int"` (a [Long]) or a `"bool"`;
+   * null when the world doesn't define it, the call fails, or the result has the wrong type.
+   */
+  fun pluginExport(name: String, type: String, c: RulesContext): Any? = null
 
   /**
    * Whether [c]`actor`, a mob, thinks again as soon as it can act, ignoring `think_every`, after

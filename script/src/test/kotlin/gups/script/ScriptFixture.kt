@@ -46,9 +46,11 @@ class ScriptFixture(
   bubble: Boolean = false,
   /** Wraps the host the world calls, for tests that watch hook calls. */
   wrap: (ScriptHost) -> ScriptHost = { it },
+  /** The plugins a world loads with; defaults to none. */
+  val wiring: WorldPluginWiring = WorldPluginWiring.NONE,
 ) {
   val root: Path = tempWorld(files)
-  val loader = ScriptLoader(WorldDir(root), limits)
+  val loader = ScriptLoader(WorldDir(root), limits, plugins = wiring)
   val result: LoadResult =
     loader.load((load + RULES_PACKAGE).distinct().filter { WorldDir(root).hasPackage(it) })
   val host: StarlarkHost by lazy { StarlarkHost(result, limits, loader) }
@@ -68,6 +70,7 @@ class ScriptFixture(
         memoryPulses = loader.module.memoryPulses,
       )
       .also {
+        wiring.install(it)
         host.install(it)
         it.start()
       }

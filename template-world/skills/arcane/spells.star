@@ -11,6 +11,8 @@ skill("spark",
       range = "near",
       target = "enemy",
       channels = ["spell", "sound"],
+      tags = ["blue"],
+      unrecognized = {"noun": "spark", "begin": "{actor}'s fingertips crackle with heat."},
       effect = damage(dice = "2d4", type = DAMAGE.fire),
 )
 

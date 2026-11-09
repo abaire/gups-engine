@@ -558,6 +558,7 @@ object ScriptApi {
             WorldModule.SPEC,
             WorldModule.STAT_SPEC,
             WorldModule.VITAL_SPEC,
+            WorldModule.DAMAGE_TYPE_SPEC,
             WorldMessages.SPEC,
             ServerConfig.SPEC,
           )

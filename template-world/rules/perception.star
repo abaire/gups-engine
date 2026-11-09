@@ -66,3 +66,14 @@ def perceive_message(ctx):
     if ctx.text:
         return ctx.text
     return None
+
+def recognizes_skill(ctx):
+    # Whether ctx.actor, watching ctx.source, recognizes ctx.skill without knowing it. Skills
+    # tagged "subtle" can't be recognized by watching. A technique is easier to read than an
+    # incantation.
+    if "subtle" in ctx.skill.tags:
+        return False
+    pct = 10 + 3 * (ctx.actor.int - 10) + 2 * (ctx.actor.wis - 10)
+    if ctx.skill.kind != "spell":
+        pct += 30
+    return ctx.rng.chance(max(0, min(95, pct)))

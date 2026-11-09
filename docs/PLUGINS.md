@@ -267,6 +267,32 @@ r.addHook("shop_price", "Charges 25 more to buy a cursed item.") { call ->
 Script ints arrive as `Long`. A handler may return `Int`s and any `Iterable`; they reach the next handler and the script
 as `Long`s and lists. Floats and other types are refused like a throw.
 
+### Rules exports
+
+A plugin can let the world tune its numbers by declaring an optional rules export with `addRulesExport`. The name is the
+plugin id, an underscore and a snake_case name, and the type is `PluginRulesType.INT` or `BOOL`. Declare it, then ask
+for the value where the plugin needs it, passing what the plugin would use by itself as `base`:
+
+```text
+r.addRulesExport("bluemage_learn_chance", "Percent chance a blue mage learns the skill.", PluginRulesType.INT)
+
+val pct = (world.rules(
+    "bluemage_learn_chance",
+    mapOf("actor" to bearer, "source" to caster, "skill" to skill, "base" to base, "power" to power),
+    default = base,
+) as Long).toInt().coerceIn(0, 33)
+```
+
+The world defines the export in its rules package (`def bluemage_learn_chance(ctx): return ctx.base + ctx.actor.int -
+10`). `actor`, `target`, `source`, `skill` and `item` become those `ctx` fields, `base` becomes `ctx.base`, and any
+other field is in the `ctx.args` dict. When the world doesn't define the export, or the call fails, `rules` returns the
+default, so the plugin works without any world support. Clamp the result after the call, since the world's value is
+untrusted.
+
+A world that doesn't load the plugin must not define the export: it is then an ordinary "is not a rules export" load
+error. The load-time dry run calls each defined export once with `ctx.base` 0 (or `False`) and empty `ctx.args`, so a
+rule should read `ctx.args` with `get`. `@trace rules` shows each call.
+
 ### Character creation, traits and restrictions
 
 Plugins can define traits, character creation choices and operational restrictions (`samples/heritage-plugin`):
@@ -303,6 +329,13 @@ A modifier tells a spell from a swing by `call.skill`: the skill being cast (a `
 one, which is an enemy spell's `TO_HIT` and `DEFEND_HIT` roll and a spell's `DAMAGE`, `RECEIVE_DAMAGE` and `MITIGATE`
 chains, and null otherwise. A `DEFEND_HIT` modifier returning `if (call.skill?.kind == "spell") 0L else base` makes its
 bearer resist every enemy spell of kind `"spell"` cast at it, while swings roll as usual.
+
+Traits can also react. `on` maps an event to a `PluginTraitHandler` that runs for each bearer when the event happens to
+it, and unlike a modifier it may change the world through `call.world`. `SKILL_RECOGNIZED` fires for a player who
+recognized a skill they don't know, after a cast that succeeded or was resisted. The call carries the `bearer` and
+`fields`: `source` (a `PluginActor`), `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power` (a
+`Long`). `call.world.skill(label)` returns a loaded skill's view, or null. A handler that throws records a `plugin`
+diagnostic. See `samples/bluemage-plugin` for a trait that learns skills this way.
 
 #### Creation provider
 

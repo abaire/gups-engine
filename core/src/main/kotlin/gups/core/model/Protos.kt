@@ -462,11 +462,17 @@ data class SkillProto(
   val resolve: SkillResolver? = null,
   /** Free-form semantic tags inspected by rules and scripts. */
   val tags: Set<String> = emptySet(),
+  /** Lines for onlookers who don't recognize the skill, by key; see [UNRECOGNIZED_KEYS]. */
+  val unrecognized: Map<String, String> = emptyMap(),
 ) {
   /** Short unqualified name of the skill derived from its label. */
   val name: String
     get() = label.name
 }
+
+/** The keys a skill's `unrecognized` map may hold. */
+val UNRECOGNIZED_KEYS: List<String> =
+  listOf("begin", "room", "victim", "resisted_room", "resisted_victim", "noun")
 
 /** Package-level configuration for a zone of rooms. */
 data class ZoneProto(

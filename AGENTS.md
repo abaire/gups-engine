@@ -25,6 +25,13 @@ comments, as they may become outdated or invalid as the specification evolves. C
 done directly without linking back to spec sections or decision documents. Assume the reader is familiar with Kotlin and
 avoid obvious comments.
 
+## Naming: skills, not spells
+
+Everything a character casts is a `skill()`, and its `kind` is free-form; "spell" is only one kind. Name engine and
+plugin identifiers (rules exports, `ctx` fields, hooks and events, plugin API types, message ids) with "skill":
+`recognizes_skill`, not `recognizes_spell`. Documentation of `cast` may talk about spells, and player-facing text may
+say "spell" where a world or a skill chooses that word.
+
 ## Writing code
 
 - Follow test driven development practices. Write tests first, verify that they fail, then write code to pass the tests.

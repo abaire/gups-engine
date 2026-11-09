@@ -3,6 +3,9 @@ package gups.core.model
 /** A declared stat or vital: the name scripts use and the label players see. */
 data class SchemaName(val name: String, val label: String)
 
+/** A declared damage type's presentation; not recorded per database. */
+data class DamageTypeInfo(val name: String, val label: String, val adjective: String? = null)
+
 /** The life state of an actor, as `rules.condition` last decided it. */
 enum class Condition {
   OK,
@@ -57,6 +60,11 @@ data class WorldSchema(
    * Channels from strongest to weakest for text that is told as it happens; see [perceptionOrder].
    */
   val channelPriority: List<String> = emptyList(),
+  /**
+   * Label and adjective per damage type; a type missing here has the default label and no
+   * adjective.
+   */
+  val damageTypeInfo: Map<String, DamageTypeInfo> = emptyMap(),
 ) {
   val statNames: List<String> = stats.map { it.name }
   val vitalNames: List<String> = vitals.map { it.name }
@@ -84,6 +92,11 @@ data class WorldSchema(
   fun statLabel(name: String): String = stats.first { it.name == name }.label
 
   fun vitalLabel(name: String): String = vitals.first { it.name == name }.label
+
+  fun damageTypeLabel(name: String): String =
+    damageTypeInfo[name]?.label ?: name.replaceFirstChar { it.uppercase() }
+
+  fun damageTypeAdjective(name: String): String? = damageTypeInfo[name]?.adjective
 
   val unarmed: DamageType
     get() = DamageType(unarmedDamageType)

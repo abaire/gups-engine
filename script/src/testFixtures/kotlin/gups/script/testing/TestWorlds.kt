@@ -102,6 +102,7 @@ object TestWorlds {
       "interrupt_check" to setOf("skills"),
       "skill_check" to setOf("skills"),
       "skill_power" to setOf("skills"),
+      "recognizes_skill" to setOf("skills"),
       "retreat_check" to setOf("track"),
       "get_lag" to setOf("track"),
       "advance_lag" to setOf("track"),

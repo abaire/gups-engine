@@ -5,6 +5,7 @@ import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.PULSE_MS
 import gups.core.model.Channel
+import gups.core.model.DamageTypeInfo
 import gups.core.model.SchemaName
 import gups.core.model.WorldSchema
 import gups.core.world.CommandAliases
@@ -262,6 +263,23 @@ data class WorldModule(
           ),
       )
 
+    val DAMAGE_TYPE_SPEC =
+      DeclSpec(
+        name = "damage_type",
+        doc = "Declares a damage type with a label and an adjective, for MODULE.gups.",
+        params =
+          listOf(
+            DeclParam("name", "str", "The damage type's name.", positional = true, required = true),
+            DeclParam("label", "str", "The name players see.", default = "name capitalized"),
+            DeclParam(
+              "adjective",
+              "str",
+              "How a hit of this type is described in anonymous lines; a non-empty single line.",
+              default = "None",
+            ),
+          ),
+      )
+
     /** Names a plugin id may not take. */
     val reservedPluginIds: Set<String> by lazy {
       PACKAGE_GLOBALS.keys +
@@ -313,8 +331,8 @@ data class WorldModule(
             ),
             DeclParam(
               "damage_types",
-              "list[str]",
-              "The damage types of the world.",
+              "list[str | damage_type]",
+              "The damage types of the world, each a name or damage_type(name, label, adjective).",
               required = true,
             ),
             DeclParam(
@@ -412,6 +430,10 @@ data class WorldModule(
   /** A `stat(...)` or `vital(...)` value inside the `stats` and `vitals` lists. */
   private class NameDecl(val name: String, val label: String?) : StarlarkValue
 
+  /** A `damage_type(...)` value inside the `damage_types` list. */
+  private class DamageTypeDecl(val name: String, val label: String?, val adjective: String?) :
+    StarlarkValue
+
   /** The `module()` builtin: called exactly once. */
   private class Reader {
     var result: WorldModule? = null
@@ -432,6 +454,20 @@ data class WorldModule(
     )
     fun vital(args: Tuple, kwargs: Dict<String, Any>): Any = named(VITAL_SPEC, args, kwargs)
 
+    @StarlarkMethod(
+      name = "damage_type",
+      doc = "Declares a damage type with a label and an adjective.",
+      extraPositionals = Param(name = "args"),
+      extraKeywords = Param(name = "kwargs"),
+    )
+    fun damageType(args: Tuple, kwargs: Dict<String, Any>): Any =
+      DAMAGE_TYPE_SPEC.bind(args, kwargs) { d ->
+        val adjective = d.str("adjective")
+        if (adjective != null && (adjective.isEmpty() || adjective.lineSequence().count() > 1))
+          fail("damage_type(adjective): must be a non-empty single line")
+        DamageTypeDecl(d.reqStr("name"), d.str("label"), adjective)
+      }
+
     private fun named(spec: DeclSpec, args: Tuple, kwargs: Dict<String, Any>): Any =
       spec.bind(args, kwargs) { d -> NameDecl(d.reqStr("name"), d.str("label")) }
 
@@ -444,6 +480,16 @@ data class WorldModule(
             fail(
               "module($param): expected a name or ${param.removeSuffix("s")}(...), got ${typeName(it)}"
             )
+        }
+      }
+
+    private fun damageTypes(d: ParsedDecl): List<DamageTypeInfo> =
+      d.list("damage_types").map {
+        when (it) {
+          is DamageTypeDecl -> DamageTypeInfo(it.name, it.label ?: label(it.name), it.adjective)
+          is String -> DamageTypeInfo(it, label(it))
+          else ->
+            fail("module(damage_types): expected a name or damage_type(...), got ${typeName(it)}")
         }
       }
 
@@ -519,11 +565,13 @@ data class WorldModule(
           d.dict("rename").mapValues { (old, v) ->
             v as? String ?: fail("module(rename): the new name of '$old' must be a string")
           }
+        val types = damageTypes(d)
         val schema =
           WorldSchema(
             stats = names(d, "stats"),
             vitals = names(d, "vitals"),
-            damageTypes = d.strList("damage_types"),
+            damageTypes = types.map { it.name },
+            damageTypeInfo = types.associateBy { it.name },
             unarmedDamageType = d.reqStr("unarmed_damage_type"),
             channels = d.strList("channels"),
             prompt = d.str("prompt"),

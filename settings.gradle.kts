@@ -20,4 +20,5 @@ include(
   "samples:heritage-plugin",
   "samples:curse-plugin",
   "samples:hunger-plugin",
+  "samples:bluemage-plugin",
 )

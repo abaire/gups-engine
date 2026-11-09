@@ -482,6 +482,9 @@ class BonusDamageTest {
         ally = d,
         away = 7L,
         pastLeash = true,
+        castTarget = d,
+        base = 8L,
+        args = mapOf("n" to 1L),
         command = "cast",
         chain = 3,
       )

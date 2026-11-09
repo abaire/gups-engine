@@ -44,6 +44,7 @@ import gups.core.model.StandingSubject
 import gups.core.model.TAG_REGEX
 import gups.core.model.TargetKind
 import gups.core.model.TrackSize
+import gups.core.model.UNRECOGNIZED_KEYS
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.model.keywordWords
@@ -712,6 +713,34 @@ private fun affectTagList(v: Any?, what: String): Set<String> =
   strList(v, what)
     .onEach { t -> if (!TAG_REGEX.matches(t)) fail("$what: '$t' is not a valid tag") }
     .toSet()
+
+private val PLACEHOLDER_REGEX = Regex("""(?<!\{)\{([a-z][a-z0-9_]*)\}""")
+
+private fun unrecognizedLines(d: ParsedDecl): Map<String, String> {
+  val v = d["unrecognized"] ?: return emptyMap()
+  val what = d.what("unrecognized")
+  val m = dict(v, what)
+  for (k in m.keys) choice(k, what, UNRECOGNIZED_KEYS)
+  return m.mapValues { (k, value) ->
+    val at = "skill(unrecognized[\"$k\"])"
+    val text = str(value, at)
+    if (text.isEmpty() || '\n' in text || '\r' in text) fail("$at: must be a non-empty single line")
+    for (name in PLACEHOLDER_REGEX.findAll(text).map { it.groupValues[1] }) {
+      if (k == "noun") fail("$at: the noun takes no placeholders")
+      if (name != "actor" && name != "target") fail("$at: unknown placeholder {$name}")
+    }
+    text
+  }
+}
+
+private fun checkUnrecognizedTargets(proto: SkillProto) {
+  val noTarget = proto.target in setOf(TargetKind.SELF, TargetKind.NONE, TargetKind.ROOM)
+  for ((k, text) in proto.unrecognized) {
+    val usesTarget = PLACEHOLDER_REGEX.findAll(text).any { it.groupValues[1] == "target" }
+    if (usesTarget && (noTarget || (k == "room" && proto.range == SkillRange.ROOM)))
+      fail("skill(unrecognized[\"$k\"]): {target} needs a skill with a target")
+  }
+}
 
 private fun parseTags(d: ParsedDecl): Set<String> {
   val tags = d.strList("tags")
@@ -1524,8 +1553,10 @@ internal class DeclarationBuiltins(
           effect = d["effect"]?.let { effectValue(it, d.what("effect")) },
           resolve = d["resolve"]?.let { ScriptResolve(hookRef(it, d.what("resolve")), pkg) },
           tags = parseTags(d),
+          unrecognized = unrecognizedLines(d),
         )
       if (proto.warmup < 0 || proto.lag < 0) fail("skill(): warmup and lag can't be negative")
+      checkUnrecognizedTargets(proto)
       proto.effect?.let { effectRefs(it, ctx, thread) }
       proto.effect?.let { eff ->
         checkEffectTarget(
@@ -3686,6 +3717,12 @@ internal class DeclarationBuiltins(
               "list[str]",
               "Tags for plugin restrictions and scripts.",
               default = "[]",
+            ),
+            DeclParam(
+              "unrecognized",
+              "dict[str, str]",
+              "Lines for players who don't recognize the skill: begin, room, victim, resisted_room, resisted_victim, noun.",
+              default = "{}",
             ),
           ),
       )

@@ -34,7 +34,12 @@ module(
 
     # The kinds of damage. A weapon's damage_type, damage(...) effects, resists(...) and
     # `mitigate` in the rules all use these names (DAMAGE.fire in scripts).
-    damage_types = ["bludgeon", "slash", "pierce", "fire"],
+    damage_types = [
+        damage_type("bludgeon", adjective = "crushing"),
+        damage_type("slash", adjective = "slashing"),
+        damage_type("pierce", adjective = "piercing"),
+        damage_type("fire", adjective = "fiery"),
+    ],
 
     # The damage type of an unarmed auto-attack, and of a weapon that names none. One of
     # damage_types.

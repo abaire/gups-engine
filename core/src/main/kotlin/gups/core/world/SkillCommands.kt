@@ -1,12 +1,17 @@
 package gups.core.world
 
+import gups.core.EntityId
 import gups.core.model.Actor
 import gups.core.model.Band
+import gups.core.model.Channel
+import gups.core.model.Effect
 import gups.core.model.Item
+import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
 import gups.core.model.TargetKind
+import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
 
 object SkillMsg : MsgGroup(Feature.SKILLS) {
@@ -40,6 +45,43 @@ object SkillMsg : MsgGroup(Feature.SKILLS) {
     msg("cast.resisted.room", "{target} resists {actor}'s {skill}.", "actor,skill,target", "skill")
   val FAILED_SELF = msg("cast.failed.self", "You fail to cast {skill}.", "skill", "skill")
   val FAILED_ROOM = msg("cast.failed.room", "{actor}'s spell fizzles.", "actor", "actor")
+  val ANON_VICTIM_DAMAGE =
+    msg("cast.anon.victim.damage", "{actor}'s {what} hits you!", "actor,what,damage_type", "actor")
+  val ANON_ROOM_DAMAGE =
+    msg(
+      "cast.anon.room.damage",
+      "{actor}'s {what} hits {target}.",
+      "actor,target,what,damage_type",
+      "actor",
+    )
+  val ANON_VICTIM_AID =
+    msg("cast.anon.victim.aid", "{actor}'s {what} makes you feel better.", "actor,what", "actor")
+  val ANON_ROOM_AID =
+    msg(
+      "cast.anon.room.aid",
+      "{actor}'s {what} washes over {target}.",
+      "actor,target,what",
+      "actor",
+    )
+  val ANON_VICTIM_HARM =
+    msg("cast.anon.victim.harm", "{actor}'s {what} makes you feel worse.", "actor,what", "actor")
+  val ANON_ROOM_HARM =
+    msg("cast.anon.room.harm", "{actor}'s {what} strikes {target}.", "actor,target,what", "actor")
+  val ANON_RESISTED_VICTIM =
+    msg("cast.anon.resisted.victim", "You resist {actor}'s {what}.", "actor,what", "actor")
+  val ANON_RESISTED_ROOM =
+    msg(
+      "cast.anon.resisted.room",
+      "{target} resists {actor}'s {what}.",
+      "actor,target,what",
+      "actor",
+    )
+  val ANON_ROOM = msg("cast.anon.room", "{actor} does something.", "actor", "actor")
+  val ANON_ROOM_TARGET =
+    msg("cast.anon.room.target", "{actor} does something to {target}.", "actor,target", "actor")
+  val ANON_VICTIM = msg("cast.anon.victim", "{actor} does something to you.", "actor", "actor")
+  val ANON_NOUN_HARM = msg("cast.anon.noun.harm", "attack")
+  val ANON_NOUN_AID = msg("cast.anon.noun.aid", "aid")
   val INTERRUPTED = msg("cast.interrupted", "Your concentration is broken!")
   val MOVED =
     msg("cast.moved", "You are no longer where you began casting {skill}.", "skill", "skill")
@@ -115,6 +157,45 @@ internal object SkillCommands {
   }
 }
 
+/** One cast's recognition answers, by player id; true = recognized. */
+internal class CastRecognition {
+  val answers = HashMap<EntityId, Boolean>()
+
+  /** Players who recognized the skill without knowing it, in the order they were asked. */
+  val learnedBy = LinkedHashSet<EntityId>()
+}
+
+/**
+ * Whether [viewer] recognizes [skill] cast by [caster]: a player who knows it does, anyone else
+ * asks `rules.recognizes_skill`, and without it doesn't. The answer is kept in [rec], so every line
+ * about the cast agrees.
+ */
+internal fun World.recognizes(
+  viewer: Player,
+  caster: Actor,
+  skill: SkillProto,
+  castTarget: Actor?,
+  rec: CastRecognition,
+): Boolean =
+  rec.answers.getOrPut(viewer.id) {
+    if (skill.label in viewer.skills) return@getOrPut true
+    val answer =
+      rules.recognizesSkill(
+        RulesContext(
+          this,
+          actor = viewer,
+          target = viewer,
+          source = caster,
+          skill = skill,
+          room = viewer.room,
+          castTarget = castTarget,
+        )
+      ) ?: false
+    traceRules(viewer, "recognizes_skill ${skill.label} → $answer")
+    if (answer) rec.learnedBy += viewer.id
+    answer
+  }
+
 /**
  * A skill cast with the full action lifecycle. The target is found by [targetWord] at the first
  * validation, unless the script verb `act_cast` fixed it up front.
@@ -142,6 +223,9 @@ internal class CastAction(
 
   /** The target of an `item` skill: carried, worn or on the ground. */
   private var targetItem: Item? = null
+
+  /** Who recognized the skill, decided once per player over the whole cast. */
+  private val recognition = CastRecognition()
 
   /** The room a `room` skill acts on: the caster's. */
   private var targetRoom: Room? = null
@@ -228,15 +312,16 @@ internal class CastAction(
 
   override fun begin(w: World, actor: Actor) {
     w.tell(actor, SkillMsg.BEGIN_SELF, "skill" to skill.name)
-    // Onlookers who know the spell recognize it; others only see that a spell is starting.
-    for (viewer in actor.room.actorIndex.values) {
-      if (viewer === actor) continue
-      w.send(
-        viewer,
-        if (viewer.skills.containsKey(skill.label))
-          w.msg(SkillMsg.BEGIN_KNOWN, "actor" to actor.name.cap(), "skill" to skill.name)
-        else w.msg(SkillMsg.BEGIN_UNKNOWN, "actor" to actor.name.cap()),
-      )
+    for ((viewer, seen) in
+      w.perceiversOf(actor.room, "cast", actor, setOf(Channel.SIGHT), exclude = arrayOf(actor))) {
+      val line =
+        when {
+          seen.channel != Channel.SIGHT -> seen.text.orEmpty()
+          w.recognizes(viewer, actor, skill, target, recognition) ->
+            w.msg(SkillMsg.BEGIN_KNOWN, "actor" to actor.name.cap(), "skill" to skill.name)
+          else -> w.anonBegin(skill, actor, target)
+        }
+      w.send(viewer, line)
     }
     w.witness(actor.room, actor, "cast_start", skill = skill.label, target = target)
     w.dispatch(
@@ -274,23 +359,50 @@ internal class CastAction(
         else -> w.msg(SkillMsg.DONE_TARGET, "skill" to skill.name, "target" to t.name)
       },
     )
-    if (t != null && t !== actor)
-      w.tell(t, SkillMsg.DONE_VICTIM, "actor" to actor.name.cap(), "skill" to skill.name)
     // Bystanders see every completed cast, so instant spells aren't invisible to the room.
     val who = actor.name.cap()
-    w.tellSight(
-      actor.room,
-      "cast",
-      actor,
+    val everyone =
+      w.perceiversOf(actor.room, "cast", actor, setOf(Channel.SIGHT), exclude = arrayOf(actor))
+
+    fun named(p: Player) = w.recognizes(p, actor, skill, t, recognition)
+    val namedRoomLine =
       when {
         onItem != null ->
           w.msg(SkillMsg.ROOM_ITEM, "actor" to who, "skill" to skill.name, "target" to onItem.name)
         t == null || t === actor -> w.msg(SkillMsg.ROOM_SELF, "actor" to who, "skill" to skill.name)
         else ->
           w.msg(SkillMsg.ROOM_TARGET, "actor" to who, "skill" to skill.name, "target" to t.name)
-      },
-      *listOfNotNull(actor, t).toTypedArray(),
-    )
+      }
+    val targetPlayer = (t as? Player)?.takeIf { it !== actor }
+    val targetNamed = targetPlayer?.let(::named)
+    if (targetPlayer != null && targetNamed == true)
+      w.tell(targetPlayer, SkillMsg.DONE_VICTIM, "actor" to who, "skill" to skill.name)
+    val anonBystanders = mutableListOf<Player>()
+    for ((p, seen) in everyone) {
+      if (p === t) continue
+      when {
+        seen.channel != Channel.SIGHT -> w.send(p, seen.text.orEmpty())
+        named(p) -> w.send(p, namedRoomLine)
+        else -> anonBystanders += p
+      }
+    }
+    // A single enemy target is told of a hit only once the landing roll is known.
+    val awaitsRoll =
+      skill.target == TargetKind.ENEMY &&
+        t != null &&
+        t !== actor &&
+        skill.range != SkillRange.ROOM &&
+        onItem == null &&
+        onRoom == null
+    val roomTarget =
+      if (skill.range == SkillRange.ROOM || t === actor) null else t?.name ?: onItem?.name
+    if (!awaitsRoll) {
+      if (targetPlayer != null && targetNamed == false) {
+        val key = if (skill.range == SkillRange.ROOM) KEY_ROOM else KEY_VICTIM
+        w.send(targetPlayer, w.anonLine(skill, key, actor, null))
+      }
+      for (p in anonBystanders) w.send(p, w.anonLine(skill, KEY_ROOM, actor, roomTarget))
+    }
     // Witnessed before the effects run, so a resolver can make a mob forget the cast.
     w.witness(actor.room, actor, "cast", skill = skill.label, target = t)
     val targets =
@@ -316,21 +428,34 @@ internal class CastAction(
           actor,
           w.msg(SkillMsg.RESISTED_SELF, "target" to each.name.cap(), "skill" to skill.name),
         )
-        w.tell(each, SkillMsg.RESISTED_TARGET, "actor" to actor.name.cap(), "skill" to skill.name)
-        w.tellSight(
-          actor.room,
-          "cast",
-          actor,
-          w.msg(
-            SkillMsg.RESISTED_ROOM,
-            "actor" to who,
-            "skill" to skill.name,
-            "target" to each.name.cap(),
-          ),
-          actor,
-          each,
-        )
+        if (each is Player) {
+          if (named(each))
+            w.tell(each, SkillMsg.RESISTED_TARGET, "actor" to who, "skill" to skill.name)
+          else w.send(each, w.anonLine(skill, KEY_RESISTED_VICTIM, actor, null))
+        }
+        for ((p, seen) in everyone) {
+          if (p === each) continue
+          when {
+            seen.channel != Channel.SIGHT -> w.send(p, seen.text.orEmpty())
+            named(p) ->
+              w.send(
+                p,
+                w.msg(
+                  SkillMsg.RESISTED_ROOM,
+                  "actor" to who,
+                  "skill" to skill.name,
+                  "target" to each.name.cap(),
+                ),
+              )
+            else -> w.send(p, w.anonLine(skill, KEY_RESISTED_ROOM, actor, each.name.cap()))
+          }
+        }
         continue
+      }
+      if (awaitsRoll && each === t) {
+        if (targetPlayer != null && targetNamed == false)
+          w.send(targetPlayer, w.anonLine(skill, KEY_VICTIM, actor, null))
+        for (p in anonBystanders) w.send(p, w.anonLine(skill, KEY_ROOM, actor, t.name))
       }
       if (each != null) landed += each
       // An item or room skill's effect already ran on the item or the room.
@@ -348,7 +473,134 @@ internal class CastAction(
       if (skill.target == TargetKind.ENEMY && reached > 0 && landed.isEmpty()) "resist"
       else "success"
     w.reportCastUse(actor, skill, t, onItem, outcome, landed)
+    w.fireSkillRecognized(recognition, actor, skill, t, outcome, power)
     return skill.lag
+  }
+}
+
+/**
+ * Runs the SKILL_RECOGNIZED handlers of each player who recognized a skill they don't know, in the
+ * order they were asked and then by trait name. A handler that throws is recorded and doesn't stop
+ * the others.
+ */
+private fun World.fireSkillRecognized(
+  rec: CastRecognition,
+  caster: Actor,
+  skill: SkillProto,
+  target: Actor?,
+  outcome: String,
+  power: Int,
+) {
+  val fields =
+    mapOf(
+      "source" to caster,
+      "skill" to skill.label.v,
+      "outcome" to outcome,
+      "target" to target,
+      "power" to power,
+    )
+  for (id in rec.learnedBy) {
+    val player = entities[id] as? Player ?: continue
+    // An earlier handler may have removed the player or taught them the skill.
+    if (!player.inWorld || skill.label in player.skills) continue
+    for (trait in player.traits) {
+      val handler = trait.handlers[TraitEvent.SKILL_RECOGNIZED] ?: continue
+      try {
+        handler.handle(this, player, TraitEvent.SKILL_RECOGNIZED, fields)
+      } catch (e: Exception) {
+        diagnose(
+          "plugin",
+          "trait '${trait.name}' handler ${TraitEvent.SKILL_RECOGNIZED} threw: ${e.message}",
+          e,
+        )
+      }
+    }
+  }
+}
+
+private const val KEY_ROOM = "room"
+private const val KEY_VICTIM = "victim"
+private const val KEY_RESISTED_ROOM = "resisted_room"
+private const val KEY_RESISTED_VICTIM = "resisted_victim"
+
+/** The warmup line for a player who doesn't recognize [skill]. */
+private fun World.anonBegin(skill: SkillProto, caster: Actor, target: Actor?): String {
+  val own = skill.unrecognized["begin"]
+  val values = mapOf("actor" to caster.name.cap(), "target" to target?.name.orEmpty())
+  return if (own != null) Messages.fill(own, values)
+  else msg(SkillMsg.BEGIN_UNKNOWN, "actor" to caster.name.cap())
+}
+
+/** The first damage primitive of [effect], depth-first through sequences, or null. */
+internal fun firstDamage(effect: Effect?): Effect.Damage? =
+  when (effect) {
+    is Effect.Damage -> effect
+    is Effect.Sequence -> effect.effects.firstNotNullOfOrNull(::firstDamage)
+    else -> null
+  }
+
+/**
+ * The line a player who doesn't recognize [skill] is told. [key] is "room", "victim",
+ * "resisted_room" or "resisted_victim"; [target] is the display name of the cast's target (an actor
+ * or item), or null when there is none.
+ */
+internal fun World.anonLine(
+  skill: SkillProto,
+  key: String,
+  caster: Actor,
+  target: String?,
+): String {
+  val noun =
+    skill.unrecognized["noun"]
+      ?: msg(
+        if (skill.target == TargetKind.ENEMY) SkillMsg.ANON_NOUN_HARM else SkillMsg.ANON_NOUN_AID
+      )
+  val dmg = firstDamage(skill.effect)
+  val what =
+    listOfNotNull(dmg?.let { schema.damageTypeAdjective(it.type.name) }, noun).joinToString(" ")
+  val actor = caster.name.cap()
+  val hasTarget = target != null
+  // Without a target, a room line is about the caster (a self-cast) and a victim line about the
+  // viewer.
+  val shown = target ?: if (key == KEY_ROOM) actor else "you"
+
+  skill.unrecognized[key]?.let {
+    return Messages.fill(it, mapOf("actor" to actor, "target" to shown))
+  }
+
+  fun say(m: Msg, vararg extra: Pair<String, Any?>): String {
+    val args = mutableListOf<Pair<String, Any?>>("actor" to actor)
+    if ("target" in m.placeholders) args += "target" to shown
+    if ("what" in m.placeholders) args += "what" to what
+    args += extra
+    return msg(m, *args.toTypedArray())
+  }
+  val damageType = dmg?.let { "damage_type" to schema.damageTypeLabel(it.type.name) }
+
+  if (damageType != null) {
+    if (key == "victim") return say(SkillMsg.ANON_VICTIM_DAMAGE, damageType)
+    if (key == "room" && hasTarget) return say(SkillMsg.ANON_ROOM_DAMAGE, damageType)
+  }
+  when (skill.target) {
+    TargetKind.ENEMY ->
+      when {
+        key == "victim" -> return say(SkillMsg.ANON_VICTIM_HARM)
+        key == "room" && hasTarget -> return say(SkillMsg.ANON_ROOM_HARM)
+        key == "resisted_victim" -> return say(SkillMsg.ANON_RESISTED_VICTIM)
+        key == "resisted_room" -> return say(SkillMsg.ANON_RESISTED_ROOM)
+      }
+    TargetKind.ALLY,
+    TargetKind.SELF ->
+      when {
+        key == "victim" -> return say(SkillMsg.ANON_VICTIM_AID)
+        key == "room" && hasTarget -> return say(SkillMsg.ANON_ROOM_AID)
+      }
+    else -> {}
+  }
+  return when {
+    key == "victim" -> say(SkillMsg.ANON_VICTIM)
+    hasTarget -> say(SkillMsg.ANON_ROOM_TARGET)
+    else -> say(SkillMsg.ANON_ROOM)
   }
 }
 

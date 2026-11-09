@@ -134,27 +134,30 @@ private fun World.spread(
 }
 
 /**
- * Tells each player in [room] except [exclude] about [event] as it happens, with the first thing
- * they perceive, and returns the channel each was told through. The built-in commands tell their
- * own room immediately so reactions appear in order.
+ * How a player perceives an event: on [channel]; [text] is perceive_message's text for a world
+ * channel.
+ */
+internal data class Perceived(val channel: Channel, val text: String?)
+
+/**
+ * The players of [room] (except [exclude]) who would be told an event rendered on [channels], with
+ * the first channel each passes can_perceive for and that has text. Sends nothing.
  *
  * Channels are tried strongest first, in the world's perception order. A channel counts when
- * `rules.can_perceive` lets the player notice it and there is text for it: the engine's own
- * [renderings] for a built-in channel, and whatever `rules.perceive_message` returns for a channel
- * the world declares, with null or empty meaning nothing to say. A player who perceives no channel
- * with text is told nothing, and one who is told through a channel is not told through a weaker
- * one.
+ * `rules.can_perceive` lets the player notice it and there is text for it: the channel is in
+ * [channels], or it is a channel the world declares and `rules.perceive_message` returns something
+ * for it (kept in [Perceived.text]), with null or empty meaning nothing to say.
  */
-internal fun World.tellPerceivers(
+internal fun World.perceiversOf(
   room: Room,
   event: String,
   source: Actor?,
-  renderings: Map<Channel, String>,
+  channels: Set<Channel>,
   intensity: Int = 1,
   eventText: String? = null,
   vararg exclude: Actor,
-): Map<Player, Channel> {
-  val told = LinkedHashMap<Player, Channel>()
+): Map<Player, Perceived> {
+  val out = LinkedHashMap<Player, Perceived>()
   for (a in room.actorIndex.values) {
     if (a !is Player || exclude.any { it === a }) continue
     for (channel in schema.perceptionOrder) {
@@ -173,13 +176,39 @@ internal fun World.tellPerceivers(
           text = eventText,
         )
       if (!rules.canPerceive(c)) continue
-      val line =
-        renderings[channel] ?: if (channel in Channel.BUILT_IN) null else rules.perceiveMessage(c)
+      if (channel in channels) {
+        out[a] = Perceived(channel, null)
+        break
+      }
+      if (channel in Channel.BUILT_IN) continue
+      val line = rules.perceiveMessage(c)
       if (line.isNullOrEmpty()) continue
-      send(a, line)
-      told[a] = channel
+      out[a] = Perceived(channel, line)
       break
     }
+  }
+  return out
+}
+
+/**
+ * Tells each player in [room] except [exclude] about [event] as it happens, with the first thing
+ * they perceive, and returns the channel each was told through. The built-in commands tell their
+ * own room immediately so reactions appear in order. See [perceiversOf] for who is told and how.
+ */
+internal fun World.tellPerceivers(
+  room: Room,
+  event: String,
+  source: Actor?,
+  renderings: Map<Channel, String>,
+  intensity: Int = 1,
+  eventText: String? = null,
+  vararg exclude: Actor,
+): Map<Player, Channel> {
+  val told = LinkedHashMap<Player, Channel>()
+  for ((p, seen) in
+    perceiversOf(room, event, source, renderings.keys, intensity, eventText, *exclude)) {
+    send(p, renderings[seen.channel] ?: seen.text.orEmpty())
+    told[p] = seen.channel
   }
   return told
 }

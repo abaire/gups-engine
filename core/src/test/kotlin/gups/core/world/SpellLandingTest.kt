@@ -120,6 +120,8 @@ class SpellLandingTest {
     caster.skills[enemySkillLabel] = 100
     val victim = f.player("Victim")
     val bystander = f.player("Bystander")
+    victim.skills[enemySkillLabel] = 10
+    bystander.skills[enemySkillLabel] = 10
 
     // Equip victim with ward cloak
     f.w.moveItem(

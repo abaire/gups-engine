@@ -130,8 +130,8 @@ gups-engine/
   cli/         the `gups` binary, the docs renderer (§4.16)
   webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
                as resources
-  samples/     sample plugins: weather-plugin, heritage-plugin (race and class) and
-               curse-plugin (§4.15); robot-world, a small non-fantasy course world with its own schema and
+  samples/     sample plugins: weather-plugin, heritage-plugin (race and class), curse-plugin,
+               hunger-plugin and bluemage-plugin (§4.15); robot-world, a small non-fantasy course world with its own schema and
                features (§3.9, §3.10)
   template-world/  the course world template, including the canonical tutorial zone,
                //lib and //rules (§2.3)
@@ -716,7 +716,8 @@ module(
     stat("wis", label="Wisdom"), stat("cha", label="Charisma"), "armor",
   ],
   vitals=[vital("hp", label="Hit points"), "mana", vital("move", label="Movement")],
-  damage_types=["bludgeon", "slash", "pierce", "fire"],
+  damage_types=[damage_type("bludgeon", adjective="crushing"), damage_type("slash", adjective="slashing"),
+                damage_type("pierce", adjective="piercing"), damage_type("fire", adjective="fiery")],
   unarmed_damage_type="bludgeon",
   channels=["spell"],
   prompt="<{hp}hp {mana}m {move}mv> ",
@@ -738,9 +739,11 @@ module(
 )
 ```
 
-- **Declarations:** `stat(name, label = None)` and `vital(name, label = None)`; a plain string is the same as the call
-  with only a name. The label is shown to players (`score`, GMCP) and defaults to the name with its first letter
-  capitalized. Declaration order is display order everywhere.
+- **Declarations:** `stat(name, label = None)`, `vital(name, label = None)` and `damage_type(name, label = None,
+  adjective = None)`; a plain string is the same as the call with only a name. The label is shown to players (`score`,
+  GMCP, messages) and defaults to the name with its first letter capitalized. A damage type's `adjective` (`"fiery"`)
+  describes a hit of that type in the lines told to onlookers who don't recognize a skill (§4.3); it is a non-empty
+  single line, or `None` for no adjective. Declaration order is display order everywhere.
 - **Numbers belong to actors, not the schema.** A schema has no starting values, maxima or floors: every new character
   and every spawned mob gets its numbers from `rules.starting_stats` (§4.6), so they may differ per actor and be
   randomized.
@@ -796,8 +799,8 @@ module(
   order) in `meta.world_schema`. A later start whose `MODULE.gups` declares different names refuses to start, detailing
   the added, removed, or reordered elements and explaining that saved characters and items cannot follow schema
   modifications without a `--wipe` ([SchemaRecord.kt](../persist/src/main/kotlin/gups/persist/SchemaRecord.kt)). Labels,
-  `prompt` and `unarmed_damage_type` are not recorded per database and need only a restart. `gups migrate-check`
-  verifies schema compatibility the same way (§7.3).
+  damage type adjectives, `prompt` and `unarmed_damage_type` are not recorded per database and need only a restart.
+  `gups migrate-check` verifies schema compatibility the same way (§7.3).
 
 ### 3.10 Feature Modules
 
@@ -1078,6 +1081,8 @@ skill("fireball",
       effect=damage(dice="4d6", type=DAMAGE.fire),
       resolve=None,  # optional custom Starlark effect: def f(ctx)
       tags=["arcane"],  # free-form, for plugins (§4.19)
+      unrecognized={"noun": "bolt",  # optional; what onlookers who don't recognize it see (below)
+                    "victim": "{actor}'s bolt of flame burns you!"},
       )
 ```
 
@@ -1085,6 +1090,19 @@ skill("fireball",
 the caster only, and `room` affects everyone in the room except the caster (and, with a bubble, except dormant actors).
 Without the `track` feature, `melee`, `near` and `far` are load errors, and an omitted `range` means any one target in
 the room.
+
+**`unrecognized`:** optional lines for players who don't recognize the skill (**Recognition**, below). Its keys are
+`begin`, `room`, `victim`, `resisted_room`, `resisted_victim` and `noun`; each is optional. `noun` (`"breath"`,
+`"spell"`) names the skill in the engine's anonymous lines. The others replace a whole line:
+
+- `begin`: the warmup line.
+- `room`: what bystanders see when the cast resolves, with or without a target.
+- `victim`: what the target sees.
+- `resisted_room` and `resisted_victim`: the lines when an `enemy` skill is resisted.
+
+Lines may use `{actor}` and `{target}`. `{target}` is a load error on a skill whose `target` is `self`, `none` or
+`room`, and in `room` on a skill whose `range` is `room`, which has no single target. An unknown key or placeholder is a
+load error too. Every value is a non-empty single line.
 
 **Costs:** a cost is affordable when each named vital's `current` is at least the amount. Otherwise the cast fails
 validation with "You don't have enough <label>." (§4.18).
@@ -1109,6 +1127,32 @@ validation with "You don't have enough <label>." (§4.18).
   somewhere else when the warmup ends, the cast fails with `cast.moved`, the same way a cast whose target has left
   fails.
 - The target is chosen at the first validation and stays fixed through the warmup.
+
+**Recognition:** each player other than the caster who is told about a cast either recognizes the skill and sees its
+name, or doesn't and sees an anonymous line.
+
+- **When it's decided:** once per player per cast, at the first line about the cast they get. That is the warmup line
+  for a player who sees it. For an instant cast, or for someone who arrived mid-warmup, it is the resolution. Every
+  later line about that cast follows the same answer.
+- **How it's decided:** a player who knows the skill recognizes it. Anyone else asks the optional
+  `rules.recognizes_skill` (§4.6), and without it doesn't recognize it.
+- **Who is told:** bystanders are told when they see the caster (§5.7). One reached only through a world channel is told
+  that channel's `perceive_message` text, as today, and isn't asked. The cast's target is told whether or not they see.
+  Mobs are never asked.
+- **What the caster sees:** their own lines always name the skill.
+- **When an `enemy` skill is resisted:** a player who doesn't recognize it is told of a hit only once the skill lands.
+  If the target resists, they get only the resisted lines.
+- **The anonymous line**, from the first source that has one:
+  1. The skill's `unrecognized` entry for that line.
+  2. For a skill whose `effect` deals damage (its first `damage(...)`, reading into `sequence`), a line naming the
+     damage.
+  3. An aid line for an `ally` or `self` skill, or a harm line for an `enemy` skill.
+  4. A generic line. A room line with no single target, such as from a `range="room"` skill, always uses the generic
+     line.
+
+The engine's lines (§4.18) use `{what}`: the damage type's `adjective` and a space when it has one, then the skill's
+`unrecognized["noun"]`, or "attack" for an `enemy` skill and "aid" for the others (`cast.anon.noun.harm` and
+`cast.anon.noun.aid`). A fizzle (`cast.failed.room`) names no skill and doesn't change.
 
 **Success and power:** when a cast resolves (after any warmup), costs are deducted from the caster's vitals and the
 engine asks whether the cast gets off: `rules.skill_check` with `ctx.skill` set, then the caster's `skill_check` chain
@@ -1536,12 +1580,26 @@ non-test file of the package; defining it in two is a load error naming both fil
 for the package, after all its files have loaded, since it belongs to no file; a forbidden export or a public function
 that isn't an export is reported at its file and line. The engine has no built-in ruleset and nothing to fall back to:
 every export that an enabled feature uses (the "Feature" column) must be defined, and an export of a feature that is off
-must not be. Nine exports are optional: `xp_share`, whose default pays the killer the whole pool, `owned_behaviors` and
+must not be. Ten exports are optional: `xp_share`, whose default pays the killer the whole pool, `owned_behaviors` and
 `leash_return`, whose defaults are described in §4.7, `move_pace`, whose default is 100 (§5.5), `chain_think`, whose
-default is described in §5.8, `target_order`, without which behaviors choose as §4.7 describes, and `factions`,
-`standing` and `standing_change`, whose defaults are described in §5.14. The engine calls them with a rules `ctx` that
-is read-only, apart from `deny`. Any other public top-level function in a rules file (one whose name doesn't start with
-`_`) is a load error for the rules package. A misspelled export can't be silently ignored; helpers take a `_` prefix.
+default is described in §5.8, `target_order`, without which behaviors choose as §4.7 describes, `factions`, `standing`
+and `standing_change`, whose defaults are described in §5.14, and `recognizes_skill`, without which only players who
+know a skill recognize it (§4.3). The engine calls them with a rules `ctx` that is read-only, apart from `deny`. Any
+other public top-level function in a rules file (one whose name doesn't start with `_`) is a load error for the rules
+package. A misspelled export can't be silently ignored; helpers take a `_` prefix.
+
+**Plugin-declared exports:** a plugin may declare optional exports of its own (§4.15), named `<plugin id>_<name>`
+(`bluemage_learn_chance`). The rules package may define any of them; defining one no loaded plugin declares is the usual
+"is not a rules export" load error.
+
+- **The call:** the plugin calls its export with fields of its choosing. `actor`, `target`, `source`, `skill` and `item`
+  become those `ctx` fields. `base` is `ctx.base`, the value the plugin would use by itself. Anything else is in
+  `ctx.args`, a dict.
+- **Results:** the result must be the declared type (`int` or `bool`). A wrong type or an error is a rules diagnostic,
+  and the plugin gets its default.
+- **Dry run:** the load-time dry run calls each defined plugin export once, with the dry-run player as `ctx.actor`, the
+  throwaway mob as `ctx.source`, `ctx.base` 0 or `False`, and empty `ctx.args`.
+- **Tracing:** `@trace rules` shows each call.
 
 **The rules `ctx`** has `actor`, `attacker` (the same actor), `defender` and `target` (the other actor, if any: the
 defender, the pinner, the killed or the killer, or the actor advanced on or retreated from), `weapon`, `item`, `band` (a
@@ -1558,14 +1616,16 @@ contributed by an actor affect or an item's instance affect, that affect's view,
 and in `carry_limit`'s own call), `carried` (the carried and worn weight, containers' contents included, in
 `encumbrance_level` and `encumbrance`; `None` elsewhere), `encumbrance_level` (the level just computed, in
 `encumbrance`; `None` elsewhere), `behaviors` (in `owned_behaviors`, the mob's prototype behaviors as behavior values;
-`None` elsewhere), `away` and `past_leash` (in `leash_return`: pulses since the mob became eligible to go home, and
-whether it is past its leash; `None` elsewhere), `behavior` (in `target_order`, the behavior asking: `"aggressive"`,
-`"assist"` or `"retarget"`; in `chain_think`, the source of the proposal that ran: a behavior name such as `"pursue"`,
-`"leash"` for the return home, or `"think"` for an action `think` chose; otherwise `None`), `command` (in `chain_think`,
-the command line of the action that finished; otherwise `None`), `chain` (in `chain_think`, how many chained thinks in a
-row led to that action, 0 after an ordinary think; otherwise `None`), `prefer` (in `target_order`, the behavior's
-`prefer`; otherwise `None`), `candidates` (in `target_order`, the actors to choose from, in ascending id; otherwise
-`None`), `current` (in `target_order`, the mob's primary target for `retarget` and the ally's for `assist`, or `None`),
+`None` elsewhere), `cast_target` (in `recognizes_skill`, the cast's target actor or `None`; `None` elsewhere), `base`
+and `args` (in a plugin-declared export, the plugin's own value and a dict of its extra fields; `None` elsewhere),
+`away` and `past_leash` (in `leash_return`: pulses since the mob became eligible to go home, and whether it is past its
+leash; `None` elsewhere), `behavior` (in `target_order`, the behavior asking: `"aggressive"`, `"assist"` or
+`"retarget"`; in `chain_think`, the source of the proposal that ran: a behavior name such as `"pursue"`, `"leash"` for
+the return home, or `"think"` for an action `think` chose; otherwise `None`), `command` (in `chain_think`, the command
+line of the action that finished; otherwise `None`), `chain` (in `chain_think`, how many chained thinks in a row led to
+that action, 0 after an ordinary think; otherwise `None`), `prefer` (in `target_order`, the behavior's `prefer`;
+otherwise `None`), `candidates` (in `target_order`, the actors to choose from, in ascending id; otherwise `None`),
+`current` (in `target_order`, the mob's primary target for `retarget` and the ally's for `assist`, or `None`),
 `current_since` (in `target_order` for `retarget`, the pulse the mob's primary target last changed; otherwise `None`),
 `dispositions` (in `target_order` with the `standing` feature, the mob's disposition toward each candidate, in the same
 order; otherwise `None`), `ally` (in `target_order` for `assist`, the ally being helped; otherwise `None`),
@@ -1609,6 +1669,7 @@ verbs. Its actor views have the schema fields of §4.5, and `choices`, `traits` 
 | `interrupt_check(ctx, amount)`                | `skills`             | Whether a casting actor is interrupted, a bool.                                                                                                                                                                     |
 | `skill_check(ctx)`                            | `skills`             | Percent chance that `ctx.actor` gets `ctx.skill` off, rolled once per cast at resolution (§4.3). `ctx.target`, `ctx.item` (an `item` skill's item).                                                                 |
 | `skill_power(ctx)`                            | `skills`             | Percent strength of a successful cast; 100 is the skill as declared (§4.3). Same fields as `skill_check`.                                                                                                           |
+| `recognizes_skill(ctx)`                       | `skills`             | `bool`. Whether `ctx.actor`, a player watching `ctx.source` cast `ctx.skill` (or its target, `ctx.cast_target`), recognizes the skill without knowing it (§4.3). Asked at most once per player per cast.            |
 | `sense_cost(ctx)`                             | kernel               | `int`. What an event on `ctx.channel` loses crossing `ctx.exit` into `ctx.room`, one hop toward the listeners; a negative price blocks the hop and 0 is free. `ctx.actor` is `None`.                                |
 | `can_perceive(ctx)`                           | kernel               | `bool`. Whether the candidate listener `ctx.actor` notices the event (§5.7), including the `notice` event `aggressive` asks once per candidate.                                                                     |
 | `perceive_message(ctx)`                       | kernel               | `str` or `None`. What a player is told about an event they can perceive: in another room, or for a `shout`, also in its own room. In the event's own room otherwise, it is asked only about a world channel.        |
@@ -1644,6 +1705,18 @@ return proposal. `ctx.away` counts pulses since the mob became eligible, without
 `False` doesn't). `ctx.past_leash` tells a mob past its leash from one only outside its home ground. Without the export,
 mobs go home at once. A world makes a mob linger (`return ctx.away >= 40`), hold a post longer, or never go back, by
 reading its label, flags, `attrs` or affects. A failing call counts as `True`, so a broken rule can't strand mobs.
+
+**`recognizes_skill`**: asked about a player who doesn't know the skill, when the engine first tells them about a cast
+(§4.3 **Recognition**). Its `ctx`:
+
+- `ctx.actor` (also `ctx.target`): the onlooker.
+- `ctx.source`: the caster.
+- `ctx.skill`: the skill.
+- `ctx.cast_target`: the cast's target actor, or `None`.
+- `ctx.room`, `pulse` and `rng`.
+
+Its `kind` and `tags` let a world make some skills harder or impossible to recognize. A rules error counts as `False`.
+When defined, the load-time dry run calls it with the dry-run player as onlooker and the throwaway mob as caster.
 
 **`move_pace`**: asked whenever a script reads an actor's `move_pace` view field, with `ctx.exit` `None`; while the
 export or its chain is running, that view field reads 100, so a rule can't recurse into itself. It is also asked once
@@ -2783,11 +2856,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   Starlark builtins (with automatic parameter binding and type conversion), player commands (fast or tick lane, with
   optional roles and categories), custom effect primitives, GMCP state packages and event packages, GMCP input handlers
   (`onGmcp`), custom hook handlers (`addHook`), world start callbacks (`onWorldStarted`), periodic work (`every`),
-  engine event listeners (`onEvent`), traits (`PluginTrait`), character creation definitions (`PluginCreation`, with
-  custom steps `PluginCreationStep` and the `prepare` callback), action restrictions (`PluginRestrictionPoint.WEAR`,
-  `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`), containment filters (`addContainmentFilter`),
-  owned behaviors (`addOwnedBehaviors`), chained thinks (`addChainThink`), disposition modifiers
-  (`addDispositionModifier`) and faction lists (`addFactions`). See
+  engine event listeners (`onEvent`), traits (`PluginTrait`, with event callbacks, `on`), character creation definitions
+  (`PluginCreation`, with custom steps `PluginCreationStep` and the `prepare` callback), action restrictions
+  (`PluginRestrictionPoint.WEAR`, `ENTER`, `CAST`, `LEARN`, `REMOVE`, `DROP`, `GIVE`, `PUT`, `ORDER`), containment
+  filters (`addContainmentFilter`), owned behaviors (`addOwnedBehaviors`), chained thinks (`addChainThink`), disposition
+  modifiers (`addDispositionModifier`), faction lists (`addFactions`) and optional rules exports (`addRulesExport`). See
   [PluginApi.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginApi.kt).
 - **The Facade (`PluginWorld` and `PluginEntity`):** Plugins never interact directly with internal mutable `World` or
   entity instances. Instead, the engine provides safe facades
@@ -2797,10 +2870,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   verbs (`send`, `gmcp`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
   `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`,
   `removeTrait`, `setSkill`, `removeSkill`, `reportSkillUse`, `setBaseStat`, `setBaseMaxVital`, `setBaseResist`,
-  `awardXp`, `takeXp`, `levelUp`, `levelDown`), query methods, RNG access, and read-only views of live entities
-  (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`). All facade mutations execute synchronously on the world
-  thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which holds the reads (except `rng`), `send`,
-  `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers receive.
+  `awardXp`, `takeXp`, `levelUp`, `levelDown`, `rules`), query methods (including `skill(label)`, a loaded skill's
+  `PluginSkill` view or null), RNG access, and read-only views of live entities (`PluginRoom`, `PluginActor`,
+  `PluginItem`, `PluginSkill`). All facade mutations execute synchronously on the world thread with invariant checking.
+  `PluginWorld` extends `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose`
+  and `log`; it is what GMCP input handlers receive.
 
 **Plugin capabilities and lifecycle:**
 
@@ -2859,6 +2933,18 @@ subsystems (`core` or `script`). It consists of three primary components:
   skill's label), `outcome` (`"fail"`, `"resist"`, `"success"` or `"report"`), `target` (or null), `item` (or null) and
   `targets` (the landed actors). Ints are `Long`s and actors `PluginActor`s. A listener for an event whose feature is
   off registers and never runs. A throw records a `plugin` diagnostic.
+- **Trait callbacks:** `PluginTrait(on = mapOf(PluginTraitEvent.SKILL_RECOGNIZED to handler))` runs the handler for each
+  bearer of the trait when the event happens to it (§4.19). The call carries a `PluginWorld`, which may change the
+  world, along with the event, the `bearer` and `fields`. For `SKILL_RECOGNIZED`, the fields are `source` (a
+  `PluginActor`), `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power` (a `Long`). A throw
+  records a `plugin` diagnostic.
+- **Rules exports:** `addRulesExport(name, doc, type)` declares an optional rules export the world may define (§4.6).
+  - **Names:** `name` must be `<id>_<snake_case>`. Registering a name twice fails `register`.
+  - **Types:** `type` is `PluginRulesType.INT` or `BOOL`.
+  - **Calling it:** `world.rules(name, fields, default)` runs the world's definition and returns a `Long` or a
+    `Boolean`. When the world doesn't define it, or the call fails, it returns `default`. Calling a name the plugin
+    didn't declare throws.
+  - **Docs:** declared exports appear with the plugin's docs.
 - **Failures at run time:** Exceptions in commands, effect callbacks, GMCP producers, GMCP input handlers, custom hook
   handlers, periodic work, event listeners, or `onWorldStarted` hooks are caught and logged as `plugin` diagnostics
   while world execution continues.
@@ -3027,6 +3113,12 @@ subsystems (`core` or `script`). It consists of three primary components:
   the `hunger` feature, refuses worlds without an `hp` vital, raises each simulated player's hunger every world tick
   with `every(120)` and warns them as it grows, resets it from an `on_death` event listener, and adds a
   `hunger.eat(actor, amount)` builtin for item `on_use` hooks.
+- **Blue Mage Plugin ([samples/bluemage-plugin](../samples/bluemage-plugin/README.md)):** trait callbacks and
+  plugin-declared rules exports. Its `blue_mage` trait, granted by the `bluemage.awaken(actor)` builtin, handles
+  `SKILL_RECOGNIZED`. When a blue mage recognizes a mob's skill tagged `blue` that they don't know, they may learn it at
+  proficiency 10. The chance falls with the caster's level above theirs and with the cast's power, rises if they were
+  the target, passes through the optional rules export `bluemage_learn_chance`, and is clamped to 0–33%. A `bluemagic`
+  command lists what they learned this way.
 
 **The guide:** [PLUGINS.md](PLUGINS.md) covers building plugins against `plugin-api` (Gradle setup, `GupsPlugin`,
 `PluginApi.VERSION`, service descriptors), facade operations, extension points with `WeatherPlugin` as a running
@@ -3182,6 +3274,21 @@ mechanics ("You begin casting" becomes "Your implant spins up").
     `cast.resisted.room` (`"{target} resists {actor}'s {skill}."`, placeholders `target`, `actor`, `skill`).
   - Cast failure entries include `cast.failed.self` (`"You fail to cast {skill}."`, placeholders `skill`, required
     `skill`) and `cast.failed.room` (`"{actor}'s spell fizzles."`, placeholders `actor`, required `actor`).
+  - Anonymous cast entries, for players who don't recognize a skill (§4.3); see the list below.
+    - Placeholders `actor`, `target` and `what`. The damage lines also take `damage_type`, the type's label.
+    - `cast.anon.victim.damage`: "{actor}'s {what} hits you!"
+    - `cast.anon.room.damage`: "{actor}'s {what} hits {target}."
+    - `cast.anon.victim.aid`: "{actor}'s {what} makes you feel better."
+    - `cast.anon.room.aid`: "{actor}'s {what} washes over {target}."
+    - `cast.anon.victim.harm`: "{actor}'s {what} makes you feel worse."
+    - `cast.anon.room.harm`: "{actor}'s {what} strikes {target}."
+    - `cast.anon.resisted.victim`: "You resist {actor}'s {what}."
+    - `cast.anon.resisted.room`: "{target} resists {actor}'s {what}."
+    - `cast.anon.room`: "{actor} does something."
+    - `cast.anon.room.target`: "{actor} does something to {target}."
+    - `cast.anon.victim`: "{actor} does something to you."
+    - `cast.anon.noun.harm`: "attack", and `cast.anon.noun.aid`: "aid" (no placeholders).
+    - `cast.begin.unknown` remains the anonymous warmup line.
 - **Coverage:** every message to players and onlookers from the engine and its features: command replies and refusals,
   combat, cast and condition messages, `look`, `score`, `who` and `help` framing, and login and character-menu text.
   Output of `@` tools isn't in the catalog; staff see engine terms.
@@ -3306,6 +3413,16 @@ no traits and no restrictions, and players see nothing new.
     spell's roll and damage (§4.15). They join the chain after the room's modifiers and before the actor's affects
     (§4.6), and `@trace` shows them as `trait:<name>`. Like a script modifier, one that fails or returns the wrong type
     leaves the value as it was; the failure is a `plugin` diagnostic.
+  - **Callbacks:** a trait may handle events of its bearer. Unlike modifiers, a handler may change the world, through
+    the plugin facade (§4.15). The one event is `skill_recognized`:
+    - **When it fires:** for each player who recognized a skill they don't know (§4.3) on a cast whose outcome is
+      `success` or `resist`, after that cast's `on_skill_use`.
+    - **Order:** in the order the players were asked, then by trait name.
+    - **Fields:** `source` (the caster), `skill` (its label), `outcome`, `target` (the cast's target actor, or null) and
+      `power` (the cast's power).
+    - **Who is skipped:** a bearer no longer in the world, or who has meanwhile learned the skill (an earlier handler
+      may have taught it).
+    - **Failures:** a handler that throws records a `plugin` diagnostic.
   - **Schema names:** Stats, vitals, and damage types named in a trait are checked when the plugin registers it (§4.15).
 
 **Restrictions** are checks that plugins register at eight points. Each gets the actor and what it is about to do, and
@@ -3513,7 +3630,8 @@ For each popped action:
 3. **Warmup:**
 
 - If `warmup > 0`, set `casting = CastState(action, endsAt)` and fire `on_cast_start`.
-- Onlookers who know the skill see "<caster> begins casting <skill>."; others see "<caster> begins casting."
+- Each player who sees the caster (§5.7) is told "<caster> begins casting <skill>." if they recognize the skill (§4.3),
+  and otherwise the skill's `unrecognized["begin"]` or "<caster> begins casting."
 - Each incoming `damage` event calls `rules.interrupt_check`. A `stun` always interrupts if `interrupt.stun`.
 - An interrupt clears `casting`, pays no cost, and applies `lag / 2` (rounded down).
 
@@ -3525,8 +3643,10 @@ For each popped action:
 - Pay the cost.
 - For casts, roll `skill_check` (§4.3). On a failure the caster and onlookers get the `cast.failed.*` messages and the
   rest of this step is skipped, including the `on_*` hooks; recovery still applies. Otherwise compute `skill_power`.
-- For casts, everyone else in the room except the target sees "<caster> casts <skill>.", with " at <target>" or " on
-  <item>" when there is one. Instant casts are seen too.
+- For casts, everyone else in the room who sees it, except the target, is told "<caster> casts <skill>." (with " at
+  <target>" or " on <item>" when there is one) if they recognize the skill. The target is told the same way. A player
+  who doesn't recognize the skill gets an anonymous line instead (§4.3); for an `enemy` skill, that line comes after the
+  landing roll, and only if it lands. Instant casts are told too.
 - Apply the `effect`, or call `resolve(ctx)`. For an `enemy` skill, each victim first rolls to land (§4.3); a victim
   that resists gets neither. All mutations go through verbs.
 - Fire the `on_*` hooks (`on_cast`, `on_damage`, …).
@@ -3829,13 +3949,13 @@ never propagated and never sent to `on_perceive`, only used to decide whether th
   order and gets the first line for a channel they pass. The context's intensity is 2 for combat, the door's own for
   doors and containers, and 1 otherwise.
 
-|                                                                                            Event                                                                                            |                              Channels                               |
-|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
-| `emote`, `enter`/`exit` (also teleport, respawn and a summon fading), `drop`, `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast`, item decay, `incapacitated`, `recovered` | `sight`                                                             |
-| `whisper` (the gesture seen by bystanders; its words go only to the target)                                                                                                                 | `sight`                                                             |
-| `say`                                                                                                                                                                                       | `sound`                                                             |
-| `combat_start`, `combat`, `death`                                                                                                                                                           | `sight`, then `sound`                                               |
-| door or container `open`, `close`, `lock`, `unlock`                                                                                                                                         | `sight`, then `sound` (only when `rules.door_intensity` is above 0) |
+|                                                                                                              Event                                                                                                               |                              Channels                               |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `emote`, `enter`/`exit` (also teleport, respawn and a summon fading), `drop`, `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast` (its warmup line and its resolution), item decay, `incapacitated`, `recovered` | `sight`                                                             |
+| `whisper` (the gesture seen by bystanders; its words go only to the target)                                                                                                                                                      | `sight`                                                             |
+| `say`                                                                                                                                                                                                                            | `sound`                                                             |
+| `combat_start`, `combat`, `death`                                                                                                                                                                                                | `sight`, then `sound`                                               |
+| door or container `open`, `close`, `lock`, `unlock`                                                                                                                                                                              | `sight`, then `sound` (only when `rules.door_intensity` is above 0) |
 
 A `say` has no sight alternative, and `shout` has its own delivery.
 

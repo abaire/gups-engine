@@ -102,6 +102,74 @@ class WorldModuleTest {
   }
 
   @Test
+  fun `damage types mix names and damage_type calls, in declaration order`() {
+    val schema =
+      read(
+          mod(
+            schema =
+              "stats = [\"str\"], vitals = [\"hp\"], damage_types = [\"cold\", damage_type(\"fire\", label = \"Flame\", adjective = \"fiery\"), damage_type(\"poison\")], unarmed_damage_type = \"fire\""
+          )
+        )
+        .first
+        .schema
+    assertEquals(listOf("cold", "fire", "poison"), schema.damageTypes)
+    assertEquals(listOf("Cold", "Flame", "Poison"), schema.damageTypes.map(schema::damageTypeLabel))
+    assertEquals(listOf(null, "fiery", null), schema.damageTypes.map(schema::damageTypeAdjective))
+  }
+
+  @Test
+  fun `an adjective must be a non-empty single line`() {
+    for (adjective in listOf("\"\"", "\"fire\" + \"\\n\" + \"ice\"")) {
+      assertContains(
+        assertNotNull(
+            read(
+                mod(
+                  schema =
+                    "stats = [\"str\"], vitals = [\"hp\"], damage_types = [damage_type(\"fire\", adjective = $adjective)], unarmed_damage_type = \"fire\""
+                )
+              )
+              .second
+          )
+          .message,
+        "damage_type(adjective): must be a non-empty single line",
+      )
+    }
+  }
+
+  @Test
+  fun `a damage type that is neither a name nor a damage_type fails to load`() {
+    assertContains(
+      assertNotNull(
+          read(
+              mod(
+                schema =
+                  "stats = [\"str\"], vitals = [\"hp\"], damage_types = [1], unarmed_damage_type = \"fire\""
+              )
+            )
+            .second
+        )
+        .message,
+      "module(damage_types): expected a name or damage_type(...), got int",
+    )
+  }
+
+  @Test
+  fun `labels and adjectives don't change the recorded schema names`() {
+    val schema =
+      read(
+          mod(
+            schema =
+              "stats = [\"str\"], vitals = [\"hp\"], damage_types = [damage_type(\"fire\", label = \"Flame\", adjective = \"fiery\"), \"cold\"], unarmed_damage_type = \"fire\""
+          )
+        )
+        .first
+        .schema
+    assertEquals(listOf("fire", "cold"), schema.names.damageTypes)
+    assertEquals(listOf("str"), schema.names.stats)
+    assertEquals(listOf("hp"), schema.names.vitals)
+  }
+
+  @Test
   fun `a bad name is a problem`() {
     assertContains(
       problems(

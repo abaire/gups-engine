@@ -1165,6 +1165,13 @@ class SkillView internal constructor(val skill: SkillProto, private val schema: 
   fun tags(): Any = sList(skill.tags.sorted())
 
   @StarlarkMethod(
+    name = "unrecognized",
+    structField = true,
+    doc = "Lines for onlookers who don't recognize the skill, by key.",
+  )
+  fun unrecognized(): Any = sDict(skill.unrecognized.toSortedMap())
+
+  @StarlarkMethod(
     name = "kind",
     structField = true,
     doc = "Skill category, such as 'spell' or 'skill'.",

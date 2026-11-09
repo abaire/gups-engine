@@ -45,7 +45,8 @@ fun world(
   bubble: Boolean = false,
 ): World {
   val dir = WorldDir(tempWorld(files))
-  val loader = ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = plugins.globals)
+  val loader =
+    ScriptLoader(dir, ScriptLimits.HARNESS, plugins = plugins, pluginGlobals = plugins.globals)
   val result = loader.load(dir.packages())
   check(result.ok) { result.report() }
   val host = StarlarkHost(result, ScriptLimits.HARNESS)

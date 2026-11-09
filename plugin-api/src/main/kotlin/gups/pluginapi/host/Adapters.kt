@@ -2,6 +2,7 @@ package gups.pluginapi.host
 
 import gups.core.Label
 import gups.core.Rng
+import gups.core.model.Actor
 import gups.core.model.Channel
 import gups.core.model.CreationAttempt
 import gups.core.model.CreationChoice
@@ -15,6 +16,8 @@ import gups.core.model.RestrictionPoint
 import gups.core.model.StepReply
 import gups.core.model.StepView
 import gups.core.model.Trait
+import gups.core.model.TraitEvent
+import gups.core.model.TraitHandler
 import gups.core.model.TraitModifier
 import gups.core.model.didYouMean
 import gups.core.world.ChainThinkAdjuster
@@ -47,6 +50,8 @@ import gups.pluginapi.PluginStepReply
 import gups.pluginapi.PluginTargetChoice
 import gups.pluginapi.PluginTargetOrderCall
 import gups.pluginapi.PluginTrait
+import gups.pluginapi.PluginTraitCall
+import gups.pluginapi.PluginTraitEvent
 import gups.pluginapi.PluginWorld
 import java.util.Collections
 
@@ -315,6 +320,39 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
           }
         }
       }
+  val handlers =
+    pt.on
+      .mapKeys { TraitEvent.valueOf(it.key.name) }
+      .mapValues { (event, handler) ->
+        TraitHandler { w, bearer, _, fields ->
+          val call =
+            PluginTraitCall(
+              world = WorldFacade(w, pluginId, Facades.logOf(w)),
+              event = PluginTraitEvent.valueOf(event.name),
+              bearer = ActorFacade(bearer, w),
+              fields =
+                fields.mapValues { (_, v) ->
+                  when (v) {
+                    is Actor -> ActorFacade(v, w)
+                    is Int -> v.toLong()
+                    else -> v
+                  }
+                },
+            )
+          try {
+            handler.handle(call)
+          } catch (e: Throwable) {
+            w.record(
+              Diagnostic(
+                w.pulse,
+                "plugin",
+                "plugin '$pluginId': trait '${pt.name}' handler $event threw: ${e.message}",
+                e,
+              )
+            )
+          }
+        }
+      }
   return Trait(
     name = pt.name,
     label = pt.label,
@@ -325,6 +363,7 @@ internal fun traitAdapter(pluginId: String, pt: PluginTrait): Trait {
     flags = pt.flags,
     modifiers = mods,
     senseDeltas = pt.senseDeltas.mapKeys { Channel(it.key) },
+    handlers = handlers,
   )
 }
 

@@ -170,13 +170,13 @@
         {
           "symbol": "module.damage_types",
           "name": "damage_types",
-          "type": "list[str]",
+          "type": "list[str | damage_type]",
           "positional": false,
           "keyword": true,
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "The damage types of the world.",
+          "doc": "The damage types of the world, each a name or damage_type(name, label, adjective).",
           "since": 1
         },
         {
@@ -3618,6 +3618,12 @@
           "since": 1
         },
         {
+          "symbol": "rules_ctx.args",
+          "name": "args",
+          "doc": "Extra fields a plugin passed to its rules export; None elsewhere.",
+          "since": 1
+        },
+        {
           "symbol": "rules_ctx.attacker",
           "name": "attacker",
           "doc": "For attack calls, the same as actor.",
@@ -3634,6 +3640,12 @@
           "feature": "track",
           "name": "band",
           "doc": "'melee', 'near' or 'far' between actor and target, or None.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.base",
+          "name": "base",
+          "doc": "The plugin's own value, in a plugin-declared rules export; None elsewhere.",
           "since": 1
         },
         {
@@ -3660,6 +3672,12 @@
           "symbol": "rules_ctx.carried",
           "name": "carried",
           "doc": "The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.cast_target",
+          "name": "cast_target",
+          "doc": "The cast's target actor, in recognizes_skill; None elsewhere.",
           "since": 1
         },
         {
@@ -4376,6 +4394,123 @@
       "placeholders": ["actor"],
       "required": [],
       "default": "{actor} fades away.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.noun.aid",
+      "feature": "skills",
+      "id": "cast.anon.noun.aid",
+      "placeholders": [],
+      "required": [],
+      "default": "aid",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.noun.harm",
+      "feature": "skills",
+      "id": "cast.anon.noun.harm",
+      "placeholders": [],
+      "required": [],
+      "default": "attack",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.resisted.room",
+      "feature": "skills",
+      "id": "cast.anon.resisted.room",
+      "placeholders": ["actor", "target", "what"],
+      "required": ["actor"],
+      "default": "{target} resists {actor}'s {what}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.resisted.victim",
+      "feature": "skills",
+      "id": "cast.anon.resisted.victim",
+      "placeholders": ["actor", "what"],
+      "required": ["actor"],
+      "default": "You resist {actor}'s {what}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.room",
+      "feature": "skills",
+      "id": "cast.anon.room",
+      "placeholders": ["actor"],
+      "required": ["actor"],
+      "default": "{actor} does something.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.room.aid",
+      "feature": "skills",
+      "id": "cast.anon.room.aid",
+      "placeholders": ["actor", "target", "what"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} washes over {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.room.damage",
+      "feature": "skills",
+      "id": "cast.anon.room.damage",
+      "placeholders": ["actor", "target", "what", "damage_type"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} hits {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.room.harm",
+      "feature": "skills",
+      "id": "cast.anon.room.harm",
+      "placeholders": ["actor", "target", "what"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} strikes {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.room.target",
+      "feature": "skills",
+      "id": "cast.anon.room.target",
+      "placeholders": ["actor", "target"],
+      "required": ["actor"],
+      "default": "{actor} does something to {target}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.victim",
+      "feature": "skills",
+      "id": "cast.anon.victim",
+      "placeholders": ["actor"],
+      "required": ["actor"],
+      "default": "{actor} does something to you.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.victim.aid",
+      "feature": "skills",
+      "id": "cast.anon.victim.aid",
+      "placeholders": ["actor", "what"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} makes you feel better.",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.victim.damage",
+      "feature": "skills",
+      "id": "cast.anon.victim.damage",
+      "placeholders": ["actor", "what", "damage_type"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} hits you!",
+      "since": 1
+    },
+    {
+      "symbol": "message:cast.anon.victim.harm",
+      "feature": "skills",
+      "id": "cast.anon.victim.harm",
+      "placeholders": ["actor", "what"],
+      "required": ["actor"],
+      "default": "{actor}'s {what} makes you feel worse.",
       "since": 1
     },
     {

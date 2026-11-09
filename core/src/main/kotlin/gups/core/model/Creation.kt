@@ -106,7 +106,30 @@ class Trait(
   val modifiers: Map<ModifierPoint, TraitModifier> = emptyMap(),
   /** Perception sense deltas contributed by this trait. */
   val senseDeltas: Map<Channel, Int> = emptyMap(),
+  /** Callbacks run for the trait's bearer, by event. */
+  val handlers: Map<TraitEvent, TraitHandler> = emptyMap(),
 )
+
+/** Events of a trait's bearer that a [TraitHandler] can react to. */
+enum class TraitEvent {
+  /**
+   * A player recognized a skill they don't know, on a cast that succeeded or was resisted. Fields:
+   * `source` (the caster), `skill` (its label), `outcome`, `target` (the cast's target actor or
+   * null) and `power`.
+   */
+  SKILL_RECOGNIZED
+}
+
+/** Callback contributed by a [Trait] for an event of its bearer. */
+fun interface TraitHandler {
+  /** Handles [event] for [bearer]; [fields] as described per event. May change the world. */
+  fun handle(
+    world: gups.core.world.World,
+    bearer: Actor,
+    event: TraitEvent,
+    fields: Map<String, Any?>,
+  )
+}
 
 /** Modifier callback contributed by a [Trait] modifying a rules calculation. */
 fun interface TraitModifier {

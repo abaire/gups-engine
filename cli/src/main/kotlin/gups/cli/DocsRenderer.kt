@@ -39,6 +39,9 @@ data class PluginGmcpDocSpec(val pkg: String, val doc: String, val kind: String 
 /** A custom hook a plugin registers a handler for, for `plugins.html`. */
 data class PluginHookDocSpec(val name: String, val doc: String)
 
+/** An optional rules export a plugin declares, for `plugins.html`. */
+data class PluginRulesExportDocSpec(val name: String, val doc: String, val type: String)
+
 /** A GMCP package a script package declares, for `world.html`. */
 data class ScriptGmcpDocSpec(val pkg: String, val doc: String, val declaredBy: String)
 
@@ -106,6 +109,7 @@ data class PluginDocSpec(
   val dispositionModifiers: List<PluginDispositionModifierDocSpec> = emptyList(),
   val factions: List<PluginFactionAdjusterDocSpec> = emptyList(),
   val steps: List<PluginStepDocSpec> = emptyList(),
+  val rulesExports: List<PluginRulesExportDocSpec> = emptyList(),
 )
 
 /** What `world.html` shows about one world, and what its pages leave out. */
@@ -661,6 +665,27 @@ object DocsRenderer {
               .append(badge)
               .append("</td><td>")
               .append(esc(h.doc))
+              .append("</td></tr>\n")
+          }
+          append("</tbody>\n</table>\n")
+        }
+        if (p.rulesExports.isNotEmpty()) {
+          append(
+            "<h3>Rules exports</h3>\n<table>\n<thead><tr><th>Export</th><th>Type</th><th>Doc</th></tr></thead>\n<tbody>\n"
+          )
+          for (e in p.rulesExports.sortedBy { it.name }) {
+            append("<tr id=\"plugin-")
+              .append(esc(p.id))
+              .append(".rules-")
+              .append(esc(e.name))
+              .append("\"><td><code>")
+              .append(esc(e.name))
+              .append("</code> ")
+              .append(badge)
+              .append("</td><td>")
+              .append(esc(e.type))
+              .append("</td><td>")
+              .append(esc(e.doc))
               .append("</td></tr>\n")
           }
           append("</tbody>\n</table>\n")

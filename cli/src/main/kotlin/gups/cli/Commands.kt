@@ -872,6 +872,7 @@ internal fun toDocSpec(p: PluginInfo): PluginDocSpec {
         )
       },
     steps = p.steps.map { PluginStepDocSpec(it.id, it.title) },
+    rulesExports = p.rulesExports.map { PluginRulesExportDocSpec(it.name, it.doc, it.type) },
   )
 }
 

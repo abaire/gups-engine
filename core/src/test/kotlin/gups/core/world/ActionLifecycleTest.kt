@@ -64,6 +64,7 @@ class ActionLifecycleTest(private val fs: FixtureSchema) {
     p.skills[T.ZAP] = 100
     val g = f.mob(T.DUMMY, index = 2)
     val onlooker = f.player("Bea", index = 1)
+    onlooker.skills[T.ZAP] = 10
     f.input(p, "cast zap dummy")
     f.run()
     assertTrue(g.current(fs.health) < 1000, "the instant cast resolved")

@@ -166,6 +166,12 @@ interface PluginRegistry {
 
   fun addTrait(trait: PluginTrait)
 
+  /**
+   * Declares an optional rules export the world may define. [name] must be this plugin's id, an
+   * underscore, then a snake_case name; call it with [PluginWorld.rules].
+   */
+  fun addRulesExport(name: String, doc: String, type: PluginRulesType) {}
+
   fun setCreation(creation: PluginCreation)
 
   fun addRestriction(
@@ -393,7 +399,38 @@ data class PluginTrait(
   val modifiers: Map<PluginModifierPoint, PluginModifier> = emptyMap(),
   /** Sense changes by channel name, built-in or world-declared. */
   val senseDeltas: Map<String, Int> = emptyMap(),
+  /** Callbacks run for each bearer of the trait when the event happens to it. */
+  val on: Map<PluginTraitEvent, PluginTraitHandler> = emptyMap(),
 )
+
+/** The result type of a plugin-declared rules export. */
+enum class PluginRulesType {
+  INT,
+  BOOL,
+}
+
+/** Events of a trait's bearer that a [PluginTraitHandler] can react to. */
+enum class PluginTraitEvent {
+  /**
+   * A player recognized a skill they don't know, on a cast that succeeded or was resisted. Fields:
+   * `source` ([PluginActor], the caster), `skill` (the label), `outcome` (`success` or `resist`),
+   * `target` ([PluginActor] or null) and `power` ([Long]).
+   */
+  SKILL_RECOGNIZED
+}
+
+data class PluginTraitCall(
+  val world: PluginWorld,
+  val event: PluginTraitEvent,
+  /** The actor carrying the trait. */
+  val bearer: PluginActor,
+  /** The event's fields as plain values: ints as Long, actors as PluginActor. */
+  val fields: Map<String, Any?>,
+)
+
+fun interface PluginTraitHandler {
+  fun handle(call: PluginTraitCall)
+}
 
 enum class PluginModifierPoint {
   TO_HIT,

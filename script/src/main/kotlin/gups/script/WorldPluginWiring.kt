@@ -15,6 +15,10 @@ interface WorldPluginWiring {
   val gmcpPackages: Set<String>
     get() = emptySet()
 
+  /** Plugin-declared rules exports: name to `"int"` or `"bool"`. */
+  val rulesExports: Map<String, String>
+    get() = emptyMap()
+
   /** Registers plugin commands, effects and GMCP producers. Call before StarlarkHost.install. */
   fun install(world: World)
 

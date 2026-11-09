@@ -16,6 +16,7 @@ import gups.core.model.StandingHolder
 import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
+import gups.core.rules.RulesContext
 import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
@@ -63,6 +64,7 @@ import gups.core.world.setSkill
 import gups.core.world.standing
 import gups.core.world.takeXp
 import gups.core.world.teleport
+import gups.core.world.traceRules
 import gups.core.world.transformItem
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
@@ -107,6 +109,20 @@ internal object Facades {
 
   fun gmcpOf(world: World, pluginId: String?): List<String> =
     pluginId?.let { id -> synchronized(gmcp) { gmcp[world]?.get(id) } } ?: emptyList()
+
+  private val rulesExports = WeakHashMap<World, Map<String, Map<String, String>>>()
+
+  /**
+   * Records the rules exports each plugin of [world] declared, by plugin id: name to "int" or
+   * "bool".
+   */
+  fun registerRulesExports(world: World, declared: Map<String, Map<String, String>>) {
+    synchronized(rulesExports) { rulesExports[world] = declared }
+  }
+
+  /** The rules exports plugin [pluginId] declared in [world]: name to "int" or "bool". */
+  fun rulesExportsOf(world: World, pluginId: String?): Map<String, String> =
+    synchronized(rulesExports) { rulesExports[world] }?.get(pluginId) ?: emptyMap()
 
   /** The facade for raw builtins, which belong to no plugin namespace. */
   fun world(thread: StarlarkThread): PluginWorld? =
@@ -373,6 +389,9 @@ internal class RngFacade(private val rngSupplier: () -> Rng) : PluginRng {
 
   override fun chance(pct: Int): Boolean = rngSupplier().chance(pct)
 }
+
+/** The fields of [PluginWorld.rules] that become `ctx` fields of the same name. */
+private val RULES_CTX_FIELDS = setOf("actor", "target", "source", "skill", "item")
 
 /**
  * The [PluginWorld] of plugin [pluginId] over [world]. A null [pluginId] (raw builtins) has no
@@ -958,6 +977,54 @@ internal class WorldFacade(
       ?.let { RoomFacade(it, world) }
 
   override fun regions(): List<String> = world.rooms.flatMap { it.regions }.toSortedSet().toList()
+
+  override fun skill(label: String): PluginSkill? =
+    runCatching { Label(label) }
+      .getOrNull()
+      ?.let { world.protos.skills[it] }
+      ?.let { SkillFacade(it) }
+
+  override fun rules(name: String, fields: Map<String, Any?>, default: Any): Any {
+    val type = Facades.rulesExportsOf(world, pluginId)[name]
+    require(type != null) { "rules(): '$name' is not declared by plugin '$pluginId'" }
+    val int = type == "int"
+    require(if (int) default is Long || default is Int else default is Boolean) {
+      "rules(): default for '$name' must be ${if (int) "an int" else "a bool"}"
+    }
+    val fallback = if (default is Int) default.toLong() else default
+    fun unwrap(v: Any?): Any? =
+      when (v) {
+        is ActorFacade -> actorOf(v, "rules($name)")
+        is ItemFacade -> itemOf(v, "rules($name)")
+        is List<*> -> v.map(::unwrap)
+        is Map<*, *> -> v.entries.associate { (k, x) -> k as String to unwrap(x) }
+        else -> v
+      }
+    val rest =
+      fields.filterKeys { it !in RULES_CTX_FIELDS && it != "base" }.mapValues { unwrap(it.value) }
+    val actor = unwrap(fields["actor"]) as? Actor
+    val skill =
+      when (val s = fields["skill"]) {
+        is SkillFacade -> s.skill
+        is String -> runCatching { Label(s) }.getOrNull()?.let { world.protos.skills[it] }
+        else -> null
+      }
+    val c =
+      RulesContext(
+        world,
+        actor = actor,
+        target = unwrap(fields["target"]) as? Actor,
+        source = unwrap(fields["source"]) as? Actor,
+        skill = skill,
+        item = unwrap(fields["item"]) as? Item,
+        room = actor?.room,
+        base = fields["base"],
+        args = rest,
+      )
+    val result = world.rules.pluginExport(name, type, c) ?: fallback
+    world.traceRules(actor, "rules.$name → $result")
+    return result
+  }
 
   override fun diagnose(message: String) =
     world.record(

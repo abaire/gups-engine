@@ -4,6 +4,23 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Recognizing skills and trait callbacks
+
+- `damage_types` accepts `damage_type(name, label=None, adjective=None)` beside plain names.
+- `skill(unrecognized={...})` gives the lines players who don't recognize a skill see, and the noun the engine's
+  anonymous lines use (`ctx.skill.unrecognized`).
+- New optional rules export `recognizes_skill(ctx)` (`ctx.source`, `ctx.cast_target`).
+- Breaking: players who don't recognize a skill no longer see its name when it resolves, is resisted, or hits them. They
+  see the skill's `unrecognized` line or a new `cast.anon.*` message.
+- The warmup line now reaches only players who can see the caster.
+- Plugins: `PluginTrait.on` trait callbacks (`SKILL_RECOGNIZED`) and `PluginWorld.skill(label)`.
+- Plugins can declare optional rules exports (`addRulesExport`, `PluginWorld.rules`); rules calls gain `ctx.base` and
+  `ctx.args`.
+- Template world: `recognizes_skill` (Intelligence and Wisdom; skills tagged `subtle` are never recognized), damage type
+  adjectives, and `spark` carries the `blue` tag and an `unrecognized` dict. The tutorial mentor now has mana, so it can
+  cast `spark`.
+- New sample `samples/bluemage-plugin`.
+
 ### Movement pace and pursuit catch-up
 
 - New optional rules export `move_pace(ctx)` and modifier point `move_pace`: hundredths of a pulse per room (default

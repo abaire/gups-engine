@@ -55,6 +55,7 @@ import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Printer
 import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkInt
 import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.StarlarkValue
@@ -214,6 +215,50 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   fun behaviors(): Any = field {
     c.behaviors?.let { sList(it.map { b -> BehaviorDecl(b) }) } ?: Starlark.NONE
   }
+
+  @StarlarkMethod(
+    name = "cast_target",
+    structField = true,
+    doc = "The cast's target actor, in recognizes_skill; None elsewhere.",
+  )
+  fun castTarget(): Any = field { v(c.castTarget) }
+
+  @StarlarkMethod(
+    name = "base",
+    structField = true,
+    doc = "The plugin's own value, in a plugin-declared rules export; None elsewhere.",
+  )
+  fun base(): Any = field { plainValue(c.base) }
+
+  @StarlarkMethod(
+    name = "args",
+    structField = true,
+    doc = "Extra fields a plugin passed to its rules export; None elsewhere.",
+  )
+  fun args(): Any = field {
+    c.args?.let { m -> sDict(m.mapValues { (_, x) -> plainValue(x) }) } ?: Starlark.NONE
+  }
+
+  /** A plugin-supplied plain value as Starlark; entities become views. */
+  private fun plainValue(x: Any?): Any =
+    when (x) {
+      null -> Starlark.NONE
+      is Boolean -> x
+      is Int -> sInt(x)
+      is Long -> sInt(x)
+      is String -> x
+      is gups.core.model.Entity -> v(x)
+      is List<*> -> sList(x.map(::plainValue))
+      is Map<*, *> ->
+        sDict(
+          x.entries.associate { (k, item) ->
+            (k as? String
+              ?: fail("rules args: keys must be strings, got ${k?.javaClass?.simpleName}")) to
+              plainValue(item)
+          }
+        )
+      else -> fail("rules ctx: cannot pass a ${x.javaClass.simpleName} to a rules export")
+    }
 
   @StarlarkMethod(
     name = "away",
@@ -760,11 +805,13 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   internal var collected: MutableList<String>? = null
 
   /** True if the rules package is loaded and defines [export]. */
-  fun defines(export: RulesExport): Boolean = refOf(export) != null
+  fun defines(export: RulesExport): Boolean = refOf(export.scriptName) != null
 
-  /** Where [export] is defined: any non-test file of the rules package. */
-  private fun refOf(export: RulesExport): HookRef? =
-    host.scripts.packages[pkg]?.rulesExports?.get(export.scriptName)
+  /** True if the rules package defines the plugin-declared export [name]. */
+  fun definesPluginExport(name: String): Boolean = refOf(name) != null
+
+  /** Where the export [name] is defined: any non-test file of the rules package. */
+  private fun refOf(name: String): HookRef? = host.scripts.packages[pkg]?.rulesExports?.get(name)
 
   /**
    * Calls [export] with the rules ctx of [c] (or [args] alone when [c] is null) and converts the
@@ -777,10 +824,19 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     deny: Boolean = false,
     onThread: (StarlarkThread) -> Unit = {},
     convert: (Any?) -> T,
+  ): T? = runNamed(export.scriptName, c, args, deny, onThread, convert)
+
+  /** [run] for any export by its script name, plugin-declared ones included. */
+  private fun <T : Any> runNamed(
+    name: String,
+    c: RulesContext?,
+    args: (Frame) -> List<Any>,
+    deny: Boolean = false,
+    onThread: (StarlarkThread) -> Unit = {},
+    convert: (Any?) -> T,
   ): T? {
-    val name = export.scriptName
     val w = c?.world ?: world ?: return null
-    val ref = refOf(export)
+    val ref = refOf(name)
     if (ref == null || host.scripts.function(ref) == null) {
       fault(w, name, "rules.$name is not defined by //$pkg")
       return null
@@ -1081,6 +1137,29 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     }
   }
 
+  override fun recognizesSkill(c: RulesContext): Boolean? {
+    if (!defines(RulesExport.RECOGNIZES_SKILL)) return null
+    return run(RulesExport.RECOGNIZES_SKILL, c, ctxArgs(c)) { v ->
+      val what = "rules.recognizes_skill return value"
+      v as? Boolean ?: fail("$what: must be a bool, got ${typeName(v)}")
+    }
+  }
+
+  override fun pluginExport(name: String, type: String, c: RulesContext): Any? {
+    if (!definesPluginExport(name)) return null
+    return runNamed(name, c, ctxArgs(c)) { v ->
+      val what = "rules.$name return value"
+      when (type) {
+        "int" -> {
+          if (v !is StarlarkInt) fail("$what: must be an int, got ${typeName(v)}")
+          int(v, what).toLong()
+        }
+        "bool" -> v as? Boolean ?: fail("$what: must be a bool, got ${typeName(v)}")
+        else -> fail("rules.$name has the unknown type '$type'")
+      }
+    }
+  }
+
   override fun chainThink(c: RulesContext): Boolean? {
     if (!defines(RulesExport.CHAIN_THINK)) return null
     return run(RulesExport.CHAIN_THINK, c, ctxArgs(c)) { v ->
@@ -1242,6 +1321,7 @@ enum class RulesExport(val scriptName: String) {
   INTERRUPT_CHECK("interrupt_check"),
   SKILL_CHECK("skill_check"),
   SKILL_POWER("skill_power"),
+  RECOGNIZES_SKILL("recognizes_skill"),
   RETREAT_CHECK("retreat_check"),
   FLEE_CHANCE("flee_chance"),
   MOVE_COST("move_cost"),
@@ -1416,6 +1496,16 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       returnType = "int",
       ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
       doc = "Percent strength of a successful cast; 100 is the skill as declared.",
+    ),
+    RulesExportSpec(
+      export = RulesExport.RECOGNIZES_SKILL,
+      signature = "recognizes_skill(ctx)",
+      returnType = "bool",
+      ctxFields =
+        listOf("actor", "target", "source", "skill", "cast_target", "room", "pulse", "rng"),
+      doc =
+        "Whether ctx.actor, a player watching ctx.source cast ctx.skill, recognizes it without knowing it.",
+      hasDefault = true,
     ),
     RulesExportSpec(
       export = RulesExport.RETREAT_CHECK,
@@ -1964,7 +2054,7 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
  * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
  *   `retreat_fail_lag`, and `get_lag` across all range bands.
  * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed`,
- *   `interrupt_check`, `skill_check`, and `skill_power`.
+ *   `interrupt_check`, `skill_check`, `skill_power`, and `recognizes_skill`.
  * - Tests `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `regen`, `move_cost`,
  *   and `move_pace`.
  * - Tests `mitigate` for each damage type declared in the world [schema].
@@ -2060,6 +2150,28 @@ internal fun dryRunRules(
       mobs.firstOrNull()?.let {
         rules.leashReturn(RulesContext(world, it, null, away = 0L, pastLeash = false))
       }
+    }
+    if (Feature.SKILLS in features && rules.defines(RulesExport.RECOGNIZES_SKILL)) {
+      mobs.firstOrNull()?.let {
+        rules.recognizesSkill(
+          RulesContext(world, player, player, source = it, skill = skill, room = player.room)
+        )
+      }
+    }
+    for ((name, type) in wiring.rulesExports) {
+      if (!rules.definesPluginExport(name)) continue
+      rules.pluginExport(
+        name,
+        type,
+        RulesContext(
+          world,
+          actor = player,
+          target = player,
+          source = mobs.firstOrNull(),
+          base = if (type == "bool") false else 0L,
+          args = emptyMap(),
+        ),
+      )
     }
     if (rules.defines(RulesExport.MOVE_PACE)) {
       mobs.firstOrNull()?.let {

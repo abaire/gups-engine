@@ -258,8 +258,8 @@ class ScriptLoader(
      */
     fun findRulesExports(st: PkgState) {
       val files = contentFiles(st.pkg.path)
-      for (export in RulesExport.entries) {
-        val name = export.scriptName
+      val names = RulesExport.entries.map { it.scriptName } + plugins.rulesExports.keys.sorted()
+      for (name in names) {
         val defs =
           files.filter { file ->
             val m = modules[file]
@@ -437,7 +437,7 @@ class ScriptLoader(
           return null
         }
         val unknown =
-          unknownRulesExports(module).filter { name ->
+          unknownRulesExports(module, plugins.rulesExports.keys).filter { name ->
             forbiddenRulesExports(module, features).none { it.first == name }
           }
         if (unknown.isNotEmpty()) {
@@ -883,8 +883,8 @@ internal fun forbiddenRulesExports(
  * Public top-level functions of a rules [module] that aren't a [RulesExport], sorted. The engine
  * would never call them, so they're almost always a misspelled export.
  */
-internal fun unknownRulesExports(module: Module): List<String> {
-  val known = RulesExport.entries.mapTo(HashSet()) { it.scriptName }
+internal fun unknownRulesExports(module: Module, extra: Set<String> = emptySet()): List<String> {
+  val known = RulesExport.entries.mapTo(HashSet()) { it.scriptName } + extra
   return module.globals
     .filter { (name, v) -> v is StarlarkFunction && !name.startsWith("_") && name !in known }
     .keys

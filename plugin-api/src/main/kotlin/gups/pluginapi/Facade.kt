@@ -14,6 +14,9 @@ interface PluginGmcpWorld {
 
   fun send(target: PluginActor, text: String)
 
+  /** A loaded skill's view by absolute label, or null. */
+  fun skill(label: String): PluginSkill? = null
+
   /**
    * Sends the GMCP event [pkg] with [data] (plain values) to [actor]. [pkg] must be, or nest in, a
    * package this plugin declared with addGmcp or addGmcpEvent. Returns false, sending nothing, for
@@ -69,6 +72,14 @@ interface PluginGmcpWorld {
  *   attributes and other plugins.
  */
 interface PluginWorld : PluginGmcpWorld {
+  /**
+   * Calls this plugin's declared rules export [name]; returns a Long or Boolean, or [default] when
+   * the world doesn't define it or the call fails. [fields] named `actor`, `target`, `source`,
+   * `skill` and `item` become those `ctx` fields, `base` becomes `ctx.base`, and the rest
+   * `ctx.args`.
+   */
+  fun rules(name: String, fields: Map<String, Any?>, default: Any): Any = default
+
   // ---- Verbs ----
 
   fun echo(room: PluginRoom, text: String, exclude: List<PluginActor> = emptyList())

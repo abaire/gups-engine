@@ -59,12 +59,14 @@ import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRole
+import gups.pluginapi.PluginRulesType
 import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginTargetChoice
 import gups.pluginapi.PluginTargetOrderCall
 import gups.pluginapi.PluginTickCall
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
+import gups.script.RulesExport
 import gups.script.WorldDir
 import gups.script.WorldModule
 import gups.script.WorldPluginWiring
@@ -98,7 +100,10 @@ data class PluginInfo(
   val dispositionModifiers: List<PluginDispositionModifierInfo> = emptyList(),
   val factions: List<PluginFactionAdjusterInfo> = emptyList(),
   val steps: List<PluginStepInfo> = emptyList(),
+  val rulesExports: List<PluginRulesExportInfo> = emptyList(),
 )
+
+data class PluginRulesExportInfo(val name: String, val doc: String, val type: String)
 
 data class PluginStepInfo(val id: String, val title: String)
 
@@ -255,6 +260,7 @@ internal class PluginRegistryImpl(
   val periodic = mutableListOf<Triple<Int, String, (PluginTickCall) -> Unit>>()
   val events = mutableListOf<Triple<String, String, (PluginEventCall) -> Unit>>()
   val traits = mutableMapOf<String, PluginTrait>()
+  val rulesExports = LinkedHashMap<String, PluginRulesExportInfo>()
   private var _creation: PluginCreation? = null
   val creation: PluginCreation?
     get() = _creation
@@ -438,6 +444,17 @@ internal class PluginRegistryImpl(
     events += Triple(name, doc, fn)
   }
 
+  override fun addRulesExport(name: String, doc: String, type: PluginRulesType) {
+    require(Regex("${Regex.escape(pluginId)}_[a-z][a-z0-9_]*").matches(name)) {
+      "addRulesExport(): '$name' must be '${pluginId}_' then a snake_case name"
+    }
+    require(RulesExport.entries.none { it.scriptName == name }) {
+      "addRulesExport(): '$name' is an engine rules export"
+    }
+    require(name !in rulesExports) { "addRulesExport(): '$name' is already declared" }
+    rulesExports[name] = PluginRulesExportInfo(name, doc, type.name.lowercase())
+  }
+
   override fun addTrait(trait: PluginTrait) {
     require(MEMBER.matches(trait.name)) { "trait name '${trait.name}' must match [a-z][a-z0-9_]*" }
     require(trait.name !in traits && trait.name !in takenTraits) {
@@ -591,6 +608,10 @@ internal constructor(
         }
         .toSet()
 
+  override val rulesExports: Map<String, String>
+    get() =
+      plugins.flatMap { it.reg.rulesExports.values }.associate { it.name to it.type }.toSortedMap()
+
   /** The ids that loaded, sorted. */
   val ids: List<String>
     get() = plugins.map { it.id }
@@ -681,6 +702,10 @@ internal constructor(
 
   override fun install(world: World) {
     Facades.registerLog(world, log)
+    Facades.registerRulesExports(
+      world,
+      plugins.associate { p -> p.id to p.reg.rulesExports.values.associate { it.name to it.type } },
+    )
     Facades.registerGmcp(
       world,
       plugins.associate { p -> p.id to p.reg.gmcp.map { it.pkg } + p.reg.gmcpEvents.map { it.pkg } },
@@ -936,6 +961,7 @@ internal constructor(
               )
             }
             .sortedBy { it.name },
+        rulesExports = p.reg.rulesExports.values.sortedBy { it.name },
         restrictions =
           p.reg.restrictions.flatMap { (point, list) ->
             list.map { (doc, _) -> PluginRestrictionInfo(point.name.lowercase(), doc) }

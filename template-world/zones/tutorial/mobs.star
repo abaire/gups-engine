@@ -168,7 +168,7 @@ def _mentor_open(ctx):
 mob("mentor",
     name = "the mentor",
     desc = "A robed figure who hums to themselves, sparks of light dancing between their fingers.",
-    vitals = vitals(hp = 60),
+    vitals = vitals(hp = 60, mana = 40),
     factions = ["//lib:townsfolk"],
     behaviors = [sentinel()],
     skills = {"//skills/arcane:spark": 100, "//skills/arcane:mend": 100},

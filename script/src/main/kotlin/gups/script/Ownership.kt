@@ -37,6 +37,7 @@ object FeatureOwnership {
       "rules:interrupt_check",
       "rules:skill_check",
       "rules:skill_power",
+      "rules:recognizes_skill",
       "modifier:cast_allowed",
       "modifier:skill_check",
       "modifier:skill_power",

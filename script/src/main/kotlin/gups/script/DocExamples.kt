@@ -712,7 +712,7 @@ object DocExamples {
             """,
           test =
             """
-                w = t.world(seed = 1)
+                w = t.world(seed = 2)
                 v = w.spawn_player("Vlad", at = ":start", skills = {":vampiric_drain": 100})
                 p = w.spawn_player("Tess", at = ":start")
                 hp0 = p.max_hp

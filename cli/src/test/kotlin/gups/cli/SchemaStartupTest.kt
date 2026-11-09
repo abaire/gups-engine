@@ -142,7 +142,14 @@ class SchemaStartupTest {
     val snapshot = tempDb()
     assertTrue(boot(root, snapshot).first)
     val module = root.resolve("MODULE.gups")
-    module.writeText(module.readText().replace("\"fire\"]", "\"fire\", \"acid\"]"))
+    module.writeText(
+      module
+        .readText()
+        .replace(
+          "damage_type(\"fire\", adjective = \"fiery\"),",
+          "damage_type(\"fire\", adjective = \"fiery\"), \"acid\",",
+        )
+    )
     val outcome = MigrationChecker(WorldDir(root), snapshot).check()
     assertFalse(outcome.ok)
     assertContains(outcome.problems.single(), "this schema or feature change needs a server wipe")
