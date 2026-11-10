@@ -2732,22 +2732,23 @@ fixture fails lint with an unresolved label.
 
 ### 4.13 CLI
 
-|                                      Command                                      |                      Purpose                       |
-|-----------------------------------------------------------------------------------|----------------------------------------------------|
-| `gups serve --dev\|--prod [--fresh] [--world DIR] [--db FILE] ...`                | Run the server (§2.4).                             |
-| `gups test [--world DIR] <label-pattern...>`                                      | Run tests, e.g. `//zones/goblin_caves/...`.        |
-| `gups lint [--base REF] [--format text\|github] [label-pattern...]`               | Run the load and static checks (§7.3).             |
-| `gups fuzz [--pulses N] [--seed S] <label-pattern...>`                            | Run the fuzz walker (§7.3).                        |
-| `gups snapshot --sanitized --out FILE [--admin ADDR]`                             | Make a sanitized database copy.                    |
-| `gups migrate-check --snapshot FILE`                                              | Run the migration check (§7.3).                    |
-| `gups docs [--out DIR] [--world DIR]`                                             | Write the HTML API reference (§4.16).              |
-| `gups docs --json [--out PATH]`                                                   | Write the `api.json` model (§4.16).                |
-| `gups docs --update-baseline [--docs-dir DIR]`                                    | Before a release: write the API baseline (§4.17).  |
-| `gups repro <diagnostic-id\|bundle.json> [--save FILE]`                           | Replay a diagnostic in the harness.                |
-| `gups scenario --package //PKG [--world DIR] FILE`                                | Run a test file kept outside the world, verbosely. |
-| `gups backup` / `gups restore <file>`                                             | Back up or restore the database.                   |
-| `gups deploy [--commit SHA]`                                                      | Called by CI; talks to the admin port.             |
-| `gups invite --role R`, `gups import-roster [--admin ADDR] [--days N] roster.csv` | Create accounts.                                   |
+|                                      Command                                      |                        Purpose                        |
+|-----------------------------------------------------------------------------------|-------------------------------------------------------|
+| `gups serve --dev\|--prod [--fresh] [--world DIR] [--db FILE] ...`                | Run the server (§2.4).                                |
+| `gups test [--world DIR] <label-pattern...>`                                      | Run tests, e.g. `//zones/goblin_caves/...`.           |
+| `gups lint [--base REF] [--format text\|github] [label-pattern...]`               | Run the load and static checks (§7.3).                |
+| `gups fuzz [--pulses N] [--seed S] <label-pattern...>`                            | Run the fuzz walker (§7.3).                           |
+| `gups snapshot --sanitized --out FILE [--admin ADDR]`                             | Make a sanitized database copy.                       |
+| `gups migrate-check --snapshot FILE`                                              | Run the migration check (§7.3).                       |
+| `gups docs [--out DIR] [--world DIR]`                                             | Write the HTML API reference (§4.16).                 |
+| `gups docs --json [--out PATH]`                                                   | Write the `api.json` model (§4.16).                   |
+| `gups docs --update-baseline [--docs-dir DIR]`                                    | Before a release: write the API baseline (§4.17).     |
+| `gups describe-world [--world DIR] [--out PATH]`                                  | Write one world's schema and content summary as JSON. |
+| `gups repro <diagnostic-id\|bundle.json> [--save FILE]`                           | Replay a diagnostic in the harness.                   |
+| `gups scenario --package //PKG [--world DIR] FILE`                                | Run a test file kept outside the world, verbosely.    |
+| `gups backup` / `gups restore <file>`                                             | Back up or restore the database.                      |
+| `gups deploy [--commit SHA]`                                                      | Called by CI; talks to the admin port.                |
+| `gups invite --role R`, `gups import-roster [--admin ADDR] [--days N] roster.csv` | Create accounts.                                      |
 
 - `--world` defaults to the current directory. `gups backup`, `restore` and `repro` take `--world` and `--db` as `serve`
   does.
@@ -2764,6 +2765,21 @@ fixture fails lint with an unresolved label.
   record when one was started. It exits 1 if a function fails or errors, the file has no `test_*` functions, or the
   package doesn't exist. It is meant for end-to-end checks that drive the real command pipeline without a network or a
   database; a scenario that should keep running moves into the package as a `*_test.star` file unchanged.
+- **`gups describe-world`:** loads the world and its plugins as `gups lint` does and writes one JSON document describing
+  it, for external tools: to stdout without `--out`, else to `PATH` (parent directories are created).
+  - Top-level keys, in this order: `format` (the document's own version, `1`, raised only when a field is removed or
+    changes meaning), `api_version`, `engine_version`, `schema` (stats and vitals with labels and damage types with
+    label and adjective, in declaration order; the unarmed damage type; all channels), `features`, `commands` (the
+    world's renames), `packages` (path, kind, and whether it loaded), `rooms`, `mobs`, `items`, `skills`, `factions`,
+    `regions`, `plugins` (each plugin's builtin, effect primitive and trait names) and `errors` (the load errors).
+  - Each declaration is a summary: a room's name, size, regions, tags, flags and exits with their doors; a mob's name,
+    keywords, level, stats, vitals, resists, skills, traits and factions; an item's name, keywords, kind, wear slot,
+    weight and value; a skill's kind, target, range, cost, warmup, lag, channels and tags. Descriptions, hooks, spawns,
+    behaviors and loot are not included.
+  - A package that fails to load is listed with `ok` false and its errors; everything else is still described, and the
+    command exits 0. A `MODULE.gups` that can't be read or has problems prints them and exits 1.
+  - Output is deterministic: declarations sorted by label, packages by path, plugins by id, set-valued fields and maps
+    sorted, exits in declared order.
 - **`gups restore FILE`** replaces the database with SQLite's restore API. The server must be stopped first; nothing
   enforces it.
 - **`gups import-roster`:**

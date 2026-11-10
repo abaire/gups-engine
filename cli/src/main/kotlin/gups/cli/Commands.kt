@@ -80,6 +80,7 @@ fun gupsCommand(): CliktCommand =
       SnapshotCmd(),
       MigrateCheck(),
       Docs(),
+      DescribeWorld(),
       Repro(),
       ScenarioCmd(),
       Backup(),
@@ -710,6 +711,35 @@ class MigrateCheck : CliktCommand(name = "migrate-check") {
       )
     } finally {
       runCatching { Files.deleteIfExists(tempDb) }
+    }
+  }
+}
+
+class DescribeWorld : CliktCommand(name = "describe-world") {
+  val world by
+    option("--world", help = "Course world directory (default: the current directory).")
+      .file(mustExist = true, canBeFile = false)
+  val out by
+    option("--out", metavar = "PATH", help = "Write the JSON here instead of stdout.").file()
+
+  override fun help(context: Context) = "Describe a world's schema and content as JSON."
+
+  override fun run() {
+    val target = out
+    if (target != null && target.isDirectory)
+      throw UsageError("--out: ${target.path} is a directory, give a file")
+    val dir = WorldDir((world ?: File(".")).toPath())
+    val problems = mutableListOf<String>()
+    val json = withPlugins(dir) { host -> describeWorld(dir, host, host.describe(), problems) }
+    if (json == null) {
+      for (p in problems) echo("error: $p", err = true)
+      throw ProgramResult(1)
+    }
+    if (target == null) {
+      echo(json, trailingNewline = false)
+    } else {
+      target.absoluteFile.parentFile?.mkdirs()
+      target.writeText(json, Charsets.UTF_8)
     }
   }
 }

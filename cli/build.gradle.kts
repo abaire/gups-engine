@@ -22,6 +22,7 @@ dependencies {
   implementation(libs.clikt)
   implementation(libs.micrometer.prometheus)
   implementation(libs.commonmark)
+  implementation(libs.kotlinx.serialization.json)
   testImplementation(libs.selenium.java)
   // Test plugins and buildPluginJar (PluginIntegrationTest).
   testImplementation(testFixtures(project(":plugin-api")))
@@ -62,6 +63,11 @@ tasks.test {
   systemProperty(
     "gups.docsGolden",
     layout.projectDirectory.dir("src/test/resources/docs-golden").asFile.absolutePath,
+  )
+  // The committed describe-world output of the sample worlds (DescribeWorldCommandTest).
+  systemProperty(
+    "gups.describeWorldGolden",
+    layout.projectDirectory.dir("src/test/resources/describe-world").asFile.absolutePath,
   )
   systemProperty("gups.updateGolden", System.getProperty("gups.updateGolden") ?: "false")
   // The API baselines the repository check reads.

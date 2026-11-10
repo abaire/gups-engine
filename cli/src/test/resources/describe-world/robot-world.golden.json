@@ -1,0 +1,428 @@
+{
+    "format": 1,
+    "api_version": 1,
+    "engine_version": "",
+    "schema": {
+        "stats": [
+            {
+                "name": "might",
+                "label": "Might"
+            },
+            {
+                "name": "agility",
+                "label": "Agility"
+            },
+            {
+                "name": "tech",
+                "label": "Tech"
+            },
+            {
+                "name": "grit",
+                "label": "Grit"
+            },
+            {
+                "name": "plating",
+                "label": "Plating"
+            }
+        ],
+        "vitals": [
+            {
+                "name": "integrity",
+                "label": "Integrity"
+            },
+            {
+                "name": "sanity",
+                "label": "Sanity"
+            },
+            {
+                "name": "power",
+                "label": "Power"
+            },
+            {
+                "name": "rads",
+                "label": "Radiation"
+            }
+        ],
+        "damage_types": [
+            {
+                "name": "kinetic",
+                "label": "Kinetic",
+                "adjective": null
+            },
+            {
+                "name": "energy",
+                "label": "Energy",
+                "adjective": null
+            },
+            {
+                "name": "psychic",
+                "label": "Psychic",
+                "adjective": null
+            }
+        ],
+        "unarmed_damage_type": "kinetic",
+        "channels": [
+            "psionic",
+            "sight",
+            "sound"
+        ]
+    },
+    "features": [
+        "combat",
+        "skills"
+    ],
+    "commands": {
+        "cast": "invoke"
+    },
+    "packages": [
+        {
+            "path": "lib",
+            "kind": "lib",
+            "ok": true
+        },
+        {
+            "path": "rules",
+            "kind": "rules",
+            "ok": true
+        },
+        {
+            "path": "zones/foundry",
+            "kind": "zone",
+            "ok": true
+        }
+    ],
+    "rooms": [
+        {
+            "label": "//zones/foundry:assembly",
+            "name": "The Assembly Hall",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/foundry:gate",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/foundry:control",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "south",
+                    "to": "//zones/foundry:vault",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:control",
+            "name": "The Control Room",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/foundry:assembly",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:furnace",
+            "name": "The Dead Furnace",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "north",
+                    "to": "//zones/foundry:gate",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:gate",
+            "name": "The Foundry Gate",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/foundry:scrapyard",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/foundry:assembly",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "south",
+                    "to": "//zones/foundry:furnace",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:reactor",
+            "name": "The Reactor Core",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "north",
+                    "to": "//zones/foundry:whisper_hall",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:scrapyard",
+            "name": "The Scrapyard",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "east",
+                    "to": "//zones/foundry:gate",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:vault",
+            "name": "The Parts Vault",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "north",
+                    "to": "//zones/foundry:assembly",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/foundry:whisper_hall",
+                    "one_way": false,
+                    "tags": [
+                        "psionic_proof"
+                    ],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/foundry:whisper_hall",
+            "name": "The Whisper Hall",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/foundry:vault",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "south",
+                    "to": "//zones/foundry:reactor",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        }
+    ],
+    "mobs": [
+        {
+            "label": "//zones/foundry:rust_hound",
+            "name": "a rust hound",
+            "keywords": [
+                "hound",
+                "rust"
+            ],
+            "level": 1,
+            "stats": {
+                "agility": 12,
+                "might": 12,
+                "plating": 2
+            },
+            "vitals": {
+                "integrity": 20,
+                "power": 60,
+                "sanity": 8
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/foundry:welder_drone",
+            "name": "a welder drone",
+            "keywords": [
+                "drone",
+                "welder"
+            ],
+            "level": 1,
+            "stats": {
+                "plating": 4,
+                "tech": 14
+            },
+            "vitals": {
+                "integrity": 30,
+                "power": 80,
+                "sanity": 10
+            },
+            "resists": {
+                "energy": 25
+            },
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/foundry:whisperer",
+            "name": "a whisperer",
+            "keywords": [
+                "whisperer"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "integrity": 25,
+                "power": 40,
+                "sanity": 40
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        }
+    ],
+    "items": [
+        {
+            "label": "//zones/foundry:plasma_cutter",
+            "name": "a plasma cutter",
+            "keywords": [
+                "cutter",
+                "plasma"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 4,
+            "value": 0
+        },
+        {
+            "label": "//zones/foundry:repair_chip",
+            "name": "a repair chip",
+            "keywords": [
+                "chip",
+                "repair"
+            ],
+            "kind": "consumable",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/foundry:scrap_plate",
+            "name": "a scrap plate",
+            "keywords": [
+                "plate",
+                "scrap"
+            ],
+            "kind": "armor",
+            "wear": "torso",
+            "weight": 1,
+            "value": 0
+        }
+    ],
+    "skills": [
+        {
+            "label": "//zones/foundry:mind_lash",
+            "kind": "spell",
+            "target": "enemy",
+            "range": "melee",
+            "cost": {
+                "power": 10
+            },
+            "warmup": 2,
+            "lag": 2,
+            "channels": [
+                "psionic"
+            ],
+            "tags": []
+        },
+        {
+            "label": "//zones/foundry:overload",
+            "kind": "spell",
+            "target": "enemy",
+            "range": "melee",
+            "cost": {
+                "power": 15
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        },
+        {
+            "label": "//zones/foundry:self_repair",
+            "kind": "routine",
+            "target": "self",
+            "range": "melee",
+            "cost": {
+                "power": 5
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        }
+    ],
+    "factions": [],
+    "regions": [],
+    "plugins": [],
+    "errors": []
+}

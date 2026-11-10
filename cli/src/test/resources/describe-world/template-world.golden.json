@@ -1,0 +1,934 @@
+{
+    "format": 1,
+    "api_version": 1,
+    "engine_version": "",
+    "schema": {
+        "stats": [
+            {
+                "name": "str",
+                "label": "Strength"
+            },
+            {
+                "name": "dex",
+                "label": "Dexterity"
+            },
+            {
+                "name": "con",
+                "label": "Constitution"
+            },
+            {
+                "name": "int",
+                "label": "Intelligence"
+            },
+            {
+                "name": "wis",
+                "label": "Wisdom"
+            },
+            {
+                "name": "cha",
+                "label": "Charisma"
+            },
+            {
+                "name": "speed",
+                "label": "Speed"
+            },
+            {
+                "name": "armor",
+                "label": "Armor"
+            }
+        ],
+        "vitals": [
+            {
+                "name": "hp",
+                "label": "Hit points"
+            },
+            {
+                "name": "mana",
+                "label": "Mana"
+            },
+            {
+                "name": "move",
+                "label": "Movement"
+            }
+        ],
+        "damage_types": [
+            {
+                "name": "bludgeon",
+                "label": "Bludgeon",
+                "adjective": "crushing"
+            },
+            {
+                "name": "slash",
+                "label": "Slash",
+                "adjective": "slashing"
+            },
+            {
+                "name": "pierce",
+                "label": "Pierce",
+                "adjective": "piercing"
+            },
+            {
+                "name": "fire",
+                "label": "Fire",
+                "adjective": "fiery"
+            }
+        ],
+        "unarmed_damage_type": "bludgeon",
+        "channels": [
+            "sight",
+            "sound",
+            "spell"
+        ]
+    },
+    "features": [
+        "combat",
+        "leveling",
+        "skills",
+        "standing",
+        "track"
+    ],
+    "commands": {},
+    "packages": [
+        {
+            "path": "lib",
+            "kind": "lib",
+            "ok": true
+        },
+        {
+            "path": "rules",
+            "kind": "rules",
+            "ok": true
+        },
+        {
+            "path": "skills/arcane",
+            "kind": "skills",
+            "ok": true
+        },
+        {
+            "path": "zones/tutorial",
+            "kind": "zone",
+            "ok": true
+        }
+    ],
+    "rooms": [
+        {
+            "label": "//zones/tutorial:arena",
+            "name": "The Practice Arena",
+            "size": "large",
+            "regions": [
+                "practice_grounds"
+            ],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "south",
+                    "to": "//zones/tutorial:hall",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:armory",
+            "name": "The Armory",
+            "size": "cramped",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/tutorial:hall",
+                    "one_way": false,
+                    "tags": [],
+                    "door": {
+                        "state": "locked",
+                        "key": "//zones/tutorial:brass_key",
+                        "tags": [
+                            "creaky"
+                        ]
+                    }
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:shop",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:gate",
+            "name": "The Tutorial Gate",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "north",
+                    "to": "//zones/tutorial:hall",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:gravel",
+            "name": "The Gravel Path",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:tar_pit",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:hall",
+            "name": "The Hall of Lessons",
+            "size": "large",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "south",
+                    "to": "//zones/tutorial:gate",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "west",
+                    "to": "//zones/tutorial:tar_pit",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "north",
+                    "to": "//zones/tutorial:arena",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:armory",
+                    "one_way": false,
+                    "tags": [],
+                    "door": {
+                        "state": "locked",
+                        "key": "//zones/tutorial:brass_key",
+                        "tags": [
+                            "creaky"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:hook_test_room",
+            "name": "The Hag's Hut",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [
+                "dead_end_ok"
+            ],
+            "exits": []
+        },
+        {
+            "label": "//zones/tutorial:shop",
+            "name": "The Shop",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/tutorial:armory",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:shop_test_room",
+            "name": "The Shop Test Room",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [
+                "dead_end_ok"
+            ],
+            "exits": []
+        },
+        {
+            "label": "//zones/tutorial:tar_pit",
+            "name": "The Tar Pit",
+            "size": "normal",
+            "regions": [],
+            "tags": [
+                "sticky_floor"
+            ],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:hall",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "west",
+                    "to": "//zones/tutorial:gravel",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        }
+    ],
+    "mobs": [
+        {
+            "label": "//zones/tutorial:familiar",
+            "name": "a spectral familiar",
+            "keywords": [
+                "familiar",
+                "spectral"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 20
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:gate_guard",
+            "name": "the gate guard",
+            "keywords": [
+                "guard",
+                "gatekeeper"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 100
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": [
+                "//lib:townsfolk"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:goblin",
+            "name": "a goblin scout",
+            "keywords": [
+                "goblin",
+                "scout"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 20
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": [
+                "//lib:goblins"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:guide",
+            "name": "the guide",
+            "keywords": [
+                "guide"
+            ],
+            "level": 10,
+            "stats": {},
+            "vitals": {
+                "hp": 200
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": [
+                "//lib:townsfolk"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:mentor",
+            "name": "the mentor",
+            "keywords": [
+                "mentor"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 60,
+                "mana": 40
+            },
+            "resists": {},
+            "skills": {
+                "//skills/arcane:mend": 100,
+                "//skills/arcane:spark": 100
+            },
+            "traits": [],
+            "factions": [
+                "//lib:townsfolk"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:shopkeeper",
+            "name": "the shopkeeper",
+            "keywords": [
+                "shopkeeper"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 60
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": [
+                "//lib:townsfolk"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:squirrel",
+            "name": "a foraging squirrel",
+            "keywords": [
+                "squirrel"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 20,
+                "move": 50
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:test_hag",
+            "name": "the test hag",
+            "keywords": [
+                "test",
+                "hag"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 50
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:test_pack_keeper",
+            "name": "the test peddler",
+            "keywords": [
+                "test",
+                "peddler"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 50
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:test_shopkeeper",
+            "name": "the test shopkeeper",
+            "keywords": [
+                "test",
+                "shopkeeper"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 50
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:test_small_keeper",
+            "name": "the test small shopkeeper",
+            "keywords": [
+                "test",
+                "small",
+                "shopkeeper"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 50
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
+            "label": "//zones/tutorial:training_dummy",
+            "name": "a training dummy",
+            "keywords": [
+                "dummy",
+                "training"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 30
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        }
+    ],
+    "items": [
+        {
+            "label": "//lib:gold_coin",
+            "name": "a gold coin",
+            "keywords": [
+                "coin",
+                "gold"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 0,
+            "value": 1
+        },
+        {
+            "label": "//lib:shop_chest",
+            "name": "a stout chest",
+            "keywords": [
+                "chest"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//lib:shop_chest_key",
+            "name": "a shop chest key",
+            "keywords": [
+                "key"
+            ],
+            "kind": "key",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//lib:shop_pack",
+            "name": "a peddler's pack",
+            "keywords": [
+                "pack"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:amulet",
+            "name": "an amulet",
+            "keywords": [
+                "amulet"
+            ],
+            "kind": "misc",
+            "wear": "neck",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:bramble_vest",
+            "name": "a bramble vest",
+            "keywords": [
+                "bramble",
+                "vest"
+            ],
+            "kind": "armor",
+            "wear": "body",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:brass_key",
+            "name": "a brass key",
+            "keywords": [
+                "brass",
+                "key"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:copper_ring",
+            "name": "a copper ring",
+            "keywords": [
+                "copper",
+                "ring"
+            ],
+            "kind": "misc",
+            "wear": "ring",
+            "weight": 1,
+            "value": 15
+        },
+        {
+            "label": "//zones/tutorial:cracked_wand",
+            "name": "a cracked wand of many colors",
+            "keywords": [
+                "cracked",
+                "wand"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:dagger",
+            "name": "a dagger",
+            "keywords": [
+                "dagger"
+            ],
+            "kind": "melee",
+            "wear": "hand",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:ember_amulet",
+            "name": "an ember amulet",
+            "keywords": [
+                "ember"
+            ],
+            "kind": "misc",
+            "wear": "neck",
+            "weight": 1,
+            "value": 40
+        },
+        {
+            "label": "//zones/tutorial:ember_dagger",
+            "name": "an ember dagger",
+            "keywords": [
+                "ember",
+                "dagger"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 2,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:flaming_sword",
+            "name": "a flaming sword",
+            "keywords": [
+                "flaming",
+                "sword"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 3,
+            "value": 60
+        },
+        {
+            "label": "//zones/tutorial:greatsword",
+            "name": "a greatsword",
+            "keywords": [
+                "greatsword"
+            ],
+            "kind": "melee",
+            "wear": "hand",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:healing_draught",
+            "name": "a healing draught",
+            "keywords": [
+                "draught",
+                "potion"
+            ],
+            "kind": "consumable",
+            "wear": null,
+            "weight": 1,
+            "value": 30
+        },
+        {
+            "label": "//zones/tutorial:leather_cap",
+            "name": "a leather cap",
+            "keywords": [
+                "leather",
+                "cap"
+            ],
+            "kind": "armor",
+            "wear": "head",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:oily_rags",
+            "name": "sketchy oil-soaked rags of protection",
+            "keywords": [
+                "rags"
+            ],
+            "kind": "armor",
+            "wear": "arms",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:pinecone",
+            "name": "a pinecone",
+            "keywords": [
+                "pinecone",
+                "cone"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 1
+        },
+        {
+            "label": "//zones/tutorial:practice_sword",
+            "name": "a practice sword",
+            "keywords": [
+                "practice",
+                "sword"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 3,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:shadow_cloak",
+            "name": "a shadow cloak",
+            "keywords": [
+                "shadow",
+                "cloak"
+            ],
+            "kind": "armor",
+            "wear": "body",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:siphon_amulet",
+            "name": "a siphon amulet",
+            "keywords": [
+                "siphon"
+            ],
+            "kind": "misc",
+            "wear": "neck",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:stolen_ring",
+            "name": "a stolen ring",
+            "keywords": [
+                "ring"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 15
+        },
+        {
+            "label": "//zones/tutorial:tar_walker_boots",
+            "name": "a pair of tar-walker boots",
+            "keywords": [
+                "boots"
+            ],
+            "kind": "armor",
+            "wear": "feet",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:test_axe",
+            "name": "a test axe",
+            "keywords": [
+                "axe"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 4,
+            "value": 40
+        },
+        {
+            "label": "//zones/tutorial:test_bread",
+            "name": "a loaf of bread",
+            "keywords": [
+                "loaf",
+                "of",
+                "bread"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 5
+        },
+        {
+            "label": "//zones/tutorial:test_sword",
+            "name": "a test sword",
+            "keywords": [
+                "test",
+                "sword"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 3,
+            "value": 50
+        },
+        {
+            "label": "//zones/tutorial:wooden_shield",
+            "name": "a wooden shield",
+            "keywords": [
+                "wooden",
+                "shield"
+            ],
+            "kind": "armor",
+            "wear": "offhand",
+            "weight": 1,
+            "value": 20
+        }
+    ],
+    "skills": [
+        {
+            "label": "//skills/arcane:familiar",
+            "kind": "spell",
+            "target": "self",
+            "range": "self",
+            "cost": {
+                "mana": 12
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        },
+        {
+            "label": "//skills/arcane:mend",
+            "kind": "spell",
+            "target": "self",
+            "range": "self",
+            "cost": {
+                "mana": 10
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        },
+        {
+            "label": "//skills/arcane:pacify",
+            "kind": "spell",
+            "target": "ally",
+            "range": "near",
+            "cost": {
+                "mana": 15
+            },
+            "warmup": 8,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        },
+        {
+            "label": "//skills/arcane:soothe",
+            "kind": "spell",
+            "target": "ally",
+            "range": "near",
+            "cost": {
+                "mana": 8
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        },
+        {
+            "label": "//skills/arcane:spark",
+            "kind": "spell",
+            "target": "enemy",
+            "range": "near",
+            "cost": {
+                "mana": 8
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [
+                "sound",
+                "spell"
+            ],
+            "tags": [
+                "blue"
+            ]
+        },
+        {
+            "label": "//skills/arcane:ward",
+            "kind": "spell",
+            "target": "ally",
+            "range": "near",
+            "cost": {
+                "mana": 8
+            },
+            "warmup": 0,
+            "lag": 4,
+            "channels": [],
+            "tags": []
+        }
+    ],
+    "factions": [
+        "//lib:goblins",
+        "//lib:townsfolk"
+    ],
+    "regions": [
+        "practice_grounds"
+    ],
+    "plugins": [],
+    "errors": []
+}
