@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.Label
+import gups.core.model.Effect
 import gups.core.model.Mob
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
@@ -171,12 +172,12 @@ class OwnersTest {
         }
       )
     val ann = f.player("Ann")
-    val pets = f.w.summon(ann, T.DUMMY, 2)
+    val pets = f.w.summon(ann, Effect.Summon(T.DUMMY, 2))
     assertEquals(ann.id, sawSummoner)
     assertEquals(ann.id, sawOwner)
     assertTrue(pets.all { it.owner == ann.id && ownerReason(ann.id) in it.activeReasons })
     val boss = f.mob(T.GOBLIN)
-    val minions = f.w.summon(boss, T.DUMMY)
+    val minions = f.w.summon(boss, Effect.Summon(T.DUMMY))
     assertTrue(minions.all { it.owner == null && it.summonedBy == boss.id })
   }
 
@@ -185,7 +186,7 @@ class OwnersTest {
     val events = mutableListOf<Seen>()
     val (f, _) = recording(events = events)
     val ann = f.player("Ann")
-    f.w.summon(ann, T.DUMMY, 2)
+    f.w.summon(ann, Effect.Summon(T.DUMMY, 2))
     assertEquals(listOf("set", "set"), events.map { it.event })
     assertEquals("Ann", events.first().target)
   }

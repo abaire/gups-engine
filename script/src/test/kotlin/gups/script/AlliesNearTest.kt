@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.Label
+import gups.core.model.Effect
 import gups.core.world.groupAdd
 import gups.core.world.summon
 import gups.script.testing.TestWorlds
@@ -39,7 +40,7 @@ class AlliesNearTest {
     val f = fixture("zones/z/a.star" to ALLIES_ZONE, "rules/combat.star" to TestWorlds.rules())
     val ann = f.player("Ann")
     val quinn = f.player("Quinn")
-    f.w.summon(quinn, Label("//zones/z:helper"), 1, null)
+    f.w.summon(quinn, Effect.Summon(Label("//zones/z:helper"), 1, null))
     f.w.spawnMob(Label("//zones/z:stray"), ann.room)
     f.input(ann, "allies")
     f.run(1)

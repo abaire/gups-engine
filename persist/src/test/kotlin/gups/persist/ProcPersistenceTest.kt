@@ -16,6 +16,7 @@ import gups.core.model.ProcOutcome
 import gups.core.model.ProcTarget
 import gups.core.model.ProcTrigger
 import gups.core.model.Prototypes
+import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
 import gups.core.world.quit
@@ -171,7 +172,7 @@ class ProcPersistenceTest {
             )
           ),
       )
-    a.w.applyAffect(ann, "surge", 100, procs = listOf(proc))
+    a.w.applyAffect(ann, AffectSpec("surge", 100, procs = listOf(proc)))
 
     val surge = ann.affects.single { it.name == "surge" }
     assertEquals(1, surge.procs.size)
@@ -206,7 +207,11 @@ class ProcPersistenceTest {
         outcomes =
           listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 4), DamageType("fire")))),
       )
-    a.w.applyItemAffect(gem, "thorns", 50, applies = AffectScope.CARRIED, procs = listOf(proc))
+    a.w.applyItemAffect(
+      gem,
+      AffectSpec("thorns", 50, procs = listOf(proc)),
+      applies = AffectScope.CARRIED,
+    )
 
     a.w.quit(ann)
     a.save()

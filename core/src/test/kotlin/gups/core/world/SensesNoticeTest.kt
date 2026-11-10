@@ -84,7 +84,7 @@ class SensesNoticeTest {
     val f = fixture(mob("watcher"), rules = rules)
     val watcher = f.mob(Label("//t:watcher"))
     val p = f.player("Ann")
-    f.w.applyAffect(watcher, "blind", 10, senseDeltas = mapOf(Channel.SIGHT to -1))
+    f.w.applyAffect(watcher, AffectSpec("blind", 10, senseDeltas = mapOf(Channel.SIGHT to -1)))
     f.runTo(3)
     assertFalse(watcher.isEngaged)
     assertEquals(listOf(Channel.SOUND to "notice"), rules.calls)

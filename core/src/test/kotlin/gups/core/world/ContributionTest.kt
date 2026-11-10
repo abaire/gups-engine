@@ -99,9 +99,9 @@ class ContributionTest(private val fs: FixtureSchema) {
     val p = f.player("Ann")
     val g = f.mob(T.DUMMY)
     f.w.startCombat(p, g)
-    f.w.applyAffect(g, "hex", 100, source = p, hostile = true)
+    f.w.applyAffect(g, AffectSpec("hex", 100, source = p), hostile = true)
     assertEquals(1, entry(g, p.id)?.support)
-    f.w.applyAffect(g, "hex", 50, source = p, hostile = true)
+    f.w.applyAffect(g, AffectSpec("hex", 50, source = p), hostile = true)
     assertEquals(1, entry(g, p.id)?.support, "the shorter reapply records nothing")
   }
 
@@ -111,7 +111,7 @@ class ContributionTest(private val fs: FixtureSchema) {
     val p = f.player("Ann")
     val g = f.mob(T.DUMMY)
     val skill = SkillProto(T.ZAP, kind = "spell", target = TargetKind.ENEMY)
-    f.w.applyEffect(Effect.ApplyAffect("hex", 100), p, g, skill, power = 100)
+    f.w.applyEffect(Effect.ApplyAffect("hex", 100), p, g, EffectContext(skill, power = 100))
     assertEquals(
       1,
       entry(g, p.id)?.support,
@@ -128,7 +128,7 @@ class ContributionTest(private val fs: FixtureSchema) {
     val s = f.mob(T.GOBLIN)
     f.w.startCombat(a, g)
     val skill = SkillProto(T.MEND, kind = "spell", target = TargetKind.ALLY)
-    f.w.applyEffect(Effect.ApplyAffect("buff", 100), s, a, skill, power = 100)
+    f.w.applyEffect(Effect.ApplyAffect("buff", 100), s, a, EffectContext(skill, power = 100))
     assertEquals(1, entry(g, s.id)?.support, "help goes onto the ally's opponents' ledgers")
     assertNull(entry(a, s.id), "the healed ally's own ledger gains nothing")
   }
@@ -142,11 +142,11 @@ class ContributionTest(private val fs: FixtureSchema) {
     f.w.startCombat(a, g)
     f.w.startCombat(b, g)
     // Engaged applier: a bane on the victim's own ledger.
-    f.w.applyAffect(g, "hex", 100, source = a, hostile = null)
+    f.w.applyAffect(g, AffectSpec("hex", 100, source = a), hostile = null)
     assertEquals(1, entry(g, a.id)?.support)
     // A not-engaged applier is help: it lands on the victim's opponents.
     val c = f.player("Cal")
-    f.w.applyAffect(g, "buff", 100, source = c, hostile = null)
+    f.w.applyAffect(g, AffectSpec("buff", 100, source = c), hostile = null)
     assertNull(entry(g, c.id), "an unengaged applier is help, not a bane on the victim")
     assertEquals(1, entry(a, c.id)?.support, "help lands on the victim's opponents")
   }
@@ -186,7 +186,7 @@ class ContributionTest(private val fs: FixtureSchema) {
     val s = f.player("Sam")
     val owned = f.mob(T.GOBLIN)
     f.w.setOwner(owned, p)
-    val summoned = f.w.summon(p, T.DUMMY, 1, null).first()
+    val summoned = f.w.summon(p, Effect.Summon(T.DUMMY, 1, null)).first()
     val follower = f.mob(T.DUMMY)
     follower.leader = p.id
     val lostOwner = f.mob(T.DUMMY)

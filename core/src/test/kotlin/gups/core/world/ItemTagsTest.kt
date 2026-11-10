@@ -184,10 +184,8 @@ class ItemTagsTest(private val fs: FixtureSchema) {
     val luck =
       f.w.applyItemAffect(
         sword_,
-        "luck",
-        null,
+        AffectSpec("luck", null, statDeltas = mapOf(fs.agility to 2)),
         AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 2),
       )!!
     val base = p.stat(fs.agility)
     val oldId = sword_.id

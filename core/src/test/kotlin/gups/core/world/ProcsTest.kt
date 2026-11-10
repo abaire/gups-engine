@@ -336,9 +336,11 @@ class ProcsTest {
     // Add a damage modifier to the room to capture ctx.skill
     f.w.applyAffect(
       p,
-      "tracker",
-      1000,
-      modifiers = mapOf(ModifierPoint.DAMAGE to HookRef(Label("//t:mods.star"), "track_skill")),
+      AffectSpec(
+        "tracker",
+        1000,
+        modifiers = mapOf(ModifierPoint.DAMAGE to HookRef(Label("//t:mods.star"), "track_skill")),
+      ),
     )
 
     val startMana = p.current(fs.energy)
@@ -422,9 +424,12 @@ class ProcsTest {
     f.w.spawnItem(procSword, ItemLocation.Equipped(p.id, "wield"))
     f.w.applyAffect(
       p,
-      "silence_mod",
-      1000,
-      modifiers = mapOf(ModifierPoint.CAST_ALLOWED to HookRef(Label("//t:mods.star"), "deny_cast")),
+      AffectSpec(
+        "silence_mod",
+        1000,
+        modifiers =
+          mapOf(ModifierPoint.CAST_ALLOWED to HookRef(Label("//t:mods.star"), "deny_cast")),
+      ),
     )
 
     f.w.startCombat(p, d)
@@ -536,7 +541,7 @@ class ProcsTest {
         100,
         listOf(ProcOutcome(weight = 100, effect = Effect.Damage(Dice(1, 1, 3), fire))),
       )
-    f.w.applyAffect(p, "flame_blade", 100, procs = listOf(flameProc))
+    f.w.applyAffect(p, AffectSpec("flame_blade", 100, procs = listOf(flameProc)))
 
     f.w.startCombat(p, d)
     f.runTo(8)

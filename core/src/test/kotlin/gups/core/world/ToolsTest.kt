@@ -162,7 +162,11 @@ class ToolsTest {
     val f = Fixture(protos = Prototypes(T.rooms, T.mobs, T.items + charm, T.skills))
     val b = f.builder()
     val item = f.w.spawnItem(Label("//t:charm"), ItemLocation.Carried(b.id))
-    f.w.applyItemAffect(item, "keen", 500, applies = AffectScope.WORN, flags = setOf("glowing"))
+    f.w.applyItemAffect(
+      item,
+      AffectSpec("keen", 500, flags = setOf("glowing")),
+      applies = AffectScope.WORN,
+    )
     assertTrue(f.w.addItemTag(item, "cursed"))
     assertTrue(f.w.removeItemTag(item, "shiny"))
     f.input(b, "@stat charm")
@@ -177,7 +181,7 @@ class ToolsTest {
     val f = fixture()
     val b = f.builder()
     val mob = f.mob(at = b.room.label)
-    f.w.applyAffect(mob, "keen", 500, flags = setOf("glowing"))
+    f.w.applyAffect(mob, AffectSpec("keen", 500, flags = setOf("glowing")))
     f.input(b, "@stat #${mob.id.v}")
     assertContains(f.out(b), "Affects: keen (125s left; glowing)")
   }
@@ -206,7 +210,7 @@ class ToolsTest {
     val f = Fixture(protos = Prototypes(T.rooms, T.mobs, T.items + charm, T.skills))
     val b = f.builder()
     val item = f.w.spawnItem(Label("//t:charm"), ItemLocation.Carried(b.id))
-    f.w.applyItemAffect(item, "ward", null, applies = AffectScope.CARRIED)
+    f.w.applyItemAffect(item, AffectSpec("ward", null), applies = AffectScope.CARRIED)
     item.proto = tombstone(item.proto)
     f.input(b, "@stat charm")
     val out = f.out(b)

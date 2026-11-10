@@ -74,8 +74,14 @@ class ModifierChainTest {
       )
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
-    f.w.applyAffect(p, "zeta", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff_a")))
-    f.w.applyAffect(p, "alpha", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff_b")))
+    f.w.applyAffect(
+      p,
+      AffectSpec("zeta", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff_a"))),
+    )
+    f.w.applyAffect(
+      p,
+      AffectSpec("alpha", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff_b"))),
+    )
     f.w.moveItem(
       f.w.spawnItem(blade, ItemLocation.Carried(p.id)),
       ItemLocation.Equipped(p.id, "wield"),
@@ -145,7 +151,10 @@ class ModifierChainTest {
       )
     val p = f.player("Ann")
     p.skills[T.BOLT] = 100
-    f.w.applyAffect(p, "late", 100, modifiers = mapOf(ModifierPoint.CAST_ALLOWED to mod("never")))
+    f.w.applyAffect(
+      p,
+      AffectSpec("late", 100, modifiers = mapOf(ModifierPoint.CAST_ALLOWED to mod("never"))),
+    )
     f.mob(T.DUMMY)
     f.input(p, "cast bolt dummy")
     f.run()
@@ -172,9 +181,12 @@ class ModifierChainTest {
     val p = f.player("Ann", hp = 50)
     f.w.applyAffect(
       p,
-      "weary",
-      10_000,
-      modifiers = mapOf(ModifierPoint.REGEN to mod("slow"), ModifierPoint.MOVE_COST to mod("slow")),
+      AffectSpec(
+        "weary",
+        10_000,
+        modifiers =
+          mapOf(ModifierPoint.REGEN to mod("slow"), ModifierPoint.MOVE_COST to mod("slow")),
+      ),
     )
     f.setVital(p, "hp", 10)
     val regen = f.w.regenOf(RulesContext(f.w, p))
@@ -322,9 +334,11 @@ class ModifierChainTest {
     f.w.onRules = { _, line -> lines += line }
     f.w.applyAffect(
       p,
-      "slow_advance",
-      10_000,
-      modifiers = mapOf(ModifierPoint.ADVANCE_LAG to mod("mod_lag")),
+      AffectSpec(
+        "slow_advance",
+        10_000,
+        modifiers = mapOf(ModifierPoint.ADVANCE_LAG to mod("mod_lag")),
+      ),
     )
     val ctx = RulesContext(f.w, p, other, band = Band.NEAR)
     assertEquals(0, f.w.advanceLagOf(ctx))

@@ -30,7 +30,7 @@ class EffectPowerTest {
       Effect.Damage(Dice.parse("10d1"), DamageType("physical")),
       ann,
       goblin,
-      power = 150,
+      EffectContext(power = 150),
     )
     val hpAfter1 = goblin.vitals.getValue("hp").current
     assertEquals(15, hpBefore - hpAfter1)
@@ -40,7 +40,7 @@ class EffectPowerTest {
       Effect.Damage(Dice.parse("10d1"), DamageType("physical")),
       ann,
       goblin,
-      power = 0,
+      EffectContext(power = 0),
     )
     val hpAfter2 = goblin.vitals.getValue("hp").current
     assertEquals(1, hpAfter1 - hpAfter2)
@@ -54,10 +54,10 @@ class EffectPowerTest {
     val maxHp = ann.vitals.getValue("hp").max
     assertTrue(maxHp >= 40)
 
-    f.w.applyEffect(Effect.Heal(Dice.parse("10d1"), "hp"), ann, ann, power = 150)
+    f.w.applyEffect(Effect.Heal(Dice.parse("10d1"), "hp"), ann, ann, EffectContext(power = 150))
     assertEquals(25, ann.vitals.getValue("hp").current)
 
-    f.w.applyEffect(Effect.Heal(Dice.parse("10d1"), "hp"), ann, ann, power = 0)
+    f.w.applyEffect(Effect.Heal(Dice.parse("10d1"), "hp"), ann, ann, EffectContext(power = 0))
     assertEquals(26, ann.vitals.getValue("hp").current)
   }
 
@@ -67,7 +67,7 @@ class EffectPowerTest {
     val ann = f.player("Ann")
     val goblin = f.mob()
 
-    f.w.applyEffect(Effect.Stun(5), ann, goblin, power = 200)
+    f.w.applyEffect(Effect.Stun(5), ann, goblin, EffectContext(power = 200))
     val stun = goblin.affects.single { it.name == "stun" }
     assertEquals(f.w.pulse + 10, stun.expiresAt)
     assertEquals(200, stun.power)
@@ -79,7 +79,12 @@ class EffectPowerTest {
     val ann = f.player("Ann")
     val goblin = f.mob()
 
-    f.w.applyEffect(Effect.ApplyAffect("haste", duration = 10), ann, goblin, power = 150)
+    f.w.applyEffect(
+      Effect.ApplyAffect("haste", duration = 10),
+      ann,
+      goblin,
+      EffectContext(power = 150),
+    )
     val haste = goblin.affects.single { it.name == "haste" }
     assertEquals(f.w.pulse + 15, haste.expiresAt)
     assertEquals(150, haste.power)
@@ -90,7 +95,12 @@ class EffectPowerTest {
     val f = Fixture()
     val ann = f.player("Ann")
 
-    f.w.applyEffect(Effect.Summon(T.GOBLIN, count = 2, duration = 10), ann, null, power = 150)
+    f.w.applyEffect(
+      Effect.Summon(T.GOBLIN, count = 2, duration = 10),
+      ann,
+      null,
+      EffectContext(power = 150),
+    )
     val goblins = f.w.actors.filter { it.room == ann.room && it.name == "a goblin" }
     assertEquals(2, goblins.size)
     for (g in goblins) {
@@ -124,13 +134,23 @@ class EffectPowerTest {
     val goblin = f.mob()
 
     // Duration 20 scaled at 150% is 30.
-    f.w.applyEffect(Effect.ApplyAffect("shield", duration = 20), ann, goblin, power = 150)
+    f.w.applyEffect(
+      Effect.ApplyAffect("shield", duration = 20),
+      ann,
+      goblin,
+      EffectContext(power = 150),
+    )
     val first = goblin.affects.single { it.name == "shield" }
     assertEquals(150, first.power)
     assertEquals(f.w.pulse + 30, first.expiresAt)
 
     // Reapply with shorter duration (5 scaled at 80% is 4) and different power
-    f.w.applyEffect(Effect.ApplyAffect("shield", duration = 5), ann, goblin, power = 80)
+    f.w.applyEffect(
+      Effect.ApplyAffect("shield", duration = 5),
+      ann,
+      goblin,
+      EffectContext(power = 80),
+    )
     val second = goblin.affects.single { it.name == "shield" }
     assertEquals(first.id, second.id)
     assertEquals(150, second.power)

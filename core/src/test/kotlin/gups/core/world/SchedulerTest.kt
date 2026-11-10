@@ -84,7 +84,10 @@ class SchedulerTest {
   fun `affects expire on their absolute pulse`() {
     val f = Fixture()
     val p = f.player("Ann")
-    f.w.applyAffect(p, "haste", 5, statDeltas = mapOf("dex" to 3), expireMessage = "You slow down.")
+    f.w.applyAffect(
+      p,
+      AffectSpec("haste", 5, statDeltas = mapOf("dex" to 3), expireMessage = "You slow down."),
+    )
     assertEquals(13, p.stat("dex"))
     f.run(4)
     assertEquals(13, p.stat("dex"))

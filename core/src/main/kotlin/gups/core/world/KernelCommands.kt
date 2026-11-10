@@ -1040,7 +1040,7 @@ internal object KernelCommands {
           if (useTarget == TargetKind.ITEM) {
             targetItem?.let { w.applyItemEffect(effect, actor, it, power = power) }
           } else {
-            w.applyEffect(effect, actor, target, power = power)
+            w.applyEffect(effect, actor, target, EffectContext(power = power))
           }
         }
         w.dispatch(HookName.ON_USE, item, actor.room, ctx(actor))

@@ -122,7 +122,7 @@ class TraitEffectsTest {
     val p = g.player("Ann")
     g.w.grantTrait(p, "zealous")
     g.w.grantTrait(p, "able")
-    g.w.applyAffect(p, "x", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff")))
+    g.w.applyAffect(p, AffectSpec("x", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("aff"))))
     val r = g.w.toHitChain(RulesContext(g.w, p, g.mob(T.DUMMY)))
     assertEquals(
       "rules.to_hit base=50 → room:hall 51 → trait:able 52 → trait:zealous 104 → affect:x 105",

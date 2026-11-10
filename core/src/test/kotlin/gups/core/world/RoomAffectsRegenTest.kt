@@ -173,7 +173,7 @@ class RoomAffectsRegenTest {
         host = host,
         setup = { w, room ->
           val rat = room.actors.single()
-          w.w.applyAffect(rat, "weakened", 600, flags = setOf("no_regen"))
+          w.w.applyAffect(rat, AffectSpec("weakened", 600, flags = setOf("no_regen")))
           w.w.applyRoomAffect(
             room,
             "ward",
@@ -196,7 +196,7 @@ class RoomAffectsRegenTest {
         host = host,
         setup = { w, room ->
           val rat = room.actors.single()
-          w.w.applyAffect(rat, "weakened", 3600, flags = setOf("no_regen"))
+          w.w.applyAffect(rat, AffectSpec("weakened", 3600, flags = setOf("no_regen")))
           w.w.applyRoomAffect(
             room,
             "ward",

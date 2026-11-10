@@ -15,6 +15,7 @@ import gups.core.model.Prototypes
 import gups.core.model.Restriction
 import gups.core.model.RestrictionPoint
 import gups.core.rules.RulesContext
+import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
 import gups.core.world.changeVital
@@ -101,11 +102,13 @@ class CodecTest {
     val gem = a.w.spawnItem(P.GEM, ItemLocation.Carried(ann.id))
     a.w.applyItemAffect(
       gem,
-      "fire_ward",
-      100,
+      AffectSpec(
+        "fire_ward",
+        100,
+        maxVitalDeltas = mapOf("hp" to 10),
+        resistDeltas = mapOf(fire to 8),
+      ),
       applies = AffectScope.CARRIED,
-      maxVitalDeltas = mapOf("hp" to 10),
-      resistDeltas = mapOf(fire to 8),
     )
     a.w.quit(ann)
     a.save()
@@ -129,10 +132,7 @@ class CodecTest {
     val ann = a.login("Ann")
     a.w.applyAffect(
       ann,
-      "vigor",
-      100,
-      maxVitalDeltas = mapOf("hp" to 20),
-      resistDeltas = mapOf(fire to 4),
+      AffectSpec("vigor", 100, maxVitalDeltas = mapOf("hp" to 20), resistDeltas = mapOf(fire to 4)),
     )
     a.w.quit(ann)
     a.save()

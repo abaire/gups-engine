@@ -2,6 +2,7 @@ package gups.persist
 
 import gups.core.model.Channel
 import gups.core.model.Mob
+import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.core.world.quit
 import kotlin.test.Test
@@ -18,7 +19,7 @@ class SensesPersistenceTest {
     ann.baseSenses[Channel.SOUND] = 3
     ann.baseSenses[Channel.SIGHT] = 0
     ann.dirty = true
-    a.w.applyAffect(ann, "attuned", 5000, senseDeltas = mapOf(Channel.SOUND to 2))
+    a.w.applyAffect(ann, AffectSpec("attuned", 5000, senseDeltas = mapOf(Channel.SOUND to 2)))
     a.w.quit(ann)
     a.save()
     a.close()

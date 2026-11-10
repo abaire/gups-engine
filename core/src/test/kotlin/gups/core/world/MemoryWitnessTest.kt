@@ -114,7 +114,7 @@ class MemoryWitnessTest {
     val ally = f.player("Ally")
     val victim = f.mob(T.GOBLIN)
 
-    f.w.applyAffect(ally, "bless", duration = 10, source = actorMob, hostile = false)
+    f.w.applyAffect(ally, AffectSpec("bless", duration = 10, source = actorMob), hostile = false)
     assertEquals(1, f.w.memoriesOf(watcher, subject = actorMob, event = "help").size)
     assertEquals(
       ally.id,
@@ -139,7 +139,7 @@ class MemoryWitnessTest {
     val cleric = f.player("Cleric", at = T.HALL)
     f.w.damage(tank, mapOf(f.fs.health to 10), slash, nearTarget)
     f.w.heal(tank, f.fs.health, 7, source = cleric)
-    f.w.applyAffect(tank, "bless", duration = 10, source = cleric, hostile = false)
+    f.w.applyAffect(tank, AffectSpec("bless", duration = 10, source = cleric), hostile = false)
     val victim = f.mob(T.GOBLIN, at = T.YARD)
     f.w.damage(victim, mapOf(f.fs.health to 100), slash, cleric)
 

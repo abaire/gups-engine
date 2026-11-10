@@ -59,7 +59,7 @@ class SaturatingPulsesTest {
         it.scope = setOf("t")
         it.accountId = 1
       }
-    val a = f.w.applyAffect(p, "forever", Long.MAX_VALUE)
+    val a = f.w.applyAffect(p, AffectSpec("forever", Long.MAX_VALUE))
     assertEquals(Long.MAX_VALUE, a!!.expiresAt)
     f.run(1000)
     assertEquals(1, p.affects.size, "still on the actor after 1000 pulses")

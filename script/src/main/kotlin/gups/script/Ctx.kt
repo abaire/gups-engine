@@ -14,6 +14,7 @@ import gups.core.model.DamageType
 import gups.core.model.Dice
 import gups.core.model.Direction
 import gups.core.model.DoorState
+import gups.core.model.Effect
 import gups.core.model.Entity
 import gups.core.model.GroupSnapshot
 import gups.core.model.Item
@@ -104,6 +105,7 @@ import gups.core.world.stopCombat
 import gups.core.world.summon
 import gups.core.world.takeXp
 import gups.core.world.teleport
+import gups.core.world.toSpec
 import gups.core.world.transformItem
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
@@ -1869,25 +1871,7 @@ internal constructor(
               )
             AffectScope.valueOf(s.uppercase())
           }
-        val a =
-          world.applyItemAffect(
-            item,
-            e.name,
-            e.duration,
-            scope,
-            e.statDeltas,
-            e.flags,
-            e.tickEvery,
-            e.onTick,
-            e.onExpire,
-            e.expireMessage,
-            owner as? Actor,
-            e.modifiers,
-            e.senseDeltas,
-            maxVitalDeltas = e.maxVitalDeltas,
-            resistDeltas = e.resistDeltas,
-            procs = e.procs,
-          )
+        val a = world.applyItemAffect(item, e.toSpec(owner as? Actor), scope)
         a?.let { AffectView(frame, item, it) } ?: Starlark.NONE
       } else {
         val t = actorArg(target, "apply_affect(target)")
@@ -1896,25 +1880,8 @@ internal constructor(
         if (e.removeTags.isNotEmpty())
           fail("apply_affect(remove_tags): only a room's affect can remove tags")
         if (!isNone(applies)) fail("apply_affect(applies): only item affects take applies")
-        val d = e.duration ?: fail("apply_affect(duration): an actor's affect needs a duration")
-        val a =
-          world.applyAffect(
-            t,
-            e.name,
-            d,
-            e.statDeltas,
-            e.flags,
-            e.tickEvery,
-            e.onTick,
-            e.onExpire,
-            e.expireMessage,
-            owner as? Actor,
-            e.modifiers,
-            senseDeltas = e.senseDeltas,
-            maxVitalDeltas = e.maxVitalDeltas,
-            resistDeltas = e.resistDeltas,
-            procs = e.procs,
-          )
+        if (e.duration == null) fail("apply_affect(duration): an actor's affect needs a duration")
+        val a = world.applyAffect(t, e.toSpec(owner as? Actor))
         a?.let { AffectView(frame, t, it) } ?: Starlark.NONE
       }
     }
@@ -1977,7 +1944,7 @@ internal constructor(
       if (n < 1) fail("summon(count): must be at least 1")
       val d = if (duration == Starlark.NONE) null else int(duration, "summon(duration)")
       if (d != null && d < 1) fail("summon(duration): must be at least 1")
-      val mobs = world.summon(c, l, n, d)
+      val mobs = world.summon(c, Effect.Summon(l, n, d))
       sList(mobs.map { v(it) })
     }
 

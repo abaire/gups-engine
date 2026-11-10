@@ -218,7 +218,7 @@ class ActionLifecycleTest(private val fs: FixtureSchema) {
     val p = f.player("Ann")
     val g = f.mob(index = 2)
     p.waitState = 4
-    f.w.applyAffect(p, "stun", 3, flags = setOf("stunned"))
+    f.w.applyAffect(p, AffectSpec("stun", 3, flags = setOf("stunned")))
     assertEquals(0, p.waitState, "the stun removes recovery")
     f.run(2)
     assertEquals(0, p.waitState)
@@ -304,7 +304,7 @@ class ActionLifecycleTest(private val fs: FixtureSchema) {
     val p = f.player("Ann")
     val bob = f.player("Bob")
     f.mob(T.DUMMY)
-    f.w.applyAffect(p, "hexed", 10, flags = setOf("silenced"))
+    f.w.applyAffect(p, AffectSpec("hexed", 10, flags = setOf("silenced")))
     f.w.flushOutput()
     f.out(bob)
     for (line in listOf("say hi", "tell dummy hi", "whisper bob hi", "shout hi", "gossip hi")) {
@@ -332,12 +332,12 @@ class ActionLifecycleTest(private val fs: FixtureSchema) {
   fun `re-applying an affect only replaces it when the new one lasts longer`() {
     val f = Fixture()
     val p = f.player("Ann")
-    val long = f.w.applyAffect(p, "stun", 10, flags = setOf("stunned"))
+    val long = f.w.applyAffect(p, AffectSpec("stun", 10, flags = setOf("stunned")))
     f.run(2)
-    val short = f.w.applyAffect(p, "stun", 3, flags = setOf("stunned"))
+    val short = f.w.applyAffect(p, AffectSpec("stun", 3, flags = setOf("stunned")))
     assertTrue(short === long, "a shorter stun leaves the longer one in place")
     assertEquals(f.w.pulse + 8, p.affects.single().expiresAt)
-    val longer = f.w.applyAffect(p, "stun", 9, flags = setOf("stunned"))
+    val longer = f.w.applyAffect(p, AffectSpec("stun", 9, flags = setOf("stunned")))
     assertTrue(longer !== long, "a stun that outlasts the old one replaces it")
     assertEquals(f.w.pulse + 9, p.affects.single().expiresAt)
     f.w.applyEffect(Effect.Stun(1), p, p)

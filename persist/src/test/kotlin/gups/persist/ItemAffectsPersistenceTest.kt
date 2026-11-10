@@ -3,6 +3,7 @@ package gups.persist
 import gups.core.model.AffectScope
 import gups.core.model.ItemLocation
 import gups.core.model.Prototypes
+import gups.core.world.AffectSpec
 import gups.core.world.TOMBSTONE
 import gups.core.world.addItemTag
 import gups.core.world.applyItemAffect
@@ -24,17 +25,13 @@ class ItemAffectsPersistenceTest {
     val baseDex = ann.stat("dex")
     a.w.applyItemAffect(
       gem,
-      "glow",
-      100,
+      AffectSpec("glow", 100, statDeltas = mapOf("str" to 5)),
       applies = AffectScope.CARRIED,
-      statDeltas = mapOf("str" to 5),
     )
     a.w.applyItemAffect(
       gem,
-      "ward",
-      null,
+      AffectSpec("ward", null, statDeltas = mapOf("dex" to 3)),
       applies = AffectScope.CARRIED,
-      statDeltas = mapOf("dex" to 3),
     )
     // The carried affects count for the holder while the gem is carried.
     assertEquals(baseStr + 5, ann.stat("str"))
@@ -108,10 +105,8 @@ class ItemAffectsPersistenceTest {
     val baseStr = ann.stat("str")
     a.w.applyItemAffect(
       gem,
-      "glow",
-      null,
+      AffectSpec("glow", null, statDeltas = mapOf("str" to 5)),
       applies = AffectScope.CARRIED,
-      statDeltas = mapOf("str" to 5),
     )
     assertTrue(a.w.addItemTag(gem, "cursed"))
     a.w.quit(ann)

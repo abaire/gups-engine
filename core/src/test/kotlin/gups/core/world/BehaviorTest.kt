@@ -292,7 +292,7 @@ class BehaviorTest {
     f.w.actMove(g, Direction.NORTH)
     f.runTo(3)
     assertEquals(T.YARD, g.room.label, "mobs are the guard's allies by default")
-    f.w.applyAffect(warden, "stun", 50, flags = setOf("stunned"))
+    f.w.applyAffect(warden, AffectSpec("stun", 50, flags = setOf("stunned")))
     f.input(p, "north")
     f.run()
     assertEquals(T.YARD, p.room.label)

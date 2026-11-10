@@ -121,7 +121,7 @@ class ProcSourcesTest {
     val p = f.player("Ann")
     val proc1 = Proc(ProcTrigger.HIT, 40, listOf(ProcOutcome(weight = 100)))
 
-    val aff1 = f.w.applyAffect(p, "buff", duration = 10, procs = listOf(proc1))
+    val aff1 = f.w.applyAffect(p, AffectSpec("buff", duration = 10, procs = listOf(proc1)))
     assertEquals(listOf(proc1), aff1?.procs)
     assertEquals(listOf(proc1), p.affects.first { it.name == "buff" }.procs)
 
@@ -139,7 +139,7 @@ class ProcSourcesTest {
     val stack = f.w.spawnItem(potion, ItemLocation.Carried(p.id), count = 5)
 
     val proc = Proc(ProcTrigger.AVOID, 50, listOf(ProcOutcome(weight = 100)))
-    f.w.applyItemAffect(stack, "enchanted", duration = null, procs = listOf(proc))
+    f.w.applyItemAffect(stack, AffectSpec("enchanted", duration = null, procs = listOf(proc)))
 
     val part = f.w.moveItem(stack, ItemLocation.Carried(p.id), count = 1)
     val partAffect = part.affects.firstOrNull { it.name == "enchanted" }

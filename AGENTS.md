@@ -36,6 +36,12 @@ say "spell" where a world or a skill chooses that word.
 
 - Follow test driven development practices. Write tests first, verify that they fail, then write code to pass the tests.
 
+## CodeScene
+
+After changing code, run `code_health_review` on the changed files. If Code Health drops, fix the issues, run the review
+again, and use `code_health_score` to confirm the result. Before finishing, run `pre_commit_code_health_safeguard` and
+only stop when it passes.
+
 ## Building and testing
 
 See [README.md](README.md). `./gradlew check` must pass, including the module-graph check. All Kotlin warnings are

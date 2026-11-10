@@ -4,6 +4,7 @@ import gups.core.fixtures.FixtureRules
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Actor
+import gups.core.model.Effect
 import gups.core.rules.RulesContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -182,7 +183,7 @@ class XpShareTest(private val fs: FixtureSchema) {
     }
     val f = Fixture(rules = rules)
     val killer = f.player("Ann")
-    val summoned = f.w.summon(killer, T.DUMMY, 1, null).first()
+    val summoned = f.w.summon(killer, Effect.Summon(T.DUMMY, 1, null)).first()
     f.w.startCombat(killer, summoned)
     f.hurt(summoned, summoned.current(fs.health) + 1, killer)
     assertFalse(summoned.inWorld)

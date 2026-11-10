@@ -263,9 +263,9 @@ class BubbleTest(private val fs: FixtureSchema) {
     }
     val f = Fixture(protos = C.protos(), scripts = host, bubble = true)
     val rat = f.w.spawnMob(C.RAT, f.w.room(C.r(9)))
-    f.w.applyAffect(rat, "late", 300, onExpire = HookRef(Label("//c:t.star"), "late"))
-    f.w.applyAffect(rat, "early", 100, onExpire = HookRef(Label("//c:t.star"), "early"))
-    f.w.applyAffect(rat, "lasting", 5000)
+    f.w.applyAffect(rat, AffectSpec("late", 300, onExpire = HookRef(Label("//c:t.star"), "late")))
+    f.w.applyAffect(rat, AffectSpec("early", 100, onExpire = HookRef(Label("//c:t.star"), "early")))
+    f.w.applyAffect(rat, AffectSpec("lasting", 5000))
     f.runTo(400)
     assertEquals(3, rat.affects.size, "affects don't tick while dormant")
     host.calls.clear()
@@ -320,7 +320,7 @@ class DormantRecoveryTest(private val fs: FixtureSchema) {
     val held =
       wakeAfter(
         DormantRecovery.FULL,
-        { f, rat -> f.w.applyAffect(rat, "weakened", 3600, flags = setOf("no_regen")) },
+        { f, rat -> f.w.applyAffect(rat, AffectSpec("weakened", 3600, flags = setOf("no_regen"))) },
       )
     assertEquals(10, held.current(fs.health))
     // Expired during dormancy: the boss is back to full.
@@ -328,7 +328,7 @@ class DormantRecoveryTest(private val fs: FixtureSchema) {
       100,
       wakeAfter(
           DormantRecovery.FULL,
-          { f, rat -> f.w.applyAffect(rat, "weakened", 600, flags = setOf("no_regen")) },
+          { f, rat -> f.w.applyAffect(rat, AffectSpec("weakened", 600, flags = setOf("no_regen"))) },
         )
         .current(fs.health),
     )
@@ -348,7 +348,7 @@ class DormantRecoveryTest(private val fs: FixtureSchema) {
       28,
       wakeAfter(
           DormantRecovery.REGEN,
-          { f, rat -> f.w.applyAffect(rat, "weakened", 600, flags = setOf("no_regen")) },
+          { f, rat -> f.w.applyAffect(rat, AffectSpec("weakened", 600, flags = setOf("no_regen"))) },
         )
         .current(fs.health),
     )
@@ -361,7 +361,10 @@ class DormantRecoveryTest(private val fs: FixtureSchema) {
       wakeAfter(
         DormantRecovery.REGEN,
         { f, rat ->
-          f.w.applyAffect(rat, "slowed", 600, modifiers = mapOf(ModifierPoint.REGEN to mod("slow")))
+          f.w.applyAffect(
+            rat,
+            AffectSpec("slowed", 600, modifiers = mapOf(ModifierPoint.REGEN to mod("slow"))),
+          )
         },
         host,
       )

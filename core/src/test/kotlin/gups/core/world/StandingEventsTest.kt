@@ -157,12 +157,12 @@ class StandingEventsTest {
     val enemy = f.mob(T.DUMMY)
 
     // Helpful affect outside combat does not raise help
-    f.w.applyAffect(mob, "bless", duration = 100, source = p, hostile = false)
+    f.w.applyAffect(mob, AffectSpec("bless", duration = 100, source = p), hostile = false)
     assertEquals(0, f.w.disposition(mob, p))
 
     // Helpful affect while engaged raises help (+5)
     f.w.startCombat(mob, enemy)
-    f.w.applyAffect(mob, "shield", duration = 100, source = p, hostile = false)
+    f.w.applyAffect(mob, AffectSpec("shield", duration = 100, source = p), hostile = false)
     assertEquals(5, f.w.disposition(mob, p))
     // And assist on enemy (-10)
     assertEquals(-10, f.w.disposition(enemy, p))
@@ -171,7 +171,7 @@ class StandingEventsTest {
     val enemy2 = f.mob(T.GOBLIN)
     f.w.startCombat(p, enemy2)
     assertEquals(-50, f.w.disposition(enemy2, p)) // from attack event
-    f.w.applyAffect(enemy2, "curse", duration = 100, source = p, hostile = true)
+    f.w.applyAffect(enemy2, AffectSpec("curse", duration = 100, source = p), hostile = true)
     assertEquals(-50, f.w.disposition(enemy2, p)) // Bane does not raise help
   }
 

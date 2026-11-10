@@ -209,7 +209,7 @@ class VitalsTest(private val fs: FixtureSchema) {
     }
     val f = Fixture(rules = lastVitalKills(), scripts = host)
     val g = f.mob(T.GOBLIN)
-    f.w.applyAffect(g, "rot", 1000, tickEvery = 10, onTick = mod("rot"))
+    f.w.applyAffect(g, AffectSpec("rot", 1000, tickEvery = 10, onTick = mod("rot")))
     f.runTo(9)
     assertTrue(g.inWorld)
     f.runTo(10)
@@ -509,7 +509,8 @@ class VitalsTest(private val fs: FixtureSchema) {
     val f = Fixture(rules = rules { regenOf = { emptyMap() } })
     val p = f.player("Ann")
     val baseMax = p.max(fs.health)
-    val aff = f.w.applyAffect(p, "endurance", 10, maxVitalDeltas = mapOf(fs.health to 15))
+    val aff =
+      f.w.applyAffect(p, AffectSpec("endurance", 10, maxVitalDeltas = mapOf(fs.health to 15)))
     assertEquals(baseMax + 15, p.max(fs.health))
     f.w.changeVital(p, fs.health, 15)
     assertEquals(baseMax + 15, p.current(fs.health))
@@ -526,7 +527,7 @@ class VitalsTest(private val fs: FixtureSchema) {
     val p = f.player("Ann")
     val type = DamageType(fs.schema.damageTypes.first())
     val baseResist = p.effectiveResist(type)
-    val aff = f.w.applyAffect(p, "ward", 10, resistDeltas = mapOf(type to 7))
+    val aff = f.w.applyAffect(p, AffectSpec("ward", 10, resistDeltas = mapOf(type to 7)))
     assertEquals(baseResist + 7, p.effectiveResist(type))
     assertEquals(baseResist + 7, p.effectiveResist(type.name))
 

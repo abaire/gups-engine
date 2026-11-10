@@ -285,7 +285,10 @@ class BonusDamageTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     f.wearFlame(p)
-    f.w.applyAffect(d, "rd", 100, modifiers = mapOf(ModifierPoint.RECEIVE_DAMAGE to mod("rd")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("rd", 100, modifiers = mapOf(ModifierPoint.RECEIVE_DAMAGE to mod("rd"))),
+    )
     val hit = f.w.resolveDamage(RulesContext(f.w, p, d, damageType = slash), 5, slash)
     // The fire part of 0 is dropped; the defender's receive_damage ran only for the primary part.
     assertEquals(listOf<DamageType?>(slash), seen)
@@ -312,7 +315,10 @@ class BonusDamageTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     f.wearFlame(p)
-    f.w.applyAffect(d, "rd", 100, modifiers = mapOf(ModifierPoint.RECEIVE_DAMAGE to mod("rd")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("rd", 100, modifiers = mapOf(ModifierPoint.RECEIVE_DAMAGE to mod("rd"))),
+    )
     f.w.resolveDamage(RulesContext(f.w, p, d, damageType = slash), 5, slash)
     assertEquals(listOf<DamageType?>(slash, fire), seen)
   }
@@ -332,7 +338,10 @@ class BonusDamageTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     f.wearFlame(p)
-    f.w.applyAffect(d, "siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon"))),
+    )
     val hit = f.w.resolveDamage(RulesContext(f.w, p, d, damageType = slash), 5, slash)
     // 5 primary hp plus the fire part's -1 gain: the combined loss is 4.
     assertEquals(mapOf("hp" to 4), hit.losses)

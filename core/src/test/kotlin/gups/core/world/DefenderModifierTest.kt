@@ -62,7 +62,10 @@ class DefenderModifierTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     // The defender carries its own chain: a room modifier, an affect and two worn items.
-    f.w.applyAffect(d, "wary", 100, modifiers = mapOf(ModifierPoint.DEFEND_HIT to mod("aff")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("wary", 100, modifiers = mapOf(ModifierPoint.DEFEND_HIT to mod("aff"))),
+    )
     f.w.moveItem(
       f.w.spawnItem(cloak, ItemLocation.Carried(d.id)),
       ItemLocation.Equipped(d.id, "body"),
@@ -72,7 +75,10 @@ class DefenderModifierTest {
       ItemLocation.Equipped(d.id, "wield"),
     )
     // The attacker has a to_hit of its own so its chain is non-empty and runs first.
-    f.w.applyAffect(p, "keen", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("atk")))
+    f.w.applyAffect(
+      p,
+      AffectSpec("keen", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("atk"))),
+    )
     val ctx = RulesContext(f.w, p, d)
     host.calls.clear()
     val r = f.w.toHitChain(ctx)
@@ -140,11 +146,12 @@ class DefenderModifierTest {
     // Give the attacker a defend_hit and the defender a to_hit: neither may be consulted.
     f.w.applyAffect(
       p,
-      "rogue",
-      100,
-      modifiers = mapOf(ModifierPoint.DEFEND_HIT to mod("atk_defend")),
+      AffectSpec("rogue", 100, modifiers = mapOf(ModifierPoint.DEFEND_HIT to mod("atk_defend"))),
     )
-    f.w.applyAffect(d, "sly", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("def_to_hit")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("sly", 100, modifiers = mapOf(ModifierPoint.TO_HIT to mod("def_to_hit"))),
+    )
     host.calls.clear()
     val r = f.w.toHitChain(RulesContext(f.w, p, d))
     assertEquals(50, r.value)
@@ -244,7 +251,10 @@ class DefenderModifierTest {
     val p = f.player("Ann")
     val d = f.player("Bea", index = 1) // a player has a mana vital
     f.setVital(d, "mana", d.max("mana") - 1) // room to gain
-    f.w.applyAffect(d, "siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon")))
+    f.w.applyAffect(
+      d,
+      AffectSpec("siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon"))),
+    )
     val beforeHp = d.current("hp")
     val beforeMana = d.current("mana")
     val hit = f.w.resolveDamage(RulesContext(f.w, p, d), 5, slash)
@@ -270,8 +280,14 @@ class DefenderModifierTest {
       )
     val p = f.player("Ann")
     val d = f.player("Bea", index = 1)
-    f.w.applyAffect(p, "strike", 100, modifiers = mapOf(ModifierPoint.DAMAGE to mod("atk_dmg")))
-    f.w.applyAffect(d, "siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon")))
+    f.w.applyAffect(
+      p,
+      AffectSpec("strike", 100, modifiers = mapOf(ModifierPoint.DAMAGE to mod("atk_dmg"))),
+    )
+    f.w.applyAffect(
+      d,
+      AffectSpec("siphon", 100, modifiers = mapOf(ModifierPoint.MITIGATE to mod("siphon"))),
+    )
     host.calls.clear()
     f.w.resolveDamage(RulesContext(f.w, p, d), 5, slash)
     assertEquals(

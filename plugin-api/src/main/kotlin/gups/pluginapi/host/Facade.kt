@@ -17,6 +17,7 @@ import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
 import gups.core.rules.RulesContext
+import gups.core.world.AffectSpec
 import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
@@ -530,13 +531,15 @@ internal class WorldFacade(
       "apply_affect(resistDeltas)",
     )
     world.applyAffect(
-      target = actorOf(target, "apply_affect(target)"),
-      name = name,
-      duration = duration.toLong(),
-      statDeltas = statDeltas,
-      flags = flags,
-      maxVitalDeltas = maxVitalDeltas,
-      resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
+      actorOf(target, "apply_affect(target)"),
+      AffectSpec(
+        name,
+        duration.toLong(),
+        statDeltas = statDeltas,
+        flags = flags,
+        maxVitalDeltas = maxVitalDeltas,
+        resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
+      ),
     )
   }
 
@@ -587,15 +590,17 @@ internal class WorldFacade(
       "apply_item_affect(resistDeltas)",
     )
     world.applyItemAffect(
-      item = target,
-      name = name,
-      duration = duration?.toLong(),
-      applies = scope,
-      statDeltas = statDeltas,
-      flags = flags,
-      senseDeltas = senseDeltas.mapKeys { Channel(it.key) },
-      maxVitalDeltas = maxVitalDeltas,
-      resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
+      target,
+      AffectSpec(
+        name,
+        duration?.toLong(),
+        statDeltas = statDeltas,
+        flags = flags,
+        senseDeltas = senseDeltas.mapKeys { Channel(it.key) },
+        maxVitalDeltas = maxVitalDeltas,
+        resistDeltas = resistDeltas.mapKeys { DamageType(it.key) },
+      ),
+      scope,
     )
   }
 

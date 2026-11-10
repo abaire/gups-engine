@@ -306,7 +306,7 @@ class SlotsTest(private val fs: FixtureSchema) {
     assertTrue(rules.actorSlotsCalls - calls <= 1)
 
     refreshedBy("wield") { f.w.forgetActorSlots(p) }
-    refreshedBy("finger_l") { f.w.applyAffect(p, "buff", 10) }
+    refreshedBy("finger_l") { f.w.applyAffect(p, AffectSpec("buff", 10)) }
     refreshedBy("finger_r") { f.w.removeAffect(p, "buff") }
     refreshedBy("head") { f.w.applyPrototypes(Prototypes(T.rooms, T.mobs, T.items, T.skills)) }
   }
@@ -358,7 +358,10 @@ class SlotsTest(private val fs: FixtureSchema) {
 
     // Weakness drops strength to 13 (< 18)
     val affect =
-      f.w.applyAffect(p, "Weakness", duration = 10, statDeltas = mapOf(fs.strength to -5))
+      f.w.applyAffect(
+        p,
+        AffectSpec("Weakness", duration = 10, statDeltas = mapOf(fs.strength to -5)),
+      )
     assertNotNull(affect)
     f.w.flushOutput()
 

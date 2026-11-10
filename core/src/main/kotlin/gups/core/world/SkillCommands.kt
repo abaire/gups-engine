@@ -460,7 +460,7 @@ internal class CastAction(
       if (each != null) landed += each
       // An item or room skill's effect already ran on the item or the room.
       if (onItem == null && onRoom == null)
-        skill.effect?.let { w.applyEffect(it, actor, each, skill, power = power) }
+        skill.effect?.let { w.applyEffect(it, actor, each, EffectContext(skill, power)) }
       skill.resolve?.resolve(w, actor, each, onItem, power)
     }
     w.dispatch(

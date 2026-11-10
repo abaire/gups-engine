@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.model.Condition
+import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.core.world.changeVital
 import kotlin.test.Test
@@ -317,7 +318,7 @@ class SchemaTest {
   fun `the actor view has every schema field`() {
     val f = fixture(viewSource)
     val p = f.player(hp = 30)
-    f.w.applyAffect(p, "quick", 100, statDeltas = mapOf("dex" to 3))
+    f.w.applyAffect(p, AffectSpec("quick", 100, statDeltas = mapOf("dex" to 3)))
     f.input(p, "probe")
     f.run()
     assertEquals("30 30 13\n10 0\nok None\n10,10,10,10,0,20,20,100,100\n", f.out(p))

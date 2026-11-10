@@ -11,6 +11,7 @@ import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
+import gups.core.world.AffectSpec
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.applyAffect
@@ -1752,7 +1753,7 @@ class RulesTest {
         overrides = StartingStats(stats = mapOf("armor" to 6)),
       )
     a.xp = 3500
-    w.applyAffect(a, "clumsy", 50, statDeltas = mapOf("dex" to -3))
+    w.applyAffect(a, AffectSpec("clumsy", 50, statDeltas = mapOf("dex" to -3)))
     val c = RulesContext(w, a, b, band = Band.NEAR)
     assertEquals(kotlin.equipmentSlots(), w.rules.equipmentSlots())
     assertEquals(kotlin.startingStats(c), w.rules.startingStats(c))

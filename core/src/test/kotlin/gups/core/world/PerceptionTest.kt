@@ -474,7 +474,7 @@ class PerceptionTest {
     f.perceive("whisper_of_stars", spell, T.HALL, intensity = 1)
     f.run()
     assertEquals(emptyList(), heard.toList().map { it.toString() }, "nobody senses spell yet")
-    f.w.applyAffect(viaAffect, "attuned", 100, senseDeltas = mapOf(spell to 1))
+    f.w.applyAffect(viaAffect, AffectSpec("attuned", 100, senseDeltas = mapOf(spell to 1)))
     f.w.traits = mapOf("seer" to Trait("seer", senseDeltas = mapOf(spell to 1)))
     viaTrait.grantedTraits = setOf("seer")
     viaTrait.recomputeTraits(f.w)
@@ -490,7 +490,7 @@ class PerceptionTest {
   fun `senses never drop below 0`() {
     val (f, _) = fixture()
     val m = f.mob(ear)
-    f.w.applyAffect(m, "stuffed", 100, senseDeltas = mapOf(Channel.SOUND to -5))
+    f.w.applyAffect(m, AffectSpec("stuffed", 100, senseDeltas = mapOf(Channel.SOUND to -5)))
     assertEquals(0, m.sense(Channel.SOUND))
     assertEquals(1, m.baseSenses[Channel.SOUND])
   }

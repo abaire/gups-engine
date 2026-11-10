@@ -164,7 +164,7 @@ private fun World.resolveProcOutcome(
       if (skill.target == TargetKind.ENEMY && each != null && each !== bearer) {
         startCombat(bearer, each)
       }
-      skill.effect?.let { applyEffect(it, bearer, each, skill, power = power) }
+      skill.effect?.let { applyEffect(it, bearer, each, EffectContext(skill, power)) }
       skill.resolve?.resolve(this, bearer, each, null, power)
     }
     return skill.label.toString()
@@ -173,7 +173,7 @@ private fun World.resolveProcOutcome(
   val effect = outcome.effect!!
   val power = computeProcPower(bearer, other, src, null, trigger)
   sendProcMessages(bearer, src, outcome)
-  applyEffect(effect, bearer, recipient, null, power = power)
+  applyEffect(effect, bearer, recipient, EffectContext(power = power))
   return primitiveName(effect)
 }
 

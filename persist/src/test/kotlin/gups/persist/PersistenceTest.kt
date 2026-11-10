@@ -17,6 +17,7 @@ import gups.core.model.LevelGain
 import gups.core.model.Mob
 import gups.core.model.Prototypes
 import gups.core.model.Trait
+import gups.core.world.AffectSpec
 import gups.core.world.Diagnostic
 import gups.core.world.ScriptHost
 import gups.core.world.TOMBSTONE
@@ -96,7 +97,7 @@ class PersistenceTest {
     a.w.spawnItem(P.GEM, ItemLocation.InRoom(hall.id, 3))
     ann.customAttributes["t:visits"] = AttrValue.L(listOf(AttrValue.I(1), AttrValue.S("x")))
     a.w.after(ann, 500, HookRef(Label("//t:a.star"), "_ring"), mapOf("n" to AttrValue.I(2)))
-    a.w.applyAffect(ann, "blessed", 900, statDeltas = mapOf("str" to 2))
+    a.w.applyAffect(ann, AffectSpec("blessed", 900, statDeltas = mapOf("str" to 2)))
     a.run(130)
     // Shutdown takes a final checkpoint.
     a.save()
@@ -479,9 +480,7 @@ class PersistenceTest {
     val fn = HookRef(Label("//t:mods.star"), "slow")
     first.w.applyAffect(
       rat,
-      "slowed",
-      10_000,
-      modifiers = mapOf(gups.core.model.ModifierPoint.REGEN to fn),
+      AffectSpec("slowed", 10_000, modifiers = mapOf(gups.core.model.ModifierPoint.REGEN to fn)),
     )
     first.w.setActive(rat, "boss")
     first.w.setAnchor(rat, "raid:1")

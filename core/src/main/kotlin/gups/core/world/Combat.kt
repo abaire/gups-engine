@@ -1,209 +1,61 @@
 package gups.core.world
 
-import gups.core.CORPSE_DECAY_PULSES
-import gups.core.EntityId
-import gups.core.HookRef
-import gups.core.Label
 import gups.core.model.Actor
-import gups.core.model.Affect
-import gups.core.model.AffectScope
 import gups.core.model.Band
-import gups.core.model.CastState
 import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.DamageType
-import gups.core.model.Effect
 import gups.core.model.Item
-import gups.core.model.ItemLocation
-import gups.core.model.Mob
-import gups.core.model.Modifiers
-import gups.core.model.Player
-import gups.core.model.Proc
 import gups.core.model.ProcTrigger
-import gups.core.model.Room
-import gups.core.model.SkillProto
-import gups.core.model.TargetKind
 import gups.core.model.TraitEvent
 import gups.core.rules.RulesContext
-import gups.core.saturatingAdd
-
-// ---- Engagement ------------------------------------------------------------------------------
-
-internal fun World.setPrimaryTarget(a: Actor, id: EntityId?) {
-  if (a.primaryTarget != id) {
-    a.primaryTarget = id
-    a.primaryTargetSince = pulse
-  }
-}
-
-fun World.startCombat(a: Actor, b: Actor) = startCombat(a, b, coupled = false)
-
-internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
-  if (Feature.COMBAT !in features) return
-  if (a === b || !a.inWorld || !b.inWorld || a.room !== b.room) return
-  // An actor whose death is being run is about to be removed or respawned; engaging it now would
-  // leave its opponent fighting someone who is gone.
-  if (isDying(a) || isDying(b)) return
-  val fresh = b.id !in a.fighting
-  a.fighting += b.id
-  b.fighting += a.id
-  if (a.primaryTarget == null) setPrimaryTarget(a, b.id)
-  if (b.primaryTarget == null) setPrimaryTarget(b, a.id)
-  a.dirty = true
-  b.dirty = true
-  if (fresh) {
-    tellPerceivers(
-      a.room,
-      "combat_start",
-      a,
-      mapOf(
-        Channel.SIGHT to msg(CombatMsg.FIGHTING, "actor" to a.name.cap(), "target" to b.name),
-        Channel.SOUND to msg(CombatMsg.FIGHTING_HEARD),
-      ),
-      COMBAT_INTENSITY,
-      exclude = arrayOf(a, b),
-    )
-    perceive("combat_start", Channel.SOUND, a.room, a, intensity = COMBAT_INTENSITY)
-    for ((pet, foe) in listOf(a to b, b to a)) {
-      if (pet is Mob) {
-        val owner = ownerOf(pet)
-        if (owner != null && owner.room === pet.room && owner !== foe) {
-          startCombat(owner, foe, coupled = true)
-        }
-      }
-    }
-    if (!coupled) {
-      (b as? Mob)?.let { remember(it, a, "attack") }
-      raiseStandingEvent(StandingEvent("attack", affected = b, actor = a))
-    }
-  }
-}
-
-/** Ends [a]'s engagement with [b], or with everyone if [b] is null. */
-fun World.stopCombat(a: Actor, b: Actor? = null) {
-  if (b == null) return disengageAll(a)
-  fireDisengage(unlink(a, b).filter(::isSimulated), "stop")
-}
-
-/** The body of a stop: edits the engagement with [b], returning whoever this freed, in order. */
-private fun World.unlink(a: Actor, b: Actor): List<Actor> {
-  val aWas = a.isEngaged
-  val bWas = b.isEngaged
-  a.fighting -= b.id
-  b.fighting -= a.id
-  if (a.primaryTarget == b.id) setPrimaryTarget(a, null)
-  if (b.primaryTarget == a.id) setPrimaryTarget(b, null)
-  if (!a.isEngaged) a.initiative = null
-  if (!b.isEngaged) b.initiative = null
-
-  val original = buildList {
-    if (aWas && !a.isEngaged) add(a)
-    if (bWas && !b.isEngaged) add(b)
-  }
-
-  val petFreed = mutableListOf<Actor>()
-  for ((owner, foe) in listOf(a to b, b to a)) {
-    if (owner is Player) {
-      for (pet in petsEngagedWith(owner, owner.room, foe)) {
-        petFreed += unlink(pet, foe)
-      }
-    }
-  }
-
-  val freed = LinkedHashSet<Actor>(original)
-  freed.addAll(petFreed)
-  return freed.toList()
-}
-
-/** [owner]'s pets in [room] engaged with [foe], ascending id. */
-private fun World.petsEngagedWith(owner: Player, room: Room, foe: Actor): List<Mob> =
-  room.actorIndex.values
-    .filterIsInstance<Mob>()
-    .filter { it.owner == owner.id && foe.id in it.fighting }
-    .sortedBy { it.id }
-
-internal fun World.disengageAll(a: Actor, reason: String? = "stop") {
-  val freed = unlinkAll(a)
-  if (reason != null) fireDisengage(freed, reason)
-}
-
-/**
- * Ends every engagement of [a] without firing anything, returning whoever this freed that is
- * simulated, in order. A caller that is about to move or remove [a] fires [fireDisengage] once that
- * is done, so a hook can't re-engage an actor that is half gone. Simulation is judged here, where
- * the fight was, so a mob that flees into a dormant room still hears of it.
- */
-internal fun World.unlinkAll(a: Actor): List<Actor> {
-  val freed = LinkedHashSet<Actor>()
-  for (id in a.fighting.toList()) actor(id)?.let { freed += unlink(a, it) }
-  a.fighting.clear()
-  setPrimaryTarget(a, null)
-  a.initiative = null
-  return freed.filter(::isSimulated)
-}
-
-/** Fires `on_disengage` with [reason], on each of [freed] still in the world and globally. */
-internal fun World.fireDisengage(freed: Collection<Actor>, reason: String) {
-  if (Feature.COMBAT !in features) return
-  for (x in freed) {
-    if (!x.inWorld) continue
-    val ctx = HookContext(actor = x, event = reason)
-    dispatch(HookName.ON_DISENGAGE, x, x.room, ctx)
-    dispatchGlobal(HookName.ON_DISENGAGE, ctx)
-  }
-}
-
-/** Opponents of [a] who are, for validation, in the same room; ascending id. */
-fun World.opponentsOf(a: Actor): List<Actor> {
-  val room = roomOf(a)
-  return a.fighting.mapNotNull { actor(it) }.filter { isPresent(it, room) && isSimulated(it) }
-}
-
-/** True if an opponent shares [a]'s track index. */
-fun World.isPinned(a: Actor): Boolean =
-  Feature.TRACK in features && opponentsOf(a).any { indexOf(it) == indexOf(a) }
 
 // ---- Auto-attacks ----------------------------------------------------------------------------
 
+/** One attack an actor makes in a round: with [weapon] (null for unarmed) from [slot]. */
+private class Swing(val weapon: Item?, val slot: String)
+
 internal fun World.autoAttack(a: Actor) {
-  val cast = a.casting
-  if (cast != null && !cast.action.attackWhileCasting) return
-  if (a.isIncapacitated) return
+  if (a.castBlocksAttacks() || a.isIncapacitated) return
   val opponents = opponentsOf(a)
   if (opponents.isEmpty()) return
   val target = opponents.firstOrNull { it.id == a.primaryTarget } ?: opponents.first()
 
-  val slots = actorSlots(a)
-  val swings = mutableListOf<Pair<Item?, String>>()
-  for (slot in slots) {
-    val item = a.equipped(slot)
-    if (slot == "wield" && item == null) {
-      swings.add(null to "wield")
-    } else if (item != null && a.isActiveSlot(slot) && item.proto.dice != null) {
-      swings.add(item to slot)
-    }
-  }
-  val otherSlots = a.equipment.keys.filter { it !in slots }.sorted()
-  for (slot in otherSlots) {
-    val item = a.equipped(slot) ?: continue
-    if (a.isActiveSlot(slot) && item.proto.dice != null) {
-      swings.add(item to slot)
-    }
-  }
-
-  for ((weapon, slot) in swings) {
-    if (
-      !a.inWorld ||
-        a.isIncapacitated ||
-        !canAct(a) ||
-        target !in opponentsOf(a) ||
-        target.condition == Condition.DEAD
-    ) {
-      break
-    }
-    swing(a, target, weapon, slot)
+  for (attack in swingsOf(a)) {
+    if (!canKeepSwinging(a, target)) break
+    swing(a, target, attack.weapon, attack.slot)
   }
 }
+
+private fun Actor.castBlocksAttacks(): Boolean = casting?.action?.attackWhileCasting == false
+
+/** The swings [a] makes in a round: its actor slots in order, then any other equipped slots. */
+private fun World.swingsOf(a: Actor): List<Swing> {
+  val slots = actorSlots(a)
+  val others = a.equipment.keys.filter { it !in slots }.sorted()
+  return slots.mapNotNull { primarySwing(a, it) } + others.mapNotNull { armedSwing(a, it) }
+}
+
+/** A bare wield slot swings unarmed; any other slot swings only if it holds an active weapon. */
+private fun primarySwing(a: Actor, slot: String): Swing? {
+  val bare = slot == "wield" && a.equipped(slot) == null
+  return if (bare) Swing(null, slot) else armedSwing(a, slot)
+}
+
+private fun armedSwing(a: Actor, slot: String): Swing? {
+  val item = a.equipped(slot) ?: return null
+  if (!a.isActiveSlot(slot)) return null
+  if (item.proto.dice == null) return null
+  return Swing(item, slot)
+}
+
+private fun World.canKeepSwinging(a: Actor, target: Actor): Boolean =
+  isAbleToSwing(a) && isStillOpposing(a, target)
+
+private fun World.isAbleToSwing(a: Actor): Boolean = a.inWorld && !a.isIncapacitated && canAct(a)
+
+private fun World.isStillOpposing(a: Actor, target: Actor): Boolean =
+  target in opponentsOf(a) && target.condition != Condition.DEAD
 
 /** One auto-attack swing by [a] at [target] with [weapon] (null for unarmed) from [slot]. */
 private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
@@ -265,7 +117,7 @@ private fun World.swing(a: Actor, target: Actor, weapon: Item?, slot: String) {
   fireProcs(ProcTrigger.STRUCK, target, a, weapon)
 }
 
-// ---- Damage, healing, death ------------------------------------------------------------------
+// ---- Damage and healing ----------------------------------------------------------------------
 
 /**
  * The `damage` verb: lowers each vital in [losses] by its amount, with no floor; a negative entry
@@ -317,17 +169,17 @@ fun World.damage(
         "parts" to parts.map { mapOf("type" to it.type.name, "losses" to it.losses) },
       ),
     )
-    val cast = target.casting
-    if (
-      cast != null &&
-        rules.interruptCheck(
-          RulesContext(this, target, source, skill = (cast.action as? Castable)?.skill),
-          total,
-        )
-    )
-      interruptCast(target)
+    interruptCastOnDamage(target, source, total)
   }
   refreshCondition(target)
+}
+
+private fun World.interruptCastOnDamage(target: Actor, source: Actor?, total: Int) {
+  val cast = target.casting ?: return
+  val skill = (cast.action as? Castable)?.skill
+  if (rules.interruptCheck(RulesContext(this, target, source, skill = skill), total)) {
+    interruptCast(target)
+  }
 }
 
 /** The `heal` verb: raises [vital] by [amount], up to its maximum. */
@@ -335,28 +187,7 @@ fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null)
   if (!target.inWorld || amount <= 0) return
   val effective = minOf(amount, maxOf(0, target.max(vital) - target.current(vital)))
   changeVital(target, vital, amount)
-  if (source != null) {
-    recordHealing(target, source, effective)
-    if (effective > 0) {
-      witness(source.room, source, "heal", amount = effective.toLong(), target = target)
-    }
-    if (source !== target && effective > 0) {
-      raiseStandingEvent(
-        StandingEvent("heal", affected = target, actor = source, amount = effective.toLong())
-      )
-      for (opp in opponentsOf(target).filter { it !== source }.sortedBy { it.id }) {
-        raiseStandingEvent(
-          StandingEvent(
-            "assist",
-            affected = opp,
-            actor = source,
-            amount = effective.toLong(),
-            helped = target,
-          )
-        )
-      }
-    }
-  }
+  if (source != null) creditHealing(target, source, effective)
   if (effective > 0) {
     fireTraitEvent(
       target,
@@ -366,598 +197,14 @@ fun World.heal(target: Actor, vital: String, amount: Int, source: Actor? = null)
   }
 }
 
-/** True while [a]'s death is being run, before it is removed or respawned. */
-fun World.isDying(a: Actor): Boolean = a.id in dying
-
-/** Engine-owned death. Runs at most once per life. */
-internal fun World.processDeath(victim: Actor) {
-  // Damage dealt while the death runs, as by an on_death hook, must not start it again.
-  if (!dying.add(victim.id)) return
-  try {
-    runDeath(victim)
-  } finally {
-    dying.remove(victim.id)
+private fun World.creditHealing(target: Actor, source: Actor, effective: Int) {
+  recordHealing(target, source, effective)
+  if (effective <= 0) return
+  witness(source.room, source, "heal", amount = effective.toLong(), target = target)
+  if (source === target) return
+  val amount = effective.toLong()
+  raiseStandingEvent(StandingEvent("heal", affected = target, actor = source, amount = amount))
+  raiseAssists(target, source) { opponent ->
+    StandingEvent("assist", affected = opponent, actor = source, amount = amount, helped = target)
   }
 }
-
-private fun World.runDeath(victim: Actor) {
-  if (!victim.inWorld || victim.condition != Condition.DEAD) return
-  val standing = askCondition(victim)
-  if (standing != Condition.DEAD) return setCondition(victim, standing)
-  val room = victim.room
-  val killer = victim.lastAttacker?.let(::actor)?.takeIf { it.inWorld && it !== victim }
-  val snapshot = contributorsOf(victim, killer)
-  victim.contributions.clear()
-  victim.casting = null
-  victim.actionQueue.clear()
-  victim.waitState = 0
-  victim.heldWaitState = 0
-  victim.heldSince = 0
-  // The opponents it frees hear of it once the victim is gone or respawned, so a hook can't
-  // re-engage it here.
-  val freed = unlinkAll(victim) - victim
-  removedThisPhase += victim.id
-  tell(victim, KernelMsg.DEATH_SELF)
-  tellPerceivers(
-    room,
-    "death",
-    victim,
-    mapOf(
-      Channel.SIGHT to msg(KernelMsg.DEATH_ROOM, "actor" to victim.name.cap()),
-      Channel.SOUND to msg(KernelMsg.DEATH_HEARD),
-    ),
-    COMBAT_INTENSITY,
-    exclude = arrayOf(victim),
-  )
-  perceive("death", Channel.SOUND, room, victim, intensity = COMBAT_INTENSITY)
-  dispatch(HookName.ON_DEATH, victim, room, HookContext(actor = killer, target = victim))
-  fireTraitEvent(victim, TraitEvent.DIED, mapOf("killer" to killer))
-  if (killer != null) fireTraitEvent(killer, TraitEvent.KILLED, mapOf("victim" to victim))
-  // The global hook sees the victim's belongings and level as at death, before the corpse is made
-  // and XP is priced.
-  dispatchGlobal(HookName.ON_DEATH, HookContext(actor = killer, target = victim), subject = victim)
-  // A debug mob is worth nothing, and everything it leaves is debug too. A summon is
-  // worth nothing either and drops no loot, so it can't be farmed.
-  val summoned = victim is Mob && victim.summonedBy != null
-  // Priced now, against the victim as it died, but awarded last: a level the award raises fires
-  // on_level_change, which must not reach the victim or the belongings it is about to lose.
-  val pool =
-    if (Feature.LEVELING in features && killer != null && !victim.debug && !summoned)
-      rules.xpForKill(RulesContext(this, killer, victim))
-    else 0L
-  val awards: Map<Actor, Long> =
-    if (killer != null && pool > 0)
-      rules.xpShare(RulesContext(this, killer, victim, xp = pool, contributors = snapshot))
-    else emptyMap()
-
-  if (killer != null && killer !== victim) {
-    witness(killer.room, killer, "kill", target = victim)
-    raiseStandingEvent(StandingEvent("kill", affected = victim, actor = killer))
-  }
-
-  val corpse =
-    spawnItem(
-      gups.core.model.Prototypes.CORPSE.label,
-      ItemLocation.InRoom(room.id, victim.trackIndex),
-      debug = victim.debug,
-    )
-  corpse.nameOverride = "the corpse of ${victim.name}"
-  corpse.decayAt = pulse + CORPSE_DECAY_PULSES
-  val into = ItemLocation.Contained(corpse.id)
-  when (victim) {
-    is Mob -> {
-      for (item in victim.inventory + victim.equipment.values) {
-        if (victim.debug) markDebug(item)
-        moveItem(item, into)
-      }
-      if (!summoned)
-        for (rule in victim.proto.loot) if (rng.passes(rule.chance))
-          spawnItem(rule.label, into, rule.count, debug = victim.debug)
-      removeActor(victim)
-    }
-    is Player -> {
-      for (item in victim.inventory) moveItem(item, into)
-      val outcome = rules.onPlayerDeath(RulesContext(this, victim, killer))
-      if (Feature.LEVELING in features) victim.xp = (victim.xp - outcome.xpLoss).coerceAtLeast(0)
-      victim.affects.clear()
-      victim.condition = Condition.OK
-      respawnVitals(victim, outcome.vitals)
-      placeActor(victim, room(outcome.respawn), 0)
-      announceArrival(victim, victim.room)
-      tellSight(
-        victim.room,
-        "enter",
-        victim,
-        msg(KernelMsg.DEATH_RESPAWN, "name" to victim.name),
-        victim,
-      )
-      send(victim, describeRoom(victim))
-      if (outcome.levelLoss > 0) levelDown(victim, outcome.levelLoss)
-    }
-  }
-  fireDisengage(freed, "death")
-  for ((a, n) in awards.entries.sortedBy { it.key.id }) if (a.inWorld && n > 0) awardXp(a, n)
-}
-
-/**
- * Sets the vitals of a respawned player: [given] where the rules name one (capped at its maximum),
- * else the maximum. A rules result that still calls the player dead is an error, and fills them.
- */
-private fun World.respawnVitals(victim: Actor, given: Map<String, Int>?) {
-  for ((name, v) in victim.vitalMap) {
-    val effMax = victim.max(name)
-    val next = given?.get(name)?.coerceAtMost(effMax) ?: effMax
-    v.belowZeroSince = if (next < 0) pulse else null
-    v.current = next
-  }
-  victim.dirty = true
-  settleNewCondition(victim, "on_player_death")
-}
-
-// ---- Affects ---------------------------------------------------------------------------------
-
-/**
- * The `apply_affect` verb. Re-applying a name replaces the old affect only if the new one would run
- * out later; otherwise the old one stays and is returned, so a short stun or debuff can't cut a
- * longer one short.
- */
-fun World.applyAffect(
-  target: Actor,
-  name: String,
-  duration: Long,
-  statDeltas: Map<String, Int> = emptyMap(),
-  flags: Set<String> = emptySet(),
-  tickEvery: Int? = null,
-  onTick: HookRef? = null,
-  onExpire: HookRef? = null,
-  expireMessage: String = "",
-  source: Actor? = null,
-  modifiers: Modifiers = emptyMap(),
-  wornFrom: EntityId? = null,
-  senseDeltas: Map<Channel, Int> = emptyMap(),
-  maxVitalDeltas: Map<String, Int> = emptyMap(),
-  resistDeltas: Map<DamageType, Int> = emptyMap(),
-  procs: List<Proc> = emptyList(),
-  power: Int = 100,
-  hostile: Boolean? = null,
-): Affect? {
-  if (!target.inWorld) return null
-  require(duration >= 1) { "apply_affect: duration must be at least 1" }
-  // A worn item's affect lasts until the item comes off.
-  val expiresAt = if (wornFrom != null) Long.MAX_VALUE else saturatingAdd(pulse, duration)
-  target.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
-  val wasDisabled = target.isDisabled
-  target.affects.removeIf { it.name == name }
-  val affect =
-    Affect(
-      allocateHandle(),
-      name,
-      source?.id,
-      pulse,
-      expiresAt,
-      statDeltas,
-      flags,
-      tickEvery,
-      onTick,
-      onExpire,
-      expireMessage,
-      modifiers,
-      wornFrom,
-      senseDeltas,
-      maxVitalDeltas = maxVitalDeltas,
-      resistDeltas = resistDeltas,
-      procs = procs,
-      power = power,
-    )
-  target.affects += affect
-  if (source != null && source !== target) {
-    recordSupport(target, source, hostile)
-    if (!isBane(target, source, hostile)) {
-      witness(source.room, source, "help", target = target)
-      if (target.isEngaged) {
-        raiseStandingEvent(
-          StandingEvent("help", affected = target, actor = source, affect = affect)
-        )
-      }
-      for (opp in opponentsOf(target).filter { it !== source }.sortedBy { it.id }) {
-        raiseStandingEvent(
-          StandingEvent("assist", affected = opp, actor = source, affect = affect, helped = target)
-        )
-      }
-    }
-  }
-  target.dirty = true
-  if ("stunned" in flags && target.casting?.action?.interrupt?.stun == true) interruptCast(target)
-  disabledChanged(target, wasDisabled)
-  forgetActorSlots(target)
-  refreshFit(target)
-  clampVitals(target)
-  return affect
-}
-
-fun World.removeAffect(target: Actor, name: String): Boolean =
-  removeAffects(target) { it.name == name }
-
-/** Ends every affect on [target] that [matches], as removed early; true if any matched. */
-private fun World.removeAffects(target: Actor, matches: (Affect) -> Boolean): Boolean {
-  val gone = target.affects.filter(matches)
-  for (affect in gone) endAffect(target, affect, AffectEndReason.REMOVED)
-  return gone.isNotEmpty()
-}
-
-internal fun World.expireAffect(a: Actor, affect: Affect) =
-  endAffect(a, affect, AffectEndReason.EXPIRED)
-
-/**
- * Takes [affect] off [a] and runs its end: the expire message (on expiry, or always when
- * [announce]), `on_expire` and, for a summon, the banishing. An affect that has reached its expiry
- * pulse counts as expired however it was taken off.
- */
-private fun World.endAffect(
-  a: Actor,
-  affect: Affect,
-  reason: AffectEndReason,
-  announce: Boolean = false,
-) {
-  val wasDisabled = a.isDisabled
-  if (!a.affects.remove(affect)) return
-  a.dirty = true
-  disabledChanged(a, wasDisabled)
-  forgetActorSlots(a)
-  refreshFit(a)
-  clampVitals(a)
-  val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
-  if ((announce || why == AffectEndReason.EXPIRED) && affect.expireMessage.isNotEmpty())
-    send(a, affect.expireMessage)
-  affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
-  if ("summoned" in affect.flags && a is Mob && a.inWorld) {
-    tellSight(a.room, "exit", a, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
-    disengageAll(a, null)
-    removeActor(a)
-  }
-}
-
-/**
- * Puts instance affect [name] on [item]; [duration] null makes it permanent. A same-name affect is
- * replaced only by one that expires later.
- */
-fun World.applyItemAffect(
-  item: Item,
-  name: String,
-  duration: Long?,
-  applies: AffectScope = AffectScope.WORN,
-  statDeltas: Map<String, Int> = emptyMap(),
-  flags: Set<String> = emptySet(),
-  tickEvery: Int? = null,
-  onTick: HookRef? = null,
-  onExpire: HookRef? = null,
-  expireMessage: String = "",
-  source: Actor? = null,
-  modifiers: Modifiers = emptyMap(),
-  senseDeltas: Map<Channel, Int> = emptyMap(),
-  maxVitalDeltas: Map<String, Int> = emptyMap(),
-  resistDeltas: Map<DamageType, Int> = emptyMap(),
-  procs: List<Proc> = emptyList(),
-  power: Int = 100,
-): Affect? {
-  if (item.id !in entities) return null
-  require(duration == null || duration >= 1) { "apply_affect: duration must be at least 1" }
-  require("stunned" !in flags) { "apply_affect: item affects can't stun" }
-  val expiresAt = duration?.let { saturatingAdd(pulse, it) } ?: Long.MAX_VALUE
-  item.affects.firstOrNull { it.name == name }?.let { if (it.expiresAt >= expiresAt) return it }
-  item.affects.removeIf { it.name == name }
-  val affect =
-    Affect(
-      allocateHandle(),
-      name,
-      source?.id,
-      pulse,
-      expiresAt,
-      statDeltas,
-      flags,
-      tickEvery,
-      onTick,
-      onExpire,
-      expireMessage,
-      modifiers,
-      null,
-      senseDeltas,
-      applies,
-      maxVitalDeltas,
-      resistDeltas,
-      procs,
-      power,
-    )
-  item.affects += affect
-  item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
-  return affect
-}
-
-/** Removes instance affect [name] from [item]; true if there was one. */
-fun World.removeItemAffect(item: Item, name: String): Boolean {
-  val gone = item.affects.filter { it.name == name }
-  for (affect in gone) endItemAffect(item, affect, AffectEndReason.REMOVED)
-  return gone.isNotEmpty()
-}
-
-internal fun World.expireItemAffect(item: Item, affect: Affect) =
-  endItemAffect(item, affect, AffectEndReason.EXPIRED)
-
-/**
- * Takes [affect] off [item] and runs its end: the expire message to the custodian on expiry, and
- * `on_expire`, whose `ctx.self` is the item. An affect that has reached its expiry pulse counts as
- * expired however it was taken off. With no custodian the message is dropped. An item that has left
- * the world took its affects with it, so nothing runs for them.
- */
-private fun World.endItemAffect(item: Item, affect: Affect, reason: AffectEndReason) {
-  if (item.id !in entities || !item.affects.remove(affect)) return
-  item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
-  val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
-  if (why == AffectEndReason.EXPIRED && affect.expireMessage.isNotEmpty())
-    custodian(item)?.let { send(it, affect.expireMessage) }
-  affect.onExpire?.let { invokeRef(item, it, HookContext(affect = affect, affectEndReason = why)) }
-}
-
-/**
- * Clears [a]'s recovery when a stun or incapacitation starts and puts it back when the last one
- * ends, so recovery neither counts down nor runs out meanwhile. Any lag from a cast that broke is
- * part of what is put back. A cast that didn't break has its warmup pushed back by the length of
- * the interruption, so it stays paused.
- */
-internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
-  val disabled = a.isDisabled
-  if (disabled && !wasDisabled) {
-    a.heldWaitState = a.waitState
-    a.heldSince = pulse
-    a.waitState = 0
-  } else if (wasDisabled && !disabled) {
-    a.waitState = maxOf(a.waitState, a.heldWaitState)
-    a.heldWaitState = 0
-    a.casting?.let { c ->
-      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.heldSince), c.orderedBy)
-    }
-  }
-}
-
-/**
- * Applies [item]'s `equip_affects` to [wearer] as it is equipped, through [applyAffect] like any
- * other affect. Untimed entries last until [removeEquipAffects]; timed ones count down. If
- * [untimedOnly] is true, timed entries are skipped (used when an inactive item becomes active
- * again).
- */
-internal fun World.applyEquipAffects(wearer: Actor, item: Item, untimedOnly: Boolean = false) {
-  for (e in item.proto.equipAffects) {
-    if (untimedOnly && e.pulses != null) continue
-    val name = equipAffectName(item, e.flag)
-    if (e.pulses != null) applyAffect(wearer, name, e.pulses.toLong(), flags = setOf(e.flag))
-    else applyAffect(wearer, name, 1, flags = setOf(e.flag), wornFrom = item.id)
-  }
-}
-
-/** Removes the untimed `equip_affects` of [item] from [wearer] as it comes off. */
-internal fun World.removeEquipAffects(wearer: Actor, item: Item) {
-  for (e in item.proto.equipAffects) {
-    if (e.pulses == null) removeAffect(wearer, equipAffectName(item, e.flag))
-  }
-}
-
-private fun equipAffectName(item: Item, flag: String) = "worn:${item.id.v}:$flag"
-
-// ---- Effect primitives -----------------------------------------------------------------------
-
-/**
- * Scales a declared amount by [power] percent: rounded down, never below 1 when it was positive.
- */
-internal fun scaled(amount: Int, power: Int): Int =
-  if (amount <= 0) amount else maxOf(1, (amount.toLong() * power / 100).toInt())
-
-/**
- * Like [scaled] for a Long amount: rounded down, never below 1 when positive, and stopping at
- * Long.MAX_VALUE. A duration of Long.MAX_VALUE means "never ends" and is never scaled.
- */
-internal fun scaledDuration(amount: Long, power: Int): Long {
-  if (amount <= 0 || amount == Long.MAX_VALUE) return amount
-  if (power <= 0) return 1L
-  // amount * power / 100, split so the intermediate product can't overflow.
-  val q = amount / 100
-  val r = amount % 100
-  if (q > (Long.MAX_VALUE - r * power / 100) / power) return Long.MAX_VALUE
-  return maxOf(1L, q * power + r * power / 100)
-}
-
-/**
- * Spawns [count] mobs of [label] beside [caster] as its summons; [duration] null means they stay.
- */
-fun World.summon(
-  caster: Actor,
-  label: Label,
-  count: Int = 1,
-  duration: Int? = null,
-  power: Int = 100,
-): List<Mob> {
-  require(count >= 1) { "summon: count must be at least 1" }
-  require(duration == null || duration >= 1) { "summon: duration must be at least 1" }
-  val denial =
-    dispatch(
-      HookName.BEFORE_SUMMON,
-      caster,
-      caster.room,
-      HookContext(actor = caster, summonLabel = label, count = count),
-    )
-  if (denial != null) {
-    send(caster, denial)
-    return emptyList()
-  }
-  val mobs = mutableListOf<Mob>()
-  val owning = caster as? Player
-  repeat(count) {
-    val m =
-      spawnMob(label, caster.room, caster.trackIndex) { m ->
-        m.summonedBy = caster.id
-        if (owning != null && owning.inWorld) m.owner = owning.id
-      }
-    if (owning != null && m.owner != null && m.inWorld) assignOwner(m, owning)
-    duration?.let {
-      applyAffect(
-        m,
-        "summoned",
-        scaled(it, power).toLong(),
-        flags = setOf("summoned"),
-        source = caster,
-        power = power,
-      )
-    }
-    mobs += m
-  }
-  if (owning != null) {
-    for (m in mobs.sortedBy { it.id }) {
-      if (m.inWorld && m.owner == owning.id) announceOwner(m, owning, "set")
-    }
-  }
-  if (mobs.isNotEmpty()) {
-    dispatch(HookName.ON_SUMMON, caster, caster.room, HookContext(actor = caster, mobs = mobs))
-  }
-  return mobs
-}
-
-/** Applies [effect] from [caster] to [target] (null for `target = "none"` skills). */
-fun World.applyEffect(
-  effect: Effect,
-  caster: Actor,
-  target: Actor?,
-  skill: SkillProto? = null,
-  power: Int = 100,
-) {
-  when (effect) {
-    is Effect.Sequence -> effect.effects.forEach { applyEffect(it, caster, target, skill, power) }
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, target, null, null, power)
-    is Effect.Summon -> summon(caster, effect.label, effect.count, effect.duration, power)
-    else -> {
-      val t = target ?: return
-      if (!t.inWorld) return
-      // Harmful primitives engage, so a stun or shove can't be used on a mob without aggro.
-      val hostile =
-        effect is Effect.Damage ||
-          effect is Effect.Stun ||
-          effect is Effect.Knockback ||
-          effect is Effect.Pull
-      if (hostile && t !== caster) startCombat(caster, t)
-      // A skill's affect is a bane exactly when the skill targets an enemy; a stun always is one.
-      val skillHostile = skill?.let { it.target == TargetKind.ENEMY }
-      when (effect) {
-        is Effect.Damage -> {
-          val c = RulesContext(this, caster, t, skill = skill, damageType = effect.type)
-          val hit = resolveDamage(c, scaled(effect.dice.roll(rng), power), effect.type)
-          traceRules(caster, hit.text)
-          damage(t, hit.losses, effect.type, caster, hit.parts)
-        }
-        is Effect.Heal ->
-          heal(t, effect.vital, scaled(effect.dice.roll(rng), power), source = caster)
-        is Effect.ApplyAffect ->
-          applyAffect(
-            t,
-            effect.name,
-            scaledDuration(
-              requireNotNull(effect.duration) { "apply_affect: duration is required for an actor" },
-              power,
-            ),
-            effect.statDeltas,
-            effect.flags,
-            effect.tickEvery,
-            effect.onTick,
-            effect.onExpire,
-            effect.expireMessage,
-            caster,
-            effect.modifiers,
-            senseDeltas = effect.senseDeltas,
-            maxVitalDeltas = effect.maxVitalDeltas,
-            resistDeltas = effect.resistDeltas,
-            procs = effect.procs,
-            power = power,
-            hostile = skillHostile,
-          )
-        is Effect.Dispel -> {
-          val gone = t.affects.filter(effect::matches)
-          // Unlike remove_affect, a dispel tells the target its affect ended.
-          for (affect in gone.take(effect.count ?: gone.size)) endAffect(
-            t,
-            affect,
-            AffectEndReason.REMOVED,
-            announce = true,
-          )
-        }
-        is Effect.Knockback ->
-          if (Feature.TRACK in features) shove(t, awayFrom = caster, steps = effect.steps)
-        is Effect.Pull ->
-          if (Feature.TRACK in features) pull(t, toward = caster, steps = effect.steps)
-        is Effect.Stun ->
-          applyAffect(
-            t,
-            "stun",
-            scaled(effect.pulses, power).toLong(),
-            flags = setOf("stunned"),
-            source = caster,
-            power = power,
-            hostile = true,
-          )
-        is Effect.Sequence,
-        is Effect.Summon,
-        is Effect.Plugin -> Unit
-      }
-    }
-  }
-}
-
-/** Applies an item skill's [effect] from [caster] to [item]. */
-fun World.applyItemEffect(effect: Effect, caster: Actor, item: Item, power: Int = 100) {
-  when (effect) {
-    is Effect.Sequence -> effect.effects.forEach { applyItemEffect(it, caster, item, power) }
-    is Effect.ApplyAffect ->
-      applyItemAffect(
-        item,
-        effect.name,
-        effect.duration?.let { scaledDuration(it, power) },
-        effect.applies ?: AffectScope.WORN,
-        effect.statDeltas,
-        effect.flags,
-        effect.tickEvery,
-        effect.onTick,
-        effect.onExpire,
-        effect.expireMessage,
-        caster,
-        effect.modifiers,
-        effect.senseDeltas,
-        effect.maxVitalDeltas,
-        effect.resistDeltas,
-        effect.procs,
-        power = power,
-      )
-    is Effect.Plugin -> pluginEffects.apply(this, effect, caster, null, item, null, power)
-    else -> error("${effect::class.simpleName} can't act on an item")
-  }
-}
-
-/** Pushes [t] along the track away from [awayFrom]; track movement applies immediately. */
-internal fun World.shove(t: Actor, awayFrom: Actor, steps: Int) {
-  val dir =
-    when {
-      t.trackIndex > awayFrom.trackIndex -> 1
-      t.trackIndex < awayFrom.trackIndex -> -1
-      t.room.trackSize - 1 - t.trackIndex >= t.trackIndex -> 1
-      else -> -1
-    }
-  placeActor(t, t.room, t.trackIndex + dir * steps)
-}
-
-internal fun World.pull(t: Actor, toward: Actor, steps: Int) {
-  val gap = toward.trackIndex - t.trackIndex
-  val moved = gap.coerceIn(-steps, steps)
-  placeActor(t, t.room, t.trackIndex + moved)
-}
-
-/** Nearest opponent by track distance, then lowest id. */
-internal fun World.nearestOpponent(a: Actor): Actor? =
-  opponentsOf(a)
-    .minWithOrNull(compareBy<Actor>({ kotlin.math.abs(indexOf(it) - indexOf(a)) }, { it.id }))

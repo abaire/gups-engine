@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.LINKDEAD_PULSES
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.Effect
 import gups.core.model.Player
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -321,7 +322,7 @@ class GroupTest(private val fs: FixtureSchema) {
     val a = g.fixture.player("Ann")
     val b = g.fixture.player("Ben")
     g.fixture.w.groupAdd(b, a)
-    val pet = g.fixture.w.summon(a, T.DUMMY, 1, null).first()
+    val pet = g.fixture.w.summon(a, Effect.Summon(T.DUMMY, 1, null)).first()
     assertEquals(g.fixture.w.groupOf(a), g.fixture.w.groupOf(pet), "a pet's group is its owner's")
     val wild = g.fixture.mob()
     assertNull(g.fixture.w.groupOf(wild), "a mob with no player leader has no group")
@@ -379,7 +380,7 @@ class GroupTest(private val fs: FixtureSchema) {
     val owner = g.fixture.player("Ann")
     val ally = g.fixture.player("Ben")
     g.fixture.w.groupAdd(ally, owner)
-    val pet = g.fixture.w.summon(owner, T.DUMMY, 1, null).first()
+    val pet = g.fixture.w.summon(owner, Effect.Summon(T.DUMMY, 1, null)).first()
     val victim = g.fixture.mob(T.DUMMY)
     g.fixture.w.startCombat(owner, victim)
     g.fixture.w.startCombat(pet, victim)

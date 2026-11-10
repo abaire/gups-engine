@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.Label
+import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
@@ -69,7 +70,7 @@ class LeashReturnRulesTest {
     val f = world("def leash_return(ctx):\n    return not ctx.actor.has_flag(\"stubborn\")")
     val s = f.exile("guard", "r2", "//zones/z:r0")
     val n = f.exile("guard", "r2", "//zones/z:r0")
-    f.w.applyAffect(s, "stubborn", 1_000_000, flags = setOf("stubborn"))
+    f.w.applyAffect(s, AffectSpec("stubborn", 1_000_000, flags = setOf("stubborn")))
     f.run(300)
     assertEquals(Label("//zones/z:r2"), s.room.label, "the stubborn mob stays")
     assertEquals(Label("//zones/z:r0"), n.room.label, "the unflagged mob goes home")

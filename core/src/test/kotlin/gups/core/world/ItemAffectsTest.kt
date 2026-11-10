@@ -58,11 +58,8 @@ class ItemAffectsTest {
     val base = p.stat(fs.agility)
     f.w.applyItemAffect(
       item,
-      "luck",
-      5,
+      AffectSpec("luck", 5, statDeltas = mapOf(fs.agility to 2), onExpire = HookRef(hooks, "gone")),
       applies = AffectScope.CARRIED,
-      statDeltas = mapOf(fs.agility to 2),
-      onExpire = HookRef(hooks, "gone"),
     )
     assertEquals(base + 2, p.stat(fs.agility))
     f.assertFresh(p)
@@ -86,10 +83,8 @@ class ItemAffectsTest {
     val a =
       f.w.applyItemAffect(
         item,
-        "luck",
-        null,
+        AffectSpec("luck", null, statDeltas = mapOf(fs.agility to 2)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 2),
       )
     assertEquals(Long.MAX_VALUE, a!!.expiresAt)
     assertEquals(base + 2, p.stat(fs.agility))
@@ -108,46 +103,36 @@ class ItemAffectsTest {
     val short =
       f.w.applyItemAffect(
         item,
-        "luck",
-        10,
+        AffectSpec("luck", 10, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     val longer =
       f.w.applyItemAffect(
         item,
-        "luck",
-        20,
+        AffectSpec("luck", 20, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     assertNotSame(short, longer, "a longer affect replaces a shorter one")
     assertEquals(1, item.affects.size)
     val shorter =
       f.w.applyItemAffect(
         item,
-        "luck",
-        5,
+        AffectSpec("luck", 5, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     assertSame(longer, shorter, "a shorter affect doesn't replace a longer one")
     val permanent =
       f.w.applyItemAffect(
         item,
-        "luck",
-        null,
+        AffectSpec("luck", null, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     assertNotSame(longer, permanent, "a permanent affect replaces a timed one")
     val timed =
       f.w.applyItemAffect(
         item,
-        "luck",
-        10,
+        AffectSpec("luck", 10, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     assertSame(permanent, timed, "a timed affect doesn't replace a permanent one")
     assertEquals(1, item.affects.size)
@@ -159,7 +144,10 @@ class ItemAffectsTest {
     val f = fixture(host, listOf(ItemProto(charm, "a charm", listOf("charm"), wear = "neck")))
     val p = f.player("Ann")
     val item = f.w.spawnItem(charm, ItemLocation.Carried(p.id))
-    f.w.applyItemAffect(item, "burn", 10, tickEvery = 3, onTick = HookRef(hooks, "tick"))
+    f.w.applyItemAffect(
+      item,
+      AffectSpec("burn", 10, tickEvery = 3, onTick = HookRef(hooks, "tick")),
+    )
     f.runTo(9)
     assertEquals(
       listOf("ref:tick@3", "ref:tick@6", "ref:tick@9"),
@@ -181,9 +169,9 @@ class ItemAffectsTest {
     val p = f.player("Ann")
     val item = f.w.spawnItem(charm, ItemLocation.Carried(p.id))
     host.refHandlers["crumble"] = { _, _, _ -> f.w.destroy(item) }
-    f.w.applyItemAffect(item, "dust", 5, onExpire = HookRef(hooks, "crumble"))
-    f.w.applyItemAffect(item, "glow", 5, onExpire = HookRef(hooks, "gone"))
-    f.w.applyItemAffect(item, "hum", 10, tickEvery = 5, onTick = HookRef(hooks, "tick"))
+    f.w.applyItemAffect(item, AffectSpec("dust", 5, onExpire = HookRef(hooks, "crumble")))
+    f.w.applyItemAffect(item, AffectSpec("glow", 5, onExpire = HookRef(hooks, "gone")))
+    f.w.applyItemAffect(item, AffectSpec("hum", 10, tickEvery = 5, onTick = HookRef(hooks, "tick")))
     f.run(6)
     assertEquals(listOf("ref:crumble@5"), host.calls.filter { it.startsWith("ref:") })
     f.assertFresh(p)
@@ -203,10 +191,8 @@ class ItemAffectsTest {
     val crumb = f.w.spawnItem(C.CRUMB, ItemLocation.InRoom(room.id, 0))
     f.w.applyItemAffect(
       crumb,
-      "rot",
-      300,
+      AffectSpec("rot", 300, onExpire = HookRef(Label("//c:t.star"), "gone")),
       applies = AffectScope.CARRIED,
-      onExpire = HookRef(Label("//c:t.star"), "gone"),
     )
     f.runTo(400)
     assertEquals(1, crumb.affects.size, "no expiry while the room is dormant")
@@ -225,7 +211,7 @@ class ItemAffectsTest {
     val p = f.player("Ann")
     val item = f.w.spawnItem(charm, ItemLocation.Carried(p.id))
     assertFailsWith<IllegalArgumentException> {
-      f.w.applyItemAffect(item, "daze", 5, flags = setOf("stunned"))
+      f.w.applyItemAffect(item, AffectSpec("daze", 5, flags = setOf("stunned")))
     }
     assertEquals(emptyList(), item.affects)
   }
@@ -239,7 +225,7 @@ class ItemAffectsTest {
     val p = f.player("Ann")
     // stack() leaves the affected item out of the merge.
     val wet = f.w.spawnItem(arrow, ItemLocation.Carried(p.id), 2)
-    f.w.applyItemAffect(wet, "wet", 5)
+    f.w.applyItemAffect(wet, AffectSpec("wet", 5))
     val dry = f.w.spawnItem(arrow, ItemLocation.Carried(p.id), 3)
     assertSame(dry, f.w.stack(dry))
     assertEquals(3, dry.count)
@@ -251,7 +237,7 @@ class ItemAffectsTest {
     val pouch = f.w.spawnItem(pouch, ItemLocation.Carried(p.id))
     val inPouch = f.w.spawnItem(arrow, ItemLocation.Contained(pouch.id))
     val heavy = f.w.spawnItem(arrow, ItemLocation.Carried(p.id), 4)
-    f.w.applyItemAffect(heavy, "wet", 5)
+    f.w.applyItemAffect(heavy, AffectSpec("wet", 5))
     assertTrue("is full" in f.doLine(p, "put arrow in pouch"))
     assertEquals(4, heavy.count)
     // Without the affect, the same put merges.
@@ -269,10 +255,8 @@ class ItemAffectsTest {
     val a =
       f.w.applyItemAffect(
         stack,
-        "wet",
-        5,
+        AffectSpec("wet", 5, statDeltas = mapOf(fs.agility to 1)),
         applies = AffectScope.CARRIED,
-        statDeltas = mapOf(fs.agility to 1),
       )
     assertEquals(base + 1, p.stat(fs.agility))
     f.assertFresh(p)

@@ -48,7 +48,7 @@ class SummonHooksTest {
     val f = Fixture(scripts = host)
     val p = f.player("Ann")
 
-    val result = f.w.summon(p, T.DUMMY, count = 2)
+    val result = f.w.summon(p, Effect.Summon(T.DUMMY, count = 2))
     f.run(1)
 
     assertTrue(result.isEmpty())
@@ -90,7 +90,7 @@ class SummonHooksTest {
     val p = f.player("Ann")
     f.mob(T.GOBLIN)
 
-    val result = f.w.summon(p, T.DUMMY, count = 3)
+    val result = f.w.summon(p, Effect.Summon(T.DUMMY, count = 3))
 
     assertEquals(3, result.size)
     assertEquals(T.DUMMY, observedLabel)
@@ -118,7 +118,7 @@ class SummonHooksTest {
     val f = Fixture(scripts = host)
     val p = f.player("Ann")
 
-    val result = f.w.summon(p, T.DUMMY, count = 2)
+    val result = f.w.summon(p, Effect.Summon(T.DUMMY, count = 2))
 
     assertEquals(2, result.size)
     assertEquals(result, summonTargets)

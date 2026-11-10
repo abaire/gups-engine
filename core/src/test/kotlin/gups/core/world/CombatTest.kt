@@ -340,9 +340,9 @@ class CombatTest(private val fs: FixtureSchema) {
     val f = Fixture(scripts = host)
     val p = f.player("Ann")
     val done = HookRef(Label("//t:t.star"), "done")
-    f.w.applyAffect(p, "ward", 5, onExpire = done)
-    f.w.applyAffect(p, "hex", 50, onExpire = done)
-    f.w.applyAffect(p, "glow", 50, onExpire = done)
+    f.w.applyAffect(p, AffectSpec("ward", 5, onExpire = done))
+    f.w.applyAffect(p, AffectSpec("hex", 50, onExpire = done))
+    f.w.applyAffect(p, AffectSpec("glow", 50, onExpire = done))
     f.w.removeAffect(p, "hex")
     f.w.applyEffect(Effect.Dispel(name = "glow"), p, p)
     f.runTo(10)
@@ -361,8 +361,8 @@ class CombatTest(private val fs: FixtureSchema) {
       reasons += "${ctx.affect!!.name} ${ctx.affectEndReason}"
       if (ctx.affect.name == "first") w.removeAffect(p, "second")
     }
-    f.w.applyAffect(p, "first", 5, onExpire = done)
-    f.w.applyAffect(p, "second", 5, onExpire = done)
+    f.w.applyAffect(p, AffectSpec("first", 5, onExpire = done))
+    f.w.applyAffect(p, AffectSpec("second", 5, onExpire = done))
     f.runTo(10)
     assertEquals(listOf("first EXPIRED", "second EXPIRED"), reasons)
   }
@@ -371,11 +371,11 @@ class CombatTest(private val fs: FixtureSchema) {
   fun `dispel matches by flag, never removes intrinsic affects, and stops at its count`() {
     val f = Fixture()
     val p = f.player("Ann")
-    f.w.applyAffect(p, "hex", 50, flags = setOf("curse"))
-    f.w.applyAffect(p, "doom", 50, flags = setOf("curse"))
-    f.w.applyAffect(p, "venom", 50, flags = setOf("poison"))
-    f.w.applyAffect(p, "blessing", 50)
-    f.w.applyAffect(p, "birthmark", 50, flags = setOf("curse", "intrinsic"))
+    f.w.applyAffect(p, AffectSpec("hex", 50, flags = setOf("curse")))
+    f.w.applyAffect(p, AffectSpec("doom", 50, flags = setOf("curse")))
+    f.w.applyAffect(p, AffectSpec("venom", 50, flags = setOf("poison")))
+    f.w.applyAffect(p, AffectSpec("blessing", 50))
+    f.w.applyAffect(p, AffectSpec("birthmark", 50, flags = setOf("curse", "intrinsic")))
     f.w.applyEffect(Effect.Dispel(flags = setOf("curse"), count = 1), p, p)
     assertEquals(listOf("doom", "venom", "blessing", "birthmark"), p.affects.map { it.name })
     f.w.applyEffect(Effect.Dispel(all = true), p, p)
@@ -386,7 +386,7 @@ class CombatTest(private val fs: FixtureSchema) {
   fun `a dispelled affect sends its expire message`() {
     val f = Fixture()
     val p = f.player("Ann")
-    f.w.applyAffect(p, "haste", 50, expireMessage = "You slow down.")
+    f.w.applyAffect(p, AffectSpec("haste", 50, expireMessage = "You slow down."))
     f.out(p)
     f.w.applyEffect(Effect.Dispel(name = "haste"), p, p)
     f.run()
@@ -470,11 +470,18 @@ class CombatTest(private val fs: FixtureSchema) {
     val d = f.mob(T.DUMMY)
     f.w.applyAffect(
       p,
-      "empower",
-      duration = 100,
-      modifiers = mapOf(ModifierPoint.DAMAGE to mod("affect_boost")),
+      AffectSpec(
+        "empower",
+        duration = 100,
+        modifiers = mapOf(ModifierPoint.DAMAGE to mod("affect_boost")),
+      ),
     )
-    f.w.applyEffect(Effect.Damage(Dice(1, 1, 9), DamageType(fs.magic)), p, d, skill = T.skills[0])
+    f.w.applyEffect(
+      Effect.Damage(Dice(1, 1, 9), DamageType(fs.magic)),
+      p,
+      d,
+      EffectContext(skill = T.skills[0]),
+    )
     assertEquals(1000 - 18, d.current(fs.health))
     assertTrue(
       lines.any { "rules.damage base=10 → room:hall 15 → affect:empower 18" in it },
