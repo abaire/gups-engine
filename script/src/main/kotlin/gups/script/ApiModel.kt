@@ -567,9 +567,8 @@ object ScriptApi {
       hooks = HookCatalog.specs.sortedBy { it.name },
       ctx = describeBuiltin(Ctx::class.java),
       views = VIEW_CLASSES.map { describeBuiltin(it) }.sortedBy { it.name },
-      effects = describeMethods(DeclarationBuiltins::class.java, DeclarationBuiltins.EFFECT_NAMES),
-      behaviors =
-        describeMethods(DeclarationBuiltins::class.java, DeclarationBuiltins.BEHAVIOR_NAMES),
+      effects = describeMethods(EffectBuiltins::class.java, DeclarationBuiltins.EFFECT_NAMES),
+      behaviors = describeMethods(BehaviorBuiltins::class.java, DeclarationBuiltins.BEHAVIOR_NAMES),
       rules =
         RulesApiSpec(
           ctx = describeBuiltin(RulesCtx::class.java),

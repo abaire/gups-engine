@@ -53,6 +53,8 @@ internal fun packageGlobals(
 ): Map<String, Any> {
   val b = ImmutableMap.builder<String, Any>()
   Starlark.addMethods(b, DeclarationBuiltins(schema, features, knownTraits))
+  Starlark.addMethods(b, EffectBuiltins(schema, features))
+  Starlark.addMethods(b, BehaviorBuiltins(features))
   b.putAll(DeclarationBuiltins.constants(schema))
   b.putAll(schemaGlobals(schema))
   return b.build()
