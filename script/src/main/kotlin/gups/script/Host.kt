@@ -353,7 +353,7 @@ class StarlarkHost(
     source: String,
     c: RulesContext,
     base: Any?,
-  ): Any? = runModifier(world, point, ref, source, c, base)
+  ): Any? = runModifier(world, ModifierCall(point, ref, source), c, base)
 
   // ---- Commands, think, resolve --------------------------------------------------------------
 

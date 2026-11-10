@@ -1,7 +1,5 @@
 package gups.script
 
-import gups.core.AttrValue
-import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.model.Actor
@@ -9,39 +7,26 @@ import gups.core.model.Affect
 import gups.core.model.Band
 import gups.core.model.Condition
 import gups.core.model.DamageType
-import gups.core.model.Direction
-import gups.core.model.DoorProto
 import gups.core.model.Entity
-import gups.core.model.ExitProto
-import gups.core.model.Interrupt
 import gups.core.model.Item
-import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
-import gups.core.model.Prototypes
-import gups.core.model.RoomProto
 import gups.core.model.STANDING_MAX
 import gups.core.model.STANDING_MIN
-import gups.core.model.SkillProto
 import gups.core.model.StandingDelta
 import gups.core.model.WorldSchema
 import gups.core.model.didYouMean
-import gups.core.rules.Contributor
 import gups.core.rules.LevelUpResult
 import gups.core.rules.PlayerDeathOutcome
 import gups.core.rules.RulesContext
 import gups.core.rules.RulesEngine
 import gups.core.rules.StartingStats
-import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Behavior
 import gups.core.world.Feature
-import gups.core.world.Features
 import gups.core.world.KernelMsg
 import gups.core.world.TargetChoice
 import gups.core.world.World
-import gups.core.world.WorldConfig
-import gups.core.world.disposition
 import gups.core.world.dispositionParts
 import gups.core.world.factionsOf
 import gups.core.world.memoriesOf
@@ -677,22 +662,46 @@ private fun findAffectHost(c: RulesContext, a: Affect): Entity? {
   return among(c.actor) ?: among(c.target) ?: c.item?.takeIf { carries(it) }
 }
 
+/** How a modifier point's value crosses between the engine's type and Starlark. */
+private class PointCodec(
+  val toStarlark: (Any?, WorldSchema) -> Any,
+  val fromStarlark: (Any?, String) -> Any?,
+)
+
+@Suppress("UNCHECKED_CAST")
+private fun vitalsCodec() =
+  PointCodec(
+    { v, schema -> TypedMap(TypedKind.VITALS, v as Map<String, Int>, schema.vitalNames) },
+    { v, what -> typed(v, TypedKind.VITALS, what) },
+  )
+
+private val POINT_CODECS: Map<ModifierPoint, PointCodec> =
+  mapOf(
+    ModifierPoint.MOVE_COST to vitalsCodec(),
+    ModifierPoint.REGEN to vitalsCodec(),
+    ModifierPoint.MITIGATE to vitalsCodec(),
+    ModifierPoint.BONUS_DAMAGE to
+      PointCodec(
+        { v, schema ->
+          @Suppress("UNCHECKED_CAST")
+          TypedMap(TypedKind.DAMAGES, v as Map<String, Int>, schema.damageTypes)
+        },
+        { v, what -> typed(v, TypedKind.DAMAGES, what) },
+      ),
+    ModifierPoint.CAST_ALLOWED to
+      PointCodec(
+        { v, _ -> (v as String?)?.let(::Denial) ?: Starlark.NONE },
+        { v, what -> denialValue(v, what) },
+      ),
+  )
+
+private val INT_POINT_CODEC = PointCodec({ v, _ -> sInt(v as Int) }, { v, what -> int(v, what) })
+
+private fun codecOf(point: ModifierPoint): PointCodec = POINT_CODECS[point] ?: INT_POINT_CODEC
+
 /** Converts a rules result for [point] to Starlark, as a modifier's `base` argument. */
 private fun baseValue(point: ModifierPoint, v: Any?, schema: WorldSchema): Any =
-  when (point) {
-    ModifierPoint.MOVE_COST,
-    ModifierPoint.REGEN,
-    ModifierPoint.MITIGATE -> {
-      @Suppress("UNCHECKED_CAST")
-      TypedMap(TypedKind.VITALS, v as Map<String, Int>, schema.vitalNames)
-    }
-    ModifierPoint.BONUS_DAMAGE -> {
-      @Suppress("UNCHECKED_CAST")
-      TypedMap(TypedKind.DAMAGES, v as Map<String, Int>, schema.damageTypes)
-    }
-    ModifierPoint.CAST_ALLOWED -> (v as String?)?.let(::Denial) ?: Starlark.NONE
-    else -> sInt(v as Int)
-  }
+  codecOf(point).toStarlark(v, schema)
 
 private fun denialValue(v: Any?, what: String): String? =
   when {
@@ -703,14 +712,10 @@ private fun denialValue(v: Any?, what: String): String? =
 
 /** Converts a modifier's return value for [point] back to the engine's type. */
 private fun pointValue(point: ModifierPoint, v: Any?, what: String): Any? =
-  when (point) {
-    ModifierPoint.MOVE_COST,
-    ModifierPoint.REGEN,
-    ModifierPoint.MITIGATE -> typed(v, TypedKind.VITALS, what)
-    ModifierPoint.BONUS_DAMAGE -> typed(v, TypedKind.DAMAGES, what)
-    ModifierPoint.CAST_ALLOWED -> denialValue(v, what)
-    else -> int(v, what)
-  }
+  codecOf(point).fromStarlark(v, what)
+
+/** Which modifier a [StarlarkHost.runModifier] runs: its [point], function [ref] and [source]. */
+internal data class ModifierCall(val point: ModifierPoint, val ref: HookRef, val source: String)
 
 /**
  * Runs one modifier for [StarlarkHost.modify]: `fn(ctx, base)` with its own rules budget, charged
@@ -718,12 +723,11 @@ private fun pointValue(point: ModifierPoint, v: Any?, what: String): Any? =
  */
 internal fun StarlarkHost.runModifier(
   world: World,
-  point: ModifierPoint,
-  ref: HookRef,
-  source: String,
+  modifier: ModifierCall,
   c: RulesContext,
   base: Any?,
 ): Any? {
+  val (point, ref, source) = modifier
   val site =
     Site(
       ref.file.pkg,
@@ -813,6 +817,14 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   /** Where the export [name] is defined: any non-test file of the rules package. */
   private fun refOf(name: String): HookRef? = host.scripts.packages[pkg]?.rulesExports?.get(name)
 
+  /** How a rules call is made: its ctx [c] (null for none), [args], and the optional extras. */
+  private class Invocation(
+    val c: RulesContext?,
+    val args: (Frame) -> List<Any>,
+    val deny: Boolean = false,
+    val onThread: (StarlarkThread) -> Unit = {},
+  )
+
   /**
    * Calls [export] with the rules ctx of [c] (or [args] alone when [c] is null) and converts the
    * result with [convert]. Null means the call failed and the caller gives the neutral result.
@@ -821,67 +833,73 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
     export: RulesExport,
     c: RulesContext?,
     args: (Frame) -> List<Any>,
-    deny: Boolean = false,
-    onThread: (StarlarkThread) -> Unit = {},
     convert: (Any?) -> T,
-  ): T? = runNamed(export.scriptName, c, args, deny, onThread, convert)
+  ): T? = runNamed(export.scriptName, Invocation(c, args), convert)
 
   /** [run] for any export by its script name, plugin-declared ones included. */
-  private fun <T : Any> runNamed(
-    name: String,
-    c: RulesContext?,
-    args: (Frame) -> List<Any>,
-    deny: Boolean = false,
-    onThread: (StarlarkThread) -> Unit = {},
-    convert: (Any?) -> T,
-  ): T? {
+  private fun <T : Any> runNamed(name: String, call: Invocation, convert: (Any?) -> T): T? {
+    val c = call.c
     val w = c?.world ?: world ?: return null
-    val ref = refOf(name)
-    if (ref == null || host.scripts.function(ref) == null) {
-      fault(w, name, "rules.$name is not defined by //$pkg")
-      return null
-    }
-    val site = Site(pkg, null, "rules.$name", deny, c?.actor?.id)
-    val sink = collected
+    val ref = definedRef(w, name) ?: return null
+    val target = Target(w, Site(pkg, null, "rules.$name", call.deny, c?.actor?.id), name)
     val result =
       host.call(
         w,
-        site,
+        target.site,
         ref,
-        { f ->
-          if (c != null) f.rng = c.rng
-          c?.let { RulesCtx(f, it) } ?: Starlark.NONE
-        },
-        positional = { f ->
-          if (c != null) f.rng = c.rng
-          args(f)
-        },
+        { f -> c?.let { RulesCtx(f.withRng(it), it) } ?: Starlark.NONE },
+        positional = { f -> call.args(c?.let { f.withRng(it) } ?: f) },
         budget = host.limits.rulesSteps,
-        recordErrors = sink == null,
-        onThread = onThread,
+        recordErrors = collected == null,
+        onThread = call.onThread,
       )
-    when (result) {
-      is CallResult.Ok ->
-        try {
-          return convert(result.value)
-        } catch (e: EvalException) {
-          if (sink == null)
-            host.report(
-              w,
-              site,
-              "script_error",
-              "rules.$name returned a bad value: ${e.message}",
-              e,
-              null,
-            )
-          else sink += "rules.$name returned a bad value: ${e.message}"
-        }
-      is CallResult.Failed -> if (sink != null) sink += "rules.$name failed: ${result.message}"
-      CallResult.Skipped -> Unit
+    val converted = outcome(target, result, convert)
+    if (converted == null) {
+      fault(w, name, "rules.$name failed; using its neutral result for this call")
     }
-    fault(w, name, "rules.$name failed; using its neutral result for this call")
+    return converted
+  }
+
+  private fun Frame.withRng(c: RulesContext): Frame = also { rng = c.rng }
+
+  /** Where [name] is defined, or null after raising the alarm that it isn't. */
+  private fun definedRef(w: World, name: String): HookRef? {
+    val ref = refOf(name)
+    if (ref != null && host.scripts.function(ref) != null) return ref
+    fault(w, name, "rules.$name is not defined by //$pkg")
     return null
   }
+
+  /** The world, site and export name of one rules call, for reporting what it did wrong. */
+  private class Target(val world: World, val site: Site, val name: String)
+
+  /**
+   * The converted value of a successful [result], else null with the failure noted if collecting.
+   */
+  private fun <T : Any> outcome(target: Target, result: CallResult, convert: (Any?) -> T): T? =
+    when (result) {
+      is CallResult.Ok -> convertResult(target, result.value, convert)
+      is CallResult.Failed -> {
+        collected?.add("rules.${target.name} failed: ${result.message}")
+        null
+      }
+      CallResult.Skipped -> null
+    }
+
+  /** [value] converted, or null after reporting why it is not a valid result of the export. */
+  private fun <T : Any> convertResult(target: Target, value: Any?, convert: (Any?) -> T): T? =
+    try {
+      convert(value)
+    } catch (e: EvalException) {
+      val message = "rules.${target.name} returned a bad value: ${e.message}"
+      val sink = collected
+      if (sink == null) {
+        host.report(target.world, target.site, "script_error", message, e, null)
+      } else {
+        sink += message
+      }
+      null
+    }
 
   /** Loud, but at most once a minute of game time per function. */
   private fun fault(w: World, name: String, message: String) {
@@ -986,7 +1004,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
   override fun castAllowed(c: RulesContext): String? {
     // A None result is a real answer here, so it is wrapped to tell it from a failure.
     val answer =
-      run(RulesExport.CAST_ALLOWED, c, ctxArgs(c), deny = true) { v ->
+      runNamed(RulesExport.CAST_ALLOWED.scriptName, Invocation(c, ctxArgs(c), deny = true)) { v ->
         Allowed(denialValue(v, "rules.cast_allowed return value"))
       }
     return if (answer == null) c.world.msg(KernelMsg.NOTHING_HAPPENS) else answer.denial
@@ -1114,11 +1132,12 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 
   override fun ownedBehaviors(c: RulesContext): List<Behavior>? {
     if (!defines(RulesExport.OWNED_BEHAVIORS)) return null
-    return run(
-      RulesExport.OWNED_BEHAVIORS,
-      c,
-      ctxArgs(c),
-      onThread = { it.setThreadLocal(OwnedBehaviorsMarker::class.java, OwnedBehaviorsMarker(pkg)) },
+    val marker = { t: StarlarkThread ->
+      t.setThreadLocal(OwnedBehaviorsMarker::class.java, OwnedBehaviorsMarker(pkg))
+    }
+    return runNamed(
+      RulesExport.OWNED_BEHAVIORS.scriptName,
+      Invocation(c, ctxArgs(c), onThread = marker),
     ) { v ->
       val what = "rules.owned_behaviors return value"
       val list = v as? StarlarkList<*> ?: fail("$what: must be a list, got ${typeName(v)}")
@@ -1147,7 +1166,7 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 
   override fun pluginExport(name: String, type: String, c: RulesContext): Any? {
     if (!definesPluginExport(name)) return null
-    return runNamed(name, c, ctxArgs(c)) { v ->
+    return runNamed(name, Invocation(c, ctxArgs(c))) { v ->
       val what = "rules.$name return value"
       when (type) {
         "int" -> {
@@ -1195,16 +1214,12 @@ class StarlarkRules(private val host: StarlarkHost, val pkg: String = "rules") :
 
   override fun standingChange(c: RulesContext): List<StandingDelta>? {
     if (!defines(RulesExport.STANDING_CHANGE)) return null
-    return run(
-      RulesExport.STANDING_CHANGE,
-      c,
-      ctxArgs(c),
-      onThread = {
-        it.setThreadLocal(
-          StandingChangeMarker::class.java,
-          StandingChangeMarker(pkg, c.world.protos),
-        )
-      },
+    val marker = { t: StarlarkThread ->
+      t.setThreadLocal(StandingChangeMarker::class.java, StandingChangeMarker(pkg, c.world.protos))
+    }
+    return runNamed(
+      RulesExport.STANDING_CHANGE.scriptName,
+      Invocation(c, ctxArgs(c), onThread = marker),
     ) { v ->
       val what = "rules.standing_change return value"
       val list = v as? StarlarkList<*> ?: fail("$what: must be a list, got ${typeName(v)}")
@@ -2023,412 +2038,3 @@ internal val MODIFIER_POINTS: List<ModifierPointSpec> =
         "Adjusts the percent strength of what ctx.item does for ctx.actor: use or proc. The final result is clamped to 0.",
     ),
   )
-
-/**
- * The load-time dry run of the rules package [pkg] in [result].
- *
- * Every export the rules package defines is exercised against synthetic actors to verify that its
- * return types match declarations and do not throw runtime exceptions.
- *
- * ## Synthetic World and Actors Setup
- * - Sets up a throwaway single-room world (`//engine:dry_run`) containing one north exit with a
- *   door (`DoorProto`) leading to itself.
- * - Spawns two synthetic player actors (`Dryrunner` and `Dryrunfoe`) and one synthetic mob per
- *   loaded mob prototype, each initialized through `starting_stats`.
- * - If a character creation provider is configured, exercises `starting_stats` across player
- *   permutations for every declared option of each creation choice.
- *
- * ## Export Verification
- * - Calls `equipment_slots` to ensure slot names are valid lowercase identifiers.
- * - Verifies `slot_families`: valid family names, no collision with slots, non-empty, no
- *   duplicates, valid slots, no slot in two families.
- * - Verifies `actor_slots` returns a subset of `equipment_slots` for each synthetic actor.
- * - Verifies `slot_cost` for each synthetic actor against wearable item prototypes, stopping at the
- *   first failure.
- * - If the `leveling` feature is enabled, verifies that `xp_to_level(ctx, level)` strictly
- *   increases for all levels from 1 to 50 for each synthetic actor, stopping at the first actor
- *   whose curve fails, checks `xp_for_kill`, and calls `on_level_up` for each synthetic actor with
- *   its level set to 2 (validated but not applied).
- * - If the `combat` feature is enabled, tests `to_hit`, `damage`, `initiative`, `flee_chance`, and
- *   `flee_fail_lag`.
- * - If the `track` feature is enabled, tests `retreat_check`, `advance_lag`, `retreat_lag`,
- *   `retreat_fail_lag`, and `get_lag` across all range bands.
- * - If the `skills` feature is enabled, tests `to_hit` with a synthetic skill, `cast_allowed`,
- *   `interrupt_check`, `skill_check`, `skill_power`, and `recognizes_skill`.
- * - Tests `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `regen`, `move_cost`,
- *   and `move_pace`.
- * - Tests `mitigate` for each damage type declared in the world [schema].
- * - For player actors, tests `on_player_death`.
- * - Tests sensory perception exports (`sense_cost`, `can_perceive`, `perceive_message`) for each
- *   channel declared in [schema], testing both same-room events and multi-hop exit events.
- * - Tests `door_intensity` for `"open"`, `"close"`, `"lock"`, and `"unlock"` actions, both with and
- *   without tags.
- *
- * Returns what went wrong, one line per failed call, and the slots and families that items' `wear`
- * is checked against.
- */
-internal fun dryRunRules(
-  result: LoadResult,
-  schema: WorldSchema,
-  limits: ScriptLimits,
-  pkg: String = "rules",
-  features: Features = Features.ALL,
-  wiring: WorldPluginWiring = WorldPluginWiring.NONE,
-): RulesDryRun {
-  val host = StarlarkHost(result, limits)
-  val rules = host.rules(pkg)
-  val problems = mutableListOf<String>()
-  rules.collected = problems
-  val dryExit = ExitProto(Direction.NORTH, Label("//engine:dry_run"), door = DoorProto())
-  val room = RoomProto(Label("//engine:dry_run"), "The dry run", exits = listOf(dryExit))
-  val protos =
-    Prototypes(
-      rooms = listOf(room),
-      mobs = result.prototypes().mobs.values.toList(),
-      factions = result.prototypes().factions.values.toList(),
-    )
-  val world =
-    World(
-        protos,
-        schema,
-        rules,
-        config = WorldConfig(seed = 0, strict = false, features = features),
-      )
-      .also {
-        rules.world = it
-        wiring.install(it)
-      }
-  val skill = SkillProto(Label("//engine:dry_run_skill"), interrupt = Interrupt(damagePct = 10))
-  var wearSlots: WearSlots? = null
-  try {
-    wearSlots = dryRunSlots(rules, problems)
-    val at = room.label
-    val player = world.spawnPlayer("Dryrunner", at)
-    val foe = world.spawnPlayer("Dryrunfoe", at)
-    val mobs = protos.mobs.keys.map { world.spawnMob(it, world.room(at)) }
-    // A second xp_share contributor that is never the victim, so a split runs over two entries.
-    val ally = if (Feature.LEVELING in features) world.spawnPlayer("Dryrunally", at) else null
-    world.creation?.let { provider ->
-      for (c in provider.choices) {
-        for (opt in c.options) {
-          val answers = mutableMapOf<String, String>()
-          var ok = true
-          for (choice in provider.choices) {
-            // The provider is the plugin's to fix; a path it can't answer is skipped.
-            val avail =
-              runCatching { provider.available(world, choice.id, answers) }
-                .getOrDefault(emptyList())
-            if (choice.id == c.id) {
-              if (opt.id !in avail) {
-                ok = false
-                break
-              }
-              answers[choice.id] = opt.id
-            } else {
-              val first = avail.firstOrNull()
-              if (first != null) {
-                answers[choice.id] = first
-              }
-            }
-          }
-          if (ok) {
-            world.spawnPlayer(
-              "Dryrun_${c.id}_${opt.id}_${world.players.size}",
-              at,
-              choices = answers,
-            )
-          }
-        }
-      }
-    }
-    if (rules.defines(RulesExport.OWNED_BEHAVIORS)) {
-      mobs.firstOrNull()?.let {
-        rules.ownedBehaviors(RulesContext(world, it, player, behaviors = it.proto.behaviors))
-      }
-    }
-    if (rules.defines(RulesExport.LEASH_RETURN)) {
-      mobs.firstOrNull()?.let {
-        rules.leashReturn(RulesContext(world, it, null, away = 0L, pastLeash = false))
-      }
-    }
-    if (Feature.SKILLS in features && rules.defines(RulesExport.RECOGNIZES_SKILL)) {
-      mobs.firstOrNull()?.let {
-        rules.recognizesSkill(
-          RulesContext(world, player, player, source = it, skill = skill, room = player.room)
-        )
-      }
-    }
-    for ((name, type) in wiring.rulesExports) {
-      if (!rules.definesPluginExport(name)) continue
-      rules.pluginExport(
-        name,
-        type,
-        RulesContext(
-          world,
-          actor = player,
-          target = player,
-          source = mobs.firstOrNull(),
-          base = if (type == "bool") false else 0L,
-          args = emptyMap(),
-        ),
-      )
-    }
-    if (rules.defines(RulesExport.MOVE_PACE)) {
-      mobs.firstOrNull()?.let {
-        rules.movePace(RulesContext(world, it, room = it.room, exit = null))
-      }
-    }
-    if (rules.defines(RulesExport.CHAIN_THINK)) {
-      mobs.firstOrNull()?.let {
-        rules.chainThink(
-          RulesContext(world, it, null, behavior = "pursue", command = "north", chain = 0)
-        )
-      }
-    }
-    if (Feature.COMBAT in features && rules.defines(RulesExport.TARGET_ORDER)) {
-      mobs.firstOrNull()?.let { dryMob ->
-        rules.targetOrder(
-          RulesContext(
-            world,
-            actor = dryMob,
-            room = dryMob.room,
-            behavior = "aggressive",
-            prefer = AttrValue.S("dry_run"),
-            candidates = listOf(player),
-            dispositions =
-              if (Feature.STANDING in features) listOf(world.disposition(dryMob, player)) else null,
-          )
-        )
-      }
-    }
-    if (Feature.STANDING in features) {
-      val dryMob = mobs.firstOrNull()
-      if (dryMob != null) {
-        if (rules.defines(RulesExport.FACTIONS)) {
-          rules.factions(RulesContext(world, dryMob))
-          rules.factions(RulesContext(world, player))
-        }
-        if (rules.defines(RulesExport.DISPOSITION)) {
-          val parts1 = world.dispositionParts(dryMob, player)
-          rules.disposition(RulesContext(world, dryMob, player, dispositionParts = parts1))
-          val parts2 = world.dispositionParts(player, dryMob)
-          rules.disposition(RulesContext(world, player, dryMob, dispositionParts = parts2))
-        }
-        if (rules.defines(RulesExport.STANDING_CHANGE)) {
-          for (evt in BUILTIN_STANDING_EVENTS) {
-            rules.standingChange(
-              RulesContext(
-                world,
-                actor = dryMob,
-                target = player,
-                event = evt,
-                amount = if (evt in setOf("heal", "give")) 10L else null,
-              )
-            )
-          }
-        }
-      }
-    }
-    val actors = listOf(player, foe) + mobs
-    val slots = rules.equipmentSlots()
-    for (a in actors) {
-      val stray = rules.actorSlots(RulesContext(world, a)).filter { it !in slots }
-      for (slot in stray) {
-        problems +=
-          "rules.actor_slots for ${dryRunActor(a)} returned '$slot', which is not in equipment_slots()${didYouMean(slot, slots)}; equipment_slots() has ${slots.joinToString(", ")}"
-      }
-    }
-    // A slot_cost that fails usually fails for every actor and item alike, so stop at the first.
-    val wearable = result.prototypes().items.values.filter { it.wear != null }
-    costs@ for (a in actors) {
-      for (proto in wearable) {
-        val before = problems.size
-        val item = Item(EntityId(0L), proto, ItemLocation.Carried(a.id))
-        rules.slotCost(RulesContext(world, a, item = item))
-        if (problems.size > before) {
-          for (i in before until problems.size) {
-            problems[i] += " (item ${proto.label}, worn by ${dryRunActor(a)})"
-          }
-          break@costs
-        }
-      }
-    }
-    if (Feature.LEVELING in features) {
-      // A curve that ignores the actor fails the same way for every actor, so stop at the first.
-      curves@ for (a in actors) {
-        val c = RulesContext(world, a)
-        var prevXp: Long? = null
-        for (level in 1..50) {
-          val problemsBefore = problems.size
-          val xp = rules.xpToLevel(c, level)
-          if (problems.size > problemsBefore) break@curves
-          if (prevXp != null && xp <= prevXp) {
-            problems +=
-              "rules.xp_to_level for ${a.name} is not strictly increasing: level $level ($xp) <= level ${level - 1} ($prevXp)"
-            break@curves
-          }
-          prevXp = xp
-        }
-      }
-      for (a in actors) {
-        val originalLevel = a.level
-        a.level = 2
-        try {
-          rules.onLevelUp(RulesContext(world, a))
-        } finally {
-          a.level = originalLevel
-        }
-      }
-    }
-    for (a in actors) {
-      val other = if (a === player) foe else player
-      val c = RulesContext(world, a, other)
-      val withSkill = RulesContext(world, a, other, skill = skill)
-      rules.condition(c)
-      if (Feature.COMBAT in features) {
-        rules.toHit(c)
-        rules.damage(c)
-        rules.initiative(c)
-        rules.fleeChance(c)
-        rules.fleeFailLag(RulesContext(world, a))
-      }
-      rules.carryLimit(c)
-      rules.encumbranceLevel(RulesContext(world, a, limit = 100, carried = 50))
-      rules.encumbrance(RulesContext(world, a, limit = 100, carried = 150, encumbranceLevel = 1))
-      rules.itemPower(RulesContext(world, a, other, event = "use"))
-      rules.regen(c)
-      rules.moveCost(c)
-      if (Feature.TRACK in features) {
-        rules.retreatCheck(c)
-        val melee = RulesContext(world, a, other, band = Band.MELEE)
-        rules.advanceLag(melee)
-        rules.retreatLag(melee)
-        rules.retreatFailLag(melee)
-      }
-      if (Feature.SKILLS in features) {
-        rules.toHit(withSkill)
-        rules.castAllowed(withSkill)
-        rules.interruptCheck(withSkill, 1)
-        rules.skillCheck(withSkill)
-        rules.skillPower(withSkill)
-      }
-      if (ally != null) {
-        rules.xpForKill(c)
-        val contributors =
-          listOf(
-              Contributor(a, 2, 0, 0, world.pulse, null, null, inRoom = true),
-              Contributor(ally, 0, 1, 0, world.pulse, null, null, inRoom = true),
-            )
-            .sortedBy { it.actor.id }
-        rules.xpShare(RulesContext(world, a, other, xp = 100, contributors = contributors))
-      }
-      for (type in schema.damageTypes) {
-        val damageType = DamageType(type)
-        rules.mitigate(RulesContext(world, a, other, damageType = damageType), 5, damageType)
-      }
-      if (Feature.TRACK in features)
-        for (band in Band.entries) rules.getLag(
-          RulesContext(world, a, item = null, band = band),
-          band,
-        )
-      if (a is Player) rules.onPlayerDeath(RulesContext(world, a))
-      val here = world.room(at)
-      val exit = here.exits.getValue(Direction.NORTH)
-      for (channel in schema.allChannels) {
-        rules.senseCost(RulesContext(world, room = here, exit = exit, channel = channel))
-        for (sourceRoom in listOf(here, null)) {
-          val heard =
-            RulesContext(
-              world,
-              a,
-              a,
-              room = here,
-              channel = channel,
-              event = "dry_run",
-              intensity = 1,
-              cost = if (sourceRoom == null) 1 else 0,
-              sourceRoom = sourceRoom,
-              viaExit = if (sourceRoom == null) Direction.NORTH else null,
-              text = "dry run",
-              source = other,
-            )
-          rules.canPerceive(heard)
-          rules.perceiveMessage(heard)
-        }
-      }
-      for (action in listOf("open", "close", "lock", "unlock")) {
-        rules.doorIntensity(
-          RulesContext(world, a, room = here, action = action, tags = setOf("heavy"), exit = exit)
-        )
-        rules.doorIntensity(RulesContext(world, a, room = here, action = action))
-      }
-    }
-  } catch (e: RuntimeException) {
-    problems += "the dry run could not set up its actors: ${e.message}"
-  } finally {
-    rules.collected = null
-  }
-  return RulesDryRun(problems.distinct(), wearSlots)
-}
-
-/** What [dryRunRules] found. */
-internal class RulesDryRun(
-  /** What went wrong, one line per failed call; empty when the package is sound. */
-  val problems: List<String>,
-  /** The slots and families items may be worn in, or null if the rules got them wrong. */
-  val wearSlots: WearSlots?,
-)
-
-/**
- * The names an item's `wear` may use: [slots] from `equipment_slots()`, [families] from
- * `slot_families()`.
- */
-internal class WearSlots(val slots: List<String>, val families: Map<String, List<String>>) {
-  val names: Set<String> = slots.toSet() + families.keys
-}
-
-/**
- * Checks `equipment_slots()` and `slot_families()` and adds what is wrong to [problems]. Returns
- * the slots and families, or null if either is wrong, so items aren't blamed for the rules'
- * mistake.
- */
-private fun dryRunSlots(rules: StarlarkRules, problems: MutableList<String>): WearSlots? {
-  val before = problems.size
-  val slots = rules.equipmentSlots()
-  val families = rules.slotFamilies()
-  val owner = mutableMapOf<String, String>()
-  for ((name, familySlots) in families) {
-    val what = "rules.slot_families: family '$name'"
-    if (!Regex("[a-z][a-z0-9_]*").matches(name)) {
-      problems +=
-        "$what is not a valid family name; use lowercase letters, digits and underscores, starting with a letter"
-    }
-    if (name in slots) {
-      problems += "$what has the name of a slot in equipment_slots(); give the family its own name"
-    }
-    if (familySlots.isEmpty()) problems += "$what lists no slots"
-    val seen = mutableSetOf<String>()
-    for (slot in familySlots) {
-      if (!seen.add(slot)) {
-        problems += "$what lists slot '$slot' more than once"
-        continue
-      }
-      if (slot !in slots) {
-        problems +=
-          "$what lists '$slot', which is not in equipment_slots()${didYouMean(slot, slots)}"
-      }
-      val earlier = owner.putIfAbsent(slot, name)
-      if (earlier != null) {
-        problems +=
-          "rules.slot_families: slot '$slot' is in both '$earlier' and '$name'; a slot belongs to at most one family"
-      }
-    }
-  }
-  return if (problems.size == before) WearSlots(slots, families) else null
-}
-
-/**
- * How a dry-run problem names [a]: a mob by its prototype, since that is what an author can find.
- */
-private fun dryRunActor(a: Actor): String =
-  if (a is Mob) "mob ${a.proto.label}" else "player ${a.name}"

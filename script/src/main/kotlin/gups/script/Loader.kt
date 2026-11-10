@@ -513,7 +513,7 @@ class ScriptLoader(
      */
     fun dryRun() {
       val rules = states[RULES_PACKAGE]?.takeIf { it.contentDone && !it.failed } ?: return
-      val run = dryRunRules(result(), schema, limits, features = features, wiring = plugins)
+      val run = dryRunRules(result(), schema, limits, DryRunEnv(features, plugins))
       val exports = rules.pkg.rulesExports
       rules.errors +=
         run.problems.map { problem ->
