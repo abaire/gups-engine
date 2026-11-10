@@ -42,7 +42,7 @@ internal object TrackCommands {
         category = CommandCategory.SPECIAL,
         help = "Show your track index and bands numerically.\nUsage: @where",
       ) {
-        Tools.where(it)
+        BuilderTools.where(it)
       },
     )
 

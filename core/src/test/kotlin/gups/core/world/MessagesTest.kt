@@ -91,7 +91,14 @@ class MessagesTest {
   fun `no player-facing literal remains in core or auth`() {
     val roots = listOf(File("src/main/kotlin"), File("../auth/src/main/kotlin"))
     // Staff tools print engine terms and aren't in the catalog.
-    val skip = setOf("Tools.kt", "AccountTools.kt", "Operations.kt")
+    val skip =
+      setOf(
+        "BuilderTools.kt",
+        "InstructorTools.kt",
+        "DebugSpawns.kt",
+        "AccountTools.kt",
+        "Operations.kt",
+      )
     val call = Regex("""\b(send|echo|sendSession|prompt)\(|\.append\(""")
     val offenders = mutableListOf<String>()
     for (root in roots) {
