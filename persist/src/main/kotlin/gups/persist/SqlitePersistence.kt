@@ -314,15 +314,18 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   }
 
   private fun restoreZoneStates(world: World) {
-    for ((pkg, json) in zoneRows) {
-      if (json.isEmpty()) continue
-      val zone = pkg in world.protos.zones
-      // Non-zone packages (libraries, rules) keep a row only for their quarantine.
-      if (!zone && pkg !in world.scripts.packages) continue
-      val z = JSON.decodeFromString(ZonePayload.serializer(), json)
-      if (zone) applyZoneTimers(world, pkg, z)
-      if (z.quarantined) world.scripts.quarantine(world, pkg, "as it was at the last checkpoint")
-    }
+    for ((pkg, json) in zoneRows) restoreZoneState(world, pkg, json)
+  }
+
+  /** Restores one saved zone-state row; non-zone packages keep theirs only for the quarantine. */
+  private fun restoreZoneState(world: World, pkg: String, json: String) {
+    if (json.isEmpty()) return
+    val zone = pkg in world.protos.zones
+    // Non-zone packages (libraries, rules) keep a row only for their quarantine.
+    if (!zone && pkg !in world.scripts.packages) return
+    val z = JSON.decodeFromString(ZonePayload.serializer(), json)
+    if (zone) applyZoneTimers(world, pkg, z)
+    if (z.quarantined) world.scripts.quarantine(world, pkg, "as it was at the last checkpoint")
   }
 
   private fun applyZoneTimers(world: World, pkg: String, z: ZonePayload) {
@@ -370,7 +373,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     val notes = mutableListOf<String>()
     val deleted = LinkedHashSet<Long>()
 
-    val restoredPets = restorePets(world, player, room, deleted, notes)
+    val restoredPets = restorePets(world, player, deleted, notes)
 
     placeItems(
       world,
@@ -395,10 +398,10 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   private fun restorePets(
     world: World,
     owner: Player,
-    room: Room,
     deleted: MutableSet<Long>,
     notes: MutableList<String>,
   ): List<Mob> {
+    val room = owner.room
     val petRows =
       petOwners.filterValues { it == owner.id.v }.keys.sorted().map { entityRows.getValue(it) }
     val pets = mutableListOf<Mob>()
@@ -684,15 +687,26 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     while (grew) {
       grew = false
       for (row in entityRows.values) {
-        if (row.kind != "item" || items.any { it.id == row.id } || !isAt(row, room, holders)) {
-          continue
+        if (isItemAt(row, items, room, holders)) {
+          items += row
+          holders += row.id
+          grew = true
         }
-        items += row
-        holders += row.id
-        grew = true
       }
     }
     return items
+  }
+
+  /** True if [row] is a not-yet-collected item that sits in [room] or is held by [holders]. */
+  private fun isItemAt(
+    row: EntityRow,
+    collected: List<EntityRow>,
+    room: Label,
+    holders: Set<Long>,
+  ): Boolean {
+    if (row.kind != "item") return false
+    if (collected.any { it.id == row.id }) return false
+    return isAt(row, room, holders)
   }
 
   private fun isAt(row: EntityRow, room: Label, holders: Set<Long>): Boolean {
