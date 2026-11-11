@@ -4,6 +4,7 @@ import gups.core.EntityId
 import gups.core.Label
 import gups.core.fixtures.FixtureRules
 import gups.core.fixtures.FixtureSchemas
+import gups.core.fixtures.tempDb
 import gups.core.model.Affect
 import gups.core.model.AffectScope
 import gups.core.model.DamageType

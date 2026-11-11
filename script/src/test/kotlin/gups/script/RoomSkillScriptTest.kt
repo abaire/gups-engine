@@ -4,6 +4,7 @@ import gups.core.Label
 import gups.core.rules.RulesContext
 import gups.core.world.World
 import gups.core.world.toHitChain
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

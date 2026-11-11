@@ -1,8 +1,10 @@
 package gups.cli
 
+import gups.core.fixtures.tempDb
 import gups.core.model.ItemLocation
 import gups.core.world.spawnItem
 import gups.script.WorldDir
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

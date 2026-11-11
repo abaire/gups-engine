@@ -8,20 +8,23 @@ import gups.core.fixtures.FixtureSchemas
 import gups.core.loop.WorldLoop
 import gups.core.world.World
 import gups.core.world.WorldConfig
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 class WorldThreadTest {
-  /** Takes a full second to check a password. */
+  /** Blocks every password check until the test releases it. */
   private class SlowHasher(private val inner: PasswordHasher) : PasswordHasher {
     val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
 
     @Volatile var thread: Thread? = null
 
@@ -30,9 +33,17 @@ class WorldThreadTest {
     override fun verify(password: String, hash: String): Boolean {
       thread = Thread.currentThread()
       started.countDown()
-      Thread.sleep(1000)
+      // The timeout only keeps a failed test from wedging the pool forever.
+      release.await(30, TimeUnit.SECONDS)
       return inner.verify(password, hash)
     }
+  }
+
+  /** Reads the pulse on the world thread, which is the only place it is safe to read. */
+  private fun pulseCount(loop: WorldLoop): Long {
+    val pulse = CompletableFuture<Long>()
+    loop.submit(WorldControlEvent.Task { pulse.complete(it.pulse) })
+    return pulse.get(5, TimeUnit.SECONDS)
   }
 
   @Test
@@ -64,20 +75,26 @@ class WorldThreadTest {
       loop.submit(ClientInputEvent(id, "ann", 0))
       loop.submit(ClientInputEvent(id, "correct horse", 0))
       assertTrue(hasher.started.await(5, TimeUnit.SECONDS))
-      val before = w.pulse
+      val before = pulseCount(loop)
+      val advance = System.nanoTime() + 10_000_000_000
+      while (pulseCount(loop) < before + 5) {
+        check(System.nanoTime() < advance) { "the world stopped pulsing during the hash" }
+        Thread.sleep(5)
+      }
+      assertFalse("Your characters" in sink.transcript || "no characters" in sink.transcript)
+      hasher.release.countDown()
       val deadline = System.nanoTime() + 5_000_000_000
       while ("Your characters" !in sink.transcript && "no characters" !in sink.transcript) {
         check(System.nanoTime() < deadline) { "never logged in:\n${sink.transcript}" }
         Thread.sleep(10)
       }
-      val pulsed = w.pulse - before
-      // 1 s at 20 ms a pulse is 50 pulses; allow for a slow machine.
-      assertTrue(pulsed >= 20, "only $pulsed pulses ran during the hash")
       assertNotSame(worldThread, hasher.thread)
       assertContains(sink.transcript, "Type a name to play")
     } finally {
+      hasher.release.countDown()
       loop.stop()
       runner.join(5000)
+      assertFalse(runner.isAlive, "the world loop thread never exited")
       pool.shutdownNow()
     }
   }

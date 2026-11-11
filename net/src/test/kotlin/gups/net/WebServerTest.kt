@@ -28,6 +28,15 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
+/** Waits for the server to process a Core.Supports frame, which is handled asynchronously. */
+private fun awaitSupported(sink: gups.core.OutputSink, pkg: String) {
+  val deadline = System.nanoTime() + 8_000_000_000
+  while (!sink.wantsGmcp(pkg)) {
+    check(System.nanoTime() < deadline) { "server never registered support for $pkg" }
+    Thread.sleep(10)
+  }
+}
+
 class WebServerTest {
   private class Inbox : WorldInbox {
     val events = LinkedBlockingQueue<Any>()
@@ -303,7 +312,7 @@ class WebServerTest {
         List(3) { frames.next() },
       )
       ws.sendText("""{"t":"gmcp","p":"Core.Supports.Set","d":["Char 1"]}""", true)
-      Thread.sleep(200)
+      awaitSupported(connect.sink, "Char.Vitals")
       connect.sink.gmcp("Room.Info", mapOf("name" to "x"))
       connect.sink.gmcp("Char.Vitals", mapOf("hp" to 2))
       assertEquals(
@@ -337,7 +346,7 @@ class WebServerTest {
     val (ws, frames) = http.socket(base, cookie = "token1")
     val connect = assertIs<WorldControlEvent.Connect>(inbox.next())
     ws.sendText("""{"t":"gmcp","p":"Core.Supports.Set","d":["Char"]}""", true)
-    Thread.sleep(200)
+    awaitSupported(connect.sink, "Char.Vitals")
     connect.sink.gmcp("Char.Vitals", mapOf("hp" to 1))
     assertEquals("""{"t":"gmcp","p":"Char.Vitals","d":{"hp":1}}""", frames.next())
   }

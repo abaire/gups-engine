@@ -10,6 +10,7 @@ import gups.core.world.behaviorsOf
 import gups.core.world.handle
 import gups.core.world.setOwner
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

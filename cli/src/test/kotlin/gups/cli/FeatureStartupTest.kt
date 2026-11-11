@@ -1,11 +1,12 @@
 package gups.cli
 
+import gups.core.fixtures.TempFiles
+import gups.core.fixtures.tempDb
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.persist.Database
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -25,7 +26,7 @@ class FeatureStartupTest {
     extra: String = "",
     messages: String? = null,
   ): Path {
-    val root = Files.createTempDirectory("gups-features")
+    val root = TempFiles.dir("gups-features")
     fun file(path: String, text: String) {
       val p = root.resolve(path)
       p.parent.createDirectories()

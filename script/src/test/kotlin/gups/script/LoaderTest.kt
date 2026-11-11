@@ -9,6 +9,7 @@ import gups.core.model.EmptyAction
 import gups.core.model.TrackSize
 import gups.core.world.HookName
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

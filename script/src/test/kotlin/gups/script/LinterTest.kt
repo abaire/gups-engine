@@ -5,6 +5,7 @@ import gups.core.model.MobProto
 import gups.core.model.Prototypes
 import gups.core.model.RoomProto
 import gups.core.model.TrackSize
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

@@ -1,8 +1,8 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 
 class RunnerTest {
   private fun world(files: Map<String, String>, defaults: Boolean = true): WorldDir {
-    val root: Path = Files.createTempDirectory("gups-runner")
+    val root: Path = TempFiles.dir("gups-runner")
     for ((path, text) in if (defaults) TestWorlds.withDefaults(files) else files) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }

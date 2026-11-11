@@ -1,5 +1,6 @@
 package gups.sample.bluemage
 
+import gups.core.fixtures.TempFiles
 import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.host.PluginLoader
@@ -28,7 +29,7 @@ class BlueMageWorldTest {
 
   /** A world dir whose MODULE.gups pins the jar when [pinned], with the template's rules. */
   private fun newWorld(pinned: Boolean, learnChanceRules: Boolean): Path {
-    val tmp = Files.createTempDirectory("gups-bluemage")
+    val tmp = TempFiles.dir("gups-bluemage")
     val schema = templateWorld.resolve("MODULE.gups").readText()
     if (pinned) {
       val jar = tmp.resolve("plugins/bluemage.jar").also { it.parent.createDirectories() }

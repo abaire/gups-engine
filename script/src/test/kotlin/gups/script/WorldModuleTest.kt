@@ -1,9 +1,10 @@
 package gups.script
 
+import gups.core.fixtures.TempFiles
 import gups.core.model.WorldSchema
 import gups.core.world.LevelMode
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -37,8 +38,7 @@ class WorldModuleTest {
 
   @Test
   fun `a world without a MODULE gups file doesn't start`() {
-    val error =
-      assertNotNull(WorldModule.read(WorldDir(Files.createTempDirectory("gups-bare"))).second)
+    val error = assertNotNull(WorldModule.read(WorldDir(TempFiles.dir("gups-bare"))).second)
     assertContains(error.message, "MODULE.gups is required")
   }
 

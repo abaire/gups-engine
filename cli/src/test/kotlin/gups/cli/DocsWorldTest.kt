@@ -1,7 +1,8 @@
 package gups.cli
 
 import com.github.ajalt.clikt.testing.test
-import java.nio.file.Files
+import gups.core.fixtures.TempFiles
+import gups.script.testing.tempWorld
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -14,7 +15,7 @@ class DocsWorldTest {
   private val robot = System.getProperty("gups.robotWorld")
 
   private fun docs(vararg args: String): Map<String, String> {
-    val out = Files.createTempDirectory("gups-docs")
+    val out = TempFiles.dir("gups-docs")
     val r = gupsCommand().test(listOf("docs", "--out", out.toString()) + args)
     assertEquals(0, r.statusCode, r.output)
     return DocsRenderer.FILES.associateWith { out.resolve(it).readText() }
@@ -136,7 +137,7 @@ class DocsWorldTest {
 
   @Test
   fun `a MESSAGES gups with a problem stops docs --world`() {
-    val copy = Files.createTempDirectory("gups-docs-world")
+    val copy = TempFiles.dir("gups-docs-world")
     java.io.File(robot).copyRecursively(copy.toFile())
     copy.resolve("MESSAGES.gups").toFile().writeText("messages({\"cast.begin.knwn\": \"x\"})\n")
     val r =

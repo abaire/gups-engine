@@ -1,6 +1,7 @@
 package gups.persist
 
 import gups.core.Label
+import gups.core.fixtures.tempDb
 import gups.core.model.FactionProto
 import gups.core.model.Mob
 import gups.core.model.StandingHolder

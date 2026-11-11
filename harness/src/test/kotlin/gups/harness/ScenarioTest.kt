@@ -1,8 +1,8 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 
 class ScenarioTest {
   private fun world(files: Map<String, String>): WorldDir {
-    val root: Path = Files.createTempDirectory("gups-scenario-world")
+    val root: Path = TempFiles.dir("gups-scenario-world")
     for ((path, text) in TestWorlds.withDefaults(files)) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }
@@ -23,7 +23,7 @@ class ScenarioTest {
 
   /** A scenario file in its own directory, outside any world. */
   private fun scenarioFile(text: String, name: String = "probe.star"): Path {
-    val dir = Files.createTempDirectory("gups-scenario-file")
+    val dir = TempFiles.dir("gups-scenario-file")
     return dir.resolve(name).also { it.writeText(text.trimIndent() + "\n") }
   }
 

@@ -5,6 +5,7 @@ import gups.core.rules.RulesContext
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

@@ -7,22 +7,7 @@ import gups.script.ScriptLoader
 import gups.script.StarlarkHost
 import gups.script.WorldDir
 import gups.script.WorldPluginWiring
-import gups.script.testing.TestWorlds
-import java.nio.file.Files
-import java.nio.file.Path
-import kotlin.io.path.createDirectories
-import kotlin.io.path.writeText
-
-/** Writes [files] (paths relative to the world root) into a fresh temporary world. */
-fun tempWorld(files: Map<String, String>): Path {
-  val root = Files.createTempDirectory("gups-plugin-world")
-  for ((path, text) in TestWorlds.withDefaults(files)) {
-    val p = root.resolve(path)
-    p.parent.createDirectories()
-    p.writeText(text.trimIndent() + "\n")
-  }
-  return root
-}
+import gups.script.testing.tempWorld
 
 val ZONE =
   mapOf(

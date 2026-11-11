@@ -3,6 +3,7 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.Label
 import gups.core.world.spawnItem
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

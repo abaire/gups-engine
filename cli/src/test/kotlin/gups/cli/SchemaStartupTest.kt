@@ -2,6 +2,7 @@ package gups.cli
 
 import gups.core.Account
 import gups.core.Role
+import gups.core.fixtures.tempDb
 import gups.core.world.spawnItem
 import gups.persist.Database
 import gups.persist.SqlitePersistence

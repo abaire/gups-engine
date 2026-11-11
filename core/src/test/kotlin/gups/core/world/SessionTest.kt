@@ -132,6 +132,7 @@ class SessionTest {
     } finally {
       loop.stop()
       runner.join(5000)
+      assertFalse(runner.isAlive, "the loop thread never exited")
     }
   }
 

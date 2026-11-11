@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.model.WorldSchema
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

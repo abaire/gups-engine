@@ -7,6 +7,7 @@ import gups.core.model.ItemLocation
 import gups.core.rules.RulesContext
 import gups.core.world.spawnItem
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

@@ -1,5 +1,6 @@
 package gups.sample.weather
 
+import gups.core.fixtures.TempFiles
 import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.PluginActor
@@ -519,7 +520,7 @@ class WeatherPluginTest {
 
   @Test
   fun `the built jar runs through TestRunner`() {
-    val tmp = Files.createTempDirectory("gups-weather")
+    val tmp = TempFiles.dir("gups-weather")
     val jar = tmp.resolve("plugins/weather.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.weatherJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()

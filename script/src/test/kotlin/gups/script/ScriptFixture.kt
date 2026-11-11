@@ -14,10 +14,8 @@ import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
 import gups.core.world.handle
-import gups.script.testing.TestWorlds
-import java.nio.file.Files
+import gups.script.testing.tempWorld
 import java.nio.file.Path
-import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 
 /** `package.star` for a zone named after its last path segment. */
@@ -25,17 +23,6 @@ fun zonePkg(extra: String = "") =
   "package(api_version = 1, kind = \"zone\", title = \"Test zone\"$extra)\n"
 
 fun libPkg(extra: String = "") = "package(api_version = 1, kind = \"lib\"$extra)\n"
-
-/** Writes [files] (paths relative to the world root) into a fresh temporary world. */
-fun tempWorld(files: Map<String, String>): Path {
-  val root = Files.createTempDirectory("gups-world")
-  for ((path, text) in TestWorlds.withDefaults(files)) {
-    val p = root.resolve(path)
-    p.parent.createDirectories()
-    p.writeText(text.trimIndent() + "\n")
-  }
-  return root
-}
 
 /** Loads a world from [files] and runs it headless with a [StarlarkHost], as the harness does. */
 class ScriptFixture(

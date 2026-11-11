@@ -13,10 +13,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 
 class GmcpInputTest {
   private val f = Fixture()
@@ -94,19 +94,19 @@ class GmcpInputTest {
     val sink = CapturingSink()
     f.w.handle(WorldControlEvent.Connect(SessionId(99), sink))
     f.w.attach(SessionId(99), p)
-    val seen = mutableListOf<Boolean>()
+    val seen = CompletableDeferred<Boolean>()
     f.w.pluginGmcpIn["shop.buy"] =
-      GmcpInput("Shop.Buy") { _, _ -> seen += sink.transcript.contains("hi") }
+      GmcpInput("Shop.Buy") { _, _ -> seen.complete(sink.transcript.contains("hi")) }
     val loop = WorldLoop(f.w, pulseNanos = 2_000_000)
     val job = launch(WorldLoop.worldDispatcher) { loop.run() }
     loop.submit(ClientInputEvent(SessionId(99), "say hi", System.nanoTime()))
     loop.submit(ClientGmcpEvent(SessionId(99), "shop.buy", null, false, System.nanoTime()))
-    withTimeout(5_000) { while (seen.isEmpty()) yield() }
+    val sawLine = withTimeout(5_000) { seen.await() }
     loop.stop()
     job.join()
     assertEquals(
-      listOf(true),
-      seen,
+      true,
+      sawLine,
       "the typed line's effect reaches the session before the GMCP handler runs",
     )
   }

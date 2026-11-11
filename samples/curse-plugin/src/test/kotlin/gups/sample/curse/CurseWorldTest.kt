@@ -1,5 +1,6 @@
 package gups.sample.curse
 
+import gups.core.fixtures.TempFiles
 import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.host.PluginLoader
@@ -24,7 +25,7 @@ class CurseWorldTest {
 
   @Test
   fun `the built curse jar runs through TestRunner in fixture world`() {
-    val tmp = Files.createTempDirectory("gups-curse")
+    val tmp = TempFiles.dir("gups-curse")
     val jar = tmp.resolve("plugins/curse.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.curseJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()

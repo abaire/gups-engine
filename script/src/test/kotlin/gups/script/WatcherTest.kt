@@ -1,5 +1,6 @@
 package gups.script
 
+import gups.script.testing.tempWorld
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals

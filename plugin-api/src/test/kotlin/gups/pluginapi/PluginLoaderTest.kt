@@ -1,5 +1,6 @@
 package gups.pluginapi
 
+import gups.core.fixtures.TempFiles
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.PluginLoader
 import gups.pluginapi.host.PluginNamespace
@@ -35,14 +36,13 @@ import gups.pluginapi.testplugins.WrongVersionPlugin
 import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
 import gups.script.WorldModule
-import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class PluginLoaderTest {
-  private val root = Files.createTempDirectory("gups-plugins")
+  private val root = TempFiles.dir("gups-plugins")
   private val plugins = root.resolve("plugins")
 
   @Test
@@ -269,7 +269,7 @@ class PluginLoaderTest {
 }
 
 class PluginFeatureTest {
-  private val root = Files.createTempDirectory("gups-plugins")
+  private val root = TempFiles.dir("gups-plugins")
   private val plugins = root.resolve("plugins")
 
   private fun pin(id: String, vararg classes: kotlin.reflect.KClass<out GupsPlugin>) =
@@ -361,7 +361,7 @@ class PluginFeatureTest {
 }
 
 class PluginProvidedFeatureTest {
-  private val root = Files.createTempDirectory("gups-plugins")
+  private val root = TempFiles.dir("gups-plugins")
   private val plugins = root.resolve("plugins")
 
   /** The template world's vitals, declared as a world schema. */

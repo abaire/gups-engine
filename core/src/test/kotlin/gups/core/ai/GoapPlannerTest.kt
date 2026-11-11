@@ -433,7 +433,7 @@ class GoapPlannerTest {
   }
 
   @Test
-  fun `worst-case timing test`() {
+  fun `a worst-case search exhausts its expansion budget and finds nothing`() {
     val facts = mapOf("f_0" to FactValue.Num(0))
     val actions =
       (0 until 256).map { i ->
@@ -447,23 +447,8 @@ class GoapPlannerTest {
       }
     val goal = mapOf("f_0" to FactValue.Num(999))
 
-    // Warm up JIT
-    for (i in 0 until 25) {
-      GoapPlanner.plan(facts, actions, goal, maxExpansions = 16_384)
-    }
-
-    val times = mutableListOf<Long>()
-    var lastResult: PlanResult? = null
-    for (i in 0 until 10) {
-      val start = System.nanoTime()
-      lastResult = GoapPlanner.plan(facts, actions, goal, maxExpansions = 16_384)
-      val durationMs = (System.nanoTime() - start) / 1_000_000
-      times.add(durationMs)
-    }
-    times.sort()
-    val medianMs = times[times.size / 2]
-    println("GoapPlanner worst-case median time: ${medianMs} ms")
-    assertTrue(lastResult is PlanResult.NotFound)
-    assertTrue(lastResult.exhausted)
+    val result = GoapPlanner.plan(facts, actions, goal, maxExpansions = 16_384)
+    assertTrue(result is PlanResult.NotFound)
+    assertTrue(result.exhausted)
   }
 }

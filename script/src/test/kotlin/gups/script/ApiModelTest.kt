@@ -3,12 +3,13 @@ package gups.script
 import com.google.common.collect.ImmutableMap
 import gups.core.EngineInfo
 import gups.core.Label
+import gups.core.fixtures.TempFiles
 import gups.core.model.FactionProto
 import gups.core.model.MobProto
 import gups.core.model.Prototypes
 import gups.core.model.WorldSchema
 import gups.core.world.Features
-import java.nio.file.Files
+import gups.script.testing.tempWorld
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -310,7 +311,7 @@ class ApiModelTest {
   private fun declare(spec: DeclSpec, extra: String?): Result<Any?> {
     when (spec.name) {
       "module" -> {
-        val root = Files.createTempDirectory("gups-world")
+        val root = TempFiles.dir("gups-world")
         root
           .resolve(WorldModule.FILE)
           .writeText(
@@ -321,7 +322,7 @@ class ApiModelTest {
         return if (err == null) Result.success(m) else Result.failure(AssertionError(err.message))
       }
       "server" -> {
-        val file = Files.createTempFile("server", ".gups")
+        val file = TempFiles.file("server", ".gups")
         file.writeText("server(${extra.only()})\n")
         val (c, err) = ServerConfig.read(file)
         return if (err == null) Result.success(c) else Result.failure(AssertionError(err.message))

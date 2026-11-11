@@ -4,6 +4,7 @@ import gups.core.world.awardXp
 import gups.core.world.flushOutput
 import gups.core.world.pendingLevels
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

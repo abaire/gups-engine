@@ -1,5 +1,6 @@
 package gups.persist
 
+import gups.core.fixtures.tempDb
 import gups.core.model.AffectScope
 import gups.core.model.ItemLocation
 import gups.core.model.Prototypes

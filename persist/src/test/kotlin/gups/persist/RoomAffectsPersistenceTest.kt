@@ -2,6 +2,7 @@ package gups.persist
 
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.fixtures.tempDb
 import gups.core.model.Affect
 import gups.core.model.ModifierPoint
 import gups.core.world.quit

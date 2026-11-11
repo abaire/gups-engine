@@ -9,6 +9,7 @@ import gups.core.world.damage
 import gups.core.world.spawnItem
 import gups.core.world.teleport
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

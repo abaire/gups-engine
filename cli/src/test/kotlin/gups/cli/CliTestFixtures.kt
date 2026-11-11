@@ -25,23 +25,7 @@ import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.handle
 import gups.persist.SqlitePersistence
-import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.createDirectories
-import kotlin.io.path.writeText
-
-fun tempWorld(files: Map<String, String>): Path {
-  val root = Files.createTempDirectory("gups-world")
-  for ((path, text) in TestWorlds.withDefaults(files)) {
-    val p = root.resolve(path)
-    p.parent.createDirectories()
-    p.writeText(text.trimIndent() + "\n")
-  }
-  return root
-}
-
-fun tempDb(): Path = Files.createTempDirectory("gups-db").resolve("world.db")
 
 object P {
   val HALL = Label("//t:hall")

@@ -1,5 +1,6 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
 import java.nio.file.Path
@@ -35,7 +36,7 @@ class FuzzWalkerTest {
 
   @Test
   fun `fuzz walker respawns bot cleanly if it leaves the world`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-fuzz-respawn")
+    val root = TempFiles.dir("gups-fuzz-respawn")
     val zoneDir = root.resolve("zones/z").also { java.nio.file.Files.createDirectories(it) }
     java.nio.file.Files.writeString(
       zoneDir.resolve("package.star"),
@@ -63,7 +64,7 @@ class FuzzWalkerTest {
 
   @Test
   fun `fuzz walker refuses a world without MODULE gups`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-fuzz-bare")
+    val root = TempFiles.dir("gups-fuzz-bare")
     val outcome = FuzzWalker(WorldDir(root)).run(listOf("//..."), pulses = 5)
     assertFalse(outcome.ok)
     assertTrue("MODULE.gups is required" in outcome.failureMessage.orEmpty())
@@ -118,7 +119,7 @@ class FuzzWalkerTest {
 
   @Test
   fun `fuzz walker bots run custom steps with done and execute prepare`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-fuzz-steps")
+    val root = TempFiles.dir("gups-fuzz-steps")
     val zoneDir = root.resolve("zones/z").also { java.nio.file.Files.createDirectories(it) }
     java.nio.file.Files.writeString(
       zoneDir.resolve("package.star"),
@@ -181,7 +182,7 @@ class FuzzWalkerTest {
 
   @Test
   fun `fuzz walker fails when creation step throws`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-fuzz-step-fail")
+    val root = TempFiles.dir("gups-fuzz-step-fail")
     val zoneDir = root.resolve("zones/z").also { java.nio.file.Files.createDirectories(it) }
     java.nio.file.Files.writeString(
       zoneDir.resolve("package.star"),

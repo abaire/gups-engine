@@ -375,7 +375,7 @@ class OperationsTest {
   @Test
   fun `metrics have the spec's names after one pulse, and healthz fails while the world stalls`() {
     val repo = Repo()
-    withServer(repo, stallMs = 300) { r ->
+    withServer(repo, stallMs = 1_000) { r ->
       r.onWorld { it.pulse }
       var text = get("${r.admin}/metrics").body()
       val seen = System.nanoTime() + 5_000_000_000
@@ -403,18 +403,30 @@ class OperationsTest {
       }
       assertEquals(401, get("${r.admin}/metrics", auth = false).statusCode())
 
-      val health = get("${r.admin}/healthz", auth = false)
+      // A loaded machine can miss the stall window on its own, so wait for a healthy baseline.
+      var health = get("${r.admin}/healthz", auth = false)
+      val healthy = System.nanoTime() + 30_000_000_000
+      while (health.statusCode() != 200 && System.nanoTime() < healthy) {
+        Thread.sleep(20)
+        health = get("${r.admin}/healthz", auth = false)
+      }
       assertEquals(200, health.statusCode())
       assertContains(health.body(), "\"writer_healthy\":true")
-      r.server.world.post!!(WorldControlEvent.Task { Thread.sleep(1_500) })
-      val deadline = System.nanoTime() + 3_000_000_000
+      val release = CountDownLatch(1)
+      // The timeout only keeps a failed test from wedging the world forever.
+      r.server.world.post!!(WorldControlEvent.Task { release.await(60, TimeUnit.SECONDS) })
       var status = 200
-      while (status == 200 && System.nanoTime() < deadline) {
-        Thread.sleep(50)
-        status = get("${r.admin}/healthz", auth = false).statusCode()
+      try {
+        val deadline = System.nanoTime() + 30_000_000_000
+        while (status == 200 && System.nanoTime() < deadline) {
+          Thread.sleep(50)
+          status = get("${r.admin}/healthz", auth = false).statusCode()
+        }
+        assertEquals(503, status, "a stalled world thread is unhealthy")
+      } finally {
+        release.countDown()
       }
-      assertEquals(503, status, "a stalled world thread is unhealthy")
-      val recovery = System.nanoTime() + 3_000_000_000
+      val recovery = System.nanoTime() + 30_000_000_000
       while (status != 200 && System.nanoTime() < recovery) {
         Thread.sleep(20)
         status = get("${r.admin}/healthz", auth = false).statusCode()

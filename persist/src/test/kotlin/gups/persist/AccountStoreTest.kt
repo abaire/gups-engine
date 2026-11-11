@@ -3,6 +3,7 @@ package gups.persist
 import gups.core.Account
 import gups.core.Invite
 import gups.core.Role
+import gups.core.fixtures.tempDb
 import gups.core.world.spawnItem
 import java.nio.file.Path
 import java.sql.DriverManager

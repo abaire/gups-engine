@@ -127,23 +127,34 @@ class TlsTest {
     val ctx = SSLContext.getInstance("TLS").apply { init(null, trustAll, null) }
     return (ctx.socketFactory.createSocket("127.0.0.1", port) as SSLSocket).apply {
       enabledProtocols = arrayOf(protocol)
-      soTimeout = 300
+      soTimeout = 200
       startHandshake()
     }
   }
 
-  /** Reads what arrives until the line goes quiet. */
-  private fun SSLSocket.drain(): List<Int> {
+  /**
+   * Reads exactly [count] bytes, waiting up to several seconds for slow arrivals. Anything the
+   * server sends beyond what a test expects stays queued and surfaces in the next read.
+   */
+  private fun SSLSocket.read(count: Int): List<Int> {
     val out = ByteArrayOutputStream()
-    val buf = ByteArray(8192)
-    try {
-      while (true) {
-        val n = inputStream.read(buf)
-        if (n < 0) break
-        out.write(buf, 0, n)
+    val buf = ByteArray(count)
+    val deadline = System.nanoTime() + 8_000_000_000
+    while (out.size() < count) {
+      check(System.nanoTime() < deadline) {
+        "wanted $count bytes, got ${out.toByteArray().toList()}"
       }
-    } catch (_: java.net.SocketTimeoutException) {}
+      try {
+        val n = inputStream.read(buf, 0, count - out.size())
+        check(n >= 0) { "connection closed after ${out.toByteArray().toList()}" }
+        out.write(buf, 0, n)
+      } catch (_: java.net.SocketTimeoutException) {}
+    }
     return out.toByteArray().map { it.toInt() and 0xff }
+  }
+
+  private fun SSLSocket.expect(expected: List<Int>, message: String? = null) {
+    assertEquals(expected, read(expected.size), message)
   }
 
   private fun SSLSocket.send(vararg parts: Any) {
@@ -171,7 +182,7 @@ class TlsTest {
       client(port).use { s ->
         val connect = assertIs<WorldControlEvent.Connect>(inbox.next())
         assertEquals("tls", connect.transport)
-        assertEquals(opening, s.drain())
+        s.expect(opening)
         // Mudlet: WILL TTYPE, WILL NAWS, DO EOR, DO GMCP, DO CHARSET, its window size, Core.Hello
         // and Core.Supports.Set.
         s.send(
@@ -210,24 +221,22 @@ class TlsTest {
             .map { it.toInt() and 0xff }
             .toTypedArray()
         )
-        assertEquals(
+        s.expect(
           listOf(IAC, SB, 24, 1, IAC, SE) +
             listOf(IAC, SB, 42, 1) +
             ";UTF-8".map { it.code } +
-            listOf(IAC, SE),
-          s.drain(),
+            listOf(IAC, SE)
         )
         s.send(IAC, SB, 24, 0, "MUDLET", IAC, SE)
-        assertEquals(listOf(IAC, SB, 24, 1, IAC, SE), s.drain(), "asks again for MTTS")
+        s.expect(listOf(IAC, SB, 24, 1, IAC, SE), "asks again for MTTS")
         assertTrue(connect.sink.wantsGmcp("Char.Vitals"))
         assertFalse(connect.sink.wantsGmcp("Gups.Trace"))
         connect.sink.gmcp("Char.Vitals", mapOf("hp" to 20))
         connect.sink.gmcp("Gups.Trace", mapOf("line" to "not supported, not sent"))
         connect.sink.prompt("> ")
-        assertEquals(
+        s.expect(
           gmcpBytes("Char.Vitals {\"hp\":20}").map { it.toInt() and 0xff } +
-            listOf('>'.code, ' '.code, IAC, 239),
-          s.drain(),
+            listOf('>'.code, ' '.code, IAC, 239)
         )
         s.send("look\r\n")
         assertEquals("look", assertIs<ClientInputEvent>(inbox.next()).line)
@@ -241,10 +250,10 @@ class TlsTest {
     serve(ServerTls.selfSigned(Files.createTempDirectory("tls"))) { inbox, port ->
       client(port, "TLSv1.2").use { s ->
         val connect = assertIs<WorldControlEvent.Connect>(inbox.next())
-        assertEquals(opening, s.drain())
+        s.expect(opening)
         // TinTin++: WILL TTYPE, WILL NAWS, DONT EOR, DO GMCP, DONT CHARSET.
         s.send(IAC, 251, 24, IAC, 251, 31, IAC, 254, 25, IAC, 253, 201, IAC, 254, 42)
-        assertEquals(listOf(IAC, SB, 24, 1, IAC, SE), s.drain())
+        s.expect(listOf(IAC, SB, 24, 1, IAC, SE))
         s.send(
           IAC,
           SB,
@@ -268,11 +277,11 @@ class TlsTest {
           IAC,
           SE,
         )
-        assertEquals(listOf(IAC, SB, 24, 1, IAC, SE, IAC, SB, 24, 1, IAC, SE), s.drain())
+        s.expect(listOf(IAC, SB, 24, 1, IAC, SE, IAC, SB, 24, 1, IAC, SE))
         assertFalse(connect.sink.wantsGmcp("Char.Vitals"))
         connect.sink.gmcp("Char.Vitals", mapOf("hp" to 20))
         connect.sink.prompt("> ")
-        assertEquals(listOf('>'.code, ' '.code, IAC, 249), s.drain(), "no GMCP; GA without EOR")
+        s.expect(listOf('>'.code, ' '.code, IAC, 249), "no GMCP; GA without EOR")
       }
     }
   }

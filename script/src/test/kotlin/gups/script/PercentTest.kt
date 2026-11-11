@@ -1,5 +1,6 @@
 package gups.script
 
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertFalse

@@ -5,6 +5,7 @@ import gups.core.EntityId
 import gups.core.HookRef
 import gups.core.Label
 import gups.core.fixtures.FixtureSchemas
+import gups.core.fixtures.tempDb
 import gups.core.model.ContainerProto
 import gups.core.model.DamageType
 import gups.core.model.Direction

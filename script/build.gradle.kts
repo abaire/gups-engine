@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-  testImplementation(testFixtures(project(":core")))
+  testFixturesApi(testFixtures(project(":core")))
   implementation(project(":core"))
   // The Starlark types appear in the script API that the harness builds on.
   api(libs.starlark)

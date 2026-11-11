@@ -1,10 +1,10 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.DocExample
 import gups.script.DocExamples
 import gups.script.WorldDir
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -21,7 +21,7 @@ class DocExamplesTest {
     }
 
   private fun run(symbol: String, example: DocExample) {
-    val root: Path = Files.createTempDirectory("gups-doc-example")
+    val root: Path = TempFiles.dir("gups-doc-example")
     try {
       File(System.getProperty("gups.templateWorld"))
         .resolve("rules")

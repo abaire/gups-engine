@@ -1,5 +1,6 @@
 package gups.sample.hunger
 
+import gups.core.fixtures.TempFiles
 import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.host.PluginLoader
@@ -85,7 +86,7 @@ class HungerWorldTest {
 
   @Test
   fun `the built hunger jar runs through TestRunner in the template world`() {
-    val tmp = Files.createTempDirectory("gups-hunger")
+    val tmp = TempFiles.dir("gups-hunger")
     val sha = pinJar(tmp)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
     write(
@@ -113,7 +114,7 @@ class HungerWorldTest {
 
   @Test
   fun `a world without an hp vital skips the plugin with a refusal`() {
-    val tmp = Files.createTempDirectory("gups-hunger-nohp")
+    val tmp = TempFiles.dir("gups-hunger-nohp")
     val sha = pinJar(tmp)
     write(
       tmp,

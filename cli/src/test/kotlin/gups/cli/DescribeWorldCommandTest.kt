@@ -3,6 +3,7 @@ package gups.cli
 import com.github.ajalt.clikt.testing.test
 import gups.core.EngineInfo
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals

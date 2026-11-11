@@ -1,8 +1,8 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 
 class ChargesEndToEndTest {
   private fun run(files: Map<String, String>): TestReport {
-    val root = Files.createTempDirectory("gups-charges")
+    val root = TempFiles.dir("gups-charges")
     for ((path, text) in TestWorlds.withDefaults(files)) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }

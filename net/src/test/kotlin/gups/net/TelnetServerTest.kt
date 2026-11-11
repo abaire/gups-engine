@@ -38,17 +38,20 @@ class TelnetServerTest {
     fun next(): Any = assertNotNull(events.poll(5, TimeUnit.SECONDS), "no event arrived")
   }
 
-  private fun Socket.readAll(): String {
-    soTimeout = 300
+  /** Reads until [marker] shows up, or fails after a few seconds. */
+  private fun Socket.readUntil(marker: String): String {
+    soTimeout = 200
     val out = StringBuilder()
     val buf = ByteArray(65536)
-    try {
-      while (true) {
+    val deadline = System.nanoTime() + 8_000_000_000
+    while (marker !in out) {
+      check(System.nanoTime() < deadline) { "never saw '$marker' in:\n$out" }
+      try {
         val n = getInputStream().read(buf)
         if (n < 0) break
         out.append(String(buf, 0, n, Charsets.ISO_8859_1))
-      }
-    } catch (_: java.net.SocketTimeoutException) {}
+      } catch (_: java.net.SocketTimeoutException) {}
+    }
     return out.toString()
   }
 
@@ -67,11 +70,10 @@ class TelnetServerTest {
         assertEquals(MAX_LINE_BYTES, assertIs<ClientInputEvent>(inbox.next()).line.length)
         connect.sink.send("Hello\nthere")
         connect.sink.prompt("> ")
-        val got = s.readAll()
+        val got = s.readUntil("Hello\r\nthere> ")
         assertContains(got, "cut short")
-        assertContains(got, "Hello\r\nthere> ")
         connect.sink.close("Goodbye.")
-        assertContains(s.readAll(), "Goodbye.")
+        assertContains(s.readUntil("Goodbye."), "Goodbye.")
         assertIs<WorldControlEvent.Disconnect>(inbox.next())
       }
     } finally {
@@ -140,7 +142,7 @@ class TelnetServerTest {
         assertTrue(gmcpEvent.malformed)
         assertNull(gmcpEvent.data)
         connect.sink.send("still here")
-        assertContains(s.readAll(), "still here")
+        assertContains(s.readUntil("still here"), "still here")
       }
     } finally {
       server.stop()

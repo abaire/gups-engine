@@ -2,11 +2,13 @@ package gups.cli
 
 import com.github.ajalt.clikt.testing.test
 import gups.core.EngineInfo
+import gups.core.fixtures.TempFiles
+import gups.core.fixtures.tempDb
 import gups.harness.HarnessApi
 import gups.script.ApiDiff
 import gups.script.ScriptApi
+import gups.script.testing.tempWorld
 import java.io.File
-import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -48,7 +50,7 @@ class CommandsTest {
 
   @Test
   fun `docs writes the HTML reference`() {
-    val dir = Files.createTempDirectory("gups-docs-html").toFile()
+    val dir = TempFiles.dir("gups-docs-html").toFile()
     val result = gupsCommand().test(listOf("docs", "--out", dir.resolve("ref").path))
     assertEquals(0, result.statusCode, result.output)
     assertContains(
@@ -94,7 +96,7 @@ class CommandsTest {
     assertEquals(0, stdout.statusCode, stdout.output)
     assertEquals(expected, stdout.stdout)
 
-    val dir = Files.createTempDirectory("gups-docs-out").toFile()
+    val dir = TempFiles.dir("gups-docs-out").toFile()
     val toDir = gupsCommand().test(listOf("docs", "--json", "--out", dir.resolve("ref").path))
     assertEquals(0, toDir.statusCode, toDir.output)
     assertEquals(expected, dir.resolve("ref/api.json").readText())
@@ -130,7 +132,7 @@ class CommandsTest {
 
   @Test
   fun `docs --update-baseline writes only the API baseline`() {
-    val docs = Files.createTempDirectory("gups-docs-dir").toFile()
+    val docs = TempFiles.dir("gups-docs-dir").toFile()
     val result = gupsCommand().test(listOf("docs", "--update-baseline", "--docs-dir", docs.path))
     assertEquals(0, result.statusCode, result.output)
     val api = docs.resolve("api/api-$currentApi.json")
@@ -198,7 +200,7 @@ class CommandsTest {
   @Test
   fun `scenario runs a file from outside the world and prints its transcript`() {
     val world = System.getProperty("gups.templateWorld")
-    val file = kotlin.io.path.createTempDirectory("gups-scenario").resolve("flee.star")
+    val file = TempFiles.dir("gups-scenario").resolve("flee.star")
     file
       .toFile()
       .writeText(
@@ -236,7 +238,7 @@ class CommandsTest {
   @Test
   fun `scenario fails on an unknown package`() {
     val world = System.getProperty("gups.templateWorld")
-    val file = kotlin.io.path.createTempDirectory("gups-scenario").resolve("x.star")
+    val file = TempFiles.dir("gups-scenario").resolve("x.star")
     file.toFile().writeText("def test_x(t):\n    pass\n")
     val result =
       gupsCommand().test(listOf("scenario", "--world", world, "--package", "//zones/nope", "$file"))
@@ -281,7 +283,7 @@ class CommandsTest {
       pw.save()
 
       // Take the snapshot while pw is still open, so the data sits in world.db-wal.
-      val snapFile = java.nio.file.Files.createTempFile("snap-out", ".db").toFile()
+      val snapFile = TempFiles.file("snap-out", ".db").toFile()
       val refused =
         gupsCommand().test(listOf("snapshot", "--db", db.toString(), "--out", snapFile.path))
       assertEquals(1, refused.statusCode, "--sanitized is required")
@@ -326,7 +328,7 @@ class CommandsTest {
 
   @Test
   fun `invite and import-roster work on the world's database`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-accounts")
+    val root = TempFiles.dir("gups-accounts")
     val roster =
       root.resolve("roster.csv").toFile().apply { writeText("login,role\nann,builder\nbob,\n") }
     val first = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
@@ -359,7 +361,7 @@ class CommandsTest {
 
   @Test
   fun `import-roster offline with a disabled row prints counts, warning, and writes the flag`() {
-    val root = java.nio.file.Files.createTempDirectory("gups-accounts-disabled")
+    val root = TempFiles.dir("gups-accounts-disabled")
     val roster =
       root.resolve("roster.csv").toFile().apply { writeText("login,disabled\nann,true\n") }
     val res = gupsCommand().test(listOf("import-roster", roster.path, "--world", root.toString()))
@@ -522,7 +524,7 @@ class CommandsTest {
       "--shutdown-timeout must be at least 1",
     )
     val cfg =
-      java.nio.file.Files.createTempFile("server", ".gups").toFile().apply {
+      TempFiles.file("server", ".gups").toFile().apply {
         writeText("server(telnet = \":4000\", colour = 1)\n")
       }
     assertContains(

@@ -6,6 +6,7 @@ import gups.pluginapi.host.PluginTraitInfo
 import gups.script.WorldDir
 import gups.script.WorldPluginWiring
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

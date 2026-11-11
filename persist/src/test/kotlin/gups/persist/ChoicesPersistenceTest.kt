@@ -1,5 +1,6 @@
 package gups.persist
 
+import gups.core.fixtures.tempDb
 import gups.core.model.Mob
 import gups.core.model.Trait
 import gups.core.world.grantTrait

@@ -1,5 +1,6 @@
 package gups.persist
 
+import gups.core.fixtures.tempDb
 import gups.core.model.Channel
 import gups.core.model.Mob
 import gups.core.world.AffectSpec

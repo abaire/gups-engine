@@ -1,8 +1,8 @@
 package gups.harness
 
+import gups.core.fixtures.TempFiles
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -19,7 +19,7 @@ class ShopWithoutCombatTest {
     Path.of(System.getProperty("gups.templateWorld") ?: "../template-world")
 
   private fun world(files: Map<String, String>): WorldDir {
-    val root: Path = Files.createTempDirectory("gups-shop-nocombat")
+    val root: Path = TempFiles.dir("gups-shop-nocombat")
     for ((path, text) in files) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }

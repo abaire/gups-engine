@@ -14,6 +14,7 @@ import gups.core.world.WorldConfig
 import gups.core.world.grantTrait
 import gups.core.world.handle
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

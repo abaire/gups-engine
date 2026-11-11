@@ -1,6 +1,7 @@
 package gups.persist
 
 import gups.core.Label
+import gups.core.fixtures.tempDb
 import gups.core.model.ItemLocation
 import gups.core.world.checkInvariants
 import gups.core.world.moveItem

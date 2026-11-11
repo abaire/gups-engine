@@ -4,6 +4,7 @@ import gups.core.ClientInputEvent
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.TempFiles
 import gups.core.world.DevLogin
 import gups.core.world.World
 import gups.core.world.WorldConfig
@@ -608,7 +609,7 @@ class HeritagePluginTest {
 
   @Test
   fun `the built heritage jar runs through TestRunner in fixture world`() {
-    val tmp = Files.createTempDirectory("gups-heritage")
+    val tmp = TempFiles.dir("gups-heritage")
     val jar = tmp.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.heritageJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
@@ -754,7 +755,7 @@ class HeritagePluginTest {
 
   @Test
   fun `telnet creation flow creates character with choices`() {
-    val tmp = Files.createTempDirectory("gups-heritage-telnet")
+    val tmp = TempFiles.dir("gups-heritage-telnet")
     val jar = tmp.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.heritageJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()

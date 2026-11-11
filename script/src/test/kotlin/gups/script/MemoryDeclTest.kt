@@ -2,6 +2,7 @@ package gups.script
 
 import gups.core.Label
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

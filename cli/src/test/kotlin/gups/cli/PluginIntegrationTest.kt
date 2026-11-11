@@ -5,6 +5,7 @@ import gups.core.Label
 import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.fixtures.TempFiles
 import gups.core.world.attach
 import gups.core.world.handle
 import gups.core.world.submit
@@ -24,6 +25,7 @@ import gups.pluginapi.testplugins.WrongVersionPlugin
 import gups.pluginapi.testplugins.buildPluginJar
 import gups.script.WorldDir
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import java.nio.file.Path
 import kotlin.reflect.KClass
 import kotlin.test.Test
@@ -250,7 +252,7 @@ class PluginIntegrationTest {
   @Test
   fun `docs --world lists the plugins`() {
     val root = pluginWorld(zone, good)
-    val out = java.nio.file.Files.createTempDirectory("gups-plugin-docs")
+    val out = TempFiles.dir("gups-plugin-docs")
     val result =
       gupsCommand().test(listOf("docs", "--world", root.toString(), "--out", out.toString()))
     assertEquals(0, result.statusCode, result.output)

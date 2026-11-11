@@ -4,6 +4,7 @@ import gups.core.model.Condition
 import gups.core.world.AffectSpec
 import gups.core.world.applyAffect
 import gups.core.world.changeVital
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

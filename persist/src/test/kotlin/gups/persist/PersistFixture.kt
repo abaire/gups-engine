@@ -27,7 +27,6 @@ import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.attach
 import gups.core.world.handle
-import java.nio.file.Files
 import java.nio.file.Path
 
 object P {
@@ -162,5 +161,3 @@ class PersistWorld(
 
   fun close() = persistence.close()
 }
-
-fun tempDb(): Path = Files.createTempDirectory("gups-db").resolve("world.db")

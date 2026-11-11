@@ -1,6 +1,7 @@
 package gups.harness
 
 import gups.core.Label
+import gups.core.fixtures.TempFiles
 import gups.core.model.CreationAttempt
 import gups.core.model.CreationChoice
 import gups.core.model.CreationProvider
@@ -13,7 +14,6 @@ import gups.core.world.setBaseStat
 import gups.script.WorldDir
 import gups.script.WorldPluginWiring
 import gups.script.testing.TestWorlds
-import java.nio.file.Files
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -113,7 +113,7 @@ class SpawnPlayerStepsTest {
     files: Map<String, String>,
     wiring: WorldPluginWiring = Wiring(TestCreationProvider()),
   ): TestReport {
-    val root = Files.createTempDirectory("gups-spawn-steps")
+    val root = TempFiles.dir("gups-spawn-steps")
     for ((path, text) in TestWorlds.withDefaults(files)) {
       root.resolve(path).also { it.parent.createDirectories() }.writeText(text.trimIndent() + "\n")
     }

@@ -24,6 +24,7 @@ import gups.core.world.spawnItem
 import gups.core.world.startCombat
 import gups.core.world.toHitChain
 import gups.script.testing.TestWorlds
+import gups.script.testing.tempWorld
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals

@@ -3,6 +3,8 @@ package gups.persist
 import gups.core.Account
 import gups.core.Role
 import gups.core.fixtures.FixtureSchemas
+import gups.core.fixtures.TempFiles
+import gups.core.fixtures.tempDb
 import gups.core.model.Condition
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -164,7 +166,7 @@ class SchemaPersistenceTest {
     val file = tempDb()
     val p = SqlitePersistence.open(file)
     p.checkSchema(FixtureSchemas.FANTASY.schema.names)
-    val copy = Files.createTempDirectory("gups-snap").resolve("snapshot.db")
+    val copy = TempFiles.dir("gups-snap").resolve("snapshot.db")
     p.db.sanitizedCopy(copy)
     p.close()
     Database.open(copy).use {
