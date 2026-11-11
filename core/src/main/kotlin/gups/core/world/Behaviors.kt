@@ -8,6 +8,7 @@ import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.Condition
 import gups.core.model.Direction
+import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.Player
@@ -78,19 +79,29 @@ data class Wander(val radius: Int, val chance: Int, val priority: Int = PRIORITY
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged || !world.rng.passes(chance)) return null
     val home = world.roomOrNull(mob.homeRoom) ?: mob.room
-    val r = world.leashArea(mob)?.let { minOf(radius, mob.leash!!) } ?: radius
-    val area = world.homeArea(home, r)
-    if (mob.room !in area) {
-      val step = world.pathTo(mob.room, home)?.firstOrNull() ?: return null
-      return Proposal(step.name, priority, "wander", MoveAction(step))
-    }
-    val exits =
-      mob.room.exits.values.filter {
-        it.passable && world.roomOrNull(it.to) in area && it.to != mob.room.label
-      }
+    val area = world.homeArea(home, wanderRadius(world, mob))
+    return if (mob.room !in area) stepHome(world, mob, home) else stepOut(world, mob, area)
+  }
+
+  private fun wanderRadius(world: World, mob: Mob): Int =
+    world.leashArea(mob)?.let { minOf(radius, mob.leash!!) } ?: radius
+
+  private fun stepHome(world: World, mob: Mob, home: Room): Proposal? {
+    val step = world.pathTo(mob.room, home)?.firstOrNull() ?: return null
+    return Proposal(step.name, priority, "wander", MoveAction(step))
+  }
+
+  private fun stepOut(world: World, mob: Mob, area: Set<Room>): Proposal? {
+    val exits = mob.room.exits.values.filter { openExit(world, mob.room, it, area) }
     if (exits.isEmpty()) return null
     val exit = world.rng.choice(exits)
     return Proposal(exit.direction.name, priority, "wander", MoveAction(exit.direction))
+  }
+
+  private fun openExit(world: World, room: Room, exit: Exit, area: Set<Room>): Boolean {
+    if (!exit.passable) return false
+    if (world.roomOrNull(exit.to) !in area) return false
+    return exit.to != room.label
   }
 }
 
@@ -101,17 +112,25 @@ internal fun World.within(from: Room, radius: Int): Set<Room> {
   while (queue.isNotEmpty()) {
     val r = queue.removeFirst()
     val d = seen.getValue(r)
-    if (d >= radius) continue
-    for (e in r.exits.values) {
-      if (!e.passable) continue
-      val next = roomOrNull(e.to) ?: continue
-      if (next !in seen) {
-        seen[next] = d + 1
-        queue.addLast(next)
-      }
-    }
+    if (d < radius) addWithinNeighbors(r, d, seen, queue)
   }
   return seen.keys
+}
+
+private fun World.addWithinNeighbors(
+  room: Room,
+  depth: Int,
+  seen: MutableMap<Room, Int>,
+  queue: ArrayDeque<Room>,
+) {
+  for (e in room.exits.values) {
+    if (!e.passable) continue
+    val next = roomOrNull(e.to) ?: continue
+    if (next !in seen) {
+      seen[next] = depth + 1
+      queue.addLast(next)
+    }
+  }
 }
 
 /**
@@ -130,31 +149,50 @@ internal fun World.nearestBy(
   val seen = hashSetOf(from)
   var level = listOf(from)
   var depth = 0
-  while (level.isNotEmpty() && (range == null || depth < range)) {
+  val maxDepth = range ?: Int.MAX_VALUE
+  while (level.isNotEmpty() && depth < maxDepth) {
     depth++
-    val next = mutableListOf<Room>()
-    for (room in level) {
-      for (exit in room.exits.values) {
-        if (!exit.passable) continue
-        val r = roomOrNull(exit.to) ?: continue
-        if (r in seen) continue
-        if (allowed != null && r !in allowed) continue
-        seen.add(r)
-        firstStep[r] = if (room === from) exit.direction else firstStep.getValue(room)
-        next.add(r)
-      }
-    }
-    var best: Pair<Actor, Direction>? = null
-    for (room in next) {
-      for (a in room.actors) {
-        if (!accept(a)) continue
-        if (best == null || a.id < best.first.id) best = a to firstStep.getValue(room)
-      }
-    }
+    level = expandLevel(level, from, seen, firstStep, allowed)
+    val best = nearestActor(level, firstStep, accept)
     if (best != null) return best
-    level = next
   }
   return null
+}
+
+/** The rooms one exit farther out than [level], recording each newcomer's entry direction. */
+private fun World.expandLevel(
+  level: List<Room>,
+  from: Room,
+  seen: MutableSet<Room>,
+  firstStep: MutableMap<Room, Direction>,
+  allowed: Set<Room>?,
+): List<Room> {
+  val next = mutableListOf<Room>()
+  for (room in level) {
+    for (exit in room.exits.values) {
+      val r = openRoom(exit) ?: continue
+      if (r in seen || allowed?.contains(r) == false) continue
+      seen.add(r)
+      firstStep[r] = if (room === from) exit.direction else firstStep.getValue(room)
+      next.add(r)
+    }
+  }
+  return next
+}
+
+private fun World.openRoom(exit: Exit): Room? {
+  if (!exit.passable) return null
+  return roomOrNull(exit.to)
+}
+
+/** The lowest-id actor [accept] takes anywhere in [level], with the direction to enter it from. */
+private fun nearestActor(
+  level: List<Room>,
+  firstStep: Map<Room, Direction>,
+  accept: (Actor) -> Boolean,
+): Pair<Actor, Direction>? {
+  val candidate = level.flatMap { it.actors }.filter(accept).minByOrNull { it.id } ?: return null
+  return candidate to firstStep.getValue(candidate.room)
 }
 
 private fun World.below(mob: Mob, a: Actor, n: Int?): Boolean = n == null || disposition(mob, a) < n
@@ -190,65 +228,52 @@ fun interface TargetOrderAdjuster {
   fun adjust(world: World, call: TargetOrderCall, choice: TargetChoice): TargetChoice
 }
 
-internal fun World.chooseTarget(
-  actor: Mob,
-  behavior: String,
-  prefer: AttrValue?,
-  candidates: List<Actor>,
-  current: Actor? = null,
-  currentSince: Long? = null,
-  ally: Actor? = null,
-): TargetChoice {
-  val dispositions =
-    if (Feature.STANDING in features) candidates.map { disposition(actor, it) } else null
-  val call =
-    TargetOrderCall(
-      actor = actor,
-      behavior = behavior,
-      prefer = prefer,
-      candidates = candidates,
-      current = current,
-      currentSince = currentSince,
-      dispositions = dispositions,
-      ally = ally,
-    )
-  val c =
+/** Standings of [actor] toward [candidates] while the STANDING feature is on, else null. */
+internal fun World.dispositionsOf(actor: Mob, candidates: List<Actor>): List<Int>? =
+  if (Feature.STANDING in features) candidates.map { disposition(actor, it) } else null
+
+internal fun World.chooseTarget(call: TargetOrderCall): TargetChoice {
+  val ctx =
     RulesContext(
       world = this,
-      actor = actor,
-      room = actor.room,
-      behavior = behavior,
-      prefer = prefer,
-      candidates = candidates,
-      current = current,
-      currentSince = currentSince,
-      dispositions = dispositions,
-      ally = ally,
+      actor = call.actor,
+      room = call.actor.room,
+      behavior = call.behavior,
+      prefer = call.prefer,
+      candidates = call.candidates,
+      current = call.current,
+      currentSince = call.currentSince,
+      dispositions = call.dispositions,
+      ally = call.ally,
     )
-  var choice = rules.targetOrder(c)
-  for (adjuster in targetOrderAdjusters) {
-    choice =
-      try {
-        val next = adjuster.adjust(this, call, choice)
-        if (next is TargetChoice.Pick && call.candidates.none { it === next.actor }) {
-          record(
-            Diagnostic(
-              pulse,
-              "plugin",
-              "target order adjuster returned actor '${next.actor.name}' not in candidates",
-            )
-          )
-          choice
-        } else {
-          next
-        }
-      } catch (e: Throwable) {
-        record(Diagnostic(pulse, "plugin", "target order adjuster failed: $e", e))
-        choice
-      }
-  }
+  var choice = rules.targetOrder(ctx)
+  for (adjuster in targetOrderAdjusters) choice = applyAdjuster(call, adjuster, choice)
   return choice
 }
+
+private fun World.applyAdjuster(
+  call: TargetOrderCall,
+  adjuster: TargetOrderAdjuster,
+  choice: TargetChoice,
+): TargetChoice =
+  try {
+    val next = adjuster.adjust(this, call, choice)
+    if (next is TargetChoice.Pick && call.candidates.none { it === next.actor }) {
+      record(
+        Diagnostic(
+          pulse,
+          "plugin",
+          "target order adjuster returned actor '${next.actor.name}' not in candidates",
+        )
+      )
+      choice
+    } else {
+      next
+    }
+  } catch (e: Throwable) {
+    record(Diagnostic(pulse, "plugin", "target order adjuster failed: $e", e))
+    choice
+  }
 
 /**
  * `aggressive(toward, unless_level_above, unless_level_below, chance)`: on each think, with
@@ -267,39 +292,45 @@ data class Aggressive(
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     if (!world.rng.passes(chance)) return null
-    val candidates =
-      world.others(mob).filter {
-        toward.matches(it) &&
-          levelOk(it) &&
-          !world.isOwnerSide(mob, it) &&
-          world.below(mob, it, dispositionBelow) &&
-          world.notices(mob, it)
-      }
+    val candidates = world.others(mob).filter { canAttack(world, mob, it) }
     if (candidates.isEmpty()) return null
-    val target =
-      if (prefer == null) {
-        candidates.first()
-      } else {
-        when (
-          val choice =
-            world.chooseTarget(
-              actor = mob,
-              behavior = "aggressive",
-              prefer = prefer,
-              candidates = candidates,
-            )
-        ) {
-          is TargetChoice.Pick -> choice.actor
-          TargetChoice.Default -> candidates.first()
-          TargetChoice.Nobody -> return null
-        }
-      }
+    val target = pickTarget(world, mob, candidates) ?: return null
     return Proposal(
       "${world.commands.nameOf("kill")} ${target.keywords.first()}",
       priority,
       "aggressive",
       KillAction(target),
     )
+  }
+
+  private fun canAttack(world: World, mob: Mob, a: Actor): Boolean {
+    if (!toward.matches(a)) return false
+    if (!levelOk(a)) return false
+    if (world.isOwnerSide(mob, a)) return false
+    if (!world.below(mob, a, dispositionBelow)) return false
+    return world.notices(mob, a)
+  }
+
+  private fun pickTarget(world: World, mob: Mob, candidates: List<Actor>): Actor? {
+    if (prefer == null) return candidates.first()
+    val choice =
+      world.chooseTarget(
+        TargetOrderCall(
+          actor = mob,
+          behavior = "aggressive",
+          prefer = prefer,
+          candidates = candidates,
+          current = null,
+          currentSince = null,
+          dispositions = world.dispositionsOf(mob, candidates),
+          ally = null,
+        )
+      )
+    return when (choice) {
+      is TargetChoice.Pick -> choice.actor
+      TargetChoice.Default -> candidates.first()
+      TargetChoice.Nobody -> null
+    }
   }
 
   private fun levelOk(a: Actor): Boolean =
@@ -348,39 +379,13 @@ data class Assist(
   val priority: Int = PRIORITY_ASSIST,
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
-    if (Feature.COMBAT !in world.features || mob.isEngaged) return null
+    if (Feature.COMBAT !in world.features) return null
+    if (mob.isEngaged) return null
     for (ally in world.others(mob)) {
-      if (!allies.matches(ally) || !ally.isEngaged || !world.above(mob, ally, dispositionAbove))
-        continue
-      val foes =
-        world.opponentsOf(ally).filter {
-          it !== mob &&
-            !allies.matches(it) &&
-            !world.isOwnerSide(mob, it) &&
-            !(dispositionAbove != null && world.disposition(mob, it) > dispositionAbove)
-        }
+      if (!engagedAlly(world, mob, ally)) continue
+      val foes = world.opponentsOf(ally).filter { isFoe(world, mob, it) }
       if (foes.isEmpty()) continue
-      val foe =
-        if (prefer == null) {
-          foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.first()
-        } else {
-          val current = ally.primaryTarget?.let { id -> foes.firstOrNull { it.id == id } }
-          when (
-            val choice =
-              world.chooseTarget(
-                actor = mob,
-                behavior = "assist",
-                prefer = prefer,
-                candidates = foes,
-                current = current,
-                ally = ally,
-              )
-          ) {
-            is TargetChoice.Pick -> choice.actor
-            TargetChoice.Default -> foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.first()
-            TargetChoice.Nobody -> return null
-          }
-        }
+      val foe = pickFoe(world, mob, ally, foes) ?: return null
       return Proposal(
         "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
         priority,
@@ -390,6 +395,45 @@ data class Assist(
     }
     return null
   }
+
+  private fun engagedAlly(world: World, mob: Mob, ally: Actor): Boolean {
+    if (!allies.matches(ally)) return false
+    if (!ally.isEngaged) return false
+    return world.above(mob, ally, dispositionAbove)
+  }
+
+  private fun isFoe(world: World, mob: Mob, a: Actor): Boolean {
+    if (a === mob) return false
+    if (allies.matches(a)) return false
+    if (world.isOwnerSide(mob, a)) return false
+    return dispositionAbove == null || world.disposition(mob, a) <= dispositionAbove
+  }
+
+  private fun pickFoe(world: World, mob: Mob, ally: Actor, foes: List<Actor>): Actor? {
+    if (prefer == null) return defaultFoe(foes, ally)
+    val current = ally.primaryTarget?.let { id -> foes.firstOrNull { it.id == id } }
+    val choice =
+      world.chooseTarget(
+        TargetOrderCall(
+          actor = mob,
+          behavior = "assist",
+          prefer = prefer,
+          candidates = foes,
+          current = current,
+          currentSince = null,
+          dispositions = world.dispositionsOf(mob, foes),
+          ally = ally,
+        )
+      )
+    return when (choice) {
+      is TargetChoice.Pick -> choice.actor
+      TargetChoice.Default -> defaultFoe(foes, ally)
+      TargetChoice.Nobody -> null
+    }
+  }
+
+  private fun defaultFoe(foes: List<Actor>, ally: Actor): Actor =
+    foes.firstOrNull { it.id == ally.primaryTarget } ?: foes.first()
 }
 
 /**
@@ -406,33 +450,10 @@ data class Retarget(
     if (Feature.COMBAT !in world.features || !mob.isEngaged) return null
     if (!world.rng.passes(chance)) return null
     val others = world.others(mob)
-    val engaged = others.filter { it.id in mob.fighting && !world.isOwnerSide(mob, it) }
-    val bystanders =
-      others.filter {
-        it.id !in mob.fighting &&
-          toward.matches(it) &&
-          !world.isOwnerSide(mob, it) &&
-          world.below(mob, it, dispositionBelow) &&
-          world.notices(mob, it)
-      }
-    val candidates = (engaged + bystanders).sortedBy { it.id }
+    val candidates = retargetCandidates(world, mob, others)
     if (candidates.isEmpty()) return null
     val current = mob.primaryTarget?.let { id -> others.firstOrNull { it.id == id } }
-    val choice =
-      world.chooseTarget(
-        actor = mob,
-        behavior = "retarget",
-        prefer = prefer,
-        candidates = candidates,
-        current = current,
-        currentSince = mob.primaryTargetSince,
-      )
-    val pick =
-      when (choice) {
-        is TargetChoice.Pick -> choice.actor
-        TargetChoice.Default,
-        TargetChoice.Nobody -> return null
-      }
+    val pick = pickTarget(world, mob, candidates, current) ?: return null
     if (pick === current) return null
     return Proposal(
       "${world.commands.nameOf("kill")} ${pick.keywords.first()}",
@@ -440,6 +461,46 @@ data class Retarget(
       "retarget",
       KillAction(pick),
     )
+  }
+
+  private fun retargetCandidates(world: World, mob: Mob, others: List<Actor>): List<Actor> {
+    val engaged = others.filter { isEngagedFoe(world, mob, it) }
+    val bystanders = others.filter { isBystander(world, mob, it) }
+    return (engaged + bystanders).sortedBy { it.id }
+  }
+
+  private fun isEngagedFoe(world: World, mob: Mob, a: Actor): Boolean {
+    if (a.id !in mob.fighting) return false
+    return !world.isOwnerSide(mob, a)
+  }
+
+  private fun isBystander(world: World, mob: Mob, a: Actor): Boolean {
+    if (a.id in mob.fighting) return false
+    if (!toward.matches(a)) return false
+    if (world.isOwnerSide(mob, a)) return false
+    if (!world.below(mob, a, dispositionBelow)) return false
+    return world.notices(mob, a)
+  }
+
+  private fun pickTarget(world: World, mob: Mob, candidates: List<Actor>, current: Actor?): Actor? {
+    val choice =
+      world.chooseTarget(
+        TargetOrderCall(
+          actor = mob,
+          behavior = "retarget",
+          prefer = prefer,
+          candidates = candidates,
+          current = current,
+          currentSince = mob.primaryTargetSince,
+          dispositions = world.dispositionsOf(mob, candidates),
+          ally = null,
+        )
+      )
+    return when (choice) {
+      is TargetChoice.Pick -> choice.actor
+      TargetChoice.Default,
+      TargetChoice.Nobody -> null
+    }
   }
 }
 
@@ -473,24 +534,28 @@ data class Guard(
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? = null
 
-  fun denies(world: World, guard: Mob, actor: Actor, dir: Direction): Boolean =
-    dir == exit &&
-      actor !== guard &&
-      !allies.matches(actor) &&
-      !(dispositionAbove != null && world.disposition(guard, actor) > dispositionAbove) &&
-      world.canAct(guard) &&
-      world.isSimulated(guard)
+  fun denies(world: World, guard: Mob, actor: Actor, dir: Direction): Boolean {
+    if (dir != exit) return false
+    if (actor === guard) return false
+    if (allies.matches(actor)) return false
+    if (dispositionAbove != null && world.disposition(guard, actor) > dispositionAbove) return false
+    if (!world.canAct(guard)) return false
+    return world.isSimulated(guard)
+  }
 }
 
 /** The first guard in [room] that bars [actor] from leaving by [dir], as a denial message. */
 internal fun World.guardDenial(actor: Actor, room: Room, dir: Direction): String? {
   for (m in room.actorIndex.values) {
-    if (m !is Mob || !m.inWorld || m === actor) continue
-    if (behaviorsOf(m).any { it is Guard && it.denies(this, m, actor, dir) })
-      return msg(KernelMsg.GUARD_BLOCKS, "actor" to m.name.cap())
+    if (m !is Mob) continue
+    if (!m.inWorld || m === actor) continue
+    if (deniesExit(m, actor, dir)) return msg(KernelMsg.GUARD_BLOCKS, "actor" to m.name.cap())
   }
   return null
 }
+
+private fun World.deniesExit(m: Mob, actor: Actor, dir: Direction): Boolean =
+  behaviorsOf(m).any { it is Guard && it.denies(this, m, actor, dir) }
 
 /**
  * `follow(target)`: picks the first matching actor in its room as leader, then follows it along the
@@ -505,19 +570,7 @@ data class Follow(
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
-    val leader = mob.leader?.let(world::actor)?.takeIf { it.inWorld && target.matches(it) }
-    if (leader != null && !world.above(mob, leader, dispositionAbove)) {
-      mob.leader = null
-      return null
-    }
-    if (leader == null) {
-      mob.leader =
-        world
-          .others(mob)
-          .firstOrNull { target.matches(it) && world.above(mob, it, dispositionAbove) }
-          ?.id
-      return null
-    }
+    val leader = currentLeader(world, mob) ?: return null
     if (leader.room === mob.room) return null
     val path = world.pathTo(mob.room, leader.room)
     if (path == null || path.size > BUBBLE_RADIUS) {
@@ -526,9 +579,32 @@ data class Follow(
     }
     // Checking the leader's room, not just the next step, keeps the mob from stepping out after
     // its leader and being sent straight back by the return proposal.
-    val area = world.leashArea(mob)
-    if (area != null && (mob.room !in area || leader.room !in area)) return null
+    if (!insideLeash(world, mob, leader)) return null
     return Proposal(path.first().name, priority, "follow", MoveAction(path.first()))
+  }
+
+  private fun currentLeader(world: World, mob: Mob): Actor? {
+    val leader = mob.leader?.let(world::actor)?.takeIf { it.inWorld && target.matches(it) }
+    if (leader != null) {
+      if (!world.above(mob, leader, dispositionAbove)) {
+        mob.leader = null
+        return null
+      }
+      return leader
+    }
+    mob.leader = world.others(mob).firstOrNull { isLeaderCandidate(world, mob, it) }?.id
+    return null
+  }
+
+  private fun isLeaderCandidate(world: World, mob: Mob, a: Actor): Boolean {
+    if (!target.matches(a)) return false
+    return world.above(mob, a, dispositionAbove)
+  }
+
+  private fun insideLeash(world: World, mob: Mob, leader: Actor): Boolean {
+    val area = world.leashArea(mob)
+    if (area == null) return true
+    return mob.room in area && leader.room in area
   }
 
   override fun holdsReturn(world: World, mob: Mob): Boolean {
@@ -553,20 +629,24 @@ data class Pursue(
 ) : Behavior {
   override fun propose(world: World, mob: Mob): Proposal? {
     if (mob.isEngaged) return null
-    if (world.others(mob).any { target.matches(it) && world.below(mob, it, dispositionBelow) })
-      return null
+    if (targetNearby(world, mob)) return null
     val area = world.leashArea(mob)
     if (area != null && mob.room !in area) return null
     val (_, step) =
-      world.nearestBy(mob.room, range, area) {
-        it !== mob &&
-          it.inWorld &&
-          it.condition != Condition.DEAD &&
-          target.matches(it) &&
-          world.isSimulated(it) &&
-          world.below(mob, it, dispositionBelow)
-      } ?: return null
+      world.nearestBy(mob.room, range, area) { reachable(world, mob, it) } ?: return null
     return Proposal(step.name, priority, "pursue", MoveAction(step))
+  }
+
+  private fun targetNearby(world: World, mob: Mob): Boolean =
+    world.others(mob).any { target.matches(it) && world.below(mob, it, dispositionBelow) }
+
+  private fun reachable(world: World, mob: Mob, a: Actor): Boolean {
+    if (a === mob) return false
+    if (!a.inWorld) return false
+    if (a.condition == Condition.DEAD) return false
+    if (!target.matches(a)) return false
+    if (!world.isSimulated(a)) return false
+    return world.below(mob, a, dispositionBelow)
   }
 
   override fun holdsReturn(world: World, mob: Mob): Boolean =
@@ -592,21 +672,8 @@ data class Defend(val group: Boolean = true, val priority: Int = PRIORITY_DEFEND
   override fun propose(world: World, mob: Mob): Proposal? {
     if (Feature.COMBAT !in world.features || mob.isEngaged) return null
     val owner = world.ownerOf(mob) ?: return null
-    val candidates = buildList {
-      if (owner.room === mob.room) add(owner)
-      if (group) {
-        addAll(
-          world
-            .groupMembers(owner)
-            .filter { it !== owner && it.room === mob.room }
-            .sortedBy { it.id }
-        )
-      }
-    }
-    for (c in candidates) {
-      if (!c.isEngaged) continue
-      val foes = world.opponentsOf(c).filter { it !== mob && !world.isOwnerSide(mob, it) }
-      val foe = foes.firstOrNull { it.id == c.primaryTarget } ?: foes.firstOrNull() ?: continue
+    for (c in defenders(world, mob, owner)) {
+      val foe = pickFoe(world, mob, c) ?: continue
       return Proposal(
         "${world.commands.nameOf("kill")} ${foe.keywords.first()}",
         priority,
@@ -615,6 +682,20 @@ data class Defend(val group: Boolean = true, val priority: Int = PRIORITY_DEFEND
       )
     }
     return null
+  }
+
+  private fun defenders(world: World, mob: Mob, owner: Player): List<Actor> = buildList {
+    if (owner.room === mob.room) add(owner)
+    if (group) addAll(inRoomGroup(world, mob, owner))
+  }
+
+  private fun inRoomGroup(world: World, mob: Mob, owner: Player): List<Player> =
+    world.groupMembers(owner).filter { it !== owner && it.room === mob.room }.sortedBy { it.id }
+
+  private fun pickFoe(world: World, mob: Mob, c: Actor): Actor? {
+    if (!c.isEngaged) return null
+    val foes = world.opponentsOf(c).filter { it !== mob && !world.isOwnerSide(mob, it) }
+    return foes.firstOrNull { it.id == c.primaryTarget } ?: foes.firstOrNull()
   }
 }
 
