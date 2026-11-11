@@ -4,17 +4,13 @@ import gups.core.AccountStore
 import gups.core.EntityId
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
-import gups.core.model.Item
+import gups.core.model.Entity
 import gups.core.model.ItemLocation
-import gups.core.model.ItemProto
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.model.SchemaNames
-import gups.core.model.StandingChange
-import gups.core.model.StandingRecord
-import gups.core.model.StandingSubject
 import gups.core.world.Boot
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
@@ -26,7 +22,6 @@ import gups.core.world.World
 import gups.core.world.bindSpawn
 import gups.core.world.clampVitals
 import gups.core.world.clearInputs
-import gups.core.world.custodian
 import gups.core.world.drainItemEvents
 import gups.core.world.drainRemoved
 import gups.core.world.dropOrphanStanding
@@ -35,18 +30,14 @@ import gups.core.world.forgetActorSlots
 import gups.core.world.pruneStanding
 import gups.core.world.recentInputs
 import gups.core.world.respawnDeadlines
-import gups.core.world.restoreItem
 import gups.core.world.restoreMob
 import gups.core.world.restorePet
 import gups.core.world.restorePlayer
 import gups.core.world.setRespawn
 import gups.core.world.setZoneReset
-import gups.core.world.settleRestoredHoldings
-import gups.core.world.tombstone
 import gups.core.world.upgrade
 import gups.core.world.zoneResetDeadlines
 import java.nio.file.Path
-import kotlinx.serialization.builtins.ListSerializer
 
 /** What a server wipe removed, for the startup log. */
 data class WipeSummary(val backup: Path, val characters: Int, val items: Int)
@@ -228,33 +219,58 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
   fun restore(world: World, fresh: Boolean): RestoreReport {
     world.persistence = this
     val notes = mutableListOf<String>()
-    var restored = 0
     val owned =
       entityRows.values
         .filter { (it.kind == "item" && ownerOf(it) != null) || it.id in petOwners }
         .mapTo(HashSet()) { it.id }
     val world0 = entityRows.values.filter { it.id !in owned }.sortedBy { it.id }
-    // Held pets whose owner's character is gone, and what they hold, go even on a fresh start:
-    // nobody can ever log in to bring them back.
-    val orphans = petOwners.filterValues { it !in playerRows }
-    val goneOwners = orphans.values.toSet()
     val deleted = LinkedHashSet<Long>()
-    for (id in orphans.keys.sorted()) {
-      deleted += id
-      notes += "pet ${entityRows.getValue(id).protoLabel} #$id dropped: its owner is gone"
-    }
-    if (goneOwners.isNotEmpty()) {
-      for (row in entityRows.values) {
-        if (row.kind == "item" && ownerOf(row)?.let { it in goneOwners } == true) deleted += row.id
-      }
-    }
+    dropOrphanedPets(deleted, notes)
     if (fresh) {
       pendingDeletes += world0.map { it.id } + deleted
       for (pkg in zoneRows.keys) zoneRows[pkg] = ""
       notes += "--fresh: discarded ${world0.size} saved world rows"
       return RestoreReport(0, world0.size, 0, notes)
     }
-    for (row in world0.filter { it.kind == "room" }) {
+    var restored = restoreRooms(world, world0, deleted)
+    restored += restoreMobs(world, world0, deleted, notes)
+    restored +=
+      placeItems(world, world0.filter { it.kind == "item" }, tombstones = false, deleted, notes)
+        .size
+    for (a in world.actors) {
+      world.forgetActorSlots(a)
+      world.clampVitals(a)
+    }
+    restoreZoneStates(world)
+    world.fillMissingSpawns()
+    pendingDeletes += deleted
+    if (Feature.STANDING in world.features) {
+      world.loadStanding(db.standings())
+      notes += world.dropOrphanStanding(checkActors = true)
+    }
+    return RestoreReport(restored, deleted.size, 0, notes)
+  }
+
+  /**
+   * Marks for deletion held pets whose owner's character is gone, and what they hold, even on a
+   * fresh start: nobody can ever log in to bring them back.
+   */
+  private fun dropOrphanedPets(deleted: MutableSet<Long>, notes: MutableList<String>) {
+    val orphans = petOwners.filterValues { it !in playerRows }
+    val goneOwners = orphans.values.toSet()
+    for (id in orphans.keys.sorted()) {
+      deleted += id
+      notes += "pet ${entityRows.getValue(id).protoLabel} #$id dropped: its owner is gone"
+    }
+    if (goneOwners.isEmpty()) return
+    for (row in entityRows.values) {
+      if (row.kind == "item" && ownerOf(row)?.let { it in goneOwners } == true) deleted += row.id
+    }
+  }
+
+  private fun restoreRooms(world: World, rows: List<EntityRow>, deleted: MutableSet<Long>): Int {
+    var restored = 0
+    for (row in rows.filter { it.kind == "room" }) {
       val room = world.roomOrNull(Label(row.protoLabel))
       if (room == null || room.id.v != row.id) {
         deleted += row.id
@@ -266,7 +282,17 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       room.dirty = room.protoVersion != row.protoVersion
       restored++
     }
-    for (row in world0.filter { it.kind == "mob" }) {
+    return restored
+  }
+
+  private fun restoreMobs(
+    world: World,
+    rows: List<EntityRow>,
+    deleted: MutableSet<Long>,
+    notes: MutableList<String>,
+  ): Int {
+    var restored = 0
+    for (row in rows.filter { it.kind == "mob" }) {
       val p = JSON.decodeFromString(MobPayload.serializer(), row.payload)
       val proto = world.protos.mobs[Label(row.protoLabel)]
       val room = world.roomOrNull(Label(p.room))
@@ -284,53 +310,26 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       m.dirty = m.protoVersion != row.protoVersion
       restored++
     }
-    val placed =
-      placeItems(world, world0.filter { it.kind == "item" }, tombstones = false, deleted, notes)
-    restored += placed.size
-    for (a in world.actors) {
-      world.forgetActorSlots(a)
-      world.clampVitals(a)
-    }
+    return restored
+  }
+
+  private fun restoreZoneStates(world: World) {
     for ((pkg, json) in zoneRows) {
       if (json.isEmpty()) continue
       val zone = pkg in world.protos.zones
       // Non-zone packages (libraries, rules) keep a row only for their quarantine.
       if (!zone && pkg !in world.scripts.packages) continue
       val z = JSON.decodeFromString(ZonePayload.serializer(), json)
-      if (zone) {
-        z.resetAt?.let { world.setZoneReset(pkg, it) }
-        for (r in z.respawns) world.roomOrNull(Label(r.room))?.let {
-          world.setRespawn(it, r.rule, r.at)
-        }
-      }
+      if (zone) applyZoneTimers(world, pkg, z)
       if (z.quarantined) world.scripts.quarantine(world, pkg, "as it was at the last checkpoint")
     }
-    world.fillMissingSpawns()
-    pendingDeletes += deleted
-    if (!fresh && Feature.STANDING in world.features) {
-      val rows = db.standings()
-      world.factionStanding.clear()
-      for (row in rows) {
-        val holder = Label(row.holder)
-        val subject =
-          if (row.subject.startsWith("actor:")) {
-            StandingSubject.Of(EntityId(row.subject.removePrefix("actor:").toLong()))
-          } else {
-            StandingSubject.Faction(Label(row.subject))
-          }
-        val record = StandingRecord()
-        record.amount = row.amount
-        record.updatedPulse = row.updatedPulse
-        val historyList =
-          JSON.decodeFromString(ListSerializer(StandingChangeJson.serializer()), row.historyJson)
-        for (h in historyList) {
-          record.history.add(StandingChange(h.pulse, h.amount, h.event, h.via?.let(::EntityId)))
-        }
-        world.factionStanding[holder to subject] = record
-      }
-      notes += world.dropOrphanStanding(checkActors = true)
+  }
+
+  private fun applyZoneTimers(world: World, pkg: String, z: ZonePayload) {
+    z.resetAt?.let { world.setZoneReset(pkg, it) }
+    for (r in z.respawns) world.roomOrNull(Label(r.room))?.let {
+      world.setRespawn(it, r.rule, r.at)
     }
-    return RestoreReport(restored, deleted.size, 0, notes)
   }
 
   private fun putRow(row: EntityRow) {
@@ -371,26 +370,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     val notes = mutableListOf<String>()
     val deleted = LinkedHashSet<Long>()
 
-    val petRows =
-      petOwners.filterValues { it == row.id }.keys.sorted().map { entityRows.getValue(it) }
-
-    val restoredPets = mutableListOf<Mob>()
-    for (mobRow in petRows) {
-      val proto = world.protos.mobs[Label(mobRow.protoLabel)]
-      if (proto == null) {
-        deleted += mobRow.id
-        notes += "pet ${mobRow.protoLabel} #${mobRow.id} dropped: its prototype is gone"
-        continue
-      }
-      val m = world.restoreMob(EntityId(mobRow.id), proto, room, player.trackIndex)
-      val payload = JSON.decodeFromString(MobPayload.serializer(), mobRow.payload)
-      applyMob(world, m, payload)
-      m.protoVersion = mobRow.protoVersion
-      world.upgrade(m, proto.version)
-      m.dirty = m.protoVersion != mobRow.protoVersion
-      world.restorePet(m, player)
-      restoredPets += m
-    }
+    val restoredPets = restorePets(world, player, room, deleted, notes)
 
     placeItems(
       world,
@@ -411,6 +391,35 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     return player
   }
 
+  /** Restores the held pets saved for [owner]; pets whose prototype is gone are deleted. */
+  private fun restorePets(
+    world: World,
+    owner: Player,
+    room: Room,
+    deleted: MutableSet<Long>,
+    notes: MutableList<String>,
+  ): List<Mob> {
+    val petRows =
+      petOwners.filterValues { it == owner.id.v }.keys.sorted().map { entityRows.getValue(it) }
+    val pets = mutableListOf<Mob>()
+    for (mobRow in petRows) {
+      val proto = world.protos.mobs[Label(mobRow.protoLabel)]
+      if (proto == null) {
+        deleted += mobRow.id
+        notes += "pet ${mobRow.protoLabel} #${mobRow.id} dropped: its prototype is gone"
+        continue
+      }
+      val m = world.restoreMob(EntityId(mobRow.id), proto, room, owner.trackIndex)
+      applyMob(world, m, JSON.decodeFromString(MobPayload.serializer(), mobRow.payload))
+      m.protoVersion = mobRow.protoVersion
+      world.upgrade(m, proto.version)
+      m.dirty = m.protoVersion != mobRow.protoVersion
+      world.restorePet(m, owner)
+      pets += m
+    }
+    return pets
+  }
+
   // ---- Checkpoints ----------------------------------------------------------------------------
 
   override fun checkpoint(world: World, cause: String, immediate: Boolean) {
@@ -422,72 +431,15 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     worldCommit?.let { b.meta["world_commit"] = it }
     worldSchema?.let { b.meta["world_schema"] = it }
     worldFeatures?.let { b.meta["world_features"] = it }
-    val excluded = world.checkpointExclusions
-    for (e in world.allEntities) {
-      // Debug spawns are never saved.
-      if (!e.dirty || e.id in excluded || e.debug) continue
-      if (e is Player) {
-        world.encodePlayer(e).also {
-          b.players[it.id] = it
-          playerRows[it.id] = it
-        }
-      } else {
-        val row = world.encode(e)
-        if (row != null) {
-          b.entities[row.id] = row
-          putRow(row)
-        }
-      }
-      e.dirty = false
-    }
-    for (id in world.drainRemoved().map { it.v } + pendingDeletes) {
-      if (id in entityRows || id in b.entities) {
-        b.entities[id] = null
-        entityRows.remove(id)
-        petOwners.remove(id)
-      }
-    }
-    pendingDeletes.clear()
-    val wall = System.currentTimeMillis()
-    for (ev in world.drainItemEvents()) {
-      b.events +=
-        ItemEventRow(
-          ev.item.v,
-          ev.pulse,
-          wall,
-          ev.from?.let {
-            JSON.encodeToString(LocationJson.serializer(), world.locationJsonOrRoomless(it))
-          },
-          ev.to?.let {
-            JSON.encodeToString(LocationJson.serializer(), world.locationJsonOrRoomless(it))
-          },
-          ev.cause,
-        )
-    }
+    captureDirty(world, b)
+    captureRemovals(world, b)
+    captureItemEvents(world, b)
     if (!immediate) {
-      for ((pkg, json) in zoneStates(world)) {
-        if (zoneRows[pkg] != json) {
-          b.zones[pkg] = json
-          zoneRows[pkg] = json
-        }
-      }
+      captureZones(world, b)
       if (Feature.STANDING in world.features) {
         world.pruneStanding()
         world.dropOrphanStanding(checkActors = true)
-        b.standings =
-          world.factionStanding.map { (key, record) ->
-            val (holder, subject) = key
-            val subjectStr =
-              when (subject) {
-                is StandingSubject.Of -> "actor:${subject.actor.v}"
-                is StandingSubject.Faction -> subject.label.v
-              }
-            val historyList =
-              record.history.map { StandingChangeJson(it.pulse, it.amount, it.event, it.via?.v) }
-            val historyJson =
-              JSON.encodeToString(ListSerializer(StandingChangeJson.serializer()), historyList)
-            StandingRow(holder.v, subjectStr, record.amount, record.updatedPulse, historyJson)
-          }
+        b.standings = world.standingRows()
       }
       lastCapturePulse = world.pulse
       world.clearInputs()
@@ -501,21 +453,78 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       return
     }
     writer.submit(combined(b))
-    val oldest = writer.oldestPending
-    if (oldest != null && world.pulse - oldest > 3L * WORLD_TICK_PULSES) {
-      if (!alerted) {
-        alerted = true
-        world.record(
-          Diagnostic(
-            world.pulse,
-            "checkpoint",
-            "changes since pulse $oldest are still not saved: ${writer.lastError ?: "the writer is behind"}",
-          )
-        )
-      }
-    } else {
-      alerted = false
+    alertIfBehind(world)
+  }
+
+  private fun captureDirty(world: World, b: Batch) {
+    val excluded = world.checkpointExclusions
+    for (e in world.allEntities) {
+      if (!isSaveable(e, excluded)) continue
+      capture(world, e, b)
+      e.dirty = false
     }
+  }
+
+  private fun capture(world: World, e: Entity, b: Batch) {
+    if (e is Player) {
+      val row = world.encodePlayer(e)
+      b.players[row.id] = row
+      playerRows[row.id] = row
+      return
+    }
+    val row = world.encode(e) ?: return
+    b.entities[row.id] = row
+    putRow(row)
+  }
+
+  /** Debug spawns are never saved. */
+  private fun isSaveable(e: Entity, excluded: Set<EntityId>) =
+    e.dirty && e.id !in excluded && !e.debug
+
+  private fun captureRemovals(world: World, b: Batch) {
+    for (id in world.drainRemoved().map { it.v } + pendingDeletes) {
+      if (id in entityRows || id in b.entities) {
+        b.entities[id] = null
+        entityRows.remove(id)
+        petOwners.remove(id)
+      }
+    }
+    pendingDeletes.clear()
+  }
+
+  private fun captureItemEvents(world: World, b: Batch) {
+    val wall = System.currentTimeMillis()
+    fun json(loc: ItemLocation?) =
+      loc?.let { JSON.encodeToString(LocationJson.serializer(), world.locationJsonOrRoomless(it)) }
+    for (ev in world.drainItemEvents()) {
+      b.events += ItemEventRow(ev.item.v, ev.pulse, wall, json(ev.from), json(ev.to), ev.cause)
+    }
+  }
+
+  private fun captureZones(world: World, b: Batch) {
+    for ((pkg, json) in zoneStates(world)) {
+      if (zoneRows[pkg] != json) {
+        b.zones[pkg] = json
+        zoneRows[pkg] = json
+      }
+    }
+  }
+
+  private fun alertIfBehind(world: World) {
+    val oldest = writer.oldestPending
+    if (oldest == null || world.pulse - oldest <= 3L * WORLD_TICK_PULSES) {
+      alerted = false
+      return
+    }
+    if (alerted) return
+    alerted = true
+    world.record(
+      Diagnostic(
+        world.pulse,
+        "checkpoint",
+        "changes since pulse $oldest are still not saved: ${writer.lastError ?: "the writer is behind"}",
+      )
+    )
   }
 
   private fun World.locationJsonOrRoomless(loc: ItemLocation): LocationJson =
@@ -650,24 +659,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       playerRows.values.filter {
         JSON.decodeFromString(PlayerPayload.serializer(), it.payload).room == room.v
       }
-    val holders = (mobs.map { it.id } + players.map { it.id }).toMutableSet()
-    val items = mutableListOf<EntityRow>()
-    var grew = true
-    while (grew) {
-      grew = false
-      for (row in entityRows.values) {
-        if (row.kind != "item" || items.any { it.id == row.id }) continue
-        val loc = JSON.decodeFromString(LocationJson.serializer(), row.location ?: "{}")
-        val inRoom =
-          loc.room == room.v ||
-            (loc.carried ?: loc.equipped ?: loc.contained)?.let { it in holders } == true
-        if (inRoom) {
-          items += row
-          holders += row.id
-          grew = true
-        }
-      }
-    }
+    val items = itemsAt(room, (mobs.map { it.id } + players.map { it.id }).toMutableSet())
     return ReproBundle(
       seed = d.seed ?: world.config.seed,
       pulse = d.pulse,
@@ -683,6 +675,30 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
           .filter { it.room.pkg == pkg }
           .map { InputJson(it.pulse, it.actor.v, it.actorName, it.room.v, it.line) },
     )
+  }
+
+  /** Item rows in [room], or carried, equipped or contained by anything in [holders]. */
+  private fun itemsAt(room: Label, holders: MutableSet<Long>): List<EntityRow> {
+    val items = mutableListOf<EntityRow>()
+    var grew = true
+    while (grew) {
+      grew = false
+      for (row in entityRows.values) {
+        if (row.kind != "item" || items.any { it.id == row.id } || !isAt(row, room, holders)) {
+          continue
+        }
+        items += row
+        holders += row.id
+        grew = true
+      }
+    }
+    return items
+  }
+
+  private fun isAt(row: EntityRow, room: Label, holders: Set<Long>): Boolean {
+    val loc = JSON.decodeFromString(LocationJson.serializer(), row.location ?: "{}")
+    if (loc.room == room.v) return true
+    return (loc.carried ?: loc.equipped ?: loc.contained)?.let { it in holders } == true
   }
 
   /** [b] with any held immediate captures in front of it, oldest first. */
@@ -709,109 +725,4 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     fun open(file: Path, log: (String) -> Unit = {}): SqlitePersistence =
       SqlitePersistence(Database.open(file), log)
   }
-}
-
-/**
- * Restores item rows whose holders exist, containers before contents. Rows that can't be placed, or
- * whose prototype is gone (unless [tombstones]), are deleted.
- */
-internal fun placeItems(
-  world: World,
-  rows: List<EntityRow>,
-  tombstones: Boolean,
-  deleted: MutableSet<Long>,
-  notes: MutableList<String>,
-): List<Item> {
-  val waiting = rows.sortedBy { it.id }.toMutableList()
-  val out = mutableListOf<Item>()
-  val ids = rows.mapTo(HashSet()) { it.id }
-  var progress = true
-  while (progress && waiting.isNotEmpty()) {
-    progress = false
-    val it = waiting.iterator()
-    while (it.hasNext()) {
-      val row = it.next()
-      val loc = JSON.decodeFromString(LocationJson.serializer(), row.location ?: "{}")
-      val at: ItemLocation? =
-        when {
-          loc.room != null ->
-            world.roomOrNull(Label(loc.room))?.let { r ->
-              ItemLocation.InRoom(r.id, (loc.index ?: 0).coerceIn(0, r.trackSize - 1))
-            }
-          loc.carried != null ->
-            world.actor(EntityId(loc.carried))?.let { a -> ItemLocation.Carried(a.id) }
-          loc.equipped != null ->
-            world.actor(EntityId(loc.equipped))?.let { a ->
-              ItemLocation.Equipped(a.id, loc.slot ?: "held")
-            }
-          loc.contained != null ->
-            world.item(EntityId(loc.contained))?.let { c -> ItemLocation.Contained(c.id) }
-          else -> null
-        }
-      if (at == null) {
-        // Wait for a container that is still to be placed; otherwise give up on it.
-        if (
-          loc.contained != null &&
-            loc.contained in ids &&
-            waiting.any { w -> w.id == loc.contained }
-        )
-          continue
-        it.remove()
-        deleted += row.id
-        notes += "item ${row.protoLabel} #${row.id} dropped: where it was is gone"
-        progress = true
-        continue
-      }
-      val payload = JSON.decodeFromString(ItemPayload.serializer(), row.payload)
-      val known = world.protos.items[Label(row.protoLabel)]
-      val proto: ItemProto =
-        when {
-          known != null && payload.tombstone == null -> known
-          tombstones ->
-            tombstone(
-              ItemProto(Label(row.protoLabel), payload.name, emptyList()).let { p ->
-                p.copy(
-                  keywords =
-                    payload.name.lowercase().split(' ').filter { w ->
-                      w.isNotEmpty() && w !in setOf("a", "an", "the")
-                    },
-                  weight = payload.weight,
-                  stackable = payload.stackable,
-                  container = payload.container?.let(::containerFromJson),
-                  plural = payload.plural,
-                )
-              }
-            )
-          else -> {
-            it.remove()
-            deleted += row.id
-            notes += "item ${row.protoLabel} #${row.id} despawned: its prototype is gone"
-            progress = true
-            continue
-          }
-        }
-      val item = world.restoreItem(EntityId(row.id), proto, at, payload.count)
-      applyItem(item, payload)
-      if (known == null || payload.tombstone != null) {
-        item.savedPayload = payload.tombstone ?: row.payload
-        if (payload.tombstone == null)
-          notes += "item ${row.protoLabel} #${row.id} is now a tombstone"
-      } else {
-        item.protoVersion = row.protoVersion
-        world.upgrade(item, known.version)
-      }
-      item.dirty = known == null || item.protoVersion != row.protoVersion
-      out += item
-      it.remove()
-      progress = true
-    }
-  }
-  for (row in waiting) {
-    deleted += row.id
-    notes += "item ${row.protoLabel} #${row.id} dropped: its container is gone"
-  }
-  for (holder in out.mapNotNull { world.custodian(it) }.distinct()) world.settleRestoredHoldings(
-    holder
-  )
-  return out
 }
