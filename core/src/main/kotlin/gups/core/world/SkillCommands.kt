@@ -230,40 +230,65 @@ internal class CastAction(
   /** The room a `room` skill acts on: the caster's. */
   private var targetRoom: Room? = null
 
+  /** A script-verb fixed target only counts for skills that target an enemy or an ally. */
+  private fun fixedTargetApplies(): Boolean =
+    skill.target in setOf(TargetKind.ENEMY, TargetKind.ALLY)
+
   private fun chooseTarget(w: World, caster: Actor): Result<Actor?> {
     if (targetChosen) return Result.success(target)
-    fun fail(m: Msg, vararg args: Pair<String, Any?>) =
-      Result.failure<Actor?>(IllegalArgumentException(w.msg(m, *args)))
-    val t =
-      if (fixedTarget != null && skill.target in setOf(TargetKind.ENEMY, TargetKind.ALLY))
-        fixedTarget
-      else
-        when (skill.target) {
-          TargetKind.SELF -> caster
-          TargetKind.NONE -> null
-          TargetKind.ROOM -> {
-            targetRoom = caster.room
-            null
-          }
-          TargetKind.ITEM -> {
-            val word = targetWord ?: return fail(SkillMsg.ON_WHAT, "skill" to skill.name)
-            targetItem =
-              caster.equipment.values.firstOrNull { it.matches(word) }
-                ?: w.findItem(caster, word, inventory = true, ground = true)
-                ?: return fail(KernelMsg.DONT_SEE)
-            null
-          }
-          TargetKind.ALLY ->
-            targetWord?.let { w.findActor(caster, it) ?: return fail(KernelMsg.NOT_HERE) } ?: caster
-          TargetKind.ENEMY ->
-            targetWord?.let { w.findActor(caster, it) ?: return fail(KernelMsg.NOT_HERE) }
-              ?: caster.primaryTarget?.let(w::actor)
-              ?: return fail(SkillMsg.AT_WHOM, "skill" to skill.name)
-        }
-    target = t
-    targetChosen = true
-    return Result.success(t)
+    val t = chooseBranch(w, caster)
+    if (t.isSuccess) {
+      target = t.getOrNull()
+      targetChosen = true
+    }
+    return t
   }
+
+  private fun chooseBranch(w: World, caster: Actor): Result<Actor?> {
+    val fixed = fixedTarget
+    if (fixed != null && fixedTargetApplies()) return Result.success(fixed)
+    return when (skill.target) {
+      TargetKind.SELF -> Result.success(caster)
+      TargetKind.NONE -> Result.success(null)
+      TargetKind.ROOM -> {
+        targetRoom = caster.room
+        Result.success(null)
+      }
+      TargetKind.ITEM -> chooseItem(w, caster)
+      TargetKind.ALLY -> chooseAlly(w, caster)
+      TargetKind.ENEMY -> chooseEnemy(w, caster)
+    }
+  }
+
+  /** An `item` skill takes the target word's item: carried, worn or on the ground. */
+  private fun chooseItem(w: World, caster: Actor): Result<Actor?> {
+    val word = targetWord ?: return failure(w, SkillMsg.ON_WHAT, "skill" to skill.name)
+    targetItem =
+      caster.equipment.values.firstOrNull { it.matches(word) }
+        ?: w.findItem(caster, word, inventory = true, ground = true)
+        ?: return failure(w, KernelMsg.DONT_SEE)
+    return Result.success(null)
+  }
+
+  /** An `ally` skill aims at the target word's actor, or at the caster. */
+  private fun chooseAlly(w: World, caster: Actor): Result<Actor?> {
+    val word = targetWord ?: return Result.success(caster)
+    return Result.success(w.findActor(caster, word) ?: return failure(w, KernelMsg.NOT_HERE))
+  }
+
+  /** An `enemy` skill aims at the target word's actor, then the caster's primary target. */
+  private fun chooseEnemy(w: World, caster: Actor): Result<Actor?> {
+    val word = targetWord
+    if (word != null)
+      return Result.success(w.findActor(caster, word) ?: return failure(w, KernelMsg.NOT_HERE))
+    val fallback =
+      caster.primaryTarget?.let(w::actor)
+        ?: return failure(w, SkillMsg.AT_WHOM, "skill" to skill.name)
+    return Result.success(fallback)
+  }
+
+  private fun failure(w: World, m: Msg, vararg args: Pair<String, Any?>): Result<Actor?> =
+    Result.failure(IllegalArgumentException(w.msg(m, *args)))
 
   override fun validate(w: World, actor: Actor): String? {
     if (actor.hasFlag("silenced")) return w.msg(KernelMsg.SILENCED)
@@ -271,32 +296,52 @@ internal class CastAction(
       chooseTarget(w, actor).getOrElse {
         return it.message
       }
-    targetRoom?.let { r ->
-      if (actor.room !== r) return w.msg(SkillMsg.MOVED, "skill" to skill.name)
+    w.validateRoom(actor)?.let {
+      return it
     }
-    targetItem?.let { i ->
-      if (w.item(i.id) !== i || !w.isPresent(i, w.roomOf(actor)))
-        return w.msg(SkillMsg.NOT_HERE, "target" to i.name)
-      w.reach(actor, i)?.let {
+    w.validateItem(actor)?.let {
+      return it
+    }
+    if (t != null && t !== actor)
+      w.validateRange(actor, t)?.let {
         return it
       }
-    }
-    if (t != null && t !== actor) {
-      if (!w.isPresent(t, w.roomOf(actor))) return w.msg(SkillMsg.NOT_HERE, "target" to t.name)
-      val band = Band.between(w.indexOf(actor), w.indexOf(t))
-      val reach =
-        when (skill.range) {
-          SkillRange.MELEE -> Band.MELEE
-          SkillRange.NEAR -> Band.NEAR
-          SkillRange.FAR,
-          SkillRange.ROOM -> Band.FAR
-          SkillRange.SELF -> return w.msg(SkillMsg.SELF_ONLY, "skill" to skill.name)
-        }
-      if (!reach.reaches(band)) return w.msg(SkillMsg.OUT_OF_RANGE, "target" to t.name)
-    }
+    return w.validateCost(actor)
+  }
+
+  /** A `room` skill only casts from the room it began in. */
+  private fun World.validateRoom(actor: Actor): String? =
+    targetRoom?.takeIf { actor.room !== it }?.let { msg(SkillMsg.MOVED, "skill" to skill.name) }
+
+  /** The `item` skill's item must still be there, in the room and within reach. */
+  private fun World.validateItem(actor: Actor): String? {
+    val i = targetItem ?: return null
+    if (item(i.id) !== i || !isPresent(i, roomOf(actor)))
+      return msg(SkillMsg.NOT_HERE, "target" to i.name)
+    return reach(actor, i)
+  }
+
+  /** A remote target must be present and within the skill's range. */
+  private fun World.validateRange(actor: Actor, t: Actor): String? {
+    if (!isPresent(t, roomOf(actor))) return msg(SkillMsg.NOT_HERE, "target" to t.name)
+    val band = Band.between(indexOf(actor), indexOf(t))
+    val reach =
+      when (skill.range) {
+        SkillRange.MELEE -> Band.MELEE
+        SkillRange.NEAR -> Band.NEAR
+        SkillRange.FAR,
+        SkillRange.ROOM -> Band.FAR
+        SkillRange.SELF -> return msg(SkillMsg.SELF_ONLY, "skill" to skill.name)
+      }
+    if (!reach.reaches(band)) return msg(SkillMsg.OUT_OF_RANGE, "target" to t.name)
+    return null
+  }
+
+  /** Each vital the skill spends must be available. */
+  private fun World.validateCost(actor: Actor): String? {
     for ((vital, need) in skill.cost) {
       if (actor.current(vital) < need)
-        return w.msg(SkillMsg.NOT_ENOUGH, "vital" to w.schema.vitalLabel(vital))
+        return msg(SkillMsg.NOT_ENOUGH, "vital" to schema.vitalLabel(vital))
     }
     return null
   }
@@ -335,133 +380,42 @@ internal class CastAction(
   override fun resolve(w: World, actor: Actor): Int {
     w.changeVitals(actor, skill.cost.mapValues { -it.value })
     val c = RulesContext(w, actor, target, item = targetItem, skill = skill)
-    if (!w.skillSucceeds(c)) {
-      w.tell(actor, SkillMsg.FAILED_SELF, "skill" to skill.name)
-      w.tellSight(
-        actor.room,
-        "cast",
-        actor,
-        w.msg(SkillMsg.FAILED_ROOM, "actor" to actor.name.cap()),
-        actor,
-      )
-      w.reportCastUse(actor, skill, target, targetItem, "fail", emptyList())
-      return skill.lag
-    }
+    if (!w.skillSucceeds(c)) return failCast(w, actor)
     val power = w.skillPowerChain(c)
     val t = target
     val onItem = targetItem
     val onRoom = targetRoom
-    w.send(
-      actor,
-      when {
-        onItem != null -> w.msg(SkillMsg.DONE_ITEM, "skill" to skill.name, "target" to onItem.name)
-        t == null || t === actor -> w.msg(SkillMsg.DONE_SELF, "skill" to skill.name)
-        else -> w.msg(SkillMsg.DONE_TARGET, "skill" to skill.name, "target" to t.name)
-      },
-    )
+    w.send(actor, w.doneLine(onItem, t, actor))
     // Bystanders see every completed cast, so instant spells aren't invisible to the room.
     val who = actor.name.cap()
     val everyone =
       w.perceiversOf(actor.room, "cast", actor, setOf(Channel.SIGHT), exclude = arrayOf(actor))
-
-    fun named(p: Player) = w.recognizes(p, actor, skill, t, recognition)
-    val namedRoomLine =
-      when {
-        onItem != null ->
-          w.msg(SkillMsg.ROOM_ITEM, "actor" to who, "skill" to skill.name, "target" to onItem.name)
-        t == null || t === actor -> w.msg(SkillMsg.ROOM_SELF, "actor" to who, "skill" to skill.name)
-        else ->
-          w.msg(SkillMsg.ROOM_TARGET, "actor" to who, "skill" to skill.name, "target" to t.name)
-      }
-    val targetPlayer = (t as? Player)?.takeIf { it !== actor }
-    val targetNamed = targetPlayer?.let(::named)
-    if (targetPlayer != null && targetNamed == true)
-      w.tell(targetPlayer, SkillMsg.DONE_VICTIM, "actor" to who, "skill" to skill.name)
-    val anonBystanders = mutableListOf<Player>()
-    for ((p, seen) in everyone) {
-      if (p === t) continue
-      when {
-        seen.channel != Channel.SIGHT -> w.send(p, seen.text.orEmpty())
-        named(p) -> w.send(p, namedRoomLine)
-        else -> anonBystanders += p
-      }
-    }
+    w.tellVictim(actor, who, t)
+    val anonBystanders = w.tellBystanders(everyone, t, actor)
     // A single enemy target is told of a hit only once the landing roll is known.
-    val awaitsRoll =
-      skill.target == TargetKind.ENEMY &&
-        t != null &&
-        t !== actor &&
-        skill.range != SkillRange.ROOM &&
-        onItem == null &&
-        onRoom == null
-    val roomTarget =
-      if (skill.range == SkillRange.ROOM || t === actor) null else t?.name ?: onItem?.name
-    if (!awaitsRoll) {
-      if (targetPlayer != null && targetNamed == false) {
-        val key = if (skill.range == SkillRange.ROOM) KEY_ROOM else KEY_VICTIM
-        w.send(targetPlayer, w.anonLine(skill, key, actor, null))
-      }
-      for (p in anonBystanders) w.send(p, w.anonLine(skill, KEY_ROOM, actor, roomTarget))
-    }
+    val awaitsRoll = awaitsLandingRoll(t, actor, onItem, onRoom)
+    val roomTarget = roomTargetName(t, onItem, actor)
+    if (!awaitsRoll) w.castAnonLines(actor, t, anonBystanders, roomTarget)
     // Witnessed before the effects run, so a resolver can make a mob forget the cast.
     w.witness(actor.room, actor, "cast", skill = skill.label, target = t)
-    val targets =
-      if (onRoom != null) listOf(null)
-      else if (skill.range == SkillRange.ROOM)
-        actor.room.actors.filter { it !== actor && w.isSimulated(it) }
-      else listOf(t)
-    if (onItem != null && onItem.id in w.entities)
-      skill.effect?.let { w.applyItemEffect(it, actor, onItem, power = power) }
-    onRoom?.let { r -> skill.effect?.let { w.applyRoomEffect(it, actor, r, power = power) } }
-    // The victims the cast reached, and the ones it landed on, for the on_skill_use report.
+    w.applyAreaEffects(actor, onItem, onRoom, power)
     var reached = 0
     val landed = mutableListOf<Actor>()
-    for (each in targets) {
-      val hostile = skill.target == TargetKind.ENEMY && each != null && each !== actor
+    for (each in w.castTargets(actor, t, onRoom)) {
+      val engaged = hostileTarget(each, actor)
       // An enemy skill engages whatever it is cast at, whether or not it lands.
-      if (hostile) {
+      if (engaged != null) {
         reached++
-        w.startCombat(actor, each)
+        w.startCombat(actor, engaged)
       }
-      if (hostile && !w.spellLands(actor, each, skill)) {
-        w.send(
-          actor,
-          w.msg(SkillMsg.RESISTED_SELF, "target" to each.name.cap(), "skill" to skill.name),
-        )
-        if (each is Player) {
-          if (named(each))
-            w.tell(each, SkillMsg.RESISTED_TARGET, "actor" to who, "skill" to skill.name)
-          else w.send(each, w.anonLine(skill, KEY_RESISTED_VICTIM, actor, null))
-        }
-        for ((p, seen) in everyone) {
-          if (p === each) continue
-          when {
-            seen.channel != Channel.SIGHT -> w.send(p, seen.text.orEmpty())
-            named(p) ->
-              w.send(
-                p,
-                w.msg(
-                  SkillMsg.RESISTED_ROOM,
-                  "actor" to who,
-                  "skill" to skill.name,
-                  "target" to each.name.cap(),
-                ),
-              )
-            else -> w.send(p, w.anonLine(skill, KEY_RESISTED_ROOM, actor, each.name.cap()))
-          }
-        }
+      if (engaged != null && !w.spellLands(actor, engaged, skill)) {
+        w.tellResist(who, engaged, actor, everyone)
         continue
       }
-      if (awaitsRoll && each === t) {
-        if (targetPlayer != null && targetNamed == false)
-          w.send(targetPlayer, w.anonLine(skill, KEY_VICTIM, actor, null))
-        for (p in anonBystanders) w.send(p, w.anonLine(skill, KEY_ROOM, actor, t.name))
-      }
+      val hit = each.takeIf { awaitsRoll && it === t }
+      if (hit != null) w.tellLanded(actor, hit, anonBystanders)
       if (each != null) landed += each
-      // An item or room skill's effect already ran on the item or the room.
-      if (onItem == null && onRoom == null)
-        skill.effect?.let { w.applyEffect(it, actor, each, EffectContext(skill, power)) }
-      skill.resolve?.resolve(w, actor, each, onItem, power)
+      w.applyTargetEffect(actor, each, power)
     }
     w.dispatch(
       HookName.ON_CAST,
@@ -469,41 +423,216 @@ internal class CastAction(
       actor.room,
       HookContext(actor = actor, target = t, skill = skill, targetItem = onItem),
     )
-    val outcome =
-      if (skill.target == TargetKind.ENEMY && reached > 0 && landed.isEmpty()) "resist"
-      else "success"
-    w.reportCastUse(actor, skill, t, onItem, outcome, landed)
-    w.fireSkillRecognized(recognition, actor, skill, t, outcome, power)
+    val allResisted = skill.target == TargetKind.ENEMY && reached > 0 && landed.isEmpty()
+    val outcome = if (allResisted) "resist" else "success"
+    w.reportCastUse(actor, outcome, landed)
+    w.fireSkillRecognized(actor, t, outcome, power)
     return skill.lag
   }
-}
 
-/**
- * Runs the SKILL_RECOGNIZED handlers of each player who recognized a skill they don't know, in the
- * order they were asked and then by trait name. A handler that throws is recorded and doesn't stop
- * the others.
- */
-private fun World.fireSkillRecognized(
-  rec: CastRecognition,
-  caster: Actor,
-  skill: SkillProto,
-  target: Actor?,
-  outcome: String,
-  power: Int,
-) {
-  val fields =
-    mapOf(
-      "source" to caster,
-      "skill" to skill.label.v,
-      "outcome" to outcome,
-      "target" to target,
-      "power" to power,
+  /** The cast failed: the caster and the room are told, and the use is reported. */
+  private fun failCast(w: World, actor: Actor): Int {
+    w.tell(actor, SkillMsg.FAILED_SELF, "skill" to skill.name)
+    w.tellSight(
+      actor.room,
+      "cast",
+      actor,
+      w.msg(SkillMsg.FAILED_ROOM, "actor" to actor.name.cap()),
+      actor,
     )
-  for (id in rec.learnedBy) {
-    val player = entities[id] as? Player ?: continue
-    // An earlier handler may have removed the player or taught them the skill.
-    if (!player.inWorld || skill.label in player.skills) continue
-    fireTraitEvent(player, TraitEvent.SKILL_RECOGNIZED, fields)
+    w.reportCastUse(actor, "fail", emptyList())
+    return skill.lag
+  }
+
+  /** The caster's line for a completed cast. */
+  private fun World.doneLine(onItem: Item?, t: Actor?, actor: Actor): String =
+    when {
+      onItem != null -> msg(SkillMsg.DONE_ITEM, "skill" to skill.name, "target" to onItem.name)
+      t == null || t === actor -> msg(SkillMsg.DONE_SELF, "skill" to skill.name)
+      else -> msg(SkillMsg.DONE_TARGET, "skill" to skill.name, "target" to t.name)
+    }
+
+  /** The cast's target when it is another player. */
+  private fun victimPlayer(t: Actor?, actor: Actor): Player? =
+    (t as? Player)?.takeIf { it !== actor }
+
+  /** The target player hears they were cast on, if they recognize the skill. */
+  private fun World.tellVictim(actor: Actor, who: String, t: Actor?) {
+    val p = victimPlayer(t, actor) ?: return
+    if (!recognizes(p, actor, skill, t, recognition)) return
+    tell(p, SkillMsg.DONE_VICTIM, "actor" to who, "skill" to skill.name)
+  }
+
+  /** Bystanders who recognize the cast get the named room line; the rest stay anonymous. */
+  private fun World.tellBystanders(
+    everyone: Map<Player, Perceived>,
+    t: Actor?,
+    actor: Actor,
+  ): List<Player> {
+    val line = recognizedRoomLine(actor.name.cap(), targetItem, t, actor)
+    val anon = mutableListOf<Player>()
+    for ((p, seen) in everyone) {
+      if (p === t) continue
+      when {
+        seen.channel != Channel.SIGHT -> send(p, seen.text.orEmpty())
+        recognizes(p, actor, skill, t, recognition) -> send(p, line)
+        else -> anon += p
+      }
+    }
+    return anon
+  }
+
+  /** The room's line for a cast, for a viewer who recognizes the skill. */
+  private fun World.recognizedRoomLine(
+    who: String,
+    onItem: Item?,
+    t: Actor?,
+    actor: Actor,
+  ): String =
+    when {
+      onItem != null ->
+        msg(SkillMsg.ROOM_ITEM, "actor" to who, "skill" to skill.name, "target" to onItem.name)
+      t == null || t === actor -> msg(SkillMsg.ROOM_SELF, "actor" to who, "skill" to skill.name)
+      else -> msg(SkillMsg.ROOM_TARGET, "actor" to who, "skill" to skill.name, "target" to t.name)
+    }
+
+  /** Anonymous lines for a cast whose landing roll is not pending. */
+  private fun World.castAnonLines(
+    actor: Actor,
+    t: Actor?,
+    anonBystanders: List<Player>,
+    roomTarget: String?,
+  ) {
+    val p = victimPlayer(t, actor)
+    if (p != null && !recognizes(p, actor, skill, t, recognition)) {
+      val key = if (skill.range == SkillRange.ROOM) KEY_ROOM else KEY_VICTIM
+      send(p, anonLine(skill, key, actor, null))
+    }
+    for (v in anonBystanders) send(v, anonLine(skill, KEY_ROOM, actor, roomTarget))
+  }
+
+  /** The lines that land on a target once its roll is known. */
+  private fun World.tellLanded(actor: Actor, target: Actor, anonBystanders: List<Player>) {
+    val p = victimPlayer(target, actor)
+    if (p != null && !recognizes(p, actor, skill, target, recognition))
+      send(p, anonLine(skill, KEY_VICTIM, actor, null))
+    for (v in anonBystanders) send(v, anonLine(skill, KEY_ROOM, actor, target.name))
+  }
+
+  /** A resisted hit: the actor is told, then the victim if present, then the whole room. */
+  private fun World.tellResist(
+    who: String,
+    each: Actor,
+    actor: Actor,
+    everyone: Map<Player, Perceived>,
+  ) {
+    send(actor, msg(SkillMsg.RESISTED_SELF, "target" to each.name.cap(), "skill" to skill.name))
+    if (each is Player) tellResistedPlayer(who, each, actor)
+    for ((p, seen) in everyone) {
+      if (p === each) continue
+      when {
+        seen.channel != Channel.SIGHT -> send(p, seen.text.orEmpty())
+        recognizes(p, actor, skill, target, recognition) ->
+          send(
+            p,
+            msg(
+              SkillMsg.RESISTED_ROOM,
+              "actor" to who,
+              "skill" to skill.name,
+              "target" to each.name.cap(),
+            ),
+          )
+        else -> send(p, anonLine(skill, KEY_RESISTED_ROOM, actor, each.name.cap()))
+      }
+    }
+  }
+
+  /** The resisted player is told, named or anonymous, depending on recognition. */
+  private fun World.tellResistedPlayer(who: String, victim: Player, actor: Actor) {
+    if (recognizes(victim, actor, skill, target, recognition))
+      tell(victim, SkillMsg.RESISTED_TARGET, "actor" to who, "skill" to skill.name)
+    else send(victim, anonLine(skill, KEY_RESISTED_VICTIM, actor, null))
+  }
+
+  /** The target an enemy skill engages: a foreign actor, not the caster. */
+  private fun hostileTarget(each: Actor?, actor: Actor): Actor? {
+    if (each == null || each === actor) return null
+    if (skill.target != TargetKind.ENEMY) return null
+    return each
+  }
+
+  /** A single enemy target is told of a hit only once the landing roll is known. */
+  private fun awaitsLandingRoll(t: Actor?, actor: Actor, onItem: Item?, onRoom: Room?): Boolean =
+    skill.target == TargetKind.ENEMY &&
+      t != null &&
+      t !== actor &&
+      skill.range != SkillRange.ROOM &&
+      onItem == null &&
+      onRoom == null
+
+  /** The bystanders' line names the target, unless the cast is at the room or at the caster. */
+  private fun roomTargetName(t: Actor?, onItem: Item?, actor: Actor): String? =
+    if (skill.range == SkillRange.ROOM || t === actor) null else t?.name ?: onItem?.name
+
+  /**
+   * The actors a cast's effects run on: the room's occupants for a room skill, the target, or none.
+   */
+  private fun World.castTargets(actor: Actor, t: Actor?, onRoom: Room?): List<Actor?> =
+    if (onRoom != null) listOf(null)
+    else if (skill.range == SkillRange.ROOM)
+      actor.room.actors.filter { it !== actor && isSimulated(it) }
+    else listOf(t)
+
+  /** The item or room a cast acts on takes its effect once, before any target. */
+  private fun World.applyAreaEffects(actor: Actor, onItem: Item?, onRoom: Room?, power: Int) {
+    if (onItem != null && onItem.id in entities)
+      skill.effect?.let { applyItemEffect(it, actor, onItem, power = power) }
+    onRoom?.let { r -> skill.effect?.let { applyRoomEffect(it, actor, r, power = power) } }
+  }
+
+  /** The effect and resolver of a cast, run on one target. */
+  private fun World.applyTargetEffect(actor: Actor, each: Actor?, power: Int) {
+    // An item or room skill's effect already ran on the item or the room.
+    val areaHandled = targetItem != null || targetRoom != null
+    if (!areaHandled)
+      skill.effect?.let { applyEffect(it, actor, each, EffectContext(skill, power)) }
+    skill.resolve?.resolve(this, actor, each, targetItem, power)
+  }
+
+  /**
+   * Runs the SKILL_RECOGNIZED handlers of each player who recognized a skill they don't know, in
+   * the order they were asked and then by trait name. A handler that throws is recorded and doesn't
+   * stop the others.
+   */
+  private fun World.fireSkillRecognized(
+    caster: Actor,
+    target: Actor?,
+    outcome: String,
+    power: Int,
+  ) {
+    val fields =
+      mapOf(
+        "source" to caster,
+        "skill" to skill.label.v,
+        "outcome" to outcome,
+        "target" to target,
+        "power" to power,
+      )
+    for (id in recognition.learnedBy) {
+      val player = entities[id] as? Player ?: continue
+      // An earlier handler may have removed the player or taught them the skill.
+      if (!player.inWorld || skill.label in player.skills) continue
+      fireTraitEvent(player, TraitEvent.SKILL_RECOGNIZED, fields)
+    }
+  }
+
+  /**
+   * Reports a resolved cast to the global on_skill_use hook: once per resolve, only while the user
+   * is still in the world. A cast aimed at the user carries no target.
+   */
+  private fun World.reportCastUse(actor: Actor, outcome: String, landed: List<Actor>) {
+    if (!actor.inWorld) return
+    dispatchSkillUse(actor, skill, target?.takeIf { it !== actor }, targetItem, outcome, landed)
   }
 }
 
@@ -557,56 +686,73 @@ internal fun World.anonLine(
     return Messages.fill(it, mapOf("actor" to actor, "target" to shown))
   }
 
-  fun say(m: Msg, vararg extra: Pair<String, Any?>): String {
-    val args = mutableListOf<Pair<String, Any?>>("actor" to actor)
-    if ("target" in m.placeholders) args += "target" to shown
-    if ("what" in m.placeholders) args += "what" to what
-    args += extra
-    return msg(m, *args.toTypedArray())
-  }
   val damageType = dmg?.let { "damage_type" to schema.damageTypeLabel(it.type.name) }
-
-  if (damageType != null) {
-    if (key == "victim") return say(SkillMsg.ANON_VICTIM_DAMAGE, damageType)
-    if (key == "room" && hasTarget) return say(SkillMsg.ANON_ROOM_DAMAGE, damageType)
+  val values = AnonLineValues(actor, shown, what)
+  anonDamageLine(key, hasTarget, values, damageType)?.let {
+    return it
   }
+  anonSkillLine(skill, key, hasTarget, values)?.let {
+    return it
+  }
+  return when {
+    key == "victim" -> anonSay(SkillMsg.ANON_VICTIM, values)
+    hasTarget -> anonSay(SkillMsg.ANON_ROOM_TARGET, values)
+    else -> anonSay(SkillMsg.ANON_ROOM, values)
+  }
+}
+
+/** The fill values of an anonymous line: the caster's name, the target shown, the action. */
+private class AnonLineValues(val actor: String, val shown: String, val what: String)
+
+/** The damage lines, for a skill with a damage effect. */
+private fun World.anonDamageLine(
+  key: String,
+  hasTarget: Boolean,
+  values: AnonLineValues,
+  damageType: Pair<String, String>?,
+): String? {
+  if (damageType == null) return null
+  if (key == "victim") return anonSay(SkillMsg.ANON_VICTIM_DAMAGE, values, damageType)
+  if (key == "room" && hasTarget) return anonSay(SkillMsg.ANON_ROOM_DAMAGE, values, damageType)
+  return null
+}
+
+/** The skill's own harm or aid line, for the keys that have one. */
+private fun World.anonSkillLine(
+  skill: SkillProto,
+  key: String,
+  hasTarget: Boolean,
+  values: AnonLineValues,
+): String? =
   when (skill.target) {
     TargetKind.ENEMY ->
       when {
-        key == "victim" -> return say(SkillMsg.ANON_VICTIM_HARM)
-        key == "room" && hasTarget -> return say(SkillMsg.ANON_ROOM_HARM)
-        key == "resisted_victim" -> return say(SkillMsg.ANON_RESISTED_VICTIM)
-        key == "resisted_room" -> return say(SkillMsg.ANON_RESISTED_ROOM)
+        key == "victim" -> anonSay(SkillMsg.ANON_VICTIM_HARM, values)
+        key == "room" && hasTarget -> anonSay(SkillMsg.ANON_ROOM_HARM, values)
+        key == "resisted_victim" -> anonSay(SkillMsg.ANON_RESISTED_VICTIM, values)
+        key == "resisted_room" -> anonSay(SkillMsg.ANON_RESISTED_ROOM, values)
+        else -> null
       }
     TargetKind.ALLY,
     TargetKind.SELF ->
       when {
-        key == "victim" -> return say(SkillMsg.ANON_VICTIM_AID)
-        key == "room" && hasTarget -> return say(SkillMsg.ANON_ROOM_AID)
+        key == "victim" -> anonSay(SkillMsg.ANON_VICTIM_AID, values)
+        key == "room" && hasTarget -> anonSay(SkillMsg.ANON_ROOM_AID, values)
+        else -> null
       }
-    else -> {}
+    else -> null
   }
-  return when {
-    key == "victim" -> say(SkillMsg.ANON_VICTIM)
-    hasTarget -> say(SkillMsg.ANON_ROOM_TARGET)
-    else -> say(SkillMsg.ANON_ROOM)
-  }
-}
 
-/**
- * Reports a resolved cast to the global on_skill_use hook: once per resolve, only while the user is
- * still in the world. A cast aimed at the user carries no target.
- */
-private fun World.reportCastUse(
-  actor: Actor,
-  skill: SkillProto,
-  target: Actor?,
-  item: Item?,
-  outcome: String,
-  landed: List<Actor>,
-) {
-  if (!actor.inWorld) return
-  dispatchSkillUse(actor, skill, target?.takeIf { it !== actor }, item, outcome, landed)
+private fun World.anonSay(
+  m: Msg,
+  values: AnonLineValues,
+  vararg extra: Pair<String, Any?>,
+): String {
+  val args = mutableListOf<Pair<String, Any?>>("actor" to values.actor)
+  if ("target" in m.placeholders) args += "target" to values.shown
+  if ("what" in m.placeholders) args += "what" to values.what
+  args += extra
+  return msg(m, *args.toTypedArray())
 }
 
 /**
