@@ -20,6 +20,7 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
@@ -119,6 +120,7 @@ class OperationsTest {
     repo: Repo,
     force: Boolean = false,
     stallMs: Long? = null,
+    nanoTime: () -> Long = System::nanoTime,
     play: (Running) -> Unit,
   ) {
     val logs = StringBuffer()
@@ -130,7 +132,9 @@ class OperationsTest {
         stallMs = stallMs ?: 5_000L,
       )
     val server =
-      GupsServer(WorldDir(repo.world), port = 0, prod = prod) { logs.append(it).append('\n') }
+      GupsServer(WorldDir(repo.world), port = 0, prod = prod, nanoTime = nanoTime) {
+        logs.append(it).append('\n')
+      }
     assertTrue(server.boot(), logs.toString())
     val ready = CompletableFuture<Int>()
     val runner = thread { runBlocking(Dispatchers.Default) { server.run { ready.complete(it) } } }
@@ -375,7 +379,9 @@ class OperationsTest {
   @Test
   fun `metrics have the spec's names after one pulse, and healthz fails while the world stalls`() {
     val repo = Repo()
-    withServer(repo, stallMs = 1_000) { r ->
+    // Only the health check reads this clock; it stays still unless the test moves it.
+    val clock = AtomicLong(0)
+    withServer(repo, stallMs = 300, nanoTime = clock::get) { r ->
       r.onWorld { it.pulse }
       var text = get("${r.admin}/metrics").body()
       val seen = System.nanoTime() + 5_000_000_000
@@ -403,29 +409,34 @@ class OperationsTest {
       }
       assertEquals(401, get("${r.admin}/metrics", auth = false).statusCode())
 
-      // A loaded machine can miss the stall window on its own, so wait for a healthy baseline.
-      var health = get("${r.admin}/healthz", auth = false)
-      val healthy = System.nanoTime() + 30_000_000_000
-      while (health.statusCode() != 200 && System.nanoTime() < healthy) {
-        Thread.sleep(20)
-        health = get("${r.admin}/healthz", auth = false)
-      }
+      val health = get("${r.admin}/healthz", auth = false)
       assertEquals(200, health.statusCode())
       assertContains(health.body(), "\"writer_healthy\":true")
+
+      val entered = CountDownLatch(1)
       val release = CountDownLatch(1)
       // The timeout only keeps a failed test from wedging the world forever.
-      r.server.world.post!!(WorldControlEvent.Task { release.await(60, TimeUnit.SECONDS) })
-      var status = 200
-      try {
-        val deadline = System.nanoTime() + 30_000_000_000
-        while (status == 200 && System.nanoTime() < deadline) {
-          Thread.sleep(50)
-          status = get("${r.admin}/healthz", auth = false).statusCode()
+      r.server.world.post!!(
+        WorldControlEvent.Task {
+          entered.countDown()
+          release.await(60, TimeUnit.SECONDS)
         }
-        assertEquals(503, status, "a stalled world thread is unhealthy")
+      )
+      try {
+        assertTrue(entered.await(30, TimeUnit.SECONDS), "the world thread took the task")
+        clock.addAndGet(299_000_000)
+        assertEquals(200, get("${r.admin}/healthz", auth = false).statusCode())
+        clock.addAndGet(2_000_000)
+        assertEquals(
+          503,
+          get("${r.admin}/healthz", auth = false).statusCode(),
+          "a stalled world thread is unhealthy",
+        )
       } finally {
         release.countDown()
       }
+      // Waits for the next pulse to happen, not for time to pass: the clock no longer moves.
+      var status = 503
       val recovery = System.nanoTime() + 30_000_000_000
       while (status != 200 && System.nanoTime() < recovery) {
         Thread.sleep(20)

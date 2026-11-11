@@ -118,6 +118,8 @@ class GupsServer(
   private val docsPort: Int? = null,
   /** `--wipe`: delete every character and item, record the schema, and boot like `--fresh`. */
   private val wipe: Boolean = false,
+  /** The clock `/healthz` measures stalls and uptime with; the world loop keeps real time. */
+  private val nanoTime: () -> Long = System::nanoTime,
   private val log: (String) -> Unit = { System.err.println(it) },
 ) {
   private var persistence: SqlitePersistence? = null
@@ -128,9 +130,9 @@ class GupsServer(
   /** The world's plugins, loaded once at boot; closed when the server stops. */
   private var plugins: PluginHost? = null
   private var metrics: Metrics? = null
-  private val startedNanos = System.nanoTime()
+  private val startedNanos = nanoTime()
 
-  @Volatile private var lastPulseNanos = System.nanoTime()
+  @Volatile private var lastPulseNanos = nanoTime()
 
   @Volatile private var lastPulse = 0L
   private val background = Dispatchers.IO.limitedParallelism(BACKGROUND_THREADS).asExecutor()
@@ -345,7 +347,7 @@ class GupsServer(
     val m = Metrics(world, saved?.writer) { loop.overruns }
     metrics = m
     world.onPulse = { nanos ->
-      lastPulseNanos = System.nanoTime()
+      lastPulseNanos = nanoTime()
       lastPulse = world.pulse
       m.pulsed(nanos)
     }
@@ -484,11 +486,11 @@ class GupsServer(
     object : gups.net.Admin {
       override fun health(): Pair<Boolean, Map<String, Any?>> {
         val writerOk = persistence?.writer?.healthy ?: true
-        val stalled = System.nanoTime() - lastPulseNanos > (prod?.stallMs ?: STALL_MS) * 1_000_000
+        val stalled = nanoTime() - lastPulseNanos > (prod?.stallMs ?: STALL_MS) * 1_000_000
         return (writerOk && !stalled) to
           mapOf(
             "pulse" to lastPulse,
-            "uptime_s" to (System.nanoTime() - startedNanos) / 1_000_000_000,
+            "uptime_s" to (nanoTime() - startedNanos) / 1_000_000_000,
             "writer_healthy" to writerOk,
           )
       }
