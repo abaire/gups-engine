@@ -74,6 +74,9 @@ class OperationsTest {
     private fun identity(dir: Path) {
       git(dir, "config", "user.email", "dev@example.com")
       git(dir, "config", "user.name", "Dev")
+      // Git's detached background maintenance after a commit races with tests that scan the tree.
+      git(dir, "config", "gc.auto", "0")
+      git(dir, "config", "maintenance.auto", "false")
     }
 
     /** Commits [change] in the developer's clone, pushes it to [branch], and returns the commit. */

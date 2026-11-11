@@ -11,8 +11,12 @@ import gups.core.model.RoomProto
 import gups.core.model.SkillProto
 import gups.core.world.HookName
 import gups.core.world.Lane
+import java.io.IOException
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.name
@@ -28,15 +32,30 @@ class WorldDir(root: Path) {
   /** Every package path under [root], sorted. Hidden and `build` directories are skipped. */
   fun packages(): List<String> {
     if (!root.isDirectory()) return emptyList()
-    Files.walk(root).use { paths ->
-      return paths
-        .filter { it.name == PACKAGE_FILE && it.isRegularFile() }
-        .map { root.relativize(it.parent).joinToString("/") }
-        .filter { p -> p.isNotEmpty() && p.split('/').none { it.startsWith(".") || it == "build" } }
-        .filter { PACKAGE_PATH.matches(it) }
-        .sorted()
-        .toList()
-    }
+    val found = mutableListOf<String>()
+    // Skipped directories are pruned rather than filtered afterwards: `.git` and `.gups` change
+    // under a live world (git's background maintenance, the database), and a walk that enters them
+    // can fail on a file that vanishes mid-scan.
+    Files.walkFileTree(
+      root,
+      object : SimpleFileVisitor<Path>() {
+        override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult =
+          if (dir != root && (dir.name.startsWith(".") || dir.name == "build"))
+            FileVisitResult.SKIP_SUBTREE
+          else FileVisitResult.CONTINUE
+
+        override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+          if (file.name == PACKAGE_FILE && file.isRegularFile()) {
+            found += root.relativize(file.parent).joinToString("/")
+          }
+          return FileVisitResult.CONTINUE
+        }
+
+        override fun visitFileFailed(file: Path, exc: IOException): FileVisitResult =
+          FileVisitResult.CONTINUE
+      },
+    )
+    return found.filter { it.isNotEmpty() && PACKAGE_PATH.matches(it) }.sorted()
   }
 
   fun packageDir(pkg: String): Path = root.resolve(pkg)

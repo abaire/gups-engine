@@ -2,6 +2,7 @@ package gups.persist
 
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,14 +19,18 @@ class WriterTest {
   @Test
   fun `periodic batches merge while waiting, immediate ones never do, all in FIFO order`() {
     val gate = CountDownLatch(1)
+    val started = CountDownLatch(1)
     val written = mutableListOf<Batch>()
     val w =
       CheckpointWriter({ b ->
+        started.countDown()
         gate.await(5, TimeUnit.SECONDS)
         synchronized(written) { written += b }
       })
     w.submit(batch(false, 1, 1))
-    Thread.sleep(50) // the first batch is now in flight and must not be merged into
+    // Once the writer is inside the first write, that batch is in flight and must not be merged
+    // into.
+    assertTrue(started.await(10, TimeUnit.SECONDS))
     w.submit(batch(false, 2, 1, 2))
     w.submit(batch(false, 3, 2))
     w.submit(batch(true, 4, 3))
@@ -50,17 +55,20 @@ class WriterTest {
 
   @Test
   fun `a failing write is retried, stays pending, and later captures merge into it`() {
-    var failures = 3
+    val failing = AtomicBoolean(true)
     val written = mutableListOf<Batch>()
     val w =
       CheckpointWriter({ b ->
-        if (failures-- > 0) error("disk full")
-        written += b
+        if (failing.get()) error("disk full")
+        synchronized(written) { written += b }
       })
     w.submit(batch(false, 1, 1))
-    Thread.sleep(20)
+    // The writer thread may take arbitrarily long to get its first attempt in on a busy runner.
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+    while (w.healthy && System.nanoTime() < deadline) Thread.sleep(5)
     assertFalse(w.healthy)
     w.submit(batch(false, 2, 2))
+    failing.set(false)
     assertTrue(w.flush())
     assertTrue(w.healthy)
     assertEquals(1, written.size, "the retried batch absorbed the later capture")

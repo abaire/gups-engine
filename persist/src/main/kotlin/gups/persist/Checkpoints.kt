@@ -226,10 +226,11 @@ class CheckpointWriter(
           queue.removeFirst()
           inFlight = null
           committed++
+          // Health flips before flush() can observe the empty queue.
+          healthy = true
+          lastError = null
           changed.signalAll()
         }
-        healthy = true
-        lastError = null
         backoff = 50L
         onCommit?.invoke(b, System.nanoTime() - started)
       } catch (e: Exception) {
