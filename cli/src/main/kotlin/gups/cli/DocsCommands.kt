@@ -98,7 +98,10 @@ class Docs : CliktCommand(name = "docs") {
       throw UsageError("--out: give a directory for the HTML reference, not ${dir.name}")
     val (plugins, spec) = world?.let(::loadWorldDocs) ?: (emptyList<PluginDocSpec>() to null)
     val files =
-      DocsRenderer.render(ScriptApi.model(HarnessApi.specs()), plugins = plugins, world = spec)
+      DocsRenderer.render(
+        ScriptApi.model(HarnessApi.specs()),
+        RenderOptions(plugins = plugins, world = spec),
+      )
     dir.mkdirs()
     for ((name, text) in files) dir.resolve(name).writeText(text, Charsets.UTF_8)
     echo("Wrote the API reference (api_version ${EngineInfo.API_VERSION}) to $dir")

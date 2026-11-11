@@ -231,12 +231,10 @@ class GupsServer(
     val result = loader.load(packages)
     for (e in result.errors) log("load error: ${e.render()}")
     docs =
-      DocsRenderer.render(
-          ScriptApi.model(HarnessApi.specs()),
-          plugins = plugins.describe().map(::toDocSpec),
-          world = worldDocSpec(module, messages, scriptGmcpPackages(result)),
-        )
-        .mapValues { it.value.toByteArray(Charsets.UTF_8) }
+      docsBytes(
+        plugins.describe().map(::toDocSpec),
+        worldDocSpec(module, messages, scriptGmcpPackages(result)),
+      )
     val protos = result.prototypes()
     if (protos.rooms.isEmpty()) {
       log("No package loaded any rooms; nothing to play.")
@@ -401,6 +399,17 @@ class GupsServer(
     )
     return true
   }
+
+  /** The reference for `/docs/`, this world's plugins and message overrides included. */
+  private fun docsBytes(
+    plugins: List<PluginDocSpec>,
+    world: WorldDocSpec?,
+  ): Map<String, ByteArray> =
+    DocsRenderer.render(
+        ScriptApi.model(HarnessApi.specs()),
+        RenderOptions(plugins = plugins, world = world),
+      )
+      .mapValues { it.value.toByteArray(Charsets.UTF_8) }
 
   /**
    * Reads CODEOWNERS and replaces every account's builder scope. Runs at startup; deploys will run

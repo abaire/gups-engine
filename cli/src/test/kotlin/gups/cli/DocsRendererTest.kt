@@ -36,7 +36,9 @@ class DocsRendererTest {
     val page =
       DocsRenderer.render(
           full,
-          changelogMarkdown = "# Changelog\n\n## Unreleased\n\n- Rooms can be **dark**.\n",
+          RenderOptions(
+            changelogMarkdown = "# Changelog\n\n## Unreleased\n\n- Rooms can be **dark**.\n"
+          ),
         )
         .getValue("changelog.html")
     assertContains(page, "<h2 id=\"unreleased\">Unreleased</h2>")
@@ -101,8 +103,10 @@ class DocsRendererTest {
     val page =
       DocsRenderer.render(
         model,
-        changelogMarkdown = "# $nasty\n\n## api_version 1\n\n$nasty\n",
-        examples = emptyMap(),
+        RenderOptions(
+          changelogMarkdown = "# $nasty\n\n## api_version 1\n\n$nasty\n",
+          examples = emptyMap(),
+        ),
       )
     val escaped = "&lt;b&gt;Tom &amp; &quot;Jerry&quot;&lt;/b&gt;"
     assertContains(page.getValue("declarations.html"), "<p>$escaped</p>")
@@ -234,7 +238,16 @@ class DocsRendererTest {
           ),
         steps = listOf(PluginStepDocSpec("stats", "Attribute Assignment")),
       )
-    val pages = DocsRenderer.render(full, "", listOf(heritage), emptyMap(), "# Guide\n")
+    val pages =
+      DocsRenderer.render(
+        full,
+        RenderOptions(
+          changelogMarkdown = "",
+          plugins = listOf(heritage),
+          examples = emptyMap(),
+          pluginGuide = "# Guide\n",
+        ),
+      )
     val html = pages.getValue("plugins.html")
     assertContains(html, "<article id=\"plugin-heritage.trait-elf\">")
     assertContains(html, "<tr id=\"plugin-heritage.restrict-wear-1\">")
@@ -261,7 +274,16 @@ class DocsRendererTest {
             PluginFilterDocSpec("Blocks heat behind insulated containers."),
           ),
       )
-    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val pages =
+      DocsRenderer.render(
+        full,
+        RenderOptions(
+          changelogMarkdown = "",
+          plugins = listOf(plugin),
+          examples = emptyMap(),
+          pluginGuide = "# Guide\n",
+        ),
+      )
     val html = pages.getValue("plugins.html")
     assertContains(html, "<h3>Containment filters</h3>")
     assertContains(html, "<tr id=\"plugin-ward.filter-1\">")
@@ -282,7 +304,16 @@ class DocsRendererTest {
             PluginOwnedBehaviorsDocSpec("Adds guard."),
           ),
       )
-    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val pages =
+      DocsRenderer.render(
+        full,
+        RenderOptions(
+          changelogMarkdown = "",
+          plugins = listOf(plugin),
+          examples = emptyMap(),
+          pluginGuide = "# Guide\n",
+        ),
+      )
     val html = pages.getValue("plugins.html")
     assertContains(html, "<h3>Owned behaviors</h3>")
     assertContains(html, "<tr id=\"plugin-pack.owned-behaviors-1\">")
@@ -303,7 +334,16 @@ class DocsRendererTest {
             PluginDispositionModifierDocSpec("Penalizes dishonor."),
           ),
       )
-    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val pages =
+      DocsRenderer.render(
+        full,
+        RenderOptions(
+          changelogMarkdown = "",
+          plugins = listOf(plugin),
+          examples = emptyMap(),
+          pluginGuide = "# Guide\n",
+        ),
+      )
     val html = pages.getValue("plugins.html")
     assertContains(html, "<h3>Disposition modifiers</h3>")
     assertContains(html, "<tr id=\"plugin-honor.disposition-1\">")
@@ -324,7 +364,16 @@ class DocsRendererTest {
             PluginFactionAdjusterDocSpec("Adds merchants guild."),
           ),
       )
-    val pages = DocsRenderer.render(full, "", listOf(plugin), emptyMap(), "# Guide\n")
+    val pages =
+      DocsRenderer.render(
+        full,
+        RenderOptions(
+          changelogMarkdown = "",
+          plugins = listOf(plugin),
+          examples = emptyMap(),
+          pluginGuide = "# Guide\n",
+        ),
+      )
     val html = pages.getValue("plugins.html")
     assertContains(html, "<h3>Faction adjusters</h3>")
     assertContains(html, "<tr id=\"plugin-guild.factions-1\">")
@@ -461,9 +510,9 @@ class DocsRendererTest {
         hooks = listOf(PluginHookDocSpec("shop_price", "Raises prices for the plugin's wares.")),
         steps = listOf(PluginStepDocSpec("stats", "Attribute Assignment")),
       )
-    val examples: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
+    val ex: Map<String, DocExample> = mapOf("heal" to DocExamples.ALL.getValue("heal"))
     val guide = "# Writing Plugins\n\nA plugin is a `.jar`.\n"
-    val actual = DocsRenderer.render(small, changelog, listOf(plugin), examples, guide)
+    val actual = DocsRenderer.render(small, RenderOptions(changelog, listOf(plugin), ex, guide))
 
     val dir = File(System.getProperty("gups.docsGolden"))
     if (System.getProperty("gups.updateGolden") == "true") {
