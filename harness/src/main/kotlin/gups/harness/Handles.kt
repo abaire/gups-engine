@@ -6,6 +6,7 @@ import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.Actor
 import gups.core.model.CreationAttempt
+import gups.core.model.CreationProvider
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
@@ -213,97 +214,9 @@ internal constructor(
     val room = roomArg(at, "spawn_player(at)", thread)
     val overrideVitals = vitalsValue(vitals, "spawn_player(vitals)")
     val overrideStats = statsValue(stats, "spawn_player(stats)")
-    val supports: Set<String> =
-      if (isNone(gmcp)) emptySet()
-      else
-        (gmcp as? List<*> ?: evalFail("spawn_player(gmcp): expected a list of GMCP package names"))
-          .map { str(it, "spawn_player(gmcp)") }
-          .toSet()
-    val choicesMap = LinkedHashMap<String, String>()
-    if (!isNone(choices)) {
-      val dict = choices as? Dict<*, *> ?: evalFail("spawn_player(choices): expected a dict")
-      for ((k, v) in dict.entries) {
-        choicesMap[str(k, "spawn_player(choices)")] = str(v, "spawn_player(choices)")
-      }
-      val creation = world.creation
-      if (creation != null) {
-        val answersSoFar = LinkedHashMap<String, String>()
-        for (c in creation.choices) {
-          val chosen = choicesMap[c.id] ?: continue
-          if (c.options.none { it.id == chosen }) {
-            evalFail("spawn_player(choices): '$chosen' is not an option for choice '${c.id}'")
-          }
-          val avail =
-            try {
-              creation.available(world, c.id, answersSoFar)
-            } catch (e: Exception) {
-              evalFail("spawn_player(choices): creation provider failed: ${e.message}")
-            }
-          if (chosen !in avail) {
-            evalFail(
-              "spawn_player(choices): option '$chosen' is not available for choice '${c.id}'"
-            )
-          }
-          answersSoFar[c.id] = chosen
-        }
-        val err =
-          try {
-            creation.validate(world, choicesMap)
-          } catch (e: Exception) {
-            evalFail("spawn_player(choices): creation provider failed: ${e.message}")
-          }
-        if (err != null) {
-          evalFail("spawn_player(choices): $err")
-        }
-      } else if (choicesMap.isNotEmpty()) {
-        evalFail("spawn_player(choices): world has no character creation provider")
-      }
-    }
-    var attempt: CreationAttempt? = null
-    if (!isNone(steps)) {
-      val creation =
-        world.creation ?: evalFail("spawn_player(steps): world has no character creation provider")
-      val stepsDict = steps as? Dict<*, *> ?: evalFail("spawn_player(steps): expected a dict")
-      val playerName = str(name, "spawn_player(name)")
-      val att =
-        CreationAttempt(playerName, CreationAttempt.nameKey(playerName), 0, world.config.seed)
-      att.start = room.label
-      att.answers.putAll(choicesMap)
-
-      val stepLines = LinkedHashMap<String, List<String>>()
-      for ((k, v) in stepsDict.entries) {
-        val stepId = str(k, "spawn_player(steps)")
-        val lines =
-          (v as? Sequence<*>
-              ?: v as? List<*>
-              ?: evalFail("spawn_player(steps): expected a list of strings for step '$stepId'"))
-            .map { str(it, "spawn_player(steps)") }
-        stepLines[stepId] = lines
-      }
-
-      for ((stepId, _) in stepLines) {
-        val step = creation.steps.firstOrNull { it.id == stepId }
-        val applies =
-          try {
-            step?.applies(world, att) == true
-          } catch (e: Exception) {
-            evalFail("spawn_player(steps): step '$stepId' failed: ${e.message}")
-          }
-        if (!applies) {
-          evalFail("spawn_player(steps): step '$stepId' doesn't apply")
-        }
-      }
-
-      val outcome = world.runStepsHeadless(att) { stepId -> stepLines[stepId] ?: emptyList() }
-      when (outcome) {
-        is HeadlessSteps.Finished -> {}
-        is HeadlessSteps.Unfinished ->
-          evalFail("spawn_player(steps): step '${outcome.stepId}' isn't done after its lines")
-        is HeadlessSteps.Failed ->
-          evalFail("spawn_player(steps): step '${outcome.stepId}' failed: ${outcome.error.message}")
-      }
-      attempt = att
-    }
+    val supports = gmcpPackages(gmcp)
+    val choicesMap = validatedChoices(choices, "spawn_player(choices)") ?: emptyMap()
+    val attempt = runCreationSteps(steps, name, room, choicesMap)
     val p =
       guard("spawn_player") {
         world.spawnPlayer(
@@ -316,26 +229,156 @@ internal constructor(
           attempt = attempt,
         )
       }
-    if (attempt?.prepareError != null) {
+    if (attempt?.prepareError != null)
       evalFail("spawn_player(steps): prepare failed: ${attempt.prepareError!!.message}")
-    }
     // The harness has no idle clock; tests may run for hours of game time.
     p.idleExempt = true
-    if (!isNone(skills)) {
-      for ((k, v) in
-        (skills as? Dict<*, *> ?: evalFail("spawn_player(skills): expected a dict")).entries) {
-        val skill = label(str(k, "spawn_player(skills)"), pkgOf(thread), "spawn_player(skills)")
-        if (skill !in world.protos.skills)
-          evalFail("spawn_player(skills): there is no skill $skill")
-        p.skills[skill] = int(v, "spawn_player(skills)")
-      }
+    applySkills(skills, p, thread)
+    val sink = connect(p, supports)
+    return PlayerHandle(this, p, sink)
+  }
+
+  /** The GMCP packages a test client supports, or an empty set when None. */
+  private fun gmcpPackages(gmcp: Any): Set<String> =
+    if (isNone(gmcp)) emptySet()
+    else
+      (gmcp as? List<*> ?: evalFail("spawn_player(gmcp): expected a list of GMCP package names"))
+        .map { str(it, "spawn_player(gmcp)") }
+        .toSet()
+
+  /** The choices dict as a map, checked against the world's creation provider, or None. */
+  private fun validatedChoices(choices: Any, what: String): Map<String, String>? {
+    if (isNone(choices)) return null
+    val dict = choices as? Dict<*, *> ?: evalFail("$what: expected a dict")
+    val answers = LinkedHashMap<String, String>()
+    for ((k, v) in dict.entries) {
+      answers[str(k, what)] = str(v, what)
     }
+    val creation = world.creation
+    if (creation == null && answers.isNotEmpty())
+      evalFail("$what: world has no character creation provider")
+    if (creation == null) return answers
+    validateCreation(creation, answers, what)
+    return answers
+  }
+
+  /** Each answer checked against its choice and availability, then the whole map validated. */
+  private fun validateCreation(
+    creation: CreationProvider,
+    answers: Map<String, String>,
+    what: String,
+  ) {
+    val chosenSoFar = LinkedHashMap<String, String>()
+    for (c in creation.choices) {
+      val chosen = answers[c.id] ?: continue
+      if (c.options.none { it.id == chosen })
+        evalFail("$what: '$chosen' is not an option for choice '${c.id}'")
+      val avail =
+        try {
+          creation.available(world, c.id, chosenSoFar)
+        } catch (e: Exception) {
+          evalFail("$what: creation provider failed: ${e.message}")
+        }
+      if (chosen !in avail)
+        evalFail("$what: option '$chosen' is not available for choice '${c.id}'")
+      chosenSoFar[c.id] = chosen
+    }
+    val err =
+      try {
+        creation.validate(world, answers)
+      } catch (e: Exception) {
+        evalFail("$what: creation provider failed: ${e.message}")
+      }
+    if (err != null) evalFail("$what: $err")
+  }
+
+  /**
+   * The character-creation attempt produced by running the provider's custom steps with the given
+   * lines, or None when steps is None. Fails if a step doesn't apply or its lines don't finish it.
+   */
+  private fun runCreationSteps(
+    steps: Any,
+    name: Any,
+    room: Room,
+    choices: Map<String, String>,
+  ): CreationAttempt? {
+    if (isNone(steps)) return null
+    val creation =
+      world.creation ?: evalFail("spawn_player(steps): world has no character creation provider")
+    val stepsDict = steps as? Dict<*, *> ?: evalFail("spawn_player(steps): expected a dict")
+    val playerName = str(name, "spawn_player(name)")
+    val attempt =
+      CreationAttempt(playerName, CreationAttempt.nameKey(playerName), 0, world.config.seed)
+    attempt.start = room.label
+    attempt.answers.putAll(choices)
+
+    val stepLines = parseStepLines(stepsDict)
+    checkStepsApply(creation, stepLines, attempt)
+    val outcome = world.runStepsHeadless(attempt) { stepId -> stepLines[stepId] ?: emptyList() }
+    when (outcome) {
+      is HeadlessSteps.Finished -> {}
+      is HeadlessSteps.Unfinished ->
+        evalFail("spawn_player(steps): step '${outcome.stepId}' isn't done after its lines")
+      is HeadlessSteps.Failed ->
+        evalFail("spawn_player(steps): step '${outcome.stepId}' failed: ${outcome.error.message}")
+    }
+    return attempt
+  }
+
+  /** The lines a test sends for each step, keyed by step id. */
+  private fun parseStepLines(stepsDict: Dict<*, *>): Map<String, List<String>> {
+    val stepLines = LinkedHashMap<String, List<String>>()
+    for ((k, v) in stepsDict.entries) {
+      val stepId = str(k, "spawn_player(steps)")
+      val lines =
+        (v as? Sequence<*>
+            ?: v as? List<*>
+            ?: evalFail("spawn_player(steps): expected a list of strings for step '$stepId'"))
+          .map { str(it, "spawn_player(steps)") }
+      stepLines[stepId] = lines
+    }
+    return stepLines
+  }
+
+  /** Every step the test named must apply to the attempt, or the test fails. */
+  private fun checkStepsApply(
+    creation: CreationProvider,
+    stepLines: Map<String, List<String>>,
+    attempt: CreationAttempt,
+  ) {
+    for ((stepId, _) in stepLines) {
+      val step = creation.steps.firstOrNull { it.id == stepId }
+      val applies =
+        try {
+          step?.applies(world, attempt) == true
+        } catch (e: Exception) {
+          evalFail("spawn_player(steps): step '$stepId' failed: ${e.message}")
+        }
+      if (!applies) evalFail("spawn_player(steps): step '$stepId' doesn't apply")
+    }
+  }
+
+  /** The known skills from a dict mapping skill label to proficiency, or nothing when None. */
+  private fun applySkills(skills: Any, p: Player, thread: StarlarkThread) {
+    if (isNone(skills)) return
+    for ((k, v) in
+      (skills as? Dict<*, *> ?: evalFail("spawn_player(skills): expected a dict")).entries) {
+      val skill = label(str(k, "spawn_player(skills)"), pkgOf(thread), "spawn_player(skills)")
+      if (skill !in world.protos.skills) evalFail("spawn_player(skills): there is no skill $skill")
+      p.skills[skill] = int(v, "spawn_player(skills)")
+    }
+  }
+
+  /**
+   * Connects the player to the world, fires the creation provider's created, and returns the sink.
+   */
+  private fun connect(p: Player, supports: Set<String>): CapturingSink {
     val sink = CapturingSink(supports)
     val id = SessionId(nextSession++)
     world.handle(WorldControlEvent.Connect(id, sink))
     world.attach(id, p)
     world.creation?.created(world, p, newCharacter = true)
-    return PlayerHandle(this, p, sink)
+    return sink
   }
 
   @StarlarkMethod(
@@ -813,13 +856,17 @@ internal constructor(
     val room = Transcript.roomOf(player)
     world.submit(player, text)
     var pulses = 0
-    while (player.inWorld && (player.actionQueue.isNotEmpty() || player.casting != null)) {
+    while (player.inWorld && busy) {
       if (pulses++ >= DO_MAX_PULSES)
         evalFail("do(\"$line\"): still busy after $DO_MAX_PULSES pulses")
       world.runPulse()
     }
     return drain().also { w.transcript?.command(player, room, text, it) }
   }
+
+  /** The player still has queued actions or a cast in flight. */
+  private val busy: Boolean
+    get() = player.actionQueue.isNotEmpty() || player.casting != null
 
   @StarlarkMethod(name = "output", doc = "Output received since the last do() or output().")
   fun output(): Any = drain().also { w.transcript?.output(player, it) }
