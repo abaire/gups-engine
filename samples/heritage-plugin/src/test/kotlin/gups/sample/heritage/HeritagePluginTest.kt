@@ -1,7 +1,6 @@
 package gups.sample.heritage
 
 import gups.core.ClientInputEvent
-import gups.core.OutputSink
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.fixtures.TempFiles
@@ -13,23 +12,10 @@ import gups.harness.Status
 import gups.harness.TestRunner
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginCommandCall
-import gups.pluginapi.PluginCreation
-import gups.pluginapi.PluginEntity
-import gups.pluginapi.PluginGmcpCall
-import gups.pluginapi.PluginItem
-import gups.pluginapi.PluginLane
-import gups.pluginapi.PluginParam
-import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRestrictionCall
 import gups.pluginapi.PluginRestrictionPoint
-import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
-import gups.pluginapi.PluginRoom
-import gups.pluginapi.PluginSchema
-import gups.pluginapi.PluginSkill
 import gups.pluginapi.PluginStepReply
-import gups.pluginapi.PluginTrait
-import gups.pluginapi.PluginWorld
 import gups.pluginapi.host.PluginLoader
 import gups.script.ScriptLimits
 import gups.script.ScriptLoader
@@ -53,358 +39,12 @@ import kotlin.test.assertTrue
 
 class HeritagePluginTest {
 
-  private class FakeRegistry : PluginRegistry {
-    val traits = mutableMapOf<String, PluginTrait>()
-    private var _creation: PluginCreation? = null
-    val creation: PluginCreation?
-      get() = _creation
-
-    val restrictions =
-      mutableMapOf<
-        PluginRestrictionPoint,
-        MutableList<Pair<String, (PluginRestrictionCall) -> String?>>,
-      >()
-    val builtins = mutableMapOf<String, (PluginWorld, List<Any?>, Map<String, Any?>) -> Any?>()
-    val commands = mutableMapOf<String, (PluginCommandCall) -> Unit>()
-
-    override fun addTrait(trait: PluginTrait) {
-      traits[trait.name] = trait
-    }
-
-    override fun setCreation(creation: PluginCreation) {
-      this._creation = creation
-    }
-
-    override fun addRestriction(
-      point: PluginRestrictionPoint,
-      doc: String,
-      check: (PluginRestrictionCall) -> String?,
-    ) {
-      restrictions.getOrPut(point) { mutableListOf() }.add(doc to check)
-    }
-
-    override fun addContainmentFilter(
-      doc: String,
-      blocks: (gups.pluginapi.PluginContainmentCall) -> Boolean,
-    ) = TODO()
-
-    override fun addTargetOrder(
-      doc: String,
-      choose: (gups.pluginapi.PluginTargetOrderCall) -> gups.pluginapi.PluginTargetChoice,
-    ) = TODO()
-
-    override fun addChainThink(
-      doc: String,
-      decide: (gups.pluginapi.PluginChainThinkCall) -> Boolean,
-    ) = TODO()
-
-    override fun addOwnedBehaviors(
-      doc: String,
-      adjust: (gups.pluginapi.PluginOwnedBehaviorsCall) -> List<Map<String, Any?>>,
-    ) = TODO()
-
-    override fun addDispositionModifier(
-      doc: String,
-      adjust: (gups.pluginapi.PluginDispositionCall) -> Int,
-    ) = TODO()
-
-    override fun addFactions(
-      doc: String,
-      adjust: (gups.pluginapi.PluginFactionsCall) -> List<String>,
-    ) = TODO()
-
-    override fun addHook(
-      name: String,
-      doc: String,
-      handle: (gups.pluginapi.PluginHookCall) -> Any?,
-    ) = TODO()
-
-    override fun addBuiltin(
-      name: String,
-      doc: String,
-      params: List<PluginParam>,
-      returnType: String,
-      call: (world: PluginWorld, positional: List<Any?>, named: Map<String, Any?>) -> Any?,
-    ) {
-      builtins[name] = call
-    }
-
-    override fun addCommand(
-      name: String,
-      lane: PluginLane,
-      role: PluginRole,
-      doc: String,
-      run: (PluginCommandCall) -> Unit,
-    ) {
-      commands[name] = run
-    }
-
-    override fun addBuiltin(
-      name: String,
-      value: net.starlark.java.eval.StarlarkValue,
-      doc: String,
-    ) = TODO()
-
-    override fun addEffectPrimitive(
-      name: String,
-      doc: String,
-      params: List<PluginParam>,
-      apply: gups.pluginapi.PluginEffect,
-    ) = TODO()
-
-    override fun addGmcp(pkg: String, doc: String, produce: (PluginWorld, PluginActor) -> Any?) =
-      TODO()
-
-    override fun addGmcpEvent(pkg: String, doc: String) = TODO()
-
-    override fun onGmcp(pkg: String, doc: String, handle: (PluginGmcpCall) -> Unit) = TODO()
-
-    override fun onWorldStarted(fn: (PluginWorld) -> Unit) = TODO()
-  }
-
-  private class FakeActor(
-    override val name: String = "Tester",
-    override val isPlayer: Boolean = true,
-    override val role: PluginRole = PluginRole.PLAYER,
-    val traitSet: Set<String> = emptySet(),
-    override val choices: Map<String, String> = emptyMap(),
-    override val room: PluginRoom = FakeRoom(),
-    val statValue: Int = 10,
-  ) : PluginActor {
-    override val id = 100L
-    override val label: String? = null
-    override val flags: Set<String> = emptySet()
-    override val traits: List<String> = traitSet.sorted()
-    override val grantedTraits: Set<String> = emptySet()
-    override val skills: Map<String, Int> = emptyMap()
-
-    override fun hasTrait(name: String) = name in traitSet
-
-    override fun stat(name: String) = statValue
-
-    override fun baseStat(name: String) = 10
-
-    override fun vital(name: String) = 20
-
-    override fun maxVital(name: String) = 20
-
-    override fun baseMaxVital(name: String) = 20
-
-    override fun resist(type: String) = 0
-
-    override fun baseResist(type: String) = 0
-
-    override val level = 1
-    override val pendingLevels = 0
-    override val affects = emptyList<String>()
-
-    override fun hasAffect(name: String) = false
-  }
-
-  private class FakeRoom(override val tags: List<String> = emptyList()) : PluginRoom {
-    override val id = 1L
-    override val label = "//zones/test:room"
-    override val name = "Room"
-    override val regions = emptyList<String>()
-    override val flags = emptySet<String>()
-    override val size = "normal"
-    override val exits = emptyMap<String, String>()
-    override val actors = emptyList<PluginActor>()
-    override val items = emptyList<PluginItem>()
-  }
-
-  private class FakeAttempt(
-    override val name: String = "Tester",
-    override val answers: Map<String, String> = emptyMap(),
-    override val seed: Long = 12345L,
-    override val state: MutableMap<String, Any?> = mutableMapOf(),
-    override val preview: PluginActor = FakeActor(),
-  ) : gups.pluginapi.PluginCreationAttempt {
-    override fun rng(stream: Int): PluginRng = TODO()
-  }
-
-  private class FakeItem(override val tags: List<String> = emptyList()) : PluginItem {
-    override val id = 50L
-    override val label = "//zones/test:item"
-    override val name = "Item"
-    override val keywords = listOf("item")
-    override val kind = "armor"
-    override val wear = "body"
-    override val slotCost = 1
-    override val weight = 10
-    override val value = 0
-    override val maxVitalDeltas = emptyMap<String, Int>()
-    override val resistDeltas = emptyMap<String, Int>()
-    override val inactive = false
-    override val plural: String? = null
-    override val charges: Int? = null
-    override val maxCharges: Int? = null
-
-    override fun hasTag(tag: String): Boolean = tag in tags
-
-    override val variants: Map<String, String> = emptyMap()
-    override val affects: List<gups.pluginapi.PluginItemAffect> = emptyList()
-    override val contents: List<PluginItem> = emptyList()
-    override val custodian: PluginActor? = null
-  }
-
-  private class FakeSkill(override val tags: List<String> = emptyList()) : PluginSkill {
-    override val label = "//skills:test"
-    override val name = "Test"
-    override val kind = "spell"
-  }
-
-  private class FakeWorld : PluginWorld {
-    override val pulse = 0L
-    override val seed = 42L
-    override val rng: PluginRng
-      get() = TODO()
-
-    override val schema: PluginSchema
-      get() = TODO()
-
-    val sent = mutableListOf<String>()
-    val setChoicesCalls = mutableListOf<Pair<PluginActor, Map<String, String?>>>()
-    val setBaseStatCalls = mutableListOf<Triple<PluginActor, String, Int>>()
-
-    override fun send(target: PluginActor, text: String) {
-      sent += text
-    }
-
-    override fun gmcp(actor: PluginActor, pkg: String, data: Any?): Boolean = TODO()
-
-    override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
-      setChoicesCalls += actor to changes
-      return null
-    }
-
-    override fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? {
-      setBaseStatCalls += Triple(actor, stat, value)
-      return null
-    }
-
-    override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) = TODO()
-
-    override fun damage(
-      target: PluginActor,
-      amount: Int,
-      type: String,
-      vital: String,
-      source: PluginActor?,
-    ) = TODO()
-
-    override fun heal(target: PluginActor, amount: Int, vital: String) = TODO()
-
-    override fun applyAffect(
-      target: PluginActor,
-      name: String,
-      duration: Int,
-      statDeltas: Map<String, Int>,
-      flags: Set<String>,
-      maxVitalDeltas: Map<String, Int>,
-      resistDeltas: Map<String, Int>,
-    ) = TODO()
-
-    override fun removeAffect(target: PluginActor, name: String) = TODO()
-
-    override fun applyItemAffect(
-      item: PluginItem,
-      name: String,
-      duration: Int?,
-      applies: String,
-      statDeltas: Map<String, Int>,
-      flags: Set<String>,
-      senseDeltas: Map<String, Int>,
-      maxVitalDeltas: Map<String, Int>,
-      resistDeltas: Map<String, Int>,
-    ): Unit = TODO("not used")
-
-    override fun removeItemAffect(item: PluginItem, name: String): Boolean = TODO("not used")
-
-    override fun addTag(item: PluginItem, tag: String): Boolean = TODO("not used")
-
-    override fun removeTag(item: PluginItem, tag: String): Boolean = TODO("not used")
-
-    override fun transform(item: PluginItem, label: String): Unit = TODO("not used")
-
-    override fun setCharges(item: PluginItem, charges: Int): Unit = TODO("not used")
-
-    override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
-
-    override fun getAttr(entity: PluginEntity, key: String, default: Any?) = TODO()
-
-    override fun setAttr(entity: PluginEntity, key: String, value: Any?) = TODO()
-
-    override fun delAttr(entity: PluginEntity, key: String) = TODO()
-
-    override fun grantTrait(actor: PluginActor, trait: String): String? = TODO()
-
-    override fun removeTrait(actor: PluginActor, trait: String): String? = TODO()
-
-    override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? = null
-
-    override fun removeSkill(actor: PluginActor, skill: String) = TODO()
-
-    override fun awardXp(actor: PluginActor, amount: Long) = TODO()
-
-    override fun takeXp(actor: PluginActor, amount: Long): Long = TODO()
-
-    override fun levelUp(actor: PluginActor): Boolean = TODO()
-
-    override fun levelDown(actor: PluginActor, count: Int): Int = TODO()
-
-    override fun disposition(holder: PluginActor, subject: PluginActor): Int = TODO()
-
-    override fun standing(holder: Any, subject: Any): Int = TODO()
-
-    override fun factionsOf(actor: PluginActor): List<String> = TODO()
-
-    override fun raiseStandingEvent(
-      affected: PluginActor,
-      actor: PluginActor,
-      event: String,
-      amount: Long,
-      item: PluginItem?,
-    ) = TODO()
-
-    override fun adjustStanding(holder: Any, subject: Any, amount: Int) = TODO()
-
-    override fun memories(
-      mob: PluginActor,
-      subject: PluginActor?,
-      event: String?,
-      since: Long,
-    ): List<gups.pluginapi.PluginMemory> = TODO()
-
-    override fun remember(
-      mob: PluginActor,
-      subject: PluginActor,
-      event: String,
-      skill: String?,
-      amount: Long,
-      target: PluginActor?,
-    ) = TODO()
-
-    override fun forget(mob: PluginActor, subject: PluginActor?, event: String?): Int = TODO()
-
-    override fun rooms() = emptyList<PluginRoom>()
-
-    override fun room(label: String): PluginRoom? = null
-
-    override fun regions() = emptyList<String>()
-
-    override fun diagnose(message: String) {}
-
-    override fun log(message: String) {}
-  }
-
   // ---- Unit Tests ---------------------------------------------------------------------------
 
   @Test
-  fun `unit - plugin registers all traits, choices and restrictions`() {
-    val plugin = HeritagePlugin()
+  fun `unit - every trait registers its stats, vitals, resistances and modifiers`() {
     val reg = FakeRegistry()
-    plugin.register(reg)
+    HeritagePlugin().register(reg)
 
     assertEquals(setOf("human", "elf", "dwarf", "warrior", "mage", "cleric"), reg.traits.keys)
     val human = reg.traits.getValue("human")
@@ -451,11 +91,10 @@ class HeritagePluginTest {
     assertEquals(mapOf("mana" to 10), cleric.maxVitalDeltas)
     val regenMod = cleric.modifiers[gups.pluginapi.PluginModifierPoint.REGEN]
     assertNotNull(regenMod)
-    val fakeWorld = FakeWorld()
     val modifiedRegen =
       regenMod.modify(
         gups.pluginapi.PluginModifierCall(
-          world = fakeWorld,
+          world = FakeWorld(),
           point = gups.pluginapi.PluginModifierPoint.REGEN,
           actor = FakeActor(),
           other = null,
@@ -465,7 +104,13 @@ class HeritagePluginTest {
         mapOf("hp" to 1L, "mana" to 2L),
       )
     assertEquals(mapOf("hp" to 1L, "mana" to 3L), modifiedRegen)
+  }
 
+  @Test
+  fun `unit - creation offers the right choices and rejects invalid race-class combos`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val fakeWorld = FakeWorld()
     val creation = reg.creation
     assertNotNull(creation)
     assertEquals(listOf("human", "elf", "dwarf"), creation.available(fakeWorld, "race", emptyMap()))
@@ -477,14 +122,18 @@ class HeritagePluginTest {
       listOf("warrior", "cleric"),
       creation.available(fakeWorld, "class", mapOf("race" to "dwarf")),
     )
-
     assertNull(creation.validate(fakeWorld, mapOf("race" to "dwarf", "class" to "warrior")))
     assertEquals(
       "Dwarves cannot be mages.",
       creation.validate(fakeWorld, mapOf("race" to "dwarf", "class" to "mage")),
     )
+  }
 
-    // Test restrictions
+  @Test
+  fun `unit - the wear restriction blocks heavy armor on mages`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val fakeWorld = FakeWorld()
     val wearCheck = reg.restrictions.getValue(PluginRestrictionPoint.WEAR).single().second
     val mageActor = FakeActor(traitSet = setOf("mage"))
     val nonMage = FakeActor(traitSet = setOf("warrior"))
@@ -507,11 +156,19 @@ class HeritagePluginTest {
         PluginRestrictionCall(fakeWorld, PluginRestrictionPoint.WEAR, nonMage, item = heavyArmor)
       )
     )
+  }
 
+  @Test
+  fun `unit - the cast restriction blocks a skill a trait cannot call`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val fakeWorld = FakeWorld()
     val castCheck = reg.restrictions.getValue(PluginRestrictionPoint.CAST).single().second
+    val mageActor = FakeActor(traitSet = setOf("mage"))
+    val nonMage = FakeActor(traitSet = setOf("warrior"))
+    val clericActor = FakeActor(traitSet = setOf("cleric"))
     val arcaneSkill = FakeSkill(tags = listOf("arcane"))
     val divineSkill = FakeSkill(tags = listOf("divine"))
-    val clericActor = FakeActor(traitSet = setOf("cleric"))
 
     assertNull(
       castCheck(
@@ -550,9 +207,18 @@ class HeritagePluginTest {
         )
       ),
     )
+  }
 
+  @Test
+  fun `unit - the enter restriction keeps out non-mages and non-builders`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val fakeWorld = FakeWorld()
     val enterCheck = reg.restrictions.getValue(PluginRestrictionPoint.ENTER).single().second
+    val mageActor = FakeActor(traitSet = setOf("mage"))
+    val nonMage = FakeActor(traitSet = setOf("warrior"))
     val guildMageRoom = FakeRoom(tags = listOf("guild_mage"))
+
     assertNull(
       enterCheck(
         PluginRestrictionCall(
@@ -574,7 +240,6 @@ class HeritagePluginTest {
         )
       ),
     )
-
     val builderActor = FakeActor(role = PluginRole.BUILDER, traitSet = setOf("warrior"))
     assertNull(
       enterCheck(
@@ -586,8 +251,13 @@ class HeritagePluginTest {
         )
       )
     )
+  }
 
-    // Command heritage
+  @Test
+  fun `unit - the heritage command reports a player's race and class`() {
+    val reg = FakeRegistry()
+    HeritagePlugin().register(reg)
+    val fakeWorld = FakeWorld()
     val heritageCmd = reg.commands.getValue("heritage")
     val p1 = FakeActor(choices = mapOf("race" to "elf", "class" to "mage"))
     heritageCmd(PluginCommandCall(fakeWorld, p1, ""))
@@ -610,11 +280,26 @@ class HeritagePluginTest {
   @Test
   fun `the built heritage jar runs through TestRunner in fixture world`() {
     val tmp = TempFiles.dir("gups-heritage")
-    val jar = tmp.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
+    writeFixtureWorld(tmp)
+    val dir = WorldDir(tmp)
+    val (module, error) = WorldModule.read(dir)
+    assertNull(error)
+    PluginLoader.load(dir, module).use { host ->
+      assertEquals(emptyList(), host.warnings)
+      val report = TestRunner(dir, plugins = host).run(listOf("//zones/heritage_zone"))
+      assertEquals(emptyList(), report.problems)
+      assertEquals(4, report.results.size, report.results.joinToString("\n"))
+      for (r in report.results) assertEquals(Status.PASS, r.status, "${r.name}: ${r.message}")
+    }
+  }
+
+  /** Writes a fixture world that pins the heritage jar and carries the zone, skills and rules. */
+  private fun writeFixtureWorld(root: Path) {
+    val jar = root.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.heritageJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
     write(
-      tmp,
+      root,
       "MODULE.gups",
       schema.replaceFirst(
         "module(",
@@ -624,11 +309,11 @@ class HeritagePluginTest {
     val rules = Path.of(System.getProperty("gups.templateWorld")).resolve("rules")
     Files.list(rules)
       .use { s -> s.toList() }
-      .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
-    TestWorlds.makeSpellsLand(tmp.resolve("rules"))
+      .forEach { it.copyTo(root.resolve("rules").createDirectories().resolve(it.fileName)) }
+    TestWorlds.makeSpellsLand(root.resolve("rules"))
 
     write(
-      tmp,
+      root,
       "rules/respec.star",
       """
       def _respec(ctx):
@@ -638,19 +323,28 @@ class HeritagePluginTest {
       """,
     )
 
-    write(tmp, "skills/package.star", """package(api_version = 1, kind = "skills")""")
+    writeFixtureSkills(root)
+    writeFixtureZone(root)
+  }
+
+  /** Writes the skills package the fixture zone depends on, with an arcane and a divine skill. */
+  private fun writeFixtureSkills(root: Path) {
+    write(root, "skills/package.star", """package(api_version = 1, kind = "skills")""")
     write(
-      tmp,
+      root,
       "skills/skills.star",
       """
       skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"])
       skill("minor_heal", kind = "spell", target = "self", tags = ["divine"])
       """,
     )
+  }
 
-    write(tmp, "zones/heritage_zone/package.star", """package(api_version = 1, kind = "zone")""")
+  /** Writes the heritage zone's rooms, items and mobs plus the scenarios that exercise it. */
+  private fun writeFixtureZone(root: Path) {
+    write(root, "zones/heritage_zone/package.star", """package(api_version = 1, kind = "zone")""")
     write(
-      tmp,
+      root,
       "zones/heritage_zone/content.star",
       """
       room("square", name = "Town Square", desc = "Central square.", exits = [exit("north", ":guild_mage")])
@@ -664,7 +358,7 @@ class HeritagePluginTest {
       """,
     )
     write(
-      tmp,
+      root,
       "zones/heritage_zone/heritage_test.star",
       """
       def test_mage_restrictions_and_skills(t):
@@ -721,41 +415,61 @@ class HeritagePluginTest {
           t.false(p.has_trait("cleric"))
       """,
     )
-
-    val dir = WorldDir(tmp)
-    val (module, error) = WorldModule.read(dir)
-    assertNull(error)
-    PluginLoader.load(dir, module).use { host ->
-      assertEquals(emptyList(), host.warnings)
-      val report = TestRunner(dir, plugins = host).run(listOf("//zones/heritage_zone"))
-      assertEquals(emptyList(), report.problems)
-      assertEquals(4, report.results.size, report.results.joinToString("\n"))
-      for (r in report.results) assertEquals(Status.PASS, r.status, "${r.name}: ${r.message}")
-    }
   }
 
   // ---- Telnet Creation Flow Test ------------------------------------------------------------
 
-  private class PromptSink : OutputSink {
-    val all = StringBuilder()
-    var closed: String? = null
-
-    override fun send(text: String) {
-      all.append(text).append("\n")
-    }
-
-    override fun prompt(text: String) {
-      all.append("[$text]")
-    }
-
-    override fun close(reason: String) {
-      closed = reason
-    }
-  }
-
   @Test
   fun `telnet creation flow creates character with choices`() {
     val tmp = TempFiles.dir("gups-heritage-telnet")
+    val world = bootTelnetWorld(tmp)
+
+    val sink = PromptSink()
+    val sess = SessionId(10)
+    world.handle(WorldControlEvent.Connect(sess, sink, "127.0.0.1", "telnet"))
+
+    assertContains(sink.all, "[By what name do you wish to be known? ]")
+    world.handle(ClientInputEvent(sess, "Eldrin", 0))
+
+    // Prompts for race
+    assertContains(sink.all, "Choose your race:")
+    assertContains(sink.all, "1. Human")
+    assertContains(sink.all, "2. Elf")
+    assertContains(sink.all, "3. Dwarf")
+
+    world.handle(ClientInputEvent(sess, "elf", 0))
+
+    // Prompts for class
+    assertContains(sink.all, "Choose your class:")
+    assertContains(sink.all, "1. Warrior")
+    assertContains(sink.all, "2. Mage")
+    assertContains(sink.all, "3. Cleric")
+
+    world.handle(ClientInputEvent(sess, "mage", 0))
+
+    // Prompts for stats step
+    assertContains(sink.all, "Str 10 → 10 (+0)")
+    assertContains(sink.all, "Points left: 6.")
+    world.handle(ClientInputEvent(sess, "done", 0))
+
+    // Prompts for confirmation
+    assertContains(sink.all, "Create this character? (yes, back or cancel)")
+    assertContains(sink.all, "Stats Str 10 Dex 10 Con 10 Int 10 Wis 10 Cha 10")
+    world.handle(ClientInputEvent(sess, "yes", 0))
+
+    // Player enters
+    val player = world.players.singleOrNull()
+    assertNotNull(player)
+    assertEquals("Eldrin", player.name)
+    assertEquals("elf", player.choices["race"])
+    assertEquals("mage", player.choices["class"])
+    assertTrue(player.hasTrait("elf"))
+    assertTrue(player.hasTrait("mage"))
+    assertContains(sink.all, "Welcome, Eldrin.")
+  }
+
+  /** Builds and boots a world that pins the heritage jar, ready for a telnet client to log in. */
+  private fun bootTelnetWorld(tmp: Path): World {
     val jar = tmp.resolve("plugins/heritage.jar").also { it.parent.createDirectories() }
     Path.of(System.getProperty("gups.sample.heritageJar")).copyTo(jar)
     val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
@@ -802,49 +516,7 @@ class HeritagePluginTest {
     host.install(world)
     world.start()
     world.login = DevLogin(gups.core.Label("//zones/start:hall"))
-
-    val sink = PromptSink()
-    val sess = SessionId(10)
-    world.handle(WorldControlEvent.Connect(sess, sink, "127.0.0.1", "telnet"))
-
-    assertContains(sink.all, "[By what name do you wish to be known? ]")
-    world.handle(ClientInputEvent(sess, "Eldrin", 0))
-
-    // Prompts for race
-    assertContains(sink.all, "Choose your race:")
-    assertContains(sink.all, "1. Human")
-    assertContains(sink.all, "2. Elf")
-    assertContains(sink.all, "3. Dwarf")
-
-    world.handle(ClientInputEvent(sess, "elf", 0))
-
-    // Prompts for class
-    assertContains(sink.all, "Choose your class:")
-    assertContains(sink.all, "1. Warrior")
-    assertContains(sink.all, "2. Mage")
-    assertContains(sink.all, "3. Cleric")
-
-    world.handle(ClientInputEvent(sess, "mage", 0))
-
-    // Prompts for stats step
-    assertContains(sink.all, "Str 10 → 10 (+0)")
-    assertContains(sink.all, "Points left: 6.")
-    world.handle(ClientInputEvent(sess, "done", 0))
-
-    // Prompts for confirmation
-    assertContains(sink.all, "Create this character? (yes, back or cancel)")
-    assertContains(sink.all, "Stats Str 10 Dex 10 Con 10 Int 10 Wis 10 Cha 10")
-    world.handle(ClientInputEvent(sess, "yes", 0))
-
-    // Player enters
-    val player = world.players.singleOrNull()
-    assertNotNull(player)
-    assertEquals("Eldrin", player.name)
-    assertEquals("elf", player.choices["race"])
-    assertEquals("mage", player.choices["class"])
-    assertTrue(player.hasTrait("elf"))
-    assertTrue(player.hasTrait("mage"))
-    assertContains(sink.all, "Welcome, Eldrin.")
+    return world
   }
 
   @Test
