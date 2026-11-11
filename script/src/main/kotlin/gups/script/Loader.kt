@@ -3,7 +3,6 @@ package gups.script
 import com.google.common.collect.ImmutableMap
 import gups.core.HookRef
 import gups.core.Label
-import gups.core.model.Direction
 import gups.core.model.Prototypes
 import gups.core.model.WorldSchema
 import gups.core.model.ZoneProto
@@ -12,7 +11,6 @@ import gups.core.world.CommandRegistry
 import gups.core.world.FeatureRequirement
 import gups.core.world.Features
 import gups.core.world.HookName
-import gups.core.world.gmcpOverlaps
 import java.nio.file.Path
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
@@ -24,17 +22,14 @@ import net.starlark.java.eval.StarlarkFunction
 import net.starlark.java.eval.StarlarkSemantics
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.syntax.AssignmentStatement
-import net.starlark.java.syntax.CallExpression
 import net.starlark.java.syntax.DefStatement
 import net.starlark.java.syntax.FileOptions
 import net.starlark.java.syntax.Identifier
 import net.starlark.java.syntax.LoadStatement
 import net.starlark.java.syntax.Location
-import net.starlark.java.syntax.NodeVisitor
 import net.starlark.java.syntax.ParserInput
 import net.starlark.java.syntax.Program
 import net.starlark.java.syntax.StarlarkFile
-import net.starlark.java.syntax.StringLiteral
 import net.starlark.java.syntax.SyntaxError
 
 internal val SEMANTICS: StarlarkSemantics = StarlarkSemantics.DEFAULT
@@ -117,6 +112,23 @@ internal constructor(
   fun report(): String = errors.joinToString("\n") { it.render() }
 }
 
+/** What the load has evaluated about one package, and the errors and progress it made. */
+internal class PkgState(val pkg: ScriptPackage) {
+  val errors = mutableListOf<LoadError>()
+  val deps = sortedSetOf<String>()
+  var headerDone = false
+  var contentDone = false
+  var steps = 0L
+  var startedNanos = 0L
+
+  val failed: Boolean
+    get() = errors.isNotEmpty()
+}
+
+/** The packages of [states] whose content evaluated and that made no error. */
+internal fun livePackages(states: Map<String, PkgState>): List<PkgState> =
+  states.values.filter { it.contentDone && !it.failed }
+
 /**
  * Evaluates packages into frozen prototypes. Loading a package also loads every package it refers
  * to by label or `load()`.
@@ -172,18 +184,6 @@ class ScriptLoader(
     testSources: Map<Label, Path> = emptyMap(),
   ): LoadResult = Session(testSources).run(requested, tests, testGlobals)
 
-  private class PkgState(val pkg: ScriptPackage) {
-    val errors = mutableListOf<LoadError>()
-    val deps = sortedSetOf<String>()
-    var headerDone = false
-    var contentDone = false
-    var steps = 0L
-    var startedNanos = 0L
-
-    val failed: Boolean
-      get() = errors.isNotEmpty()
-  }
-
   private inner class Session(private val testSources: Map<Label, Path>) {
     val states = LinkedHashMap<String, PkgState>()
     val modules = HashMap<Label, Module>()
@@ -224,15 +224,21 @@ class ScriptLoader(
     fun drain() {
       while (queue.isNotEmpty()) {
         val p = queue.removeFirst()
-        val st = header(p) ?: continue
+        val st = header(p)
+        if (st == null) continue
         if (st.contentDone || st.failed) continue
         st.contentDone = true
-        for (file in contentFiles(p)) loadFile(file, st)
-        for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
-        for (ref in st.pkg.factionRefs) dependOn(st, ref.label.pkg)
-        findMigrate(st)
-        if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
+        loadContent(st)
       }
+    }
+
+    /** Evaluates a package's files and follows its label references into other packages. */
+    private fun loadContent(st: PkgState) {
+      for (file in contentFiles(st.pkg.path)) loadFile(file, st)
+      for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
+      for (ref in st.pkg.factionRefs) dependOn(st, ref.label.pkg)
+      findMigrate(st)
+      if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
     }
 
     fun contentFiles(pkg: String): List<Label> = dir.files(pkg, tests = false, fixtures = fixtures)
@@ -299,7 +305,8 @@ class ScriptLoader(
       val file = Label("//$p:${WorldDir.PACKAGE_FILE}")
       val ctx = evalFile(file, globals, header = true)
       st.headerDone = true
-      if (ctx != null && !ctx.packageDeclared && !st.failed) {
+      if (ctx == null) return st
+      if (!ctx.packageDeclared && !st.failed) {
         st.errors += LoadError(p, "package", "package.star must call package(...)", file.v, 1, 1)
       }
       return st
@@ -336,53 +343,114 @@ class ScriptLoader(
       test: Boolean = false,
     ): LoadCtx? {
       val st = states.getValue(file.pkg).takeUnless { test } ?: header(file.pkg)!!
-      fun err(e: LoadError) {
-        if (test) testErrors.getOrPut(file) { mutableListOf() } += e else st.errors += e
-        badFiles += file
-      }
-      val path = (if (test) testSources[file] else null) ?: dir.fileOf(file)
-      if (!path.isRegularFile()) {
-        err(LoadError(st.pkg.path, "missing", "no file $path"))
+      val err = { e: LoadError -> record(file, test, e) }
+      val parsed = parseFile(file, st, sourceOf(file, test), err) ?: return null
+      val module = Module.withPredeclared(SEMANTICS, globals)
+      module.clientData = FileInfo(file, file.pkg, test)
+      val program = compileFile(parsed, module, st, err) ?: return null
+      val loaded = HashMap<String, Module>()
+      inProgress += file
+      val loadsOk =
+        try {
+          evalLoads(program, loaded, file, st, test, err)
+        } finally {
+          inProgress -= file
+        }
+      if (!loadsOk) return null
+      val ctx =
+        LoadCtx(module.clientData as FileInfo, st.pkg, header, engineVerbs) { checkWall(st) }
+      if (!runFile(program, module, loaded, ctx, st, file, test, err)) return null
+      if (!checkTopLevelBindings(file, parsed, module, st, test, err)) return null
+      if (test) testModules[file] = module else modules[file] = module
+      return ctx
+    }
+
+    /** The path a file's source reads from: a test file may be kept outside the world. */
+    private fun sourceOf(file: Label, test: Boolean): Path =
+      (if (test) testSources[file] else null) ?: dir.fileOf(file)
+
+    /** Charges [e] to the file's package, or to [testErrors] for a test file, and marks it bad. */
+    private fun record(file: Label, test: Boolean, e: LoadError) {
+      if (test) testErrors.getOrPut(file) { mutableListOf() } += e
+      else states.getValue(file.pkg).errors += e
+      badFiles += file
+    }
+
+    /** Reads and parses a file's source; null after charging a missing or syntax error. */
+    private fun parseFile(
+      file: Label,
+      st: PkgState,
+      source: Path,
+      err: (LoadError) -> Unit,
+    ): StarlarkFile? {
+      if (!source.isRegularFile()) {
+        err(LoadError(st.pkg.path, "missing", "no file $source"))
         return null
       }
-      val parsed = StarlarkFile.parse(ParserInput.fromString(path.readText(), file.v), FILE_OPTIONS)
+      val parsed =
+        StarlarkFile.parse(ParserInput.fromString(source.readText(), file.v), FILE_OPTIONS)
       if (!parsed.ok()) {
         parsed.errors().forEach { err(syntaxError(st.pkg.path, it)) }
         return null
       }
-      val module = Module.withPredeclared(SEMANTICS, globals)
-      module.clientData = FileInfo(file, file.pkg, test)
-      val program =
-        try {
-          Program.compileFile(parsed, module)
-        } catch (e: SyntaxError.Exception) {
-          e.errors().forEach { err(syntaxError(st.pkg.path, it)) }
-          return null
-        }
-      val loaded = HashMap<String, Module>()
-      inProgress += file
+      return parsed
+    }
+
+    private fun compileFile(
+      parsed: StarlarkFile,
+      module: Module,
+      st: PkgState,
+      err: (LoadError) -> Unit,
+    ): Program? =
       try {
-        for (spec in program.loads) {
-          val target =
-            try {
-              loadLabel(spec, file, test)
-            } catch (e: EvalException) {
-              err(LoadError(st.pkg.path, "load", e.message ?: "bad load", file.v))
-              return null
-            }
-          if (!test) dependOn(st, target.pkg)
-          val m = loadFile(target, if (test) null else st)
-          if (m == null) {
-            err(LoadError(st.pkg.path, "load", "load(\"$spec\"): $target failed to load", file.v))
-            return null
-          }
-          loaded[spec] = m
-        }
-      } finally {
-        inProgress -= file
+        Program.compileFile(parsed, module)
+      } catch (e: SyntaxError.Exception) {
+        e.errors().forEach { err(syntaxError(st.pkg.path, it)) }
+        null
       }
-      val ctx =
-        LoadCtx(module.clientData as FileInfo, st.pkg, header, engineVerbs) { checkWall(st) }
+
+    /** Resolves and loads every `load()` of [program] into [loaded]; false on a failed load. */
+    private fun evalLoads(
+      program: Program,
+      loaded: HashMap<String, Module>,
+      file: Label,
+      st: PkgState,
+      test: Boolean,
+      err: (LoadError) -> Unit,
+    ): Boolean {
+      for (spec in program.loads) {
+        val target =
+          try {
+            loadLabel(spec, file, test)
+          } catch (e: EvalException) {
+            err(LoadError(st.pkg.path, "load", e.message ?: "bad load", file.v))
+            return false
+          }
+        if (!test) dependOn(st, target.pkg)
+        val m = loadFile(target, if (test) null else st)
+        if (m == null) {
+          err(LoadError(st.pkg.path, "load", "load(\"$spec\"): $target failed to load", file.v))
+          return false
+        }
+        loaded[spec] = m
+      }
+      return true
+    }
+
+    /**
+     * Runs [program] under the load limits of the loading package. Test files run under a throwaway
+     * context whose step and wall-clock counters never fire.
+     */
+    private fun runFile(
+      program: Program,
+      module: Module,
+      loaded: Map<String, Module>,
+      ctx: LoadCtx,
+      st: PkgState,
+      file: Label,
+      test: Boolean,
+      err: (LoadError) -> Unit,
+    ): Boolean {
       try {
         Mutability.create(file.v).use { mu ->
           val thread = StarlarkThread(mu, SEMANTICS)
@@ -403,62 +471,91 @@ class ScriptLoader(
             if (!test) st.steps += thread.executedSteps
           }
         }
+        return true
       } catch (e: EvalException) {
         err(evalError(st.pkg.path, file, e))
-        return null
+        return false
       }
+    }
+
+    /** Rejects top-level names a plugin owns and rules exports the features forbid. */
+    private fun checkTopLevelBindings(
+      file: Label,
+      parsed: StarlarkFile,
+      module: Module,
+      st: PkgState,
+      test: Boolean,
+      err: (LoadError) -> Unit,
+    ): Boolean =
+      checkPluginClashes(file, parsed, module, st, err) &&
+        checkRulesExports(file, parsed, module, st, test, err)
+
+    private fun checkPluginClashes(
+      file: Label,
+      parsed: StarlarkFile,
+      module: Module,
+      st: PkgState,
+      err: (LoadError) -> Unit,
+    ): Boolean {
       val clashes = module.globals.keys.filter { it in pluginGlobals }.sorted()
-      if (clashes.isNotEmpty()) {
-        for (name in clashes) {
+      if (clashes.isEmpty()) return true
+      for (name in clashes) {
+        err(
+          LoadError(
+            st.pkg.path,
+            "plugin",
+            "cannot define '$name': it is the namespace of plugin '$name'",
+            file.v,
+            bindingLine(parsed, name),
+          )
+        )
+      }
+      return false
+    }
+
+    private fun checkRulesExports(
+      file: Label,
+      parsed: StarlarkFile,
+      module: Module,
+      st: PkgState,
+      test: Boolean,
+      err: (LoadError) -> Unit,
+    ): Boolean {
+      if (test || st.pkg.kind != PackageKind.RULES) return true
+      val forbidden = forbiddenRulesExports(module, features)
+      if (forbidden.isNotEmpty()) {
+        for ((name, req) in forbidden) {
           err(
             LoadError(
               st.pkg.path,
-              "plugin",
-              "cannot define '$name': it is the namespace of plugin '$name'",
+              "rules",
+              "the rules package defines $name(...), which needs the ${req.text} ${req.noun}",
               file.v,
               bindingLine(parsed, name),
             )
           )
         }
-        return null
+        return false
       }
-      if (!test && st.pkg.kind == PackageKind.RULES) {
-        val forbidden = forbiddenRulesExports(module, features)
-        if (forbidden.isNotEmpty()) {
-          for ((name, req) in forbidden) {
-            err(
-              LoadError(
-                st.pkg.path,
-                "rules",
-                "the rules package defines $name(...), which needs the ${req.text} ${req.noun}",
-                file.v,
-                bindingLine(parsed, name),
-              )
-            )
-          }
-          return null
+      val unknown =
+        unknownRulesExports(module, plugins.rulesExports.keys).filter { name ->
+          forbidden.none { it.first == name }
         }
-        val unknown =
-          unknownRulesExports(module, plugins.rulesExports.keys).filter { name ->
-            forbiddenRulesExports(module, features).none { it.first == name }
-          }
-        if (unknown.isNotEmpty()) {
-          for (name in unknown) {
-            err(
-              LoadError(
-                st.pkg.path,
-                "rules",
-                "'$name' is not a rules export; prefix helpers with '_'",
-                file.v,
-                bindingLine(parsed, name),
-              )
+      if (unknown.isNotEmpty()) {
+        for (name in unknown) {
+          err(
+            LoadError(
+              st.pkg.path,
+              "rules",
+              "'$name' is not a rules export; prefix helpers with '_'",
+              file.v,
+              bindingLine(parsed, name),
             )
-          }
-          return null
+          )
         }
+        return false
       }
-      if (test) testModules[file] = module else modules[file] = module
-      return ctx
+      return true
     }
 
     fun checkWall(st: PkgState) {
@@ -475,24 +572,27 @@ class ScriptLoader(
       if (!target.name.endsWith(".star")) fail("load(\"$spec\"): load labels name a .star file")
       if (target.name == WorldDir.PACKAGE_FILE)
         fail("load(\"$spec\"): package.star can't be loaded")
-      if (target.name.endsWith(WorldDir.TEST_SUFFIX) && !test)
+      if (!test && target.name.endsWith(WorldDir.TEST_SUFFIX))
         fail("load(\"$spec\"): test files can only be loaded by other test files")
-      if (WorldDir.isFixture(target.name) && !test && !WorldDir.isFixture(from.name))
-        fail(
-          "load(\"$spec\"): test fixture files can only be loaded by test files and other fixture files"
-        )
+      if (WorldDir.isFixture(target.name) && !WorldDir.isFixture(from.name)) {
+        if (!test)
+          fail(
+            "load(\"$spec\"): test fixture files can only be loaded by test files and other fixture files"
+          )
+      }
       return target
     }
 
     fun finish(): LoadResult {
+      val checks = LoadChecks(dir, states, pluginGlobals, knownGmcp, engineVerbs, fixtures)
       propagate()
-      resolveLabels()
-      checkFactions()
+      checks.resolveLabels()
+      checks.checkFactions()
       propagate()
-      checkNamespaces()
-      checkRegions()
-      checkGmcp()
-      checkCommands()
+      checks.checkNamespaces()
+      checks.checkRegions()
+      checks.checkGmcp()
+      checks.checkCommands()
       propagate()
       dryRun()
       return result()
@@ -540,14 +640,14 @@ class ScriptLoader(
               ref.file,
               ref.line,
               ref.column,
-              snippet(ref.file, ref.line, ref.column),
+              snippet(dir, ref.file, ref.line, ref.column),
             )
         }
       }
     }
 
     val live: List<PkgState>
-      get() = states.values.filter { it.contentDone && !it.failed }
+      get() = livePackages(states)
 
     /** A package fails if anything it depends on failed. */
     fun propagate() {
@@ -562,223 +662,6 @@ class ScriptLoader(
       } while (changed)
     }
 
-    /** Every label resolves to a declaration of the right kind. */
-    fun resolveLabels() {
-      val index = HashMap<Label, RefKind>()
-      for (st in live) {
-        st.pkg.rooms.forEach { index[it.label] = RefKind.ROOM }
-        st.pkg.mobs.forEach { index[it.label] = RefKind.MOB }
-        st.pkg.items.forEach { index[it.label] = RefKind.ITEM }
-        st.pkg.skills.forEach { index[it.label] = RefKind.SKILL }
-      }
-      index[Prototypes.CORPSE.label] = RefKind.ITEM
-      for (st in live) {
-        for (ref in st.pkg.refs) {
-          val found = index[ref.label]
-          if (found == ref.kind) continue
-          val why =
-            when {
-              found != null -> "${ref.label} is a ${found.word}, not a ${ref.kind.word}"
-              !dir.hasPackage(ref.label.pkg) ->
-                "${ref.label} doesn't resolve: there is no package //${ref.label.pkg}"
-              else ->
-                "${ref.label} doesn't resolve: //${ref.label.pkg} declares no ${ref.kind.word} named '${ref.label.name}'" +
-                  fixtureNote(ref.label)
-            }
-          st.errors +=
-            LoadError(
-              st.pkg.path,
-              "label",
-              why,
-              ref.file,
-              ref.line,
-              ref.column,
-              snippet(ref.file, ref.line, ref.column),
-            )
-        }
-      }
-    }
-
-    /** Every faction reference in mob(factions=) or faction(standing=) resolves. */
-    fun checkFactions() {
-      val declaredFactions = live.flatMap { it.pkg.factions.map { f -> f.label } }.toSet()
-      val mobFactions = live.flatMap { it.pkg.mobs.map { m -> m.label } }.toSet()
-      val knownFactionLabels = declaredFactions + mobFactions
-      val knownStrings = knownFactionLabels.map { it.v }
-      for (st in live) {
-        for (ref in st.pkg.factionRefs) {
-          if (ref.label in knownFactionLabels) continue
-          val why =
-            "${ref.label} doesn't resolve: it is neither a declared faction nor a mob prototype${didYouMean(ref.label.v, knownStrings)}"
-          st.errors +=
-            LoadError(
-              st.pkg.path,
-              "label",
-              why,
-              ref.file,
-              ref.line,
-              ref.column,
-              snippet(ref.file, ref.line, ref.column),
-            )
-        }
-      }
-    }
-
-    private val fixtureDecls = HashMap<String, Map<String, Label>>()
-
-    /**
-     * When fixtures are left out, says which fixture file of the label's package declares the name,
-     * found by scanning those files for declaration calls without evaluating them.
-     */
-    fun fixtureNote(label: Label): String {
-      if (fixtures) return ""
-      val decls =
-        fixtureDecls.getOrPut(label.pkg) {
-          dir
-            .files(label.pkg, tests = false, fixtures = true)
-            .filter { WorldDir.isFixture(it.name) }
-            .flatMap { file -> declaredNames(file).map { it to file } }
-            .toMap()
-        }
-      val file = decls[label.name] ?: return ""
-      return " (it is declared in $file, a test fixture file, which loads only for gups test and gups scenario)"
-    }
-
-    /** The names [file]'s `room`, `mob`, `item` and `skill` calls declare, wherever they are. */
-    fun declaredNames(file: Label): List<String> {
-      val text = runCatching { dir.fileOf(file).readText() }.getOrNull() ?: return emptyList()
-      val parsed = StarlarkFile.parse(ParserInput.fromString(text, file.v), FILE_OPTIONS)
-      val kinds = RefKind.entries.mapTo(HashSet()) { it.word }
-      val names = mutableListOf<String>()
-      parsed.accept(
-        object : NodeVisitor() {
-          override fun visit(node: CallExpression) {
-            val fn = node.function as? Identifier
-            val first = node.arguments.firstOrNull()?.takeIf { it.name == null }?.value
-            if (fn != null && fn.name in kinds && first is StringLiteral) names += first.value
-            super.visit(node)
-          }
-        }
-      )
-      return names
-    }
-
-    /** Attribute namespaces are unique across the world, plugins' included. */
-    fun checkNamespaces() {
-      val owners = LinkedHashMap<String, MutableList<String>>()
-      for (st in live) {
-        owners.getOrPut(st.pkg.namespace) { mutableListOf() } += st.pkg.path
-        for (ns in st.pkg.sharedNamespaces) owners.getOrPut(ns) { mutableListOf() } +=
-          "${st.pkg.path} (shared)"
-      }
-      for ((ns, pkgs) in owners) {
-        if (pkgs.size < 2) continue
-        for (p in pkgs) {
-          val path = p.removeSuffix(" (shared)")
-          states.getValue(path).errors +=
-            LoadError(
-              path,
-              "namespace",
-              "attribute namespace '$ns' is used by more than one package: ${pkgs.joinToString(", ")}",
-            )
-        }
-      }
-      // A plugin writes attributes in its id's namespace, so no package may own it.
-      for (st in live) {
-        for (ns in listOf(st.pkg.namespace) + st.pkg.sharedNamespaces) {
-          if (ns in pluginGlobals)
-            st.errors +=
-              LoadError(
-                st.pkg.path,
-                "namespace",
-                "attribute namespace '$ns' is the namespace of plugin '$ns'",
-              )
-        }
-      }
-    }
-
-    /** Region names are world-wide, so only one package may declare each. */
-    fun checkRegions() {
-      val owners = LinkedHashMap<String, MutableList<String>>()
-      for (st in live) for (r in st.pkg.regions) owners.getOrPut(r.name) { mutableListOf() } +=
-        st.pkg.path
-      for ((name, pkgs) in owners) {
-        if (pkgs.size < 2) continue
-        for (p in pkgs.distinct()) {
-          states.getValue(p).errors +=
-            LoadError(
-              p,
-              "region",
-              "region '$name' is declared by more than one package: ${pkgs.joinToString(", ") { "//$it" }}",
-            )
-        }
-      }
-    }
-
-    /** Declared GMCP packages may not overlap across packages or with a plugin's. */
-    fun checkGmcp() {
-      val decls = live.flatMap { st -> st.pkg.gmcpPackages.map { it.name to st.pkg.path } }
-      for (i in decls.indices) {
-        for (j in (i + 1) until decls.size) {
-          val (a, pa) = decls[i]
-          val (b, pb) = decls[j]
-          if (pa == pb || !gmcpOverlaps(a, b)) continue
-          states.getValue(pa).errors +=
-            LoadError(pa, "gmcp", "GMCP package '$a' of //$pa overlaps '$b' of //$pb")
-          states.getValue(pb).errors +=
-            LoadError(pb, "gmcp", "GMCP package '$b' of //$pb overlaps '$a' of //$pa")
-        }
-      }
-      val plugin = knownGmcp()
-      for (st in live) {
-        for (decl in st.pkg.gmcpPackages) {
-          plugin
-            .firstOrNull { gmcpOverlaps(decl.name, it) }
-            ?.let {
-              st.errors +=
-                LoadError(
-                  st.pkg.path,
-                  "gmcp",
-                  "GMCP package '${decl.name}' overlaps the plugin package '$it'",
-                )
-            }
-        }
-      }
-    }
-
-    /** Global commands may not shadow engine commands, directions or each other. */
-    fun checkCommands() {
-      val seen = HashMap<String, String>()
-      for (st in live) {
-        for (c in st.pkg.globalCommands) {
-          val clash =
-            when {
-              c.name in engineVerbs -> "engine command"
-              Direction.parse(c.name) in Direction.STANDARD -> "direction"
-              else -> seen.put(c.name, st.pkg.path)?.let { "global command of //$it" }
-            } ?: continue
-          st.errors +=
-            LoadError(st.pkg.path, "command", "global_command '${c.name}' clashes with the $clash")
-        }
-      }
-      // A global command would shadow an exit of the same name, so the name is reserved
-      // (engine verbs are rejected by exit() itself).
-      for (st in live) {
-        for (room in st.pkg.rooms) {
-          for (exit in room.exits) {
-            val owner = seen[exit.direction.name] ?: continue
-            st.errors +=
-              LoadError(
-                st.pkg.path,
-                "command",
-                "exit '${exit.direction.name}' of ${room.label} is a reserved keyword: " +
-                  "the global command of //$owner",
-              )
-          }
-        }
-      }
-    }
-
     fun syntaxError(pkg: String, e: SyntaxError): LoadError {
       val loc = e.location()
       return LoadError(
@@ -788,7 +671,7 @@ class ScriptLoader(
         loc.file(),
         loc.line(),
         loc.column(),
-        snippet(loc.file(), loc.line(), loc.column()),
+        snippet(dir, loc.file(), loc.line(), loc.column()),
       )
     }
 
@@ -807,14 +690,15 @@ class ScriptLoader(
         else e.message ?: "error"
       val line = loc.line().takeIf { it > 0 }
       val col = loc.column().takeIf { it > 0 }
-      return LoadError(pkg, kind, message, loc.file(), line, col, snippet(loc.file(), line, col))
-    }
-
-    fun snippet(file: String?, line: Int?, column: Int?): String? {
-      if (file == null || line == null) return null
-      val text = runCatching { dir.sourceLine(Label(file), line) }.getOrNull() ?: return null
-      return "    $text" +
-        if (column != null && column > 0) "\n    " + " ".repeat(column - 1) + "^" else ""
+      return LoadError(
+        pkg,
+        kind,
+        message,
+        loc.file(),
+        line,
+        col,
+        snippet(dir, loc.file(), line, col),
+      )
     }
   }
 }
@@ -831,6 +715,14 @@ internal fun innermost(e: EvalException): Location? =
   e.callStack.lastOrNull { it.location != Location.BUILTIN && it.location.line() > 0 }?.location
 
 internal fun isStepLimit(e: EvalException): Boolean = e.message?.contains("too many steps") == true
+
+/** A source line with a caret under [column], for error messages; null if the line is gone. */
+internal fun snippet(dir: WorldDir, file: String?, line: Int?, column: Int?): String? {
+  if (file == null || line == null) return null
+  val text = runCatching { dir.sourceLine(Label(file), line) }.getOrNull() ?: return null
+  return "    $text" +
+    if (column != null && column > 0) "\n    " + " ".repeat(column - 1) + "^" else ""
+}
 
 /** The line of the first top-level statement of [file] that binds [name], for clash errors. */
 private fun bindingLine(file: StarlarkFile, name: String): Int? =
