@@ -11,6 +11,7 @@ import gups.core.Rng
 import gups.core.SessionId
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.Condition
 import gups.core.model.CreationAttempt
 import gups.core.model.Entity
@@ -494,14 +495,16 @@ class World(
     val room = room(at)
     val (p, result) =
       buildPlayer(
-        allocateId(),
-        name,
-        room,
-        level,
-        index,
-        accountId,
-        effectiveChoices,
-        startingRng = attempt?.startingRng(),
+        PlayerBlueprint(
+          allocateId(),
+          name,
+          room,
+          level,
+          index,
+          accountId,
+          effectiveChoices,
+          attempt?.startingRng(),
+        )
       )
     if (attempt != null) {
       attempt.prepareError = null
@@ -530,34 +533,37 @@ class World(
     return p
   }
 
+  /** Everything that goes into building a player before it enters the world. */
+  internal class PlayerBlueprint(
+    val id: EntityId,
+    val name: String,
+    val at: Room,
+    val level: Int,
+    val index: Int,
+    val accountId: Long?,
+    val choices: Map<String, String>,
+    val startingRng: Rng?,
+  )
+
   /**
    * A player with its answers, traits and starting stats, not yet in the world, and the
    * starting_stats result.
    */
-  internal fun buildPlayer(
-    id: EntityId,
-    name: String,
-    at: Room,
-    level: Int,
-    index: Int,
-    accountId: Long?,
-    choices: Map<String, String>,
-    startingRng: Rng?,
-  ): Pair<Player, StartingStats> {
+  internal fun buildPlayer(bp: PlayerBlueprint): Pair<Player, StartingStats> {
     val p =
       Player(
-        id,
-        name,
-        at,
-        index.coerceIn(0, at.trackSize - 1),
-        recallRoom = at.protoLabel,
-        accountId = accountId,
+        bp.id,
+        bp.name,
+        bp.at,
+        bp.index.coerceIn(0, bp.at.trackSize - 1),
+        recallRoom = bp.at.protoLabel,
+        accountId = bp.accountId,
       )
-    p.level = level
-    p.choices.putAll(choices)
+    p.level = bp.level
+    p.choices.putAll(bp.choices)
     initVitals(p)
     p.recomputeTraits(this)
-    val result = startingStatsOf(p, startingRng)
+    val result = startingStatsOf(p, bp.startingRng)
     applyStartingStats(p, result)
     return p to result
   }
@@ -580,14 +586,16 @@ class World(
       }
     val (p, _) =
       buildPlayer(
-        PREVIEW_ID,
-        attempt.name,
-        room(at),
-        1,
-        0,
-        null,
-        attempt.answers,
-        attempt.startingRng(),
+        PlayerBlueprint(
+          PREVIEW_ID,
+          attempt.name,
+          room(at),
+          1,
+          0,
+          null,
+          attempt.answers,
+          attempt.startingRng(),
+        )
       )
     attempt.preview = p
     return p
@@ -744,11 +752,12 @@ class World(
     pulse++
     runTimers()
     flushImmediate()
+    val combatRound = Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L
     // Roll before phase 2 so a round-boundary action pulse uses the new initiative.
-    if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) rollInitiative()
+    if (combatRound) rollInitiative()
     runTiers(actorIndex.values.filter { isSimulated(it) }, ::actionPulse)
     runMoveRounds()
-    if (Feature.COMBAT in features && pulse % COMBAT_ROUND_PULSES == 0L) runCombatRound()
+    if (combatRound) runCombatRound()
     flushImmediate()
     if (pulse % WORLD_TICK_PULSES == 0L) runWorldTick()
     runPluginPeriodic()
@@ -759,84 +768,134 @@ class World(
     expireSessions()
     shutdownWarnings()
     flushOutput()
-    if (config.checkInvariants) {
-      val violations = checkInvariants()
-      if (violations.isNotEmpty()) {
-        // The harness fails the test; --dev logs and keeps running.
-        if (config.strict) throw InvariantViolation(violations)
-        for (v in violations) record(
-          Diagnostic(pulse, "invariant", v, InvariantViolation(listOf(v)))
-        )
-      }
-    }
+    checkPulseInvariants()
+  }
+
+  /** `--dev` and the harness check the invariants after every pulse. */
+  private fun checkPulseInvariants() {
+    if (!config.checkInvariants) return
+    val violations = checkInvariants()
+    if (violations.isEmpty()) return
+    // The harness fails the test; --dev logs and keeps running.
+    if (config.strict) throw InvariantViolation(violations)
+    for (v in violations) record(Diagnostic(pulse, "invariant", v, InvariantViolation(listOf(v))))
   }
 
   fun runPulses(n: Int) = repeat(n) { runPulse() }
 
+  /** A piece of phase 1 work — a timer, an affect expiry or an affect tick — with its sort key. */
+  private class Due(val due: Long, val id: Long, val run: () -> Unit)
+
   /** Phase 1: script timers, affect ticks and expiries due now, ordered by `(due, id)`. */
   private fun runTimers() {
-    class Due(val due: Long, val id: Long, val run: () -> Unit)
-    val due = ArrayList<Due>()
+    val dues = ArrayList<Due>()
     for (e in entities.values) {
-      if (e.timers.isEmpty() || !isSimulated(e)) continue
-      for (t in e.timers) {
-        val at = t.due ?: continue
-        // A quarantined package's timers stay pending, neither fired nor dropped.
-        if (at <= pulse && !scripts.isSuspended(e, t.fn)) {
-          due +=
-            Due(at, t.id) {
-              if (e.timers.remove(t)) {
-                e.dirty = true
-                invokeRef(e, t.fn, HookContext(args = t.args))
-              }
-            }
-        }
+      if (!isSimulated(e)) continue
+      timerDues(e, dues)
+      when (e) {
+        is Actor -> actorAffectDues(e, dues)
+        is Item -> itemAffectDues(e, dues)
+        is Room -> roomAffectDues(e, dues)
       }
     }
-    for (a in actorIndex.values) {
-      if (a.affects.isEmpty() || !isSimulated(a)) continue
-      for (aff in a.affects) {
-        val every = aff.tickEvery
-        when {
-          aff.expiresAt <= pulse -> due += Due(aff.expiresAt, aff.id) { expireAffect(a, aff) }
-          every != null && aff.onTick != null && (pulse - aff.appliedAt) % every == 0L ->
-            due += Due(pulse, aff.id) { invokeRef(a, aff.onTick, HookContext(affect = aff)) }
-        }
-      }
+    dues.sortWith(compareBy<Due>({ it.due }, { it.id }))
+    for (d in dues) guarded("timer ${d.id}") { d.run() }
+  }
+
+  /**
+   * [e]'s script timers due now; a quarantined package's stay pending, neither fired nor dropped.
+   */
+  private fun timerDues(e: Entity, dues: MutableList<Due>) {
+    for (t in e.timers) {
+      val at = t.due ?: continue
+      if (at > pulse) continue
+      if (scripts.isSuspended(e, t.fn)) continue
+      dues += Due(at, t.id) { fireTimer(e, t) }
     }
-    for (e in entities.values) {
-      if (e !is Item || e.affects.isEmpty() || !isSimulated(e)) continue
-      for (aff in e.affects) {
-        val every = aff.tickEvery
-        when {
-          aff.expiresAt <= pulse -> due += Due(aff.expiresAt, aff.id) { expireItemAffect(e, aff) }
-          every != null && aff.onTick != null && (pulse - aff.appliedAt) % every == 0L ->
-            due +=
-              Due(pulse, aff.id) {
-                // An earlier hook this pulse may have destroyed the item or ended the affect.
-                if (e.id in entities && aff in e.affects)
-                  invokeRef(e, aff.onTick, HookContext(affect = aff))
-              }
-        }
-      }
+  }
+
+  /** Fires [t] if it is still one of [e]'s timers; a hook this pulse may have canceled it. */
+  private fun fireTimer(e: Entity, t: ScriptTimer) {
+    if (!e.timers.remove(t)) return
+    e.dirty = true
+    invokeRef(e, t.fn, HookContext(args = t.args))
+  }
+
+  /** [a]'s affects expiring or ticking this pulse. */
+  private fun actorAffectDues(a: Actor, dues: MutableList<Due>) {
+    for (aff in a.affects) {
+      val due = actorAffectDue(a, aff)
+      if (due != null) dues += due
     }
-    for (e in entities.values) {
-      if (e !is Room || e.affects.isEmpty() || !isSimulated(e)) continue
-      for (aff in e.affects) {
-        val every = aff.tickEvery
-        when {
-          aff.expiresAt <= pulse -> due += Due(aff.expiresAt, aff.id) { expireRoomAffect(e, aff) }
-          every != null && aff.onTick != null && (pulse - aff.appliedAt) % every == 0L ->
-            due +=
-              Due(pulse, aff.id) {
-                // An earlier hook this pulse may have ended the affect.
-                if (aff in e.affects) invokeRef(e, aff.onTick, HookContext(affect = aff))
-              }
-        }
-      }
+  }
+
+  /** The due for one actor affect: an expiry or a tick, else null. */
+  private fun actorAffectDue(a: Actor, aff: Affect): Due? {
+    if (aff.expiresAt <= pulse) return Due(aff.expiresAt, aff.id) { expireAffect(a, aff) }
+    if (!affectTicksNow(aff)) return null
+    return Due(pulse, aff.id) { fireActorAffectTick(a, aff) }
+  }
+
+  /** True if [aff] runs its tick hook this pulse. */
+  private fun affectTicksNow(aff: Affect): Boolean {
+    val every = aff.tickEvery
+    if (every == null) return false
+    if (aff.onTick == null) return false
+    return (pulse - aff.appliedAt) % every == 0L
+  }
+
+  /** Runs [aff]'s tick hook; an earlier hook this pulse may have ended the affect. */
+  private fun fireActorAffectTick(a: Actor, aff: Affect) {
+    val tick = aff.onTick
+    if (tick == null) return
+    invokeRef(a, tick, HookContext(affect = aff))
+  }
+
+  /** [item]'s affects expiring or ticking this pulse. */
+  private fun itemAffectDues(item: Item, dues: MutableList<Due>) {
+    for (aff in item.affects) {
+      val due = itemAffectDue(item, aff)
+      if (due != null) dues += due
     }
-    due.sortWith(compareBy<Due>({ it.due }, { it.id }))
-    for (d in due) guarded("timer ${d.id}") { d.run() }
+  }
+
+  /** The due for one item affect: an expiry or a tick, else null. */
+  private fun itemAffectDue(item: Item, aff: Affect): Due? {
+    if (aff.expiresAt <= pulse) return Due(aff.expiresAt, aff.id) { expireItemAffect(item, aff) }
+    if (!affectTicksNow(aff)) return null
+    return Due(pulse, aff.id) { fireItemAffectTick(item, aff) }
+  }
+
+  /** Runs [aff]'s tick hook; an earlier hook this pulse may have destroyed the item or ended it. */
+  private fun fireItemAffectTick(item: Item, aff: Affect) {
+    if (item.id !in entities) return
+    if (aff !in item.affects) return
+    val tick = aff.onTick
+    if (tick == null) return
+    invokeRef(item, tick, HookContext(affect = aff))
+  }
+
+  /** [room]'s affects expiring or ticking this pulse. */
+  private fun roomAffectDues(room: Room, dues: MutableList<Due>) {
+    for (aff in room.affects) {
+      val due = roomAffectDue(room, aff)
+      if (due != null) dues += due
+    }
+  }
+
+  /** The due for one room affect: an expiry or a tick, else null. */
+  private fun roomAffectDue(room: Room, aff: Affect): Due? {
+    if (aff.expiresAt <= pulse) return Due(aff.expiresAt, aff.id) { expireRoomAffect(room, aff) }
+    if (!affectTicksNow(aff)) return null
+    return Due(pulse, aff.id) { fireRoomAffectTick(room, aff) }
+  }
+
+  /** Runs [aff]'s tick hook; an earlier hook this pulse may have ended the affect. */
+  private fun fireRoomAffectTick(room: Room, aff: Affect) {
+    if (aff !in room.affects) return
+    val tick = aff.onTick
+    if (tick == null) return
+    invokeRef(room, tick, HookContext(affect = aff))
   }
 
   /** Phase 2 for one actor. */
@@ -939,31 +998,11 @@ class World(
 
   /** Phase 4. Checkpoint capture arrives with persistence. */
   private fun runWorldTick() {
-    for (a in actorIndex.values.toList()) {
-      if (!isSimulated(a) || !a.inWorld) continue
-      if (!a.hasFlag("no_regen"))
-        guarded("regen of $a") { applyVitalDeltas(a, regenOf(RulesContext(this, a)), null) }
-      guarded("condition of $a") { refreshCondition(a) }
-    }
-    for (e in
-      entities.values
-        .filter { isSimulated(it) && scripts.hasHook(it, HookName.ON_TICK) }
-        .sortedBy { it.id }) {
-      if (e.id in entities) invokeOn(e, HookName.ON_TICK, HookContext())
-    }
-    for ((pkg, at) in zoneResets.entries.toList()) {
-      if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
-    }
-    // Dormant rooms catch up on respawns and decay when they wake.
-    for (s in spawnStates) {
-      val at = s.respawnAt ?: continue
-      if (at <= pulse && !s.room.isDormant) guarded("respawn in ${s.room.label}") { fillSpawn(s) }
-    }
-    for (item in entities.values.filterIsInstance<Item>()) {
-      val at = item.decayAt ?: continue
-      if (at <= pulse && item.id in entities && isSimulated(item))
-        guarded("decay of $item") { decay(item) }
-    }
+    regenPulse()
+    onTickPulse()
+    resetPulse()
+    respawnPulse()
+    decayPulse()
     for (a in actorIndex.values) if (isSimulated(a)) updateEncumbrance(a)
     expireDebugMobs()
     // Checked every world tick; broken entities stay out of the next checkpoint.
@@ -971,6 +1010,61 @@ class World(
     if (!config.checkInvariants) for (v in broken) record(Diagnostic(pulse, "invariant", v.message))
     checkpointExclusions = broken.mapNotNullTo(HashSet()) { it.entity }
     if (pulse - lastCheckpoint >= config.checkpointPulses) checkpointNow("scheduled")
+  }
+
+  /** Regen and condition refresh for every simulated actor in the world. */
+  private fun regenPulse() {
+    for (a in actorIndex.values.toList()) {
+      if (!isSimulated(a)) continue
+      if (!a.inWorld) continue
+      if (!a.hasFlag("no_regen"))
+        guarded("regen of $a") { applyVitalDeltas(a, regenOf(RulesContext(this, a)), null) }
+      guarded("condition of $a") { refreshCondition(a) }
+    }
+  }
+
+  /** `on_tick` on every simulated entity that has one, ascending id. */
+  private fun onTickPulse() {
+    for (e in
+      entities.values
+        .filter { isSimulated(it) && scripts.hasHook(it, HookName.ON_TICK) }
+        .sortedBy { it.id }) {
+      if (e.id in entities) invokeOn(e, HookName.ON_TICK, HookContext())
+    }
+  }
+
+  /** Zone resets due this tick, at most one per package. */
+  private fun resetPulse() {
+    for ((pkg, at) in zoneResets.entries.toList()) {
+      if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
+    }
+  }
+
+  /** Spawn rules whose respawn is due; a dormant room catches up when it wakes. */
+  private fun respawnPulse() {
+    for (s in spawnStates) {
+      val at = s.respawnAt ?: continue
+      if (at > pulse) continue
+      if (s.room.isDormant) continue
+      guarded("respawn in ${s.room.label}") { fillSpawn(s) }
+    }
+  }
+
+  /** Item decay due this tick; an earlier hook this tick may have removed the item. */
+  private fun decayPulse() {
+    for (item in entities.values.filterIsInstance<Item>()) {
+      if (!decayDue(item)) continue
+      guarded("decay of $item") { decay(item) }
+    }
+  }
+
+  /** True if [item]'s decay is due now and the item is still alive and simulated. */
+  private fun decayDue(item: Item): Boolean {
+    val at = item.decayAt
+    if (at == null) return false
+    if (at > pulse) return false
+    if (item.id !in entities) return false
+    return isSimulated(item)
   }
 
   /** Plugin periodic work due this pulse, then the output it sent, before perceptions. */
@@ -1041,23 +1135,28 @@ class World(
     removedThisPhase.clear()
     val (ranked, rest) = participants.partition { it.isEngaged && it.initiative != null }
     val tiers = ranked.groupBy { it.initiative!! }.toSortedMap(reverseOrder()).values + listOf(rest)
-    for (tier in tiers) {
-      val members = tier.filter { it.inWorld && it.id !in removedThisPhase }.sortedBy { it.id }
-      if (members.isEmpty()) continue
-      // Only actors that can be acted on: simulated ones, which covers active rooms.
-      val snap = TierSnapshot(actorIndex.values.filter { isSimulated(it) })
-      snapshot = snap
-      try {
-        for (a in members) {
-          if (snap.canAct(a)) guarded("action of $a") { act(a) }
-          flushImmediate()
-        }
-      } finally {
-        snapshot = null
-      }
-      commitDeferred()
-    }
+    for (tier in tiers) runTier(tier, act)
     removedThisPhase.clear()
+  }
+
+  /**
+   * One initiative tier: its actions validated against the snapshot, then the tier's deferred work.
+   */
+  private fun runTier(tier: List<Actor>, act: (Actor) -> Unit) {
+    val members = tier.filter { it.inWorld && it.id !in removedThisPhase }.sortedBy { it.id }
+    if (members.isEmpty()) return
+    // Only actors that can be acted on: simulated ones, which covers active rooms.
+    val snap = TierSnapshot(actorIndex.values.filter { isSimulated(it) })
+    snapshot = snap
+    try {
+      for (a in members) {
+        if (snap.canAct(a)) guarded("action of $a") { act(a) }
+        flushImmediate()
+      }
+    } finally {
+      snapshot = null
+    }
+    commitDeferred()
   }
 
   /** Runs [op] at the end of the current tier, or now if no tier is running. */
