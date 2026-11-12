@@ -60,6 +60,10 @@ val MIGRATIONS: List<Migration> =
     Migration(5, listOf("ALTER TABLE accounts ADD COLUMN creations INTEGER NOT NULL DEFAULT 0")),
   )
 
+private fun PreparedStatement.setLongOrNull(index: Int, value: Long?) {
+  if (value == null) setNull(index, java.sql.Types.INTEGER) else setLong(index, value)
+}
+
 /** A diagnostics row. */
 data class DiagnosticRow(
   val id: Long = 0,
@@ -284,169 +288,167 @@ class Database private constructor(val file: Path, private val conn: Connection)
   private fun writeAccounts(ops: List<AccountOp>, results: MutableList<() -> Unit>) {
     for (op in ops) {
       when (op) {
-        is AccountOp.Create ->
-          prepare(
-            "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          ) { st ->
-            val a = op.account
-            st.setString(1, a.login)
-            st.setString(2, a.pwHash)
-            st.setString(3, rolesJson(a))
-            st.setString(4, a.githubHandle)
-            st.setInt(5, if (a.disabled) 1 else 0)
-            val by = a.disabledBy
-            if (by == null) st.setNull(6, java.sql.Types.INTEGER) else st.setLong(6, by)
-            val at = a.disabledAt
-            if (at == null) st.setNull(7, java.sql.Types.INTEGER) else st.setLong(7, at)
-            st.setString(8, a.disabledReason)
-            st.setLong(9, a.createdAt)
-            val id = if (st.executeUpdate() == 1) scalar("SELECT last_insert_rowid()") else null
-            results += { op.result.complete(id) }
-          }
-        is AccountOp.Update ->
-          // Update writes only these columns; creations is not written so a stale Account copy can
-          // never lower the counter.
-          prepare(
-            "UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ?, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
-          ) { st ->
-            val a = op.account
-            st.setString(1, rolesJson(a))
-            st.setString(2, a.githubHandle)
-            st.setInt(3, if (a.disabled) 1 else 0)
-            val by = a.disabledBy
-            if (by == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, by)
-            val at = a.disabledAt
-            if (at == null) st.setNull(5, java.sql.Types.INTEGER) else st.setLong(5, at)
-            st.setString(6, a.disabledReason)
-            st.setLong(7, a.id)
-            st.executeUpdate()
-          }
+        is AccountOp.Create -> createAccount(op, results)
+        is AccountOp.Update -> updateAccount(op)
         is AccountOp.CountCreation ->
-          prepare("UPDATE accounts SET creations = creations + 1 WHERE id = ?") { st ->
-            st.setLong(1, op.id)
-            st.executeUpdate()
+          update("UPDATE accounts SET creations = creations + 1 WHERE id = ?") {
+            it.setLong(1, op.id)
           }
         is AccountOp.SetPassword -> {
-          prepare("UPDATE accounts SET pw_hash = ? WHERE id = ?") { st ->
-            st.setString(1, op.pwHash)
-            st.setLong(2, op.id)
-            st.executeUpdate()
+          update("UPDATE accounts SET pw_hash = ? WHERE id = ?") {
+            it.setString(1, op.pwHash)
+            it.setLong(2, op.id)
           }
-          prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
-            st.setLong(1, op.id)
-            st.executeUpdate()
-          }
+          deleteTokensOf(op.id)
         }
-        is AccountOp.AddInvite ->
-          prepare(
-            "INSERT OR IGNORE INTO invites (code_hash, role, expires_at, used_by, account_id) VALUES (?, ?, ?, NULL, ?)"
-          ) { st ->
-            st.setString(1, op.invite.codeHash)
-            st.setString(2, op.invite.role.name)
-            st.setLong(3, op.invite.expiresAt)
-            val bound = op.invite.accountId
-            if (bound == null) st.setNull(4, java.sql.Types.INTEGER) else st.setLong(4, bound)
-            st.executeUpdate()
-          }
-        is AccountOp.RevokeTokens ->
-          prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
-            st.setLong(1, op.id)
-            st.executeUpdate()
-          }
-        is AccountOp.AddToken -> {
-          prepare("DELETE FROM session_tokens WHERE expires_at <= ?") { st ->
-            st.setLong(1, op.now)
-            st.executeUpdate()
-          }
-          prepare(
-            "INSERT OR REPLACE INTO session_tokens (token_hash, account_id, expires_at) VALUES (?, ?, ?)"
-          ) { st ->
-            st.setString(1, op.tokenHash)
-            st.setLong(2, op.accountId)
-            st.setLong(3, op.expiresAt)
-            st.executeUpdate()
-          }
-        }
+        is AccountOp.AddInvite -> addInvite(op)
+        is AccountOp.RevokeTokens -> deleteTokensOf(op.id)
+        is AccountOp.AddToken -> addToken(op)
         is AccountOp.RemoveToken ->
-          prepare("DELETE FROM session_tokens WHERE token_hash = ?") { st ->
-            st.setString(1, op.tokenHash)
-            st.executeUpdate()
+          update("DELETE FROM session_tokens WHERE token_hash = ?") {
+            it.setString(1, op.tokenHash)
           }
-        is AccountOp.AddRestriction ->
-          prepare(
-            "INSERT INTO restrictions (account_id, capability, until, reason, set_by, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-          ) { st ->
-            val r = op.restriction
-            st.setLong(1, r.accountId)
-            st.setString(2, r.capability)
-            st.setObject(3, r.until)
-            st.setString(4, r.reason)
-            st.setObject(5, r.setBy)
-            st.setLong(6, r.createdAt)
-            st.executeUpdate()
-            val id = scalar("SELECT last_insert_rowid()")
-            results += { op.result.complete(id) }
-          }
+        is AccountOp.AddRestriction -> addRestriction(op, results)
         is AccountOp.LiftRestriction ->
-          prepare(
+          update(
             "UPDATE restrictions SET lifted_by = ?, lifted_at = ? WHERE id = ? AND lifted_at IS NULL"
-          ) { st ->
-            st.setObject(1, op.by)
-            st.setLong(2, op.at)
-            st.setLong(3, op.id)
-            st.executeUpdate()
+          ) {
+            it.setObject(1, op.by)
+            it.setLong(2, op.at)
+            it.setLong(3, op.id)
           }
-        is AccountOp.UseInvite ->
-          prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL") { st ->
-            st.setLong(1, op.accountId)
-            st.setString(2, op.codeHash)
-            val used = st.executeUpdate() == 1
-            results += { op.result.complete(used) }
-          }
-        is AccountOp.SetDisabled -> {
-          var changed = false
-          prepare("SELECT disabled FROM accounts WHERE id = ?") { st ->
-            st.setLong(1, op.id)
-            st.executeQuery().use { rs ->
-              if (rs.next()) {
-                val current = rs.getInt(1) != 0
-                if (current != op.disabled) {
-                  changed = true
-                }
-              }
-            }
-          }
-          if (changed) {
-            if (op.disabled) {
-              prepare(
-                "UPDATE accounts SET disabled = 1, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
-              ) { st ->
-                if (op.by == null) st.setNull(1, java.sql.Types.INTEGER) else st.setLong(1, op.by)
-                st.setLong(2, op.at)
-                st.setString(3, op.reason)
-                st.setLong(4, op.id)
-                st.executeUpdate()
-              }
-              prepare("DELETE FROM session_tokens WHERE account_id = ?") { st ->
-                st.setLong(1, op.id)
-                st.executeUpdate()
-              }
-              prepare("DELETE FROM invites WHERE account_id = ? AND used_by IS NULL") { st ->
-                st.setLong(1, op.id)
-                st.executeUpdate()
-              }
-            } else {
-              prepare(
-                "UPDATE accounts SET disabled = 0, disabled_by = NULL, disabled_at = NULL, disabled_reason = NULL WHERE id = ?"
-              ) { st ->
-                st.setLong(1, op.id)
-                st.executeUpdate()
-              }
-            }
-          }
-          results += { op.result.complete(changed) }
-        }
+        is AccountOp.UseInvite -> useInvite(op, results)
+        is AccountOp.SetDisabled -> setDisabled(op, results)
       }
+    }
+  }
+
+  private fun update(sql: String, bind: (PreparedStatement) -> Unit) {
+    prepare(sql) { st ->
+      bind(st)
+      st.executeUpdate()
+    }
+  }
+
+  private fun deleteTokensOf(accountId: Long) =
+    update("DELETE FROM session_tokens WHERE account_id = ?") { it.setLong(1, accountId) }
+
+  private fun createAccount(op: AccountOp.Create, results: MutableList<() -> Unit>) {
+    prepare(
+      "INSERT OR IGNORE INTO accounts (login, pw_hash, roles_json, github_handle, disabled, disabled_by, disabled_at, disabled_reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ) { st ->
+      val a = op.account
+      st.setString(1, a.login)
+      st.setString(2, a.pwHash)
+      st.setString(3, rolesJson(a))
+      st.setString(4, a.githubHandle)
+      st.setInt(5, if (a.disabled) 1 else 0)
+      st.setLongOrNull(6, a.disabledBy)
+      st.setLongOrNull(7, a.disabledAt)
+      st.setString(8, a.disabledReason)
+      st.setLong(9, a.createdAt)
+      val id = if (st.executeUpdate() == 1) scalar("SELECT last_insert_rowid()") else null
+      results += { op.result.complete(id) }
+    }
+  }
+
+  // Writes only these columns; creations is left out so a stale Account copy can never lower the
+  // counter.
+  private fun updateAccount(op: AccountOp.Update) {
+    update(
+      "UPDATE accounts SET roles_json = ?, github_handle = ?, disabled = ?, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
+    ) { st ->
+      val a = op.account
+      st.setString(1, rolesJson(a))
+      st.setString(2, a.githubHandle)
+      st.setInt(3, if (a.disabled) 1 else 0)
+      st.setLongOrNull(4, a.disabledBy)
+      st.setLongOrNull(5, a.disabledAt)
+      st.setString(6, a.disabledReason)
+      st.setLong(7, a.id)
+    }
+  }
+
+  private fun addInvite(op: AccountOp.AddInvite) {
+    update(
+      "INSERT OR IGNORE INTO invites (code_hash, role, expires_at, used_by, account_id) VALUES (?, ?, ?, NULL, ?)"
+    ) {
+      it.setString(1, op.invite.codeHash)
+      it.setString(2, op.invite.role.name)
+      it.setLong(3, op.invite.expiresAt)
+      it.setLongOrNull(4, op.invite.accountId)
+    }
+  }
+
+  private fun addToken(op: AccountOp.AddToken) {
+    update("DELETE FROM session_tokens WHERE expires_at <= ?") { it.setLong(1, op.now) }
+    update(
+      "INSERT OR REPLACE INTO session_tokens (token_hash, account_id, expires_at) VALUES (?, ?, ?)"
+    ) {
+      it.setString(1, op.tokenHash)
+      it.setLong(2, op.accountId)
+      it.setLong(3, op.expiresAt)
+    }
+  }
+
+  private fun addRestriction(op: AccountOp.AddRestriction, results: MutableList<() -> Unit>) {
+    update(
+      "INSERT INTO restrictions (account_id, capability, until, reason, set_by, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ) {
+      val r = op.restriction
+      it.setLong(1, r.accountId)
+      it.setString(2, r.capability)
+      it.setObject(3, r.until)
+      it.setString(4, r.reason)
+      it.setObject(5, r.setBy)
+      it.setLong(6, r.createdAt)
+    }
+    val id = scalar("SELECT last_insert_rowid()")
+    results += { op.result.complete(id) }
+  }
+
+  private fun useInvite(op: AccountOp.UseInvite, results: MutableList<() -> Unit>) {
+    prepare("UPDATE invites SET used_by = ? WHERE code_hash = ? AND used_by IS NULL") { st ->
+      st.setLong(1, op.accountId)
+      st.setString(2, op.codeHash)
+      val used = st.executeUpdate() == 1
+      results += { op.result.complete(used) }
+    }
+  }
+
+  private fun isDisabled(accountId: Long): Boolean? {
+    var disabled: Boolean? = null
+    prepare("SELECT disabled FROM accounts WHERE id = ?") { st ->
+      st.setLong(1, accountId)
+      st.executeQuery().use { rs -> if (rs.next()) disabled = rs.getInt(1) != 0 }
+    }
+    return disabled
+  }
+
+  private fun setDisabled(op: AccountOp.SetDisabled, results: MutableList<() -> Unit>) {
+    val changed = isDisabled(op.id).let { it != null && it != op.disabled }
+    if (changed && op.disabled) disableAccount(op) else if (changed) enableAccount(op.id)
+    results += { op.result.complete(changed) }
+  }
+
+  private fun disableAccount(op: AccountOp.SetDisabled) {
+    update(
+      "UPDATE accounts SET disabled = 1, disabled_by = ?, disabled_at = ?, disabled_reason = ? WHERE id = ?"
+    ) {
+      it.setLongOrNull(1, op.by)
+      it.setLong(2, op.at)
+      it.setString(3, op.reason)
+      it.setLong(4, op.id)
+    }
+    deleteTokensOf(op.id)
+    update("DELETE FROM invites WHERE account_id = ? AND used_by IS NULL") { it.setLong(1, op.id) }
+  }
+
+  private fun enableAccount(id: Long) {
+    update(
+      "UPDATE accounts SET disabled = 0, disabled_by = NULL, disabled_at = NULL, disabled_reason = NULL WHERE id = ?"
+    ) {
+      it.setLong(1, id)
     }
   }
 
@@ -459,14 +461,32 @@ class Database private constructor(val file: Path, private val conn: Connection)
     }
 
   private fun writeWorld(b: Batch) {
-    prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)") { st ->
+    writeMeta(b)
+    writeEntities(b)
+    writePlayers(b)
+    writeZones(b)
+    writeStandings(b)
+    writeItemEvents(b)
+    writeDiagnostics(b)
+  }
+
+  private fun batch(sql: String, bind: (PreparedStatement) -> Unit) {
+    prepare(sql) { st ->
+      bind(st)
+      st.executeBatch()
+    }
+  }
+
+  private fun writeMeta(b: Batch) =
+    batch("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)") { st ->
       for ((k, v) in b.meta) {
         st.setString(1, k)
         st.setString(2, v)
         st.addBatch()
       }
-      st.executeBatch()
     }
+
+  private fun writeEntities(b: Batch) {
     prepare("INSERT OR REPLACE INTO world_entities VALUES (?, ?, ?, ?, ?, ?, ?)") { up ->
       prepare("DELETE FROM world_entities WHERE id = ?") { del ->
         for ((id, row) in b.entities) {
@@ -488,43 +508,48 @@ class Database private constructor(val file: Path, private val conn: Connection)
         up.executeBatch()
       }
     }
-    prepare("INSERT OR REPLACE INTO players VALUES (?, ?, ?, ?, ?)") { st ->
+  }
+
+  private fun writePlayers(b: Batch) =
+    batch("INSERT OR REPLACE INTO players VALUES (?, ?, ?, ?, ?)") { st ->
       for (row in b.players.values) {
         st.setLong(1, row.id)
-        if (row.accountId == null) st.setNull(2, java.sql.Types.INTEGER)
-        else st.setLong(2, row.accountId)
+        st.setLongOrNull(2, row.accountId)
         st.setString(3, row.name)
         st.setString(4, row.payload)
         st.setLong(5, row.updatedPulse)
         st.addBatch()
       }
-      st.executeBatch()
     }
-    prepare("INSERT OR REPLACE INTO zone_states VALUES (?, ?)") { st ->
+
+  private fun writeZones(b: Batch) =
+    batch("INSERT OR REPLACE INTO zone_states VALUES (?, ?)") { st ->
       for ((pkg, json) in b.zones) {
         st.setString(1, pkg)
         st.setString(2, json)
         st.addBatch()
       }
-      st.executeBatch()
     }
-    b.standings?.let { standings ->
-      conn.createStatement().use { st -> st.executeUpdate("DELETE FROM standings") }
-      prepare(
-        "INSERT INTO standings (holder, subject, amount, updated_pulse, history_json) VALUES (?, ?, ?, ?, ?)"
-      ) { st ->
-        for (row in standings) {
-          st.setString(1, row.holder)
-          st.setString(2, row.subject)
-          st.setInt(3, row.amount)
-          st.setLong(4, row.updatedPulse)
-          st.setString(5, row.historyJson)
-          st.addBatch()
-        }
-        st.executeBatch()
+
+  private fun writeStandings(b: Batch) {
+    val standings = b.standings ?: return
+    conn.createStatement().use { st -> st.executeUpdate("DELETE FROM standings") }
+    batch(
+      "INSERT INTO standings (holder, subject, amount, updated_pulse, history_json) VALUES (?, ?, ?, ?, ?)"
+    ) { st ->
+      for (row in standings) {
+        st.setString(1, row.holder)
+        st.setString(2, row.subject)
+        st.setInt(3, row.amount)
+        st.setLong(4, row.updatedPulse)
+        st.setString(5, row.historyJson)
+        st.addBatch()
       }
     }
-    prepare(
+  }
+
+  private fun writeItemEvents(b: Batch) =
+    batch(
       "INSERT INTO item_events (item_id, pulse, wall_time, from_json, to_json, cause) VALUES (?, ?, ?, ?, ?, ?)"
     ) { st ->
       for (e in b.events) {
@@ -536,9 +561,10 @@ class Database private constructor(val file: Path, private val conn: Connection)
         st.setString(6, e.cause)
         st.addBatch()
       }
-      st.executeBatch()
     }
-    prepare(
+
+  private fun writeDiagnostics(b: Batch) =
+    batch(
       """INSERT INTO diagnostics (pulse, wall_time, package, label, hook, file, line, kind, message, stack, ctx_json, seed, repro_json)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
     ) { st ->
@@ -549,18 +575,16 @@ class Database private constructor(val file: Path, private val conn: Connection)
         st.setString(4, d.label)
         st.setString(5, d.hook)
         st.setString(6, d.file)
-        if (d.line == null) st.setNull(7, java.sql.Types.INTEGER) else st.setInt(7, d.line)
+        st.setLongOrNull(7, d.line?.toLong())
         st.setString(8, d.kind)
         st.setString(9, d.message)
         st.setString(10, d.stack)
         st.setString(11, d.ctxJson)
-        if (d.seed == null) st.setNull(12, java.sql.Types.INTEGER) else st.setLong(12, d.seed)
+        st.setLongOrNull(12, d.seed)
         st.setString(13, d.reproJson)
         st.addBatch()
       }
-      st.executeBatch()
     }
-  }
 
   /** A consistent snapshot through SQLite's online-backup API, safe while the world writes. */
   fun backupTo(target: Path) = backup(file, target)
