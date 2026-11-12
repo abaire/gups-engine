@@ -161,7 +161,11 @@ fun World.wearFits(wear: String, slot: String): Boolean =
  * a bound; the last pass stands. The wearer is told only about the net change across all passes,
  * and only if [announce].
  */
-fun World.refreshFit(a: Actor, announce: Boolean = true) {
+fun World.refreshFit(a: Actor, announce: Boolean = true) = holdingAffectEvents {
+  refit(a, announce)
+}
+
+private fun World.refit(a: Actor, announce: Boolean) {
   if (!a.inWorld || a.refittingSlots) return
   val initial = a.inactiveSlots
   var changed = false

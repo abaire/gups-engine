@@ -37,29 +37,39 @@ fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boole
  * decay deadline and instance affects. A moved part does not fire `on_spawn`, because no new
  * content was created.
  */
-fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item {
+fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item =
+  holdingAffectEvents {
+    relocate(item, to, count)
+  }
+
+private fun World.relocate(item: Item, to: ItemLocation, count: Int): Item {
   require(item.id in entities) { "$item is not in the world" }
   require(count in 1..item.count) {
     "move_item: count must be between 1 and ${item.count}, got $count"
   }
-  if (count == item.count) {
-    checkTarget(item, to)
-    val before = custodian(item) as? Player
-    val from = item.location
-    unindex(item)
-    item.location = to
-    index(item, to)
-    item.dirty = true
-    val after = custodian(item) as? Player
-    if (before !== after && !item.debug) {
-      itemEvents += ItemEvent(item.id, pulse, from, to, "move")
-      // An item changing hands between players is saved at once, both sides together.
-      if (before != null && after != null) requestImmediate("transfer")
-    }
-    holderOf(from)?.let { refreshHoldings(it) }
-    custodian(item)?.let { refreshHoldings(it) }
-    return item
+  return if (count == item.count) moveWhole(item, to) else moveSplit(item, to, count)
+}
+
+private fun World.moveWhole(item: Item, to: ItemLocation): Item {
+  checkTarget(item, to)
+  val before = custodian(item) as? Player
+  val from = item.location
+  unindex(item)
+  item.location = to
+  index(item, to)
+  item.dirty = true
+  val after = custodian(item) as? Player
+  if (before !== after && !item.debug) {
+    itemEvents += ItemEvent(item.id, pulse, from, to, "move")
+    // An item changing hands between players is saved at once, both sides together.
+    if (changesPlayers(before, after)) requestImmediate("transfer")
   }
+  holderOf(from)?.let { refreshHoldings(it) }
+  custodian(item)?.let { refreshHoldings(it) }
+  return item
+}
+
+private fun World.moveSplit(item: Item, to: ItemLocation, count: Int): Item {
   require(item.proto.stackable) { "${item.name} is not stackable" }
   require(item.location !is ItemLocation.Equipped && to !is ItemLocation.Equipped) {
     "move_item: can't move part of a stack to or from equipment"
@@ -67,49 +77,66 @@ fun World.moveItem(item: Item, to: ItemLocation, count: Int = item.count): Item 
   checkTarget(item, to)
   val from = item.location
   val before = custodian(item) as? Player
+  val part = splitOff(item, to, count)
+  register(part)
+  index(part, to)
+  val after = custodian(part) as? Player
+  // The part is a new id, so it always needs an origin record when a player is involved.
+  val involvesPlayer = before != null || after != null
+  if (involvesPlayer && !part.debug) itemEvents += ItemEvent(part.id, pulse, from, to, "split")
+  if (changesPlayers(before, after)) requestImmediate("transfer")
+  holderOf(from)?.let { refreshHoldings(it) }
+  custodian(part)?.let { refreshHoldings(it) }
+  return part
+}
+
+/** True when an item goes from one player's custody to another's. */
+private fun changesPlayers(before: Player?, after: Player?): Boolean {
+  if (before == null || after == null) return false
+  return before !== after
+}
+
+/**
+ * A new item at [to] holding [count] of [item], with copies of everything else the instance owns;
+ * [item] keeps the rest. The part is not yet registered or indexed.
+ */
+private fun World.splitOff(item: Item, to: ItemLocation, count: Int): Item {
   val part = Item(allocateId(), item.proto, to, count)
   part.debug = item.debug
   part.nameOverride = item.nameOverride
   part.decayAt = item.decayAt
   part.charges = item.charges
   part.customAttributes.putAll(item.customAttributes)
-  for (a in item.affects) part.affects +=
-    Affect(
-      allocateHandle(),
-      a.name,
-      a.source,
-      a.appliedAt,
-      a.expiresAt,
-      a.statDeltas,
-      a.flags,
-      a.tickEvery,
-      a.onTick,
-      a.onExpire,
-      a.expireMessage,
-      a.modifiers,
-      a.wornFrom,
-      a.senseDeltas,
-      a.applies,
-      a.maxVitalDeltas,
-      a.resistDeltas,
-      a.procs,
-    )
+  for (a in item.affects) part.affects += copyAffect(a)
   part.addedTags += item.addedTags
   part.removedTags += item.removedTags
   part.dirty = true
   item.count -= count
   item.dirty = true
-  register(part)
-  index(part, to)
-  val after = custodian(part) as? Player
-  // The part is a new id, so it always needs an origin record when a player is involved.
-  if ((before != null || after != null) && !part.debug)
-    itemEvents += ItemEvent(part.id, pulse, from, to, "split")
-  if (before != null && after != null && before !== after) requestImmediate("transfer")
-  holderOf(from)?.let { refreshHoldings(it) }
-  custodian(part)?.let { refreshHoldings(it) }
   return part
 }
+
+private fun World.copyAffect(a: Affect): Affect =
+  Affect(
+    allocateHandle(),
+    a.name,
+    a.source,
+    a.appliedAt,
+    a.expiresAt,
+    a.statDeltas,
+    a.flags,
+    a.tickEvery,
+    a.onTick,
+    a.onExpire,
+    a.expireMessage,
+    a.modifiers,
+    a.wornFrom,
+    a.senseDeltas,
+    a.applies,
+    a.maxVitalDeltas,
+    a.resistDeltas,
+    a.procs,
+  )
 
 /** The actor whose load an item at [loc] counts toward, if any. */
 private fun World.holderOf(loc: ItemLocation): Actor? =
@@ -131,6 +158,22 @@ internal fun World.updateEncumbrance(a: Actor, announceFit: Boolean = true) {
   if (!a.inWorld) return
   val was = a.encumbrance
   val wasLevel = a.encumbranceLevel
+  askEncumbrance(a)
+  val level = a.encumbranceLevel
+  if (was != a.encumbrance || wasLevel != level) {
+    a.dirty = true
+    tellEncumbranceChange(a, wasLevel, level)
+  }
+  if (was != a.encumbrance) refreshFit(a, announceFit)
+  if (wasLevel != level && announceFit)
+    dispatchGlobal(
+      HookName.ON_ENCUMBRANCE_CHANGE,
+      HookContext(actor = a, oldEncumbranceLevel = wasLevel, newEncumbranceLevel = level),
+    )
+}
+
+/** Sets [a]'s encumbrance level and penalties from the rules, asked without the current ones. */
+private fun World.askEncumbrance(a: Actor) {
   guarded("encumbrance of $a") {
     a.encumbrance = emptyMap()
     a.encumbranceLevel = 0
@@ -147,22 +190,15 @@ internal fun World.updateEncumbrance(a: Actor, announceFit: Boolean = true) {
     a.encumbranceLevel = level
     a.encumbrance = penalties
   }
-  val level = a.encumbranceLevel
-  if (was != a.encumbrance || wasLevel != level) {
-    a.dirty = true
-    when {
-      wasLevel == 0 && level > 0 -> tell(a, KernelMsg.ENCUMBERED)
-      level == 0 && wasLevel > 0 -> tell(a, KernelMsg.UNENCUMBERED)
-      level > wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_UP, "level" to level, "was" to wasLevel)
-      level < wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_DOWN, "level" to level, "was" to wasLevel)
-    }
+}
+
+private fun World.tellEncumbranceChange(a: Actor, wasLevel: Int, level: Int) {
+  when {
+    wasLevel == 0 && level > 0 -> tell(a, KernelMsg.ENCUMBERED)
+    level == 0 && wasLevel > 0 -> tell(a, KernelMsg.UNENCUMBERED)
+    level > wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_UP, "level" to level, "was" to wasLevel)
+    level < wasLevel -> tell(a, KernelMsg.ENCUMBRANCE_DOWN, "level" to level, "was" to wasLevel)
   }
-  if (was != a.encumbrance) refreshFit(a, announceFit)
-  if (wasLevel != level && announceFit)
-    dispatchGlobal(
-      HookName.ON_ENCUMBRANCE_CHANGE,
-      HookContext(actor = a, oldEncumbranceLevel = wasLevel, newEncumbranceLevel = level),
-    )
 }
 
 /**
@@ -183,28 +219,29 @@ internal fun Item.canStack(): Boolean =
  */
 fun World.stack(item: Item): Item {
   if (!item.canStack()) return item
-  val peers =
-    when (val loc = item.location) {
-      is ItemLocation.InRoom ->
-        (entity(loc.room) as? Room)?.itemIndex?.values?.filter { it.groundIndex == loc.trackIndex }
-      is ItemLocation.Carried -> actor(loc.actor)?.inventoryIndex?.values
-      is ItemLocation.Contained -> item(loc.container)?.contentsIndex?.values
-      is ItemLocation.Equipped -> null
-    } ?: return item
-  val into =
-    peers.firstOrNull {
-      it !== item &&
-        it.protoLabel == item.protoLabel &&
-        it.canStack() &&
-        it.decayAt == item.decayAt &&
-        it.charges == item.charges &&
-        it.customAttributes == item.customAttributes
-    } ?: return item
+  val into = stackPeers(item)?.firstOrNull { it !== item && it.stacksWith(item) } ?: return item
   into.count += item.count
   into.dirty = true
   destroy(item)
   return into
 }
+
+/** The items at [item]'s location it could stack with, or null where nothing stacks. */
+private fun World.stackPeers(item: Item): Collection<Item>? =
+  when (val loc = item.location) {
+    is ItemLocation.InRoom ->
+      (entity(loc.room) as? Room)?.itemIndex?.values?.filter { it.groundIndex == loc.trackIndex }
+    is ItemLocation.Carried -> actor(loc.actor)?.inventoryIndex?.values
+    is ItemLocation.Contained -> item(loc.container)?.contentsIndex?.values
+    is ItemLocation.Equipped -> null
+  }
+
+private fun Item.stacksWith(other: Item): Boolean =
+  protoLabel == other.protoLabel &&
+    canStack() &&
+    decayAt == other.decayAt &&
+    charges == other.charges &&
+    customAttributes == other.customAttributes
 
 /**
  * The `destroy` verb: removes [item] and everything inside it, or only [count] of a stack when
@@ -257,21 +294,19 @@ internal fun World.spendCharge(item: Item) {
   when (val empty = item.proto.empty) {
     EmptyAction.Destroy -> destroy(item, 1)
     EmptyAction.Keep -> Unit
-    is EmptyAction.Variant -> {
-      val label = item.proto.variants.getValue(empty.name)
-      if (item.count == 1) {
-        transformItem(item, label)
-      } else {
-        val loc = item.location
-        val thatLocation =
-          (loc as? ItemLocation.Equipped)?.let { ItemLocation.Carried(it.actor) } ?: loc
-        destroy(item, 1)
-        val part = spawnItem(label, thatLocation, debug = item.debug)
-        part.customAttributes.putAll(item.customAttributes)
-        stack(part)
-      }
-    }
+    is EmptyAction.Variant -> becomeVariant(item, item.proto.variants.getValue(empty.name))
   }
+}
+
+/** Turns one of [item] into [label]: the item itself, or one split off a stack and restacked. */
+private fun World.becomeVariant(item: Item, label: Label) {
+  if (item.count == 1) return transformItem(item, label)
+  val loc = item.location
+  val thatLocation = (loc as? ItemLocation.Equipped)?.let { ItemLocation.Carried(it.actor) } ?: loc
+  destroy(item, 1)
+  val part = spawnItem(label, thatLocation, debug = item.debug)
+  part.customAttributes.putAll(item.customAttributes)
+  stack(part)
 }
 
 /** The actor whose custody [item] ends in, following containers; null for items on the ground. */

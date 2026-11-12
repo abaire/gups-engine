@@ -332,7 +332,7 @@ bearer resist every enemy spell of kind `"spell"` cast at it, while swings roll 
 
 Traits can also react. `on` maps an event to a `PluginTraitHandler` that runs for each bearer when the event happens to
 it, and unlike a modifier it may change the world through `call.world`. The call carries the `bearer`, the `event` and
-its `fields`, where ints are `Long`, actors are `PluginActor` and rooms are `PluginRoom`:
+its `fields`, where ints are `Long`, actors are `PluginActor` and rooms are `PluginRoom` and items are `PluginItem`:
 
 - `SKILL_RECOGNIZED`: a player recognized a skill they don't know, after a cast that succeeded or was resisted. Fields:
   `source`, `skill` (the label), `outcome`, `target` (a `PluginActor` or null) and `power`.
@@ -346,12 +346,19 @@ its `fields`, where ints are `Long`, actors are `PluginActor` and rooms are `Plu
   `new_level`.
 - `ROOM_ENTERED`: the bearer arrived by walking, fleeing or teleporting. Fields: `from_room` (a `PluginRoom`) and
   `direction` (a `String`, or null for a teleport).
+- `AFFECT_GAINED`: an affect was put on the bearer, new or replacing one that ran out sooner. Fields: `name`, `flags` (a
+  sorted list of `String`s), `source` (a `PluginActor` or null), `source_item` (the `PluginItem` the affect lasts while
+  it is worn, or null), `power`, `expires_at` (the absolute pulse, or null when it never runs out) and `replaced` (a
+  `Boolean`).
+- `AFFECT_LOST`: an affect came off the bearer, by expiry, `remove_affect`, `dispel` or its item coming off, after its
+  `on_expire`. Fields: `name`, `flags`, `source`, `source_item`, `power` and `reason` (`"expired"` or `"removed"`).
 
 Handlers run synchronously where the event happens, right after the script hooks on entities, the room and items there.
 At death and at a level change they run before the global hooks and plugin event listeners. Bearers can be players or
 mobs, except for `SKILL_RECOGNIZED`, which is players only. A handler that causes another event (a `DAMAGED` handler
 that deals damage, say) is cut off by the cascade depth, with a `cascade` diagnostic. `call.world.skill(label)` returns
-a loaded skill's view, or null. A handler that throws records a `plugin` diagnostic. See `samples/bluemage-plugin` for a
+a loaded skill's view, or null. A handler that throws records a `plugin` diagnostic. A replaced affect fires only
+`AFFECT_GAINED`, with `replaced` true, and restoring a saved actor fires neither. See `samples/bluemage-plugin` for a
 trait that learns skills from `SKILL_RECOGNIZED`.
 
 A trait that reacts when its bearer is hurt (from `samples/bluemage-plugin`, which registers it with

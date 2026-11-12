@@ -13,6 +13,7 @@ import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.Modifiers
 import gups.core.model.Proc
+import gups.core.model.TraitEvent
 import gups.core.saturatingAdd
 
 /**
@@ -95,18 +96,26 @@ private fun List<Affect>.lastingAs(name: String, expiresAt: Long): Affect? =
 // ---- Actor affects ---------------------------------------------------------------------------
 
 /**
+ * Where an applied affect comes from beyond its spec. [wornFrom] ties it to an item, and it then
+ * lasts until the item comes off. [fireEvents] is false when rebuilding affects that already
+ * existed, so nothing reports them as new.
+ */
+data class AffectOrigin(val wornFrom: EntityId? = null, val fireEvents: Boolean = true)
+
+/**
  * The `apply_affect` verb. Re-applying a name replaces the old affect only if the new one would run
  * out later; otherwise the old one stays and is returned, so a short stun or debuff can't cut a
  * longer one short. [hostile] says whether the affect is a bane when the skill behind it doesn't
- * settle that; [wornFrom] ties the affect to an item, and it then lasts until the item comes off.
+ * settle that; [origin] says what else the affect is tied to.
  */
 fun World.applyAffect(
   target: Actor,
   spec: AffectSpec,
   hostile: Boolean? = null,
-  wornFrom: EntityId? = null,
+  origin: AffectOrigin = AffectOrigin(),
 ): Affect? {
   if (!target.inWorld) return null
+  val wornFrom = origin.wornFrom
   val duration = requireNotNull(spec.duration) { "apply_affect: duration is required for an actor" }
   require(duration >= 1) { "apply_affect: duration must be at least 1" }
   val expiresAt = if (wornFrom != null) Long.MAX_VALUE else saturatingAdd(pulse, duration)
@@ -114,7 +123,7 @@ fun World.applyAffect(
     return it
   }
   val wasDisabled = target.isDisabled
-  target.affects.removeIf { it.name == spec.name }
+  val replaced = target.affects.removeIf { it.name == spec.name }
   val affect = newAffect(spec, expiresAt, wornFrom)
   target.affects += affect
   creditApplication(target, spec.source, affect, hostile)
@@ -124,7 +133,71 @@ fun World.applyAffect(
   forgetActorSlots(target)
   refreshFit(target)
   clampVitals(target)
+  if (origin.fireEvents) fireAffectGained(target, affect, replaced)
   return affect
+}
+
+private fun World.fireAffectGained(target: Actor, affect: Affect, replaced: Boolean) {
+  val fields =
+    affectEventFields(affect) +
+      mapOf(
+        "expires_at" to affect.expiresAt.takeIf { it != Long.MAX_VALUE },
+        "replaced" to replaced,
+      )
+  fireAffectEvent(target, TraitEvent.AFFECT_GAINED, fields)
+}
+
+/** The fields both affect events carry. */
+private fun World.affectEventFields(affect: Affect): Map<String, Any?> =
+  mapOf(
+    "name" to affect.name,
+    "flags" to affect.flags.sorted(),
+    "source" to affect.source?.let(::actor)?.takeIf { it.inWorld },
+    "source_item" to affect.wornFrom?.let(::item),
+    "power" to affect.power,
+  )
+
+/** An affect event waiting for the item move or refit that caused it to finish. */
+internal class HeldAffectEvent(
+  val bearer: Actor,
+  val event: TraitEvent,
+  val fields: Map<String, Any?>,
+)
+
+/**
+ * Fires an affect event for [bearer], except while its own death is being processed. Inside
+ * [holdingAffectEvents] it waits until that work is done.
+ */
+private fun World.fireAffectEvent(bearer: Actor, event: TraitEvent, fields: Map<String, Any?>) {
+  if (isDying(bearer)) return
+  if (affectEventHold > 0) heldAffectEvents += HeldAffectEvent(bearer, event, fields)
+  else fireTraitEvent(bearer, event, fields)
+}
+
+/**
+ * Runs [block], holding back the affect events it causes until it has finished, so a handler never
+ * sees an item half moved or slots half refitted. Nested calls release once, at the outermost.
+ */
+internal inline fun <T> World.holdingAffectEvents(block: () -> T): T {
+  affectEventHold++
+  val result =
+    try {
+      block()
+    } catch (e: Throwable) {
+      if (affectEventHold == 1) heldAffectEvents.clear()
+      throw e
+    } finally {
+      affectEventHold--
+    }
+  if (affectEventHold == 0) releaseAffectEvents()
+  return result
+}
+
+internal fun World.releaseAffectEvents() {
+  while (heldAffectEvents.isNotEmpty()) {
+    val e = heldAffectEvents.removeFirst()
+    fireTraitEvent(e.bearer, e.event, e.fields)
+  }
 }
 
 private fun stunsCaster(spec: AffectSpec, target: Actor): Boolean =
@@ -192,6 +265,12 @@ internal fun World.endAffect(
   val tells = announce || why == AffectEndReason.EXPIRED
   if (tells && affect.expireMessage.isNotEmpty()) send(a, affect.expireMessage)
   affect.onExpire?.let { invokeRef(a, it, HookContext(affect = affect, affectEndReason = why)) }
+  // Before the dismissal, which takes a summoned mob out of the world and would skip its handler.
+  fireAffectEvent(
+    a,
+    TraitEvent.AFFECT_LOST,
+    affectEventFields(affect) + ("reason" to why.name.lowercase()),
+  )
   if ("summoned" in affect.flags) dismissSummon(a)
 }
 
@@ -282,16 +361,29 @@ internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
  * Applies [item]'s `equip_affects` to [wearer] as it is equipped, through [applyAffect] like any
  * other affect. Untimed entries last until [removeEquipAffects]; timed ones count down. If
  * [untimedOnly] is true, timed entries are skipped (used when an inactive item becomes active
- * again).
+ * again). [fireEvents] is passed on to [applyAffect].
  */
-internal fun World.applyEquipAffects(wearer: Actor, item: Item, untimedOnly: Boolean = false) {
+internal fun World.applyEquipAffects(
+  wearer: Actor,
+  item: Item,
+  untimedOnly: Boolean = false,
+  fireEvents: Boolean = true,
+) {
   for (e in item.proto.equipAffects) {
     if (untimedOnly && e.pulses != null) continue
     val name = equipAffectName(item, e.flag)
     if (e.pulses != null) {
-      applyAffect(wearer, AffectSpec(name, e.pulses.toLong(), flags = setOf(e.flag)))
+      applyAffect(
+        wearer,
+        AffectSpec(name, e.pulses.toLong(), flags = setOf(e.flag)),
+        origin = AffectOrigin(fireEvents = fireEvents),
+      )
     } else {
-      applyAffect(wearer, AffectSpec(name, 1, flags = setOf(e.flag)), wornFrom = item.id)
+      applyAffect(
+        wearer,
+        AffectSpec(name, 1, flags = setOf(e.flag)),
+        origin = AffectOrigin(item.id, fireEvents),
+      )
     }
   }
 }

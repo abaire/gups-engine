@@ -448,6 +448,21 @@ enum class PluginTraitEvent {
    * ([PluginRoom]) and `direction` (the exit's name, or null for a teleport).
    */
   ROOM_ENTERED,
+
+  /**
+   * An affect was put on the bearer: a new one, or a longer reapplication that replaced the old
+   * one. Fields: `name`, `flags` (`List<String>`, sorted), `source` ([PluginActor] or null),
+   * `source_item` ([PluginItem] the affect lasts while it is worn, or null), `power` ([Long]),
+   * `expires_at` ([Long], or null when it never runs out) and `replaced` ([Boolean]).
+   */
+  AFFECT_GAINED,
+
+  /**
+   * An affect came off the bearer: it expired, was removed or dispelled, or its item came off. Not
+   * fired for one a reapplication replaced. Fields: `name`, `flags`, `source`, `source_item`,
+   * `power` and `reason` (`expired` or `removed`).
+   */
+  AFFECT_LOST,
 }
 
 data class PluginTraitCall(

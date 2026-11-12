@@ -98,7 +98,7 @@ fun World.settleRestoredHoldings(a: Actor) {
   a.refittingSlots = true
   try {
     for ((slot, item) in a.equipmentIndex.toList()) {
-      if (a.isActiveSlot(slot)) applyEquipAffects(a, item, untimedOnly = true)
+      if (a.isActiveSlot(slot)) applyEquipAffects(a, item, untimedOnly = true, fireEvents = false)
     }
   } finally {
     a.refittingSlots = false

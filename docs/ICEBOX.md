@@ -120,11 +120,13 @@ the maintenance cost across multiple API versions?
 
 ### Starlark-defined choices, traits, and restrictions
 
-**Spec:** §4.2, §4.19. **Today:** character creation choices, traits, and restrictions can only be declared in Kotlin by
-plugins. Starlark content can tag mobs with existing trait names, but cannot define new choices, traits, or restriction
-logic. **Questions:** - Should Starlark packages (`//rules` or `//lib`) be able to declare custom traits and creation
-choices without requiring a compiled JVM plugin? - How would Starlark-defined restrictions be evaluated during character
-creation and item equips without performance penalties?
+**Spec:** §4.2, §4.15, §4.19. **Today:** character creation choices, traits, and restrictions can only be declared in
+Kotlin by plugins. Starlark content can tag mobs with existing trait names, but cannot define new choices, traits, or
+restriction logic. **Questions:** - Should Starlark packages (`//rules` or `//lib`) be able to declare custom traits and
+creation choices without requiring a compiled JVM plugin? - How would Starlark-defined restrictions be evaluated during
+character creation and item equips without performance penalties? - Should world content get player-scoped hooks or
+Starlark trait handlers for the trait events (`DAMAGED`, `AFFECT_GAINED` and the others), so a behavior doesn't need a
+plugin?
 
 ## Plugins
 

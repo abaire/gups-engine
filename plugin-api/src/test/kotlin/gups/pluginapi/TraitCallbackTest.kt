@@ -5,11 +5,13 @@ import gups.core.CapturingSink
 import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
+import gups.core.model.ItemLocation
 import gups.core.model.Player
 import gups.core.world.World
 import gups.core.world.attach
 import gups.core.world.grantTrait
 import gups.core.world.handle
+import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.pluginapi.host.traitAdapter
 import gups.script.testing.TestWorlds
@@ -29,6 +31,10 @@ class TraitCallbackTest {
         "zones/z/skills.star" to
           """
             skill("bolt", kind = "spell", target = "enemy", tags = ["blue", "arcane"], effect = damage(dice = "1d4"))
+          """,
+        "zones/z/items.star" to
+          """
+            item("cap", name = "a cap", desc = "A cap.", keywords = ["cap"], wear = "held", equip_affects = ["no_regen"])
           """,
         "rules/package.star" to TestWorlds.RULES_PACKAGE,
         "rules/combat.star" to TestWorlds.rules("def recognizes_skill(ctx):\n    return True"),
@@ -285,5 +291,38 @@ class TraitCallbackTest {
       "a wolf",
       rec.of(PluginTraitEvent.DAMAGED).first { it.bearer.name == "a wolf" }.bearer.name,
     )
+  }
+
+  @Test
+  fun `AFFECT_GAINED and AFFECT_LOST through PluginWorld applyAffect and removeAffect carry plugin typed fields`() {
+    val rec = Rec()
+    val s = scene(recorder(rec, PluginTraitEvent.AFFECT_GAINED, PluginTraitEvent.AFFECT_LOST))
+    val facade = gups.pluginapi.host.WorldFacade(s.w, "bluemage") {}
+    val bea = gups.pluginapi.host.ActorFacade(s.bea, s.w)
+    facade.applyAffect(bea, "ward", 40)
+    facade.removeAffect(bea, "ward")
+    assertEquals(
+      listOf(PluginTraitEvent.AFFECT_GAINED, PluginTraitEvent.AFFECT_LOST),
+      rec.calls.map { it.event },
+    )
+    val gained = rec.of(PluginTraitEvent.AFFECT_GAINED).single()
+    assertEquals("ward", gained.fields["name"])
+    assertIs<Long>(gained.fields["power"])
+    assertIs<Long>(gained.fields["expires_at"])
+    assertEquals(false, gained.fields["replaced"])
+    assertNull(gained.fields["source_item"])
+    assertEquals("removed", rec.of(PluginTraitEvent.AFFECT_LOST).single().fields["reason"])
+  }
+
+  @Test
+  fun `AFFECT_GAINED through wearing gear carries a PluginItem source_item`() {
+    val rec = Rec()
+    val s = scene(recorder(rec, PluginTraitEvent.AFFECT_GAINED))
+    s.w.spawnItem(Label("//zones/z:cap"), ItemLocation.Carried(s.bea.id))
+    s.w.submit(s.bea, "wear cap")
+    repeat(6) { s.w.runPulse() }
+    val c = rec.of(PluginTraitEvent.AFFECT_GAINED).single()
+    assertIs<PluginItem>(c.fields["source_item"])
+    assertNull(c.fields["expires_at"])
   }
 }

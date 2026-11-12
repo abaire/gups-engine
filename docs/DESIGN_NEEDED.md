@@ -85,11 +85,12 @@ dependency between plugins need a declared version range, and how does that rela
 
 **Spec:** §4.15 (traits, event listeners), §4.19 (effects of traits). **Today:** `PluginTrait.on` maps a
 `PluginTraitEvent` to a handler that may change the world, run for each bearer of the trait. The events are
-`SKILL_RECOGNIZED`, `DAMAGED`, `HEALED`, `KILLED`, `DIED`, `LEVEL_CHANGED` and `ROOM_ENTERED`; handlers run inline at
-the event, after the entity hooks there, within the cascade depth cap. Only plugins can declare them. **Questions:** -
-Should there be affect-gained and affect-lost trait events, and do they fire for affects that expire, are dispelled, or
-are replaced by a reapplication? - Should world content get a way to declare traits, or player-scoped hooks, so the same
-behavior doesn't need a plugin? The trait events and dispatch sites it would build on now exist.
+`SKILL_RECOGNIZED`, `DAMAGED`, `HEALED`, `KILLED`, `DIED`, `LEVEL_CHANGED`, `ROOM_ENTERED`, `AFFECT_GAINED` and
+`AFFECT_LOST`; handlers run inline at the event, after the entity hooks there, within the cascade depth cap. Only
+plugins can declare them. **Questions:** - (Done in Milestone 50) Should there be affect-gained and affect-lost trait
+events, and do they fire for affects that expire, are dispelled, or are replaced by a reapplication? - (Moved to ICEBOX:
+Starlark-defined choices, traits, and restrictions) Should world content get a way to declare traits, or player-scoped
+hooks, so the same behavior doesn't need a plugin? The trait events and dispatch sites it would build on now exist.
 
 ### In-game character respec and choice changes
 

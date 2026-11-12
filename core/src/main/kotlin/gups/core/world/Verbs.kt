@@ -4,12 +4,15 @@ import gups.core.ACTION_QUEUE_MAX
 import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Channel
+import gups.core.model.ContainerProto
 import gups.core.model.ContainerState
+import gups.core.model.CreationProvider
 import gups.core.model.DamageType
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Item
 import gups.core.model.ItemLocation
+import gups.core.model.ItemProto
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.QueuedAction
@@ -90,25 +93,34 @@ private fun World.searchPath(from: Room, to: Room): List<Direction>? {
   val queue = ArrayDeque(listOf(from))
   while (queue.isNotEmpty()) {
     val room = queue.removeFirst()
-    for (exit in room.exits.values) {
-      if (!exit.passable) continue
-      val next = room(exit.to)
+    for ((next, direction) in passableExits(room)) {
       if (next === from || next in via) continue
-      via[next] = room to exit.direction
-      if (next === to) {
-        val path = ArrayDeque<Direction>()
-        var at = to
-        while (at !== from) {
-          val (prev, dir) = via.getValue(at)
-          path.addFirst(dir)
-          at = prev
-        }
-        return path.toList()
-      }
+      via[next] = room to direction
+      if (next === to) return unwindPath(via, from, to)
       queue.addLast(next)
     }
   }
   return null
+}
+
+/** The rooms [room]'s passable exits lead to, each with the exit's direction. */
+private fun World.passableExits(room: Room): Sequence<Pair<Room, Direction>> =
+  room.exits.values.asSequence().filter { it.passable }.map { room(it.to) to it.direction }
+
+/** The directions from [from] to [to], following the search's [via] links back from [to]. */
+private fun unwindPath(
+  via: Map<Room, Pair<Room, Direction>>,
+  from: Room,
+  to: Room,
+): List<Direction> {
+  val path = ArrayDeque<Direction>()
+  var at = to
+  while (at !== from) {
+    val (prev, dir) = via.getValue(at)
+    path.addFirst(dir)
+    at = prev
+  }
+  return path.toList()
 }
 
 // ---- Mob actions -----------------------------------------------------------------------------
@@ -172,6 +184,15 @@ fun World.choicesRefusal(player: Player, changes: Map<String, String?>): String?
     creation
       ?: if (changes.isEmpty()) return null
       else throw IllegalArgumentException("World has no creation provider")
+  requireKnownChanges(provider, changes)
+  val newAnswers = LinkedHashMap(player.choices)
+  for ((cId, optId) in changes) {
+    if (optId == null) newAnswers.remove(cId) else newAnswers[cId] = optId
+  }
+  return availabilityRefusal(provider, newAnswers) ?: validationRefusal(provider, newAnswers)
+}
+
+private fun requireKnownChanges(provider: CreationProvider, changes: Map<String, String?>) {
   for ((choiceId, optId) in changes) {
     val choice =
       provider.choices.firstOrNull { it.id == choiceId }
@@ -180,13 +201,16 @@ fun World.choicesRefusal(player: Player, changes: Map<String, String?>): String?
       throw IllegalArgumentException("Unknown option '$optId' for choice '$choiceId'")
     }
   }
-  val newAnswers = LinkedHashMap(player.choices)
-  for ((cId, optId) in changes) {
-    if (optId == null) newAnswers.remove(cId) else newAnswers[cId] = optId
-  }
+}
+
+/** Why one of [answers] isn't available given the answers to the choices before it, or null. */
+private fun World.availabilityRefusal(
+  provider: CreationProvider,
+  answers: Map<String, String>,
+): String? {
   val answersSoFar = LinkedHashMap<String, String>()
   for (c in provider.choices) {
-    val ans = newAnswers[c.id] ?: continue
+    val ans = answers[c.id] ?: continue
     val avail =
       try {
         provider.available(this, c.id, answersSoFar)
@@ -194,20 +218,19 @@ fun World.choicesRefusal(player: Player, changes: Map<String, String?>): String?
         diagnose("plugin", "creation provider available() failed: ${e.message}", e)
         return msg(LoginMsg.CREATION_PROVIDER_FAILED)
       }
-    if (ans !in avail) {
-      return "Option '$ans' is not available for choice '${c.id}'"
-    }
+    if (ans !in avail) return "Option '$ans' is not available for choice '${c.id}'"
     answersSoFar[c.id] = ans
   }
-  val valRefusal =
-    try {
-      provider.validate(this, newAnswers)
-    } catch (e: Exception) {
-      diagnose("plugin", "creation provider validate() failed: ${e.message}", e)
-      return msg(LoginMsg.CREATION_PROVIDER_FAILED)
-    }
-  return valRefusal
+  return null
 }
+
+private fun World.validationRefusal(provider: CreationProvider, answers: Map<String, String>) =
+  try {
+    provider.validate(this, answers)
+  } catch (e: Exception) {
+    diagnose("plugin", "creation provider validate() failed: ${e.message}", e)
+    msg(LoginMsg.CREATION_PROVIDER_FAILED)
+  }
 
 /**
  * The change function: applies [changes] (an option id, or null to remove the answer) to [player]'s
@@ -361,50 +384,80 @@ fun World.removeItemTag(item: Item, tag: String): Boolean {
  * no key for is undone, leaving the container closed. A worn item whose new prototype can't go in
  * its slot is taken off.
  */
-fun World.transformItem(item: Item, label: Label) {
+fun World.transformItem(item: Item, label: Label) = holdingAffectEvents { transform(item, label) }
+
+private fun World.transform(item: Item, label: Label) {
   require(item.id in entities) { "$item is not in the world" }
   val newProto = protos.items[label]
   requireNotNull(newProto) { "transform: $label is not an item" }
-  val box = newProto.container
-  val ground =
-    if (box == null && item.contentsIndex.isNotEmpty())
-      requireNotNull(groundOf(item)) { "transform: $item has nowhere to drop its contents" }
-    else null
-  if (box != null) {
-    val count = item.contentsIndex.size
-    val weight = item.contentsIndex.values.sumOf { it.weight }
-    require(count <= box.capacity && weight <= box.maxWeight) {
-      "transform: $item can't become $label: it holds $count items weighing $weight, but $label " +
-        "holds at most ${box.capacity} items weighing ${box.maxWeight}"
-    }
-  }
+  val ground = groundForTransform(item, newProto, label)
   val loc = item.location as? ItemLocation.Equipped
   val wearer = loc?.let { actor(it.actor) }
-  if (wearer != null) {
-    val wear = newProto.wear
-    val fits = wear != null && wearFits(wear, loc.slot)
-    if (!fits) moveItem(item, ItemLocation.Carried(wearer.id))
-    else if (wearer.isActiveSlot(loc.slot)) removeEquipAffects(wearer, item)
-  }
-  if (ground != null) for (inner in item.contentsIndex.values.toList()) moveItem(inner, ground)
+  if (wearer != null) unwearForTransform(wearer, item, loc.slot, newProto)
+  ground?.let { dropContents(item, it) }
   item.proto = newProto
   item.protoVersion = newProto.version
   if (!newProto.stackable) item.count = 1
   item.charges = newProto.charges
+  replaceContainer(item, newProto.container)
+  if (wearer?.wearsActively(item) == true) applyEquipAffects(wearer, item)
+  item.dirty = true
+  recordTransform(item)
+  custodian(item)?.let { refreshHoldings(it) }
+}
+
+private fun World.dropContents(item: Item, ground: ItemLocation.InRoom) {
+  for (inner in item.contentsIndex.values.toList()) moveItem(inner, ground)
+}
+
+private fun World.recordTransform(item: Item) {
+  if (custodian(item) is Player && !item.debug)
+    itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "transform")
+}
+
+/**
+ * Where [item]'s contents go as it becomes [newProto] ([label]): the ground when it stops being a
+ * container, otherwise nowhere. Refuses contents the new container can't hold.
+ */
+private fun World.groundForTransform(
+  item: Item,
+  newProto: ItemProto,
+  label: Label,
+): ItemLocation.InRoom? {
+  val box = newProto.container
+  if (box == null) {
+    if (item.contentsIndex.isEmpty()) return null
+    return requireNotNull(groundOf(item)) { "transform: $item has nowhere to drop its contents" }
+  }
+  val count = item.contentsIndex.size
+  val weight = item.contentsIndex.values.sumOf { it.weight }
+  require(count <= box.capacity && weight <= box.maxWeight) {
+    "transform: $item can't become $label: it holds $count items weighing $weight, but $label " +
+      "holds at most ${box.capacity} items weighing ${box.maxWeight}"
+  }
+  return null
+}
+
+/** Takes [item] off [wearer] if [newProto] can't go in [slot], else just its equip affects. */
+private fun World.unwearForTransform(wearer: Actor, item: Item, slot: String, newProto: ItemProto) {
+  val wear = newProto.wear
+  val fits = wear != null && wearFits(wear, slot)
+  if (!fits) moveItem(item, ItemLocation.Carried(wearer.id))
+  else if (wearer.isActiveSlot(slot)) removeEquipAffects(wearer, item)
+}
+
+/** Gives [item] a fresh state for [box], keeping its open state; a lock without a key is undone. */
+private fun replaceContainer(item: Item, box: ContainerProto?) {
   val oldState = item.container?.state
   item.container = box?.let { ContainerState(it) }
   item.container?.let { c ->
     if (oldState != null)
       c.state = if (oldState == DoorState.LOCKED && c.key == null) DoorState.CLOSED else oldState
   }
-  val worn = item.location as? ItemLocation.Equipped
-  if (wearer != null && worn != null && wearer.isActiveSlot(worn.slot))
-    applyEquipAffects(wearer, item)
-  item.dirty = true
-  if (custodian(item) is Player && !item.debug)
-    itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "transform")
-  custodian(item)?.let { refreshHoldings(it) }
 }
+
+private fun Actor.wearsActively(item: Item): Boolean =
+  (item.location as? ItemLocation.Equipped)?.let { isActiveSlot(it.slot) } == true
 
 /** The ground under [item]: where it lies, or where whoever ultimately holds it stands. */
 private fun World.groundOf(item: Item): ItemLocation.InRoom? =

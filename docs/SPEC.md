@@ -2967,6 +2967,18 @@ subsystems (`core` or `script`). It consists of three primary components:
   - `DIED`: `killer` (`PluginActor` or null).
   - `LEVEL_CHANGED`: `old_level` and `new_level`.
   - `ROOM_ENTERED`: `from_room` (`PluginRoom`) and `direction` (a `String`, or null for a teleport).
+  - `AFFECT_GAINED`: an affect was put on the bearer, new or replacing a same-name one that ran out sooner (a
+    reapplication that doesn't last longer fires nothing). Fields: `name`, `flags` (a sorted list of `String`s),
+    `source` (`PluginActor` or null), `source_item` (the `PluginItem` the affect lasts while it is worn, or null),
+    `power`, `expires_at` (the absolute pulse, or null when it never runs out) and `replaced` (a `Boolean`). It runs
+    once the affect is in place.
+  - `AFFECT_LOST`: an affect came off the bearer, by expiry, `remove_affect`, `dispel` or its item coming off. Fields:
+    `name`, `flags`, `source`, `source_item`, `power` and `reason` (`"expired"` or `"removed"`, as for `on_expire`). It
+    runs after the affect's `on_expire`. A replaced affect fires no `AFFECT_LOST`.
+  - Both are for an actor's own affects, including those its worn items give it (§4.2 `equip_affects`), not affects on
+    items or rooms. `source` and `source_item` are null once they have left the world. Neither fires when a saved actor
+    is restored, for changes to an actor's affects while its own death is processed, or for the regen catch-up of a
+    dormant mob. Affects that ran out while a room slept fire `AFFECT_LOST` when it wakes.
 - **Rules exports:** `addRulesExport(name, doc, type)` declares an optional rules export the world may define (§4.6).
   - **Names:** `name` must be `<id>_<snake_case>`. Registering a name twice fails `register`.
   - **Types:** `type` is `PluginRulesType.INT` or `BOOL`.
@@ -3443,7 +3455,7 @@ no traits and no restrictions, and players see nothing new.
     (§4.6), and `@trace` shows them as `trait:<name>`. Like a script modifier, one that fails or returns the wrong type
     leaves the value as it was; the failure is a `plugin` diagnostic.
   - **Callbacks:** a trait may handle events of its bearer. Unlike modifiers, a handler may change the world, through
-    the plugin facade (§4.15). The one event is `skill_recognized`:
+    the plugin facade (§4.15), which lists the events and their fields. `skill_recognized` works as follows:
     - **When it fires:** for each player who recognized a skill they don't know (§4.3) on a cast whose outcome is
       `success` or `resist`, after that cast's `on_skill_use`.
     - **Order:** in the order the players were asked, then by trait name.

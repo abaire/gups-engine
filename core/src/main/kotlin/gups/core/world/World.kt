@@ -331,6 +331,10 @@ class World(
   /** Actors whose death is being processed right now. */
   internal val dying = HashSet<EntityId>()
   internal var cascadeDepth = 0
+  /** Nesting depth of work that holds affect events back until it has finished. */
+  internal var affectEventHold = 0
+  /** Affect events held back while [affectEventHold] is positive, in the order they happened. */
+  internal val heldAffectEvents = ArrayDeque<HeldAffectEvent>()
 
   /** The in-memory player groups, by group id; never saved. */
   internal val groups = TreeMap<Int, Group>()

@@ -148,6 +148,21 @@ enum class TraitEvent {
    * `direction` (String, or null for a teleport).
    */
   ROOM_ENTERED,
+
+  /**
+   * An affect was put on the bearer: a new one, or a reapplication that lasts longer and replaced
+   * the old one. Fields: `name`, `flags` (sorted List<String>), `source` (Actor or null),
+   * `source_item` (the worn Item the affect lasts for, or null), `power` (Int), `expires_at` (Long,
+   * or null when it never runs out) and `replaced` (Boolean).
+   */
+  AFFECT_GAINED,
+
+  /**
+   * An affect came off the bearer: it expired or was removed. Not fired for one a reapplication
+   * replaced. Fields: `name`, `flags`, `source`, `source_item`, `power` and `reason` (`expired` or
+   * `removed`).
+   */
+  AFFECT_LOST,
 }
 
 /** Callback contributed by a [Trait] for an event of its bearer. */

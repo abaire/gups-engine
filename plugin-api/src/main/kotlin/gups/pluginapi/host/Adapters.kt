@@ -9,6 +9,7 @@ import gups.core.model.CreationChoice
 import gups.core.model.CreationOption
 import gups.core.model.CreationProvider
 import gups.core.model.CreationStep
+import gups.core.model.Item
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Restriction
@@ -366,6 +367,7 @@ private fun plainField(v: Any?, w: World): Any? =
   when (v) {
     is Actor -> ActorFacade(v, w)
     is Room -> RoomFacade(v, w)
+    is Item -> ItemFacade(v, w)
     is Int -> v.toLong()
     is Map<*, *> -> v.entries.associate { (k, x) -> k to plainField(x, w) }
     is List<*> -> v.map { plainField(it, w) }
