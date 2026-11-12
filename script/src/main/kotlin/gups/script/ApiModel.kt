@@ -590,6 +590,15 @@ object ScriptApi {
           .sortedBy { it.id },
     )
 
+  /** Accumulates the problems [validate] reports, so every check appends to one list. */
+  private class ModelProblems {
+    val list = mutableListOf<String>()
+
+    operator fun plusAssign(message: String) {
+      list += message
+    }
+  }
+
   /**
    * Checks that [model] covers every global in `PACKAGE_GLOBALS`, every `@StarlarkBuiltin` class in
    * [builtinClasses] and all of its `@StarlarkMethod`s, every [HookName], every [ModifierPoint] and
@@ -598,52 +607,53 @@ object ScriptApi {
    * Returns the problems (empty when complete).
    */
   fun validate(model: ScriptApiModel, builtinClasses: Collection<Class<*>>): List<String> {
-    val problems = mutableListOf<String>()
+    val problems = ModelProblems()
+    checkGlobals(problems, model)
+    checkDeclarationDocs(problems, model)
+    checkConstants(problems, model)
+    checkHooks(problems, model)
+    checkEffectsAndBehaviors(problems, model)
+    checkRulesExportsAndPoints(problems, model)
+    checkBuiltinTypes(problems, model, builtinClasses)
+    checkSymbolUniqueness(problems, model)
+    return problems.list
+  }
 
-    fun requireDoc(path: String, doc: String) {
-      if (doc.isBlank()) problems += "$path has a blank doc string"
-    }
-
-    fun requireMethodDocs(path: String, m: MethodSpec) {
-      requireDoc(path, m.doc)
-      for (p in m.params) requireDoc("$path param '${p.name}'", p.doc)
-    }
-
-    fun requireFields(path: String, fields: List<String>, type: TypeSpec) {
-      val known = type.fields.mapTo(HashSet()) { it.name }
-      for (f in fields) if (f !in known)
-        problems += "$path lists ctx field '$f', which ${type.builtinType} doesn't have"
-    }
-
-    // 1. Every global in PACKAGE_GLOBALS must appear in declarations, effects, behaviors, or
-    // constants.
+  /**
+   * Every global in `PACKAGE_GLOBALS` must appear in declarations, effects, behaviors, or
+   * constants, and vice versa.
+   */
+  private fun checkGlobals(problems: ModelProblems, model: ScriptApiModel) {
     val documentedGlobals = buildSet {
-      model.declarations.forEach { add(it.name) }
-      model.effects.forEach { add(it.name) }
-      model.behaviors.forEach { add(it.name) }
-      model.constants.forEach { add(it.name) }
+      addAll(model.declarations.map { it.name })
+      addAll(model.effects.map { it.name })
+      addAll(model.behaviors.map { it.name })
+      addAll(model.constants.map { it.name })
     }
-    for (g in PACKAGE_GLOBALS.keys.sorted()) {
-      if (g !in documentedGlobals)
-        problems += "PACKAGE_GLOBALS entry '$g' is missing from ScriptApiModel"
-    }
-    for (g in documentedGlobals.sorted()) {
-      if (g !in PACKAGE_GLOBALS) problems += "ScriptApiModel global '$g' is not in PACKAGE_GLOBALS"
-    }
+    for (g in PACKAGE_GLOBALS.keys.sorted() - documentedGlobals) problems +=
+      "PACKAGE_GLOBALS entry '$g' is missing from ScriptApiModel"
+    for (g in documentedGlobals.sorted() - PACKAGE_GLOBALS.keys) problems +=
+      "ScriptApiModel global '$g' is not in PACKAGE_GLOBALS"
+  }
 
-    // 2. Declarations and settings specs must have non-blank docs on the declaration and every
-    // parameter.
+  /**
+   * Declarations and settings specs must have non-blank docs on the declaration and every
+   * parameter.
+   */
+  private fun checkDeclarationDocs(problems: ModelProblems, model: ScriptApiModel) {
     for (d in model.declarations + model.settings) {
-      requireDoc("declaration '${d.name}'", d.doc)
+      requireDoc(problems, "declaration '${d.name}'", d.doc)
       if (!d.extraKeywords && d.params.isEmpty()) {
         problems += "declaration '${d.name}' has no parameters and extraKeywords=false"
       }
-      for (p in d.params) requireDoc("declaration '${d.name}' param '${p.name}'", p.doc)
+      for (p in d.params) requireDoc(problems, "declaration '${d.name}' param '${p.name}'", p.doc)
     }
+  }
 
-    // 3. Constants.
+  /** Every constant must have a doc, and its model value must match the runtime value. */
+  private fun checkConstants(problems: ModelProblems, model: ScriptApiModel) {
     for (c in model.constants) {
-      requireDoc("constant '${c.name}'", c.doc)
+      requireDoc(problems, "constant '${c.name}'", c.doc)
       val actual = DeclarationBuiltins.CONSTANTS[c.name]
       if (actual == null) {
         problems += "constant '${c.name}' is not in DeclarationBuiltins.CONSTANTS"
@@ -652,85 +662,145 @@ object ScriptApi {
           "constant '${c.name}' value in model is ${c.value}, but runtime value is ${Starlark.repr(actual)}"
       }
     }
+  }
 
-    // 4. Every HookName must appear in model.hooks with a doc, owners, and ctx fields ctx has.
+  /** Every [HookName] must appear in `model.hooks` with a doc, owners, and ctx fields ctx has. */
+  private fun checkHooks(problems: ModelProblems, model: ScriptApiModel) {
     val hooksByName = model.hooks.associateBy { it.hook }
-    for (h in HookName.entries) {
-      val spec = hooksByName[h]
-      if (spec == null) {
-        problems += "HookName.${h.name} ('${h.scriptName}') is missing from model.hooks"
-      } else {
-        requireDoc("hook '${spec.name}'", spec.doc)
-        if (spec.ctxFields.isEmpty()) problems += "hook '${spec.name}' has empty ctxFields"
-        requireFields("hook '${spec.name}'", spec.ctxFields, model.ctx)
-      }
+    for (h in HookName.entries) checkHook(problems, h, hooksByName[h], model.ctx)
+  }
+
+  /** A [HookName] appears in `model.hooks` with a doc and ctx fields ctx has. */
+  private fun checkHook(problems: ModelProblems, h: HookName, spec: HookSpec?, ctx: TypeSpec) {
+    if (spec == null) {
+      problems += "HookName.${h.name} ('${h.scriptName}') is missing from model.hooks"
+      return
     }
+    requireDoc(problems, "hook '${spec.name}'", spec.doc)
+    if (spec.ctxFields.isEmpty()) problems += "hook '${spec.name}' has empty ctxFields"
+    requireFields(problems, "hook '${spec.name}'", spec.ctxFields, ctx)
+  }
 
-    // 5. Effect primitives and behaviors.
-    for (e in model.effects) requireMethodDocs("effect '${e.name}'", e)
-    for (b in model.behaviors) requireMethodDocs("behavior '${b.name}'", b)
+  /** Every effect and behavior must have a doc, and every parameter a doc. */
+  private fun checkEffectsAndBehaviors(problems: ModelProblems, model: ScriptApiModel) {
+    for (e in model.effects) requireMethodDocs(problems, "effect '${e.name}'", e)
+    for (b in model.behaviors) requireMethodDocs(problems, "behavior '${b.name}'", b)
+  }
 
-    // 6. Every RulesExport and ModifierPoint, with ctx fields rules_ctx has.
+  /** Every [RulesExport] and [ModifierPoint] must have a doc and ctx fields rules_ctx has. */
+  private fun checkRulesExportsAndPoints(problems: ModelProblems, model: ScriptApiModel) {
+    val ctx = model.rules.ctx
     val exportsByName = model.rules.exports.associateBy { it.export }
-    for (x in RulesExport.entries) {
-      val spec = exportsByName[x]
-      if (spec == null) {
-        problems += "RulesExport.${x.name} ('${x.scriptName}') is missing from model.rules.exports"
-      } else {
-        requireDoc("rules export '${spec.name}'", spec.doc)
-        if (spec.returnType.isBlank())
-          problems += "rules export '${spec.name}' has blank returnType"
-        requireFields("rules export '${spec.name}'", spec.ctxFields, model.rules.ctx)
-      }
-    }
+    for (x in RulesExport.entries) checkRulesExport(problems, x, exportsByName[x], ctx)
     val pointsByName = model.rules.modifierPoints.associateBy { it.point }
-    for (mp in ModifierPoint.entries) {
-      val spec = pointsByName[mp]
-      if (spec == null) {
-        problems +=
-          "ModifierPoint.${mp.name} ('${mp.scriptName}') is missing from model.rules.modifierPoints"
-      } else {
-        requireDoc("modifier point '${spec.name}'", spec.doc)
-        requireFields("modifier point '${spec.name}'", spec.ctxFields, model.rules.ctx)
-      }
-    }
+    for (mp in ModifierPoint.entries) checkModifierPoint(problems, mp, pointsByName[mp], ctx)
+  }
 
-    // 7. All @StarlarkBuiltin types in the model and in builtinClasses.
+  /** A [RulesExport] is in the model with a doc, a return type, and ctx fields rules_ctx has. */
+  private fun checkRulesExport(
+    problems: ModelProblems,
+    x: RulesExport,
+    spec: RulesExportSpec?,
+    ctx: TypeSpec,
+  ) {
+    if (spec == null) {
+      problems += "RulesExport.${x.name} ('${x.scriptName}') is missing from model.rules.exports"
+      return
+    }
+    requireDoc(problems, "rules export '${spec.name}'", spec.doc)
+    if (spec.returnType.isBlank()) problems += "rules export '${spec.name}' has blank returnType"
+    requireFields(problems, "rules export '${spec.name}'", spec.ctxFields, ctx)
+  }
+
+  /** A [ModifierPoint] is in the model with a doc and ctx fields rules_ctx has. */
+  private fun checkModifierPoint(
+    problems: ModelProblems,
+    mp: ModifierPoint,
+    spec: ModifierPointSpec?,
+    ctx: TypeSpec,
+  ) {
+    if (spec == null) {
+      problems +=
+        "ModifierPoint.${mp.name} ('${mp.scriptName}') is missing from model.rules.modifierPoints"
+      return
+    }
+    requireDoc(problems, "modifier point '${spec.name}'", spec.doc)
+    requireFields(problems, "modifier point '${spec.name}'", spec.ctxFields, ctx)
+  }
+
+  /** All `@StarlarkBuiltin` types must be in the model, and every member must be documented. */
+  private fun checkBuiltinTypes(
+    problems: ModelProblems,
+    model: ScriptApiModel,
+    builtinClasses: Collection<Class<*>>,
+  ) {
     val allTypes = listOf(model.ctx, model.rules.ctx) + model.views + model.harness
     for (t in allTypes) {
-      requireDoc("type '${t.name}' (${t.builtinType})", t.doc)
-      for (f in t.fields) requireDoc("type '${t.name}' field '${f.name}'", f.doc)
-      for (m in t.methods) requireMethodDocs("type '${t.name}' method '${m.name}'", m)
+      requireDoc(problems, "type '${t.name}' (${t.builtinType})", t.doc)
+      for (f in t.fields) requireDoc(problems, "type '${t.name}' field '${f.name}'", f.doc)
+      for (m in t.methods) requireMethodDocs(problems, "type '${t.name}' method '${m.name}'", m)
     }
     val byBuiltinType = allTypes.associateBy { it.builtinType }
     for (cls in builtinClasses) {
       val annot = cls.getAnnotation(StarlarkBuiltin::class.java)
-      if (annot == null) {
-        problems += "${cls.name} is not annotated with @StarlarkBuiltin"
-        continue
-      }
-      val typeSpec = byBuiltinType[annot.name]
-      if (typeSpec == null) {
-        problems += "@StarlarkBuiltin '${annot.name}' (${cls.name}) is missing from ScriptApiModel"
-        continue
-      }
-      val documentedMembers =
-        (typeSpec.fields.map { it.name } + typeSpec.methods.map { it.name }).toSet()
-      for (m in starlarkMethodsOf(cls)) {
-        val ma = m.getAnnotation(StarlarkMethod::class.java)
-        if (ma.name !in documentedMembers) {
-          problems +=
-            "@StarlarkMethod '${annot.name}.${ma.name}' on ${cls.simpleName} is missing from ScriptApiModel"
-        }
+      checkBuiltinClass(problems, cls, annot, annot?.let { byBuiltinType[it.name] })
+    }
+  }
+
+  /** A `@StarlarkBuiltin` class is in the model, and documents every `@StarlarkMethod` member. */
+  private fun checkBuiltinClass(
+    problems: ModelProblems,
+    cls: Class<*>,
+    annot: StarlarkBuiltin?,
+    typeSpec: TypeSpec?,
+  ) {
+    if (annot == null) {
+      problems += "${cls.name} is not annotated with @StarlarkBuiltin"
+      return
+    }
+    if (typeSpec == null) {
+      problems += "@StarlarkBuiltin '${annot.name}' (${cls.name}) is missing from ScriptApiModel"
+      return
+    }
+    val documentedMembers =
+      (typeSpec.fields.map { it.name } + typeSpec.methods.map { it.name }).toSet()
+    for (m in starlarkMethodsOf(cls)) {
+      val ma = m.getAnnotation(StarlarkMethod::class.java)
+      if (ma.name !in documentedMembers) {
+        problems +=
+          "@StarlarkMethod '${annot.name}.${ma.name}' on ${cls.simpleName} is missing from ScriptApiModel"
       }
     }
+  }
 
-    // 8. Symbols name one entry each.
+  /** Every symbol must name exactly one entry. */
+  private fun checkSymbolUniqueness(problems: ModelProblems, model: ScriptApiModel) {
     for ((symbol, n) in model.symbols().groupingBy { it }.eachCount()) {
       if (n > 1) problems += "symbol '$symbol' names $n entries"
     }
+  }
 
-    return problems
+  /** Adds a problem when [doc] is blank. */
+  private fun requireDoc(problems: ModelProblems, path: String, doc: String) {
+    if (doc.isBlank()) problems += "$path has a blank doc string"
+  }
+
+  /** [requireDoc] for [m] and each of its parameters. */
+  private fun requireMethodDocs(problems: ModelProblems, path: String, m: MethodSpec) {
+    requireDoc(problems, path, m.doc)
+    for (p in m.params) requireDoc(problems, "$path param '${p.name}'", p.doc)
+  }
+
+  /** Adds a problem for each ctx field [path] lists that [type] doesn't have. */
+  private fun requireFields(
+    problems: ModelProblems,
+    path: String,
+    fields: List<String>,
+    type: TypeSpec,
+  ) {
+    val known = type.fields.mapTo(HashSet()) { it.name }
+    for (f in fields) if (f !in known)
+      problems += "$path lists ctx field '$f', which ${type.builtinType} doesn't have"
   }
 }
 
@@ -885,17 +955,23 @@ private class JsonWriter {
   private fun symbol(path: String) {
     symbols += path
     field("symbol", path)
-    if (path.startsWith("message:")) {
-      Messages.find(path.removePrefix("message:"))?.feature?.let { field("feature", it.id) }
+    if (path.startsWith("message:")) writeMessageFeature(path.removePrefix("message:"))
+    else writeOwnedFeatures(path)
+  }
+
+  /** The `feature` field of a message, when the engine message catalog has one. */
+  private fun writeMessageFeature(id: String) {
+    Messages.find(id)?.feature?.let { field("feature", it.id) }
+  }
+
+  /** The `feature` field, or `features` and `features_mode`, for an entry a feature owns. */
+  private fun writeOwnedFeatures(path: String) {
+    val req = FeatureOwnership.of(path) ?: return
+    if (req.features.size == 1) {
+      field("feature", req.ids.first())
     } else {
-      FeatureOwnership.of(path)?.let { req ->
-        if (req.features.size == 1) {
-          field("feature", req.ids.first())
-        } else {
-          strListField("features", req.ids)
-          field("features_mode", if (req.all) "all" else "any")
-        }
-      }
+      strListField("features", req.ids)
+      field("features_mode", if (req.all) "all" else "any")
     }
   }
 
