@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap
 import gups.core.EngineInfo
 import gups.core.Label
 import gups.core.PULSE_MS
-import gups.core.model.Channel
 import gups.core.model.DamageTypeInfo
 import gups.core.model.SchemaName
 import gups.core.model.WorldSchema
@@ -13,7 +12,6 @@ import gups.core.world.CommandRegistry
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.LevelMode
-import gups.core.world.PROMPT_PLACEHOLDER
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.readText
 import net.starlark.java.annot.Param
@@ -146,74 +144,7 @@ data class WorldModule(
     features.problems().forEach { add("MODULE.gups: $it") }
     CommandRegistry.renameProblems(features, rename, aliases).forEach { add("MODULE.gups: $it") }
     aliases.problems(commandNames).forEach { add("MODULE.gups: $it") }
-    addAll(schemaProblems())
-  }
-
-  private fun schemaProblems(): List<String> = buildList {
-    val name = Regex("[a-z][a-z0-9_]*")
-    val reserved = reservedViewNames
-    val vitals = schema.vitalNames
-    val seen = HashSet<String>()
-    fun declared(kind: String, names: List<String>) {
-      for (n in names) {
-        when {
-          !name.matches(n) -> add("MODULE.gups: $kind name '$n' must match [a-z][a-z0-9_]*")
-          !seen.add(n) -> add("MODULE.gups: '$n' is declared more than once among stats and vitals")
-          n in reserved -> add("MODULE.gups: $kind name '$n' is reserved for the actor view")
-          else -> Unit
-        }
-        if (n.startsWith("max_") && n.removePrefix("max_") in vitals)
-          add(
-            "MODULE.gups: $kind name '$n' clashes with the maximum of vital '${n.removePrefix("max_")}'"
-          )
-      }
-    }
-    declared("stat", schema.statNames)
-    declared("vital", vitals)
-    for (v in vitals) if (v.startsWith("max"))
-      add("MODULE.gups: vital name '$v' may not start with 'max'")
-    val types = HashSet<String>()
-    for (t in schema.damageTypes) {
-      if (!name.matches(t)) add("MODULE.gups: damage type '$t' must match [a-z][a-z0-9_]*")
-      else if (!types.add(t)) add("MODULE.gups: damage type '$t' is declared more than once")
-    }
-    if (schema.unarmedDamageType !in schema.damageTypes)
-      add(
-        "MODULE.gups: unarmed_damage_type '${schema.unarmedDamageType}' is not a declared damage type" +
-          schema.suggest(schema.unarmedDamageType, schema.damageTypes)
-      )
-    val channels = HashSet<String>()
-    for (c in schema.channels) {
-      when {
-        !name.matches(c) -> add("MODULE.gups: channel '$c' must match [a-z][a-z0-9_]*")
-        Channel.BUILT_IN.any { it.name == c } -> add("MODULE.gups: channel '$c' is built in")
-        !channels.add(c) -> add("MODULE.gups: channel '$c' is declared more than once")
-      }
-    }
-    val ranked = HashSet<String>()
-    val knownChannels = schema.allChannels.map { it.name }
-    for (c in schema.channelPriority) {
-      when {
-        c !in knownChannels ->
-          add(
-            "MODULE.gups: channel_priority names '$c', which is not a channel" +
-              schema.suggest(c, knownChannels)
-          )
-        !ranked.add(c) ->
-          add("MODULE.gups: channel '$c' is ranked more than once in channel_priority")
-      }
-    }
-    schema.prompt?.let { prompt ->
-      for (m in PROMPT_PLACEHOLDER.findAll(prompt)) {
-        val key = m.groupValues[1]
-        val vital = key.removePrefix("max_")
-        if (key !in vitals && !(key.startsWith("max_") && vital in vitals))
-          add(
-            "MODULE.gups: prompt placeholder '{$key}' is not a declared vital" +
-              schema.suggest(key, vitals + vitals.map { "max_$it" })
-          )
-      }
-    }
+    addAll(schemaProblems(schema))
   }
 
   /** Things worth a warning, such as a different pinned engine version. */
@@ -495,6 +426,45 @@ data class WorldModule(
 
     private fun label(name: String): String = name.replaceFirstChar { it.uppercase() }
 
+    private fun startRoom(d: ParsedDecl): Label? =
+      d.str("start_room")?.let { text ->
+        runCatching { Label(text) }
+          .getOrElse {
+            fail("module(start_room): '$text' is not a label such as //zones/tutorial:gate")
+          }
+      }
+
+    private fun stringMap(d: ParsedDecl, param: String, what: String): Map<String, String> =
+      d.dict(param).mapValues { (key, v) ->
+        v as? String ?: fail("module($param): the $what of '$key' must be a string")
+      }
+
+    private fun prefixes(d: ParsedDecl): Map<Char, String> =
+      stringMap(d, "prefixes", "command").entries.associate { (prefix, command) ->
+        if (prefix.length != 1) fail("module(prefixes): '$prefix' must be a single character")
+        prefix[0] to command
+      }
+
+    /** Fails when [param] is set although the feature that owns [key] is off. */
+    private fun requireFeature(d: ParsedDecl, param: String, key: String, features: Features) {
+      if (d[param] == null) return
+      FeatureOwnership.refused(key, "module($param)", features)?.let { fail(it) }
+    }
+
+    private fun schema(d: ParsedDecl): WorldSchema {
+      val types = damageTypes(d)
+      return WorldSchema(
+        stats = names(d, "stats"),
+        vitals = names(d, "vitals"),
+        damageTypes = types.map { it.name },
+        damageTypeInfo = types.associateBy { it.name },
+        unarmedDamageType = d.reqStr("unarmed_damage_type"),
+        channels = d.strList("channels"),
+        prompt = d.str("prompt"),
+        channelPriority = d.strList("channel_priority"),
+      )
+    }
+
     @StarlarkMethod(
       name = "module",
       doc = "Declares the world's metadata.",
@@ -503,97 +473,43 @@ data class WorldModule(
     fun module(kwargs: Dict<String, Any>): Any {
       if (result != null) fail("module() is called more than once")
       return SPEC.bind(kwargs = kwargs) { d ->
-        val minutes = d.int("checkpoint_minutes") ?: DEFAULT_CHECKPOINT_MINUTES
-        if (minutes < 1) fail("module(checkpoint_minutes): must be at least 1")
-        val start =
-          d.str("start_room")?.let { text ->
-            runCatching { Label(text) }
-              .getOrElse {
-                fail("module(start_room): '$text' is not a label such as //zones/tutorial:gate")
-              }
-          }
-        val plugins =
-          d.dict("plugins").mapValues { (id, v) ->
-            v as? String ?: fail("module(plugins): the checksum of '$id' must be a string")
-          }
-        val words =
-          d.dict("aliases").mapValues { (alias, v) ->
-            v as? String ?: fail("module(aliases): the command of '$alias' must be a string")
-          }
-        val prefixes =
-          d.dict("prefixes").entries.associate { (prefix, v) ->
-            if (prefix.length != 1) fail("module(prefixes): '$prefix' must be a single character")
-            prefix[0] to
-              (v as? String ?: fail("module(prefixes): the command of '$prefix' must be a string"))
-          }
-        // Listing all four features is the same as leaving the line out.
-        val features =
-          d["features"]
-            ?.let { d.strList("features") }
-            ?.takeUnless { ids -> ids.toSet() == Feature.entries.map { it.id }.toSet() }
-        if (d["level_mode"] != null) {
-          FeatureOwnership.refused("module.level_mode", "module(level_mode)", featuresOf(features))
-            ?.let { fail(it) }
-        }
-        val levelMode =
-          when (d.choice("level_mode")) {
-            "deferred" -> LevelMode.DEFERRED
-            else -> LevelMode.AUTO
-          }
-        if (d["standing_history_pulses"] != null) {
-          FeatureOwnership.refused(
-              "module.standing_history_pulses",
-              "module(standing_history_pulses)",
-              featuresOf(features),
-            )
-            ?.let { fail(it) }
-        }
-        val standingHistoryPulses =
-          d.int("standing_history_pulses")?.toLong() ?: DEFAULT_STANDING_HISTORY_PULSES
-        if (standingHistoryPulses < 1) fail("module(standing_history_pulses): must be at least 1")
-        if (d["memory_pulses"] != null) {
-          FeatureOwnership.refused(
-              "module.memory_pulses",
-              "module(memory_pulses)",
-              featuresOf(features),
-            )
-            ?.let { fail(it) }
-        }
-        val memoryPulses = d.int("memory_pulses")?.toLong() ?: 0L
-        if (memoryPulses < 0) fail("module(memory_pulses): must be at least 0")
-        val rename =
-          d.dict("rename").mapValues { (old, v) ->
-            v as? String ?: fail("module(rename): the new name of '$old' must be a string")
-          }
-        val types = damageTypes(d)
-        val schema =
-          WorldSchema(
-            stats = names(d, "stats"),
-            vitals = names(d, "vitals"),
-            damageTypes = types.map { it.name },
-            damageTypeInfo = types.associateBy { it.name },
-            unarmedDamageType = d.reqStr("unarmed_damage_type"),
-            channels = d.strList("channels"),
-            prompt = d.str("prompt"),
-            channelPriority = d.strList("channel_priority"),
-          )
-        result =
-          WorldModule(
-            engine = d.str("engine"),
-            apiVersion = d.int("api_version") ?: EngineInfo.API_VERSION,
-            checkpointMinutes = minutes,
-            startRoom = start,
-            plugins = plugins,
-            aliases = CommandAliases(words, prefixes),
-            schema = schema,
-            featureIds = features,
-            rename = rename,
-            levelMode = levelMode,
-            standingHistoryPulses = standingHistoryPulses,
-            memoryPulses = memoryPulses,
-          )
+        result = build(d)
         Starlark.NONE
       }
+    }
+
+    private fun build(d: ParsedDecl): WorldModule {
+      val minutes = d.int("checkpoint_minutes") ?: DEFAULT_CHECKPOINT_MINUTES
+      if (minutes < 1) fail("module(checkpoint_minutes): must be at least 1")
+      // Listing all four features is the same as leaving the line out.
+      val featureIds =
+        d["features"]
+          ?.let { d.strList("features") }
+          ?.takeUnless { ids -> ids.toSet() == Feature.entries.map { it.id }.toSet() }
+      val features = featuresOf(featureIds)
+      requireFeature(d, "level_mode", "module.level_mode", features)
+      requireFeature(d, "standing_history_pulses", "module.standing_history_pulses", features)
+      requireFeature(d, "memory_pulses", "module.memory_pulses", features)
+      val standingHistoryPulses =
+        d.int("standing_history_pulses")?.toLong() ?: DEFAULT_STANDING_HISTORY_PULSES
+      if (standingHistoryPulses < 1) fail("module(standing_history_pulses): must be at least 1")
+      val memoryPulses = d.int("memory_pulses")?.toLong() ?: 0L
+      if (memoryPulses < 0) fail("module(memory_pulses): must be at least 0")
+      return WorldModule(
+        engine = d.str("engine"),
+        apiVersion = d.int("api_version") ?: EngineInfo.API_VERSION,
+        checkpointMinutes = minutes,
+        startRoom = startRoom(d),
+        plugins = stringMap(d, "plugins", "checksum"),
+        aliases = CommandAliases(stringMap(d, "aliases", "command"), prefixes(d)),
+        schema = schema(d),
+        featureIds = featureIds,
+        rename = stringMap(d, "rename", "new name"),
+        levelMode =
+          if (d.choice("level_mode") == "deferred") LevelMode.DEFERRED else LevelMode.AUTO,
+        standingHistoryPulses = standingHistoryPulses,
+        memoryPulses = memoryPulses,
+      )
     }
   }
 }

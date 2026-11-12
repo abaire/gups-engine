@@ -4,6 +4,7 @@ import gups.core.BUBBLE_RADIUS
 import gups.core.EntityId
 import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Actor
+import gups.core.model.Affect
 import gups.core.model.DormantRecovery
 import gups.core.model.Entity
 import gups.core.model.Item
@@ -31,13 +32,16 @@ fun World.roomOfEntity(e: Entity): Room? =
       }
   }
 
+/** Whether something keeps this entity simulated or projecting a bubble regardless of its room. */
+private val Entity.hasSimulationReason: Boolean
+  get() = activeReasons.isNotEmpty() || anchorReasons.isNotEmpty()
+
 /**
  * True if [e] is simulated: it is in an active room, it is an anchor, or it has an `active` reason.
  * Players are always anchors.
  */
 fun World.isSimulated(e: Entity): Boolean {
-  if (!config.bubble || e is Player || e.activeReasons.isNotEmpty() || e.anchorReasons.isNotEmpty())
-    return true
+  if (!config.bubble || e is Player || e.hasSimulationReason) return true
   val room = roomOfEntity(e) ?: return false
   return !room.isDormant
 }
@@ -64,15 +68,15 @@ internal fun World.ball(from: Room): List<Room> {
     val r = queue.removeFirst()
     val d = seen.getValue(r)
     if (d == BUBBLE_RADIUS) continue
-    for (exit in r.exits.values) {
-      val next = roomsByLabel[exit.to] ?: continue
-      if (next in seen) continue
-      seen[next] = d + 1
-      queue.addLast(next)
+    for (next in neighbours(r)) {
+      if (seen.putIfAbsent(next, d + 1) == null) queue.addLast(next)
     }
   }
   return seen.keys.toList()
 }
+
+private fun World.neighbours(room: Room): List<Room> =
+  room.exits.values.mapNotNull { roomsByLabel[it.to] }
 
 /** The active rooms computed from scratch, for checking the incremental bookkeeping. */
 fun World.activeRoomsFromScratch(): Set<Room> {
@@ -105,16 +109,16 @@ internal fun World.maintainBubble() {
   val now = HashMap<EntityId, Room>()
   for (e in entities.values) anchorRoom(e)?.let { now[e.id] = it }
   val changed = LinkedHashSet<Room>()
-  for (id in anchorRooms.keys + now.keys) {
-    val was = anchorRooms[id]
-    val is_ = now[id]
-    if (was === is_) continue
-    if (was != null && was.label in roomsByLabel) cover(was, -1, changed)
-    if (is_ != null) cover(is_, +1, changed)
-  }
+  for (id in anchorRooms.keys + now.keys) moveCoverage(anchorRooms[id], now[id], changed)
   anchorRooms.clear()
   anchorRooms.putAll(now)
   applyCoverage(changed)
+}
+
+private fun World.moveCoverage(was: Room?, now: Room?, changed: MutableSet<Room>) {
+  if (was === now) return
+  if (was != null && was.label in roomsByLabel) cover(was, -1, changed)
+  if (now != null) cover(now, +1, changed)
 }
 
 /** Recomputes the whole bubble, for example after a reload changed the room graph. */
@@ -208,7 +212,7 @@ internal fun World.sleep(room: Room) {
   room.dormantSince = pulse
   room.dirty = true
   for (e in entitiesIn(room)) {
-    if (e.activeReasons.isNotEmpty() || e.anchorReasons.isNotEmpty()) continue
+    if (e.hasSimulationReason) continue
     pauseTimers(e)
     if (e is Mob) {
       disengageAll(e, null)
@@ -228,31 +232,42 @@ internal fun World.wake(room: Room) {
   val since = room.dormantSince ?: return
   room.dormantSince = null
   room.dirty = true
-  val elapsed = pulse - since
-  val sleepers =
-    entitiesIn(room).filter { it.activeReasons.isEmpty() && it.anchorReasons.isEmpty() }
+  val sleepers = entitiesIn(room).filter { !it.hasSimulationReason }
   for (e in sleepers) resumeTimers(e)
   val mobs = sleepers.filterIsInstance<Mob>()
+  val items = sleepers.filterIsInstance<Item>()
   for (m in mobs) guarded("dormant recovery of $m") { recover(m, since) }
+  expireMissedAffects(room, mobs, items)
+  replayMissedSpawns(room)
+  for (i in items) {
+    val at = i.decayAt ?: continue
+    if (at <= pulse && i.id in entities) guarded("decay of $i") { decay(i) }
+  }
+  fireWakeHooks(room, pulse - since, mobs, items)
+}
+
+private fun World.dueAffects(affects: Collection<Affect>): List<Affect> =
+  affects.filter { it.expiresAt <= pulse }.sortedWith(compareBy({ it.expiresAt }, { it.id }))
+
+/** Expires what ran out while asleep: the room's affects first, then the mobs', then the items'. */
+private fun World.expireMissedAffects(room: Room, mobs: List<Mob>, items: List<Item>) {
   // A room with an active or anchor reason was never paused, so it expired its affects live.
-  if (room.activeReasons.isEmpty() && room.anchorReasons.isEmpty()) {
-    val expired =
-      room.affects
-        .filter { it.expiresAt <= pulse }
-        .sortedWith(compareBy({ it.expiresAt }, { it.id }))
-    for (a in expired) guarded("expiry of ${a.name} on $room") { expireRoomAffect(room, a) }
+  if (!room.hasSimulationReason) {
+    for (a in dueAffects(room.affects)) guarded("expiry of ${a.name} on $room") {
+      expireRoomAffect(room, a)
+    }
   }
-  for (m in mobs) {
-    val expired =
-      m.affects.filter { it.expiresAt <= pulse }.sortedWith(compareBy({ it.expiresAt }, { it.id }))
-    for (a in expired) guarded("expiry of ${a.name} on $m") { expireAffect(m, a) }
+  for (m in mobs) for (a in dueAffects(m.affects)) guarded("expiry of ${a.name} on $m") {
+    expireAffect(m, a)
   }
-  val expiredOnItems =
-    sleepers
-      .filterIsInstance<Item>()
+  val onItems =
+    items
       .flatMap { i -> i.affects.filter { it.expiresAt <= pulse }.map { i to it } }
       .sortedWith(compareBy({ it.second.expiresAt }, { it.second.id }))
-  for ((i, a) in expiredOnItems) guarded("expiry of ${a.name} on $i") { expireItemAffect(i, a) }
+  for ((i, a) in onItems) guarded("expiry of ${a.name} on $i") { expireItemAffect(i, a) }
+}
+
+private fun World.replayMissedSpawns(room: Room) {
   if (room.resetMissed) {
     room.resetMissed = false
     for (s in spawnStates) if (s.room === room) guarded("reset of ${room.label}") { fillSpawn(s) }
@@ -262,15 +277,13 @@ internal fun World.wake(room: Room) {
     val at = s.respawnAt ?: continue
     if (s.room === room && at <= pulse) guarded("respawn in ${room.label}") { fillSpawn(s) }
   }
-  for (i in sleepers.filterIsInstance<Item>()) {
-    val at = i.decayAt ?: continue
-    if (at <= pulse && i.id in entities) guarded("decay of $i") { decay(i) }
-  }
+}
+
+private fun World.fireWakeHooks(room: Room, elapsed: Long, mobs: List<Mob>, items: List<Item>) {
   val ctx = { HookContext(room = room, elapsedPulses = elapsed) }
   invokeOn(room, HookName.ON_WAKE, ctx())
   for (m in mobs.sortedBy { it.id }) if (m.inWorld) invokeOn(m, HookName.ON_WAKE, ctx())
-  for (i in sleepers.filterIsInstance<Item>().sortedBy { it.id }) if (i.id in entities)
-    invokeOn(i, HookName.ON_WAKE, ctx())
+  for (i in items.sortedBy { it.id }) if (i.id in entities) invokeOn(i, HookName.ON_WAKE, ctx())
 }
 
 /** Dormant vital recovery by `dormant_recovery`. */

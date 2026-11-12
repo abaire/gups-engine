@@ -53,6 +53,10 @@ class LabelPattern(val text: String) {
   fun matches(pkg: String): Boolean =
     if (recursive) base.isEmpty() || pkg == base || pkg.startsWith("$base/") else pkg == base
 
+  /** Whether a test file may hold what this pattern selects. */
+  internal fun wantsFile(file: Label): Boolean =
+    target == null || target == file.name || !target.endsWith(".star")
+
   fun selects(file: Label, test: String): Boolean =
     target == null || target == file.name || target == test
 
@@ -135,10 +139,7 @@ class TestRunner(
     for (pkg in all) {
       val wanted = parsed.filter { it.matches(pkg) }
       if (wanted.isEmpty()) continue
-      val files =
-        dir.files(pkg, tests = true).filter { f ->
-          wanted.any { it.target == null || it.target == f.name || !it.target.endsWith(".star") }
-        }
+      val files = dir.files(pkg, tests = true).filter { f -> wanted.any { it.wantsFile(f) } }
       if (files.isEmpty()) continue
       for (r in runPackage(pkg, files, wanted)) {
         results += r
@@ -158,19 +159,8 @@ class TestRunner(
     val problems = mutableListOf<String>()
     problems += moduleProblems(dir)
     val pkg = pkgLabel.removePrefix("//")
-    when {
-      !pkgLabel.startsWith("//") || ':' in pkgLabel || pkg.isEmpty() ->
-        problems += "'$pkgLabel' is not a package label such as //zones/forest"
-      !dir.hasPackage(pkg) -> problems += "no package //$pkg in ${dir.root}"
-    }
-    val name = file.fileName?.toString().orEmpty()
-    if (!name.endsWith(".star") || !file.isRegularFile()) problems += "$file is not a .star file"
-    val label =
-      if (problems.isEmpty())
-        runCatching { Label("//$pkg:$name") }
-          .onFailure { problems += "$file: ${it.message}" }
-          .getOrNull()
-      else null
+    problems += scenarioProblems(file, pkgLabel, pkg)
+    val label = if (problems.isEmpty()) scenarioLabel(file, pkg, problems) else null
     if (label == null) return TestReport(emptyList(), problems)
     val loaded =
       loader.load(listOf(pkg) + implicit, tests = listOf(label), testSources = mapOf(label to file))
@@ -190,6 +180,25 @@ class TestRunner(
     if (results.isEmpty()) problems += "$file has no test_ functions"
     return TestReport(results, problems)
   }
+
+  private fun scenarioProblems(file: Path, pkgLabel: String, pkg: String): List<String> =
+    listOfNotNull(
+      when {
+        !pkgLabel.startsWith("//") || ':' in pkgLabel || pkg.isEmpty() ->
+          "'$pkgLabel' is not a package label such as //zones/forest"
+        !dir.hasPackage(pkg) -> "no package //$pkg in ${dir.root}"
+        else -> null
+      },
+      "$file is not a .star file"
+        .takeIf {
+          file.fileName?.toString().orEmpty().endsWith(".star").not() || !file.isRegularFile()
+        },
+    )
+
+  private fun scenarioLabel(file: Path, pkg: String, problems: MutableList<String>): Label? =
+    runCatching { Label("//$pkg:${file.fileName?.toString().orEmpty()}") }
+      .onFailure { problems += "$file: ${it.message}" }
+      .getOrNull()
 
   private fun runPackage(
     pkg: String,
@@ -234,9 +243,35 @@ class TestRunner(
         transcript = transcript,
       )
     val printed = StringBuilder()
-    var status = Status.PASS
-    var message: String? = null
-    var location: String? = null
+    val outcome = execute(name, fn, t, printed, transcript)
+    val trace = t.worlds.mapNotNull { it.traceText() }.joinToString("\n").ifEmpty { null }
+    return TestResult(
+      file,
+      name,
+      outcome.status,
+      outcome.message,
+      outcome.location,
+      // A scenario is run to be read, so its trace is kept even when it passes.
+      trace.takeIf { outcome.status != Status.PASS || transcript != null },
+      printed.toString(),
+      warnings(t),
+      transcript?.toString().orEmpty(),
+    )
+  }
+
+  private class Outcome(
+    val status: Status,
+    val message: String? = null,
+    val location: String? = null,
+  )
+
+  private fun execute(
+    name: String,
+    fn: StarlarkFunction,
+    t: TestCtx,
+    printed: StringBuilder,
+    transcript: Transcript?,
+  ): Outcome =
     Mutability.create(name).use { mu ->
       val thread = StarlarkThread(mu, StarlarkSemantics.DEFAULT)
       thread.setMaxExecutionSteps(TEST_STEPS)
@@ -246,53 +281,42 @@ class TestRunner(
       }
       try {
         Starlark.call(thread, fn, listOf(t), emptyMap())
+        Outcome(Status.PASS)
       } catch (e: EvalException) {
-        status =
-          if (generateSequence<Throwable>(e) { it.cause }.any { it is AssertionFailed }) Status.FAIL
-          else Status.ERROR
-        message =
-          if (e.message?.contains("too many steps") == true)
-            "the test's own code exceeded $TEST_STEPS steps"
-          else e.message
-        location =
-          e.callStack
-            .lastOrNull { it.location != Location.BUILTIN && it.location.line() > 0 }
-            ?.location
-            ?.let { "${it.file()}:${it.line()}" }
+        evalOutcome(e)
       } catch (e: InvariantViolation) {
-        status = Status.ERROR
-        message = e.message
+        Outcome(Status.ERROR, e.message)
       } catch (e: RuntimeException) {
-        status = Status.ERROR
-        message = "engine exception: $e"
+        Outcome(Status.ERROR, "engine exception: $e")
       }
     }
-    val trace = t.worlds.mapNotNull { it.traceText() }.joinToString("\n").ifEmpty { null }
-    val warnings =
-      t.worlds.flatMap { w ->
-        w.world.diagnostics
-          .filter { it.pkg != null }
-          .map { d ->
-            listOfNotNull(
-                d.file?.let { f -> d.line?.let { "$f:$it" } ?: f },
-                "[${d.kind}] ${d.message}",
-              )
-              .joinToString(": ")
-          }
-      }
-    return TestResult(
-      file,
-      name,
-      status,
-      message,
-      location,
-      // A scenario is run to be read, so its trace is kept even when it passes.
-      trace.takeIf { status != Status.PASS || transcript != null },
-      printed.toString(),
-      warnings,
-      transcript?.toString().orEmpty(),
-    )
+
+  private fun evalOutcome(e: EvalException): Outcome {
+    val failed = generateSequence<Throwable>(e) { it.cause }.any { it is AssertionFailed }
+    val message =
+      if (e.message?.contains("too many steps") == true)
+        "the test's own code exceeded $TEST_STEPS steps"
+      else e.message
+    val location =
+      e.callStack
+        .lastOrNull { it.location != Location.BUILTIN && it.location.line() > 0 }
+        ?.location
+        ?.let { "${it.file()}:${it.line()}" }
+    return Outcome(if (failed) Status.FAIL else Status.ERROR, message, location)
   }
+
+  private fun warnings(t: TestCtx): List<String> =
+    t.worlds.flatMap { w ->
+      w.world.diagnostics
+        .filter { it.pkg != null }
+        .map { d ->
+          listOfNotNull(
+              d.file?.let { f -> d.line?.let { "$f:$it" } ?: f },
+              "[${d.kind}] ${d.message}",
+            )
+            .joinToString(": ")
+        }
+    }
 }
 
 /**

@@ -54,21 +54,7 @@ interface Castable {
 /** Pops and plans a queued command, then starts its lifecycle. */
 internal fun World.runQueued(actor: Actor, queued: QueuedAction) {
   val orderedBy = queued.orderedBy
-  if (orderedBy != null) {
-    val owner = actor(orderedBy)
-    if (
-      actor !is Mob ||
-        actor.owner != orderedBy ||
-        owner == null ||
-        !owner.inWorld ||
-        owner.room !== actor.room
-    ) {
-      if (owner is Player && owner.inWorld) {
-        tell(owner, KernelMsg.ORDER_DROPPED, "pet" to actor.name)
-      }
-      return
-    }
-  }
+  if (orderedBy != null && !orderHolds(actor, orderedBy)) return
   // A non-move step bars the actor from extra move rounds this pulse; a move records itself in
   // `chargeMove`.
   if (!queued.command.moves) actor.lastNonMovePulse = pulse
@@ -100,24 +86,30 @@ fun World.execute(
   finish(actor, action, origin)
 }
 
+/** Whether [actor] is a pet still in the room of its owner [orderedBy]; the owner hears if not. */
+private fun World.orderHolds(actor: Actor, orderedBy: EntityId): Boolean {
+  val owner = actor(orderedBy)
+  val holds = actor is Mob && actor.owner == orderedBy && owner.isInRoomOf(actor)
+  if (!holds && owner is Player && owner.inWorld) {
+    tell(owner, KernelMsg.ORDER_DROPPED, "pet" to actor.name)
+  }
+  return holds
+}
+
+private fun Actor?.isInRoomOf(other: Actor): Boolean =
+  this != null && inWorld && room === other.room
+
+/** An actor still in the world and not in the middle of a cast. */
+private val Actor.isFree: Boolean
+  get() = inWorld && casting == null
+
 internal fun World.advanceCast(actor: Actor, cast: CastState) {
   if (pulse < cast.endsAt) return
   actor.casting = null
-  if (cast.orderedBy != null) {
-    val owner = actor(cast.orderedBy)
-    if (
-      actor !is Mob ||
-        actor.owner != cast.orderedBy ||
-        owner == null ||
-        !owner.inWorld ||
-        owner.room !== actor.room
-    ) {
-      if (owner is Player && owner.inWorld) {
-        tell(owner, KernelMsg.ORDER_DROPPED, "pet" to actor.name)
-      }
-      actor.waitState = cast.action.lag / 2
-      return
-    }
+  val orderedBy = cast.orderedBy
+  if (orderedBy != null && !orderHolds(actor, orderedBy)) {
+    actor.waitState = cast.action.lag / 2
+    return
   }
   val failure = cast.action.validate(this, actor)
   if (failure != null) {
@@ -133,10 +125,10 @@ private fun World.finish(actor: Actor, action: Action, origin: ThinkOrigin? = nu
   actor.lastMoveExit = null
   val lag = action.resolve(this, actor)
   // A resolve can kill or interrupt the actor; recovery only applies to one still standing.
-  if (actor.inWorld && actor.casting == null) actor.waitState = maxOf(actor.waitState, lag)
+  if (actor.isFree) actor.waitState = maxOf(actor.waitState, lag)
   // A mob that chose its action may be asked whether to think again, once the action (a move, or a
   // finished warmup) has landed or been cancelled.
-  if (actor is Mob && origin != null && actor.inWorld && actor.casting == null) {
+  if (actor is Mob && origin != null && actor.isFree) {
     deferRemoval(actor, Deferred.Kind.CHAIN) { askChain(actor, origin) }
   }
   actor.dirty = true
@@ -265,72 +257,76 @@ internal fun World.think(mob: Mob) {
   val chained = mob.chainDue
   mob.chainDue = false
   mob.chainCount = if (chained) mob.chainCount + 1 else 0
-  val behaviors = behaviorsOf(mob)
-  val proposals =
-    behaviors
-      .mapIndexedNotNull { i, b ->
-        val p =
-          try {
-            b.propose(this, mob)
-          } catch (e: Exception) {
-            if (config.strict) throw e
-            diagnose("engine", "behavior of $mob failed: ${e.message}", e)
-            null
-          }
-        p?.let { i to it }
-      }
-      .let { pairs ->
-        val returnProposal =
-          try {
-            returnProposal(mob)?.let { behaviors.size to it }
-          } catch (e: Exception) {
-            if (config.strict) throw e
-            diagnose("engine", "return proposal of $mob failed: ${e.message}", e)
-            null
-          }
-        if (returnProposal != null) pairs + returnProposal else pairs
-      }
-      .filter { (_, p) -> Sentinel !in behaviors || Sentinel.allows(p) }
-      .sortedWith(
-        compareByDescending<Pair<Int, Proposal>> { it.second.priority }.thenBy { it.first }
-      )
-      .map { it.second }
-  val result =
-    mob.proto.think?.let { fn ->
-      try {
-        fn.think(this, mob, proposals)
-      } catch (e: Exception) {
-        diagnose("script", "think of $mob failed: ${e.message}", e)
-        ThinkResult.Accept
-      }
-    } ?: ThinkResult.Accept
-  var originSource: String? = null
-  when (result) {
-    ThinkResult.Accept ->
-      proposals.firstOrNull()?.let { p ->
-        originSource = p.source
-        val action = p.action
-        if (action != null) enqueue(mob, p.commandLine.substringBefore(' '), action)
-        else act(mob, p.commandLine)
-      }
-    ThinkResult.Idle -> Unit
-    is ThinkResult.Act -> {
-      originSource = "think"
-      act(mob, result.commandLine)
-    }
-  }
+  val proposals = proposalsOf(mob)
+  val originSource = applyThink(mob, proposals, thinkResult(mob, proposals))
   // The queue was empty when the think ran, so any head now is the action this think chose; tag it
   // so the finished action can be asked whether to chain.
   mob.actionQueue.firstOrNull()?.let { queued ->
     queued.thinkOrigin =
       ThinkOrigin(originSource ?: "think", queued.toString(), queued.command.moves)
   }
-  // The first action the think queued starts at once, in this step of the action pulse, as if
-  // popped from the queue. A move at the head still waits for the movement debt to clear, and any
-  // further actions wait their turn.
-  if (mob.inWorld && mob.casting == null && mob.waitState == 0) {
-    val head = mob.actionQueue.firstOrNull() ?: return
-    if (head.command.moves && !canMove(mob)) return
-    runQueued(mob, mob.actionQueue.removeFirst())
+  startHeadAction(mob)
+}
+
+private fun World.guardedProposal(what: String, propose: () -> Proposal?): Proposal? =
+  try {
+    propose()
+  } catch (e: Exception) {
+    if (config.strict) throw e
+    diagnose("engine", "$what failed: ${e.message}", e)
+    null
   }
+
+/** The behaviors' proposals and the engine's return step, best first; ties keep behavior order. */
+private fun World.proposalsOf(mob: Mob): List<Proposal> {
+  val behaviors = behaviorsOf(mob)
+  val ranked =
+    behaviors.mapIndexedNotNull { i, b ->
+      guardedProposal("behavior of $mob") { b.propose(this, mob) }?.let { i to it }
+    }
+  val home =
+    guardedProposal("return proposal of $mob") { returnProposal(mob) }?.let { behaviors.size to it }
+  return (ranked + listOfNotNull(home))
+    .filter { (_, p) -> Sentinel !in behaviors || Sentinel.allows(p) }
+    .sortedWith(compareByDescending<Pair<Int, Proposal>> { it.second.priority }.thenBy { it.first })
+    .map { it.second }
+}
+
+private fun World.thinkResult(mob: Mob, proposals: List<Proposal>): ThinkResult {
+  val fn = mob.proto.think ?: return ThinkResult.Accept
+  return try {
+    fn.think(this, mob, proposals)
+  } catch (e: Exception) {
+    diagnose("script", "think of $mob failed: ${e.message}", e)
+    ThinkResult.Accept
+  }
+}
+
+/** Queues what the think chose; returns the source of the choice, or null if nothing was chosen. */
+private fun World.applyThink(mob: Mob, proposals: List<Proposal>, result: ThinkResult): String? =
+  when (result) {
+    ThinkResult.Accept -> proposals.firstOrNull()?.also { queueProposal(mob, it) }?.source
+    ThinkResult.Idle -> null
+    is ThinkResult.Act -> {
+      act(mob, result.commandLine)
+      "think"
+    }
+  }
+
+private fun World.queueProposal(mob: Mob, p: Proposal) {
+  val action = p.action
+  if (action != null) enqueue(mob, p.commandLine.substringBefore(' '), action)
+  else act(mob, p.commandLine)
+}
+
+/**
+ * The first action the think queued starts at once, in this step of the action pulse, as if popped
+ * from the queue. A move at the head still waits for the movement debt to clear, and any further
+ * actions wait their turn.
+ */
+private fun World.startHeadAction(mob: Mob) {
+  if (!mob.isFree || mob.waitState != 0) return
+  val head = mob.actionQueue.firstOrNull() ?: return
+  if (head.command.moves && !canMove(mob)) return
+  runQueued(mob, mob.actionQueue.removeFirst())
 }
