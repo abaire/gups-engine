@@ -329,10 +329,14 @@ class HeritagePluginTest {
 
   /** Writes the skills package the fixture zone depends on, with an arcane and a divine skill. */
   private fun writeFixtureSkills(root: Path) {
-    write(root, "skills/package.star", """package(api_version = 1, kind = "skills")""")
     write(
       root,
-      "skills/skills.star",
+      "skills/heritage_skills/package.star",
+      """package(api_version = 1, kind = "skills", title = "Heritage")""",
+    )
+    write(
+      root,
+      "skills/heritage_skills/skills.star",
       """
       skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"])
       skill("minor_heal", kind = "spell", target = "self", tags = ["divine"])
@@ -362,7 +366,7 @@ class HeritagePluginTest {
       "zones/heritage_zone/heritage_test.star",
       """
       def test_mage_restrictions_and_skills(t):
-          w = t.world(packages = ["//skills", "//zones/heritage_zone"])
+          w = t.world(packages = ["//skills/heritage_skills", "//zones/heritage_zone"])
           # Elf mage
           p = w.spawn_player("Ann", at = ":square", choices = {"race": "elf", "class": "mage"})
           t.eq(p.choices["race"], "elf")
@@ -370,7 +374,7 @@ class HeritagePluginTest {
           t.true(p.has_trait("elf"))
           t.true(p.has_trait("mage"))
           # Starting skill granted at 25
-          t.eq(p.skills["//skills:magic_missile"], 25)
+          t.eq(p.skills["//skills/heritage_skills:magic_missile"], 25)
 
           # WEAR restriction
           w.spawn(":heavy_plate", at = p)
@@ -402,7 +406,7 @@ class HeritagePluginTest {
           t.true(guard.has_trait("warrior"))
 
       def test_heritage_choose_repick(t):
-          w = t.world(packages = ["//skills", "//zones/heritage_zone"])
+          w = t.world(packages = ["//skills/heritage_skills", "//zones/heritage_zone"])
           p = w.spawn_player("Clara", at = ":square", choices = {"race": "human", "class": "warrior"})
           t.true(p.has_trait("warrior"))
           # Builtin choose called via in-game command

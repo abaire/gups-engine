@@ -34,40 +34,79 @@ private fun World.canEquip(wanted: String, wield: Boolean): Boolean {
   return (wieldFamily != null && familyOfWear(wanted) == wieldFamily) || wanted == "wield"
 }
 
+/**
+ * Why [item] can't go on [actor] by [plan], or null if it can: no slot, no room, more than one item
+ * in the way, or the WEAR restriction about the item or the REMOVE restriction about the one item
+ * it would take off.
+ */
+private fun World.wearRefusal(actor: Actor, item: Item, plan: SlotPlan?, wield: Boolean): String? {
+  if (plan == null) return msg(cantMessage(wield), "item" to item.name)
+  if (plan.ambiguous) return msg(KernelMsg.WEAR_NO_ROOM, "item" to item.name)
+  if (plan.displaced.size >= 2) {
+    return msg(
+      KernelMsg.WEAR_REMOVE_FIRST,
+      "items" to plan.displaced.joinToString(", ") { it.name },
+    )
+  }
+  val request =
+    RestrictionRequest(point = RestrictionPoint.WEAR, actor = actor, item = item, slot = plan.slot)
+  return refusalFor(request) ?: plan.displaced.singleOrNull()?.let { removeRefusal(actor, it) }
+}
+
+/** The REMOVE restriction's answer about taking [worn] off [actor]. */
+internal fun World.removeRefusal(actor: Actor, worn: Item): String? =
+  refusalFor(
+    RestrictionRequest(
+      point = RestrictionPoint.REMOVE,
+      actor = actor,
+      item = worn,
+      slot = (worn.location as ItemLocation.Equipped).slot,
+    )
+  )
+
+/** Moves what [plan] displaces back to [actor]'s inventory and puts [item] on. Says nothing. */
+private fun World.equipByPlan(actor: Actor, item: Item, plan: SlotPlan) {
+  for (displaced in plan.displaced) moveItem(displaced, ItemLocation.Carried(actor.id))
+  moveItem(item, ItemLocation.Equipped(actor.id, plan.slot))
+}
+
+/**
+ * The script and plugin verb: puts on an item [actor] carries as `wear` (or `wield`) would, with
+ * the same slot choice and restrictions, but sends nothing. Returns the refusal, or null once worn.
+ */
+fun World.wearItem(actor: Actor, item: Item, wield: Boolean = false): String? {
+  require(item.location == ItemLocation.Carried(actor.id)) {
+    "${item.name} is not carried by ${actor.name}"
+  }
+  val wanted = item.proto.wear
+  if (wanted == null || !canEquip(wanted, wield))
+    return msg(cantMessage(wield), "item" to item.name)
+  val plan = planSlot(actor, item)
+  wearRefusal(actor, item, plan, wield)?.let {
+    return it
+  }
+  equipByPlan(actor, item, plan!!)
+  return null
+}
+
+/** Takes off an item [actor] wears, after the REMOVE restriction, saying nothing. */
+fun World.unwearItem(actor: Actor, item: Item): String? {
+  val location = item.location
+  require(location is ItemLocation.Equipped && location.actor == actor.id) {
+    "${item.name} is not worn by ${actor.name}"
+  }
+  removeRefusal(actor, item)?.let {
+    return it
+  }
+  moveItem(item, ItemLocation.Carried(actor.id))
+  return null
+}
+
 private class WearAction(private val item: Item, private val wield: Boolean) : Action {
   private var validatedPlan: SlotPlan? = null
 
-  /** Why [plan] can't go ahead, or null if it can. */
-  private fun refusal(w: World, actor: Actor, plan: SlotPlan?): String? {
-    if (plan == null) return w.msg(cantMessage(wield), "item" to item.name)
-    if (plan.ambiguous) return w.msg(KernelMsg.WEAR_NO_ROOM, "item" to item.name)
-    if (plan.displaced.size >= 2) {
-      return w.msg(
-        KernelMsg.WEAR_REMOVE_FIRST,
-        "items" to plan.displaced.joinToString(", ") { it.name },
-      )
-    }
-    val request =
-      RestrictionRequest(
-        point = RestrictionPoint.WEAR,
-        actor = actor,
-        item = item,
-        slot = plan.slot,
-      )
-    return w.refusalFor(request) ?: removalRefusal(w, actor, plan.displaced.singleOrNull())
-  }
-
-  private fun removalRefusal(w: World, actor: Actor, occupant: Item?): String? {
-    if (occupant == null) return null
-    return w.refusalFor(
-      RestrictionRequest(
-        point = RestrictionPoint.REMOVE,
-        actor = actor,
-        item = occupant,
-        slot = (occupant.location as ItemLocation.Equipped).slot,
-      )
-    )
-  }
+  private fun refusal(w: World, actor: Actor, plan: SlotPlan?): String? =
+    w.wearRefusal(actor, item, plan, wield)
 
   override fun validate(w: World, actor: Actor): String? {
     if (item.location != ItemLocation.Carried(actor.id)) return w.msg(KernelMsg.NOT_CARRYING)
@@ -106,11 +145,8 @@ private class WearAction(private val item: Item, private val wield: Boolean) : A
   }
 
   private fun equip(w: World, actor: Actor, plan: SlotPlan) {
-    for (displaced in plan.displaced) {
-      w.moveItem(displaced, ItemLocation.Carried(actor.id))
-      w.tell(actor, KernelMsg.WEAR_STOP, "item" to displaced.name)
-    }
-    w.moveItem(item, ItemLocation.Equipped(actor.id, plan.slot))
+    w.equipByPlan(actor, item, plan)
+    for (displaced in plan.displaced) w.tell(actor, KernelMsg.WEAR_STOP, "item" to displaced.name)
     val wieldFamily = w.familyOfSlot("wield")
     val wielded =
       plan.slot == "wield" || (wieldFamily != null && w.familyOfSlot(plan.slot) == wieldFamily)

@@ -183,7 +183,7 @@ name.
 
 - **In Scope:** move the creation provider into a named class; a pure `Respec` helper; the builtins `respec_menu`,
   `respec_check`, `respec`, `starter_skills`; `created` granting starter skills for both `newCharacter` values; starter
-  skill labels moved to `//skills/heritage:*`; unit tests; the §4.15 bullet.
+  skill labels moved to `//skills/heritage_skills:*`; unit tests; the §4.15 bullet.
 - **Out of Scope:** *Do not implement these; later phases do.* `respec.star`, any `.star` world content, the sample
   world tree, `HeritageWorldTest`, tutorials and README.
 
@@ -202,7 +202,7 @@ name.
   - `samples/heritage-plugin/src/test/kotlin/gups/sample/heritage/FakeEntities.kt`, `FakeWorld.kt` (make `skills`
     configurable on `FakeActor`; record `setSkill` calls in `FakeWorld`)
   - `samples/heritage-plugin/src/test/kotlin/gups/sample/heritage/HeritagePluginTest.kt` (the fixture's skills package
-    and the `//skills:magic_missile` assertion move to `//skills/heritage:*`)
+    and the `//skills:magic_missile` assertion move to `//skills/heritage_skills:*`)
   - `samples/heritage-plugin/docs/tutorials/02_character_creation_provider.md`,
     `03_operational_restrictions_and_tags.md`, `05_testing_creation_and_traits.md`, and `docs/PLUGINS.md` (step 8)
   - `docs/SPEC.md`, `docs/CHANGELOG.md`
@@ -234,8 +234,8 @@ open class HeritageCreation : PluginCreation {
     const val STARTER_PROFICIENCY = 25
     val STARTER_SKILLS: Map<String, List<String>> =
       mapOf(
-        "mage" to listOf("//skills/heritage:magic_missile"),
-        "cleric" to listOf("//skills/heritage:minor_heal"),
+        "mage" to listOf("//skills/heritage_skills:magic_missile"),
+        "cleric" to listOf("//skills/heritage_skills:minor_heal"),
       )
   }
 }
@@ -319,7 +319,7 @@ maps) for the builtins to return.
        `"list"`.
   8. **Docs that quote this code:**
      - Tutorials 02, 03 and 05 and `docs/PLUGINS.md` quote `//skills:magic_missile` / `minor_heal`. Update those labels
-       to `//skills/heritage:*`.
+       to `//skills/heritage_skills:*`.
      - Tutorial 02 (~140 and ~230) and `docs/PLUGINS.md` (~425) also quote the old `created` body with its `when`.
        Replace each excerpt with the new shape: `created` calling `grantStarterSkills`, and the `STARTER_SKILLS` map.
      - In tutorial 02, change the prose that says starter skills are given only to new characters.
@@ -344,10 +344,10 @@ maps) for the builtins to return.
     nothing and returns `null`.
   - `grantStarterSkills`: grants for mage, nothing for warrior, skips a known skill, skips a `learn` refusal
     (`FakeWorld.setSkill` returning a message), and `created(..., newCharacter = false)` grants too.
-- `HeritagePluginTest`: the fixture skills package becomes `skills/heritage/` (`package.star` + `skills.star`), and its
-  assertion reads `//skills/heritage:magic_missile`.
+- `HeritagePluginTest`: the fixture skills package becomes `skills/heritage_skills/` (`package.star` + `skills.star`),
+  and its assertion reads `//skills/heritage_skills:magic_missile`.
 - CHANGELOG bullet: "`samples/heritage-plugin`: `heritage.respec_menu`, `respec_check`, `respec` and `starter_skills`;
-  `created` grants class starter skills for re-picked characters too; starter skills are `//skills/heritage:*`."
+  `created` grants class starter skills for re-picked characters too; starter skills are `//skills/heritage_skills:*`."
 
 ### Exit Conditions
 
@@ -361,10 +361,10 @@ maps) for the builtins to return.
 
 ### Objective & Scope
 
-- **In Scope:** `samples/heritage-plugin/world/` (copied over a template-world copy by tests): the `//skills/heritage`
-  package, `lib/respec.star` with `define`, `open`, the menu, the full request flow for `"keep"`, the `respec_offer`
-  hook and the cooldown; the `//zones/shrine` zone with a class mentor; `*_test.star` tests; `HeritageWorldTest` running
-  them; the §4.19 paragraph.
+- **In Scope:** `samples/heritage-plugin/world/` (copied over a template-world copy by tests): the
+  `//skills/heritage_skills` package, `lib/respec.star` with `define`, `open`, the menu, the full request flow for
+  `"keep"`, the `respec_offer` hook and the cooldown; the `//zones/shrine` zone with a class mentor; `*_test.star`
+  tests; `HeritageWorldTest` running them; the §4.19 paragraph.
 - **Out of Scope:** *Do not implement these; Phase 4 does.* The `"reset"` policy's refund and skill removal (accept
   `"reset"` in `define` but leave a `fail("reset is not implemented yet")` at the point it would run), the standing
   event, `respec_done`, the rebirth altar. No tutorial or README text.
@@ -379,7 +379,7 @@ maps) for the builtins to return.
   `HeritageWorldTest.worldDir` and its `TestRunner` use; `samples/heritage-plugin/build.gradle.kts` (`tasks.test` inputs
   and system properties); `template-world/MODULE.gups` ("1200 pulses is 5 minutes": 240 pulses a minute).
 - **Files to Modify / Create:**
-  - `samples/heritage-plugin/world/skills/heritage/package.star`, `skills.star` (new)
+  - `samples/heritage-plugin/world/skills/heritage_skills/package.star`, `skills.star` (new)
   - `samples/heritage-plugin/world/lib/respec.star` (new)
   - `samples/heritage-plugin/world/zones/shrine/package.star`, `shrine.star`, `shrine_testdata.star`, `respec_test.star`
     (new)
@@ -401,10 +401,11 @@ maps) for the builtins to return.
 
 ### Implementation Blueprint
 
-- **Skills package** `//skills/heritage`: `package(api_version = 1, kind = "skills", title = "Heritage")`;
-  `skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"], ...)` and `skill("minor_heal", kind =
-  "spell", target = "self", tags = ["divine"], ...)`, with a cost, lag and effect like `spark` and `mend` in
-  `template-world/skills/arcane/spells.star`.
+- **Skills package** `//skills/heritage_skills` (not `//skills/heritage`: a package's attribute namespace is its last
+  path segment, and no package may take a plugin id's namespace): `package(api_version = 1, kind = "skills", title =
+  "Heritage")`; `skill("magic_missile", kind = "spell", target = "enemy", tags = ["arcane"], ...)` and
+  `skill("minor_heal", kind = "spell", target = "self", tags = ["divine"], ...)`, with a cost, lag and effect like
+  `spark` and `mend` in `template-world/skills/arcane/spells.star`.
 
 - **`respec.star` API:**
 
@@ -505,7 +506,8 @@ maps) for the builtins to return.
       - `grant N`: `trainer.grant_practices(ctx, ctx.self, N)`.
       - `stun_keeper`: stuns the respec keeper here (copy `_stun_trainer`).
       - `offer MODE`: sets `offer_mode` on the respec keeper here.
-      - `armor`: gives the player a `plate_mail` and has them wear it.
+      - `armor`: gives the player a `plate_mail` and puts it on with `ctx.wear` (added for this; scripts had no verb to
+        wear an item).
 - **`HeritageWorldTest`:**
   - Add `private fun shrineWorld(): WorldDir`. It is `worldDir()` plus a recursive copy of
     `System.getProperty("gups.sample.heritageWorld")` over the copy's root (directories merge, and `lib/respec.star`
@@ -523,10 +525,10 @@ maps) for the builtins to return.
   - The menu at the mentor shows the class options, prices, the current class refused as `(That is already your
     class.)`, and `You can change now.`
   - `respec mage` for a human warrior with 10 coins:
-    - `You pay 10 gold coins.`, `Your class is now Mage.` and `You learn magic missile.`. The skill's display name comes
-      from its identifier with `_` as spaces. If `ctx.skill_info(...).name` turns out different, give the skill an
-      explicit name rather than changing the assertion.
-    - `p.choices["class"] == "mage"`, the coins are gone, and `p.skills["//skills/heritage:magic_missile"] == 25`.
+    - `You pay 10 gold coins.`, `Your class is now Mage.` and `You learn magic_missile.`. A skill's name is its
+      identifier (`skill()` takes no display name), the same name players type for `practice` and `cast`.
+    - `p.choices["class"] == "mage"`, the coins are gone, and `p.skills["//skills/heritage_skills:magic_missile"] ==
+      25`.
     - A skill the player knew before is still known (`"keep"`).
   - Refusals, each leaving coins, choices and skills unchanged:
     - no keeper;
@@ -619,11 +621,11 @@ maps) for the builtins to return.
 
 - `respec_test.star` additions:
   - **Reset to another class.** In `rebirth_test_room`, a human mage gets `grant 2`, `practice spark` twice, and `coins
-    100`. They are spawned with `skills = {"//skills/heritage:magic_missile": 25}`, or keep the starter skill from
-    creation. Then they do `respec cleric`.
-    - Output: `You forget everything you had learned.`, `2 practice sessions are returned to you.` and `You learn minor
-      heal.`.
-    - Skills are exactly `{"//skills/heritage:minor_heal": 25}`, the balance is up by 2, and the coins are gone.
+    100`. They are spawned with `skills = {"//skills/heritage_skills:magic_missile": 25}`, or keep the starter skill
+    from creation. Then they do `respec cleric`.
+    - Output: `You forget everything you had learned.`, `2 practice sessions are returned to you.` and `You learn
+      minor_heal.`.
+    - Skills are exactly `{"//skills/heritage_skills:minor_heal": 25}`, the balance is up by 2, and the coins are gone.
   - **Reset to the same class.** `respec class mage` for a mage at the altar is allowed: skills are reset and
     `magic_missile` is back at 25.
   - **Race change at the altar.**
@@ -692,11 +694,11 @@ maps) for the builtins to return.
   2. `cp -R template-world local-world-test/world`.
   3. Copy `samples/heritage-plugin/world/` over it.
   4. Copy `samples/heritage-plugin/build/libs/heritage.jar` to `local-world-test/world/plugins/`.
-  5. Pin it in `local-world-test/world/MODULE.gups` as `plugins = {"heritage": "<sha256>"}`; get the hash with `shasum
-     -a 256`.
+  5. Pin it in `local-world-test/world/MODULE.gups` as `plugins = {"heritage": "sha256:<hash>"}`; get the hash with
+     `shasum -a 256`.
   6. Write `local-world-test/scenario.star`. `gups scenario` loads `*_testdata.star`, so the fixture commands work.
      - A human warrior is spawned at `:respec_test_room` and gets `coins 10`.
-     - `respec`, then `respec mage`; then `skills` lists magic missile.
+     - `respec`, then `respec mage`; then `skills` lists magic_missile.
      - The same player is moved (`w.spawn_player` a second player instead if moving isn't available) to
        `:rebirth_test_room`, gets `coins 100` and does `respec cleric`.
   7. Run `cli/build/install/gups/bin/gups scenario --world local-world-test/world --package //zones/shrine

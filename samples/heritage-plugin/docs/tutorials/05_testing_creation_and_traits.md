@@ -87,11 +87,11 @@ fun `created grants magic missile to new mage`() {
 
   creation.created(world, mage, newCharacter = true)
 
-  assertEquals(listOf(Triple(mage, "//skills:magic_missile", 25)), world.skills)
+  assertEquals(listOf(Triple(mage, "//skills/heritage_skills:magic_missile", 25)), world.skills)
 }
 
 @Test
-fun `created does nothing for existing character`() {
+fun `created grants starter skills to a re-picked character too`() {
   val plugin = HeritagePlugin()
   val registry = FakeRegistry()
   plugin.register(registry)
@@ -101,7 +101,7 @@ fun `created does nothing for existing character`() {
 
   creation.created(world, mage, newCharacter = false)
 
-  assertTrue(world.skills.isEmpty(), "Existing characters should not receive starter skills")
+  assertEquals(listOf(Triple(mage, "//skills/heritage_skills:magic_missile", 25)), world.skills)
 }
 ```
 
@@ -243,7 +243,7 @@ fun `telnet creation flow sets choices and grants starter skills`() {
   assertEquals("elf", player.choices["race"])
   assertEquals("mage", player.choices["class"])
   assertTrue(player.hasTrait("mage"))
-  assertEquals(25, player.skillProficiency("//skills:magic_missile"))
+  assertEquals(25, player.skillProficiency("//skills/heritage_skills:magic_missile"))
 }
 ```
 

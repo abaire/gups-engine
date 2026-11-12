@@ -1120,6 +1120,29 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.unwear" class="entry">
+<h4><code>unwear(actor, item)</code> <span class="since">since api_version 1</span></h4>
+<p>Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.unwear.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who takes the item off.</td></tr>
+<tr id="ctx.unwear.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor wears.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.wear" class="entry">
+<h4><code>wear(actor, item, wield = False)</code> <span class="since">since api_version 1</span></h4>
+<p>Puts on an item the actor carries as the wear command (or wield) would, asking the same restrictions and taking off at most one worn item, which goes back to the inventory. Sends nothing. Returns the refusal message, or None once the item is worn.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.wear.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who puts the item on.</td></tr>
+<tr id="ctx.wear.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor carries.</td></tr>
+<tr id="ctx.wear.wield"><td><code>wield</code></td><td>positional or named</td><td><code>False</code></td><td>Wield it, as the wield command does.</td></tr>
+</tbody>
+</table>
+</article>
 </section>
 <h2>Views</h2>
 <p class="intro">Read-only views of the world that ctx and rules_ctx hand out.</p>

@@ -106,56 +106,46 @@ companion object {
 
 ## 3. Implementing the `PluginCreation` Interface
 
-The `PluginCreation` interface requires implementing five methods:
+The `PluginCreation` interface requires implementing five methods. The sample keeps them in a named class,
+`HeritageCreation`, so the respec builtins can share the same instance:
 
 ```kotlin
-r.setCreation(
-  object : PluginCreation {
-    override val choices =
-      listOf(
-        PluginChoice("race", "Race", RACE_OPTIONS),
-        PluginChoice("class", "Class", CLASS_OPTIONS),
-      )
+open class HeritageCreation : PluginCreation {
+  override val choices: List<PluginChoice> =
+    listOf(
+      PluginChoice("race", "Race", RACE_OPTIONS),
+      PluginChoice("class", "Class", CLASS_OPTIONS),
+    )
 
-    override fun available(
-      world: PluginWorld,
-      choice: String,
-      answers: Map<String, String>,
-    ): List<String> =
-      when (choice) {
-        "race" -> listOf("human", "elf", "dwarf")
-        "class" ->
-          if (answers["race"] == "dwarf") listOf("warrior", "cleric")
-          else listOf("warrior", "mage", "cleric")
-        else -> emptyList()
-      }
-
-    override fun validate(world: PluginWorld, answers: Map<String, String>): String? =
-      if (answers["race"] == "dwarf" && answers["class"] == "mage") {
-        "Dwarves cannot be mages."
-      } else null
-
-    override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
-
-    override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
-      if (newCharacter) {
-        val skill =
-          when (actor.choices["class"]) {
-            "mage" -> "//skills:magic_missile"
-            "cleric" -> "//skills:minor_heal"
-            else -> null
-          }
-        if (skill != null) {
-          try {
-            world.setSkill(actor, skill, 25)
-          } catch (_: IllegalArgumentException) {
-            // Skill not defined in world
-          }
-        }
-      }
+  override fun available(
+    world: PluginWorld,
+    choice: String,
+    answers: Map<String, String>,
+  ): List<String> =
+    when (choice) {
+      "race" -> listOf("human", "elf", "dwarf")
+      "class" ->
+        if (answers["race"] == "dwarf") listOf("warrior", "cleric")
+        else listOf("warrior", "mage", "cleric")
+      else -> emptyList()
     }
+
+  override fun validate(world: PluginWorld, answers: Map<String, String>): String? =
+    if (answers["race"] == "dwarf" && answers["class"] == "mage") {
+      "Dwarves cannot be mages."
+    } else null
+
+  override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
+
+  override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
+    grantStarterSkills(world, actor)
   }
-)
+
+  // grantStarterSkills and STARTER_SKILLS: see section 7.
+}
+
+val creation = HeritageCreation()
+r.setCreation(creation)
 ```
 
 ---
@@ -227,34 +217,45 @@ newCharacter)`:
 
 ```kotlin
 override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
-  if (newCharacter) {
-    val skill =
-      when (actor.choices["class"]) {
-        "mage" -> "//skills:magic_missile"
-        "cleric" -> "//skills:minor_heal"
-        else -> null
-      }
-    if (skill != null) {
-      try {
-        world.setSkill(actor, skill, 25)
-      } catch (_: IllegalArgumentException) {
-        // Skill not defined in world
-      }
-    }
+  grantStarterSkills(world, actor)
+}
+
+/** Grants the current class's starter skills the actor lacks; returns the labels granted. */
+fun grantStarterSkills(world: PluginWorld, actor: PluginActor): List<String> =
+  STARTER_SKILLS[actor.choices["class"]].orEmpty().filter { label ->
+    label !in actor.skills && tryGrant(world, actor, label)
   }
+
+private fun tryGrant(world: PluginWorld, actor: PluginActor, label: String): Boolean =
+  try {
+    // A learn refusal leaves the skill out silently: the class still changed.
+    world.setSkill(actor, label, STARTER_PROFICIENCY) == null
+  } catch (_: IllegalArgumentException) {
+    false // the world doesn't define this skill
+  }
+
+companion object {
+  const val STARTER_PROFICIENCY = 25
+  val STARTER_SKILLS: Map<String, List<String>> =
+    mapOf(
+      "mage" to listOf("//skills/heritage_skills:magic_missile"),
+      "cleric" to listOf("//skills/heritage_skills:minor_heal"),
+    )
 }
 ```
 
 ### Initializing Starter Skills and Gear:
 
-* **`newCharacter = true`:** Called when a player creates a brand new character. Here, `HeritagePlugin` uses
-  `world.setSkill()` to grant starting spell proficiencies:
-  * Mages receive `//skills:magic_missile` at proficiency 25.
-  * Clerics receive `//skills:minor_heal` at proficiency 25.
+* **Both values of `newCharacter`:** `created` runs for a brand new character (`true`) and for a saved character that
+  has just completed *missing choices* at login (`false`, see below). `HeritageCreation` grants starter skills either
+  way, through `grantStarterSkills`, which uses `world.setSkill()`:
+  * Mages receive `//skills/heritage_skills:magic_missile` at proficiency 25.
+  * Clerics receive `//skills/heritage_skills:minor_heal` at proficiency 25.
+  * A skill the character already knows is skipped, so a re-picked character never loses progress, and a `learn` refusal
+    is skipped silently.
   * Notice the graceful `try/catch`: if the course world has not implemented these skill prototypes, the plugin handles
     it cleanly without failing login.
-* **`newCharacter = false`:** Called when an existing saved character logs in and completes *missing choices* (see
-  below). Because they are an existing character, you typically avoid granting duplicate starter items or skills.
+* The `heritage.starter_skills(actor)` builtin calls the same method after an in-game class change.
 
 ---
 

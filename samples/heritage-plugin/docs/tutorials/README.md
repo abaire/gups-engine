@@ -57,7 +57,7 @@ The relationship between course world content, the engine lifecycle, and the her
 │  - PluginCreation: choices, available(), validate()    │
 │  - PluginTrait: "human", "elf", "warrior", "mage"...   │
 │  - Restrictions: WEAR, CAST, ENTER, LEARN              │
-│  - Builtin: heritage.choose(actor, choice, option)     │
+│  - Builtins: heritage.choose, respec_menu, respec ...  │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -88,7 +88,10 @@ The relationship between course world content, the engine lifecycle, and the her
 4. **[04. Runtime Choice Changes, Builtins & Commands](04_runtime_choice_changes_and_builtins.md)**
    * In-game choice modification mechanics via `world.setChoices()`
    * Immediate state captures and vitals capping
-   * Exposing `heritage.choose(actor, choice, option)` to Starlark zone scripts
+   * Clearing a choice for a re-pick at the next login
+   * A respec shrine: the `respec_menu`, `respec_check`, `respec` and `starter_skills` builtins and the `respec.star`
+     library (prices, cooldowns, `keep` and `reset` skill policies, the `respec_offer` and `respec_done` hooks, the
+     `"respec"` standing event)
    * Implementing player-facing commands: the fast-lane `heritage` command
    * Inspecting choices and traits via `score`, `@stat`, and GMCP `Char.Traits`
 5. **[05. Testing Character Creation & Traits](05_testing_creation_and_traits.md)**

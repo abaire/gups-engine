@@ -6,6 +6,7 @@ import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.harness.FuzzWalker
 import gups.harness.TestRunner
+import gups.harness.render
 import gups.pluginapi.host.PluginHost
 import gups.pluginapi.host.PluginLoader
 import gups.script.ScriptLimits
@@ -55,6 +56,20 @@ class HeritageWorldTest {
       p.writeText(text.trimIndent() + "\n")
     }
     return WorldDir(root)
+  }
+
+  /** [worldDir] with the sample's own `world/` tree copied over it, directories merging. */
+  private fun shrineWorld(): WorldDir {
+    val dir = worldDir()
+    val sample = Path.of(System.getProperty("gups.sample.heritageWorld"))
+    Files.walk(sample).use { paths ->
+      for (from in paths.filter { Files.isRegularFile(it) }) {
+        val to = dir.root.resolve(sample.relativize(from).toString())
+        to.parent.createDirectories()
+        from.copyTo(to, overwrite = true)
+      }
+    }
+    return dir
   }
 
   private fun plugins(dir: WorldDir): PluginHost {
@@ -125,6 +140,16 @@ class HeritageWorldTest {
     assertEquals(0, report.failed, report.results.mapNotNull { it.message }.joinToString())
     assertEquals(0, report.errors, report.results.mapNotNull { it.message }.joinToString())
     assertTrue(report.passed > 0)
+  }
+
+  @Test
+  fun `the sample world's shrine tests pass`() {
+    val dir = shrineWorld()
+    val report = TestRunner(dir, plugins = plugins(dir)).run(listOf("//zones/shrine"))
+    val text = report.results.joinToString("\n") { it.render() } + "\n" + report.problems
+    assertEquals(0, report.failed, text)
+    assertEquals(0, report.errors, text)
+    assertTrue(report.passed > 0, text)
   }
 
   private val guildZone =

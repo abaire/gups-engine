@@ -4,6 +4,20 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Respec shrines
+
+- `//lib:trainer.star` records the sessions spent per skill; `trainer.refund(ctx, actor, skill=None)` gives them back.
+- `samples/heritage-plugin`: `heritage.respec_menu`, `respec_check`, `respec` and `starter_skills`; `created` grants
+  class starter skills for re-picked characters too; starter skills are `//skills/heritage_skills:*`.
+- The heritage sample ships `world/` content: `lib/respec.star` (shrine keepers, the `respec` command, `respec_offer`,
+  cooldowns, world-wide defaults) and a `//zones/shrine` example.
+- `respec.star`: the `reset` skill policy (refund through `trainer.refund`, forget, starter skills), the `"respec"`
+  standing event, the `respec_done` hook, and a rebirth altar example.
+- Heritage tutorial 04 walks through a respec shrine; `docs/PLUGINS.md` lists the respec builtins.
+- New verbs `ctx.wear(actor, item, wield=False)` and `ctx.unwear(actor, item)`, and `PluginWorld.wear` / `unwear`: put a
+  carried item on, or a worn one off, as the `wear`, `wield` and `remove` commands would, asking the same restrictions
+  and sending nothing. They return the refusal or `None`. Script item verbs otherwise still skip item restrictions.
+
 ### Timed tasks and crafting
 
 - The warmup slot is kernel: `stop`/`clear` cancel an activity in every world, and `interrupt_check` belongs to the

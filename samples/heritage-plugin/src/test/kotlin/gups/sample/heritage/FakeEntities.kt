@@ -16,13 +16,13 @@ class FakeActor(
   override val choices: Map<String, String> = emptyMap(),
   override val room: PluginRoom = FakeRoom(),
   val statValue: Int = 10,
+  override val skills: Map<String, Int> = emptyMap(),
 ) : PluginActor {
   override val id = 100L
   override val label: String? = null
   override val flags: Set<String> = emptySet()
   override val traits: List<String> = traitSet.sorted()
   override val grantedTraits: Set<String> = emptySet()
-  override val skills: Map<String, Int> = emptyMap()
 
   override fun hasTrait(name: String) = name in traitSet
 

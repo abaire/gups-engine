@@ -3,9 +3,6 @@ package gups.sample.heritage
 import gups.pluginapi.GupsPlugin
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
-import gups.pluginapi.PluginChoice
-import gups.pluginapi.PluginCreation
-import gups.pluginapi.PluginCreationAttempt
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifier
 import gups.pluginapi.PluginModifierPoint
@@ -15,7 +12,6 @@ import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRestrictionPoint
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginTrait
-import gups.pluginapi.PluginWorld
 
 /** Fantasy race and class plugin for character creation, traits and restrictions. */
 class HeritagePlugin : GupsPlugin {
@@ -99,69 +95,9 @@ class HeritagePlugin : GupsPlugin {
     )
 
     // ---- Character Creation -----------------------------------------------------------------
-    r.setCreation(
-      object : PluginCreation {
-        override val choices =
-          listOf(
-            PluginChoice("race", "Race", RACE_OPTIONS),
-            PluginChoice("class", "Class", CLASS_OPTIONS),
-          )
-
-        override val steps = listOf(StatsStep())
-
-        override fun available(
-          world: PluginWorld,
-          choice: String,
-          answers: Map<String, String>,
-        ): List<String> =
-          when (choice) {
-            "race" -> listOf("human", "elf", "dwarf")
-            "class" ->
-              if (answers["race"] == "dwarf") listOf("warrior", "cleric")
-              else listOf("warrior", "mage", "cleric")
-            else -> emptyList()
-          }
-
-        override fun validate(world: PluginWorld, answers: Map<String, String>): String? =
-          if (answers["race"] == "dwarf" && answers["class"] == "mage") {
-            "Dwarves cannot be mages."
-          } else null
-
-        override fun startRoom(world: PluginWorld, answers: Map<String, String>): String? = null
-
-        override fun prepare(
-          world: PluginWorld,
-          actor: PluginActor,
-          attempt: PluginCreationAttempt,
-        ) {
-          @Suppress("UNCHECKED_CAST")
-          val spend = (attempt.state["spend"] as? Map<String, Int>) ?: emptyMap()
-          for ((stat, delta) in spend) {
-            if (delta != 0) {
-              world.setBaseStat(actor, stat, actor.baseStat(stat) + delta)
-            }
-          }
-        }
-
-        override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
-          if (newCharacter) {
-            val skill =
-              when (actor.choices["class"]) {
-                "mage" -> "//skills:magic_missile"
-                "cleric" -> "//skills:minor_heal"
-                else -> null
-              }
-            if (skill != null) {
-              try {
-                world.setSkill(actor, skill, 25)
-              } catch (_: IllegalArgumentException) {
-                // Skill not defined in world
-              }
-            }
-          }
-        }
-      }
-    )
+    val creation = HeritageCreation()
+    r.setCreation(creation)
+    registerRespecBuiltins(r, creation)
 
     // ---- Restrictions -----------------------------------------------------------------------
     r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") { call ->

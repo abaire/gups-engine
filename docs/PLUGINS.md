@@ -71,7 +71,9 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
 - **skills and items:** `skillRoll(actor, skill, item, target, event = "craft", adjust = 0)` rolls a skill outside a
   cast and returns a `PluginSkillRoll(chance, roll, success, power)`, as `ctx.skill_roll` does (it throws
   `IllegalStateException` naming `skills` when that feature is off); `setItemName(item, name)` sets or clears an item's
-  name override, as `ctx.set_item_name` does.
+  name override, as `ctx.set_item_name` does; `wear(actor, item, wield = false)` and `unwear(actor, item)` put a carried
+  item on and take a worn one off, as `ctx.wear` and `ctx.unwear` do: they ask the `WEAR` and `REMOVE` restrictions,
+  return the refusal or null, and send nothing.
 - **timed tasks:** `startTask`, `stopTask`, `PluginActor.task` and `PluginActor.isBusy`; see
   [Timed tasks](#timed-tasks).
 - **leveling:** `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and `levelDown(actor, count = 1)` do
@@ -423,25 +425,28 @@ r.setCreation(
         }
 
         override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
-            if (newCharacter) {
-                val skill =
-                    when (actor.choices["class"]) {
-                        "mage" -> "//skills:magic_missile"
-                        "cleric" -> "//skills:minor_heal"
-                        else -> null
-                    }
-                if (skill != null) {
-                    try {
-                        world.setSkill(actor, skill, 25)
-                    } catch (_: IllegalArgumentException) {
-                        // Skill not defined in world
-                    }
+            // Both new and re-picked characters get the starter skills their class lacks.
+            for (label in STARTER_SKILLS[actor.choices["class"]].orEmpty()) {
+                if (label in actor.skills) continue
+                try {
+                    world.setSkill(actor, label, 25)
+                } catch (_: IllegalArgumentException) {
+                    // Skill not defined in world
                 }
             }
         }
     }
 )
+
+val STARTER_SKILLS =
+    mapOf(
+        "mage" to listOf("//skills/heritage_skills:magic_missile"),
+        "cleric" to listOf("//skills/heritage_skills:minor_heal"),
+    )
 ```
+
+`samples/heritage-plugin` keeps this loop in `HeritageCreation.grantStarterSkills`, which its `heritage.starter_skills`
+builtin also calls after a respec.
 
 ##### prepare
 
@@ -560,6 +565,21 @@ r.addBuiltin(
     world.setChoices(actor, mapOf(choice to option))
 }
 ```
+
+#### Respec builtins
+
+The heritage sample also registers four builtins for respec shrines, so world content can offer in-session changes with
+its own price, cooldown and skill policy. The engine sets none of those.
+
+- `heritage.respec_menu(actor, choices, allow_same=False)` lists each choice with its current option and every option
+  with its refusal or `None`.
+- `heritage.respec_check(actor, phrase, choices, allow_same=False)` matches the player's words to one option and says
+  whether it may be picked, changing nothing.
+- `heritage.respec(actor, choice, option, allow_same=False)` re-checks and then calls `setChoices`.
+- `heritage.starter_skills(actor)` grants the class's starter skills the actor lacks.
+
+The sample's `world/lib/respec.star` builds shrine keepers on them. See
+[Tutorial 04: Runtime Choice Changes](../samples/heritage-plugin/docs/tutorials/04_runtime_choice_changes_and_builtins.md#4-a-respec-shrine).
 
 #### Base values
 

@@ -73,6 +73,8 @@ import gups.core.world.taskOf
 import gups.core.world.teleport
 import gups.core.world.traceRules
 import gups.core.world.transformItem
+import gups.core.world.unwearItem
+import gups.core.world.wearItem
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginGmcpCall
@@ -647,6 +649,12 @@ internal class WorldFacade(
 
   override fun teleport(actor: PluginActor, room: PluginRoom) =
     world.teleport(actorOf(actor, "teleport(actor)"), roomOf(room, "teleport(room)"))
+
+  override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? =
+    world.wearItem(actorOf(actor, "wear(actor)"), itemOf(item, "wear(item)"), wield)
+
+  override fun unwear(actor: PluginActor, item: PluginItem): String? =
+    world.unwearItem(actorOf(actor, "unwear(actor)"), itemOf(item, "unwear(item)"))
 
   override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
     val a = actorOf(actor, "setChoices(actor)")

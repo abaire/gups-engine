@@ -20,6 +20,10 @@ class FakeWorld : PluginWorld {
   val sent = mutableListOf<String>()
   val setChoicesCalls = mutableListOf<Pair<PluginActor, Map<String, String?>>>()
   val setBaseStatCalls = mutableListOf<Triple<PluginActor, String, Int>>()
+  val setSkillCalls = mutableListOf<Pair<String, Int>>()
+
+  /** What setSkill answers, by skill label: a refusal, or "undefined" to throw as the host does. */
+  val skillAnswers = mutableMapOf<String, String>()
 
   override fun send(target: PluginActor, text: String) {
     sent += text
@@ -85,6 +89,10 @@ class FakeWorld : PluginWorld {
 
   override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 
+  override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
+
+  override fun unwear(actor: PluginActor, item: PluginItem): String? = TODO()
+
   override fun getAttr(entity: PluginEntity, key: String, default: Any?) = TODO()
 
   override fun setAttr(entity: PluginEntity, key: String, value: Any?) = TODO()
@@ -95,7 +103,12 @@ class FakeWorld : PluginWorld {
 
   override fun removeTrait(actor: PluginActor, trait: String): String? = TODO()
 
-  override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? = null
+  override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? {
+    val answer = skillAnswers[skill]
+    if (answer == "undefined") throw IllegalArgumentException("unknown skill $skill")
+    setSkillCalls += skill to proficiency
+    return answer
+  }
 
   override fun removeSkill(actor: PluginActor, skill: String) = TODO()
 

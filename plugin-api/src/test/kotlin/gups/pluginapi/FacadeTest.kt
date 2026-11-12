@@ -601,6 +601,29 @@ class FacadeTest {
   }
 
   @Test
+  fun `wear and unwear put a carried item on and off as the script verbs do`() {
+    val testWorld = world(files = ITEM_FILES)
+    val facade = WorldFacade(testWorld, "weather") {}
+    val player =
+      testWorld.spawnPlayer(
+        "Ann",
+        Label("//zones/z:a"),
+        overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+      )
+    val ann = ActorFacade(player, testWorld)
+    val pack = testWorld.spawnItem(Label("//zones/z:backpack"), ItemLocation.Carried(player.id))
+    val stick = testWorld.spawnItem(Label("//zones/z:stick"), ItemLocation.Carried(player.id))
+
+    assertEquals("You can't wear a stick.", facade.wear(ann, ItemFacade(stick, testWorld)))
+    assertNull(facade.wear(ann, ItemFacade(pack, testWorld)))
+    assertEquals(ItemLocation.Equipped(player.id, "held"), pack.location)
+    assertFailsWith<IllegalArgumentException> { facade.wear(ann, ItemFacade(pack, testWorld)) }
+    assertNull(facade.unwear(ann, ItemFacade(pack, testWorld)))
+    assertEquals(ItemLocation.Carried(player.id), pack.location)
+    assertFailsWith<IllegalArgumentException> { facade.unwear(ann, ItemFacade(pack, testWorld)) }
+  }
+
+  @Test
   fun `PluginItem affects shows prototype entry and instance entry with right origin`() {
     val testWorld = world(files = ITEM_FILES)
     val testFacade = WorldFacade(testWorld, "weather") {}

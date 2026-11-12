@@ -281,6 +281,10 @@ class BlueMagePluginTest {
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 
+    override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
+
+    override fun unwear(actor: PluginActor, item: PluginItem): String? = TODO()
+
     override fun delAttr(entity: PluginEntity, key: String) = TODO()
 
     override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? = TODO()

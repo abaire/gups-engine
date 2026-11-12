@@ -58,11 +58,16 @@ def _set_offer(ctx):
             return
     ctx.send(ctx.actor, "The trainer is not here.")
 
+# refund [<skill label>]: gives back the sessions recorded for one skill, or for all of them.
+def _refund(ctx):
+    n = trainer.refund(ctx, ctx.actor, ctx.args or None)
+    ctx.send(ctx.actor, "Refunded %d." % n)
+
 room("trainer_test_room",
     name = "The Trainer Test Room",
     desc = "A bare room kept for the trainer tests.",
     flags = ["dead_end_ok"],
-    commands = {"grant": _grant, "stun_trainer": _stun_trainer},
+    commands = {"grant": _grant, "stun_trainer": _stun_trainer, "refund": _refund},
     spawns = [spawn(":test_trainer")],
 )
 
@@ -70,7 +75,7 @@ room("offer_test_room",
     name = "The Offer Test Room",
     desc = "A bare room kept for the practice_offer hook tests.",
     flags = ["dead_end_ok"],
-    commands = {"grant": _grant, "set_offer": _set_offer},
+    commands = {"grant": _grant, "set_offer": _set_offer, "refund": _refund},
     spawns = [spawn(":test_offer_trainer")],
 )
 

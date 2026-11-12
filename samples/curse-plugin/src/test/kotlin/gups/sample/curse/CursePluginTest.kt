@@ -262,6 +262,10 @@ class CursePluginTest {
 
     override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
 
+    override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
+
+    override fun unwear(actor: PluginActor, item: PluginItem): String? = TODO()
+
     override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? = default
 
     override fun setAttr(entity: PluginEntity, key: String, value: Any?) = TODO()

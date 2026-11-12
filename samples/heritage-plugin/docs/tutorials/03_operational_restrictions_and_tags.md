@@ -221,8 +221,8 @@ r.addRestriction(
 }
 ```
 
-If a script or plugin calls `world.setSkill(actor, "//skills:magic_missile", 25)` on a warrior, the call is rejected
-with an `IllegalArgumentException` containing the refusal message.
+If a script or plugin calls `world.setSkill(actor, "//skills/heritage_skills:magic_missile", 25)` on a warrior, the call
+is rejected with an `IllegalArgumentException` containing the refusal message.
 
 ---
 

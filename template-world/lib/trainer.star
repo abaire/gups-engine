@@ -13,7 +13,9 @@
 # every level gained grants PRACTICES_PER_LEVEL and every level lost takes them back, through a
 # global on_level_change hook, so the balance can go negative and dying can't farm points. A
 # keeper that is incapacitated, stunned or fighting doesn't teach. The keeper's custom hook
-# `practice_offer` may change the gain or cost or refuse a session.
+# `practice_offer` may change the gain or cost or refuse a session. The library records the
+# sessions each skill cost, so trainer.refund(ctx, actor, skill = None) can give them back, for
+# example when a character starts over.
 
 PRACTICES_PER_LEVEL = 2
 
@@ -74,8 +76,35 @@ def _grant_practices(ctx, actor, n):
     ctx.set_attr(actor, "practices", balance)
     return balance
 
+def _spent(ctx, actor):
+    """The actor's ledger: skill label -> sessions spent, as a new mutable dict."""
+    return dict(ctx.get_attr(actor, "practiced", {}))
+
+def _record_spent(ctx, actor, label, cost):
+    ledger = _spent(ctx, actor)
+    ledger[label] = ledger.get(label, 0) + cost
+    ctx.set_attr(actor, "practiced", ledger)
+
+def _refund(ctx, actor, skill = None):
+    """Gives back the sessions recorded for skill (a label), or for every skill; returns the count."""
+    ledger = _spent(ctx, actor)
+    if skill == None:
+        total = 0
+        for n in ledger.values():
+            total += n
+        ctx.del_attr(actor, "practiced")
+    else:
+        total = ledger.pop(skill, 0)
+        if ledger:
+            ctx.set_attr(actor, "practiced", ledger)
+        else:
+            ctx.del_attr(actor, "practiced")
+    if total > 0:
+        _grant_practices(ctx, actor, total)
+    return total
+
 trainer = struct(define = _define, teach = _teach, open = _open,
-                 practices = _practices, grant_practices = _grant_practices)
+                 practices = _practices, grant_practices = _grant_practices, refund = _refund)
 
 # --- The global level hook and the practice command ------------------------------------------
 
@@ -189,6 +218,8 @@ def _do_practice(ctx, keeper, definition, line, balance):
         ctx.send(ctx.self, refusal)
         return   # a refused session spends nothing
     _grant_practices(ctx, ctx.self, -cost)
+    if cost >= 1:
+        _record_spent(ctx, ctx.self, label, cost)
     if current == None:
         ctx.send(ctx.self, "You learn %s from %s. (%d%%)" % (name, keeper.name, new))
     else:

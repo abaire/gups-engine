@@ -22,4 +22,7 @@ tasks.test {
   // A developer's local server data (.gups) isn't part of the world the tests use.
   inputs.files(fileTree(templateWorld) { exclude(".gups/**") }).withPropertyName("templateWorld")
   systemProperty("gups.templateWorld", templateWorld.asFile.absolutePath)
+  val heritageWorld = layout.projectDirectory.dir("world")
+  inputs.files(fileTree(heritageWorld)).withPropertyName("heritageWorld")
+  systemProperty("gups.sample.heritageWorld", heritageWorld.asFile.absolutePath)
 }

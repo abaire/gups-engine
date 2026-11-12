@@ -13,7 +13,7 @@ import net.starlark.java.eval.StarlarkThread
 /** Doors, exits and containers. */
 abstract class CtxDoors
 internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxExtras) :
-  CtxItems(frame, owner, hc, extras) {
+  CtxEquipment(frame, owner, hc, extras) {
   internal fun door(
     room: Any,
     dir: Any,

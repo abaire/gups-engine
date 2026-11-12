@@ -287,14 +287,7 @@ private class RemoveAction(private val item: Item) : Action {
   override fun validate(w: World, actor: Actor): String? {
     val location = item.location as? ItemLocation.Equipped
     if (location == null || location.actor != actor.id) return w.msg(KernelMsg.NOT_USING)
-    return w.refusalFor(
-      RestrictionRequest(
-        point = RestrictionPoint.REMOVE,
-        actor = actor,
-        item = item,
-        slot = location.slot,
-      )
-    )
+    return w.removeRefusal(actor, item)
   }
 
   override fun resolve(w: World, actor: Actor): Int {

@@ -138,6 +138,19 @@ interface PluginWorld : PluginGmcpWorld {
 
   fun teleport(actor: PluginActor, room: PluginRoom)
 
+  /**
+   * Puts on an item [actor] carries as the `wear` command (or `wield`) would, asking the same
+   * restrictions and taking off at most one worn item into the inventory. Sends nothing. Returns
+   * the refusal message, or null once worn; an item the actor doesn't carry is an error.
+   */
+  fun wear(actor: PluginActor, item: PluginItem, wield: Boolean = false): String?
+
+  /**
+   * Takes off an item [actor] wears, into the inventory, after asking the REMOVE restriction. Sends
+   * nothing. Returns the refusal message, or null; an item not worn by the actor is an error.
+   */
+  fun unwear(actor: PluginActor, item: PluginItem): String?
+
   /** Writes an attribute in the plugin's own namespace; `null` deletes it. */
   fun setAttr(entity: PluginEntity, key: String, value: Any?)
 

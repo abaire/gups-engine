@@ -78,3 +78,33 @@ def test_practice_never_raises_past_the_cap(t):
     w.set_skill(p, "//skills/arcane:spark", 45)   # one gain of 10 would overshoot up_to = 50
     t.contains(p.do("practice spark"), "You practice spark with the test trainer. (45% → 50%)")
     t.eq(p.skills["//skills/arcane:spark"], 50)
+
+def test_refund_returns_recorded_sessions(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":trainer_test_room")
+    p.do("grant 5")
+    p.do("practice spark")
+    p.do("practice spark")
+    p.do("practice mend")
+    t.contains(p.do("practice"), "You have 2 practice sessions.")
+    t.contains(p.do("refund //skills/arcane:spark"), "Refunded 2.")
+    t.contains(p.do("refund"), "Refunded 1.")
+    t.contains(p.do("refund"), "Refunded 0.")
+    t.contains(p.do("practice"), "You have 5 practice sessions.")
+
+def test_refund_records_hook_costs(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":offer_test_room")
+    p.do("grant 5")
+    p.do("set_offer dict")
+    p.do("practice spark")
+    t.contains(p.do("refund"), "Refunded 2.")
+    t.contains(p.do("practice"), "You have 5 practice sessions.")
+
+def test_refused_session_records_nothing(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":offer_test_room")
+    p.do("grant 5")
+    p.do("set_offer refuse")
+    p.do("practice spark")
+    t.contains(p.do("refund"), "Refunded 0.")

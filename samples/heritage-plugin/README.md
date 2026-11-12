@@ -10,8 +10,8 @@ enforce operational **restrictions**:
 * **Traits:** Defining permanent trait bundles (`PluginTrait`) with stat deltas, maximum vital deltas, elemental
   resistance deltas, flags, and modifier chain functions (`PluginModifierPoint.REGEN`).
 * **Character Creation Provider:** Declaring a multi-step login creation sequence (`PluginCreation`) with `race` and
-  `class` choices, progressive dynamic availability (e.g. forbidding dwarf mages), whole-set validation, and
-  post-creation skill assignment (`created`).
+  `class` choices, progressive dynamic availability (e.g. forbidding dwarf mages), whole-set validation, and class
+  starter skills granted by `created`.
 * **Custom Creation Steps:** Implementing interactive post-choice creation steps (`PluginCreationStep`), demonstrated
   with a point-buy attribute step using attempt state, character preview inspection, and a `prepare` callback adjusting
   base stats.
@@ -19,6 +19,10 @@ enforce operational **restrictions**:
   `LEARN`) using character traits and content `tags` on items, rooms, and skills.
 * **In-Game Re-spec & Verbs:** Allowing runtime choice modifications via `world.setChoices()`, Starlark script calls via
   `heritage.choose()`, and inspecting player state via the `heritage` command.
+* **Respec Shrines:** The `heritage.respec_menu`, `respec_check`, `respec` and `starter_skills` builtins, and world
+  content built on them in `world/`: the `lib/respec.star` library (prices, a shared cooldown, `keep` and `reset` skill
+  policies with practice refunds, the `respec_offer` and `respec_done` hooks) and a `//zones/shrine` zone with a class
+  mentor and a rebirth altar.
 
 ---
 
@@ -36,15 +40,23 @@ samples/heritage-plugin/
 │       ├── 03_operational_restrictions_and_tags.md
 │       ├── 04_runtime_choice_changes_and_builtins.md
 │       └── 05_testing_creation_and_traits.md
-└── src/
-    ├── main/kotlin/gups/sample/heritage/
-    │   ├── HeritagePlugin.kt   # Complete plugin implementation
-    │   └── StatsStep.kt        # Point-buy custom creation step
-    ├── plugin/META-INF/services/
-    │   └── gups.pluginapi.GupsPlugin  # Java ServiceLoader SPI declaration
-    └── test/kotlin/gups/sample/heritage/
-        ├── HeritagePluginTest.kt      # Fast unit tests with mock facades
-        └── HeritageWorldTest.kt       # End-to-end integration and telnet tests
+├── src/
+│   ├── main/kotlin/gups/sample/heritage/
+│   │   ├── HeritagePlugin.kt   # Traits, restrictions, choose and the heritage command
+│   │   ├── HeritageCreation.kt # The creation provider and class starter skills
+│   │   ├── Respec.kt           # Matching and refusing respec requests
+│   │   ├── RespecBuiltins.kt   # heritage.respec_menu, respec_check, respec, starter_skills
+│   │   └── StatsStep.kt        # Point-buy custom creation step
+│   ├── plugin/META-INF/services/
+│   │   └── gups.pluginapi.GupsPlugin  # Java ServiceLoader SPI declaration
+│   └── test/kotlin/gups/sample/heritage/
+│       ├── HeritagePluginTest.kt      # Fast unit tests with mock facades
+│       ├── RespecTest.kt              # Respec matching, refusals and builtins
+│       └── HeritageWorldTest.kt       # End-to-end integration and telnet tests, and the shrine tests
+└── world/                     # Content to copy over a world's root (needs the plugin pinned)
+    ├── lib/respec.star        # The respec shrine library
+    ├── skills/heritage_skills/  # magic_missile and minor_heal, the class starter skills
+    └── zones/shrine/          # A class mentor, a rebirth altar, and their tests
 ```
 
 ---
@@ -64,8 +76,9 @@ restrictions, start with the **[Heritage Plugin Developer's Guide](docs/tutorial
    into `WEAR`, `CAST`, `ENTER`, and `LEARN`, reading Starlark `tags` on items/rooms/skills, staff role overrides, and
    automatic de-equipping.
 4. **[04. Runtime Choice Changes, Builtins & Commands](docs/tutorials/04_runtime_choice_changes_and_builtins.md)** —
-   Respec mechanics with `world.setChoices()`, exposing `heritage.choose` to zone scripts, and registering the fast-lane
-   `heritage` command.
+   Respec mechanics with `world.setChoices()`, a respec shrine built from the respec builtins and
+   `world/lib/respec.star` (menus, prices, cooldowns, skill policies, hooks and standing), `heritage.choose` for zone
+   scripts, and the fast-lane `heritage` command.
 5. **[05. Testing Character Creation & Traits](docs/tutorials/05_testing_creation_and_traits.md)** — Fast unit testing
    with fake registries and entities, authoring `*_test.star` harness scripts, and testing live telnet creation flows.
 
@@ -89,8 +102,9 @@ samples/heritage-plugin/build/libs/heritage.jar
 
 ### Run the Test Suite
 
-The sample includes fast unit tests verifying trait calculations and mock creation sessions, as well as an end-to-end
-integration test that boots a test world with the pinned jar:
+The sample includes fast unit tests verifying trait calculations and mock creation sessions, as well as end-to-end
+integration tests that boot a test world with the pinned jar, one of them with `world/` copied in to run the shrine's
+`*_test.star` files:
 
 ```bash
 ./gradlew :samples:heritage-plugin:test

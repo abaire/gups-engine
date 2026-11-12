@@ -68,7 +68,7 @@ entry. **Questions:** - Should the operator also agree in `MODULE.gups` (for exa
 (a plugin adding a sub-command to another's), attribute namespaces, or calling another plugin's builtins? - Does a
 dependency between plugins need a declared version range, and how does that relate to `PluginApi.VERSION`?
 
-### In-game character respec and choice changes
+### In-game character respec and choice changes (Done in Milestone 52)
 
 **Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no
 built-in player command, trainer, or shrine mechanic to alter character choices after creation; these belong to plugins.

@@ -3670,6 +3670,72 @@
             "doc": "Direction of the exit."
           }
         ]
+      },
+      {
+        "symbol": "ctx.unwear",
+        "name": "unwear",
+        "doc": "Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.unwear.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who takes the item off."
+          },
+          {
+            "symbol": "ctx.unwear.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor wears."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.wear",
+        "name": "wear",
+        "doc": "Puts on an item the actor carries as the wear command (or wield) would, asking the same restrictions and taking off at most one worn item, which goes back to the inventory. Sends nothing. Returns the refusal message, or None once the item is worn.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.wear.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who puts the item on."
+          },
+          {
+            "symbol": "ctx.wear.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor carries."
+          },
+          {
+            "symbol": "ctx.wear.wield",
+            "name": "wield",
+            "positional": true,
+            "named": true,
+            "default": "False",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Wield it, as the wield command does."
+          }
+        ]
       }
     ]
   },
