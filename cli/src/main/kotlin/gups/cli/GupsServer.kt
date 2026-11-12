@@ -7,6 +7,7 @@ import gups.auth.CodeOwners
 import gups.auth.DEFAULT_LADDER
 import gups.auth.LoginLimiter
 import gups.auth.LoginSettings
+import gups.auth.RosterResult
 import gups.auth.WebLogins
 import gups.auth.applyAccount
 import gups.auth.closeDisabledAccount
@@ -16,9 +17,11 @@ import gups.core.Label
 import gups.core.Role
 import gups.core.WorldControlEvent
 import gups.core.loop.WorldLoop
+import gups.core.model.Prototypes
 import gups.core.world.Boot
 import gups.core.world.DevLogin
 import gups.core.world.Diagnostic
+import gups.core.world.LoginHandler
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.alert
@@ -33,6 +36,7 @@ import gups.persist.Backups
 import gups.persist.SqlitePersistence
 import gups.pluginapi.host.PluginHost
 import gups.script.DevTools
+import gups.script.LoadResult
 import gups.script.RULES_PACKAGE
 import gups.script.ScriptApi
 import gups.script.ScriptLimits
@@ -46,6 +50,7 @@ import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.coroutineScope
@@ -198,6 +203,20 @@ class GupsServer(
   var ports: Map<String, Int> = emptyMap()
     private set
 
+  /**
+   * What [boot] has loaded from the world: the module, messages, packages, script results,
+   * prototypes, and the start room.
+   */
+  private data class WorldScripts(
+    val module: WorldModule,
+    val messages: WorldMessages,
+    val packages: List<String>,
+    val loader: ScriptLoader,
+    val result: LoadResult,
+    val protos: Prototypes,
+    val start: Label,
+  )
+
   /** Loads the world. Returns false, after logging why, if there is nothing to play. */
   fun boot(): Boolean {
     val packages = dir.packages()
@@ -205,23 +224,59 @@ class GupsServer(
       log("No packages under ${dir.root}. Point --world at a course world directory.")
       return false
     }
-    val (module, moduleError) = WorldModule.read(dir)
-    if (moduleError != null) {
-      log("error: ${moduleError.render()}")
-      return false
-    }
-    module.problems().forEach { log("error: $it") }
-    if (module.problems().isNotEmpty()) return false
-    module.warnings().forEach { log("warning: $it") }
-    val (messages, messagesError) = WorldMessages.read(dir)
-    if (messagesError != null) {
-      log("error: ${messagesError.render()}")
-      return false
-    }
-    messages.problems().forEach { log("error: $it") }
-    if (messages.problems().isNotEmpty()) return false
-    messages.warnings(module.features).forEach { log("warning: $it") }
+    val module = loadWorldModule() ?: return false
+    val messages = loadWorldMessages(module) ?: return false
     val plugins = loadPlugins(dir, module) { log("warning: $it") }.also { plugins = it }
+    val loaded = loadWorldScripts(plugins, packages, module, messages) ?: return false
+    if (!startPreconditions(loaded)) return false
+    val host = StarlarkHost(loaded.result, ScriptLimits(), loaded.loader)
+    val saved = if (db == null) null else openPersistence(loaded.module, db) ?: return false
+    buildWorld(loaded, host, plugins, saved)
+    wireLoop(loaded, plugins, host, saved)
+    log(
+      "Loaded ${loaded.result.packages.size} of ${packages.size} packages; new characters start in ${loaded.start}; checkpoints every ${loaded.module.checkpointMinutes} min."
+    )
+    return true
+  }
+
+  /** Loads and validates `MODULE.gups`. Returns null, after logging the error, if it is broken. */
+  private fun loadWorldModule(): WorldModule? {
+    val (module, error) = WorldModule.read(dir)
+    if (error != null) {
+      log("error: ${error.render()}")
+      return null
+    }
+    val problems = module.problems()
+    problems.forEach { log("error: $it") }
+    if (problems.isNotEmpty()) return null
+    module.warnings().forEach { log("warning: $it") }
+    return module
+  }
+
+  /** Loads and validates the world messages. Returns null, after logging the error, if broken. */
+  private fun loadWorldMessages(module: WorldModule): WorldMessages? {
+    val (messages, error) = WorldMessages.read(dir)
+    if (error != null) {
+      log("error: ${error.render()}")
+      return null
+    }
+    val problems = messages.problems()
+    problems.forEach { log("error: $it") }
+    if (problems.isNotEmpty()) return null
+    messages.warnings(module.features).forEach { log("warning: $it") }
+    return messages
+  }
+
+  /**
+   * Loads the world's packages, renders the API reference, and resolves the start room. Returns
+   * null, after logging why, if there is nothing to play.
+   */
+  private fun loadWorldScripts(
+    plugins: PluginHost,
+    packages: List<String>,
+    module: WorldModule,
+    messages: WorldMessages,
+  ): WorldScripts? {
     // Packages that use a skipped plugin fail to load and are left out, as any failed package is.
     val loader =
       ScriptLoader(
@@ -240,7 +295,7 @@ class GupsServer(
     val protos = result.prototypes()
     if (protos.rooms.isEmpty()) {
       log("No package loaded any rooms; nothing to play.")
-      return false
+      return null
     }
     val at =
       start
@@ -249,47 +304,74 @@ class GupsServer(
         ?: protos.rooms.keys.minBy { it.v }
     if (at !in protos.rooms) {
       log("${if (start != null) "--start" else "MODULE.gups start_room"} $at is not a room.")
-      return false
+      return null
     }
-    if (prod != null && db == null) {
-      log("--prod needs a database.")
-      return false
+    return WorldScripts(module, messages, packages, loader, result, protos, at)
+  }
+
+  /**
+   * The start preconditions, in refusal order: a database and the git binary for `--prod` deploys,
+   * and the rules package for every world.
+   */
+  private fun startPreconditions(loaded: WorldScripts): Boolean {
+    if (prod != null) {
+      if (db == null) {
+        log("--prod needs a database.")
+        return false
+      }
+      if (!Git.available()) {
+        log("--prod needs the git binary for deploys; install git.")
+        return false
+      }
     }
-    if (prod != null && !Git.available()) {
-      log("--prod needs the git binary for deploys; install git.")
-      return false
-    }
-    if (RULES_PACKAGE !in result.packages) {
+    if (RULES_PACKAGE !in loaded.result.packages) {
       log(
         "error: the rules package //$RULES_PACKAGE is required and did not load, so the world has no rules."
       )
       return false
     }
-    val host = StarlarkHost(result, ScriptLimits(), loader)
-    val saved = db?.let { SqlitePersistence.open(it, log) }
+    return true
+  }
+
+  /**
+   * Opens the database and checks the start preconditions that may refuse it: the recorded world
+   * commit, then a wipe or a schema mismatch. A refusal closes the database and returns null.
+   */
+  private fun openPersistence(module: WorldModule, db: Path): SqlitePersistence? {
+    val saved = SqlitePersistence.open(db, log)
     persistence = saved
     // Every refusal comes before a wipe, so a start that won't run never deletes anything.
-    if (prod != null && !checkCommit(saved!!)) {
+    if (prod != null && !checkCommit(saved)) {
       saved.close()
-      return false
+      return null
     }
-    if (saved != null) {
-      val names = module.schema.names
-      if (wipe) {
-        val gone = saved.wipe(names, module.features)
-        log(
-          "Wiped ${gone.characters} characters and ${gone.items} items; the previous database is at ${gone.backup}. Recorded the schema and features in MODULE.gups."
-        )
-      } else {
-        (saved.checkFeatures(module.features) ?: saved.checkSchema(names))?.let {
-          log("error: $it")
-          saved.close()
-          return false
-        }
+    val names = module.schema.names
+    if (wipe) {
+      val gone = saved.wipe(names, module.features)
+      log(
+        "Wiped ${gone.characters} characters and ${gone.items} items; the previous database is at ${gone.backup}. Recorded the schema and features in MODULE.gups."
+      )
+    } else {
+      (saved.checkFeatures(module.features) ?: saved.checkSchema(names))?.let {
+        log("error: $it")
+        saved.close()
+        return null
       }
     }
+    return saved
+  }
+
+  /** Builds the world from what [boot] loaded, wires its alerts, and restores the saved state. */
+  private fun buildWorld(
+    loaded: WorldScripts,
+    host: StarlarkHost,
+    plugins: PluginHost,
+    saved: SqlitePersistence?,
+  ) {
+    val module = loaded.module
+    val messages = loaded.messages
     val discardWorld = fresh || wipe
-    val boot = saved?.boot(protos, discardWorld) ?: Boot()
+    val boot = saved?.boot(loaded.protos, discardWorld) ?: Boot()
     // --prod checks invariants only at world ticks, before capture.
     val config =
       WorldConfig(
@@ -305,7 +387,7 @@ class GupsServer(
       )
     world =
       World(
-        protos,
+        loaded.protos,
         module.schema,
         host.rules(),
         host,
@@ -338,6 +420,15 @@ class GupsServer(
       world.record(Diagnostic(world.pulse, "plugin", w))
       world.alert("plugin_load", w)
     }
+  }
+
+  /** Starts the world, then wires its pulse loop, metrics, deploys, accounts, and login. */
+  private fun wireLoop(
+    loaded: WorldScripts,
+    plugins: PluginHost,
+    host: StarlarkHost,
+    saved: SqlitePersistence?,
+  ) {
     world.start()
     plugins.started(world)
     if (saved != null) world.checkpointNow("boot")
@@ -351,55 +442,59 @@ class GupsServer(
       lastPulse = world.pulse
       m.pulsed(nanos)
     }
-    if (prod != null && saved != null && Git(dir.root).isWorkTree()) {
-      world.deploys =
-        Deployer(
-          dir.root,
-          prod.deploy,
-          world,
-          host,
-          saved,
-          loop::submit,
-          { resyncCodeOwners() },
-          log,
-        )
-    } else if (prod != null) {
+    wireDeploys(host, saved)
+    saved?.accounts?.let { wireAccounts(it, loaded.packages) }
+    world.login = loginFor(loaded.start, saved)
+  }
+
+  /** Wires deploys for a `--prod` server in a git working tree; logs a warning if it cannot. */
+  private fun wireDeploys(host: StarlarkHost, saved: SqlitePersistence?) {
+    if (prod == null) return
+    if (saved == null || !Git(dir.root).isWorkTree()) {
       log("warning: ${dir.root} isn't a git working tree, so this server can't deploy.")
+      return
     }
-    saved?.accounts?.let { accounts ->
-      syncCodeOwners(accounts, packages)
-      world.accountRestrictions = accounts.restrictions()
-      AccountTools.install(world, AccountService(accounts), prod?.ladder ?: DEFAULT_LADDER) {
-        codeOwners
-      }
+    world.deploys =
+      Deployer(dir.root, prod.deploy, world, host, saved, loop::submit, { resyncCodeOwners() }, log)
+  }
+
+  /** Replaces every account's builder scope from CODEOWNERS and installs the account tools. */
+  private fun wireAccounts(accounts: gups.core.AccountStore, packages: List<String>) {
+    syncCodeOwners(accounts, packages)
+    world.accountRestrictions = accounts.restrictions()
+    AccountTools.install(world, AccountService(accounts), prod?.ladder ?: DEFAULT_LADDER) {
+      codeOwners
     }
-    world.login =
-      if (prod != null) {
-        val accounts = saved!!.accounts
-        if (accounts.all().isEmpty())
-          log("There are no accounts yet. Create some with gups import-roster or gups invite.")
-        AccountLogin(AccountService(accounts), at, background, loop::submit, prod.login, limiter)
-      } else {
-        // The local instructor is a real account once there is a database.
-        val instructor =
-          saved?.accounts?.let { a ->
-            a.byLogin(DEV_ACCOUNT)
-              ?: a.create(
-                Account(
-                  0,
-                  DEV_ACCOUNT,
-                  null,
-                  Role.INSTRUCTOR,
-                  createdAt = System.currentTimeMillis(),
-                )
-              )
-          }
-        DevLogin(at, instructor?.id)
+  }
+
+  /**
+   * The login for the profile: account login in production, where an empty account store is logged,
+   * and the passwordless local instructor in `--dev`, which is a real account once there is a
+   * database.
+   */
+  private fun loginFor(start: Label, saved: SqlitePersistence?): LoginHandler {
+    if (prod != null) {
+      val accounts = saved!!.accounts
+      if (accounts.all().isEmpty())
+        log("There are no accounts yet. Create some with gups import-roster or gups invite.")
+      return AccountLogin(
+        AccountService(accounts),
+        start,
+        background,
+        loop::submit,
+        prod.login,
+        limiter,
+      )
+    }
+    // The local instructor is a real account once there is a database.
+    val instructor =
+      saved?.accounts?.let { a ->
+        a.byLogin(DEV_ACCOUNT)
+          ?: a.create(
+            Account(0, DEV_ACCOUNT, null, Role.INSTRUCTOR, createdAt = System.currentTimeMillis())
+          )
       }
-    log(
-      "Loaded ${result.packages.size} of ${packages.size} packages; new characters start in $at; checkpoints every ${module.checkpointMinutes} min."
-    )
-    return true
+    return DevLogin(start, instructor?.id)
   }
 
   /** The reference for `/docs/`, this world's plugins and message overrides included. */
@@ -470,11 +565,13 @@ class GupsServer(
       )
       return false
     }
-    if (!force && recorded != null && recorded != head) {
-      log(
-        "The world is at $head, but the database was saved at $recorded. Check out $recorded, or start with --force-commit to adopt $head."
-      )
-      return false
+    if (recorded != null && recorded != head) {
+      if (!force) {
+        log(
+          "The world is at $head, but the database was saved at $recorded. Check out $recorded, or start with --force-commit to adopt $head."
+        )
+        return false
+      }
     }
     if (recorded != head) log("Recording world commit $head.")
     saved.worldCommit = head
@@ -529,27 +626,10 @@ class GupsServer(
         val (entries, problems) = gups.auth.Roster.parse(csv)
         if (problems.isNotEmpty()) return 400 to problems.joinToString("\n", postfix = "\n")
         val r = AccountService(accounts).importRoster(entries)
-        if (r.disabledIds.isNotEmpty() || r.enabledIds.isNotEmpty()) {
-          val done = CompletableFuture<Unit>()
-          loop.submit(
-            WorldControlEvent.Task { w ->
-              try {
-                for (id in r.disabledIds) w.closeDisabledAccount(id)
-                for (id in r.enabledIds) w.login?.accountEnabled(w, id)
-                done.complete(Unit)
-              } catch (e: Throwable) {
-                done.completeExceptionally(e)
-                throw e
-              }
-            }
-          )
-          // A stopping loop may never run the task; the import itself has already committed.
-          try {
-            done.get(ROSTER_KICK_TIMEOUT_S, TimeUnit.SECONDS)
-          } catch (e: Exception) {
-            return 500 to "The roster was imported, but closing disabled accounts failed: $e\n"
-          }
-        }
+        val failure =
+          if (r.disabledIds.isNotEmpty() || r.enabledIds.isNotEmpty()) kickRosterAccounts(r)
+          else null
+        if (failure != null) return 500 to failure
         return 200 to
           (listOf("login,setup_code") + r.codes.map { (l, c) -> "$l,$c" }).joinToString(
             "\n",
@@ -561,6 +641,34 @@ class GupsServer(
         requireNotNull(persistence) { "this server has no database" }.sanitizedCopy(target)
       }
     }
+
+  /**
+   * Closes the accounts the roster disabled and reopens the ones it enabled, on the world thread,
+   * waiting up to [ROSTER_KICK_TIMEOUT_S] seconds. Returns the failure message if the world never
+   * ran the task, null otherwise; the import itself has already committed either way.
+   */
+  private fun kickRosterAccounts(r: RosterResult): String? {
+    val done = CompletableFuture<Unit>()
+    loop.submit(
+      WorldControlEvent.Task { w ->
+        try {
+          for (id in r.disabledIds) w.closeDisabledAccount(id)
+          for (id in r.enabledIds) w.login?.accountEnabled(w, id)
+          done.complete(Unit)
+        } catch (e: Throwable) {
+          done.completeExceptionally(e)
+          throw e
+        }
+      }
+    )
+    // A stopping loop may never run the task; the import itself has already committed.
+    try {
+      done.get(ROSTER_KICK_TIMEOUT_S, TimeUnit.SECONDS)
+    } catch (e: Exception) {
+      return "The roster was imported, but closing disabled accounts failed: $e\n"
+    }
+    return null
+  }
 
   private val adminServer by lazy {
     prod?.admin?.let { gups.net.AdminServer(admin, it.token, it.host, it.port) }
@@ -586,43 +694,11 @@ class GupsServer(
         // Last, so ready() still gets the telnet port.
         listOfNotNull(docsServer?.let { "docs" to it.start() })
     val certs = prod?.tls?.tls ?: prod?.web?.tls
-    // Renewed certificates are picked up without a restart.
-    val certChecks =
-      launch(Dispatchers.IO) {
-        while (isActive && certs != null) {
-          delay(CERT_CHECK_INTERVAL.toMillis())
-          runCatching {
-              if (certs.reloadIfChanged()) log("Reloaded the TLS certificate from ${certs.cert}.")
-            }
-            .onFailure {
-              log("The TLS certificate didn't reload; keeping the old one: ${it.message}")
-            }
-        }
-      }
+    val certChecks = launch(Dispatchers.IO) { certReloadLoop(certs) }
     val watcher = WorldWatcher(dir)
-    // --prod changes only through deploys.
-    val watching =
-      launch(Dispatchers.IO) {
-        while (isActive && prod == null) {
-          delay(WATCH_INTERVAL_MS)
-          val changed = watcher.poll()
-          if (changed.isNotEmpty()) {
-            log("Reloading ${changed.joinToString(", ") { "//$it" }}")
-            loop.submit(WorldControlEvent.Reload(changed))
-          }
-        }
-      }
+    val watching = launch(Dispatchers.IO) { autoReloadLoop(watcher) }
     val backups = persistence?.let { Backups(it.db) }
-    val backingUp =
-      launch(Dispatchers.IO) {
-        while (isActive && backups != null) {
-          runCatching { backups.runDue() }
-            .onFailure { log("backup failed: $it") }
-            .getOrNull()
-            ?.forEach { log("Backup: $it") }
-          delay(BACKUP_CHECK_MS)
-        }
-      }
+    val backingUp = launch(Dispatchers.IO) { backupLoop(backups) }
     ready(ports.values.first())
     running.join()
     watching.cancel()
@@ -637,6 +713,40 @@ class GupsServer(
     }
     plugins?.close()
     stopped.countDown()
+  }
+
+  /** Picks up a renewed TLS certificate without a restart, until the coroutine is cancelled. */
+  private suspend fun CoroutineScope.certReloadLoop(certs: ServerTls?) {
+    while (isActive && certs != null) {
+      delay(CERT_CHECK_INTERVAL.toMillis())
+      runCatching {
+          if (certs.reloadIfChanged()) log("Reloaded the TLS certificate from ${certs.cert}.")
+        }
+        .onFailure { log("The TLS certificate didn't reload; keeping the old one: ${it.message}") }
+    }
+  }
+
+  /** Reloads the world when a file changes; `--prod` changes only through deploys. */
+  private suspend fun CoroutineScope.autoReloadLoop(watcher: WorldWatcher) {
+    while (isActive && prod == null) {
+      delay(WATCH_INTERVAL_MS)
+      val changed = watcher.poll()
+      if (changed.isNotEmpty()) {
+        log("Reloading ${changed.joinToString(", ") { "//$it" }}")
+        loop.submit(WorldControlEvent.Reload(changed))
+      }
+    }
+  }
+
+  /** Runs the backups whose schedule is due, until the coroutine is cancelled. */
+  private suspend fun CoroutineScope.backupLoop(backups: Backups?) {
+    while (isActive && backups != null) {
+      runCatching { backups.runDue() }
+        .onFailure { log("backup failed: $it") }
+        .getOrNull()
+        ?.forEach { log("Backup: $it") }
+      delay(BACKUP_CHECK_MS)
+    }
   }
 
   fun stop() = loop.stop()
