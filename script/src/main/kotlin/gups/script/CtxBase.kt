@@ -79,6 +79,13 @@ internal constructor(
   internal fun playerArg(x: Any?, what: String): Player =
     actorArg(x, what) as? Player ?: fail("$what: must be a player")
 
+  /** [actorArg], or null for `None`. */
+  internal fun actorOrNull(x: Any?, what: String): Actor? =
+    if (isNone(x)) null else actorArg(x, what)
+
+  /** [itemArg], or null for `None`. */
+  internal fun itemOrNull(x: Any?, what: String): Item? = if (isNone(x)) null else itemArg(x, what)
+
   internal fun itemArg(x: Any?, what: String): Item {
     val i = (x as? ItemView)?.item ?: fail("$what: expected an item, got ${typeName(x)}")
     if (world.item(i.id) !== i) fail("$what: ${i.name} is no longer in the world")

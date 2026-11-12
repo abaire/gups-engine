@@ -1,5 +1,13 @@
 # Tests for standing, factions, grudges, rate caps, and behavior thresholds.
 
+# The shop opens west to the armory and east to the smithy; flee picks either.
+_NEXT_DOOR = {"//zones/tutorial:armory": "east", "//zones/tutorial:smithy": "west"}
+
+def _fled_next_door(t, actor):
+    """Asserts actor fled from the shop to a neighbouring room; the direction back."""
+    t.true(actor.room.label in _NEXT_DOOR, actor.room.label)
+    return _NEXT_DOOR[actor.room.label]
+
 def test_hit_flee_return_attacked_on_sight(t):
     w = t.world(seed = 1)
     ash = w.spawn_player("Ash", at = ":shop")
@@ -11,18 +19,18 @@ def test_hit_flee_return_attacked_on_sight(t):
     ash.do("kill shopkeeper")
     t.true(len(ash.fighting()) > 0)
 
-    # Flee west to the armory
+    # Flee to a neighbouring room
     for _ in range(20):
         if ash.room.label != "//zones/tutorial:shop":
             break
         ash.do("flee")
-    t.eq(ash.room.label, "//zones/tutorial:armory")
+    back = _fled_next_door(t, ash)
     t.eq(len(ash.fighting()), 0)
 
-    # Return east to the shop.
+    # Return to the shop.
     # Shopkeeper has disposition_below = -40; attack lowered personal standing to -50.
     # Shopkeeper attacks Ash on sight.
-    ash.do("east")
+    ash.do(back)
     t.eq(ash.room.label, "//zones/tutorial:shop")
     w.run(pulses = 20)
     t.true(len(ash.fighting()) > 0)
@@ -45,7 +53,7 @@ def test_group_healer_smaller_grudge_than_attacker(t):
     # Tess heals Ash in combat (assist event gives smaller grudge -10)
     tess.do("cast soothe Ash")
 
-    # Both flee to the armory
+    # Both flee to a neighbouring room
     for _ in range(20):
         if ash.room.label != "//zones/tutorial:shop":
             break
@@ -54,12 +62,12 @@ def test_group_healer_smaller_grudge_than_attacker(t):
         if tess.room.label != "//zones/tutorial:shop":
             break
         tess.do("flee")
-    t.eq(ash.room.label, "//zones/tutorial:armory")
-    t.eq(tess.room.label, "//zones/tutorial:armory")
+    ash_back = _fled_next_door(t, ash)
+    tess_back = _fled_next_door(t, tess)
 
     # Tess returns to the shop first.
     # Tess's grudge is only -10, which is not below -40. Shopkeeper ignores Tess.
-    tess.do("east")
+    tess.do(tess_back)
     t.eq(tess.room.label, "//zones/tutorial:shop")
     w.run(pulses = 20)
     t.eq(len(tess.fighting()), 0)
@@ -68,7 +76,7 @@ def test_group_healer_smaller_grudge_than_attacker(t):
 
     # Ash returns to the shop.
     # Ash's grudge is -50 (< -40). Shopkeeper attacks Ash on sight.
-    ash.do("east")
+    ash.do(ash_back)
     t.eq(ash.room.label, "//zones/tutorial:shop")
     w.run(pulses = 20)
     t.true(len(ash.fighting()) > 0)

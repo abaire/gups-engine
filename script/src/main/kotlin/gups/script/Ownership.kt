@@ -21,6 +21,7 @@ object FeatureOwnership {
       "ctx.remove_skill",
       "ctx.skill_info",
       "ctx.report_skill_use",
+      "ctx.skill_roll",
     )
     owns(Feature.SKILLS, "w.set_skill", "w.remove_skill")
     owns(
@@ -34,7 +35,6 @@ object FeatureOwnership {
     owns(
       Feature.SKILLS,
       "rules:cast_allowed",
-      "rules:interrupt_check",
       "rules:skill_check",
       "rules:skill_power",
       "rules:recognizes_skill",

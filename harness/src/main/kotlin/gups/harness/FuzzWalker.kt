@@ -308,9 +308,9 @@ class FuzzWalker(
       bot.vitals.values.any { it.current * 4 < it.max } ||
       bot.waitState > 50
 
-  /** True when a bot is idle: no queued action, no wait state and not casting. */
+  /** True when a bot is idle: no queued action, no wait state and nothing in its activity slot. */
   private fun isIdle(bot: Player): Boolean =
-    bot.actionQueue.isEmpty() && bot.waitState == 0 && bot.casting == null
+    bot.actionQueue.isEmpty() && bot.waitState == 0 && !bot.isBusy
 
   /**
    * Runs one pulse and asserts that it neither violated an invariant nor emitted a forbidden

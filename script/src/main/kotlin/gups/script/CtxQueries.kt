@@ -8,6 +8,7 @@ import gups.core.model.Actor
 import gups.core.model.Band
 import gups.core.model.Dice
 import gups.core.model.Entity
+import gups.core.model.ItemProto
 import gups.core.model.Room
 import gups.core.world.Feature
 import gups.core.world.HookContext
@@ -170,6 +171,28 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     }
 
   @StarlarkMethod(
+    name = "item_info",
+    doc =
+      "An item prototype's catalog fields by label, without spawning one: struct(label, name," +
+        " plural, keywords, kind, tags, value, weight, stackable, charges), plural and charges" +
+        " None when the prototype has none; None when no loaded item has the label.",
+    parameters =
+      [
+        Param(
+          name = "label",
+          named = true,
+          doc = "Item label, absolute or relative to your package.",
+        )
+      ],
+    useStarlarkThread = true,
+  )
+  fun itemInfo(label: Any, thread: StarlarkThread): Any =
+    verb("item_info", "$label") {
+      val l = label(str(label, "item_info(label)"), pkgOf(thread), "item_info(label)")
+      world.protos.items[l]?.let(::itemInfoStruct) ?: Starlark.NONE
+    }
+
+  @StarlarkMethod(
     name = "has_feature",
     doc =
       "Whether the world has the named feature: an engine feature that is on, or one a loaded plugin provides.",
@@ -258,3 +281,20 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     private val FEATURE_ID = Regex("[a-z][a-z0-9_]*")
   }
 }
+
+/** An item prototype's catalog fields, as `ctx.item_info` returns them. */
+internal fun itemInfoStruct(p: ItemProto): Any =
+  StructValue(
+    linkedMapOf(
+      "label" to p.label.v,
+      "name" to p.name,
+      "plural" to (p.plural ?: Starlark.NONE),
+      "keywords" to sList(p.keywords),
+      "kind" to p.kind,
+      "tags" to sList(p.tags.sorted()),
+      "value" to sInt(p.value),
+      "weight" to sInt(p.weight),
+      "stackable" to p.stackable,
+      "charges" to (p.charges?.let(::sInt) ?: Starlark.NONE),
+    )
+  )

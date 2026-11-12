@@ -186,7 +186,7 @@ open class FixtureRules(val fs: FixtureSchema = FixtureSchemas.FANTASY) : RulesE
   override fun castAllowed(c: RulesContext): String? = null
 
   override fun interruptCheck(c: RulesContext, amount: Int): Boolean {
-    val pct = c.requireActor().casting?.action?.interrupt?.damagePct ?: return false
+    val pct = c.requireActor().activity?.action?.interrupt?.damagePct ?: return false
     return amount * 100 >= pct * c.requireActor().max(fs.health).coerceAtLeast(1)
   }
 

@@ -99,7 +99,6 @@ object TestWorlds {
       "initiative" to setOf("combat"),
       "flee_chance" to setOf("combat"),
       "cast_allowed" to setOf("skills"),
-      "interrupt_check" to setOf("skills"),
       "skill_check" to setOf("skills"),
       "skill_power" to setOf("skills"),
       "recognizes_skill" to setOf("skills"),

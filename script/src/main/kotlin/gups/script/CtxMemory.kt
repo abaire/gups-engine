@@ -14,7 +14,7 @@ import net.starlark.java.eval.StarlarkThread
 /** Mob combat memories. */
 abstract class CtxMemory
 internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxExtras) :
-  CtxSkills(frame, owner, hc, extras) {
+  CtxTasks(frame, owner, hc, extras) {
   @StarlarkMethod(
     name = "memories",
     doc = "Queries a mob's combat memories, newest first.",

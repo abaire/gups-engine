@@ -255,7 +255,7 @@ private fun nextChargesFor(item: Item, p: ItemProto): Int? =
 /** Disengages a mob, clears its action and removes it from its room. */
 private fun World.despawn(m: Mob) {
   disengageAll(m, null)
-  m.casting = null
+  endActivity(m, TaskEnd.GONE)
   m.actionQueue.clear()
   removeActor(m)
 }

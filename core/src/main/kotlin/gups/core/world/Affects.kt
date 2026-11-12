@@ -2,10 +2,10 @@ package gups.core.world
 
 import gups.core.EntityId
 import gups.core.HookRef
+import gups.core.model.ActivityState
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.AffectScope
-import gups.core.model.CastState
 import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Effect
@@ -128,7 +128,7 @@ fun World.applyAffect(
   target.affects += affect
   creditApplication(target, spec.source, affect, hostile)
   target.dirty = true
-  if (stunsCaster(spec, target)) interruptCast(target)
+  if (stunsCaster(spec, target)) interruptActivity(target)
   disabledChanged(target, wasDisabled)
   forgetActorSlots(target)
   refreshFit(target)
@@ -201,7 +201,7 @@ internal fun World.releaseAffectEvents() {
 }
 
 private fun stunsCaster(spec: AffectSpec, target: Actor): Boolean =
-  "stunned" in spec.flags && target.casting?.action?.interrupt?.stun == true
+  "stunned" in spec.flags && target.activity?.action?.interrupt?.stun == true
 
 /** Records and announces what [source] did for or against [target] by giving it [affect]. */
 private fun World.creditApplication(
@@ -351,8 +351,15 @@ internal fun World.disabledChanged(a: Actor, wasDisabled: Boolean) {
   } else if (wasDisabled && !disabled) {
     a.waitState = maxOf(a.waitState, a.heldWaitState)
     a.heldWaitState = 0
-    a.casting?.let { c ->
-      a.casting = CastState(c.action, c.startedAt, c.endsAt + (pulse - a.heldSince), c.orderedBy)
+    a.activity?.let { c ->
+      a.activity =
+        ActivityState(
+          c.action,
+          c.startedAt,
+          c.endsAt + (pulse - a.heldSince),
+          c.orderedBy,
+          c.thinkOrigin,
+        )
     }
   }
 }

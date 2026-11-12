@@ -65,6 +65,7 @@
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_perceive: the room the event happened in.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
 <tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.</td></tr>
+<tr id="ctx.task"><td><code>task</code></td><td>1</td><td>The task view, struct(name, started_at, ends_at, remaining, interrupt), in a timed task's callbacks; None elsewhere.</td></tr>
 <tr id="ctx.text"><td><code>text</code></td><td>1</td><td>Spoken text, for on_say and on_tell.</td></tr>
 <tr id="ctx.to_room"><td><code>to_room</code></td><td>1</td><td>The room the actor is going to, for exit hooks.</td></tr>
 <tr id="ctx.type"><td><code>type</code></td><td>1</td><td>The damage type, for on_damage.</td></tr>
@@ -589,6 +590,16 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.item_info" class="entry">
+<h4><code>item_info(label)</code> <span class="since">since api_version 1</span></h4>
+<p>An item prototype's catalog fields by label, without spawning one: struct(label, name, plural, keywords, kind, tags, value, weight, stackable, charges), plural and charges None when the prototype has none; None when no loaded item has the label.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.item_info.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Item label, absolute or relative to your package.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.level_down" class="entry">
 <h4><code>level_down(actor, count = 1)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
 <p>Lowers actor by up to count levels, stopping at level 1. Returns the number of levels actually lost. Needs the leveling feature.</p>
@@ -870,6 +881,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.set_item_name" class="entry">
+<h4><code>set_item_name(item, name)</code> <span class="since">since api_version 1</span></h4>
+<p>Renames an item: name, a single line of 1 to 80 characters, replaces its prototype's name, or None restores it. Keywords don't change. Returns whether the name changed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_item_name.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to rename.</td></tr>
+<tr id="ctx.set_item_name.name"><td><code>name</code></td><td>positional or named</td><td></td><td>The new name, or None for the prototype's.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.set_leash" class="entry">
 <h4><code>set_leash(mob, leash)</code> <span class="since">since api_version 1</span></h4>
 <p>Overrides a mob's leash with an int of at least 0, or with None to unleash it. The override is saved with the mob and outlives reloads. Returns None.</p>
@@ -911,6 +933,21 @@
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.skill_info.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.skill_roll" class="entry">
+<h4><code>skill_roll(actor, skill, item = None, target = None, event = 'craft', adjust = 0)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Rolls actor's skill outside a cast: rules.skill_check and its chain (with ctx.event), plus adjust, then one draw unless the chance is 100 or more; on success, the power from rules.skill_power and its chain. Returns struct(chance, roll, success, power), roll None when nothing was drawn and power 0 on a failure. No cost and no on_skill_use; the actor need not know the skill. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.skill_roll.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who uses the skill.</td></tr>
+<tr id="ctx.skill_roll.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+<tr id="ctx.skill_roll.item"><td><code>item</code></td><td>positional or named</td><td><code>None</code></td><td>Item involved, or None.</td></tr>
+<tr id="ctx.skill_roll.target"><td><code>target</code></td><td>positional or named</td><td><code>None</code></td><td>Target actor, or None.</td></tr>
+<tr id="ctx.skill_roll.event"><td><code>event</code></td><td>positional or named</td><td><code>'craft'</code></td><td>What the roll is for, a lowercase word: ctx.event in skill_check.</td></tr>
+<tr id="ctx.skill_roll.adjust"><td><code>adjust</code></td><td>positional or named</td><td><code>0</code></td><td>Added to the chance.</td></tr>
 </tbody>
 </table>
 </article>
@@ -977,6 +1014,23 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.start_task" class="entry">
+<h4><code>start_task(actor, pulses, on_done, name = 'task', lag = 0, interrupt = None, on_stop = None, **args)</code> <span class="since">since api_version 1</span></h4>
+<p>Starts a timed task on actor: after pulses, on_done(ctx, **args) runs, then lag applies. stop, clear, stop_task, a stun or damage interrupt_check accepts, death or removal end it early with on_stop(ctx, reason, **args), reason one of 'interrupted', 'cancelled', 'invalid' or 'gone'. Returns None when started, else the refusal message.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.start_task.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Player or mob that does the task.</td></tr>
+<tr id="ctx.start_task.pulses"><td><code>pulses</code></td><td>positional or named</td><td></td><td>Pulses the task takes, at least 1.</td></tr>
+<tr id="ctx.start_task.on_done"><td><code>on_done</code></td><td>positional or named</td><td></td><td>Top-level function on_done(ctx, **args).</td></tr>
+<tr id="ctx.start_task.name"><td><code>name</code></td><td>positional or named</td><td><code>'task'</code></td><td>What the actor is doing, a gerund phrase: 'You stop {name}.'</td></tr>
+<tr id="ctx.start_task.lag"><td><code>lag</code></td><td>positional or named</td><td><code>0</code></td><td>Recovery once it completes.</td></tr>
+<tr id="ctx.start_task.interrupt"><td><code>interrupt</code></td><td>positional or named</td><td><code>None</code></td><td>{'stun': bool, 'damage_pct': int 1..100 or None}; None is {'stun': True}.</td></tr>
+<tr id="ctx.start_task.on_stop"><td><code>on_stop</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function on_stop(ctx, reason, **args), or None.</td></tr>
+<tr id="ctx.start_task.args"><td><code>**args</code></td><td>extra named</td><td></td><td>Keyword arguments for both callbacks; values must be storable.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.stop_combat" class="entry">
 <h4><code>stop_combat(a, b = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Ends combat between a and b, or all of a's fights when b is None.</p>
@@ -985,6 +1039,16 @@
 <tbody>
 <tr id="ctx.stop_combat.a"><td><code>a</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Actor whose fighting stops.</td></tr>
 <tr id="ctx.stop_combat.b"><td><code>b</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Opponent, or None for all of a's fights.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.stop_task" class="entry">
+<h4><code>stop_task(actor)</code> <span class="since">since api_version 1</span></h4>
+<p>Cancels actor's timed task, with reason 'cancelled' and no lag; True if it had one.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.stop_task.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Player or mob.</td></tr>
 </tbody>
 </table>
 </article>

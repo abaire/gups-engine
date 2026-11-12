@@ -20,6 +20,9 @@ of those extension points with the hunger mechanic:
   global `on_death` hooks, while the dying actor is still in the world.
 * **Builtin:** `hunger.eat(actor, amount)` lowers an actor's hunger by `amount`, not below 0, and returns the new value.
   An item's `on_use` hook calls it to feed the actor.
+* **Timed task:** `hunger.dine(actor, amount, pulses)` eats over a timed task (`world.startTask`): the actor is busy for
+  `pulses`, hunger drops only when the meal completes, and `stop` cancels it ("You stop eating.") with hunger unchanged.
+  It returns None once the meal starts, or the refusal message ("You're busy.").
 
 The plugin's source is commented to show one extension point per block; read
 [`HungerPlugin.kt`](src/main/kotlin/gups/sample/hunger/HungerPlugin.kt) for the full walkthrough.

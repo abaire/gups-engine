@@ -75,6 +75,12 @@ persistence, and linking to official specifications and generated API references
     * Standing records, and disposition: `declared`, `faction_to_actor`, `faction_to_faction`, and `personal`
     * The `standing_change` rules export, a gratitude ceiling, and history rate capping
     * Behavior disposition thresholds (`aggressive`, `guard`, `assist`, `follow`, `pursue`)
+12. **[12. Crafting: The `//lib:craft.star` Library](12_crafting.md)**
+    * Stations: rooms, ground items and carried kits with a `craft_recipes` hook
+    * Writing recipes with `craft.recipe`, `need`, `make` and `improve`; failure losses and tool charges
+    * Skill rolls, difficulty and quality tiers
+    * The `craft_check` and `craft_done` hooks, learned recipes, and the `Craft.*` GMCP events
+    * Under the hood: timed tasks, `ctx.skill_roll` and `ctx.set_item_name`
 
 ---
 

@@ -3,6 +3,7 @@ package gups.core.world
 import gups.core.BUBBLE_RADIUS
 import gups.core.EntityId
 import gups.core.WORLD_TICK_PULSES
+import gups.core.model.ActivityState
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.DormantRecovery
@@ -211,15 +212,21 @@ internal fun World.syncTimers(e: Entity) {
 internal fun World.sleep(room: Room) {
   room.dormantSince = pulse
   room.dirty = true
+  val ended = mutableListOf<Pair<Mob, ActivityState>>()
   for (e in entitiesIn(room)) {
     if (e.hasSimulationReason) continue
     pauseTimers(e)
-    if (e is Mob) {
-      disengageAll(e, null)
-      e.actionQueue.clear()
-      e.casting = null
-    }
+    if (e is Mob) stopMob(e)?.let { ended += e to it }
   }
+  // Not while the room's entities are being walked: a callback may change them.
+  for ((mob, state) in ended) notifyStopped(mob, state, TaskEnd.GONE)
+}
+
+/** Ends what a mob in a room going dormant was doing; returns the task that still has to hear. */
+private fun World.stopMob(m: Mob): ActivityState? {
+  disengageAll(m, null)
+  m.actionQueue.clear()
+  return clearActivity(m)
 }
 
 /**

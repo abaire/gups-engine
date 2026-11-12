@@ -77,7 +77,7 @@ class ActionLifecycleTest(private val fs: FixtureSchema) {
     val (f, p, g) = caster()
     f.input(p, "cast bolt dummy")
     f.run() // pulse 1: popped, warmup starts
-    val cast = assertNotNull(p.casting)
+    val cast = assertNotNull(p.activity)
     assertEquals(1, cast.startedAt)
     assertEquals(5, cast.endsAt)
     f.run(3)

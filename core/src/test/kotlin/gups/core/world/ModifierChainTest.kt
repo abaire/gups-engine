@@ -161,7 +161,7 @@ class ModifierChainTest {
     assertContains(f.out(p), "Your magic fizzles into nothing.")
     assertEquals(50, p.current("mana"))
     assertEquals(0, p.waitState)
-    assertNull(p.casting)
+    assertNull(p.activity)
   }
 
   @Test

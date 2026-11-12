@@ -137,7 +137,7 @@ internal fun World.setCondition(actor: Actor, next: Condition) {
         msg(KernelMsg.CONDITION_DOWN_ROOM, "actor" to actor.name.cap()),
         actor,
       )
-      if (actor.casting?.action?.interrupt?.stun == true) interruptCast(actor)
+      if (actor.activity?.action?.interrupt?.stun == true) interruptActivity(actor)
     }
     next == Condition.OK && was == Condition.INCAPACITATED -> {
       tell(actor, KernelMsg.CONDITION_UP)

@@ -3,11 +3,14 @@ package gups.script
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.world.HookContext
+import gups.core.world.ITEM_NAME_MAX
 import gups.core.world.addItemTag
 import gups.core.world.destroy
+import gups.core.world.isShortLine
 import gups.core.world.moveItem
 import gups.core.world.removeItemTag
 import gups.core.world.setCharges
+import gups.core.world.setItemName
 import gups.core.world.spawnItem
 import gups.core.world.stack
 import gups.core.world.transformItem
@@ -191,6 +194,32 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       world.setCharges(i, n)
       Starlark.NONE
     }
+
+  @StarlarkMethod(
+    name = "set_item_name",
+    doc =
+      "Renames an item: name, a single line of 1 to 80 characters, replaces its prototype's name," +
+        " or None restores it. Keywords don't change. Returns whether the name changed.",
+    parameters =
+      [
+        Param(name = "item", named = true, doc = "Item to rename."),
+        Param(name = "name", named = true, doc = "The new name, or None for the prototype's."),
+      ],
+  )
+  fun setItemName(item: Any, name: Any): Any =
+    verb("set_item_name") {
+      world.setItemName(itemArg(item, "set_item_name(item)"), itemName(name))
+    }
+
+  private fun itemName(name: Any): String? {
+    if (isNone(name)) return null
+    val n = str(name, "set_item_name(name)")
+    if (!isShortLine(n, ITEM_NAME_MAX))
+      fail(
+        "set_item_name(name): must be a non-empty single line of at most $ITEM_NAME_MAX characters"
+      )
+    return n
+  }
 
   @StarlarkMethod(
     name = "add_tag",

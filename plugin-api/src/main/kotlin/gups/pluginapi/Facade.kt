@@ -17,6 +17,9 @@ interface PluginGmcpWorld {
   /** A loaded skill's view by absolute label, or null. */
   fun skill(label: String): PluginSkill? = null
 
+  /** A loaded item prototype's catalog fields by absolute label, or null; nothing is spawned. */
+  fun itemInfo(label: String): PluginItemInfo? = null
+
   /**
    * Sends the GMCP event [pkg] with [data] (plain values) to [actor]. [pkg] must be, or nest in, a
    * package this plugin declared with addGmcp or addGmcpEvent. Returns false, sending nothing, for
@@ -164,6 +167,54 @@ interface PluginWorld : PluginGmcpWorld {
     target: PluginActor? = null,
     item: PluginItem? = null,
   ): Unit = throw UnsupportedOperationException("reportSkillUse is not supported")
+
+  /**
+   * Rolls [actor]'s [skill] outside a cast, as `ctx.skill_roll` does: `skill_check` and its chain
+   * with [item], [target] and [event] (a lowercase word), plus [adjust], then one draw unless the
+   * chance is 100 or more; on success the power from `skill_power`. No cost and no on_skill_use;
+   * the actor need not know the skill. Needs the `skills` feature.
+   */
+  fun skillRoll(
+    actor: PluginActor,
+    skill: String,
+    item: PluginItem? = null,
+    target: PluginActor? = null,
+    event: String = "craft",
+    adjust: Int = 0,
+  ): PluginSkillRoll = throw UnsupportedOperationException("skillRoll is not supported")
+
+  // Timed tasks, with the same rules as `ctx.start_task` and `ctx.stop_task`.
+
+  /**
+   * Starts a timed task named [name] (a gerund phrase: "You stop {name}.") of [pulses] on [actor].
+   * [onDone] runs once it completes, then [lag] applies; [onStop], if given, hears why it ended
+   * early. Returns null when started, else the refusal message for the actor.
+   *
+   * @throws IllegalArgumentException for pulses below 1, negative lag, a name that isn't a single
+   *   line of 1 to 80 characters, or a damage percentage outside 1..100.
+   */
+  fun startTask(
+    actor: PluginActor,
+    pulses: Int,
+    name: String,
+    lag: Int = 0,
+    interrupt: PluginTaskInterrupt = PluginTaskInterrupt(),
+    onStop: ((PluginTaskStop) -> Unit)? = null,
+    onDone: (PluginTaskCall) -> Unit,
+  ): String? = throw UnsupportedOperationException("startTask is not supported")
+
+  /** Cancels [actor]'s timed task, script or plugin, with no lag; false when it has none. */
+  fun stopTask(actor: PluginActor): Boolean =
+    throw UnsupportedOperationException("stopTask is not supported")
+
+  /**
+   * Sets [item]'s name override, as `ctx.set_item_name` does; null restores the prototype's name.
+   * Returns whether it changed.
+   *
+   * @throws IllegalArgumentException for a name that isn't a single line of 1 to 80 characters.
+   */
+  fun setItemName(item: PluginItem, name: String?): Boolean =
+    throw UnsupportedOperationException("setItemName is not supported")
 
   fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? =
     throw UnsupportedOperationException("setBaseStat is not supported")
@@ -369,6 +420,14 @@ interface PluginActor : PluginEntity {
 
   /** Skill label to proficiency (needs the skills feature). */
   val skills: Map<String, Int>
+
+  /** The running timed task, script or plugin, or null. */
+  val task: PluginTask?
+    get() = null
+
+  /** True while the actor warms up a cast or runs a timed task. */
+  val isBusy: Boolean
+    get() = false
 }
 
 interface PluginItem : PluginEntity {

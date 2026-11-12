@@ -698,6 +698,8 @@ class World(
    * restore.
    */
   internal fun removeActor(a: Actor, stow: Boolean = false) {
+    // While the actor is still in the world, since a task's callback often belongs to the actor.
+    endActivity(a, TaskEnd.GONE)
     if (a is Player) leaveGroupOnRemoval(a)
     a.room.actorIndex.remove(a.id)
     actorIndex.remove(a.id)
@@ -904,9 +906,9 @@ class World(
 
   /** Phase 2 for one actor. */
   private fun actionPulse(a: Actor) {
-    val c = a.casting
+    val c = a.activity
     when {
-      c != null -> advanceCast(a, c)
+      c != null -> advanceActivity(a, c)
       a.waitState > 0 -> a.waitState--
       a.actionQueue.isNotEmpty() -> {
         val head = a.actionQueue.first()
@@ -947,7 +949,7 @@ class World(
       a.inWorld &&
       a.lastMovePulse == pulse &&
       a.lastNonMovePulse != pulse &&
-      a.casting == null &&
+      a.activity == null &&
       a.waitState == 0 &&
       canMove(a) &&
       (a.actionQueue.firstOrNull()?.command?.moves == true ||

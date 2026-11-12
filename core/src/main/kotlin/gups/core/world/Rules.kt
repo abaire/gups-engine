@@ -243,19 +243,30 @@ fun World.fleeFailLagOf(c: RulesContext): Int =
   lagOf(ModifierPoint.FLEE_FAIL_LAG, c, rules.fleeFailLag(c))
 
 /**
- * Whether c.actor gets c.skill off: the export, its chain, then a roll unless the chance is 100+.
+ * A skill roll: the [chance] after any adjustment, the 1..100 [roll] (null when 100+ needed none).
  */
-fun World.skillSucceeds(c: RulesContext): Boolean {
+data class SkillRoll(val chance: Int, val roll: Int?, val success: Boolean)
+
+/**
+ * Rolls c.actor's c.skill: the export and its chain, plus [adjust], then one draw unless the chance
+ * is 100 or more.
+ */
+fun World.skillRoll(c: RulesContext, adjust: Int = 0): SkillRoll {
   val r = chain(ModifierPoint.SKILL_CHECK, c, rules.skillCheck(c)) { "$it" }
-  if (r.value >= 100) {
-    traceRules(c.actor, "${r.text} → auto SUCCEED")
-    return true
+  val chance = r.value + adjust
+  val text = if (adjust == 0) r.text else "${r.text} adjust ${if (adjust > 0) "+" else ""}$adjust"
+  if (chance >= 100) {
+    traceRules(c.actor, "$text → auto SUCCEED")
+    return SkillRoll(chance, null, true)
   }
   val roll = rng.int(1, 100)
-  val success = roll <= r.value
-  traceRules(c.actor, "${r.text} → roll $roll ${if (success) "SUCCEED" else "FAIL"}")
-  return success
+  val success = roll <= chance
+  traceRules(c.actor, "$text → roll $roll ${if (success) "SUCCEED" else "FAIL"}")
+  return SkillRoll(chance, roll, success)
 }
+
+/** Whether c.actor gets c.skill off. */
+fun World.skillSucceeds(c: RulesContext): Boolean = skillRoll(c).success
 
 /** The power of c.actor's successful cast of c.skill, clamped to 0 or more. */
 fun World.skillPowerChain(c: RulesContext): Int =

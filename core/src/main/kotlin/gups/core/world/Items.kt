@@ -201,6 +201,29 @@ private fun World.tellEncumbranceChange(a: Actor, wasLevel: Int, level: Int) {
   }
 }
 
+/** The longest name `set_item_name` accepts. */
+const val ITEM_NAME_MAX = 80
+
+/** A non-empty single line of at most [max] characters: what an item's or a task's name must be. */
+fun isShortLine(s: String, max: Int): Boolean =
+  s.isNotBlank() && s.length <= max && s.none { it == '\n' || it == '\r' }
+
+/**
+ * The `set_item_name` verb: [name] replaces [item]'s prototype name, or null clears the override.
+ * Keywords stay; a renamed item already stays out of stacks. Returns whether the name changed.
+ */
+fun World.setItemName(item: Item, name: String?): Boolean {
+  if (name != null) {
+    require(isShortLine(name, ITEM_NAME_MAX)) {
+      "name must be a non-empty single line of at most $ITEM_NAME_MAX characters"
+    }
+  }
+  if (item.nameOverride == name) return false
+  item.nameOverride = name
+  item.dirty = true
+  return true
+}
+
 /**
  * True if [item] may merge into a stack at all: no timers, name override, affects or tag changes.
  */

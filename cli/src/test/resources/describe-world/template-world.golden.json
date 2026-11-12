@@ -105,6 +105,11 @@
             "ok": true
         },
         {
+            "path": "skills/crafts",
+            "kind": "skills",
+            "ok": true
+        },
+        {
             "path": "zones/tutorial",
             "kind": "zone",
             "ok": true
@@ -263,6 +268,13 @@
                     "one_way": false,
                     "tags": [],
                     "door": null
+                },
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:smithy",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
                 }
             ]
         },
@@ -276,6 +288,23 @@
                 "dead_end_ok"
             ],
             "exits": []
+        },
+        {
+            "label": "//zones/tutorial:smithy",
+            "name": "The Smithy",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "west",
+                    "to": "//zones/tutorial:shop",
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
         },
         {
             "label": "//zones/tutorial:tar_pit",
@@ -413,6 +442,26 @@
             },
             "resists": {},
             "skills": {},
+            "traits": [],
+            "factions": [
+                "//lib:townsfolk"
+            ]
+        },
+        {
+            "label": "//zones/tutorial:smith",
+            "name": "the smith",
+            "keywords": [
+                "smith"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 80
+            },
+            "resists": {},
+            "skills": {
+                "//skills/crafts:smithing": 100
+            },
             "traits": [],
             "factions": [
                 "//lib:townsfolk"
@@ -580,6 +629,29 @@
             "value": 0
         },
         {
+            "label": "//zones/tutorial:awl",
+            "name": "an awl",
+            "keywords": [
+                "awl"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:bent_dagger",
+            "name": "a bent dagger",
+            "keywords": [
+                "dagger",
+                "bent"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 1,
+            "value": 2
+        },
+        {
             "label": "//zones/tutorial:bramble_vest",
             "name": "a bramble vest",
             "keywords": [
@@ -602,6 +674,17 @@
             "wear": null,
             "weight": 1,
             "value": 0
+        },
+        {
+            "label": "//zones/tutorial:charcoal",
+            "name": "a piece of charcoal",
+            "keywords": [
+                "charcoal"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 1
         },
         {
             "label": "//zones/tutorial:copper_ring",
@@ -685,6 +768,18 @@
             "value": 0
         },
         {
+            "label": "//zones/tutorial:grit",
+            "name": "a pinch of grit",
+            "keywords": [
+                "grit",
+                "sand"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
             "label": "//zones/tutorial:healing_draught",
             "name": "a healing draught",
             "keywords": [
@@ -697,6 +792,42 @@
             "value": 30
         },
         {
+            "label": "//zones/tutorial:iron_bar",
+            "name": "an iron bar",
+            "keywords": [
+                "bar",
+                "iron"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 4
+        },
+        {
+            "label": "//zones/tutorial:iron_dagger",
+            "name": "an iron dagger",
+            "keywords": [
+                "dagger",
+                "iron"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 1,
+            "value": 12
+        },
+        {
+            "label": "//zones/tutorial:iron_ore",
+            "name": "a lump of iron ore",
+            "keywords": [
+                "ore",
+                "iron"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 1
+        },
+        {
             "label": "//zones/tutorial:leather_cap",
             "name": "a leather cap",
             "keywords": [
@@ -705,6 +836,18 @@
             ],
             "kind": "armor",
             "wear": "head",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:leather_scrap",
+            "name": "a leather scrap",
+            "keywords": [
+                "leather",
+                "scrap"
+            ],
+            "kind": "misc",
+            "wear": null,
             "weight": 1,
             "value": 0
         },
@@ -744,6 +887,18 @@
             "value": 0
         },
         {
+            "label": "//zones/tutorial:repair_kit",
+            "name": "a repair kit",
+            "keywords": [
+                "kit",
+                "repair"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
             "label": "//zones/tutorial:shadow_cloak",
             "name": "a shadow cloak",
             "keywords": [
@@ -767,6 +922,17 @@
             "value": 0
         },
         {
+            "label": "//zones/tutorial:smith_hammer",
+            "name": "a smith's hammer",
+            "keywords": [
+                "hammer"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 3,
+            "value": 0
+        },
+        {
             "label": "//zones/tutorial:stolen_ring",
             "name": "a stolen ring",
             "keywords": [
@@ -785,6 +951,30 @@
             ],
             "kind": "armor",
             "wear": "feet",
+            "weight": 1,
+            "value": 0
+        },
+        {
+            "label": "//zones/tutorial:tempered_dagger",
+            "name": "a tempered dagger",
+            "keywords": [
+                "dagger",
+                "tempered"
+            ],
+            "kind": "melee",
+            "wear": "wield",
+            "weight": 1,
+            "value": 20
+        },
+        {
+            "label": "//zones/tutorial:tempering_notes",
+            "name": "some tempering notes",
+            "keywords": [
+                "notes",
+                "tempering"
+            ],
+            "kind": "misc",
+            "wear": null,
             "weight": 1,
             "value": 0
         },
@@ -823,6 +1013,18 @@
             "wear": "wield",
             "weight": 3,
             "value": 50
+        },
+        {
+            "label": "//zones/tutorial:whetstone",
+            "name": "a whetstone",
+            "keywords": [
+                "whetstone",
+                "wheel"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 500,
+            "value": 0
         },
         {
             "label": "//zones/tutorial:wooden_shield",
@@ -920,6 +1122,19 @@
             "lag": 4,
             "channels": [],
             "tags": []
+        },
+        {
+            "label": "//skills/crafts:smithing",
+            "kind": "craft",
+            "target": "none",
+            "range": "self",
+            "cost": {},
+            "warmup": 0,
+            "lag": 0,
+            "channels": [],
+            "tags": [
+                "craft"
+            ]
         }
     ],
     "factions": [

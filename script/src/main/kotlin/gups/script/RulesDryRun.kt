@@ -26,6 +26,7 @@ import gups.core.rules.RulesContext
 import gups.core.world.BUILTIN_STANDING_EVENTS
 import gups.core.world.Feature
 import gups.core.world.Features
+import gups.core.world.TaskInfo
 import gups.core.world.World
 import gups.core.world.WorldConfig
 import gups.core.world.disposition
@@ -112,6 +113,10 @@ internal class WearSlots(val slots: List<String>, val families: Map<String, List
 }
 
 private val SLOT_NAME = Regex("[a-z][a-z0-9_]*")
+
+/** The timed task interrupt_check is asked about: one that damage can break. */
+private val DRY_TASK =
+  TaskInfo("dry run", startedAt = 0, endsAt = 10, lag = 0, Interrupt(damagePct = 50))
 
 /**
  * Checks `equipment_slots()` and `slot_families()` and adds what is wrong to [problems]. Returns
@@ -390,6 +395,7 @@ private class DryRun(
     rules.itemPower(RulesContext(world, a, other, event = "use"))
     rules.regen(c)
     rules.moveCost(c)
+    rules.interruptCheck(RulesContext(world, a, other, task = DRY_TASK), 1)
     if (Feature.TRACK in features) exerciseTrack(a, other, c)
     if (Feature.SKILLS in features) exerciseSkills(a, other)
     if (ally != null) exerciseXp(a, other, c)

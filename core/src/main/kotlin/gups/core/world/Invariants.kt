@@ -28,8 +28,8 @@ fun World.checkInvariants(): List<String> = invariantViolations().map { it.messa
  *    cycles.
  * 2. Every actor's spatial track position satisfies `0 <= trackIndex < room.trackSize`.
  * 3. Every vital's current value does not exceed its effective maximum.
- * 4. An actor is either idle, in recovery lag (`waitState > 0`), or casting (`casting != null`),
- *    never both in recovery and casting.
+ * 4. An actor is either idle, in recovery lag (`waitState > 0`), or busy (`activity != null`),
+ *    never both in recovery and busy.
  * 5. An actor's action queue size never exceeds [ACTION_QUEUE_MAX] (10 actions).
  * 6. Dormant rooms contain no running timers, autonomous mob AI, or active combat encounters.
  * 7. Room and actor spatial indices are bidirectional and contain no stray unindexed entities.
@@ -74,8 +74,8 @@ fun World.invariantViolations(): List<Violation> {
     }
     if (Feature.TRACK !in features && a.trackIndex != 0)
       out += "$a: track index ${a.trackIndex} without the track"
-    if (Feature.SKILLS !in features && a.casting != null) out += "$a: casting without skills"
-    if (a.waitState > 0 && a.casting != null) out += "$a: both in recovery and casting"
+    if (Feature.SKILLS !in features && a.isCasting) out += "$a: cast without skills"
+    if (a.waitState > 0 && a.isBusy) out += "$a: both in recovery and busy"
     if (a.actionQueue.size > ACTION_QUEUE_MAX) out += "$a: action queue holds ${a.actionQueue.size}"
     for (item in a.inventoryIndex.values) if (item.location != ItemLocation.Carried(a.id))
       out += "$a lists stray $item"

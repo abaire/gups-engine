@@ -562,6 +562,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.task",
+        "name": "task",
+        "doc": "The task view, struct(name, started_at, ends_at, remaining, interrupt), in a timed task's callbacks; None elsewhere.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.text",
         "name": "text",
         "doc": "Spoken text, for on_say and on_tell.",
@@ -2094,6 +2100,24 @@
         ]
       },
       {
+        "symbol": "ctx.item_info",
+        "name": "item_info",
+        "doc": "An item prototype's catalog fields by label, without spawning one: struct(label, name, plural, keywords, kind, tags, value, weight, stackable, charges), plural and charges None when the prototype has none; None when no loaded item has the label.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.item_info.label",
+            "name": "label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item label, absolute or relative to your package."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.level_down",
         "feature": "leveling",
         "name": "level_down",
@@ -2871,6 +2895,34 @@
         ]
       },
       {
+        "symbol": "ctx.set_item_name",
+        "name": "set_item_name",
+        "doc": "Renames an item: name, a single line of 1 to 80 characters, replaces its prototype's name, or None restores it. Keywords don't change. Returns whether the name changed.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_item_name.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item to rename."
+          },
+          {
+            "symbol": "ctx.set_item_name.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The new name, or None for the prototype's."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.set_leash",
         "name": "set_leash",
         "doc": "Overrides a mob's leash with an int of at least 0, or with None to unleash it. The override is saved with the mob and outlives reloads. Returns None.",
@@ -2981,6 +3033,75 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Skill label, or the skill's view."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.skill_roll",
+        "feature": "skills",
+        "name": "skill_roll",
+        "doc": "Rolls actor's skill outside a cast: rules.skill_check and its chain (with ctx.event), plus adjust, then one draw unless the chance is 100 or more; on success, the power from rules.skill_power and its chain. Returns struct(chance, roll, success, power), roll None when nothing was drawn and power 0 on a failure. No cost and no on_skill_use; the actor need not know the skill. Needs the skills feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.skill_roll.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who uses the skill."
+          },
+          {
+            "symbol": "ctx.skill_roll.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
+          },
+          {
+            "symbol": "ctx.skill_roll.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item involved, or None."
+          },
+          {
+            "symbol": "ctx.skill_roll.target",
+            "name": "target",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Target actor, or None."
+          },
+          {
+            "symbol": "ctx.skill_roll.event",
+            "name": "event",
+            "positional": true,
+            "named": true,
+            "default": "'craft'",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "What the roll is for, a lowercase word: ctx.event in skill_check."
+          },
+          {
+            "symbol": "ctx.skill_roll.adjust",
+            "name": "adjust",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Added to the chance."
           }
         ]
       },
@@ -3224,6 +3345,94 @@
         ]
       },
       {
+        "symbol": "ctx.start_task",
+        "name": "start_task",
+        "doc": "Starts a timed task on actor: after pulses, on_done(ctx, **args) runs, then lag applies. stop, clear, stop_task, a stun or damage interrupt_check accepts, death or removal end it early with on_stop(ctx, reason, **args), reason one of 'interrupted', 'cancelled', 'invalid' or 'gone'. Returns None when started, else the refusal message.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.start_task.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player or mob that does the task."
+          },
+          {
+            "symbol": "ctx.start_task.pulses",
+            "name": "pulses",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Pulses the task takes, at least 1."
+          },
+          {
+            "symbol": "ctx.start_task.on_done",
+            "name": "on_done",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Top-level function on_done(ctx, **args)."
+          },
+          {
+            "symbol": "ctx.start_task.name",
+            "name": "name",
+            "positional": true,
+            "named": true,
+            "default": "'task'",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "What the actor is doing, a gerund phrase: 'You stop {name}.'"
+          },
+          {
+            "symbol": "ctx.start_task.lag",
+            "name": "lag",
+            "positional": true,
+            "named": true,
+            "default": "0",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Recovery once it completes."
+          },
+          {
+            "symbol": "ctx.start_task.interrupt",
+            "name": "interrupt",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "{'stun': bool, 'damage_pct': int 1..100 or None}; None is {'stun': True}."
+          },
+          {
+            "symbol": "ctx.start_task.on_stop",
+            "name": "on_stop",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Top-level function on_stop(ctx, reason, **args), or None."
+          },
+          {
+            "symbol": "ctx.start_task.args",
+            "name": "args",
+            "positional": false,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": true,
+            "doc": "Keyword arguments for both callbacks; values must be storable."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.stop_combat",
         "feature": "combat",
         "name": "stop_combat",
@@ -3251,6 +3460,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Opponent, or None for all of a's fights."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.stop_task",
+        "name": "stop_task",
+        "doc": "Cancels actor's timed task, with reason 'cancelled' and no lag; True if it had one.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.stop_task.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Player or mob."
           }
         ]
       },
@@ -3759,7 +3986,7 @@
         {
           "symbol": "rules_ctx.event",
           "name": "event",
-          "doc": "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.",
+          "doc": "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'; in skill_check, a skill_roll's event, or None for a cast.",
           "since": 1
         },
         {
@@ -3865,6 +4092,12 @@
           "symbol": "rules_ctx.target",
           "name": "target",
           "doc": "The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.task",
+          "name": "task",
+          "doc": "In interrupt_check for an actor running a timed task, the task view, struct(name, started_at, ends_at, remaining, interrupt); None everywhere else.",
           "since": 1
         },
         {
@@ -6689,6 +6922,46 @@
       "placeholders": [],
       "required": [],
       "default": "You clear your plans.",
+      "since": 1
+    },
+    {
+      "symbol": "message:stop.task",
+      "id": "stop.task",
+      "placeholders": ["task"],
+      "required": [],
+      "default": "You stop {task}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:task.busy",
+      "id": "task.busy",
+      "placeholders": [],
+      "required": [],
+      "default": "You're busy.",
+      "since": 1
+    },
+    {
+      "symbol": "message:task.interrupted",
+      "id": "task.interrupted",
+      "placeholders": ["task"],
+      "required": [],
+      "default": "You are interrupted!",
+      "since": 1
+    },
+    {
+      "symbol": "message:task.invalid",
+      "id": "task.invalid",
+      "placeholders": ["task"],
+      "required": [],
+      "default": "You can't finish {task}.",
+      "since": 1
+    },
+    {
+      "symbol": "message:task.unable",
+      "id": "task.unable",
+      "placeholders": [],
+      "required": [],
+      "default": "You can't do that right now.",
       "since": 1
     },
     {

@@ -49,7 +49,15 @@ class HungerWorldTest {
     def _eat(ctx):
         ctx.send(ctx.actor, "ate %s / %s" % (hunger.eat(ctx.actor, 3), hunger.eat(ctx.actor, 100)))
 
-    room("dining", name = "Dining", desc = "A dining hall.", flags = ["dead_end_ok"], exits = [exit("north", ":hall"), exit("east", ":kitchen")])
+    def _start_dine(ctx):
+        for a in ctx.self.actors():
+            ctx.send(a, "dine %s" % hunger.dine(a, 3, 4))
+
+    def _pantry(ctx):
+        ctx.after(1, _start_dine)
+
+    room("dining", name = "Dining", desc = "A dining hall.", flags = ["dead_end_ok"], exits = [exit("north", ":hall"), exit("east", ":kitchen"), exit("south", ":pantry")])
+    room("pantry", name = "Pantry", desc = "A pantry.", exits = [exit("north", ":dining")], on_enter = _pantry)
     room("hall", name = "Hall", desc = "A hall.", exits = [exit("south", ":dining")], on_enter = _hcheck)
     room("kitchen", name = "Kitchen", desc = "A kitchen.", exits = [exit("west", ":dining")], on_enter = _eat)
     """
@@ -82,6 +90,28 @@ class HungerWorldTest {
         w.set_attr(p, "hunger:hunger", 7)
         t.contains(p.do("east"), "ate 4 / 0")
         t.eq(w.get_attr(p, "hunger:hunger", 0), 0)
+
+    def test_dine_takes_its_pulses(t):
+        w = t.world(seed = 1)
+        p = w.spawn_player("Ann", at = ":dining")
+        w.set_attr(p, "hunger:hunger", 7)
+        p.do("south")
+        w.run(pulses = 2)
+        t.contains(p.output(), "dine None")
+        t.eq(w.get_attr(p, "hunger:hunger", 0), 7)
+        w.run(pulses = 4)
+        t.eq(w.get_attr(p, "hunger:hunger", 0), 4)
+        t.contains(p.output(), "You finish eating.")
+
+    def test_stop_leaves_hunger(t):
+        w = t.world(seed = 1)
+        p = w.spawn_player("Ann", at = ":dining")
+        w.set_attr(p, "hunger:hunger", 7)
+        p.do("south")
+        w.run(pulses = 2)
+        t.contains(p.do("stop"), "You stop eating.")
+        w.run(pulses = 10)
+        t.eq(w.get_attr(p, "hunger:hunger", 0), 7)
     """
 
   @Test
@@ -107,7 +137,7 @@ class HungerWorldTest {
       assertEquals(emptyList(), host.warnings)
       val report = TestRunner(dir, plugins = host).run(listOf("//zones/hungry"))
       assertEquals(emptyList(), report.problems)
-      assertEquals(4, report.results.size, report.results.joinToString("\n"))
+      assertEquals(6, report.results.size, report.results.joinToString("\n"))
       for (r in report.results) assertEquals(Status.PASS, r.status, "${r.name}: ${r.message}")
     }
   }

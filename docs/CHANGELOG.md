@@ -4,6 +4,38 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Timed tasks and crafting
+
+- The warmup slot is kernel: `stop`/`clear` cancel an activity in every world, and `interrupt_check` belongs to the
+  kernel.
+- A mob whose warmup a stun paused is still asked `chain_think` when the warmup resolves.
+- Timed tasks in the kernel: an activity that waits like a warmup and ends completed, interrupted, cancelled, invalid or
+  gone. New messages `task.busy`, `task.unable`, `task.interrupted`, `task.invalid` and `stop.task`.
+- `Char.Status` gains `"task": {"name", "progress"}` or null (kernel); `casting` reports casts only.
+- `ctx.start_task(actor, pulses, on_done, name="task", lag=0, interrupt=None, on_stop=None, **args)` and
+  `ctx.stop_task(actor)`; the ctx field `task` in a task's callbacks and in `interrupt_check`; the actor view fields
+  `task` and `is_busy`.
+- The template's `interrupt_check` reads `(ctx.skill or ctx.task).interrupt`, so damage can break a timed task.
+- `ctx.skill_roll(actor, skill, item=None, target=None, event="craft", adjust=0)` rolls a skill outside a cast and
+  returns `struct(chance, roll, success, power)` (`skills`); `skill_check` sees `ctx.event`, and its trace shows a
+  non-zero `adjust`.
+- `ctx.set_item_name(item, name)` sets or clears an item's name override (kernel).
+- Plugin API: `PluginWorld.startTask`, `stopTask`, `skillRoll` and `setItemName`; `PluginActor.task` and `isBusy`; the
+  types `PluginTaskInterrupt`, `PluginTask`, `PluginTaskCall`, `PluginTaskStop`, `PluginTaskEnd` and `PluginSkillRoll`.
+- `samples/hunger-plugin` gains `hunger.dine(actor, amount, pulses)`, which eats over a timed task.
+- `ctx.item_info(label)` and `PluginWorld.itemInfo(label)` read an item prototype's catalog fields without spawning one
+  (kernel).
+- `//lib:craft.star`: crafting stations (a room, ground item or carried item with a `craft_recipes` hook), the recipe
+  constructors `craft.recipe`, `need`, `make`, `improve`, `failure` and `quality`, learned recipes (`craft.teach`,
+  `craft.knows`), the `recipes` command and the GMCP packages `Craft.Recipes` and `Craft.Result`.
+- `craft <recipe> [on <item>]` runs a craft as a timed task: it rolls `skill_roll` when the recipe names a skill, then
+  consumes the inputs and makes or improves an item, losing each input's `lose` on a failure. Quality tiers rename and
+  enhance the result; the station's `craft_check` and `craft_done` hooks adjust, refuse and hear a craft; `Craft.Result`
+  reports how it ended.
+- The template world gains the `//skills/crafts` package (`smithing`, a `craft` skill that `cast_allowed` refuses to
+  cast), a smithy east of the tutorial shop with a forge, a whetstone, a repair kit, tempering notes and a smith who
+  teaches smithing, and tutorial chapter 12, "Crafting".
+
 ### Recognizing skills and trait callbacks
 
 - `damage_types` accepts `damage_type(name, label=None, adjective=None)` beside plain names.

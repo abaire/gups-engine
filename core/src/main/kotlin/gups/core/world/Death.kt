@@ -59,9 +59,9 @@ private fun World.killerOf(victim: Actor): Actor? =
   victim.lastAttacker?.let(::actor)?.takeIf { it.inWorld && it !== victim }
 
 /** Clears what a dying actor was in the middle of. */
-private fun wipeActivity(victim: Actor) {
+private fun World.wipeActivity(victim: Actor) {
   victim.contributions.clear()
-  victim.casting = null
+  endActivity(victim, TaskEnd.GONE)
   victim.actionQueue.clear()
   victim.waitState = 0
   victim.heldWaitState = 0

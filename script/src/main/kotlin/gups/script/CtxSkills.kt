@@ -2,16 +2,24 @@ package gups.script
 
 import gups.core.Label
 import gups.core.model.Entity
+import gups.core.model.SkillProto
+import gups.core.rules.RulesContext
 import gups.core.world.HookContext
+import gups.core.world.SkillRoll
 import gups.core.world.removeSkill
 import gups.core.world.reportSkillUse
 import gups.core.world.setSkill
+import gups.core.world.skillPowerChain
+import gups.core.world.skillRoll
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkThread
 
-/** Skill learning, forgetting and use reports. */
+/** What a skill roll's `event` must match, for scripts and plugins alike. */
+val ROLL_EVENT = Regex("[a-z][a-z0-9_]*")
+
+/** Skill learning, forgetting, rolls and use reports. */
 abstract class CtxSkills
 internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxExtras) :
   CtxCombat(frame, owner, hc, extras) {
@@ -78,6 +86,75 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     }
 
   @StarlarkMethod(
+    name = "skill_roll",
+    doc =
+      "Rolls actor's skill outside a cast: rules.skill_check and its chain (with ctx.event), plus" +
+        " adjust, then one draw unless the chance is 100 or more; on success, the power from" +
+        " rules.skill_power and its chain. Returns struct(chance, roll, success, power), roll None" +
+        " when nothing was drawn and power 0 on a failure. No cost and no on_skill_use; the actor" +
+        " need not know the skill. Needs the skills feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor who uses the skill."),
+        Param(name = "skill", named = true, doc = "Skill label, or the skill's view."),
+        Param(name = "item", named = true, defaultValue = "None", doc = "Item involved, or None."),
+        Param(name = "target", named = true, defaultValue = "None", doc = "Target actor, or None."),
+        Param(
+          name = "event",
+          named = true,
+          defaultValue = "'craft'",
+          doc = "What the roll is for, a lowercase word: ctx.event in skill_check.",
+        ),
+        Param(name = "adjust", named = true, defaultValue = "0", doc = "Added to the chance."),
+      ],
+    useStarlarkThread = true,
+  )
+  @Suppress("LongParameterList")
+  fun skillRoll(
+    actor: Any,
+    skill: Any,
+    item: Any,
+    target: Any,
+    event: Any,
+    adjust: Any,
+    thread: StarlarkThread,
+  ): Any =
+    verb("skill_roll") {
+      val c =
+        RulesContext(
+          world,
+          actorArg(actor, "skill_roll(actor)"),
+          actorOrNull(target, "skill_roll(target)"),
+          skill = knownSkill(skill, "skill_roll", thread),
+          item = itemOrNull(item, "skill_roll(item)"),
+          event = rollEvent(event),
+        )
+      rollView(c, world.skillRoll(c, int(adjust, "skill_roll(adjust)")))
+    }
+
+  private fun knownSkill(skill: Any, what: String, thread: StarlarkThread): SkillProto {
+    val l = skillArg(skill, what, thread)
+    return world.protos.skills[l] ?: fail("$what(skill): unknown skill '${l.v}'")
+  }
+
+  /** `struct(chance, roll, success, power)`; the power chain runs only for a success. */
+  private fun rollView(c: RulesContext, r: SkillRoll): Any =
+    StructValue(
+      linkedMapOf(
+        "chance" to sInt(r.chance),
+        "roll" to (r.roll?.let(::sInt) ?: Starlark.NONE),
+        "success" to r.success,
+        "power" to sInt(if (r.success) world.skillPowerChain(c) else 0),
+      )
+    )
+
+  private fun rollEvent(event: Any): String {
+    val e = str(event, "skill_roll(event)")
+    if (!ROLL_EVENT.matches(e)) fail("skill_roll(event): must match [a-z][a-z0-9_]*, got '$e'")
+    return e
+  }
+
+  @StarlarkMethod(
     name = "report_skill_use",
     doc =
       "Reports a use of a skill to the global on_skill_use hook, with outcome 'report'. " +
@@ -94,11 +171,9 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   fun reportSkillUse(actor: Any, skill: Any, target: Any, item: Any, thread: StarlarkThread): Any =
     verb("report_skill_use") {
       val a = actorArg(actor, "report_skill_use(actor)")
-      val l = skillArg(skill, "report_skill_use", thread)
-      val proto = world.protos.skills[l] ?: fail("report_skill_use(skill): unknown skill '${l.v}'")
-      val t = if (isNone(target)) null else actorArg(target, "report_skill_use(target)")
-      val i = if (isNone(item)) null else itemArg(item, "report_skill_use(item)")
-      world.reportSkillUse(a, proto, t, i)
+      val proto = knownSkill(skill, "report_skill_use", thread)
+      val t = actorOrNull(target, "report_skill_use(target)")
+      world.reportSkillUse(a, proto, t, itemOrNull(item, "report_skill_use(item)"))
       Starlark.NONE
     }
 }

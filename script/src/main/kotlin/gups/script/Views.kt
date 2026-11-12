@@ -32,6 +32,7 @@ import gups.core.world.movePaceOf
 import gups.core.world.ownerOf
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
+import gups.core.world.taskOf
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
 import net.starlark.java.annot.StarlarkMethod
@@ -366,6 +367,24 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   )
   fun isCasting(): Any = read("actor.is_casting") { actor.isCasting }
 
+  @StarlarkMethod(
+    name = "is_busy",
+    structField = true,
+    doc = "True while the actor warms up a cast or runs a timed task.",
+  )
+  fun isBusy(): Any = read { actor.isBusy }
+
+  @StarlarkMethod(
+    name = "task",
+    structField = true,
+    allowReturnNones = true,
+    doc =
+      "The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.",
+  )
+  fun task(): Any = read {
+    scope.world.taskOf(actor)?.let { taskStruct(scope.world, it) } ?: Starlark.NONE
+  }
+
   @StarlarkMethod(name = "wait_state", structField = true, doc = "Recovery pulses left.")
   fun waitState(): Any = read { sInt(actor.waitState) }
 
@@ -466,7 +485,7 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
   @StarlarkMethod(name = "casting", structField = true, doc = "The skill being cast, or None.")
   fun casting(): Any =
     read("actor.casting") {
-      (actor.casting?.action as? gups.core.world.Castable)?.skill?.let {
+      (actor.activity?.action as? gups.core.world.Castable)?.skill?.let {
         SkillView(it, scope.world.schema)
       } ?: Starlark.NONE
     }
@@ -1209,13 +1228,7 @@ class SkillView internal constructor(val skill: SkillProto, private val schema: 
     structField = true,
     doc = "{'damage_pct': int or None, 'stun': bool}.",
   )
-  fun interrupt(): Any =
-    sDict(
-      mapOf(
-        "damage_pct" to (skill.interrupt.damagePct?.let(::sInt) ?: Starlark.NONE),
-        "stun" to skill.interrupt.stun,
-      )
-    )
+  fun interrupt(): Any = interruptDict(skill.interrupt)
 
   override fun isImmutable(): Boolean = true
 

@@ -282,25 +282,49 @@ class StarlarkHost(
   }
 
   override fun invokeRef(world: World, owner: Entity, ref: HookRef, ctx: HookContext) {
-    val pkg = chargeTo(owner, ref)
     val what =
       if (ctx.affect != null) "affect ${ctx.affect!!.name} ${ref.name}" else "timer ${ref.name}"
-    val site =
-      Site(
-        pkg,
-        owner.protoLabel.takeIf { it.pkg in scripts.packages },
-        what,
-        vetoable = false,
-        owner.id,
-      )
     call(
       world,
-      site,
+      refSite(owner, ref, what),
       ref,
       { Ctx(it, owner, ctx, CtxExtras()) },
       kwargs = { f -> ctx.args.mapValues { fromAttr(it.value, f.thread.mutability()) } },
     )
   }
+
+  /**
+   * Runs a timed task's callback on [owner], like a timer. A stop callback gets its reason as its
+   * second positional argument. A quarantined package is a diagnostic rather than a silent skip,
+   * since the task ends either way and its author should hear the callback didn't run.
+   */
+  internal fun invokeTask(world: World, owner: Entity, call: TaskCall) {
+    val ctx = call.ctx
+    val site = refSite(owner, call.ref, "task ${ctx.task?.name} ${call.ref.name}")
+    if (site.pkg in quarantinedSet) {
+      world.diagnose("script", "${site.hook} not run: ${site.pkg} is quarantined")
+      return
+    }
+    val positional: ((Frame) -> List<Any>)? =
+      call.reason?.let { r -> { f -> listOf(Ctx(f, owner, ctx, CtxExtras()), r) } }
+    call(
+      world,
+      site,
+      call.ref,
+      { Ctx(it, owner, ctx, CtxExtras()) },
+      kwargs = { f -> ctx.args.mapValues { fromAttr(it.value, f.thread.mutability()) } },
+      positional = positional,
+    )
+  }
+
+  private fun refSite(owner: Entity, ref: HookRef, what: String): Site =
+    Site(
+      chargeTo(owner, ref),
+      owner.protoLabel.takeIf { it.pkg in scripts.packages },
+      what,
+      vetoable = false,
+      owner.id,
+    )
 
   override fun invokeCustom(
     world: World,

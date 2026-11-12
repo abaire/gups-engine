@@ -5,12 +5,14 @@ import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginApi
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
+import gups.pluginapi.PluginWorld
 
 /**
  * The feature-sized sample plugin: a hunger system. It provides the `hunger` feature, refuses a
  * world that can't support it, raises each player's hunger once per world tick with `every`, warns
  * them as it grows, resets it from an `on_death` event listener, and offers `hunger.eat` for item
- * `on_use` hooks. A student plugin: every file is commented to show one extension point.
+ * `on_use` hooks and `hunger.dine`, which eats over a timed task. A student plugin: every file is
+ * commented to show one extension point.
  */
 class HungerPlugin : GupsPlugin {
   override val id = "hunger"
@@ -54,6 +56,11 @@ class HungerPlugin : GupsPlugin {
       call.world.setAttr(call.actor, "hunger", null)
     }
 
+    registerEat(r)
+    registerDine(r)
+  }
+
+  private fun registerEat(r: PluginRegistry) {
     // A Starlark builtin: hunger.eat(actor, amount) lowers hunger and returns the new value. An
     // item's on_use hook calls it to feed the actor.
     r.addBuiltin(
@@ -72,10 +79,48 @@ class HungerPlugin : GupsPlugin {
       val amount =
         (pos[1] as? Number)?.toInt()
           ?: throw IllegalArgumentException("hunger.eat(actor, amount): amount must be an int")
-      val hunger = (world.getAttr(actor, "hunger", 0L) as? Long) ?: 0L
-      val next = (hunger - amount).coerceAtLeast(0L)
-      world.setAttr(actor, "hunger", next)
-      next
+      feed(world, actor, amount)
     }
+  }
+
+  private fun registerDine(r: PluginRegistry) {
+    // A builtin that takes time: hunger.dine(actor, amount, pulses) eats over a timed task, so the
+    // actor is busy meanwhile and `stop` cancels the meal. Hunger drops only when the task
+    // completes. It returns None once the meal starts, or the refusal ("You're busy.").
+    r.addBuiltin(
+      name = "dine",
+      doc =
+        "Eats over pulses as a timed task, then lowers hunger by amount; returns None once" +
+          " started, or the refusal message.",
+      params =
+        listOf(
+          PluginParam("actor", "actor", "The actor who eats."),
+          PluginParam("amount", "int", "How much hunger the meal lowers."),
+          PluginParam("pulses", "int", "How long the meal takes, at least 1."),
+        ),
+      returnType = "str | None",
+    ) { world, pos, _ ->
+      val actor =
+        pos[0] as? PluginActor
+          ?: throw IllegalArgumentException("hunger.dine(actor, amount, pulses): expected an actor")
+      val amount = intArg(pos[1], "amount")
+      // The engine names the task in its lines: "You stop eating."
+      world.startTask(actor, intArg(pos[2], "pulses"), "eating") { done ->
+        feed(done.world, done.actor, amount)
+        done.world.send(done.actor, "You finish eating.")
+      }
+    }
+  }
+
+  private fun intArg(v: Any?, name: String): Int =
+    (v as? Number)?.toInt()
+      ?: throw IllegalArgumentException("hunger.dine(actor, amount, pulses): $name must be an int")
+
+  /** Lowers [actor]'s hunger by [amount], not below 0, and returns the new value. */
+  private fun feed(world: PluginWorld, actor: PluginActor, amount: Int): Long {
+    val hunger = (world.getAttr(actor, "hunger", 0L) as? Long) ?: 0L
+    val next = (hunger - amount).coerceAtLeast(0L)
+    world.setAttr(actor, "hunger", next)
+    return next
   }
 }

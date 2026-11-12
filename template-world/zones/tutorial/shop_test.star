@@ -323,11 +323,13 @@ def test_keeper_trades_again_after_attacker_flees(t):
         if q.room.label != "//zones/tutorial:shop":
             break
         q.do("flee")
-    t.eq(q.room.label, "//zones/tutorial:armory")   # the shop's only exit
+    # The shop opens west to the armory and east to the smithy; flee picks either.
+    fled_to = q.room.label
+    t.true(fled_to in ("//zones/tutorial:armory", "//zones/tutorial:smithy"), fled_to)
     t.eq(len(keeper.fighting()), 0)
     t.contains(p.do("list"), "the shopkeeper offers:")
     t.contains(q.do("list"), "There's no shop here.")   # the attacker is next door
-    q.do("east")
+    q.do("east" if fled_to == "//zones/tutorial:armory" else "west")
     t.contains(q.do("list"), "the shopkeeper offers:")
 
 def test_capacity_counts_each_unstacked_item(t):

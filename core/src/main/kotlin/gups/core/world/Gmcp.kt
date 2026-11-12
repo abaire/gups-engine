@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.model.ActivityState
 import gups.core.model.Band
 import gups.core.model.DoorState
 import gups.core.model.Player
@@ -124,131 +125,145 @@ fun World.gmcpPayload(p: Player, pkg: String): Any? =
         "damage_types" to schema.damageTypes,
         "features" to features.ids,
       )
-    "Char.Vitals" ->
-      LinkedHashMap<String, Any?>().also { out ->
-        for (name in schema.vitalNames) {
-          out[name] = p.current(name)
-          out["max$name"] = p.max(name)
-        }
-      }
-    "Char.Status" ->
-      LinkedHashMap<String, Any?>().also { out ->
-        out["name"] = p.name
-        if (Feature.LEVELING in features) {
-          out["level"] = p.level
-          out["xp"] = p.xp
-          out["xp_next"] = rules.xpToLevel(RulesContext(this, p), p.level)
-        }
-        out["wait"] = p.waitState
-        if (Feature.SKILLS in features)
-          out["casting"] =
-            p.casting?.let { c ->
-              val total = (c.endsAt - c.startedAt).coerceAtLeast(1)
-              mapOf(
-                "skill" to ((c.action as? Castable)?.skill?.name ?: "action"),
-                "progress" to ((pulse - c.startedAt) * 100 / total).coerceIn(0, 100),
-              )
-            }
-        if (Feature.COMBAT in features) {
-          out["initiative"] = p.initiative
-          out["fighting"] = p.fighting.mapNotNull { actor(it)?.name }
-        }
-      }
-    "Char.Affects" ->
-      p.affects.map { a ->
-        mapOf(
-          "name" to a.name,
-          "remaining" to
-            if (a.wornFrom != null || a.expiresAt == Long.MAX_VALUE) null
-            else pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0)),
-          "flags" to a.flags.sorted(),
-        )
-      }
-    "Char.Traits" -> {
-      val choicesList =
-        if (creation == null) emptyList()
-        else
-          creation!!.choices.mapNotNull { choice ->
-            val optId = p.choices[choice.id] ?: return@mapNotNull null
-            val opt = choice.options.firstOrNull { it.id == optId } ?: return@mapNotNull null
-            mapOf(
-              "choice" to choice.id,
-              "title" to choice.title,
-              "option" to opt.id,
-              "label" to opt.label,
-            )
-          }
-      val traitsList =
-        p.traits.map { t -> mapOf("name" to t.name, "label" to t.label, "doc" to t.doc) }
-      mapOf("choices" to choicesList, "traits" to traitsList)
-    }
-    "Char.Skills" -> {
-      val known =
-        p.skills
-          .mapNotNull { (label, proficiency) ->
-            protos.skills[label]?.let {
-              mapOf(
-                "label" to label.v,
-                "name" to it.name,
-                "kind" to it.kind,
-                "proficiency" to proficiency,
-              )
-            }
-          }
-          .sortedWith(compareBy({ it["name"] as String }, { it["label"] as String }))
-      mapOf("skills" to known)
-    }
-    "Char.Group" -> {
-      val group = groupOf(p)
-      if (group == null) null
-      else
-        LinkedHashMap<String, Any?>().also { out ->
-          out["id"] = group.id
-          out["leader"] = group.leader.name
-          out["members"] =
-            groupMembers(p).map { m ->
-              LinkedHashMap<String, Any?>().also { mm ->
-                mm["name"] = m.name
-                mm["leader"] = m === group.leader
-                mm["in_room"] = m.room === p.room
-                if (Feature.LEVELING in features) mm["level"] = m.level
-                mm["vitals"] =
-                  LinkedHashMap<String, Any?>().also { vit ->
-                    for (name in schema.vitalNames) {
-                      vit[name] = m.current(name)
-                      vit["max$name"] = m.max(name)
-                    }
-                  }
-              }
-            }
-        }
-    }
-    "Room.Info" -> {
-      val room = p.room
-      mapOf(
-        "label" to room.label.v,
-        "name" to room.name,
-        "exits" to
-          room.exits.values.associate { x -> x.direction.name to x.door?.state?.let(::doorWord) },
-        "regions" to room.regions.sorted(),
-      )
-    }
-    "Room.Bands" -> {
-      // Only the viewer's own room, from the viewer's own index.
-      val bands = Band.entries.associateWith { mutableListOf<Map<String, Any?>>() }
-      for (a in p.room.actors) {
-        if (a === p) continue
-        bands.getValue(Band.between(p.trackIndex, a.trackIndex)) +=
-          mapOf("id" to a.id.v, "name" to a.name, "kind" to "actor")
-      }
-      for (item in p.room.items) {
-        bands.getValue(Band.between(p.trackIndex, item.groundIndex ?: 0)) +=
-          mapOf("id" to item.id.v, "name" to item.name, "kind" to "item")
-      }
-      bands.entries.associate { (band, list) -> band.name.lowercase() to list.toList() }
-    }
+    "Char.Vitals" -> vitalsOf(p)
+    "Char.Status" -> statusPayload(p)
+    "Char.Affects" -> affectsPayload(p)
+    "Char.Traits" -> traitsPayload(p)
+    "Char.Skills" -> skillsPayload(p)
+    "Char.Group" -> groupPayload(p)
+    "Room.Info" -> roomInfoPayload(p)
+    "Room.Bands" -> bandsPayload(p)
     else -> null
   }
+
+/** Each vital's current value and, under `max` plus its name, its maximum. */
+private fun World.vitalsOf(a: gups.core.model.Actor): Map<String, Any?> =
+  LinkedHashMap<String, Any?>().also { out ->
+    for (name in schema.vitalNames) {
+      out[name] = a.current(name)
+      out["max$name"] = a.max(name)
+    }
+  }
+
+private fun World.affectsPayload(p: Player): List<Map<String, Any?>> =
+  p.affects.map { a ->
+    mapOf(
+      "name" to a.name,
+      "remaining" to
+        if (a.wornFrom != null || a.expiresAt == Long.MAX_VALUE) null
+        else pulsesToSeconds((a.expiresAt - pulse).coerceAtLeast(0)),
+      "flags" to a.flags.sorted(),
+    )
+  }
+
+private fun World.traitsPayload(p: Player): Map<String, Any?> {
+  val choicesList =
+    creation?.choices.orEmpty().mapNotNull { choice ->
+      val optId = p.choices[choice.id] ?: return@mapNotNull null
+      val opt = choice.options.firstOrNull { it.id == optId } ?: return@mapNotNull null
+      mapOf(
+        "choice" to choice.id,
+        "title" to choice.title,
+        "option" to opt.id,
+        "label" to opt.label,
+      )
+    }
+  val traitsList = p.traits.map { t -> mapOf("name" to t.name, "label" to t.label, "doc" to t.doc) }
+  return mapOf("choices" to choicesList, "traits" to traitsList)
+}
+
+private fun World.skillsPayload(p: Player): Map<String, Any?> {
+  val known =
+    p.skills
+      .mapNotNull { (label, proficiency) ->
+        protos.skills[label]?.let {
+          mapOf(
+            "label" to label.v,
+            "name" to it.name,
+            "kind" to it.kind,
+            "proficiency" to proficiency,
+          )
+        }
+      }
+      .sortedWith(compareBy({ it["name"] as String }, { it["label"] as String }))
+  return mapOf("skills" to known)
+}
+
+private fun World.groupPayload(p: Player): Map<String, Any?>? {
+  val group = groupOf(p) ?: return null
+  return LinkedHashMap<String, Any?>().also { out ->
+    out["id"] = group.id
+    out["leader"] = group.leader.name
+    out["members"] =
+      groupMembers(p).map { m ->
+        LinkedHashMap<String, Any?>().also { mm ->
+          mm["name"] = m.name
+          mm["leader"] = m === group.leader
+          mm["in_room"] = m.room === p.room
+          if (Feature.LEVELING in features) mm["level"] = m.level
+          mm["vitals"] = vitalsOf(m)
+        }
+      }
+  }
+}
+
+private fun roomInfoPayload(p: Player): Map<String, Any?> {
+  val room = p.room
+  return mapOf(
+    "label" to room.label.v,
+    "name" to room.name,
+    "exits" to
+      room.exits.values.associate { x -> x.direction.name to x.door?.state?.let(::doorWord) },
+    "regions" to room.regions.sorted(),
+  )
+}
+
+/** Only the viewer's own room, from the viewer's own index. */
+private fun bandsPayload(p: Player): Map<String, Any?> {
+  val bands = Band.entries.associateWith { mutableListOf<Map<String, Any?>>() }
+  for (a in p.room.actors) {
+    if (a === p) continue
+    bands.getValue(Band.between(p.trackIndex, a.trackIndex)) +=
+      mapOf("id" to a.id.v, "name" to a.name, "kind" to "actor")
+  }
+  for (item in p.room.items) {
+    bands.getValue(Band.between(p.trackIndex, item.groundIndex ?: 0)) +=
+      mapOf("id" to item.id.v, "name" to item.name, "kind" to "item")
+  }
+  return bands.entries.associate { (band, list) -> band.name.lowercase() to list.toList() }
+}
+
+/** `Char.Status`, with the fields of the features that are on. */
+private fun World.statusPayload(p: Player): Map<String, Any?> =
+  LinkedHashMap<String, Any?>().also { out ->
+    out["name"] = p.name
+    if (Feature.LEVELING in features) {
+      out["level"] = p.level
+      out["xp"] = p.xp
+      out["xp_next"] = rules.xpToLevel(RulesContext(this, p), p.level)
+    }
+    out["wait"] = p.waitState
+    out["task"] = activityStatus(p, "name") { (it as? TaskAction)?.name }
+    if (Feature.SKILLS in features)
+      out["casting"] = activityStatus(p, "skill") { (it as? Castable)?.skill?.name }
+    if (Feature.COMBAT in features) {
+      out["initiative"] = p.initiative
+      out["fighting"] = p.fighting.mapNotNull { actor(it)?.name }
+    }
+  }
+
+/** `{key: name, "progress"}` for [p]'s activity when [nameOf] names it, else null. */
+private fun World.activityStatus(p: Player, key: String, nameOf: (Action) -> String?): Any? {
+  val a = p.activity ?: return null
+  val name = nameOf(a.action) ?: return null
+  return mapOf(key to name, "progress" to progressOf(a))
+}
+
+/** How far through its warmup [a] is, 0..100. */
+private fun World.progressOf(a: ActivityState): Long {
+  val total = (a.endsAt - a.startedAt).coerceAtLeast(1)
+  return ((pulse - a.startedAt) * 100 / total).coerceIn(0, 100)
+}
 
 private fun doorWord(state: DoorState): String =
   when (state) {

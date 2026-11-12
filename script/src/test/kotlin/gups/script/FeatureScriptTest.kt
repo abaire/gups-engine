@@ -476,7 +476,7 @@ class FeatureScriptTest {
     for ((feature, exports) in
       mapOf(
         Feature.COMBAT to listOf("damage", "initiative", "flee_chance", "flee_fail_lag"),
-        Feature.SKILLS to listOf("cast_allowed", "interrupt_check", "skill_check", "skill_power"),
+        Feature.SKILLS to listOf("cast_allowed", "skill_check", "skill_power"),
         Feature.TRACK to
           listOf("retreat_check", "get_lag", "advance_lag", "retreat_lag", "retreat_fail_lag"),
         Feature.LEVELING to listOf("xp_for_kill", "xp_to_level", "on_level_up"),

@@ -163,6 +163,15 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   }
 
   @StarlarkMethod(
+    name = "task",
+    structField = true,
+    allowReturnNones = true,
+    doc =
+      "In interrupt_check for an actor running a timed task, the task view, struct(name, started_at, ends_at, remaining, interrupt); None everywhere else.",
+  )
+  fun task(): Any = field { c.task?.let { taskStruct(c.world, it) } ?: Starlark.NONE }
+
+  @StarlarkMethod(
     name = "limit",
     structField = true,
     doc =
@@ -318,7 +327,8 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   @StarlarkMethod(
     name = "event",
     structField = true,
-    doc = "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.",
+    doc =
+      "For can_perceive and perceive_message: the event name, such as 'say' or 'combat'; in skill_check, a skill_roll's event, or None for a cast.",
   )
   fun event(): Any = field { c.event ?: Starlark.NONE }
 
@@ -1495,15 +1505,17 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       export = RulesExport.INTERRUPT_CHECK,
       signature = "interrupt_check(ctx, amount)",
       returnType = "bool",
-      ctxFields = listOf("actor", "skill", "room", "pulse", "rng"),
-      doc = "True if a damage event with this total loss interrupts an in-progress cast.",
+      ctxFields = listOf("actor", "skill", "task", "room", "pulse", "rng"),
+      doc =
+        "True if a damage event with this total loss interrupts the cast being warmed up (ctx.skill) or the timed task (ctx.task).",
     ),
     RulesExportSpec(
       export = RulesExport.SKILL_CHECK,
       signature = "skill_check(ctx)",
       returnType = "int",
-      ctxFields = listOf("actor", "target", "item", "skill", "room", "pulse", "rng"),
-      doc = "Percent chance that ctx.actor gets ctx.skill off.",
+      ctxFields = listOf("actor", "target", "item", "skill", "event", "room", "pulse", "rng"),
+      doc =
+        "Percent chance that ctx.actor gets ctx.skill off. ctx.event names a skill_roll's purpose, such as 'craft'; a cast leaves it None.",
     ),
     RulesExportSpec(
       export = RulesExport.SKILL_POWER,

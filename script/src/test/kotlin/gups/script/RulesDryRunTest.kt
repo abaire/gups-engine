@@ -267,6 +267,21 @@ class RulesDryRunTest : RulesTestBase() {
   }
 
   @Test
+  fun `the dry run asks interrupt_check about a timed task`() {
+    val result =
+      loadWith(
+        TestWorlds.rules(
+          "def interrupt_check(ctx, amount):\n" +
+            "    return ctx.skill.interrupt[\"damage_pct\"] != None\n"
+        )
+      )
+    assertTrue("rules" in result.failed)
+    val error = result.errors.single { it.kind == "rules" }
+    assertContains(error.message, "rules.interrupt_check failed")
+    assertContains(error.message, "NoneType")
+  }
+
+  @Test
   fun `the dry run catches a misspelled vital in mitigate`() {
     val result =
       loadWith(

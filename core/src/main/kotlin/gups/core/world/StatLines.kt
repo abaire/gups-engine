@@ -139,7 +139,10 @@ private fun World.affectsLine(e: Actor): String =
 private fun World.doingLine(e: Actor): String? {
   val doing =
     listOfNotNull(
-      e.casting?.let { "casting until pulse ${it.endsAt}" },
+      e.activity?.let { a ->
+        taskInfoOf(a)?.let { "task ${it.name} until pulse ${a.endsAt}" }
+          ?: "casting until pulse ${a.endsAt}"
+      },
       e.waitState.takeIf { it > 0 }?.let { "recovering $it pulses" },
       e.actionQueue.takeIf { it.isNotEmpty() }?.let { q -> "queued: " + q.joinToString("; ") },
       e.fighting

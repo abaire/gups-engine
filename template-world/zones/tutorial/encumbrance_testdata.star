@@ -10,7 +10,7 @@ item("heavy_pack",
     weight = 80,
 )
 
-item("iron_bar",
+item("iron_weight",
     name = "an iron bar",
     desc = "A length of cold, dark iron.",
     weight = 15,

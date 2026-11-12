@@ -217,7 +217,8 @@ class CommandsTest {
                     break
                 ash.do("flee")
             print("Ash fled")
-            ash.do("east")
+            # The shop opens west to the armory and east to the smithy; flee picks either.
+            ash.do("east" if ash.room.label == "//zones/tutorial:armory" else "west")
             t.contains(tess.do("list"), "offers")
             t.contains(ash.do("list"), "offers")
         """
@@ -228,7 +229,11 @@ class CommandsTest {
         .test(listOf("scenario", "--world", world, "--package", "//zones/tutorial", "$file"))
     assertEquals(0, result.statusCode, result.output)
     assertContains(result.stdout, "Ash@//zones/tutorial:shop> kill shopkeeper")
-    assertContains(result.stdout, "(Ash is now in //zones/tutorial:armory)")
+    assertTrue(
+      "(Ash is now in //zones/tutorial:armory)" in result.stdout ||
+        "(Ash is now in //zones/tutorial:smithy)" in result.stdout,
+      result.stdout,
+    )
     assertContains(result.stdout, "Ash fled")
     assertContains(result.stdout, "Tess@//zones/tutorial:shop> list")
     assertContains(result.stdout, "PASS  test_flee_then_trade")

@@ -4,10 +4,10 @@ import gups.core.AttrValue
 import gups.core.Label
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
+import gups.core.model.ActivityState
 import gups.core.model.Actor
 import gups.core.model.Affect
 import gups.core.model.Band
-import gups.core.model.CastState
 import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Dice
@@ -365,8 +365,12 @@ class BonusDamageTest {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     f.wearFlame(p)
-    d.casting =
-      CastState(CastAction(f.w.protos.skills.getValue(T.BOLT), null, d), f.w.pulse, f.w.pulse + 4)
+    d.activity =
+      ActivityState(
+        CastAction(f.w.protos.skills.getValue(T.BOLT), null, d),
+        f.w.pulse,
+        f.w.pulse + 4,
+      )
     val hit = f.w.resolveDamage(RulesContext(f.w, p, d, damageType = slash), 5, slash)
     f.w.damage(d, hit.losses, slash, p)
     // One check, on the combined loss of the parts.
@@ -442,61 +446,65 @@ class BonusDamageTest {
 
   // ---- withDamageType -------------------------------------------------------------------------
 
-  @Test
-  fun `withDamageType replaces only the damage type`() {
-    val f = Fixture()
+  /** A context with every field set, so a copy that drops one shows. */
+  private fun everyField(f: Fixture): RulesContext {
     val p = f.player("Ann")
     val d = f.mob(T.DUMMY)
     val room = f.w.room(T.HALL)
-    val c =
-      RulesContext(
-        world = f.w,
-        actor = p,
-        target = d,
-        weapon = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id)),
-        band = Band.MELEE,
-        skill = T.skills.first(),
-        item = f.w.spawnItem(T.BAG, ItemLocation.InRoom(room.id, 0)),
-        room = room,
-        exit = room.exits.values.first(),
-        channel = Channel.SIGHT,
-        event = "say",
-        intensity = 3,
-        cost = 2,
-        sourceRoom = room,
-        viaExit = Direction.NORTH,
-        text = "hi",
-        action = "open",
-        tags = setOf("wet"),
-        source = d,
-        damageType = fire,
-        slot = "wield",
-        affect = Affect(1, "test", null, 0, 10),
-        limit = 100,
-        carried = 50,
-        encumbranceLevel = 2,
-        xp = 10,
-        contributors = listOf(Contributor(d, 1, 2, 3, 4L, null, null, true)),
-        behaviors = listOf(Heel()),
-        dispositionParts = DispositionParts(1, 2, 3, 4),
-        amount = 5L,
-        helped = d,
-        pet = d,
-        behavior = "aggressive",
-        prefer = AttrValue.S("weakest"),
-        candidates = listOf(d),
-        current = d,
-        currentSince = 6L,
-        dispositions = listOf(-10),
-        ally = d,
-        away = 7L,
-        pastLeash = true,
-        castTarget = d,
-        base = 8L,
-        args = mapOf("n" to 1L),
-        command = "cast",
-        chain = 3,
-      )
+    return RulesContext(
+      world = f.w,
+      actor = p,
+      target = d,
+      weapon = f.w.spawnItem(T.SWORD, ItemLocation.Carried(p.id)),
+      band = Band.MELEE,
+      skill = T.skills.first(),
+      item = f.w.spawnItem(T.BAG, ItemLocation.InRoom(room.id, 0)),
+      room = room,
+      exit = room.exits.values.first(),
+      channel = Channel.SIGHT,
+      event = "say",
+      intensity = 3,
+      cost = 2,
+      sourceRoom = room,
+      viaExit = Direction.NORTH,
+      text = "hi",
+      action = "open",
+      tags = setOf("wet"),
+      source = d,
+      damageType = fire,
+      slot = "wield",
+      affect = Affect(1, "test", null, 0, 10),
+      task = TaskInfo("task", 1, 2, 3, gups.core.model.Interrupt()),
+      limit = 100,
+      carried = 50,
+      encumbranceLevel = 2,
+      xp = 10,
+      contributors = listOf(Contributor(d, 1, 2, 3, 4L, null, null, true)),
+      behaviors = listOf(Heel()),
+      dispositionParts = DispositionParts(1, 2, 3, 4),
+      amount = 5L,
+      helped = d,
+      pet = d,
+      behavior = "aggressive",
+      prefer = AttrValue.S("weakest"),
+      candidates = listOf(d),
+      current = d,
+      currentSince = 6L,
+      dispositions = listOf(-10),
+      ally = d,
+      away = 7L,
+      pastLeash = true,
+      castTarget = d,
+      base = 8L,
+      args = mapOf("n" to 1L),
+      command = "cast",
+      chain = 3,
+    )
+  }
+
+  @Test
+  fun `withDamageType replaces only the damage type`() {
+    val c = everyField(Fixture())
     val c2 = c.withDamageType(slash)
     assertEquals(slash, c2.damageType)
     // Every val of the context has a getter; check them all except the one that changed.

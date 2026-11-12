@@ -80,7 +80,7 @@ class TraitEffectsTest {
     f.input(p, "cast zap goblin")
     f.run()
     assertContains(f.out(p), "You can't get the words out!")
-    assertNull(p.casting)
+    assertNull(p.activity)
   }
 
   @Test

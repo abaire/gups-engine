@@ -179,7 +179,7 @@ class RestrictionsTest {
     assertContains(f.out(p), "Not your kind of magic.")
     assertEquals(50, p.current("mana"))
     assertEquals(0, p.waitState)
-    assertNull(p.casting)
+    assertNull(p.activity)
     assertEquals(listOf("restrict:cast:bolt"), order)
     order.clear()
     refuse = false

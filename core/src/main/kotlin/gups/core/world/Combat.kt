@@ -27,7 +27,7 @@ internal fun World.autoAttack(a: Actor) {
   }
 }
 
-private fun Actor.castBlocksAttacks(): Boolean = casting?.action?.attackWhileCasting == false
+private fun Actor.castBlocksAttacks(): Boolean = activity?.action?.attackWhileCasting == false
 
 /** The swings [a] makes in a round: its actor slots in order, then any other equipped slots. */
 private fun World.swingsOf(a: Actor): List<Swing> {
@@ -169,17 +169,16 @@ fun World.damage(
         "parts" to parts.map { mapOf("type" to it.type.name, "losses" to it.losses) },
       ),
     )
-    interruptCastOnDamage(target, source, total)
+    interruptOnDamage(target, source, total)
   }
   refreshCondition(target)
 }
 
-private fun World.interruptCastOnDamage(target: Actor, source: Actor?, total: Int) {
-  val cast = target.casting ?: return
-  val skill = (cast.action as? Castable)?.skill
-  if (rules.interruptCheck(RulesContext(this, target, source, skill = skill), total)) {
-    interruptCast(target)
-  }
+private fun World.interruptOnDamage(target: Actor, source: Actor?, total: Int) {
+  val state = target.activity ?: return
+  val skill = (state.action as? Castable)?.skill
+  val c = RulesContext(this, target, source, skill = skill, task = taskInfoOf(state))
+  if (rules.interruptCheck(c, total)) interruptActivity(target)
 }
 
 /** The `heal` verb: raises [vital] by [amount], up to its maximum. */

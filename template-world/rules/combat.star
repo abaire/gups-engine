@@ -125,6 +125,9 @@ def initiative(ctx):
 
 def cast_allowed(ctx):
     # None allows the cast; ctx.deny("why") refuses it before any cost is paid.
+    # A craft skill is rolled at a workstation by //lib:craft.star, never cast.
+    if ctx.skill and ctx.skill.kind == "craft":
+        return ctx.deny("You practice %s at a workstation, not by casting." % ctx.skill.name)
     return None
 
 def skill_check(ctx):
@@ -139,9 +142,10 @@ def skill_power(ctx):
     return 50 + prof // 2 + (ctx.actor.level - 1) * 2
 
 def interrupt_check(ctx, amount):
-    # Whether `amount`, the total vital loss of a damage event, breaks ctx.actor's spell
-    # (ctx.skill is the spell being cast).
-    pct = ctx.skill.interrupt["damage_pct"] if ctx.skill else None
+    # Whether `amount`, the total vital loss of a damage event, breaks what ctx.actor is doing:
+    # the skill being cast, or the timed task.
+    what = ctx.skill or ctx.task
+    pct = what.interrupt["damage_pct"] if what else None
     if pct == None:
         return False
     return amount * 100 >= pct * max(1, ctx.actor.max_hp)

@@ -228,11 +228,11 @@ def test_encumbrance_tiers_price_move_and_dex(t):
     t.eq(_step_cost(p), 2)
     t.eq(_footwork(t, ":hall", items = [":heavy_pack"]), (3, 3))
 
-    w.spawn(":iron_bar", at = p)
+    w.spawn(":iron_weight", at = p)
     t.eq(p.encumbrance_level, 3)
     t.eq(p.dex, 7)
     t.eq(_step_cost(p), 4)
-    t.eq(_footwork(t, ":hall", items = [":heavy_pack", ":iron_bar"]), (5, 5))
+    t.eq(_footwork(t, ":hall", items = [":heavy_pack", ":iron_weight"]), (5, 5))
 
     p.do("drop heavy")
     p.do("drop iron")

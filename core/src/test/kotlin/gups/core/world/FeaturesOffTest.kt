@@ -57,6 +57,15 @@ class FeaturesOffTest {
   }
 
   @Test
+  fun `stop works without skills, and an idle actor is not busy`() {
+    val f = Fixture(features = without(Feature.SKILLS))
+    val p = f.player("Ann")
+    assertFalse(p.isBusy)
+    assertTrue(f.say(p, "stop").contains("You have nothing to stop."))
+    assertEquals(emptyList(), f.w.checkInvariants())
+  }
+
+  @Test
   fun `where is only a command with the track`() {
     val f = Fixture(features = without(Feature.TRACK))
     val b = f.player("Bob")
@@ -146,19 +155,19 @@ class FeaturesOffTest {
     }
     val all = status(Features.ALL)
     assertEquals(
-      setOf("name", "level", "xp", "xp_next", "wait", "casting", "initiative", "fighting"),
+      setOf("name", "level", "xp", "xp_next", "wait", "task", "casting", "initiative", "fighting"),
       all.keys,
     )
     assertEquals(
-      setOf("name", "wait", "casting", "initiative", "fighting"),
+      setOf("name", "wait", "task", "casting", "initiative", "fighting"),
       status(without(Feature.LEVELING)).keys,
     )
     assertEquals(
-      setOf("name", "level", "xp", "xp_next", "wait", "casting"),
+      setOf("name", "level", "xp", "xp_next", "wait", "task", "casting"),
       status(without(Feature.COMBAT)).keys,
     )
     assertEquals(
-      setOf("name", "level", "xp", "xp_next", "wait", "initiative", "fighting"),
+      setOf("name", "level", "xp", "xp_next", "wait", "task", "initiative", "fighting"),
       status(without(Feature.SKILLS)).keys,
     )
   }

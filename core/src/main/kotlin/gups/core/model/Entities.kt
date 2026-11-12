@@ -8,6 +8,7 @@ import gups.core.Role
 import gups.core.SessionId
 import gups.core.world.Action
 import gups.core.world.Behavior
+import gups.core.world.Castable
 import gups.core.world.HeldEffects
 import gups.core.world.SpawnState
 import gups.core.world.TickCommand
@@ -256,13 +257,13 @@ class ScriptTimer(
   var remaining: Int? = null,
 )
 
-/** State of an active skill or spell during its warmup casting period. */
-class CastState(
+/** What an actor is in the middle of: a cast's warmup or a timed task. */
+class ActivityState(
   /** Action being prepared. */
   val action: Action,
-  /** Absolute pulse when casting commenced. */
+  /** Absolute pulse when the activity started. */
   val startedAt: Long,
-  /** Absolute pulse when casting warmup will complete. */
+  /** Absolute pulse when the activity's warmup will complete. */
   val endsAt: Long,
   /** The owner who ordered this cast, or null when the actor chose it itself. */
   val orderedBy: EntityId? = null,
@@ -444,8 +445,8 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
   /** The pulse the current disability started, so a paused warmup can be pushed back. */
   internal var heldSince: Long = 0
 
-  /** Active casting state if warming up a skill or spell, or null. */
-  var casting: CastState? = null
+  /** The activity slot: a cast's warmup or a timed task, or null. */
+  var activity: ActivityState? = null
 
   /** Set of entity IDs this actor is currently engaged in combat with. */
   val fighting: java.util.TreeSet<EntityId> = java.util.TreeSet()
@@ -648,11 +649,15 @@ sealed class Actor(id: EntityId, protoLabel: Label, room: Room, trackIndex: Int)
 
   /** True if currently warming up a skill or spell. */
   val isCasting: Boolean
-    get() = casting != null
+    get() = activity?.action is Castable
 
-  /** True if the actor has no active casting, zero recovery wait, and an empty action queue. */
+  /** True while the activity slot holds a cast's warmup or a timed task. */
+  val isBusy: Boolean
+    get() = activity != null
+
+  /** True if the actor has no activity, zero recovery wait, and an empty action queue. */
   val isIdle: Boolean
-    get() = casting == null && waitState == 0 && actionQueue.isEmpty()
+    get() = activity == null && waitState == 0 && actionQueue.isEmpty()
 
   /** True if [keyword] matches any keyword of this actor case-insensitively. */
   fun matches(keyword: String): Boolean {

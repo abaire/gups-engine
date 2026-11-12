@@ -12,6 +12,7 @@ import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
+import gups.core.model.SkillProto
 import gups.core.model.StandingHolder
 import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
@@ -25,6 +26,7 @@ import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HeldAffect
 import gups.core.world.STANDING_EVENT_NAME
 import gups.core.world.StandingEvent
+import gups.core.world.TaskSpec
 import gups.core.world.World
 import gups.core.world.addItemTag
 import gups.core.world.applyAffect
@@ -61,9 +63,13 @@ import gups.core.world.setBaseResist
 import gups.core.world.setBaseStat
 import gups.core.world.setCharges
 import gups.core.world.setChoices
+import gups.core.world.setItemName
 import gups.core.world.setSkill
 import gups.core.world.standing
+import gups.core.world.startTask
+import gups.core.world.stopTask
 import gups.core.world.takeXp
+import gups.core.world.taskOf
 import gups.core.world.teleport
 import gups.core.world.traceRules
 import gups.core.world.transformItem
@@ -73,6 +79,7 @@ import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
+import gups.pluginapi.PluginItemInfo
 import gups.pluginapi.PluginMemory
 import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
@@ -80,9 +87,15 @@ import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginSkill
+import gups.pluginapi.PluginSkillRoll
+import gups.pluginapi.PluginTask
+import gups.pluginapi.PluginTaskCall
+import gups.pluginapi.PluginTaskInterrupt
+import gups.pluginapi.PluginTaskStop
 import gups.pluginapi.PluginWorld
 import gups.script.ActorView
 import gups.script.ItemView
+import gups.script.ROLL_EVENT
 import gups.script.RoomView
 import gups.script.scriptWorld
 import java.util.WeakHashMap
@@ -293,6 +306,12 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
       needs(world, Feature.SKILLS, "skills")
       return actor.skills.mapKeys { it.key.v }
     }
+
+  override val task: PluginTask?
+    get() = world.taskOf(actor)?.let { TaskFacade(it, world) }
+
+  override val isBusy: Boolean
+    get() = actor.isBusy
 }
 
 internal class ItemFacade(val item: Item, private val world: World) :
@@ -650,10 +669,7 @@ internal class WorldFacade(
 
   override fun setSkill(actor: PluginActor, skill: String, proficiency: Int): String? {
     needs(world, Feature.SKILLS, "setSkill")
-    val label =
-      runCatching { Label(skill) }.getOrNull()
-        ?: throw IllegalArgumentException("setSkill(skill): invalid skill label '$skill'")
-    require(world.protos.skills.containsKey(label)) { "setSkill(skill): unknown skill '$skill'" }
+    val label = knownSkill(skill, "setSkill").label
     require(proficiency in 0..100) {
       "setSkill(proficiency): proficiency must be 0..100, got $proficiency"
     }
@@ -663,11 +679,8 @@ internal class WorldFacade(
 
   override fun removeSkill(actor: PluginActor, skill: String): Boolean {
     needs(world, Feature.SKILLS, "removeSkill")
-    val label =
-      runCatching { Label(skill) }.getOrNull()
-        ?: throw IllegalArgumentException("removeSkill(skill): invalid skill label '$skill'")
     val a = preparedActorOf(actor, "removeSkill(actor)")
-    return world.removeSkill(a, label)
+    return world.removeSkill(a, skillLabel(skill, "removeSkill"))
   }
 
   override fun reportSkillUse(
@@ -677,17 +690,63 @@ internal class WorldFacade(
     item: PluginItem?,
   ) {
     needs(world, Feature.SKILLS, "reportSkillUse")
-    val label =
-      runCatching { Label(skill) }.getOrNull()
-        ?: throw IllegalArgumentException("reportSkillUse(skill): invalid skill label '$skill'")
-    require(world.protos.skills.containsKey(label)) {
-      "reportSkillUse(skill): unknown skill '$skill'"
-    }
+    val proto = knownSkill(skill, "reportSkillUse")
     val a = actorOf(actor, "reportSkillUse(actor)")
     val t = target?.let { actorOf(it, "reportSkillUse(target)") }
-    val i = item?.let { itemOf(it, "reportSkillUse(item)") }
-    world.reportSkillUse(a, world.protos.skills.getValue(label), t, i)
+    world.reportSkillUse(a, proto, t, item?.let { itemOf(it, "reportSkillUse(item)") })
   }
+
+  override fun skillRoll(
+    actor: PluginActor,
+    skill: String,
+    item: PluginItem?,
+    target: PluginActor?,
+    event: String,
+    adjust: Int,
+  ): PluginSkillRoll {
+    needs(world, Feature.SKILLS, "skillRoll")
+    require(ROLL_EVENT.matches(event)) {
+      "skillRoll(event): must match [a-z][a-z0-9_]*, got '$event'"
+    }
+    val c =
+      RulesContext(
+        world,
+        actorOf(actor, "skillRoll(actor)"),
+        target?.let { actorOf(it, "skillRoll(target)") },
+        skill = knownSkill(skill, "skillRoll"),
+        item = item?.let { itemOf(it, "skillRoll(item)") },
+        event = event,
+      )
+    return pluginSkillRoll(world, c, adjust)
+  }
+
+  private fun skillLabel(skill: String, what: String): Label =
+    runCatching { Label(skill) }.getOrNull()
+      ?: throw IllegalArgumentException("$what(skill): invalid skill label '$skill'")
+
+  private fun knownSkill(skill: String, what: String): SkillProto =
+    world.protos.skills[skillLabel(skill, what)]
+      ?: throw IllegalArgumentException("$what(skill): unknown skill '$skill'")
+
+  override fun startTask(
+    actor: PluginActor,
+    pulses: Int,
+    name: String,
+    lag: Int,
+    interrupt: PluginTaskInterrupt,
+    onStop: ((PluginTaskStop) -> Unit)?,
+    onDone: (PluginTaskCall) -> Unit,
+  ): String? {
+    val a = actorOf(actor, "startTask(actor)")
+    val spec = TaskSpec(name, pulses, lag, interrupt.toCore())
+    return world.startTask(a, spec, PluginTaskCallbacks(pluginId, onDone, onStop))
+  }
+
+  override fun stopTask(actor: PluginActor): Boolean =
+    world.stopTask(actorOf(actor, "stopTask(actor)"))
+
+  override fun setItemName(item: PluginItem, name: String?): Boolean =
+    world.setItemName(itemOf(item, "setItemName(item)"), name)
 
   override fun setBaseStat(actor: PluginActor, stat: String, value: Int): String? {
     declared(stat, world.schema.statNames, "stat", "setBaseStat(stat)")
@@ -988,6 +1047,9 @@ internal class WorldFacade(
       .getOrNull()
       ?.let { world.protos.skills[it] }
       ?.let { SkillFacade(it) }
+
+  override fun itemInfo(label: String): PluginItemInfo? =
+    runCatching { Label(label) }.getOrNull()?.let { world.protos.items[it] }?.let(::itemInfoOf)
 
   override fun rules(name: String, fields: Map<String, Any?>, default: Any): Any {
     val type = Facades.rulesExportsOf(world, pluginId)[name]

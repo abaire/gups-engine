@@ -48,19 +48,6 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
-## Economy and crafting
-
-### Crafting
-
-**Spec:** §3.3 (items, `variants`), §4.3 (skills and proficiency). **Today:** the engine has no crafting recipes. Items
-can be transformed into variants, spawned and destroyed by scripts, but nothing turns materials into a product. Split
-from the shops design because it is much more involved; it can use `skill_check` and `item_power` (§4.3) for skill
-checks. **Questions:** - Should crafting ship as a standard `//lib` library or require engine primitives? - How should
-recipes define material requirements, tools, workstations and skill checks? - What happens on failure (materials lost, a
-flawed product, nothing)? - How are item quality variations represented (variants, per-instance tags or affects, name
-overrides)? - Does crafting take time (a warmup or lag), and can it be interrupted? - Does it work without the `skills`
-feature?
-
 ## Plugins
 
 ### Plugins that share a GMCP package tree

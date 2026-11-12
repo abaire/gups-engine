@@ -175,22 +175,22 @@ internal object KernelCommands {
   private fun door(verb: DoorVerb, summary: String) =
     verb.word.item("$summary\nUsage: ${verb.word} <direction|item>") { planDoor(it, verb) }
 
-  /** `stop`/`clear`: flush the queue and cancel a cast; combat and recovery stay. */
+  /** `stop`/`clear`: flush the queue and cancel the activity; combat and recovery stay. */
   private fun stop(c: CommandCall) {
     val w = c.world
     val queued = c.actor.actionQueue.size
     c.actor.actionQueue.clear()
-    val cancelled = Feature.SKILLS in w.features && w.cancelCast(c.actor)
-    w.send(
-      c.actor,
-      w.msg(
-        when {
-          cancelled -> SkillMsg.STOP_CAST
-          queued > 0 -> KernelMsg.STOP_PLANS
-          else -> KernelMsg.STOP_NOTHING
-        }
-      ),
-    )
+    val task = w.taskOf(c.actor)
+    val reply =
+      when {
+        task != null -> w.msg(KernelMsg.STOP_TASK, "task" to task.name)
+        c.actor.isBusy -> w.msg(SkillMsg.STOP_CAST)
+        queued > 0 -> w.msg(KernelMsg.STOP_PLANS)
+        else -> w.msg(KernelMsg.STOP_NOTHING)
+      }
+    // The reply comes first so a task's own stop callback can follow it.
+    w.send(c.actor, reply)
+    w.cancelActivity(c.actor)
   }
 
   private fun quit(c: CommandCall) {

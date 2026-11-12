@@ -98,7 +98,7 @@ internal fun label(text: String, pkg: String?, what: String): Label =
  * Maximum simulation pulses allowed for actions queued by `p.do()`: 1,000 pulses (250 seconds of
  * game time).
  *
- * If the actor's action queue is non-empty or spell casting remains active after 1,000 pulses,
+ * If the actor's action queue is non-empty or its activity slot stays busy after 1,000 pulses,
  * `do(...)` fails with an evaluation error to prevent infinite busy loops during test execution.
  */
 const val DO_MAX_PULSES = 1000
@@ -866,7 +866,7 @@ internal constructor(
 
   /** The player still has queued actions or a cast in flight. */
   private val busy: Boolean
-    get() = player.actionQueue.isNotEmpty() || player.casting != null
+    get() = player.actionQueue.isNotEmpty() || player.isBusy
 
   @StarlarkMethod(name = "output", doc = "Output received since the last do() or output().")
   fun output(): Any = drain().also { w.transcript?.output(player, it) }

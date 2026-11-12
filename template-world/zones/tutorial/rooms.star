@@ -2,7 +2,7 @@
 #
 #                      arena (LARGE)
 #                        |
-#  gravel - tar_pit ---- hall (LARGE) ==== armory == shop   (the guide waits in the hall)
+#  gravel - tar_pit ---- hall (LARGE) ==== armory == shop -- smithy   (the guide waits in the hall)
 #  (crunchy)  (sticky floor)  |   (locked, creaky door)
 #                           gate  <- start here
 #
@@ -113,7 +113,7 @@ room("shop",
     name = "The Shop",
     desc = "A tidy stall of wares. A stout chest sits by the door and the shopkeeper keeps a close watch on it.",
     size = SIZE.normal,
-    exits = [exit(DIR.west, to = ":armory")],
+    exits = [exit(DIR.west, to = ":armory"), exit(DIR.east, to = ":smithy")],
     spawns = [spawn(":shopkeeper")],
 )
 

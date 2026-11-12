@@ -230,6 +230,39 @@ mob("training_dummy",
   function.
 * **Safety:** If the entity is destroyed before the timer fires, the scheduled callback is safely cancelled.
 
+### Timed tasks with `ctx.start_task`
+
+A timer runs something later. A **timed task** keeps a player or mob busy for some pulses, like a spell's warmup, then
+calls back. Here a shrine heals whoever prays at it:
+
+```python
+def _prayed(ctx, amount = 10):
+    ctx.heal(ctx.actor, amount, "hp")
+    ctx.send(ctx.actor, "A warm light settles over you.")
+
+def _pray_stopped(ctx, reason, amount = 10):
+    if reason == "interrupted":
+        ctx.send(ctx.actor, "Your prayer is broken.")
+
+def _pray(ctx):
+    err = ctx.start_task(ctx.actor, 8, _prayed, name = "praying", lag = 2,
+                         on_stop = _pray_stopped, amount = 25)
+    ctx.send(ctx.actor, err or "You kneel and begin to pray.")
+
+room("shrine", name = "A Quiet Shrine", commands = {"pray": _pray})
+```
+
+* **Busy:** while the task runs, the player's queued commands wait, as they do for a warmup. `ctx.start_task` returns a
+  refusal ("You're busy.") instead of starting when the actor is already casting, running a task or recovering.
+* **Stopping:** `stop` (or `clear`) cancels the task and the engine says "You stop praying.", so name tasks with a
+  gerund phrase. `ctx.stop_task(actor)` does the same from a script.
+* **Interruptions:** a stun interrupts a task unless you pass `interrupt = {"stun": False}`; then it pauses instead.
+  Damage interrupts it only when you give a `damage_pct` and `rules.interrupt_check` agrees (the template rule compares
+  the blow with that percentage of the actor's maximum hit points). An interrupted task costs half its `lag`.
+* **`on_stop`:** runs with the reason as its second argument: `"interrupted"`, `"cancelled"`, `"invalid"` (the actor
+  could no longer finish) or `"gone"` (it died, left the world, or its room went dormant). Both callbacks get the same
+  keyword arguments, and `ctx.task` describes the task.
+
 ---
 
 ## 8. Custom Hooks: `hooks = {...}` and `ctx.call_hook()`
@@ -287,4 +320,5 @@ room("inn",
 * **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star)
 * **Specification:** [SPEC.md §4.4: Hook Catalog](../../../docs/SPEC.md#L993) and
   [§5.7: Perception](../../../docs/SPEC.md#L2853)
-* **HTML Documentation:** `hooks.html`, `ctx.html#ctx.after` and `ctx.html#ctx.call_hook` in `gups docs`.
+* **HTML Documentation:** `hooks.html`, `ctx.html#ctx.after`, `ctx.html#ctx.start_task` and `ctx.html#ctx.call_hook` in
+  `gups docs`.

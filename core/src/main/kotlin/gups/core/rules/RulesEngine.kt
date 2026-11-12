@@ -19,6 +19,7 @@ import gups.core.model.SkillProto
 import gups.core.model.StandingDelta
 import gups.core.world.Behavior
 import gups.core.world.TargetChoice
+import gups.core.world.TaskInfo
 import gups.core.world.World
 
 /**
@@ -70,6 +71,8 @@ class RulesContext(
   val slot: String? = null,
   /** The affect whose modifier is running, or null outside an affect's modifier. */
   val affect: Affect? = null,
+  /** The timed task an `interrupt_check` is asked about, or null. */
+  val task: TaskInfo? = null,
   /** The actor's carry limit asked without an item, in encumbrance_level and encumbrance calls. */
   val limit: Int? = null,
   /** Carried and worn weight, in encumbrance_level and encumbrance calls. */
@@ -164,6 +167,7 @@ class RulesContext(
       damageType = type,
       slot = slot,
       affect = affect,
+      task = task,
       limit = limit,
       carried = carried,
       encumbranceLevel = encumbranceLevel,

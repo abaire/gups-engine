@@ -276,6 +276,8 @@ data class HookContext(
   val outcome: String? = null,
   /** The actors a cast landed on, for on_skill_use. */
   val landed: List<Actor>? = null,
+  /** The task whose callback is running, or null. */
+  val task: TaskInfo? = null,
 )
 
 /** Outcome result of a package reload operation. */
@@ -519,7 +521,7 @@ internal fun World.fireTraitEvent(bearer: Actor, event: TraitEvent, fields: Map<
 /**
  * Executes [block] guarded against infinite recursive hook cascades exceeding [CASCADE_MAX_DEPTH].
  */
-private inline fun <T> World.withCascadeGuard(what: String, block: () -> T): T? {
+internal inline fun <T> World.withCascadeGuard(what: String, block: () -> T): T? {
   if (cascadeDepth >= CASCADE_MAX_DEPTH) {
     diagnose("cascade", "$what dropped: cascade deeper than $CASCADE_MAX_DEPTH")
     return null

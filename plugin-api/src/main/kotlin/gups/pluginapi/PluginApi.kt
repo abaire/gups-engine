@@ -259,6 +259,69 @@ data class PluginParam(
 
 data class PluginCommandCall(val world: PluginWorld, val actor: PluginActor, val args: String)
 
+/** An item prototype's catalog fields; [plural] and [charges] are null when it has none. */
+data class PluginItemInfo(
+  val label: String,
+  val name: String,
+  val plural: String?,
+  val keywords: List<String>,
+  val kind: String,
+  /** Sorted. */
+  val tags: List<String>,
+  val value: Int,
+  val weight: Int,
+  val stackable: Boolean,
+  val charges: Int?,
+)
+
+/**
+ * What breaks a timed task: a stun when [stun], damage of [damagePct]% when `interrupt_check`
+ * agrees.
+ */
+data class PluginTaskInterrupt(val stun: Boolean = true, val damagePct: Int? = null)
+
+/** A running timed task, as `ctx.task` describes it. */
+interface PluginTask {
+  val name: String
+  val startedAt: Long
+  val endsAt: Long
+
+  /** Pulses left, 0 once due. */
+  val remaining: Long
+  val interrupt: PluginTaskInterrupt
+}
+
+/** A timed task that completed. */
+data class PluginTaskCall(val world: PluginWorld, val actor: PluginActor, val task: PluginTask)
+
+/** A timed task that ended early, and why. */
+data class PluginTaskStop(
+  val world: PluginWorld,
+  val actor: PluginActor,
+  val task: PluginTask,
+  val reason: PluginTaskEnd,
+)
+
+/** Why a timed task ended early. */
+enum class PluginTaskEnd {
+  /** A stun, or damage `interrupt_check` accepted; half the lag applies. */
+  INTERRUPTED,
+
+  /** `stop`, `clear` or a stop verb; no lag. */
+  CANCELLED,
+
+  /** The actor could no longer finish; half the lag applies. */
+  INVALID,
+
+  /** Death, removal from the world or dormancy; no lag. */
+  GONE,
+}
+
+/**
+ * A skill roll: [roll] is null when a chance of 100 or more needed no draw; [power] 0 on failure.
+ */
+data class PluginSkillRoll(val chance: Int, val roll: Int?, val success: Boolean, val power: Int)
+
 /** One run of a plugin's periodic work. */
 data class PluginTickCall(
   val world: PluginWorld,

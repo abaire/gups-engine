@@ -59,7 +59,7 @@
 <tr id="rules_ctx.disposition_parts"><td><code>disposition_parts</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.</td></tr>
 <tr id="rules_ctx.dispositions"><td><code>dispositions</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order with the standing feature on, actor's disposition toward each candidate; None elsewhere.</td></tr>
 <tr id="rules_ctx.encumbrance_level"><td><code>encumbrance_level</code></td><td>1</td><td>The level encumbrance_level just gave; None outside encumbrance.</td></tr>
-<tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'.</td></tr>
+<tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'; in skill_check, a skill_roll's event, or None for a cast.</td></tr>
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
 <tr id="rules_ctx.helped"><td><code>helped</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In an assist standing event, the actor helped; None elsewhere.</td></tr>
 <tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
@@ -77,6 +77,7 @@
 <tr id="rules_ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For can_perceive and perceive_message: the room the event happened in.</td></tr>
 <tr id="rules_ctx.tags"><td><code>tags</code></td><td>1</td><td>For door_intensity: the door's or container's tags, sorted.</td></tr>
 <tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.</td></tr>
+<tr id="rules_ctx.task"><td><code>task</code></td><td>1</td><td>In interrupt_check for an actor running a timed task, the task view, struct(name, started_at, ends_at, remaining, interrupt); None everywhere else.</td></tr>
 <tr id="rules_ctx.text"><td><code>text</code></td><td>1</td><td>For can_perceive and perceive_message: the event's text, or None.</td></tr>
 <tr id="rules_ctx.via_exit"><td><code>via_exit</code></td><td>1</td><td>For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.</td></tr>
 <tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>

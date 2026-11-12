@@ -1,8 +1,8 @@
 package gups.core.world
 
 import gups.core.EntityId
+import gups.core.model.ActivityState
 import gups.core.model.Actor
-import gups.core.model.CastState
 import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.Interrupt
@@ -78,8 +78,12 @@ fun World.execute(
     return
   }
   if (action.warmup > 0) {
-    actor.casting = CastState(action, pulse, pulse + action.warmup, orderedBy, origin)
+    // A validate or veto hook may have started a task; the warmup takes the slot and cancels it.
+    val displaced = clearActivity(actor)
+    actor.activity = ActivityState(action, pulse, pulse + action.warmup, orderedBy, origin)
     actor.dirty = true
+    // Told once the slot is taken, so its stop callback can't start another task under the warmup.
+    displaced?.let { notifyStopped(actor, it, TaskEnd.CANCELLED) }
     action.begin(this, actor)
     return
   }
@@ -99,25 +103,28 @@ private fun World.orderHolds(actor: Actor, orderedBy: EntityId): Boolean {
 private fun Actor?.isInRoomOf(other: Actor): Boolean =
   this != null && inWorld && room === other.room
 
-/** An actor still in the world and not in the middle of a cast. */
+/** An actor still in the world with nothing in its activity slot. */
 private val Actor.isFree: Boolean
-  get() = inWorld && casting == null
+  get() = inWorld && activity == null
 
-internal fun World.advanceCast(actor: Actor, cast: CastState) {
-  if (pulse < cast.endsAt) return
-  actor.casting = null
-  val orderedBy = cast.orderedBy
+/** Ends [actor]'s warmup once it is due: re-validates, then resolves or applies half the lag. */
+internal fun World.advanceActivity(actor: Actor, state: ActivityState) {
+  if (pulse < state.endsAt) return
+  actor.activity = null
+  val orderedBy = state.orderedBy
   if (orderedBy != null && !orderHolds(actor, orderedBy)) {
-    actor.waitState = cast.action.lag / 2
+    actor.waitState = state.action.lag / 2
     return
   }
-  val failure = cast.action.validate(this, actor)
+  val failure = state.action.validate(this, actor)
   if (failure != null) {
     send(actor, failure)
-    actor.waitState = cast.action.lag / 2
+    actor.waitState = state.action.lag / 2
+    notifyStopped(actor, state, TaskEnd.INVALID)
     return
   }
-  finish(actor, cast.action, cast.thinkOrigin)
+  (state.action as? TaskAction)?.info = taskInfoOf(state)
+  finish(actor, state.action, state.thinkOrigin)
 }
 
 private fun World.finish(actor: Actor, action: Action, origin: ThinkOrigin? = null) {
@@ -182,20 +189,24 @@ fun interface ChainThinkAdjuster {
   fun adjust(world: World, call: ChainThinkCall, chained: Boolean): Boolean
 }
 
-/** Breaks [actor]'s cast: no cost is paid and half the lag applies. */
-fun World.interruptCast(actor: Actor) {
-  val cast = actor.casting ?: return
-  actor.casting = null
-  actor.waitState = cast.action.lag / 2
+/** Breaks [actor]'s activity: no cost is paid and half the lag applies. */
+fun World.interruptActivity(actor: Actor) {
+  val state = actor.activity ?: return
+  actor.activity = null
+  actor.waitState = state.action.lag / 2
   actor.dirty = true
-  tell(actor, SkillMsg.INTERRUPTED)
+  if (state.action is TaskAction) {
+    tell(actor, KernelMsg.TASK_INTERRUPTED, "task" to state.action.name)
+    notifyStopped(actor, state, TaskEnd.INTERRUPTED)
+  } else {
+    tell(actor, SkillMsg.INTERRUPTED)
+  }
 }
 
-/** Cancels [actor]'s cast for `stop`/`clear`: no cost and no lag. */
-internal fun World.cancelCast(actor: Actor): Boolean {
-  if (actor.casting == null) return false
-  actor.casting = null
-  actor.dirty = true
+/** Cancels [actor]'s activity for `stop`, `clear` or `stop_task`: no cost and no lag. */
+internal fun World.cancelActivity(actor: Actor): Boolean {
+  if (actor.activity == null) return false
+  endActivity(actor, TaskEnd.CANCELLED)
   return true
 }
 

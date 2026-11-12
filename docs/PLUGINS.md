@@ -68,13 +68,20 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
   `delAttr`. Each does what the `ctx` verb of the same name does, so the engine's invariants hold. Attribute keys
   without `ns:` are in the plugin's own namespace (its id), and a plugin writes only its own namespace. `damage(target,
   amount, type, vital)` and `heal(target, amount, vital)` name the vital they change, as the `ctx` verbs do.
+- **skills and items:** `skillRoll(actor, skill, item, target, event = "craft", adjust = 0)` rolls a skill outside a
+  cast and returns a `PluginSkillRoll(chance, roll, success, power)`, as `ctx.skill_roll` does (it throws
+  `IllegalStateException` naming `skills` when that feature is off); `setItemName(item, name)` sets or clears an item's
+  name override, as `ctx.set_item_name` does.
+- **timed tasks:** `startTask`, `stopTask`, `PluginActor.task` and `PluginActor.isBusy`; see
+  [Timed tasks](#timed-tasks).
 - **leveling:** `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and `levelDown(actor, count = 1)` do
   what `ctx.award_xp`, `ctx.take_xp`, `ctx.level_up` and `ctx.level_down` do. They throw `IllegalStateException` naming
   `leveling` when the feature is off, and `IllegalArgumentException` when `amount` or `count` is below 1.
 - **schema names:** a vital, stat or damage type the world's `MODULE.gups` doesn't declare, in a verb or in a
   `statDeltas` key, throws `IllegalArgumentException` with a "did you mean" suggestion.
 - **reads:** `schema` (a `PluginSchema` with `stats` and `vitals`, each a `PluginNamed(name, label)`, and `damageTypes`,
-  in declaration order), `pulse`, `seed`, `rng` (seeded from the world), `rooms()`, `room(label)` and `regions()`.
+  in declaration order), `pulse`, `seed`, `rng` (seeded from the world), `rooms()`, `room(label)`, `regions()` and
+  `itemInfo(label)` (an item prototype's catalog fields as a `PluginItemInfo`, or null, as `ctx.item_info` gives them).
 - **diagnostics:** `diagnose(message)` records a `"plugin"` diagnostic; `log(message)` writes to the server log.
 - **views:** `PluginRoom`, `PluginActor` and `PluginItem` read current state on every access. A `PluginActor` has
   `stat(name)` (effective), `baseStat(name)`, `vital(name)`, `maxVital(name)` and `resist(type)` by schema name, plus
@@ -699,6 +706,31 @@ Combat memory (a mob's transient record of what it experienced and witnessed) is
 - `forget(mob, subject = null, event = null)`: removes the matching memories (all when both filters are null) and
   returns how many it removed.
 
+### Timed tasks
+
+`startTask(actor, pulses, name, lag, interrupt, onStop, onDone)` keeps an actor busy for `pulses`, like a cast's warmup,
+then calls `onDone`; it follows the rules of `ctx.start_task`. It returns null when the task started, or the refusal for
+the actor ("You're busy."). `onStop`, if given, gets a `PluginTaskStop` whose `reason` is `INTERRUPTED`, `CANCELLED`,
+`INVALID` or `GONE`. Both callbacks get a fresh `world`, the `actor` and the `task`. A callback that throws is a
+`plugin` diagnostic; the task has ended either way.
+
+The hunger sample's `dine` builtin eats over a task, lowering hunger only when the meal completes:
+
+```kotlin
+// The engine names the task in its lines: "You stop eating."
+world.startTask(actor, intArg(pos[2], "pulses"), "eating") { done ->
+  feed(done.world, done.actor, amount)
+  done.world.send(done.actor, "You finish eating.")
+}
+```
+
+`lag` (recovery once it completes) and `interrupt` (a `PluginTaskInterrupt(stun, damagePct)`) are optional, as is
+`onStop`.
+
+`stop` and `clear` cancel the task and the engine says "You stop eating.", so name a task with a gerund phrase.
+`stopTask(actor)` cancels a task of either kind, script or plugin, and `PluginActor.task` describes whichever is
+running. Tasks are not saved.
+
 ### World start
 
 `onWorldStarted` callbacks run once the world has loaded, in plugin-id order.
@@ -815,6 +847,10 @@ only from a hook or command, so an item's `on_use` hook calls it to feed the act
 def _feed(ctx):
     hunger.eat(ctx.actor, 3)
 ```
+
+`hunger.dine(actor, amount, pulses)` eats over a [timed task](#timed-tasks): the actor is busy for `pulses`, hunger
+drops only when the meal completes, and `stop` cancels it ("You stop eating.") with hunger unchanged. It returns None
+once the meal starts, or the refusal message.
 
 ## Installing a plugin
 

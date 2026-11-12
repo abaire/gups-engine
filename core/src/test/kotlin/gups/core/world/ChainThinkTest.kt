@@ -201,6 +201,35 @@ class ChainThinkTest {
   }
 
   @Test
+  fun `a warmup paused by a stun is still asked at completion`() {
+    var asked = false
+    val f =
+      Fixture(
+        rules =
+          PaceChain(100) {
+            asked = true
+            true
+          },
+        protos = protosWith(mob("dummy")),
+      )
+    val m = f.w.spawnMob(Label("//c:dummy"), f.w.room(C.r(0)))
+    f.w.execute(
+      m,
+      object : Action {
+        override val warmup: Int = 3
+
+        override fun validate(w: World, actor: Actor): String? = null
+
+        override fun resolve(w: World, actor: Actor): Int = 0
+      },
+      origin = ThinkOrigin("think", "cast", false),
+    )
+    f.w.applyAffect(m, AffectSpec("stun", 2, flags = setOf("stunned")))
+    f.run(8)
+    assertTrue(asked, "the ask came when the paused warmup resolved")
+  }
+
+  @Test
   fun `a quarry is caught in an extra round and stays caught, in either id order`() {
     for (mobFirst in listOf(true, false)) {
       val f =

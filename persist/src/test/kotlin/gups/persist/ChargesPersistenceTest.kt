@@ -9,6 +9,7 @@ import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Prototypes
 import gups.core.world.quit
+import gups.core.world.setItemName
 import gups.core.world.spawnItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,22 +31,31 @@ class ChargesPersistenceTest {
     )
   }
 
-  @Test
-  fun `a wand with charges left round-trips with its charges`() {
+  /** Saves Ann carrying a wand [prepare] changed, then logs her back in and returns the wand. */
+  private fun roundTripWand(prepare: (PersistWorld, Item) -> Unit): Item {
     val file = tempDb()
     val a = PersistWorld(file, protos())
     val ann = a.login("Ann")
-    val wand = a.w.spawnItem(wandLabel, ItemLocation.Carried(ann.id))
-    wand.charges = 1
+    prepare(a, a.w.spawnItem(wandLabel, ItemLocation.Carried(ann.id)))
     a.w.quit(ann)
     a.save()
     a.close()
 
     val b = PersistWorld(file, protos())
-    val ann2 = b.login("Ann")
-    val wand2 = ann2.inventory.single { it.protoLabel == wandLabel }
-    assertEquals(1, wand2.charges)
+    val wand = b.login("Ann").inventory.single { it.protoLabel == wandLabel }
     b.close()
+    return wand
+  }
+
+  @Test
+  fun `a wand with charges left round-trips with its charges`() {
+    assertEquals(1, roundTripWand { _, wand -> wand.charges = 1 }.charges)
+  }
+
+  @Test
+  fun `a renamed item round-trips with its name`() {
+    val wand = roundTripWand { a, wand -> a.w.setItemName(wand, "a fine wand") }
+    assertEquals("a fine wand", wand.name)
   }
 
   @Test

@@ -243,6 +243,14 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   )
   fun elapsedPulses(): Any = field { hc.elapsedPulses?.let(::sInt) ?: Starlark.NONE }
 
+  @StarlarkMethod(
+    name = "task",
+    structField = true,
+    doc =
+      "The task view, struct(name, started_at, ends_at, remaining, interrupt), in a timed task's callbacks; None elsewhere.",
+  )
+  fun task(): Any = field { hc.task?.let { taskStruct(world, it) } ?: Starlark.NONE }
+
   @StarlarkMethod(name = "pulse", structField = true, doc = "Game time.")
   fun pulse(): Any = field { sInt(world.pulse) }
 
