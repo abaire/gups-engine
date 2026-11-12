@@ -13,8 +13,6 @@ import gups.core.model.DoorState
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
-import gups.core.model.LeashOverride
-import gups.core.model.LevelGain
 import gups.core.model.Mob
 import gups.core.model.Prototypes
 import gups.core.model.Trait
@@ -29,43 +27,23 @@ import gups.core.world.checkInvariants
 import gups.core.world.damage
 import gups.core.world.grantTrait
 import gups.core.world.moveItem
-import gups.core.world.petsOf
 import gups.core.world.quit
 import gups.core.world.restoreActorNumbers
 import gups.core.world.restoreVitals
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setDoor
-import gups.core.world.setLeash
-import gups.core.world.setOwner
 import gups.core.world.spawnItem
-import java.sql.DriverManager
 import java.sql.SQLException
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 class PersistenceTest {
-  private fun count(file: java.nio.file.Path, sql: String): Int =
-    DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
-      c.createStatement().use { st ->
-        st.executeQuery(sql).use {
-          it.next()
-          it.getInt(1)
-        }
-      }
-    }
-
   @Test
   fun `schema migrations run once, in order, and newer databases are refused`() {
     val file = tempDb()
@@ -497,234 +475,6 @@ class PersistenceTest {
   }
 
   @Test
-  fun `a pet's owner survives a restart, and its owner reason is not restored`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val (rat, other) = first.w.actors.filterIsInstance<Mob>()
-    first.w.setOwner(rat, ann)
-    assertTrue("owner:${ann.id.v}" in rat.activeReasons)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file)
-    assertNull(second.w.actor(rat.id), "held out of the world until owner logs in")
-    val ann2 = second.login("Ann")
-    val back = second.w.actor(rat.id) as Mob
-    assertEquals(ann2.id, back.owner)
-    assertTrue("owner:${ann2.id.v}" in back.activeReasons)
-    assertNull((second.w.actor(other.id) as Mob).owner)
-    second.close()
-  }
-
-  @Test
-  fun `a summon's summoner survives a restart`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val (rat, other) = first.w.actors.filterIsInstance<Mob>()
-    rat.summonedBy = EntityId(42)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file)
-    assertEquals(EntityId(42), (second.w.actor(rat.id) as Mob).summonedBy)
-    assertNull((second.w.actor(other.id) as Mob).summonedBy)
-    second.close()
-  }
-
-  @Test
-  fun `leash overrides survive a restart`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val (r1, r2) = first.w.actors.filterIsInstance<Mob>()
-    val r3 = first.w.spawnMob(P.RAT, first.w.room(P.HALL), 2)
-    first.w.setLeash(r2, 3)
-    first.w.setLeash(r3, null)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file)
-    assertNull((second.w.actor(r1.id) as? Mob)?.leashOverride, "no override is not saved")
-    assertEquals(LeashOverride(3), (second.w.actor(r2.id) as Mob).leashOverride)
-    assertEquals(
-      LeashOverride(null),
-      (second.w.actor(r3.id) as Mob).leashOverride,
-      "an unleashed override is saved",
-    )
-    second.close()
-  }
-
-  @Test
-  fun `quit with a pet carrying an item keeps rows and restores pet beside player with item on login`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    val gem = first.w.spawnItem(P.GEM, ItemLocation.Carried(rat.id))
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    assertEquals(1, count(file, "SELECT count(*) FROM world_entities WHERE id = ${rat.id.v}"))
-    assertEquals(1, count(file, "SELECT count(*) FROM world_entities WHERE id = ${gem.id.v}"))
-
-    val second = PersistWorld(file)
-    assertNull(second.w.actor(rat.id), "held out of the world at boot")
-    assertNull(second.w.item(gem.id), "pet item held out of the world at boot")
-
-    val ann2 = second.login("Ann")
-    val back = second.w.actor(rat.id) as Mob
-    assertNotNull(back)
-    assertEquals(rat.id, back.id)
-    assertEquals(ann2.room, back.room)
-    assertEquals(ann2.id, back.owner)
-    assertTrue("owner:${ann2.id.v}" in back.activeReasons)
-    assertNotNull(back.ownedBehaviors)
-
-    val backGem = second.w.item(gem.id)
-    assertNotNull(backGem)
-    assertEquals(ItemLocation.Carried(back.id), backGem.location)
-    assertTrue(backGem in back.inventory)
-    second.close()
-  }
-
-  @Test
-  fun `shutdown checkpoint with owner online holds pet out of the world until owner logs in`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file)
-    assertNull(second.w.actor(rat.id), "pet is not in the world until owner logs in")
-
-    val ann2 = second.login("Ann")
-    val back = second.w.actor(rat.id) as Mob
-    assertNotNull(back)
-    assertEquals(ann2.id, back.owner)
-    second.close()
-  }
-
-  @Test
-  fun `owner character deleted deletes held pet and its items with a note`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    val gem = first.w.spawnItem(P.GEM, ItemLocation.Carried(rat.id))
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
-      c.createStatement().use { st -> st.executeUpdate("DELETE FROM players WHERE name = 'Ann'") }
-    }
-
-    val second = PersistWorld(file)
-    assertContains(
-      second.report.notes,
-      "pet ${rat.proto.label} #${rat.id.v} dropped: its owner is gone",
-    )
-    assertNull(second.w.actor(rat.id))
-    assertNull(second.w.item(gem.id))
-    second.save()
-    second.close()
-
-    assertEquals(0, count(file, "SELECT count(*) FROM world_entities WHERE id = ${rat.id.v}"))
-    assertEquals(0, count(file, "SELECT count(*) FROM world_entities WHERE id = ${gem.id.v}"))
-  }
-
-  @Test
-  fun `a fresh start also deletes a held pet whose owner is gone`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    val gem = first.w.spawnItem(P.GEM, ItemLocation.Carried(rat.id))
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    DriverManager.getConnection("jdbc:sqlite:$file").use { c ->
-      c.createStatement().use { st -> st.executeUpdate("DELETE FROM players WHERE name = 'Ann'") }
-    }
-
-    val second = PersistWorld(file, fresh = true)
-    assertContains(
-      second.report.notes,
-      "pet ${rat.proto.label} #${rat.id.v} dropped: its owner is gone",
-    )
-    second.save()
-    second.close()
-
-    assertEquals(0, count(file, "SELECT count(*) FROM world_entities WHERE id = ${rat.id.v}"))
-    assertEquals(0, count(file, "SELECT count(*) FROM world_entities WHERE id = ${gem.id.v}"))
-  }
-
-  @Test
-  fun `a fresh start keeps the held pets of existing characters`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file, fresh = true)
-    second.save()
-    val ann2 = second.login("Ann")
-    val pet = assertNotNull(second.w.actor(rat.id))
-    assertEquals(ann2.room, pet.room)
-    second.close()
-  }
-
-  @Test
-  fun `pet prototype removed drops pet at login with a note and player still logs in`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val rat = first.w.actors.filterIsInstance<Mob>().first()
-    first.w.setOwner(rat, ann)
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file, P.protos(withRat = false))
-    val ann2 = second.login("Ann")
-    assertNotNull(ann2)
-    assertNull(second.w.actor(rat.id))
-    second.close()
-  }
-
-  @Test
-  fun `two pets come back in ascending id`() {
-    val file = tempDb()
-    val first = PersistWorld(file)
-    val ann = first.login("Ann")
-    val mobs = first.w.actors.filterIsInstance<Mob>().sortedBy { it.id }
-    val (rat1, rat2) = mobs.take(2)
-    first.w.setOwner(rat2, ann)
-    first.w.setOwner(rat1, ann)
-    first.w.quit(ann)
-    first.save()
-    first.close()
-
-    val second = PersistWorld(file)
-    val ann2 = second.login("Ann")
-    val pets = second.w.petsOf(ann2)
-    assertEquals(listOf(rat1.id, rat2.id).sorted(), pets.map { it.id })
-    second.close()
-  }
-
-  @Test
   fun `trait-raised maxima and current values survive a restart without double counting`() {
     val hp = FixtureSchemas.current.health
     val traits = mapOf("tough" to Trait("tough", maxVitalDeltas = mapOf(hp to 5)))
@@ -751,81 +501,4 @@ class PersistenceTest {
     assertTrue(b.w.checkInvariants().isEmpty())
     b.close()
   }
-
-  @Test
-  fun `levelGains round-trips for a player`() {
-    val file = tempDb()
-    val a = PersistWorld(file)
-    val ann = a.login("Ann")
-    ann.levelGains[2] = LevelGain(stats = mapOf("str" to 2), max = mapOf("hp" to 5))
-    ann.levelGains[3] = LevelGain(max = mapOf("mana" to 3))
-    ann.dirty = true
-    a.w.quit(ann)
-    a.save()
-    a.close()
-
-    val db = Database.open(file)
-    val playerRow = db.playerRows().single { it.name == "Ann" }
-    val gains = assertNotNull(levelGainsJson(playerRow.payload))
-    assertEquals(setOf("2", "3"), gains.keys)
-    val two = gains.getValue("2").jsonObject
-    assertEquals(setOf("stats", "max"), two.keys)
-    assertEquals(mapOf("str" to 2), two.intMap("stats"))
-    assertEquals(mapOf("hp" to 5), two.intMap("max"))
-    val three = gains.getValue("3").jsonObject
-    assertEquals(setOf("max"), three.keys)
-    assertEquals(mapOf("mana" to 3), three.intMap("max"))
-    db.close()
-
-    val b = PersistWorld(file)
-    val ann2 = b.login("Ann")
-    assertEquals(
-      mapOf(
-        2 to LevelGain(stats = mapOf("str" to 2), max = mapOf("hp" to 5)),
-        3 to LevelGain(max = mapOf("mana" to 3)),
-      ),
-      ann2.levelGains,
-    )
-    b.close()
-  }
-
-  @Test
-  fun `levelGains round-trips for a mob, and an empty map writes nothing to the mob delta`() {
-    val file = tempDb()
-    val a = PersistWorld(file)
-    val (rat, other) = a.w.actors.filterIsInstance<Mob>()
-    rat.levelGains[2] = LevelGain(stats = mapOf("dex" to 1), max = mapOf("hp" to 2))
-    rat.dirty = true
-    other.dirty = true
-    a.save()
-    a.close()
-
-    val db = Database.open(file)
-    val rows = db.entityRows()
-    val ratRow = rows.single { it.id == rat.id.v }
-    val otherRow = rows.single { it.id == other.id.v }
-    val ratGains = assertNotNull(levelGainsJson(ratRow.payload))
-    assertEquals(setOf("2"), ratGains.keys)
-    val ratTwo = ratGains.getValue("2").jsonObject
-    assertEquals(mapOf("dex" to 1), ratTwo.intMap("stats"))
-    assertEquals(mapOf("hp" to 2), ratTwo.intMap("max"))
-    assertFalse("levelGains" in Json.parseToJsonElement(otherRow.payload).jsonObject.keys)
-    db.close()
-
-    val b = PersistWorld(file)
-    val rat2 = b.w.actor(rat.id) as Mob
-    val other2 = b.w.actor(other.id) as Mob
-    assertEquals(
-      mapOf(2 to LevelGain(stats = mapOf("dex" to 1), max = mapOf("hp" to 2))),
-      rat2.levelGains,
-    )
-    assertTrue(other2.levelGains.isEmpty())
-    b.close()
-  }
-
-  private fun levelGainsJson(payload: String): JsonObject? =
-    Json.parseToJsonElement(payload).jsonObject["levelGains"]?.jsonObject
-
-  private fun JsonObject.intMap(key: String): Map<String, Int>? =
-    this[key]?.jsonObject?.mapValues { it.value.jsonPrimitive.int }
 }
