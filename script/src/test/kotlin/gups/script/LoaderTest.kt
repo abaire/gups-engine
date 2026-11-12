@@ -21,7 +21,10 @@ class LoaderTest {
   private fun load(
     files: Map<String, String>,
     vararg pkgs: String = arrayOf("zones/z"),
-  ): LoadResult = ScriptLoader(WorldDir(tempWorld(files)), ScriptLimits.HARNESS).load(pkgs.toList())
+    pluginGlobals: Map<String, StructValue> = emptyMap(),
+  ): LoadResult =
+    ScriptLoader(WorldDir(tempWorld(files)), ScriptLimits.HARNESS, pluginGlobals = pluginGlobals)
+      .load(pkgs.toList())
 
   @Test
   fun `global commands and exits may not take the world's alias words`() {
@@ -52,6 +55,15 @@ class LoaderTest {
     assertTrue(errs.isNotEmpty(), "expected an error for $pkg, got: ${r.report()}")
     return errs.first()
   }
+
+  private fun loadItem(decl: String): LoadResult =
+    load(mapOf("zones/z/package.star" to zonePkg(), "zones/z/a.star" to decl))
+
+  private fun expectItemFailure(decl: String, message: String) {
+    assertContains(only(loadItem(decl)).message, message)
+  }
+
+  private fun loadPackage(decl: String): LoadResult = load(mapOf("zones/z/package.star" to decl))
 
   @Test
   fun `declarations become frozen prototypes with resolved labels`() {
@@ -98,36 +110,21 @@ class LoaderTest {
 
   @Test
   fun `an item's plural can't be blank`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"coin\", plural = \" \", stackable = True)",
-        )
-      )
-    assertContains(only(r).message, "item(plural): can't be blank")
+    expectItemFailure(
+      "item(\"coin\", plural = \" \", stackable = True)",
+      "item(plural): can't be blank",
+    )
   }
 
   @Test
   fun `item value defaults to 0 and must not be negative`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"bow\", value = 30)\nitem(\"coin\")",
-        )
-      )
+    val r = loadItem("item(\"bow\", value = 30)\nitem(\"coin\")")
     assertTrue(r.ok, r.report())
     val p = r.prototypes()
     assertEquals(30, p.item(Label("//zones/z:bow")).value)
     assertEquals(0, p.item(Label("//zones/z:coin")).value)
     assertEquals(0, p.item(Label("//engine:corpse")).value)
-
-    val bad =
-      load(
-        mapOf("zones/z/package.star" to zonePkg(), "zones/z/a.star" to "item(\"neg\", value = -1)")
-      )
-    assertContains(only(bad).message, "item(value): must be at least 0")
+    expectItemFailure("item(\"neg\", value = -1)", "item(value): must be at least 0")
   }
 
   @Test
@@ -185,26 +182,18 @@ class LoaderTest {
 
   @Test
   fun `slot_cost below 1 fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"sword\", wear = \"wield\", slot_cost = 0)",
-        )
-      )
-    assertContains(only(r).message, "item(slot_cost): must be at least 1")
+    expectItemFailure(
+      "item(\"sword\", wear = \"wield\", slot_cost = 0)",
+      "item(slot_cost): must be at least 1",
+    )
   }
 
   @Test
   fun `slot_cost without wear fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"rock\", slot_cost = 2)",
-        )
-      )
-    assertContains(only(r).message, "item(slot_cost): slot_cost = 2 needs wear or wield")
+    expectItemFailure(
+      "item(\"rock\", slot_cost = 2)",
+      "item(slot_cost): slot_cost = 2 needs wear or wield",
+    )
   }
 
   @Test
@@ -232,12 +221,7 @@ class LoaderTest {
 
   @Test
   fun `a different api_version names the gap and the changelog`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to "package(api_version = 2, kind = \"zone\", brand_new_arg = 1)"
-        )
-      )
+    val r = loadPackage("package(api_version = 2, kind = \"zone\", brand_new_arg = 1)")
     val e = only(r)
     assertEquals("api_version", e.kind)
     assertContains(e.message, "api_version 2")
@@ -379,11 +363,11 @@ class LoaderTest {
 
   @Test
   fun `zone reset intervals are whole world ticks`() {
-    val ok = load(mapOf("zones/z/package.star" to zonePkg(", reset_world_ticks = 3")))
+    val ok = loadPackage(zonePkg(", reset_world_ticks = 3"))
     assertEquals(3 * WORLD_TICK_PULSES, ok.prototypes().zones.getValue("zones/z").resetPulses)
-    val pulses = load(mapOf("zones/z/package.star" to zonePkg(", reset_pulses = 7200")))
+    val pulses = loadPackage(zonePkg(", reset_pulses = 7200"))
     assertContains(only(pulses).message, "reset_pulses")
-    val zero = load(mapOf("zones/z/package.star" to zonePkg(", reset_world_ticks = 0")))
+    val zero = loadPackage(zonePkg(", reset_world_ticks = 0"))
     assertContains(only(zero).message, "package(reset_world_ticks): must be at least 1")
   }
 
@@ -397,8 +381,7 @@ class LoaderTest {
         )
       )
     assertContains(only(zoneCmd).message, "only lib and rules packages")
-    val shared =
-      load(mapOf("zones/z/package.star" to zonePkg(", shared_namespaces = [\"faction\"]")))
+    val shared = loadPackage(zonePkg(", shared_namespaces = [\"faction\"]"))
     assertContains(
       only(shared).message,
       "only lib and rules packages may declare shared namespaces",
@@ -482,9 +465,9 @@ class LoaderTest {
 
   @Test
   fun `package star holds only package() and must call it`() {
-    val missing = load(mapOf("zones/z/package.star" to "x = 1"))
+    val missing = loadPackage("x = 1")
     assertContains(only(missing).message, "must call package(")
-    val room = load(mapOf("zones/z/package.star" to zonePkg() + "room(\"start\")"))
+    val room = loadPackage(zonePkg() + "room(\"start\")")
     assertContains(only(room).message, "not in package.star")
     val nopkg = load(mapOf("zones/y/package.star" to zonePkg()), "zones/nope")
     assertEquals("missing", only(nopkg, "zones/nope").kind)
@@ -562,23 +545,17 @@ class LoaderTest {
   @Test
   fun `plugin globals are predeclared, and a package may not redefine one`() {
     val weather = StructValue(mapOf("level" to net.starlark.java.eval.StarlarkInt.of(3)))
-    val dir =
-      WorldDir(
-        tempWorld(
-          mapOf(
-            "zones/z/package.star" to zonePkg(),
-            "zones/z/rooms.star" to
-              "room(\"a\", name = \"A\", desc = \"x\" * weather.level, flags = [\"dead_end_ok\"])",
-            "zones/bad/package.star" to zonePkg(),
-            "zones/bad/x.star" to "x = 1\nweather = 1\n",
-          )
-        )
+    val files =
+      mapOf(
+        "zones/z/package.star" to zonePkg(),
+        "zones/z/rooms.star" to
+          "room(\"a\", name = \"A\", desc = \"x\" * weather.level, flags = [\"dead_end_ok\"])",
+        "zones/bad/package.star" to zonePkg(),
+        "zones/bad/x.star" to "x = 1\nweather = 1\n",
       )
-    val loader =
-      ScriptLoader(dir, ScriptLimits.HARNESS, pluginGlobals = mapOf("weather" to weather))
-    val ok = loader.load(listOf("zones/z"))
+    val ok = load(files, "zones/z", pluginGlobals = mapOf("weather" to weather))
     assertTrue(ok.ok, ok.report())
-    val bad = loader.load(listOf("zones/bad"))
+    val bad = load(files, "zones/bad", pluginGlobals = mapOf("weather" to weather))
     val e = bad.errors.single { it.kind == "plugin" }
     assertEquals("plugin", e.kind)
     assertEquals("cannot define 'weather': it is the namespace of plugin 'weather'", e.message)
@@ -587,23 +564,16 @@ class LoaderTest {
 
   @Test
   fun `a package may not own a plugin's attribute namespace`() {
-    val dir =
-      WorldDir(
-        tempWorld(
-          mapOf(
-            "zones/weather/package.star" to zonePkg(),
-            "lib/sky/package.star" to libPkg(", shared_namespaces = [\"weather\"]"),
-          )
-        )
-      )
-    val loader =
-      ScriptLoader(
-        dir,
-        ScriptLimits.HARNESS,
-        pluginGlobals = mapOf("weather" to StructValue(emptyMap())),
+    val files =
+      mapOf(
+        "zones/weather/package.star" to zonePkg(),
+        "lib/sky/package.star" to libPkg(", shared_namespaces = [\"weather\"]"),
       )
     for (pkg in listOf("zones/weather", "lib/sky")) {
-      val e = loader.load(listOf(pkg)).errors.single { it.kind == "namespace" }
+      val e =
+        load(files, pkg, pluginGlobals = mapOf("weather" to StructValue(emptyMap())))
+          .errors
+          .single { it.kind == "namespace" }
       assertEquals(pkg, e.pkg)
       assertEquals("attribute namespace 'weather' is the namespace of plugin 'weather'", e.message)
     }
@@ -611,105 +581,52 @@ class LoaderTest {
 
   @Test
   fun `item with unknown vital or damage type in delta maps fails with did-you-mean`() {
-    val badVital =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"i\", wear = \"finger_l\", max_vital_deltas = vitals(hpo = 5))",
-        )
-      )
+    val badVital = loadItem("item(\"i\", wear = \"finger_l\", max_vital_deltas = vitals(hpo = 5))")
     assertContains(only(badVital).message, "unknown vital 'hpo' (did you mean 'hp'?)")
 
-    val badResist =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"i\", wear = \"finger_l\", resist_deltas = resists(frie = 5))",
-        )
-      )
+    val badResist = loadItem("item(\"i\", wear = \"finger_l\", resist_deltas = resists(frie = 5))")
     assertContains(only(badResist).message, "unknown damage type 'frie' (did you mean 'fire'?)")
   }
 
   @Test
   fun `item with vital or resist deltas without wear fails to load`() {
-    val unwornVital =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"i\", max_vital_deltas = vitals(hp = 5))",
-        )
-      )
+    val unwornVital = loadItem("item(\"i\", max_vital_deltas = vitals(hp = 5))")
     assertContains(only(unwornVital).message, "needs a wear slot")
 
-    val unwornResist =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"i\", resist_deltas = resists(fire = 5))",
-        )
-      )
+    val unwornResist = loadItem("item(\"i\", resist_deltas = resists(fire = 5))")
     assertContains(only(unwornResist).message, "needs a wear slot")
   }
 
   @Test
   fun `item charges below 1 fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", charges = 0)",
-        )
-      )
-    assertContains(only(r).message, "item(charges): must be at least 1")
+    expectItemFailure("item(\"wand\", charges = 0)", "item(charges): must be at least 1")
   }
 
   @Test
   fun `item empty without charges fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", empty = \"keep\")",
-        )
-      )
-    assertContains(only(r).message, "item(empty): needs charges")
+    expectItemFailure("item(\"wand\", empty = \"keep\")", "item(empty): needs charges")
   }
 
   @Test
   fun `stackable item with charges not equal to 1 fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"potion\", stackable = True, charges = 2)",
-        )
-      )
-    assertContains(only(r).message, "item(charges): a stackable item can only have 1 charge")
+    expectItemFailure(
+      "item(\"potion\", stackable = True, charges = 2)",
+      "item(charges): a stackable item can only have 1 charge",
+    )
   }
 
   @Test
   fun `stackable item with empty keep fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"potion\", stackable = True, charges = 1, empty = \"keep\")",
-        )
-      )
-    assertContains(only(r).message, "item(empty): a stackable item can't keep an empty item")
+    expectItemFailure(
+      "item(\"potion\", stackable = True, charges = 1, empty = \"keep\")",
+      "item(empty): a stackable item can't keep an empty item",
+    )
   }
 
   @Test
   fun `item empty with unknown variant fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", charges = 3, empty = \"dust\")",
-        )
-      )
-    assertContains(
-      only(r).message,
+    expectItemFailure(
+      "item(\"wand\", charges = 3, empty = \"dust\")",
       "item(empty): 'dust' is not 'destroy', 'keep' or one of this item's variants",
     )
   }
@@ -717,15 +634,11 @@ class LoaderTest {
   @Test
   fun `item with charges and empty variant loads successfully`() {
     val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to
-            """
-            item("spent_wand")
-            item("wand", charges = 3, empty = "spent", variants = {"spent": ":spent_wand"})
-            """,
-        )
+      loadItem(
+        """
+        item("spent_wand")
+        item("wand", charges = 3, empty = "spent", variants = {"spent": ":spent_wand"})
+        """
       )
     assertTrue(r.ok, r.report())
     val wand = r.prototypes().item(Label("//zones/z:wand"))
@@ -735,13 +648,7 @@ class LoaderTest {
 
   @Test
   fun `item empty destroy without charges loads`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"lamp\", empty = \"destroy\")",
-        )
-      )
+    val r = loadItem("item(\"lamp\", empty = \"destroy\")")
     assertTrue(r.ok, r.report())
     val lamp = r.prototypes().item(Label("//zones/z:lamp"))
     assertEquals(null, lamp.charges)
@@ -750,25 +657,15 @@ class LoaderTest {
 
   @Test
   fun `item use_target without use_effect fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", use_target = \"enemy\")",
-        )
-      )
-    assertContains(only(r).message, "item(use_target): needs use_effect")
+    expectItemFailure(
+      "item(\"wand\", use_target = \"enemy\")",
+      "item(use_target): needs use_effect",
+    )
   }
 
   @Test
   fun `item use_target self without use_effect loads`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"lamp\", use_target = \"self\")",
-        )
-      )
+    val r = loadItem("item(\"lamp\", use_target = \"self\")")
     assertTrue(r.ok, r.report())
     val lamp = r.prototypes().item(Label("//zones/z:lamp"))
     assertEquals(gups.core.model.TargetKind.SELF, lamp.useTarget)
@@ -776,25 +673,14 @@ class LoaderTest {
 
   @Test
   fun `item negative use_lag fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", use_lag = -1)",
-        )
-      )
-    assertContains(only(r).message, "item(use_lag): can't be negative")
+    expectItemFailure("item(\"wand\", use_lag = -1)", "item(use_lag): can't be negative")
   }
 
   @Test
   fun `item use_target item with heal fails load naming heal`() {
     val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to
-            "item(\"potion\", use_effect = heal(dice = \"1d4\", vital = \"hp\"), use_target = \"item\")",
-        )
+      loadItem(
+        "item(\"potion\", use_effect = heal(dice = \"1d4\", vital = \"hp\"), use_target = \"item\")"
       )
     val msg = only(r).message
     assertContains(msg, "item(use_effect):")
@@ -807,31 +693,16 @@ class LoaderTest {
 
   @Test
   fun `item use_target self with apply_affect worn fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to
-            "item(\"wand\", use_effect = apply_affect(\"glow\", 10, applies = \"worn\"), use_target = \"self\")",
-        )
-      )
-    assertContains(
-      only(r).message,
+    expectItemFailure(
+      "item(\"wand\", use_effect = apply_affect(\"glow\", 10, applies = \"worn\"), use_target = \"self\")",
       "item(use_effect): apply_affect(applies) is only for use_target = 'item'",
     )
   }
 
   @Test
   fun `item use_target self with apply_affect without duration fails load`() {
-    val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to "item(\"wand\", use_effect = apply_affect(\"glow\", None))",
-        )
-      )
-    assertContains(
-      only(r).message,
+    expectItemFailure(
+      "item(\"wand\", use_effect = apply_affect(\"glow\", None))",
       "item(use_effect): apply_affect(duration) can be None only with use_target = 'item'",
     )
   }
@@ -839,18 +710,14 @@ class LoaderTest {
   @Test
   fun `item with valid use_effect sequence loads`() {
     val r =
-      load(
-        mapOf(
-          "zones/z/package.star" to zonePkg(),
-          "zones/z/a.star" to
-            """
-            item(
-              "salve",
-              use_effect = sequence(heal(dice = "1d4", vital = "hp"), apply_affect("bless", 10)),
-              use_lag = 2,
-            )
-            """,
+      loadItem(
+        """
+        item(
+          "salve",
+          use_effect = sequence(heal(dice = "1d4", vital = "hp"), apply_affect("bless", 10)),
+          use_lag = 2,
         )
+        """
       )
     assertTrue(r.ok, r.report())
     val salve = r.prototypes().item(Label("//zones/z:salve"))
