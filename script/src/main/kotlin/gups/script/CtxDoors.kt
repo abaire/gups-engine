@@ -13,7 +13,7 @@ import net.starlark.java.eval.StarlarkThread
 /** Doors, exits and containers. */
 abstract class CtxDoors
 internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxExtras) :
-  CtxEquipment(frame, owner, hc, extras) {
+  CtxRestrictions(frame, owner, hc, extras) {
   internal fun door(
     room: Any,
     dir: Any,
@@ -57,7 +57,7 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
 
   @StarlarkMethod(
     name = "lock_door",
-    doc = "Closes and locks the door.",
+    doc = "Closes and locks the door. Only a door with a key has a lock.",
     parameters =
       [
         Param(name = "room", named = true, doc = "Room, or room label, that has the exit."),

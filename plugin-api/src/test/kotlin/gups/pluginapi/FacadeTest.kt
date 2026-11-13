@@ -12,6 +12,8 @@ import gups.core.model.CreationChoice
 import gups.core.model.CreationProvider
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.model.Restriction
+import gups.core.model.RestrictionPoint
 import gups.core.model.Trait
 import gups.core.rules.RulesContext
 import gups.core.rules.StartingStats
@@ -32,6 +34,7 @@ import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.Facades
 import gups.pluginapi.host.ItemFacade
 import gups.pluginapi.host.PluginHost
+import gups.pluginapi.host.RoomFacade
 import gups.pluginapi.host.WorldFacade
 import gups.script.testing.TestWorlds
 import kotlin.test.Test
@@ -129,7 +132,7 @@ class FacadeTest {
     assertEquals(listOf("soaked"), ann.affects)
     assertTrue(f.removeAffect(ann, "soaked"))
     assertFalse(f.removeAffect(ann, "soaked"))
-    f.teleport(ann, cave)
+    assertNull(f.teleport(ann, cave))
     assertEquals(cave, ann.room)
     assertEquals(20, ann.maxVital("hp"))
     assertEquals(1, ann.level)
@@ -601,7 +604,7 @@ class FacadeTest {
   }
 
   @Test
-  fun `wear and unwear put a carried item on and off as the script verbs do`() {
+  fun `wear and removeWorn put a carried item on and off as the script verbs do`() {
     val testWorld = world(files = ITEM_FILES)
     val facade = WorldFacade(testWorld, "weather") {}
     val player =
@@ -618,9 +621,143 @@ class FacadeTest {
     assertNull(facade.wear(ann, ItemFacade(pack, testWorld)))
     assertEquals(ItemLocation.Equipped(player.id, "held"), pack.location)
     assertFailsWith<IllegalArgumentException> { facade.wear(ann, ItemFacade(pack, testWorld)) }
-    assertNull(facade.unwear(ann, ItemFacade(pack, testWorld)))
+    assertNull(facade.removeWorn(ann, ItemFacade(pack, testWorld)))
     assertEquals(ItemLocation.Carried(player.id), pack.location)
-    assertFailsWith<IllegalArgumentException> { facade.unwear(ann, ItemFacade(pack, testWorld)) }
+    assertFailsWith<IllegalArgumentException> {
+      facade.removeWorn(ann, ItemFacade(pack, testWorld))
+    }
+  }
+
+  private class Queried(val testWorld: World, val facade: WorldFacade) {
+    val player =
+      testWorld.spawnPlayer(
+        "Ann",
+        Label("//zones/z:a"),
+        overrides = StartingStats(max = mapOf("hp" to 20), current = mapOf("hp" to 20)),
+      )
+    val ann = ActorFacade(player, testWorld)
+
+    fun carry(label: String) =
+      testWorld.spawnItem(Label("//zones/z:$label"), ItemLocation.Carried(player.id))
+
+    fun item(i: gups.core.model.Item) = ItemFacade(i, testWorld)
+
+    fun refuse(point: RestrictionPoint) {
+      testWorld.restrictions = mapOf(point to listOf(Restriction { _, _ -> "Not allowed." }))
+    }
+  }
+
+  private fun queried(): Queried {
+    val testWorld =
+      world(files = ITEM_FILES + mapOf("zones/z/skills.star" to "skill(\"zap\", kind = \"spell\")"))
+    return Queried(testWorld, WorldFacade(testWorld, "weather") {})
+  }
+
+  @Test
+  fun `mayWear and mayRemove answer as wear and removeWorn would and move nothing`() {
+    val q = queried()
+    val pack = q.carry("backpack")
+    assertEquals("You can't wear a stick.", q.facade.mayWear(q.ann, q.item(q.carry("stick"))))
+    assertNull(q.facade.mayWear(q.ann, q.item(pack)))
+    assertEquals(ItemLocation.Carried(q.player.id), pack.location)
+    assertEquals("You can't wield a backpack.", q.facade.mayWear(q.ann, q.item(pack), wield = true))
+    q.refuse(RestrictionPoint.WEAR)
+    assertEquals("Not allowed.", q.facade.mayWear(q.ann, q.item(pack)))
+    q.testWorld.restrictions = emptyMap()
+    q.facade.wear(q.ann, q.item(pack))
+    assertNull(q.facade.mayRemove(q.ann, q.item(pack)))
+    q.refuse(RestrictionPoint.REMOVE)
+    assertEquals("Not allowed.", q.facade.mayRemove(q.ann, q.item(pack)))
+    assertEquals(ItemLocation.Equipped(q.player.id, "held"), pack.location)
+    assertFailsWith<IllegalArgumentException> { q.facade.mayWear(q.ann, q.item(pack)) }
+    assertFailsWith<IllegalArgumentException> {
+      q.facade.mayRemove(q.ann, q.item(q.carry("stick")))
+    }
+  }
+
+  @Test
+  fun `mayDrop, mayGive and mayPut ask their restrictions and move nothing`() {
+    val q = queried()
+    val stick = q.carry("stick")
+    val bag = q.carry("bag")
+    val wolf =
+      ActorFacade(
+        q.testWorld.spawnMob(Label("//zones/z:wolf"), q.testWorld.room(Label("//zones/z:a"))),
+        q.testWorld,
+      )
+    val away =
+      ActorFacade(
+        q.testWorld.spawnMob(Label("//zones/z:wolf"), q.testWorld.room(Label("//zones/z:b"))),
+        q.testWorld,
+      )
+    val item = q.item(stick)
+    assertNull(q.facade.mayDrop(q.ann, item))
+    assertNull(q.facade.mayGive(q.ann, item, wolf))
+    assertNull(q.facade.mayPut(q.ann, item, q.item(bag)))
+    assertEquals("They aren't here.", q.facade.mayGive(q.ann, item, away))
+    assertEquals("You already have it.", q.facade.mayGive(q.ann, item, q.ann))
+    q.refuse(RestrictionPoint.DROP)
+    assertEquals("Not allowed.", q.facade.mayDrop(q.ann, item))
+    q.refuse(RestrictionPoint.GIVE)
+    assertEquals("Not allowed.", q.facade.mayGive(q.ann, item, wolf))
+    q.refuse(RestrictionPoint.PUT)
+    assertEquals("Not allowed.", q.facade.mayPut(q.ann, item, q.item(bag)))
+    assertEquals(ItemLocation.Carried(q.player.id), stick.location)
+    assertFailsWith<IllegalArgumentException> {
+      q.facade.mayPut(q.ann, item, q.item(q.carry("charm")))
+    }
+    q.testWorld.moveItem(stick, ItemLocation.Contained(bag.id))
+    assertFailsWith<IllegalArgumentException> { q.facade.mayDrop(q.ann, item) }
+  }
+
+  @Test
+  fun `fits answers for a container, an actor and a room as the commands would and changes nothing`() {
+    val q = queried()
+    val tin = q.item(q.carry("tin"))
+    val room = RoomFacade(q.testWorld.room(Label("//zones/z:a")), q.testWorld)
+    val pebbles =
+      q.testWorld.spawnItem(Label("//zones/z:pebble"), ItemLocation.Carried(q.player.id), 9)
+    assertEquals(3, q.facade.fits("//zones/z:pebble", tin, 9))
+    assertEquals(3, q.facade.fits(q.item(pebbles), tin))
+    assertEquals(2, q.facade.fits(q.item(pebbles), tin, 2))
+    assertEquals(7, q.facade.fits("//zones/z:pebble", room, 7))
+    assertEquals(1, q.facade.fits("//zones/z:pebble", q.ann))
+    assertEquals(9, q.facade.fits(q.item(pebbles), room))
+    assertEquals(2, q.player.inventory.size)
+    assertEquals(0, tin.item.contents.size)
+    q.refuse(RestrictionPoint.PUT)
+    assertEquals(3, q.facade.fits("//zones/z:pebble", tin, 9))
+  }
+
+  @Test
+  fun `fits rejects an unknown label, a non-container, and a bad count`() {
+    val q = queried()
+    val stick = q.item(q.carry("stick"))
+    val charm = q.item(q.carry("charm"))
+    assertFailsWith<IllegalArgumentException> { q.facade.fits("//zones/z:nope", q.ann) }
+    assertFailsWith<IllegalArgumentException> { q.facade.fits("not a label", q.ann) }
+    assertFailsWith<IllegalArgumentException> { q.facade.fits("//zones/z:stick", charm) }
+    assertFailsWith<IllegalArgumentException> { q.facade.fits(stick, charm) }
+    assertFailsWith<IllegalArgumentException> { q.facade.fits("//zones/z:stick", q.ann, 0) }
+    assertFailsWith<IllegalArgumentException> { q.facade.fits(stick, q.ann, 2) }
+  }
+
+  @Test
+  fun `mayEnter and mayLearn ask only their restrictions`() {
+    val q = queried()
+    val cave = RoomFacade(q.testWorld.room(Label("//zones/z:b")), q.testWorld)
+    assertNull(q.facade.mayEnter(q.ann, cave))
+    q.refuse(RestrictionPoint.ENTER)
+    assertEquals("Not allowed.", q.facade.mayEnter(q.ann, cave))
+    assertEquals(Label("//zones/z:a"), q.player.room.label)
+    assertEquals("Not allowed.", q.facade.teleport(q.ann, cave), "teleport returns the refusal")
+    assertEquals(Label("//zones/z:a"), q.player.room.label)
+    assertNull(q.facade.mayLearn(q.ann, "//zones/z:zap", 10))
+    q.refuse(RestrictionPoint.LEARN)
+    assertEquals("Not allowed.", q.facade.mayLearn(q.ann, "//zones/z:zap", 10))
+    assertNull(q.player.skills[Label("//zones/z:zap")])
+    assertFailsWith<IllegalArgumentException> { q.facade.mayLearn(q.ann, "//zones/z:nope", 10) }
+    assertFailsWith<IllegalArgumentException> { q.facade.mayLearn(q.ann, "//zones/z:zap", 101) }
   }
 
   @Test
@@ -1008,7 +1145,7 @@ class FacadeTest {
     return sink
   }
 
-  private companion object {
+  internal companion object {
     val READY = LevelingMsg.READY.default
 
     /** A world whose `on_level_up` adds 5 max hp per level. */
@@ -1030,6 +1167,8 @@ class FacadeTest {
             item("bag", name = "a bag", keywords = ["bag"], container = container())
             item("lead_box", name = "a lead box", keywords = ["box"], tags = ["lead"], container = container())
             item("backpack", name = "a backpack", keywords = ["backpack"], wear = "held", container = container())
+            item("tin", name = "a tin", keywords = ["tin"], container = container(capacity = 1, max_weight = 3))
+            item("pebble", name = "a pebble", keywords = ["pebble"], stackable = True)
             item("wand", name = "a wand", keywords = ["wand"], charges = 3, empty = "keep")
             item("potion", name = "a potion", keywords = ["potion"], charges = 1, stackable = True)
             """

@@ -30,12 +30,6 @@ def _find(ctx, arg):
             return a
     return None
 
-def _befriend(ctx):
-    # Syntax: befriend <mob> <amount>
-    # Sets up a personal record directly, as a quest reward would.
-    words = ctx.args.strip().split(" ")
-    ctx.adjust_standing(_find(ctx, words[0]), ctx.actor, int(words[1]))
-
 def _donate(ctx):
     # Syntax: donate <mob> <coins>
     words = ctx.args.strip().split(" ")
@@ -45,7 +39,7 @@ room("standing_test_room",
     name = "The Standing Test Chamber",
     desc = "A sealed chamber for standing tests.",
     flags = ["dead_end_ok"],
-    commands = {"probe": _probe_standing, "befriend": _befriend, "donate": _donate},
+    commands = {"probe": _probe_standing, "donate": _donate},
 )
 
 room("standing_gate",

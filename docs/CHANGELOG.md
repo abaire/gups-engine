@@ -6,6 +6,18 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ### Respec shrines
 
+- `lock_door` now fails with a script error on a door without a `key`, as `lock_container` does, since only a door with
+  a key has a lock. A `door(state=DOOR.locked)` or `container(state=...)` declared locked without a `key` now fails to
+  load. Give the door or container a `key`, or declare it `closed` and veto `open` with `before_open`. A door or
+  container left locked when its prototype loses its `key` comes back closed after a reload (doors) or a restore from
+  the database (doors and containers).
+- `ctx.give` is renamed `ctx.grant_item`, since it puts an item in an actor's inventory with no giver and isn't the
+  `give` command. The spec now says that `grant_item`, `move_item` and `destroy` take a worn item off without asking the
+  `remove` restriction; `remove_worn` asks it.
+- `teleport` now runs `before_enter` in the destination room (with `ctx.direction` `None`) after the `enter`
+  restriction, and returns the refusal or veto instead of sending it: `ctx.teleport` returns the message or `None`, and
+  `PluginWorld.teleport` returns `String?`. `@goto` tells the builder the refusal. Implementers of `PluginWorld` must
+  change `teleport`'s return type to `String?`.
 - `//lib:trainer.star` records the sessions spent per skill; `trainer.refund(ctx, actor, skill=None)` gives them back.
 - `samples/heritage-plugin`: `heritage.respec_menu`, `respec_check`, `respec` and `starter_skills`; `created` grants
   class starter skills for re-picked characters too; starter skills are `//skills/heritage_skills:*`.
@@ -14,9 +26,47 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 - `respec.star`: the `reset` skill policy (refund through `trainer.refund`, forget, starter skills), the `"respec"`
   standing event, the `respec_done` hook, and a rebirth altar example.
 - Heritage tutorial 04 walks through a respec shrine; `docs/PLUGINS.md` lists the respec builtins.
-- New verbs `ctx.wear(actor, item, wield=False)` and `ctx.unwear(actor, item)`, and `PluginWorld.wear` / `unwear`: put a
-  carried item on, or a worn one off, as the `wear`, `wield` and `remove` commands would, asking the same restrictions
-  and sending nothing. They return the refusal or `None`. Script item verbs otherwise still skip item restrictions.
+- New verbs `ctx.wear(actor, item, wield=False)` and `ctx.remove_worn(actor, item)`, and `PluginWorld.wear` /
+  `removeWorn`: put a carried item on, or a worn one off, as the `wear`, `wield` and `remove` commands would, asking the
+  same restrictions and sending nothing. They return the refusal or `None`. Script item verbs otherwise still skip item
+  restrictions.
+- New restriction queries `ctx.may_wear(actor, item, wield=False)`, `may_remove`, `may_drop`, `may_give(actor, item,
+  to)`, `may_put(actor, item, container)`, `may_enter(actor, room)` and `may_learn(actor, skill, proficiency)`, and
+  `PluginWorld.mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`: each returns the
+  message the command or verb would refuse with, or `None`, and changes nothing. `wear`, `remove_worn` and `set_skill`
+  share their checks with their queries.
+- `//lib:shop.star`: `sell` asks `may_give` with the keeper as receiver, so a `give` restriction refuses a sale and the
+  item stays with the seller.
+- New query `ctx.fits(item_or_label, to, count=None)` and `PluginWorld.fits(item | label, to, count)`: how many of
+  `count` would fit in a container (its free `capacity` and `max_weight`), at an actor (their `carry_limit`) or in a
+  room, worked out as `put`, `get` and `give` do, without moving or spawning anything. `spawn`, `give` and `move_item`
+  still skip these limits.
+- The rules `ctx` gains `item_info` in `carry_limit` asked about an item or a label: the prototype's `item_info` struct,
+  so a limit that varies by item type reads `ctx.item_info.tags` or `.kind` whether or not an instance exists.
+  `ctx.item` is `None` when `fits` asks about a label.
+- `//lib:shop.star`: `list` runs in the normal lane and restocks for real before it answers, as `buy` and `sell` do,
+  instead of projecting the restock; `buy` sells no more than the buyer can carry ("You can only carry N.", or "You
+  can't carry that." for nothing), and restocking and `sell` ask `ctx.fits` about the container. `shop.define` no longer
+  takes `capacity` and `max_weight`: the container's own limits apply. Fix a call that passes them by dropping them, and
+  give a shop that wants a smaller shelf a smaller container.
+- Plugin API: `PluginWorld.spawnItem(label, to, count=1)` (returns a list: one stack for a stackable label, `count`
+  items otherwise), `moveItem(item, to, count=null)`, `destroy(item, count=null)` and `mergeStack(item)`, with the
+  semantics of `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack`: they skip item
+  restrictions and the commands' limits, and room placement is at track index 0. There is no `give`; move or spawn to an
+  actor instead. New reads `PluginItem.count`, `PluginItem.location` (a `PluginItemLocation`: `InRoom`, `Carried`,
+  `Equipped` or `InContainer`), `PluginActor.inventory` and `PluginActor.equipment`. Implementers of `PluginWorld`,
+  `PluginActor` and `PluginItem` (fakes in tests) add the new members.
+- A worn item's `wear` restriction is asked again, for everything the wearer has on, whenever the item's effective tags,
+  prototype (`transform`) or item affects change, including an item affect that expires. A refused item goes inactive
+  and one no longer refused works again, as after a choice or trait change.
+- Test harness: `w.ctx(self=None)` returns a ctx with every verb, as a hook owned by `self` (an entity or a label; the
+  world's first room by label when omitted) would have it, for setting up state without typing commands or adding
+  fixture commands. It has no other context fields, resolves labels relative to the test's package, runs verbs at once
+  outside any pulse (mob actions queue, so `w.run` lets them happen) and stays usable for the rest of the test. `deny`
+  is an error.
+- A function defined in a `*_test.star` file can no longer be passed to `after`, `start_task` (`on_done`, `on_stop`) or
+  an affect's `on_tick` or `on_expire`: it fails with "defined in a test file", where before the callback was accepted
+  and silently never ran. Define the callback in a content file or a `*_testdata.star` fixture.
 
 ### Timed tasks and crafting
 

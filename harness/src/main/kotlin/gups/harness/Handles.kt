@@ -526,6 +526,41 @@ internal constructor(
     return world.act(m, str(commandLine, "act(command_line)"))
   }
 
+  @StarlarkMethod(
+    name = "ctx",
+    doc =
+      "A ctx with the verbs of ctx, as a hook owned by self would have it, for setting up state" +
+        " without typing commands. It has no other context fields (actor, target and the rest are" +
+        " None) and labels resolve relative to the test's package. Verbs run at once, outside any" +
+        " pulse; mob actions only queue, so run pulses to let them happen. It stays usable for" +
+        " the rest of the test. deny is an error, and so is passing a function defined in a test" +
+        " file to a verb that keeps it to call later (after, start_task, an affect's on_tick or" +
+        " on_expire).",
+    parameters =
+      [
+        Param(
+          name = "self",
+          named = true,
+          defaultValue = "None",
+          doc =
+            "The ctx's owner, an entity or a label; the world's first room by label when omitted.",
+        )
+      ],
+    useStarlarkThread = true,
+  )
+  fun ctx(self: Any, thread: StarlarkThread): Any {
+    val owner =
+      when {
+        isNone(self) ->
+          world.rooms.minByOrNull { it.label.toString() }
+            ?: evalFail("ctx(self): the world has no rooms")
+        self is EntityView -> self.entity
+        self is String -> roomArg(self, "ctx(self)", thread)
+        else -> evalFail("ctx(self): expected an entity or a label, got ${typeName(self)}")
+      }
+    return host.testCtx(world, owner, pkgOf(thread))
+  }
+
   /** The stored key for [key]: the test package's namespace unless it names one. */
   private fun attrKey(key: Any, thread: StarlarkThread): String {
     val k = str(key, "attribute key")

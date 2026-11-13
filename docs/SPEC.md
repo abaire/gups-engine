@@ -567,7 +567,7 @@ the world graph:
     vitals stay, capped at the new maximum, except that a vital that was at its maximum moves to the new one. Prototype
     traits always follow the new prototype (granted ones stay), and the maxima compared are base values; the effective
     maximum then follows from the traits.
-  - Rooms: door states follow the same rule.
+  - Rooms: door states follow the same rule, except that a locked door whose new prototype has no `key` ends up closed.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
   - Spawn rules carry their live mobs over by label. New rooms fill their spawns, then get `on_load`.
@@ -657,13 +657,15 @@ The engine persists world state and account information to SQLite in WAL mode
 - **JSON payloads and delta encoding:** Payloads are serialized using delta encoding
   ([Codec.kt](../persist/src/main/kotlin/gups/persist/Codec.kt)). Each payload carries a `format_version` integer for
   engine schema evolution:
-  - Rooms store modified door states, custom attributes, running timers, and affects.
+  - Rooms store modified door states, custom attributes, running timers, and affects. A door saved locked whose
+    prototype no longer has a `key` is restored closed.
   - Mobs store position, current vitals, XP, home room, spawn rule bindings, `summonedBy`, `owner`, a leash override
     (§4.5 `set_leash`), and personal standing records with their history. Modifiable stats, vitals maxima, resists,
     skills, and behavior cadences are persisted only when differing from prototype definitions.
   - Schema-keyed stats, vitals, and resists are stored as JSON maps, recording current values, base maxima, and
     negative-vital pulse markers.
-  - Items store stack counts, decay deadlines, name overrides, container state, attributes, and timers.
+  - Items store stack counts, decay deadlines, name overrides, container state, attributes, and timers. A container
+    saved locked whose prototype no longer has a `key` is restored closed.
   - Players store complete character state, including base attributes, choices, granted traits, and level progression
     deltas. Restored traits are computed before vitals are applied so trait bonuses are preserved without truncation.
   - Active and anchor reasons are persisted across restarts (§5.9).
@@ -809,14 +811,14 @@ The engine is a kernel plus five feature modules. A world lists the features it 
 ["combat", "track", "skills", "leveling", "standing"]`; leaving `features` out turns all five on, and listing all five
 is the same as leaving it out.
 
-|      Feature       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Requires |
-|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect`, `remove_affect` and `summon` verbs, `before_summon` and `on_summon`), pet ownership (`set_owner`, `clear_owner`, `on_owner_change`), mob leashes (`set_leash`, `reset_leash`), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, the `order` command, `before_order` and the `ORDER` restriction point, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; the activity slot (warmups, interrupts, the `interrupt_check` export), timed tasks (`start_task`, `stop_task`, `actor.task`, `is_busy`), `stop` and `clear`, `set_item_name`, `wear`, `unwear`, `item_info`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `aggressive(prefer=)`, `assist(prefer=)`, `retarget`, the `target_order` export, combat memory with `memory_pulses` (module and mob), `memories`, `remember` and `forget`; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | —        |
-| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `combat` |
-| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, `cast_allowed`, `skill_check`, `skill_power`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, the global `on_skill_use` hook, `act_cast`, the `set_skill`, `remove_skill`, `skill_info` and `report_skill_use` and `skill_roll` verbs, `casting` in `Char.Status`, the `skills` command, `Char.Skills`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | —        |
-| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_share`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`, global `on_level_change` hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | —        |
-| `standing`         | Factions, standing and disposition: the `faction` declaration, `mob(factions=)`, `standing_history_pulses`, the `disposition_below` and `disposition_above` behavior arguments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | —        |
+|      Feature       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Requires |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect`, `remove_affect` and `summon` verbs, `before_summon` and `on_summon`), pet ownership (`set_owner`, `clear_owner`, `on_owner_change`), mob leashes (`set_leash`, `reset_leash`), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, the `order` command, `before_order` and the `ORDER` restriction point, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; the activity slot (warmups, interrupts, the `interrupt_check` export), timed tasks (`start_task`, `stop_task`, `actor.task`, `is_busy`), `stop` and `clear`, `set_item_name`, `wear`, `remove_worn`, the `may_*` restriction queries, `fits`, `item_info`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `starting_stats`, `condition`, `on_player_death` | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `aggressive(prefer=)`, `assist(prefer=)`, `retarget`, the `target_order` export, combat memory with `memory_pulses` (module and mob), `memories`, `remember` and `forget`; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | —        |
+| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `combat` |
+| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, `cast_allowed`, `skill_check`, `skill_power`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, the global `on_skill_use` hook, `act_cast`, the `set_skill`, `remove_skill`, `skill_info` and `report_skill_use` and `skill_roll` verbs, `casting` in `Char.Status`, the `skills` command, `Char.Skills`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | —        |
+| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_share`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`, global `on_level_change` hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | —        |
+| `standing`         | Factions, standing and disposition: the `faction` declaration, `mob(factions=)`, `standing_history_pulses`, the `disposition_below` and `disposition_above` behavior arguments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | —        |
 
 - **A feature that is off doesn't exist** for the world:
   - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
@@ -1409,9 +1411,10 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 | Messaging         | `say(speaker, text)`, `emote(actor, text)`, `send(target, text)` (one recipient), `echo(room, text, exclude=[])`, `gmcp(player, package, data)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Veto              | `deny(msg)`. Valid only as a return value from `before_*` hooks or `cast_allowed` modifiers.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Mob actions       | `act(mob, command_line)`, `act_move(mob, dir)`, `act_attack(mob, target)`, `act_cast(mob, skill, target=None)`, `act_advance(mob, target)`, `act_retreat(mob, target=None)`, `move_toward(mob, dir_or_target)`. These enqueue tick-lane actions and apply only to mobs, never players.                                                                                                                                                                                                                                                                                                                                                           |
-| Movement          | `teleport(actor, room, index=None)`. Engine-validated; fires the enter and exit hooks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Movement          | `teleport(actor, room, index=None)`: moves the actor without an exit. See **Movement** below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Vitals and combat | `damage(target, amount, type, vital, source=None)`, `heal(target, amount, vital, source=None)`, `start_combat(a, b)`, `stop_combat(a, b=None)`, `apply_affect(target, ...)`, `remove_affect(target, name)` (target: an actor, an item or a room), `summon(caster, label, count=1, duration=None)`, `clear_contributions(victim, contributor=None)`, `remember(mob, subject, event, skill=None, amount=None, target=None)`, `forget(mob, subject=None, event=None)`                                                                                                                                                                               |
-| Items             | `spawn(label, at, index=0, count=1)`, `give(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`, `set_item_name(item, name)`, `wear(actor, item, wield=False)`, `unwear(actor, item)`                                                                                                                                                                                                                                                                        |
+| Items             | `spawn(label, at, index=0, count=1)`, `grant_item(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`, `set_item_name(item, name)`, `wear(actor, item, wield=False)`, `remove_worn(actor, item)`, `fits(item_or_label, to, count=None)`                                                                                                                                                                                                                      |
+| Restrictions      | `may_wear(actor, item, wield=False)`, `may_remove(actor, item)`, `may_drop(actor, item)`, `may_give(actor, item, to)`, `may_put(actor, item, container)`, `may_enter(actor, room)`, `may_learn(actor, skill, proficiency)`: each returns the refusal message or `None`. See **Restriction queries** below.                                                                                                                                                                                                                                                                                                                                       |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -1520,15 +1523,27 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 - **Items:**
   - `spawn` returns a view, or a list when it makes several entities. For items, `at` may be a room or room label
     (ground, at `index`), an actor (carried) or a container.
-  - `give(actor, label_or_item, count=None)` spawns `count` of a label (default 1), or moves `count` of an item (default
-    the whole stack), into the actor's inventory. It returns the item view, or a list of views when it spawns several
-    non-stackable items, and fires no hooks.
+  - `grant_item(actor, label_or_item, count=None)` spawns `count` of a label (default 1), or moves `count` of an item
+    (default the whole stack), into the actor's inventory. It returns the item view, or a list of views when it spawns
+    several non-stackable items, and fires no hooks. No one gives the item, so it is not the `give` command: nothing is
+    asked of a giver or the receiver.
   - `move_item(item, to, index=0, count=None)` moves the item, or `count` of a stack, and returns the moved item's view.
     A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and doesn't
     fire `on_spawn`. Moving part of an equipped or non-stackable item is an error. A moved part also copies the stack's
     instance affects and tag changes.
   - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
     count, removes that many from the stack.
+  - `spawn`, `grant_item` and `move_item` don't check what the commands check about where an item goes: a container may
+    be closed or locked, and its `capacity` and `max_weight`, like an actor's carry limit, may be exceeded. Content that
+    moves items for a player asks `fits` first.
+  - `grant_item`, `move_item` and `destroy` take an equipped item out of its slot without asking the `remove`
+    restriction, since they act on the item, not as its wearer; `remove_worn` is the verb that asks it.
+  - `fits(item_or_label, to, count=None)` returns how many of `count` (default: the whole stack for an item, 1 for a
+    label) would fit at `to`, worked out as the commands do, and changes nothing. For a container, its free `capacity`
+    and `max_weight` cap it, as for `put`, and an item that would merge into a stack there takes no new entry; whether
+    it is open or locked isn't considered (`may_put` answers that). For an actor, `rules.carry_limit` asked about the
+    item caps it, as for `get` and `give`. For a room, it is `count`. A label no loaded item has, or an item `to` that
+    isn't a container, is an error. Kernel.
   - `set_charges(item, charges)` sets an item's remaining uses, from 0 to its prototype's `charges`; unlimited and
     stackable items are refused, and 0 doesn't run `empty`.
   - `set_item_name(item, name)` sets the item's name override: `name` is a non-empty single line of at most 80
@@ -1540,8 +1555,9 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
     message and changes nothing, or returns `None` once the item is worn. Whatever the command would refuse (no slot, no
     room, two items in the way) gets the command's message. It sends no messages, and a displaced item goes back to the
     inventory. An item the actor doesn't carry is an error. Kernel.
-  - `unwear(actor, item)` asks the `remove` restriction, then moves an item the actor wears back to their inventory. It
-    returns the refusal or `None` and sends no messages. An item the actor doesn't wear is an error. Kernel.
+  - `remove_worn(actor, item)` asks the `remove` restriction, then moves an item the actor wears back to their
+    inventory. It returns the refusal or `None` and sends no messages. An item the actor doesn't wear is an error.
+    Kernel.
   - Verbs never merge stacks, except `merge_stack(item)`, which merges the item into a stack of the same prototype in
     the same place with identical attributes, decay deadline and charges, as `get` does, and returns the view of the
     stack that now holds it (the item itself if nothing matched). An item with instance affects or tag changes never
@@ -1553,8 +1569,28 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
     slot belongs to moves to the inventory; one that still goes in its slot stays, inactive if it no longer fits (§4.6).
     No hooks fire.
   - `add_tag` and `remove_tag` return whether the effective tags changed.
+- **Restriction queries:** `may_X` asks whether the actor may X, named after the restriction point it asks (§4.19), and
+  returns the message the command or verb would refuse with, or `None`. It moves nothing and fires no hooks, so
+  fast-lane commands may call it. Arguments a command couldn't act on (an item in the wrong place, a receiver that isn't
+  an actor) are errors.
+  - `may_wear` and `may_remove` answer exactly as `wear` and `remove_worn` would: slot choice, room, and the `wear` and
+    `remove` restrictions. `item` must be carried, or worn for `may_remove`.
+  - `may_drop`, `may_give` and `may_put` make the yes-or-no checks of those commands and ask their restriction. `item`
+    must be carried. `may_give` refuses a receiver who isn't in the actor's room or is the actor, and `may_put` refuses
+    a closed container or the item itself. They don't check how much fits; `fits` answers that.
+  - `may_learn` answers as `set_skill` would.
+  - `may_enter` asks only the `enter` restriction, with `direction` `None`. `teleport` also runs `before_enter`, which a
+    query can't, so `teleport` can still be vetoed after `may_enter` allows it.
+  - Content that moves a player's item for them asks first: `//lib:shop.star`'s `sell` asks `may_give` with the keeper
+    as receiver. Kernel.
+- **Movement:** `teleport` asks the `enter` restriction (§4.19), then `before_enter` in the destination room with
+  `ctx.direction` `None` and `ctx.from_room` the room being left. Guards and `before_exit` don't run, since no exit is
+  used. A refusal or veto moves nothing, sends nothing, and is returned as its message; otherwise `teleport` returns
+  `None` once the actor has moved, and the exit and enter hooks fire as for a walk.
 - **Doors:** door verbs set both sides at once and print nothing. `open_door` also unlocks; `close_door` leaves a locked
-  door locked; `lock_door` closes the door; `unlock_door` leaves it closed.
+  door locked; `lock_door` closes the door and fails on a door without a `key`, since only a door with a key has a lock;
+  `unlock_door` leaves it closed. Content that keeps a door shut without a lock (a bar, a portcullis) vetoes `open` with
+  `before_open`.
 - **Containers:** container verbs print nothing. `open_container` also unlocks; `close_container` leaves a locked
   container locked; `lock_container` closes the container and fails on one whose prototype has no `key`, since only a
   container with a key has a lock; `unlock_container` leaves it closed.
@@ -1602,10 +1638,6 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
   (permanent); `applies` on an actor is an error; item affects can't carry `stunned`. Damage or healing an affect does
   from its own `on_tick` or `on_expire` hook, naming no `source`, counts as done by the actor that applied the affect,
   while that actor is in the world.
-
-Verbs without a player command (`say`, `emote`, door and exit-block setters, `path_to`, and the mob actions) are public
-`core` functions, so Kotlin and plugins share them.
-
 - `award_xp(actor, amount)`: gives `actor` `amount` experience (an int of at least 1) as a kill does: the gain message,
   then level steps as the world's `level_mode` says (§5.4). Returns `None`.
 - `take_xp(actor, amount)`: removes up to `amount` experience (at least 1), never below 0, and never changes the level.
@@ -1665,7 +1697,9 @@ the swinging item in an auto-attack swing, `"wield"` for an unarmed swing, other
 contributed by an actor affect or an item's instance affect, that affect's view, so the modifier can read
 `ctx.affect.power`; in `item_power` for a proc of an item's instance affect, that affect; `None` everywhere else),
 `limit` (the actor's `carry_limit` asked without an item, in `encumbrance_level` and `encumbrance`; `None` elsewhere,
-and in `carry_limit`'s own call), `carried` (the carried and worn weight, containers' contents included, in
+and in `carry_limit`'s own call), `item_info` (in `carry_limit` asked about an item or a label, the prototype's
+`item_info` struct, while `item` is the instance, or `None` when `fits` asks about a label; `None` elsewhere, and when
+the limit is asked without an item), `carried` (the carried and worn weight, containers' contents included, in
 `encumbrance_level` and `encumbrance`; `None` elsewhere), `encumbrance_level` (the level just computed, in
 `encumbrance`; `None` elsewhere), `behaviors` (in `owned_behaviors`, the mob's prototype behaviors as behavior values;
 `None` elsewhere), `cast_target` (in `recognizes_skill`, the cast's target actor or `None`; `None` elsewhere), `base`
@@ -2039,8 +2073,9 @@ affects or `equip_affects`) and does not attack. Its `carried` item affects stil
 soon as it fits. The wearer is told when an item stops and starts working, and `equipment` marks it. When working this
 out takes several passes (an item going inactive changes what the rules read), only the net change is told. Restore
 works it out once every item is placed, and tells nothing. A worn item that the `wear` restriction refuses when it is
-asked again (after a change of choices or traits, a reload or a restore, §4.19) is inactive the same way, and the wearer
-is sent the refusal instead; it works again when a later re-check allows it.
+asked again (after a change of choices or traits, a change to the tags, prototype or item affects of something the
+wearer has on, a reload or a restore, §4.19) is inactive the same way, and the wearer is sent the refusal instead; it
+works again when a later re-check allows it.
 
 ### 4.7 Behaviors (built in, implemented in Kotlin)
 
@@ -2308,11 +2343,12 @@ in the lib's own `lib` namespace on the player, so only the library writes it (�
 **`//lib:shop.star`:** `shop.define(id, stock, ...)` describes a shop and `shop.open(ctx, keeper, shop)` (from the
 keeper's `on_spawn`) binds a keeper to a stock container: a locked chest in its room or a pack it carries. Stock and the
 till (coins of the shop's currency, `//lib:gold_coin` by default) are real items in the container, restocked lazily over
-time while a keeper is present. A keeper that is incapacitated, stunned or fighting doesn't trade: while it is engaged
-(`combat` feature) it refuses every customer, and its stock still restocks. The library keeps no memory of attackers; a
-world can refuse or reprice them from the keeper's `shop_price` hook. Players use `list`, `buy`, `sell` and `value`.
-Prices start from `item(value=)`; the keeper's custom hook `shop_price` (§4.4) may change any price or refuse any
-customer, and plugin handlers for it join in (§4.15). `list` also sends the GMCP event `Shop.Stock`.
+time while a keeper is present. `list` restocks before it answers, as `buy` and `sell` do, and `buy` sells no more than
+the buyer can carry. A keeper that is incapacitated, stunned or fighting doesn't trade: while it is engaged (`combat`
+feature) it refuses every customer, and its stock still restocks. The library keeps no memory of attackers; a world can
+refuse or reprice them from the keeper's `shop_price` hook. Players use `list`, `buy`, `sell` and `value`. Prices start
+from `item(value=)`; the keeper's custom hook `shop_price` (§4.4) may change any price or refuse any customer, and
+plugin handlers for it join in (§4.15). `list` also sends the GMCP event `Shop.Stock`.
 
 **`//lib:trainer.star`:** `trainer.define(id, teaches)` describes a trainer, `trainer.teach(label, up_to, gain,
 start=None)` one skill it teaches, and `trainer.open(ctx, keeper, trainer)` (from the keeper's `on_spawn`) makes the
@@ -2752,18 +2788,26 @@ maximum, with `type` defaulting to the unarmed damage type.
   mob from `w.spawn` carries its prototype's traits.
 - Player handles have `choices`, `traits` and `has_trait` as view fields.
 
-|      Object       |                                                                                                                                                                                                                                                                                    API                                                                                                                                                                                                                                                                                    |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None, steps=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
-| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|      Object       |                                                                                                                                                                                                                                                                                             API                                                                                                                                                                                                                                                                                             |
+|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None, steps=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `ctx(self=None)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use instead of `//rules`.
   `bubble=True` keeps a reality bubble; without it every room is always simulated, so a mob can flee with no player
   near.
 - **`w.act(mob, line)`** queues a command line for a mob as `ctx.act` does (§4.5), returning whether it was accepted;
-  players are refused, since `p.do` drives them. It runs no pulses: `w.run` lets the command happen, so a test can have
-  a mob `wear` an item it was given with `w.spawn(..., at = mob)`.
+  players are refused, since `p.do` drives them. It runs no pulses: `w.run` lets the command happen.
+- **`w.ctx(self = None)`** returns a ctx with the verbs of §4.5, as a hook owned by `self` would have it. `self` is an
+  entity or a label, and defaults to the world's first room by label. The ctx has no other context fields (`actor`,
+  `target`, `item` and the rest are `None`), and labels resolve relative to the test's package. Verbs run at once,
+  outside any pulse; mob actions only queue, so `w.run` lets them happen. The ctx stays usable for the rest of the test.
+  `deny` is an error, and so is passing a function defined in a test file to a verb that keeps it to call later
+  (`after`, `start_task`, an affect's `on_tick` or `on_expire`), since only content files are there to call it. A test
+  sets up state with it instead of typing commands or adding fixture commands: `c = w.ctx()`, then `c.wear(dummy,
+  c.grant_item(dummy, ":amulet"))` or `c.teleport(p, ":vault")`, or `w.ctx(self = mage).apply_affect(p, ...)` for an
+  affect whose source is the mage.
 - **`p.do(line)`** submits the line directly, bypassing the session rate limiter. It runs pulses until the player's
   queue is empty and it isn't casting (at most 1000; more is an error), and returns all output since the last `do()` or
   `output()`.
@@ -2949,16 +2993,23 @@ subsystems (`core` or `script`). It consists of three primary components:
   [PluginViews.kt](../plugin-api/src/main/kotlin/gups/pluginapi/PluginViews.kt)) with engine-side wiring in
   [PluginHost.kt](../plugin-api/src/main/kotlin/gups/pluginapi/host/PluginHost.kt). The facade exposes safe mutation
   verbs (`send`, `gmcp`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `applyItemAffect`, `removeItemAffect`,
-  `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `wear`, `unwear`, `setAttr`, `delAttr`, `setChoices`,
-  `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`, `reportSkillUse`, `skillRoll` (needs `skills`), `startTask`,
-  `stopTask`, `setItemName`, `setBaseStat`, `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`,
-  `levelDown`, `rules`), query methods (including `skill(label)`, a loaded skill's `PluginSkill` view or null, and
-  `itemInfo(label)`, an item prototype's `PluginItemInfo` or null), RNG access, and read-only views of live entities
-  (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`); `PluginActor.task` and `isBusy` report a timed task of
-  either kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`, `unwear`, `task` and `isBusy` follow the
-  same rules as the script verbs. All facade mutations execute synchronously on the world thread with invariant
-  checking. `PluginWorld` extends `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`,
-  `diagnose` and `log`; it is what GMCP input handlers receive.
+  `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `spawnItem`, `moveItem`, `destroy`, `mergeStack`,
+  `wear`, `removeWorn`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`,
+  `reportSkillUse`, `skillRoll` (needs `skills`), `startTask`, `stopTask`, `setItemName`, `setBaseStat`,
+  `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `rules`), query methods (`mayWear`,
+  `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`, and including `skill(label)`, a loaded
+  skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's `PluginItemInfo` or null), RNG access,
+  and read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`); `PluginActor.task`
+  and `isBusy` report a timed task of either kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`,
+  `removeWorn`, `teleport`, `may*`, `fits`, `task` and `isBusy` follow the same rules as the script verbs. `teleport`
+  returns the refusal or veto, or null once the actor has moved. The item custody verbs `spawnItem`, `moveItem`,
+  `destroy` and `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack`
+  (§4.5): they skip the item restrictions and the commands' limits, and an item placed in a room lies at track index 0.
+  `spawnItem` returns a list: one stack for a stackable label, and `count` items otherwise. There is no `grantItem`:
+  `moveItem` or `spawnItem` with an actor as the destination puts the items in its inventory. All facade mutations
+  execute synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which
+  holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers
+  receive.
 
 **Plugin capabilities and lifecycle:**
 
@@ -3135,8 +3186,11 @@ subsystems (`core` or `script`). It consists of three primary components:
   `PluginSkill`), comparing equal when wrapping the same entity. `PluginItem` exposes `keywords`, `kind`, `wear`,
   `slotCost`, `weight`, `value`, `maxVitalDeltas`, `resistDeltas`, `inactive`, `tags`, `variants`, `affects` (each a
   `PluginItemAffect` with its `statDeltas`, `senseDeltas`, `maxVitalDeltas` and `resistDeltas`), `contents`,
-  `custodian`, `plural`, and `charges` and `maxCharges` (`null` when unlimited). `PluginItem.plural` exposes the
-  prototype's optional display name for stacks of 2 or more.
+  `custodian`, `plural`, `count` (the stack's size), `location`, and `charges` and `maxCharges` (`null` when unlimited).
+  `PluginItem.plural` exposes the prototype's optional display name for stacks of 2 or more. `PluginItem.location` is a
+  `PluginItemLocation`: the `PluginRoom` it lies in, the `PluginActor` carrying it, the `PluginActor` wearing it and the
+  slot, or the containing `PluginItem`. `PluginActor` exposes `inventory` (the items it carries, by id, not those it
+  wears) and `equipment` (the items it wears by slot, inactive ones included).
 - **Thread bridge:** `PluginViews.world(thread)` and `PluginViews.room/actor/item(value)` bridge Starlark threads and
   facade values. Unqualified attribute writes are disallowed when the calling plugin cannot be determined.
 
@@ -3557,19 +3611,21 @@ either allows it or refuses with a message.
   stacks (a count or `all`), each stack is checked on its own, and a refused stack is skipped with the refusal message
   while the others move.
 - Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
-  (`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The exceptions
-  are the `wear` and `unwear` verbs, which ask them as the commands do, and the `wear` re-check of worn items after a
-  change of choices or traits (below), which moves nothing.
+  (`move_item`, `grant_item`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The
+  exceptions are the `wear` and `remove_worn` verbs, which ask them as the commands do, and the `wear` re-check of worn
+  items after a change of choices or traits (below), which moves nothing. Content that moves an item for a player asks
+  the `may_*` queries (§4.5) first.
 - An `enter` refusal stops the move as a `before_enter` veto does: walking costs no lag; a `flee` through that exit is a
-  failed flee (the refusal and the failed-flee lag); a mob's `wander` or `pursue` step just fails. `teleport`, and so
-  `@goto`, is refused before anything moves.
+  failed flee (the refusal and the failed-flee lag); a mob's `wander` or `pursue` step just fails. `teleport` is refused
+  before anything moves and returns the refusal (§4.5); `@goto` tells the builder.
 - All checks at a point run in plugin id order, and in registration order within a plugin. The first refusal wins. A
   player sees its message, and a refused action costs no lag, as a veto (§5.3). For a mob the action just fails.
 - A check that throws records a `plugin` diagnostic and allows, so a broken plugin can't lock everyone out of a room.
 - Being staff doesn't exempt anyone. A check may read the actor's role (§4.15) and allow builders through, for example.
 - Restrictions only see what an item, skill or room declares. **Tags** (§4.2) are how content opts in:
   `item("plate_mail", tags = ["heavy_armor"])` and a `wear` check that refuses `heavy_armor` to mages. The engine gives
-  tags no meaning.
+  tags no meaning. No verb forces a refused action. Content changes a check's answer by changing what the check reads:
+  removing the tag it refuses (`ctx.remove_tag(amulet, "cursed")`), or adding one that a world's checks agree to allow.
 - Script content restricts with the vetoes it already has: `before_enter`, `before_cast` and `cast_allowed` can read
   `ctx.actor.choices` and `ctx.actor.has_trait(...)`. There is no script hook for `wear`.
 
@@ -3586,7 +3642,10 @@ a cooldown and keep or reset skills, refunding practice sessions through the tra
    new maxima.
 3. Asks the `wear` restriction again about every worn item. A refused item stays worn but becomes inactive (§4.6) until
    a later re-check allows it, and the wearer is sent the refusal. The same re-check runs after a reload and, silently,
-   on restore.
+   on restore. It also runs for the wearer whenever the effective tags, the prototype (`transform`) or the item affects
+   of something they wear change, including an item affect that runs out, so an item that turns into one the `wear`
+   check refuses stops working, and one that stops being refused works again. Those are the only item changes that
+   trigger it: a restriction that reads an item's attributes, name or charges isn't asked again when they change.
 4. Doesn't run `rules.starting_stats` again: base stats, base maxima and skills stay.
 5. Triggers an immediate capture (§5.11).
 
@@ -4813,7 +4872,8 @@ Gates 1 and 2 run together as `gups lint`; gate 4 is `gups fuzz`; gate 5 is `gup
 template's `.github/workflows/gates.yml`.
 
 1. **Load:** Every package loads, `api_version` matches, all labels resolve (exits, spawns, loads, keys, skills), and
-   namespaces are unique. Hook catalog errors and duplicate namespaces are errors.
+   namespaces are unique. A door or container declared `locked` without a `key` is an error, since it would have a lock
+   no key opens. Hook catalog errors and duplicate namespaces are errors.
 2. **Lint:**
 
 - No dead-end rooms (0 exits) unless flagged `dead_end_ok` (error).

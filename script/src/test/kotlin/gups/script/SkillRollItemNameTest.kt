@@ -30,7 +30,7 @@ class SkillRollItemNameTest {
         ctx.send(ctx.actor, "FIND:%s" % ctx.actor.has_item(":bar"))
 
     def _give(ctx):
-        ctx.merge_stack(ctx.give(ctx.actor, ":bar"))
+        ctx.merge_stack(ctx.grant_item(ctx.actor, ":bar"))
 
     skill("smith", kind = "craft")
     item("bar", name = "an iron bar", keywords = ["bar", "iron"], stackable = True)

@@ -70,32 +70,57 @@ private fun World.equipByPlan(actor: Actor, item: Item, plan: SlotPlan) {
   moveItem(item, ItemLocation.Equipped(actor.id, plan.slot))
 }
 
-/**
- * The script and plugin verb: puts on an item [actor] carries as `wear` (or `wield`) would, with
- * the same slot choice and restrictions, but sends nothing. Returns the refusal, or null once worn.
- */
-fun World.wearItem(actor: Actor, item: Item, wield: Boolean = false): String? {
+/** What wearing an item would do: the slot plan, and why it can't happen, if it can't. */
+private class WearCheck(val plan: SlotPlan?, val refusal: String?)
+
+private fun World.checkWear(actor: Actor, item: Item, wield: Boolean): WearCheck {
   require(item.location == ItemLocation.Carried(actor.id)) {
     "${item.name} is not carried by ${actor.name}"
   }
   val wanted = item.proto.wear
   if (wanted == null || !canEquip(wanted, wield))
-    return msg(cantMessage(wield), "item" to item.name)
+    return WearCheck(null, msg(cantMessage(wield), "item" to item.name))
   val plan = planSlot(actor, item)
-  wearRefusal(actor, item, plan, wield)?.let {
+  return WearCheck(plan, wearRefusal(actor, item, plan, wield))
+}
+
+/**
+ * Asks what [wearItem] would refuse with, without moving anything: the slot choice, the room, the
+ * WEAR restriction about [item] and the REMOVE restriction about the one item it would take off.
+ * Returns the refusal message, or null if it would be worn; an item [actor] doesn't carry is an
+ * error.
+ */
+fun World.mayWear(actor: Actor, item: Item, wield: Boolean = false): String? =
+  checkWear(actor, item, wield).refusal
+
+/**
+ * The script and plugin verb: puts on an item [actor] carries as `wear` (or `wield`) would, with
+ * the same slot choice and restrictions, but sends nothing. Returns the refusal, or null once worn.
+ */
+fun World.wearItem(actor: Actor, item: Item, wield: Boolean = false): String? {
+  val check = checkWear(actor, item, wield)
+  check.refusal?.let {
     return it
   }
-  equipByPlan(actor, item, plan!!)
+  equipByPlan(actor, item, check.plan!!)
   return null
 }
 
-/** Takes off an item [actor] wears, after the REMOVE restriction, saying nothing. */
-fun World.unwearItem(actor: Actor, item: Item): String? {
+/**
+ * Asks what [removeWornItem] would refuse with, without moving anything: the REMOVE restriction. An
+ * item [actor] doesn't wear is an error.
+ */
+fun World.mayRemove(actor: Actor, item: Item): String? {
   val location = item.location
   require(location is ItemLocation.Equipped && location.actor == actor.id) {
     "${item.name} is not worn by ${actor.name}"
   }
-  removeRefusal(actor, item)?.let {
+  return removeRefusal(actor, item)
+}
+
+/** Takes off an item [actor] wears, after the REMOVE restriction, saying nothing. */
+fun World.removeWornItem(actor: Actor, item: Item): String? {
+  mayRemove(actor, item)?.let {
     return it
   }
   moveItem(item, ItemLocation.Carried(actor.id))

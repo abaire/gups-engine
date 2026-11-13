@@ -1003,6 +1003,17 @@
             "value": 5
         },
         {
+            "label": "//zones/tutorial:test_small_chest",
+            "name": "a cramped chest",
+            "keywords": [
+                "chest"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
             "label": "//zones/tutorial:test_sword",
             "name": "a test sword",
             "keywords": [
@@ -1013,6 +1024,18 @@
             "wear": "wield",
             "weight": 3,
             "value": 50
+        },
+        {
+            "label": "//zones/tutorial:test_tracer",
+            "name": "a test tracer",
+            "keywords": [
+                "test",
+                "tracer"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 9
         },
         {
             "label": "//zones/tutorial:whetstone",

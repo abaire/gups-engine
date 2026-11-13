@@ -12,6 +12,7 @@ import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginHookCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
+import gups.pluginapi.PluginItemLocation
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
@@ -148,6 +149,10 @@ class CursePluginTest {
 
     override val affects: List<PluginItemAffect> = emptyList()
     override val plural: String? = null
+    override val count: Int = 1
+    override val location: PluginItemLocation
+      get() = TODO()
+
     override val charges: Int? = null
     override val maxCharges: Int? = null
   }
@@ -165,6 +170,8 @@ class CursePluginTest {
 
     override val choices: Map<String, String> = emptyMap()
     override val skills: Map<String, Int> = emptyMap()
+    override val inventory: List<PluginItem> = emptyList()
+    override val equipment: Map<String, PluginItem> = emptyMap()
     override val room: PluginRoom
       get() = TODO()
 
@@ -260,11 +267,38 @@ class CursePluginTest {
 
     override fun setCharges(item: PluginItem, charges: Int) = TODO()
 
-    override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
+    override fun teleport(actor: PluginActor, room: PluginRoom): String? = TODO()
 
     override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
 
-    override fun unwear(actor: PluginActor, item: PluginItem): String? = TODO()
+    override fun removeWorn(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayWear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
+
+    override fun mayRemove(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayDrop(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayGive(actor: PluginActor, item: PluginItem, to: PluginActor): String? = TODO()
+
+    override fun mayPut(actor: PluginActor, item: PluginItem, container: PluginItem): String? =
+      TODO()
+
+    override fun mayEnter(actor: PluginActor, room: PluginRoom): String? = TODO()
+
+    override fun mayLearn(actor: PluginActor, skill: String, proficiency: Int): String? = TODO()
+
+    override fun fits(item: PluginItem, to: PluginEntity, count: Int?): Int = TODO()
+
+    override fun fits(label: String, to: PluginEntity, count: Int?): Int = TODO()
+
+    override fun spawnItem(label: String, to: PluginEntity, count: Int): List<PluginItem> = TODO()
+
+    override fun moveItem(item: PluginItem, to: PluginEntity, count: Int?): PluginItem = TODO()
+
+    override fun destroy(item: PluginItem, count: Int?) = TODO()
+
+    override fun mergeStack(item: PluginItem): PluginItem = TODO()
 
     override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? = default
 

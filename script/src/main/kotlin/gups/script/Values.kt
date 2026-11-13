@@ -124,6 +124,11 @@ internal fun hookRef(v: Any?, what: String): HookRef {
   val fn = v as? StarlarkFunction ?: fail("$what: expected a function, got ${typeName(v)}")
   val file =
     fn.module.clientData as? FileInfo ?: fail("$what: ${fn.name} is not defined in a package file")
+  if (file.test) {
+    fail(
+      "$what: ${fn.name} is defined in a test file; only functions in content files can be called later"
+    )
+  }
   if (fn.module.getGlobal(fn.name) !== fn) {
     fail(
       "$what: ${fn.name} must be a top-level function (def at the top of a file), not a nested function"

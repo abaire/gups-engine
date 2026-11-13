@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.model.Channel
+import gups.core.model.DoorState
 import gups.core.model.Entity
 import gups.core.model.Exit
 import gups.core.model.ExitProto
@@ -281,11 +282,17 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
   room.dirty = true
 }
 
-/** Keeps a door the player changed in play: the live state beats the new prototype's. */
+/**
+ * Keeps a door the player changed in play: the live state beats the new prototype's, except that a
+ * lock the new prototype has no key for is undone.
+ */
 private fun preserveDoorState(exit: Exit, live: Exit, wasProto: ExitProto) {
   val door = exit.door ?: return
   val liveDoor = live.door ?: return
-  if (liveDoor.state != wasProto.door?.state) door.state = liveDoor.state
+  if (liveDoor.state != wasProto.door?.state)
+    door.state =
+      if (liveDoor.state == DoorState.LOCKED && door.key == null) DoorState.CLOSED
+      else liveDoor.state
 }
 
 /** Moves [e] to prototype [version], running the package's `migrate` if it went up. */

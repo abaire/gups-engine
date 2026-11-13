@@ -120,8 +120,8 @@ world.applyAffect(
 )
 world.removeAffect(target = actor, name = "soaked")
 
-// Teleportation:
-world.teleport(actor = actor, room = destinationRoom)
+// Teleportation: returns the refusal or veto message, or null once the actor has moved.
+val refusal = world.teleport(actor = actor, room = destinationRoom)
 ```
 
 ### World Schema Validation

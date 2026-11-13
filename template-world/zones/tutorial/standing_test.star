@@ -127,7 +127,7 @@ def test_gratitude_never_passes_the_ceiling(t):
     p = w.spawn_player("Healer", at = ":standing_test_room")
     w.set_skill(p, "//skills/arcane:soothe", 100)
     dummy = w.spawn(":training_dummy", at = ":standing_test_room")
-    p.do("befriend dummy 22")
+    w.ctx().adjust_standing(dummy, p, 22)
 
     # The rate cap would allow +5, but the record stops at the ceiling of 25.
     w.damage(target = dummy, vital = "hp", amount = 10)

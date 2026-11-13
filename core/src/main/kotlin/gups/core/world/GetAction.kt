@@ -56,7 +56,7 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
     if (matches.isEmpty()) return w.msg(KernelMsg.DONT_SEE)
     if (matches.all { lag(w, actor, it.first) == null })
       return w.msg(KernelMsg.CANT_REACH, "item" to matches.first().first.name)
-    if (!carriedSource && matches.none { w.carryFit(actor, it.first, 1) > 0 })
+    if (!carriedSource && matches.none { w.carryFit(actor, Fitting(it.first), 1) > 0 })
       return w.msg(KernelMsg.CANT_CARRY)
     return null
   }
@@ -187,7 +187,7 @@ internal class GetAction(private val args: String, private val fixed: Item? = nu
     var n = minOf(wanted, item.count)
     var capped = false
     if (!carriedSource) {
-      val fit = w.carryFit(actor, item, n)
+      val fit = w.carryFit(actor, Fitting(item), n)
       capped = fit < n
       n = minOf(n, fit)
       if (n <= 0) return Taken(0, capped)

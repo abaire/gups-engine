@@ -169,12 +169,6 @@ def _check(ctx):
     ctx.send(ctx.actor, "name=%s doing=%s/%s lose=%s tiers=%s" % (
         r["name"], r["doing"], s["doing"], r["failure"]["lose"], [q["at"] for q in _ROD["qualities"]]))
 
-def _close(ctx):
-    ctx.set_attr(ctx.room, "closed", True)
-
-def _bonus(ctx):
-    ctx.set_attr(ctx.room, "bonus", int(ctx.args))
-
 def _last_done(ctx):
     ctx.send(ctx.actor, "DONE:%s" % ctx.get_attr(ctx.room, "last_done", ""))
 
@@ -215,8 +209,8 @@ room("craft_lab",
     flags = ["dead_end_ok"],
     hooks = {"craft_recipes": _lab_recipes, "craft_check": _lab_check, "craft_done": _lab_done},
     modifiers = {MODIFIER.skill_check: _lab_chance, MODIFIER.skill_power: _lab_power},
-    commands = {"bad": _bad, "check": _check, "learn": _learn, "shut": _close, "bonus": _bonus,
-                "lastdone": _last_done, "stop_later": _stop_later, "drop_later": _drop_later},
+    commands = {"bad": _bad, "check": _check, "learn": _learn, "lastdone": _last_done,
+                "stop_later": _stop_later, "drop_later": _drop_later},
 )
 
 # power <skill>: the actor's skill power under this world's rules, which some test runs pin to 100,

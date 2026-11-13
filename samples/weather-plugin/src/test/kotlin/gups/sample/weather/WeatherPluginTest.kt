@@ -220,6 +220,12 @@ class WeatherPluginTest {
 
     override val skills: Map<String, Int>
       get() = emptyMap()
+
+    override val inventory: List<PluginItem>
+      get() = emptyList()
+
+    override val equipment: Map<String, PluginItem>
+      get() = emptyMap()
   }
 
   private class FakeWorld(
@@ -298,11 +304,38 @@ class WeatherPluginTest {
 
     override fun setCharges(item: PluginItem, charges: Int) = TODO()
 
-    override fun teleport(actor: PluginActor, room: PluginRoom) = TODO()
+    override fun teleport(actor: PluginActor, room: PluginRoom): String? = TODO()
 
     override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
 
-    override fun unwear(actor: PluginActor, item: PluginItem): String? = TODO()
+    override fun removeWorn(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayWear(actor: PluginActor, item: PluginItem, wield: Boolean): String? = TODO()
+
+    override fun mayRemove(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayDrop(actor: PluginActor, item: PluginItem): String? = TODO()
+
+    override fun mayGive(actor: PluginActor, item: PluginItem, to: PluginActor): String? = TODO()
+
+    override fun mayPut(actor: PluginActor, item: PluginItem, container: PluginItem): String? =
+      TODO()
+
+    override fun mayEnter(actor: PluginActor, room: PluginRoom): String? = TODO()
+
+    override fun mayLearn(actor: PluginActor, skill: String, proficiency: Int): String? = TODO()
+
+    override fun fits(item: PluginItem, to: PluginEntity, count: Int?): Int = TODO()
+
+    override fun fits(label: String, to: PluginEntity, count: Int?): Int = TODO()
+
+    override fun spawnItem(label: String, to: PluginEntity, count: Int): List<PluginItem> = TODO()
+
+    override fun moveItem(item: PluginItem, to: PluginEntity, count: Int?): PluginItem = TODO()
+
+    override fun destroy(item: PluginItem, count: Int?) = TODO()
+
+    override fun mergeStack(item: PluginItem): PluginItem = TODO()
 
     override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? = TODO()
 

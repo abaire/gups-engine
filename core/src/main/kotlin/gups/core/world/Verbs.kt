@@ -61,11 +61,12 @@ fun World.emote(actor: Actor, text: String) {
 
 /**
  * Sets the door on [room]'s exit [dir], and on the matching door on the other side, so both sides
- * always agree. Silent: callers do their own messaging.
+ * always agree. Silent: callers do their own messaging. Only a door with a key can be locked.
  */
 fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
   val exit = requireNotNull(room.exits[dir]) { "${room.label} has no exit $dir" }
   val door = requireNotNull(exit.door) { "${room.label} exit $dir has no door" }
+  require(state != DoorState.LOCKED || door.key != null) { "${room.label} exit $dir has no lock" }
   door.state = state
   room.dirty = true
   reverseExit(room, exit)?.let { (other, back) ->
@@ -289,7 +290,11 @@ fun World.removeTrait(actor: Actor, traitName: String): String? {
   return null
 }
 
-fun World.setSkill(actor: Actor, skillLabel: Label, proficiency: Int): String? {
+/**
+ * Asks what [setSkill] would refuse with, without setting anything: the LEARN restrictions. An
+ * unknown skill or a proficiency outside 0 to 100 is an error.
+ */
+fun World.mayLearn(actor: Actor, skillLabel: Label, proficiency: Int): String? {
   check(Feature.SKILLS in features) { "Skills feature is disabled" }
   val proto =
     protos.skills[skillLabel] ?: throw IllegalArgumentException("Unknown skill '$skillLabel'")
@@ -301,8 +306,13 @@ fun World.setSkill(actor: Actor, skillLabel: Label, proficiency: Int): String? {
       skill = proto,
       proficiency = proficiency,
     )
-  val refused = restrictionRefusal(RestrictionPoint.LEARN, req)
-  if (refused != null) return refused
+  return restrictionRefusal(RestrictionPoint.LEARN, req)
+}
+
+fun World.setSkill(actor: Actor, skillLabel: Label, proficiency: Int): String? {
+  mayLearn(actor, skillLabel, proficiency)?.let {
+    return it
+  }
   actor.skills[skillLabel] = proficiency
   actor.dirty = true
   return null
@@ -362,7 +372,7 @@ fun World.addItemTag(item: Item, tag: String): Boolean {
   if (tag in item.tags) return false
   if (tag in item.removedTags) item.removedTags.remove(tag) else item.addedTags.add(tag)
   item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
+  itemChanged(item)
   return true
 }
 
@@ -373,7 +383,7 @@ fun World.removeItemTag(item: Item, tag: String): Boolean {
   if (tag !in item.tags) return false
   if (tag in item.addedTags) item.addedTags.remove(tag) else item.removedTags.add(tag)
   item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
+  itemChanged(item)
   return true
 }
 
@@ -403,7 +413,7 @@ private fun World.transform(item: Item, label: Label) {
   if (wearer?.wearsActively(item) == true) applyEquipAffects(wearer, item)
   item.dirty = true
   recordTransform(item)
-  custodian(item)?.let { refreshHoldings(it) }
+  itemChanged(item)
 }
 
 private fun World.dropContents(item: Item, ground: ItemLocation.InRoom) {

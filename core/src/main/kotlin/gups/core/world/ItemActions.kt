@@ -56,6 +56,59 @@ internal fun planRemove(c: CommandCall): Action? {
 
 private fun Item.isCarriedBy(actor: Actor) = location == ItemLocation.Carried(actor.id)
 
+private fun requireCarried(actor: Actor, item: Item) =
+  require(item.isCarriedBy(actor)) { "${item.name} is not carried by ${actor.name}" }
+
+/**
+ * Asks the DROP restriction about [actor] dropping [item], without moving it or running a hook.
+ * Returns the refusal message, or null; an item [actor] doesn't carry is an error.
+ */
+fun World.mayDrop(actor: Actor, item: Item): String? {
+  requireCarried(actor, item)
+  return refusalFor(RestrictionRequest(point = RestrictionPoint.DROP, actor = actor, item = item))
+}
+
+/** Why [actor] can't hand anything to [target]: not here, or the actor itself. */
+private fun World.giveTargetRefusal(actor: Actor, target: Actor): String? =
+  when {
+    !isPresent(target, roomOf(actor)) -> msg(KernelMsg.NOT_HERE)
+    target === actor -> msg(KernelMsg.GIVE_ALREADY)
+    else -> null
+  }
+
+/**
+ * Asks what `give` would refuse [actor] handing [item] to [target]: a receiver who isn't in the
+ * room or is the giver, and the GIVE restriction. Moves nothing and runs no hook; says nothing
+ * about the receiver's carry limit. An item [actor] doesn't carry is an error.
+ */
+fun World.mayGive(actor: Actor, item: Item, target: Actor): String? {
+  requireCarried(actor, item)
+  return giveTargetRefusal(actor, target)
+    ?: refusalFor(
+      RestrictionRequest(point = RestrictionPoint.GIVE, actor = actor, item = item, target = target)
+    )
+}
+
+/** Why nothing can go into [box]: it is closed. */
+private fun World.closedRefusal(box: Item): String? =
+  if (box.container?.state == DoorState.OPEN) null
+  else msg(KernelMsg.PUT_CLOSED, "container" to box.name)
+
+/**
+ * Asks what `put` would refuse [actor] putting [item] into [box]: the item itself, a closed
+ * container, and the PUT restriction. Moves nothing and runs no hook; says nothing about whether it
+ * fits. An item [actor] doesn't carry, or a [box] that isn't a container, is an error.
+ */
+fun World.mayPut(actor: Actor, item: Item, box: Item): String? {
+  requireCarried(actor, item)
+  require(box.container != null) { "${box.name} is not a container" }
+  if (item === box) return msg(KernelMsg.PUT_ITSELF)
+  return closedRefusal(box)
+    ?: refusalFor(
+      RestrictionRequest(point = RestrictionPoint.PUT, actor = actor, item = item, target = box)
+    )
+}
+
 private class DropAction(private val spec: ItemSpec) : Action {
   override fun validate(w: World, actor: Actor): String? =
     if (matchItems(actor.inventory, spec).isEmpty()) w.msg(KernelMsg.NOT_CARRYING) else null
@@ -67,8 +120,7 @@ private class DropAction(private val spec: ItemSpec) : Action {
 
   private fun dropStack(w: World, actor: Actor, item: Item, wanted: Int) {
     if (!item.isCarriedBy(actor)) return
-    val refusal =
-      w.refusalFor(RestrictionRequest(point = RestrictionPoint.DROP, actor = actor, item = item))
+    val refusal = w.mayDrop(actor, item)
     if (refusal != null) return w.send(actor, refusal)
     val veto =
       w.dispatch(HookName.BEFORE_DROP, item, actor.room, HookContext(actor = actor, item = item))
@@ -98,10 +150,12 @@ private class DropAction(private val spec: ItemSpec) : Action {
 private class GiveAction(private val spec: ItemSpec, private val targetStr: String) : Action {
   override fun validate(w: World, actor: Actor): String? {
     val target = w.findActor(actor, targetStr) ?: return w.msg(KernelMsg.NOT_HERE)
-    if (target === actor) return w.msg(KernelMsg.GIVE_ALREADY)
+    w.giveTargetRefusal(actor, target)?.let {
+      return it
+    }
     val matches = matchItems(actor.inventory, spec)
     if (matches.isEmpty()) return w.msg(KernelMsg.NOT_CARRYING)
-    if (matches.none { w.carryFit(target, it.first, 1) > 0 })
+    if (matches.none { w.carryFit(target, Fitting(it.first), 1) > 0 })
       return w.msg(KernelMsg.GIVE_FULL, "target" to target.name)
     return null
   }
@@ -124,21 +178,13 @@ private class Giver(private val w: World, private val actor: Actor, private val 
   fun give(item: Item, wanted: Int): Boolean {
     // An on_give hook for an earlier stack may have destroyed or moved this one.
     if (item.id !in w.entities || !item.isCarriedBy(actor)) return false
-    val refusal =
-      w.refusalFor(
-        RestrictionRequest(
-          point = RestrictionPoint.GIVE,
-          actor = actor,
-          item = item,
-          target = target,
-        )
-      )
+    val refusal = w.mayGive(actor, item, target)
     if (refusal != null) {
       w.send(actor, refusal)
       return false
     }
     val n = minOf(wanted, item.count)
-    val fit = w.carryFit(target, item, n)
+    val fit = w.carryFit(target, Fitting(item), n)
     if (fit > 0) handOver(item, minOf(n, fit))
     return fit < n
   }
@@ -188,12 +234,14 @@ private class PutAction(private val spec: ItemSpec, private val boxStr: String) 
     if (matches.isEmpty()) {
       return w.msg(if (namesItself(actor, box)) KernelMsg.PUT_ITSELF else KernelMsg.NOT_CARRYING)
     }
-    val state = box.container ?: return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)
+    if (box.container == null) return w.msg(KernelMsg.NOT_CONTAINER, "item" to box.name)
     if (!w.isPresent(box, w.roomOf(actor))) return w.msg(KernelMsg.DONT_SEE)
     w.reach(actor, box)?.let {
       return it
     }
-    if (state.state != DoorState.OPEN) return w.msg(KernelMsg.PUT_CLOSED, "container" to box.name)
+    w.closedRefusal(box)?.let {
+      return it
+    }
     return validateRoomFor(w, box, matches)
   }
 
@@ -202,11 +250,10 @@ private class PutAction(private val spec: ItemSpec, private val boxStr: String) 
     !spec.all && box.isCarriedBy(actor) && spec.keyword != null && box.matches(spec.keyword)
 
   private fun validateRoomFor(w: World, box: Item, matches: List<Pair<Item, Int>>): String? {
-    val state = box.container ?: return null
-    if (matches.none { w.mergesInto(it.first, box) || box.contents.size < state.capacity })
+    val rooms = matches.map { BoxRoom(w, box, Fitting(it.first)) }
+    if (rooms.none { it.byEntries(1) > 0 })
       return w.msg(KernelMsg.PUT_FULL, "container" to box.name)
-    val free = state.maxWeight - box.contents.sumOf { it.weight }
-    if (matches.none { fitWithin(free, it.first, 1) > 0 })
+    if (rooms.none { it.byWeight(1) > 0 })
       return w.msg(
         KernelMsg.PUT_WONT_FIT,
         "item" to matches.first().first.name,
@@ -236,29 +283,21 @@ private class Stower(private val w: World, private val actor: Actor, private val
   val shortfall = PutShortfall()
 
   fun put(item: Item, wanted: Int) {
-    val state = box.container ?: return
     if (!item.isCarriedBy(actor) || refused(item)) return
-    if (box.contents.size >= state.capacity && !w.mergesInto(item, box)) {
+    val room = BoxRoom(w, box, Fitting(item))
+    val n = minOf(wanted, item.count)
+    if (room.byEntries(n) == 0) {
       shortfall.full = true
       return
     }
-    val n = unitsThatFit(item, minOf(wanted, item.count), state.maxWeight)
-    if (n > 0) stow(item, n)
-  }
-
-  /** How many of the [n] units fit within [maxWeight], noting it when some don't. */
-  private fun unitsThatFit(item: Item, n: Int, maxWeight: Int): Int {
-    val fit = fitWithin(maxWeight - box.contents.sumOf { it.weight }, item, n)
+    val fit = minOf(n, room.byWeight(n))
     if (fit < n) shortfall.tooHeavy = shortfall.tooHeavy ?: item.name
-    return minOf(n, fit)
+    if (fit > 0) stow(item, fit)
   }
 
   /** True if a restriction refuses [item], after telling the actor why. */
   private fun refused(item: Item): Boolean {
-    val refusal =
-      w.refusalFor(
-        RestrictionRequest(point = RestrictionPoint.PUT, actor = actor, item = item, target = box)
-      )
+    val refusal = w.mayPut(actor, item, box)
     if (refusal != null) w.send(actor, refusal)
     return refusal != null
   }

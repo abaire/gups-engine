@@ -3,6 +3,7 @@ package gups.sample.heritage
 import gups.core.OutputSink
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginItem
+import gups.pluginapi.PluginItemLocation
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
@@ -18,6 +19,8 @@ class FakeActor(
   val statValue: Int = 10,
   override val skills: Map<String, Int> = emptyMap(),
 ) : PluginActor {
+  override val inventory: List<PluginItem> = emptyList()
+  override val equipment: Map<String, PluginItem> = emptyMap()
   override val id = 100L
   override val label: String? = null
   override val flags: Set<String> = emptySet()
@@ -83,6 +86,10 @@ class FakeItem(override val tags: List<String> = emptyList()) : PluginItem {
   override val resistDeltas = emptyMap<String, Int>()
   override val inactive = false
   override val plural: String? = null
+  override val count = 1
+  override val location: PluginItemLocation
+    get() = TODO()
+
   override val charges: Int? = null
   override val maxCharges: Int? = null
 

@@ -170,6 +170,8 @@ internal class DeclarationBuiltins(
           key = d.str("key")?.let { label(it, ctx.pkg.path, d.what("key")) },
           tags = parseTags(d),
         )
+      if (proto.state == DoorState.LOCKED && proto.key == null)
+        fail("door(state): a locked door needs a key")
       DoorDecl(proto)
     }
   }
@@ -236,6 +238,8 @@ internal class DeclarationBuiltins(
           state = d["state"]?.let { doorState(it, d.what("state")) } ?: def.state,
           key = d.str("key")?.let { label(it, ctx.pkg.path, d.what("key")) },
         )
+      if (proto.state == DoorState.LOCKED && proto.key == null)
+        fail("container(state): a locked container needs a key")
       ContainerDecl(proto)
     }
   }

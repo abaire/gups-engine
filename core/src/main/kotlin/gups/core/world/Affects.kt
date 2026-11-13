@@ -304,7 +304,7 @@ fun World.applyItemAffect(
   val affect = newAffect(spec, expiresAt, applies = applies)
   item.affects += affect
   item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
+  itemChanged(item)
   return affect
 }
 
@@ -327,7 +327,7 @@ internal fun World.expireItemAffect(item: Item, affect: Affect) =
 private fun World.endItemAffect(item: Item, affect: Affect, reason: AffectEndReason) {
   if (item.id !in entities || !item.affects.remove(affect)) return
   item.dirty = true
-  custodian(item)?.let { refreshHoldings(it) }
+  itemChanged(item)
   val why = if (pulse >= affect.expiresAt) AffectEndReason.EXPIRED else reason
   if (why == AffectEndReason.EXPIRED && affect.expireMessage.isNotEmpty())
     custodian(item)?.let { send(it, affect.expireMessage) }

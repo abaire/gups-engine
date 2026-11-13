@@ -109,6 +109,35 @@ class LoaderTest {
   }
 
   @Test
+  fun `a door declared locked needs a key`() {
+    val room =
+      "room(\"a\", exits = [exit(\"north\", to = \":b\", door = door(state = \"locked\"%s))])"
+    expectItemFailure(room.format(""), "door(state): a locked door needs a key")
+    val keyed = loadItem(room.format(", key = \":k\"") + "\nitem(\"k\")\nroom(\"b\")")
+    assertTrue(keyed.ok, keyed.report())
+    val closed =
+      loadItem(
+        "room(\"a\", exits = [exit(\"north\", to = \":b\", door = door(state = \"closed\"))])\nroom(\"b\")"
+      )
+    assertTrue(closed.ok, closed.report())
+  }
+
+  @Test
+  fun `a container declared locked needs a key`() {
+    expectItemFailure(
+      "item(\"chest\", container = container(state = \"locked\"))",
+      "container(state): a locked container needs a key",
+    )
+    val keyed =
+      loadItem(
+        "item(\"k\")\nitem(\"chest\", container = container(state = \"locked\", key = \":k\"))"
+      )
+    assertTrue(keyed.ok, keyed.report())
+    val bare = loadItem("item(\"bag\", container = container(state = \"closed\"))")
+    assertTrue(bare.ok, bare.report())
+  }
+
+  @Test
   fun `an item's plural can't be blank`() {
     expectItemFailure(
       "item(\"coin\", plural = \" \", stackable = True)",

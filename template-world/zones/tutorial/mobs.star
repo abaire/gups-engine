@@ -14,8 +14,8 @@ def _guide_hears(ctx):
         ctx.set_attr(ctx.actor, "ready", True)
         ctx.say(ctx.self, "Then off you go, %s. The arena is north." % ctx.actor.name)
     elif said(ctx.text, "key") and not ctx.actor.has_item(":brass_key"):
-        # give() spawns a fresh item straight into the player's inventory.
-        ctx.give(ctx.actor, ":brass_key")
+        # grant_item() spawns a fresh item straight into the player's inventory.
+        ctx.grant_item(ctx.actor, ":brass_key")
         ctx.emote(ctx.self, "hands %s a brass key." % ctx.actor.name)
         # from_step makes sure only a player on step 0 moves on.
         quest.advance(ctx, ctx.actor, FIRST_STEPS, from_step = 0)

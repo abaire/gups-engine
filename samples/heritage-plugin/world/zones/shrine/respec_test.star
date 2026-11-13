@@ -2,6 +2,7 @@
 # keeper stands in a room of its own; the content mentor stands in :mentor_hall.
 
 load("//lib:respec.star", "respec")
+load("//lib:trainer.star", "trainer")
 
 def _world(t):
     return t.world(seed = 1, packages = ["//zones/shrine"])
@@ -16,6 +17,16 @@ def _coins(p):
         if i.label == "//lib:gold_coin":
             n += i.count
     return n
+
+def _give_coins(w, p, n):
+    c = w.ctx()
+    made = c.grant_item(p, "//lib:gold_coin", n)
+    for v in (made if type(made) == "list" else [made]):
+        c.merge_stack(v)
+
+def _keeper(p):
+    """The one mob standing in the player's room: the fixture keeper."""
+    return [a for a in p.room.actors() if not a.is_player][0]
 
 def _unchanged(t, p, cls, coins):
     t.eq(p.choices["class"], cls)
@@ -43,7 +54,7 @@ def test_menu_shows_refusals_and_free_prices(t):
 def test_respec_changes_class_pays_and_grants_starter_skills(t):
     w = _world(t)
     p = _warrior(w, skills = {"//skills/arcane:spark": 20})
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     out = p.do("respec mage")
     t.contains(out, "You pay 10 gold coins.")
     t.contains(out, "Your class is now Mage.")
@@ -59,7 +70,7 @@ def test_the_room_sees_the_change(t):
     w = _world(t)
     p = _warrior(w)
     ash = _warrior(w, name = "Ash")
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     p.do("respec cleric")
     t.contains(ash.output(), "Tess is changed by the test mentor.")
 
@@ -68,8 +79,8 @@ def test_refusals_change_nothing(t):
     p = _warrior(w, at = ":empty_test_room")
     t.contains(p.do("respec mage"), "There's no one here who can change you.")
     p = _warrior(w, name = "Ash")
-    p.do("coins 10")
-    p.do("stun_keeper")
+    _give_coins(w, p, 10)
+    w.ctx().apply_affect(_keeper(p), "stun", 10, flags = ["stunned"])
     t.contains(p.do("respec mage"), "the test mentor can't help you right now.")
     _unchanged(t, p, "warrior", 10)
     w.run(pulses = 20)   # the stun wears off
@@ -116,14 +127,14 @@ def test_defaults_fill_what_define_leaves_out(t):
 def test_a_dwarf_cannot_become_a_mage(t):
     w = _world(t)
     p = _warrior(w, race = "dwarf")
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     t.contains(p.do("respec mage"), "Mage isn't open to you.")
     _unchanged(t, p, "warrior", 10)
 
 def test_too_few_coins(t):
     w = _world(t)
     p = _warrior(w)
-    p.do("coins 9")
+    _give_coins(w, p, 9)
     t.contains(p.do("respec mage"), "You can't afford that.")
     _unchanged(t, p, "warrior", 9)
     t.eq(p.skills.get("//skills/heritage_skills:magic_missile"), None)
@@ -142,7 +153,7 @@ def test_bad_offer_values_are_ignored(t):
     for mode in ["junk", "number"]:
         p.do("offer " + mode)
         t.contains(p.do("respec"), "  Mage - 10 gold coins: Scholars of arcane destruction.")
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     t.contains(p.do("respec mage"), "You pay 10 gold coins.")
     t.contains(p.do("respec"), "You can change now.")   # the junk cooldown was ignored too
 
@@ -162,18 +173,19 @@ def test_one_cooldown_covers_every_shrine(t):
     w = _world(t)
     p = _warrior(w, at = ":cooldown_test_room")
     p.do("respec race elf")
-    p.do("goto :respec_test_room")
+    w.ctx().teleport(p, ":respec_test_room")
     t.eq(p.room, ":respec_test_room")
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     t.contains(p.do("respec mage"), "You must wait 2 more minutes before changing again.")
     t.eq(p.choices["class"], "warrior")
 
 def test_a_mage_cannot_keep_using_plate(t):
     w = _world(t)
     p = _warrior(w)
-    t.contains(p.do("armor"), "You are buckled into a suit of plate mail.")
+    c = w.ctx()
+    t.eq(c.wear(p, c.grant_item(p, ":plate_mail")), None)
     t.ne(p.equipped("body"), None)
-    p.do("coins 10")
+    _give_coins(w, p, 10)
     out = p.do("respec mage")
     t.contains(out, "Your class is now Mage.")
     t.contains(out, "Your spellcraft can't work through that much metal.")
@@ -197,11 +209,11 @@ def test_reset_to_another_class_refunds_and_forgets(t):
     w = _world(t)
     p = _mage(w)
     t.eq(p.skills["//skills/heritage_skills:magic_missile"], 25)   # from creation
-    p.do("grant 2")
+    trainer.grant_practices(w.ctx(), p, 2)
     p.do("practice spark")
     p.do("practice spark")
     t.contains(p.do("practice"), "You have 0 practice sessions.")
-    p.do("coins 100")
+    _give_coins(w, p, 100)
     out = p.do("respec cleric")
     t.contains(out, "You pay 100 gold coins.\nYour class is now Cleric.\nYou forget everything you had learned.\n" +
                "2 practice sessions are returned to you.\nYou learn minor_heal.")
@@ -212,7 +224,7 @@ def test_reset_to_another_class_refunds_and_forgets(t):
 def test_reset_with_nothing_practiced_returns_nothing(t):
     w = _world(t)
     p = _mage(w)
-    p.do("coins 100")
+    _give_coins(w, p, 100)
     out = p.do("respec cleric")
     t.contains(out, "You forget everything you had learned.")
     t.not_contains(out, "returned to you")
@@ -221,7 +233,7 @@ def test_reset_to_the_same_class_starts_over(t):
     w = _world(t)
     p = _mage(w)
     w.set_skill(p, "//skills/heritage_skills:magic_missile", 60)
-    p.do("coins 100")
+    _give_coins(w, p, 100)
     out = p.do("respec class mage")
     t.contains(out, "Your class is now Mage.")
     t.contains(out, "You forget everything you had learned.")
@@ -231,12 +243,12 @@ def test_reset_to_the_same_class_starts_over(t):
 def test_the_altar_changes_race(t):
     w = _world(t)
     p = _mage(w)
-    p.do("coins 100")
+    _give_coins(w, p, 100)
     t.contains(p.do("respec race elf"), "Your race is now Elf.")
     t.eq(p.choices["race"], "elf")
     t.true(p.has_trait("elf"))
     elf = _mage(w, name = "Ash", race = "elf")
-    elf.do("coins 100")
+    _give_coins(w, elf, 100)
     t.contains(elf.do("respec race dwarf"), "That would leave your class (Mage) unavailable.")
     t.eq(elf.choices["race"], "elf")
     t.eq(_coins(elf), 100)
@@ -244,11 +256,11 @@ def test_the_altar_changes_race(t):
 def test_the_priestess_prices_by_standing(t):
     w = _world(t)
     p = _mage(w)
-    p.do("coins 100")
-    p.do("scorn 20")
+    _give_coins(w, p, 100)
+    w.ctx().adjust_standing(_keeper(p), p, -20)
     t.contains(p.do("respec"), "  Cleric - 500 gold coins: Holy servants of divine recovery.")
     t.contains(p.do("respec cleric"), "You can't afford that.")
-    p.do("scorn 60")
+    w.ctx().adjust_standing(_keeper(p), p, -60)
     t.contains(p.do("respec cleric"), "The priestess turns her back on you.")
     t.eq(p.choices["class"], "mage")
     t.eq(_coins(p), 100)
@@ -256,10 +268,10 @@ def test_the_priestess_prices_by_standing(t):
 def test_respec_done_warms_the_priestess(t):
     w = _world(t)
     p = _mage(w)
-    p.do("coins 100")
-    t.contains(p.do("mood"), "Disposition: 0")
+    _give_coins(w, p, 100)
+    t.eq(w.ctx().disposition(_keeper(p), p), 0)
     p.do("respec cleric")
-    t.contains(p.do("mood"), "Disposition: 10")
+    t.eq(w.ctx().disposition(_keeper(p), p), 10)
 
 def test_the_hook_can_switch_reset_to_keep(t):
     w = _world(t)

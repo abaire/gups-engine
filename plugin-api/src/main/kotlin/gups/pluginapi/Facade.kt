@@ -136,7 +136,42 @@ interface PluginWorld : PluginGmcpWorld {
    */
   fun setCharges(item: PluginItem, charges: Int)
 
-  fun teleport(actor: PluginActor, room: PluginRoom)
+  /**
+   * Moves [actor] to [room] with no exit: the ENTER restriction, then `before_enter`; guards and
+   * `before_exit` don't run. Returns the refusal or veto message, moving nothing, or null once the
+   * actor has moved.
+   */
+  fun teleport(actor: PluginActor, room: PluginRoom): String?
+
+  /**
+   * Spawns [count] of the item prototype [label] at [to]: a room (at track index 0), an actor's
+   * inventory, or a container item, as `ctx.spawn` does for items. Returns one stack for a
+   * stackable label and [count] separate items otherwise. Skips item restrictions and the commands'
+   * carry and container limits ([fits] asks them). A mob label, an unknown label, a [count] below
+   * 1, or an item [to] that isn't a container is an error.
+   */
+  fun spawnItem(label: String, to: PluginEntity, count: Int = 1): List<PluginItem>
+
+  /**
+   * Moves [count] (by default the whole stack) of [item] to [to], a room (at track index 0), an
+   * actor's inventory, or a container item, as `ctx.move_item` does, and returns the item now
+   * there. Skips item restrictions and the commands' limits. A [count] outside 1..the stack's, or
+   * an item [to] that isn't a container, is an error. There is no `give`: moving or spawning to an
+   * actor puts the items in its inventory.
+   */
+  fun moveItem(item: PluginItem, to: PluginEntity, count: Int? = null): PluginItem
+
+  /**
+   * Removes [count] (by default the whole stack) of [item] from the world, with everything inside
+   * it when whole, as `ctx.destroy` does. A [count] outside 1..the stack's is an error.
+   */
+  fun destroy(item: PluginItem, count: Int? = null)
+
+  /**
+   * Merges [item] into an identical stack in the same place, as `ctx.merge_stack` does; returns the
+   * stack that holds it.
+   */
+  fun mergeStack(item: PluginItem): PluginItem
 
   /**
    * Puts on an item [actor] carries as the `wear` command (or `wield`) would, asking the same
@@ -149,7 +184,60 @@ interface PluginWorld : PluginGmcpWorld {
    * Takes off an item [actor] wears, into the inventory, after asking the REMOVE restriction. Sends
    * nothing. Returns the refusal message, or null; an item not worn by the actor is an error.
    */
-  fun unwear(actor: PluginActor, item: PluginItem): String?
+  fun removeWorn(actor: PluginActor, item: PluginItem): String?
+
+  // Restriction queries. Each returns the message the matching command or verb would refuse with,
+  // or null, and changes nothing and runs no hook. Arguments the command couldn't act on are
+  // errors: an item the actor doesn't carry (or, for mayRemove, doesn't wear), a mayPut container
+  // that isn't one, an unknown skill.
+
+  /**
+   * Asks whether [actor] may put on a carried [item] as [wear] would: slot choice, room, the WEAR
+   * restriction and the REMOVE restriction on the one item it would take off.
+   */
+  fun mayWear(actor: PluginActor, item: PluginItem, wield: Boolean = false): String?
+
+  /** Asks the REMOVE restriction about taking off a worn [item], as [removeWorn] would. */
+  fun mayRemove(actor: PluginActor, item: PluginItem): String?
+
+  /** Asks the DROP restriction about [actor] dropping a carried [item]. */
+  fun mayDrop(actor: PluginActor, item: PluginItem): String?
+
+  /**
+   * Asks about [actor] giving a carried [item] to [to], as the give command would: [to] must be in
+   * [actor]'s room and not be [actor], and the GIVE restriction. Not whether [to] can carry it.
+   */
+  fun mayGive(actor: PluginActor, item: PluginItem, to: PluginActor): String?
+
+  /**
+   * Asks about [actor] putting a carried [item] into [container], as the put command would: not the
+   * container itself, which must be open, and the PUT restriction. Not whether it fits.
+   */
+  fun mayPut(actor: PluginActor, item: PluginItem, container: PluginItem): String?
+
+  /**
+   * Asks the ENTER restriction about [actor] going to [room] from where it is, with no direction.
+   * [teleport] also runs `before_enter`, which a query can't, so it can still be vetoed.
+   */
+  fun mayEnter(actor: PluginActor, room: PluginRoom): String?
+
+  /** Asks the LEARN restriction as [setSkill] would. Needs the `skills` feature. */
+  fun mayLearn(actor: PluginActor, skill: String, proficiency: Int): String?
+
+  /**
+   * How many of [count] (by default the whole stack) of [item] would fit at [to], worked out as the
+   * put, get and give commands do; changes nothing. A container's free capacity and max weight cap
+   * it (whether it is open or locked isn't considered, [mayPut] answers that), an actor's
+   * `carry_limit` asked about the item caps it, and a room takes all. An item [to] that isn't a
+   * container, or a count outside 1..the stack's, is an error.
+   */
+  fun fits(item: PluginItem, to: PluginEntity, count: Int? = null): Int
+
+  /**
+   * The same for the item prototype [label], with no item spawned: [count] defaults to 1, and the
+   * rules see the prototype's `item_info` and no item. A label no loaded item has is an error.
+   */
+  fun fits(label: String, to: PluginEntity, count: Int? = null): Int
 
   /** Writes an attribute in the plugin's own namespace; `null` deletes it. */
   fun setAttr(entity: PluginEntity, key: String, value: Any?)
@@ -434,6 +522,12 @@ interface PluginActor : PluginEntity {
   /** Skill label to proficiency (needs the skills feature). */
   val skills: Map<String, Int>
 
+  /** The items carried, by id; not those worn. */
+  val inventory: List<PluginItem>
+
+  /** The items worn by slot, in slot order, including inactive ones. */
+  val equipment: Map<String, PluginItem>
+
   /** The running timed task, script or plugin, or null. */
   val task: PluginTask?
     get() = null
@@ -493,6 +587,27 @@ interface PluginItem : PluginEntity {
 
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
   val plural: String?
+
+  /** The stack's size, at least 1; 1 for an item that doesn't stack. */
+  val count: Int
+
+  /** Where this item is. */
+  val location: PluginItemLocation
+}
+
+/** Where an item is, as [PluginItem.location] reports it. */
+sealed interface PluginItemLocation {
+  /** Lying on the ground in [room]. */
+  data class InRoom(val room: PluginRoom) : PluginItemLocation
+
+  /** Carried in [actor]'s inventory. */
+  data class Carried(val actor: PluginActor) : PluginItemLocation
+
+  /** Worn by [actor] in [slot]. */
+  data class Equipped(val actor: PluginActor, val slot: String) : PluginItemLocation
+
+  /** Inside the [container] item. */
+  data class InContainer(val container: PluginItem) : PluginItemLocation
 }
 
 /** An affect on an item, as a plugin sees it: declared by its prototype or put on the instance. */

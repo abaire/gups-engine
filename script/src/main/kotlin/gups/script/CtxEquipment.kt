@@ -3,7 +3,7 @@ package gups.script
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.world.HookContext
-import gups.core.world.unwearItem
+import gups.core.world.removeWornItem
 import gups.core.world.wearItem
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
@@ -41,7 +41,7 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     }
 
   @StarlarkMethod(
-    name = "unwear",
+    name = "remove_worn",
     doc =
       "Takes off an item the actor wears, back into the inventory, after asking the remove" +
         " restriction. Sends nothing. Returns the refusal message, or None.",
@@ -51,14 +51,14 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
         Param(name = "item", named = true, doc = "An item the actor wears."),
       ],
   )
-  fun unwear(actor: Any, item: Any): Any =
-    verb("unwear") {
-      val a = actorArg(actor, "unwear(actor)")
-      val i = itemArg(item, "unwear(item)")
+  fun removeWorn(actor: Any, item: Any): Any =
+    verb("remove_worn") {
+      val a = actorArg(actor, "remove_worn(actor)")
+      val i = itemArg(item, "remove_worn(item)")
       val at = i.location
       if (at !is ItemLocation.Equipped || at.actor != a.id) {
-        fail("unwear(item): ${a.name} doesn't wear ${i.name}")
+        fail("remove_worn(item): ${a.name} doesn't wear ${i.name}")
       }
-      world.unwearItem(a, i) ?: Starlark.NONE
+      world.removeWornItem(a, i) ?: Starlark.NONE
     }
 }

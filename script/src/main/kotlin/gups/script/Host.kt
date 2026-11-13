@@ -669,6 +669,20 @@ class StarlarkHost(
     }
   }
 
+  /**
+   * A ctx owned by [owner] with no hook context, for a test to set up state with verbs. Its frame
+   * is never put on the call stack and never expires, so it works at once on the world thread, in
+   * or out of a pulse, for as long as the test holds it. Relative labels resolve against the
+   * package of the Starlark function that calls a verb, and [pkg] when there is none.
+   */
+  fun testCtx(world: World, owner: Entity, pkg: String): Ctx {
+    val site = Site(pkg, null, "test", vetoable = false, owner.id)
+    val thread = StarlarkThread(Mutability.create("test ctx"), SEMANTICS)
+    val frame = Frame(this, world, thread, site, Root(null, 0), limits.evalSteps)
+    thread.setThreadLocal(ViewScope::class.java, frame)
+    return Ctx(frame, owner, HookContext(), CtxExtras())
+  }
+
   // ---- Calling Starlark ----------------------------------------------------------------------
 
   /** `ctx.call_hook` depth: more than 8 nested calls is a script error. */

@@ -60,8 +60,7 @@ def _check_id(id):
     return id
 
 def _define(id, stock, currency = "//lib:gold_coin", container = "//lib:shop_chest", carried = False,
-            key = "//lib:shop_chest_key", till = None, buy_markup = 120, sell_rate = 50,
-            capacity = 50, max_weight = 500):
+            key = "//lib:shop_chest_key", till = None, buy_markup = 120, sell_rate = 50):
     """A shop description. Keep it in a module constant and pass it to shop.open."""
     _check_id(id)
     if type(stock) != "list":
@@ -88,15 +87,10 @@ def _define(id, stock, currency = "//lib:gold_coin", container = "//lib:shop_che
         fail("define(buy_markup): must be at least 1, got %d" % buy_markup)
     if sell_rate < 0 or sell_rate > 100:
         fail("define(sell_rate): must be between 0 and 100, got %d" % sell_rate)
-    if capacity < 1:
-        fail("define(capacity): must be at least 1, got %d" % capacity)
-    if max_weight < 0:
-        fail("define(max_weight): must be at least 0, got %d" % max_weight)
     return {
         "id": id, "currency": currency, "container": container, "carried": carried,
         "key": key if key != None else "", "till": till if till != None else "",
         "stock": lines, "buy_markup": buy_markup, "sell_rate": sell_rate,
-        "capacity": capacity, "max_weight": max_weight,
     }
 
 # The container's catalog hooks: a resting container restocks when it is opened or wakes.
@@ -163,65 +157,18 @@ def _count(ctx, container, label):
             total += i.count
     return total
 
+def _fields(name, plural, keywords, value):
+    """The catalog fields shops read, with no plural mapped to an empty string."""
+    return {"name": name, "plural": plural if plural != None else "", "keywords": keywords, "value": value}
+
 def _describe(item):
     """The catalog fields of an item view."""
-    plural = item.plural
-    if plural == None:
-        plural = ""
-    return {"name": item.name, "plural": plural, "keywords": item.keywords, "value": item.value}
+    return _fields(item.name, item.plural, item.keywords, item.value)
 
-def _info(ctx, container, label):
-    """A label's name, plural, keywords, value, per-item weight and stackability, cached on the
-    container. A miss spawns two of the label to read them, so only shop.open and tick-lane
-    commands may miss."""
-    cache = ctx.get_attr(container, "info", {})
-    if label in cache:
-        return cache[label]
-    # Scripts can't read a prototype's stackable flag: two spawned at once come back as one
-    # stack when it is stackable and as a list otherwise.
-    made = ctx.spawn(label, container, count = 2)
-    if type(made) == "list":
-        info = _describe(made[0])
-        info["weight"] = made[0].weight
-        info["stackable"] = False
-        for v in made:
-            ctx.destroy(v)
-    else:
-        info = _describe(made)
-        info["weight"] = made.weight // made.count
-        info["stackable"] = True
-        ctx.destroy(made)
-    cache[label] = info
-    ctx.set_attr(container, "info", cache)
-    return info
-
-def _room_for(ctx, container, d, label, n, pending = None):
-    """How many of n more of label fit within the container's capacity and weight limits.
-    `pending` is {"weight", "entries", "labels"} for additions not yet made (a projection)."""
-    if n <= 0:
-        return 0
-    info = _info(ctx, container, label)
-    weight = 0
-    entries = 0
-    already_have = False
-    for i in container.contents():
-        weight += i.weight
-        entries += 1
-        if i.label == label:
-            already_have = True
-    if pending != None:
-        weight += pending["weight"]
-        entries += pending["entries"]
-        if label in pending["labels"]:
-            already_have = True
-    w = info["weight"]
-    fit = (d["max_weight"] - weight) // w if w > 0 else n
-    if info["stackable"]:
-        if not already_have and entries >= d["capacity"]:
-            fit = 0
-    else:
-        fit = min(fit, d["capacity"] - entries)   # each item is its own entry
-    return max(0, min(n, fit))
+def _info(ctx, label):
+    """The catalog fields of the item prototype with this label, read without spawning one."""
+    p = ctx.item_info(label)
+    return _fields(p.name, p.plural, p.keywords, p.value)
 
 def _add(ctx, container, label, n):
     """Spawns n of label into the container and merges them into the matching stack."""
@@ -232,14 +179,14 @@ def _add(ctx, container, label, n):
     else:
         ctx.merge_stack(made)
 
-def _restock_amount(ctx, container, d, label, count, every, amount, have, last, now, pending = None):
+def _restock_amount(ctx, container, label, count, every, amount, have, last, now):
     """How many of the line the time since `last` warrants, within the container's limits."""
     if have >= count:
         return 0
     steps = (now - last) // every
     if steps == 0:
         return 0
-    return _room_for(ctx, container, d, label, min(steps * amount, count - have), pending)
+    return ctx.fits(label, container, min(steps * amount, count - have))
 
 def _catch_up(ctx, container):
     """Restocks each line the time warrants, while a keeper is present. Never removes items."""
@@ -263,7 +210,7 @@ def _catch_up(ctx, container):
             restock[key] = now
             continue
         last = restock.get(key, now)
-        n = _restock_amount(ctx, container, d, label, count, every, amount, have, last, now)
+        n = _restock_amount(ctx, container, label, count, every, amount, have, last, now)
         if n > 0:
             _add(ctx, container, label, n)
         if have + n >= count:
@@ -271,41 +218,6 @@ def _catch_up(ctx, container):
         else:
             restock[key] = last + (now - last) // every * every
     ctx.set_attr(container, "restock", restock)
-
-def _projected(ctx, container, d):
-    """The counts each line would hold after a catch-up, without changing anything."""
-    out = {}
-    now = ctx.pulse
-    restock = ctx.get_attr(container, "restock", {})
-    # Each line's additions take space the next line would see after a real catch-up.
-    pending = {"weight": 0, "entries": 0, "labels": {}}
-    for line in d["stock"]:
-        if line["count"] > 0:
-            label = line["label"]
-            have = _count(ctx, container, label)
-            n = _restock_amount(ctx, container, d, label, line["count"], line["every"],
-                                line["amount"], have, restock.get(label, now), now, pending)
-            _pend(ctx, container, pending, label, have, n)
-            out[label] = have + n
-    if d["till"] and d["till"]["count"] > 0:
-        label = d["currency"]
-        have = _count(ctx, container, label)
-        n = _restock_amount(ctx, container, d, label, d["till"]["count"], d["till"]["every"],
-                            d["till"]["amount"], have, restock.get("$till", now), now, pending)
-        out[label] = have + n
-    return out
-
-def _pend(ctx, container, pending, label, have, n):
-    """Records n projected additions of label in `pending`."""
-    if n <= 0:
-        return
-    info = _info(ctx, container, label)
-    pending["weight"] += info["weight"] * n
-    if not info["stackable"]:
-        pending["entries"] += n
-    elif have == 0 and label not in pending["labels"]:
-        pending["entries"] += 1
-    pending["labels"][label] = True
 
 def _open(ctx, keeper, definition):
     """Binds keeper to its stock container, filling and locking a new one. Returns the container."""
@@ -315,16 +227,14 @@ def _open(ctx, keeper, definition):
     fresh = container == None
     if fresh:
         if d["carried"]:
-            container = ctx.give(keeper, d["container"])
+            container = ctx.grant_item(keeper, d["container"])
         else:
             container = ctx.spawn(d["container"], keeper.room)
-    # A reused container takes the current definition and catalog, so a reload's new stock
-    # lines and values apply once the keeper respawns.
+    # A reused container takes the current definition at respawn, so a reload's new stock lines
+    # apply then; names and values are read live from the prototypes.
     ctx.set_attr(container, "shop", d)
-    ctx.set_attr(container, "info", {})
-    for line in d["stock"]:
-        _info(ctx, container, line["label"])
-    _info(ctx, container, d["currency"])
+    # Saved worlds from before the catalog was read live carry a stale cache.
+    ctx.del_attr(container, "info")
     # A fresh container's restock clocks start now; a reused one keeps its own and catches up.
     restock = ctx.get_attr(container, "restock", {})
     if not restock:
@@ -337,11 +247,11 @@ def _open(ctx, keeper, definition):
     if fresh:
         for line in d["stock"]:
             if line["count"] > 0:
-                n = _room_for(ctx, container, d, line["label"], line["count"])
+                n = ctx.fits(line["label"], container, line["count"])
                 if n > 0:
                     _add(ctx, container, line["label"], n)
         if d["till"] and d["till"]["count"] > 0:
-            n = _room_for(ctx, container, d, d["currency"], d["till"]["count"])
+            n = ctx.fits(d["currency"], container, d["till"]["count"])
             if n > 0:
                 _add(ctx, container, d["currency"], n)
         if d["key"]:
@@ -353,7 +263,7 @@ def _open(ctx, keeper, definition):
                 has_key = True
                 break
         if not has_key:
-            ctx.give(keeper, d["key"])
+            ctx.grant_item(keeper, d["key"])
     return container
 
 # --- Commands: list, buy, sell, value ----------------------------------------------------------
@@ -478,27 +388,23 @@ def _offer(label, item, count, price, info):
             "name": info["name"], "plural": info["plural"], "keywords": info["keywords"],
             "value": info["value"]}
 
-def _offers(ctx, keeper, container, d, customer, projected):
+def _offers(ctx, keeper, container, d, customer):
     """What the keeper sells to this customer: the listed lines, plus anything else it holds.
     Stored lines with nothing in stock aren't offered."""
     offers = []
-    projected_counts = _projected(ctx, container, d) if projected else {}
     listed = {}
     for line in d["stock"]:
         label = line["label"]
         listed[label] = True
         if label == d["currency"] or label == d["key"]:
             continue
-        info = _info(ctx, container, label)
+        info = _info(ctx, label)
         if line["count"] == -1:
             count = None
             item = None
         else:
             item = _first_in(container, label)
-            if projected:
-                count = projected_counts.get(label, _count(ctx, container, label))
-            else:
-                count = _count(ctx, container, label)
+            count = _count(ctx, container, label)
             if count <= 0:
                 continue
         price = _buy_price(d, info["value"])
@@ -512,8 +418,7 @@ def _offers(ctx, keeper, container, d, customer, projected):
     for label in held:
         if label in listed or label == d["currency"] or label == d["key"]:
             continue
-        # Read from the held item rather than the catalog: a catalog miss would spawn, and
-        # list must not change the world.
+        # Not in the definition, so describe what the keeper actually holds.
         item = _first_in(container, label)
         info = _describe(item)
         price = _buy_price(d, info["value"])
@@ -524,15 +429,15 @@ def _offers(ctx, keeper, container, d, customer, projected):
     return offers
 
 def _currency_word(ctx, container, d):
-    c = _info(ctx, container, d["currency"])
+    c = _info(ctx, d["currency"])
     return c["plural"] if c["plural"] != "" else c["name"]
 
 def _list_command(ctx):
-    shop = _shop_here(ctx, False)
+    shop = _shop_here(ctx, True)
     if shop == None:
         return
     keeper, container, d = shop
-    offers = _offers(ctx, keeper, container, d, ctx.self, True)
+    offers = _offers(ctx, keeper, container, d, ctx.self)
     if not offers:
         ctx.send(ctx.self, "%s has nothing for sale." % keeper.name)
     else:
@@ -562,7 +467,7 @@ def _buy_command(ctx):
         return
     keeper, container, d = shop
     offer = None
-    for o in _offers(ctx, keeper, container, d, ctx.self, False):
+    for o in _offers(ctx, keeper, container, d, ctx.self):
         if _kw_match(o["keywords"], keyword):
             offer = o
             break
@@ -572,6 +477,18 @@ def _buy_command(ctx):
     if offer["count"] != None and count > offer["count"]:
         ctx.send(ctx.self, "%s only has %d." % (keeper.name, offer["count"]))
         count = offer["count"]
+    # The stack the offer names says what the carry limit sees; a purchase spread over several
+    # stacks, or an unlimited line, asks about the prototype.
+    what = offer["item"]
+    if what == None or count > what.count:
+        what = offer["label"]
+    room = ctx.fits(what, ctx.self, count)
+    if room == 0:
+        ctx.send(ctx.self, "You can't carry that.")
+        return
+    if room < count:
+        ctx.send(ctx.self, "You can only carry %d." % room)
+        count = room
     # The hook sees the library's default price, as it did on list: asking it with the
     # already-adjusted list price would apply a multiplicative discount twice.
     base = _buy_price(d, offer["value"])
@@ -594,7 +511,7 @@ def _buy_command(ctx):
     if offer["count"] != None:
         _deliver(ctx, container, ctx.self, offer["label"], count)
     else:
-        made = ctx.give(ctx.self, offer["label"], count)
+        made = ctx.grant_item(ctx.self, offer["label"], count)
         if type(made) == "list":
             for v in made:
                 ctx.merge_stack(v)
@@ -654,6 +571,10 @@ def _sell_command(ctx):
         ctx.send(ctx.self, "You aren't carrying that.")
         return
     count = min(count, item.count)
+    refusal = ctx.may_give(ctx.self, item, keeper)
+    if refusal != None:
+        ctx.send(ctx.self, refusal)
+        return
     price, refusal = _sell_default(keeper, d, item)
     price, refusal = _ask(ctx, keeper, "sell", ctx.self, item, item.label, count, price, refusal)
     if refusal != None:
@@ -664,7 +585,7 @@ def _sell_command(ctx):
     if _coins_in(container, d["currency"]) < total:
         ctx.send(ctx.self, "%s can't afford that." % keeper.name)
         return
-    if _room_for(ctx, container, d, item.label, count) < count:
+    if ctx.fits(item, container, count) < count:
         ctx.send(ctx.self, "%s has no room for that." % keeper.name)
         return
     ctx.merge_stack(ctx.move_item(item, container, count = count))
@@ -680,7 +601,7 @@ def _sell_command(ctx):
 shop = struct(define = _define, stock = _stock, till = _till, open = _open, catch_up = _catch_up)
 
 gmcp_package("Shop.Stock", doc = "What the shopkeeper here sells, with prices, sent by list.")
-global_command("list", _list_command, lane = "fast")
+global_command("list", _list_command, lane = "tick")
 global_command("buy", _buy_command, lane = "tick")
 global_command("sell", _sell_command, lane = "tick")
 global_command("value", _value_command, lane = "tick")

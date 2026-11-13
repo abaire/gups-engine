@@ -203,13 +203,24 @@ private fun World.refit(a: Actor, announce: Boolean) {
 
 /**
  * Asks the `wear` restriction again about each of [a]'s worn items, after a change the restriction
- * may read (choices, traits, a reload or a restore), and reruns the fit check. A refused item
- * becomes inactive rather than coming off, and stays inactive until a later re-check allows it; the
- * wearer is sent the refusal if [announce].
+ * may read (choices, traits, a reload or a restore, or a change to the effective tags, prototype or
+ * item affects of something [a] wears), and reruns the fit check. A refused item becomes inactive
+ * rather than coming off, and stays inactive until a later re-check allows it; the wearer is sent
+ * the refusal if [announce].
  */
 fun World.recheckWornItems(a: Actor, announce: Boolean = true) {
   askWearRestriction(a)
   refreshFit(a, announce)
+}
+
+/**
+ * Refreshes whoever holds [item] after a change to its effective tags, prototype or affects, and
+ * re-asks the `wear` restriction about everything its wearer has on when [item] is worn.
+ */
+internal fun World.itemChanged(item: Item) {
+  val holder = custodian(item) ?: return
+  if (item.location is ItemLocation.Equipped) askWearRestriction(holder)
+  refreshHoldings(holder)
 }
 
 /** Records which of [a]'s worn items the `wear` restriction refuses now, without refitting. */

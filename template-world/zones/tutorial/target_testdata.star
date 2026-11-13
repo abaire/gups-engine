@@ -1,14 +1,6 @@
 # Test fixture for the target_order tests, driven by target_test.star. The two rooms lead only to each other, and the
 # probes never wander. This is a test fixture, so it loads only when the world is loaded for tests.
 
-# mend <name>: heal the named player in the room without any skill setup.
-def _mend(ctx):
-    target = ctx.target
-    if target == None:
-        ctx.send(ctx.actor, "No one by that name.")
-        return
-    ctx.heal(target, 5, "hp", source = ctx.actor)
-
 # recall <name>: tell the player how the switcher remembers the named actor, as "<event>:<count>" entries.
 def _recall(ctx):
     mob = ctx.here("switcher")
@@ -27,11 +19,6 @@ def _memof(ctx):
         return
     ctx.send(ctx.actor, str(len(ctx.memories(mob, subject = ctx.actor))))
 
-# hide: conceal the player for 200 pulses, as the noticing tests do.
-def _hide(ctx):
-    ctx.apply_affect(ctx.actor, "hidden", 200, flags = ["hidden"])
-    ctx.send(ctx.actor, "You conceal yourself.")
-
 room("target_test_hall",
     name = "The Target Test Hall",
     desc = "A bare hall kept for the target order tests.",
@@ -44,7 +31,7 @@ room("target_test_room",
     desc = "A bare room kept for the target order tests.",
     flags = ["dead_end_ok"],
     exits = [exit(DIR.west, to = ":target_test_hall")],
-    commands = {"mend": _mend, "recall": _recall, "memof": _memof, "hide": _hide},
+    commands = {"recall": _recall, "memof": _memof},
 )
 
 mob("test_picker_weak",

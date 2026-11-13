@@ -13,6 +13,7 @@ import gups.core.model.Direction
 import gups.core.model.DispositionParts
 import gups.core.model.Exit
 import gups.core.model.Item
+import gups.core.model.ItemProto
 import gups.core.model.Player
 import gups.core.model.Room
 import gups.core.model.SkillProto
@@ -73,6 +74,11 @@ class RulesContext(
   val affect: Affect? = null,
   /** The timed task an `interrupt_check` is asked about, or null. */
   val task: TaskInfo? = null,
+  /**
+   * The prototype of the item or label `carry_limit` is asked about, whether or not an instance
+   * exists ([item] is null when `fits` asks about a label); null elsewhere.
+   */
+  val itemProto: ItemProto? = null,
   /** The actor's carry limit asked without an item, in encumbrance_level and encumbrance calls. */
   val limit: Int? = null,
   /** Carried and worn weight, in encumbrance_level and encumbrance calls. */
@@ -168,6 +174,7 @@ class RulesContext(
       slot = slot,
       affect = affect,
       task = task,
+      itemProto = itemProto,
       limit = limit,
       carried = carried,
       encumbranceLevel = encumbranceLevel,
@@ -223,6 +230,7 @@ class RulesContext(
       damageType = damageType,
       slot = slot,
       affect = a,
+      itemProto = itemProto,
       limit = limit,
       carried = carried,
       encumbranceLevel = encumbranceLevel,

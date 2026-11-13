@@ -65,15 +65,25 @@ The engine finds it with `ServiceLoader`. The jar must have exactly one provider
 Plugins never see the engine's `World` or entities. They get a `PluginWorld` facade:
 
 - **verbs:** `send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`, `getAttr`, `setAttr` and
-  `delAttr`. Each does what the `ctx` verb of the same name does, so the engine's invariants hold. Attribute keys
-  without `ns:` are in the plugin's own namespace (its id), and a plugin writes only its own namespace. `damage(target,
-  amount, type, vital)` and `heal(target, amount, vital)` name the vital they change, as the `ctx` verbs do.
+  `delAttr`. Each does what the `ctx` verb of the same name does, so the engine's invariants hold. `teleport` asks the
+  `enter` restriction and `before_enter` first, and returns the refusal or veto, or null once the actor has moved.
+  Attribute keys without `ns:` are in the plugin's own namespace (its id), and a plugin writes only its own namespace.
+  `damage(target, amount, type, vital)` and `heal(target, amount, vital)` name the vital they change, as the `ctx` verbs
+  do.
 - **skills and items:** `skillRoll(actor, skill, item, target, event = "craft", adjust = 0)` rolls a skill outside a
   cast and returns a `PluginSkillRoll(chance, roll, success, power)`, as `ctx.skill_roll` does (it throws
   `IllegalStateException` naming `skills` when that feature is off); `setItemName(item, name)` sets or clears an item's
-  name override, as `ctx.set_item_name` does; `wear(actor, item, wield = false)` and `unwear(actor, item)` put a carried
-  item on and take a worn one off, as `ctx.wear` and `ctx.unwear` do: they ask the `WEAR` and `REMOVE` restrictions,
-  return the refusal or null, and send nothing.
+  name override, as `ctx.set_item_name` does; `wear(actor, item, wield = false)` and `removeWorn(actor, item)` put a
+  carried item on and take a worn one off, as `ctx.wear` and `ctx.remove_worn` do: they ask the `WEAR` and `REMOVE`
+  restrictions, return the refusal or null, and send nothing. `mayWear(actor, item, wield = false)`, `mayRemove`,
+  `mayDrop`, `mayGive(actor, item, to)`, `mayPut(actor, item, container)`, `mayEnter(actor, room)` and `mayLearn(actor,
+  skill, proficiency)` ask whether the matching command or verb would refuse, as the `ctx.may_*` queries do: each
+  returns the refusal message or null, moves nothing and runs no hook. An argument the command couldn't act on, such as
+  an item the actor doesn't carry, throws `IllegalArgumentException`. `fits(item, to, count = null)` and `fits(label,
+  to, count = null)` return how many of `count` would fit at `to`, a container item, an actor or a room, as `ctx.fits`
+  does: the container's free capacity and weight, an actor's `carry_limit` asked about the item, any number for a room.
+  They change nothing; an unknown label, a `to` that isn't a container, or a count outside the stack's throws
+  `IllegalArgumentException`.
 - **timed tasks:** `startTask`, `stopTask`, `PluginActor.task` and `PluginActor.isBusy`; see
   [Timed tasks](#timed-tasks).
 - **leveling:** `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and `levelDown(actor, count = 1)` do
@@ -528,7 +538,7 @@ r.addRestriction(PluginRestrictionPoint.WEAR, "Mages cannot wear heavy armor.") 
 ```
 
 Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
-(`move_item`, `give`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The `WEAR`
+(`move_item`, `grant_item`, `destroy`, `transform`) and the engine's own moves (death, decay) don't run them. The `WEAR`
 restriction is also asked again about worn items after a change of choices or traits; a refused item stays worn but is
 inactive, contributing nothing, until a later re-check allows it. For details on item restrictions and swap validation,
 see the [Item Restriction Points Tutorial](../samples/curse-plugin/docs/tutorials/02_item_restriction_points.md).
@@ -605,6 +615,17 @@ transforms:
   (`item.maxCharges`); setting 0 does not run its `empty` action. Refuses unlimited and stackable items. `item.charges`
   reads uses left (`null` when unlimited), so `if (item.charges == 0) call.world.setCharges(item, item.maxCharges!!)`
   recharges an empty item.
+- **Custody:** `world.spawnItem(label, to, count = 1)` spawns items at a room, an actor's inventory or a container item
+  and returns a list: one stack for a stackable label, `count` separate items otherwise. `world.moveItem(item, to, count
+  = null)` moves the whole stack or `count` of it and returns the item now there; `world.destroy(item, count = null)`
+  removes it; `world.mergeStack(item)` folds it into an identical stack and returns the stack that holds it. They follow
+  `ctx.spawn`, `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack`: they skip item restrictions and the commands' carry
+  and container limits (`world.fits` asks those), and room placement is at track index 0. There is no `grantItem`:
+  `moveItem` or `spawnItem` with an actor as the destination puts the items in its inventory. A mob label, unknown
+  label, count below 1 or non-container item as destination is an error.
+- **Where things are:** `item.count` is the stack's size, `item.location` is a `PluginItemLocation` (`InRoom(room)`,
+  `Carried(actor)`, `Equipped(actor, slot)` or `InContainer(container)`), `actor.inventory` lists carried items by id
+  (not worn ones) and `actor.equipment` maps slot to worn item in slot order, inactive ones included.
 - **Instance affects:** `world.applyItemAffect(item, name, duration, applies = "worn", ...)` and
   `world.removeItemAffect(item, name)` apply or remove instance affects. Setting `duration = null` creates a permanent
   affect. `applies` must be `"worn"` or `"carried"`.

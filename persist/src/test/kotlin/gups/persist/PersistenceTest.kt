@@ -195,6 +195,52 @@ class PersistenceTest {
     c.close()
   }
 
+  private fun lockedDoorRestoredWith(savedKey: Label?, nextKey: Label?): DoorState {
+    val file = tempDb()
+    val a = PersistWorld(file, P.protos(doorKey = savedKey))
+    a.w.setDoor(a.w.room(P.HALL), Direction.SOUTH, DoorState.LOCKED)
+    a.save()
+    a.close()
+    val b = PersistWorld(file, P.protos(doorKey = nextKey))
+    val state = b.w.room(P.HALL).exits.values.single().door!!.state
+    b.close()
+    return state
+  }
+
+  private fun lockedBagRestoredWith(savedKey: Label?, nextKey: Label?): DoorState {
+    val file = tempDb()
+    val a = PersistWorld(file, P.protos(bagKey = savedKey))
+    val ann = a.login("Ann")
+    a.w.spawnItem(P.BAG, ItemLocation.Carried(ann.id)).container!!.state = DoorState.LOCKED
+    a.w.quit(ann)
+    a.save()
+    a.close()
+    val b = PersistWorld(file, P.protos(bagKey = nextKey))
+    val state = b.login("Ann").inventory.single().container!!.state
+    b.close()
+    return state
+  }
+
+  @Test
+  fun `a saved locked door whose prototype lost its key restores closed`() {
+    assertEquals(DoorState.CLOSED, lockedDoorRestoredWith(P.GEM, null))
+  }
+
+  @Test
+  fun `a saved locked door whose prototype keeps its key restores locked`() {
+    assertEquals(DoorState.LOCKED, lockedDoorRestoredWith(P.GEM, P.GEM))
+  }
+
+  @Test
+  fun `a saved locked container whose prototype lost its key restores closed`() {
+    assertEquals(DoorState.CLOSED, lockedBagRestoredWith(P.GEM, null))
+  }
+
+  @Test
+  fun `a saved locked container whose prototype keeps its key restores locked`() {
+    assertEquals(DoorState.LOCKED, lockedBagRestoredWith(P.GEM, P.GEM))
+  }
+
   @Test
   fun `a restored tombstone stack keeps its weight, stackability and plural`() {
     val base = P.protos()

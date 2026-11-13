@@ -135,8 +135,8 @@ def _arena_enter(ctx):
     sword = w != None and w.label.endswith(":practice_sword")
     if ctx.actor.is_player and sword and quest.step(ctx, ctx.actor, FIRST_STEPS) == 2:
         quest.complete(ctx, ctx.actor, FIRST_STEPS)
-        ctx.give(ctx.actor, ":leather_cap")
-        ctx.give(ctx.actor, ":healing_draught")
+        ctx.grant_item(ctx.actor, ":leather_cap")
+        ctx.grant_item(ctx.actor, ":healing_draught")
         ctx.send(ctx.actor, "The guide calls from the hall: 'Well done! Take these, you've earned them.'")
 
 def _stock_arena(ctx):

@@ -219,8 +219,11 @@ class CommandsTest {
             print("Ash fled")
             # The shop opens west to the armory and east to the smithy; flee picks either.
             ash.do("east" if ash.room.label == "//zones/tutorial:armory" else "west")
-            t.contains(tess.do("list"), "offers")
-            t.contains(ash.do("list"), "offers")
+            # The keeper attacks on sight before a tick-lane command runs, so the returning
+            # attacker is refused, and the keeper is fighting again, so the bystander is too.
+            w.run(pulses = 4)
+            t.contains(tess.do("list"), "is busy fighting.")
+            t.contains(ash.do("list"), "is busy fighting.")
         """
           .trimIndent() + "\n"
       )

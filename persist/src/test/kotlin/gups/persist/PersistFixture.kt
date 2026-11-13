@@ -38,19 +38,21 @@ object P {
   val GEM = Label("//t:gem")
   val HAT = Label("//t:hat")
 
-  fun rooms(ratHp: Int = 10) =
+  fun rooms(ratHp: Int = 10, doorKey: Label? = null) =
     listOf(
       RoomProto(
         HALL,
         "The Hall",
         size = TrackSize.LARGE,
-        exits = listOf(ExitProto(Direction.SOUTH, VAULT, door = DoorProto(DoorState.CLOSED))),
+        exits =
+          listOf(ExitProto(Direction.SOUTH, VAULT, door = DoorProto(DoorState.CLOSED, doorKey))),
         spawns = listOf(SpawnRule(RAT, count = 2, respawnPulses = 300)),
       ),
       RoomProto(
         VAULT,
         "The Vault",
-        exits = listOf(ExitProto(Direction.NORTH, HALL, door = DoorProto(DoorState.CLOSED))),
+        exits =
+          listOf(ExitProto(Direction.NORTH, HALL, door = DoorProto(DoorState.CLOSED, doorKey))),
       ),
     )
 
@@ -62,9 +64,13 @@ object P {
     withRat: Boolean = true,
     ratTraits: Set<String> = emptySet(),
     extraFactions: List<FactionProto> = emptyList(),
+    doorKey: Label? = null,
+    bagKey: Label? = null,
   ) =
     Prototypes(
-      rooms = if (withRat) rooms(ratHp) else rooms(ratHp).map { it.copy(spawns = emptyList()) },
+      rooms =
+        if (withRat) rooms(ratHp, doorKey)
+        else rooms(ratHp, doorKey).map { it.copy(spawns = emptyList()) },
       mobs =
         if (withRat)
           listOf(
@@ -81,7 +87,9 @@ object P {
       items =
         listOfNotNull(
           ItemProto(COIN, "a coin", listOf("coin"), stackable = true),
-          ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto()).takeIf { withBag },
+          ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto(key = bagKey)).takeIf {
+            withBag
+          },
           ItemProto(GEM, "a gem", listOf("gem")).takeIf { withGem },
           ItemProto(
             HAT,

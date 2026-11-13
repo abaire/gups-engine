@@ -733,5 +733,5 @@ private fun World.canScavenge(mob: Mob, item: Item): Boolean {
     val band = Band.between(mob.trackIndex, item.groundIndex ?: return false)
     if (rules.getLag(RulesContext(this, mob, item = item, band = band), band) == null) return false
   }
-  return mob.carriedWeight() + item.weight <= rules.carryLimit(RulesContext(this, mob, item = item))
+  return mob.carriedWeight() + item.weight <= carryLimitFor(mob, Fitting(item))
 }

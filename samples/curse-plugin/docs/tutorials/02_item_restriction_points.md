@@ -31,8 +31,9 @@ A foundational architectural rule in GUPS is that **restrictions guard player an
 
 * **Commands:** When a player enters `remove ring`, `drop sword`, `give bag bob`, or `put coin chest`, or when a mob
   executes a command line via `act`, the engine runs the registered restriction points.
-* **Script & Facade Verbs Are Trusted:** Verbs invoked by Starlark scripts (`ctx.move_item`, `ctx.give`, `ctx.destroy`,
-  `ctx.transform`) and plugin facade methods (`world.transform`, `world.addTag`) **do not run restrictions**.
+* **Script & Facade Verbs Are Trusted:** Verbs invoked by Starlark scripts (`ctx.move_item`, `ctx.grant_item`,
+  `ctx.destroy`, `ctx.transform`) and plugin facade methods (`world.transform`, `world.addTag`) **do not run
+  restrictions**.
 * **Engine-Internal Movements Are Trusted:** Character death (dropping inventory), item decay, the re-check that takes
   off equipment after a choice change, and prototype transforms bypass restrictions entirely.
 

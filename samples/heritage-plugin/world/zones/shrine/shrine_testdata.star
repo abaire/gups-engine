@@ -56,33 +56,10 @@ def _keeper(ctx):
             return a
     return None
 
-# coins <n>: gives the player n gold coins.
-def _coins(ctx):
-    made = ctx.give(ctx.actor, "//lib:gold_coin", int(ctx.args))
-    for v in (made if type(made) == "list" else [made]):
-        ctx.merge_stack(v)
-    ctx.send(ctx.actor, "You get %s gold coins." % ctx.args)
-
-# grant <n>: adds n practice sessions.
-def _grant(ctx):
-    trainer.grant_practices(ctx, ctx.actor, int(ctx.args))
-    ctx.send(ctx.actor, "You now have %d practice sessions." % trainer.practices(ctx, ctx.actor))
-
-# stun_keeper: stuns the keeper here for 10 pulses.
-def _stun_keeper(ctx):
-    keeper = _keeper(ctx)
-    ctx.apply_affect(keeper, "stun", 10, flags = ["stunned"])
-    ctx.send(ctx.actor, "You stun %s." % keeper.name)
-
 # offer <mode>: sets the keeper's respec_offer behavior (refuse | free | junk | number | default).
 def _offer(ctx):
     ctx.set_attr(_keeper(ctx), "offer_mode", ctx.args)
     ctx.send(ctx.actor, "The offer mode is now %s." % ctx.args)
-
-# armor: gives the player a suit of plate mail and puts it on them.
-def _armor(ctx):
-    refusal = ctx.wear(ctx.actor, ctx.give(ctx.actor, ":plate_mail"))
-    ctx.send(ctx.actor, refusal or "You are buckled into a suit of plate mail.")
 
 # bad <case>: calls respec.define with one bad argument, so the load-time checks can be tested.
 _BAD_DEFINES = {
@@ -103,29 +80,9 @@ def _bad(ctx):
     args.update(_BAD_DEFINES[ctx.args])
     respec.define(**args)
 
-# scorn <n>: lowers the keeper's standing with the player by n.
-def _scorn(ctx):
-    ctx.adjust_standing(_keeper(ctx), ctx.actor, -int(ctx.args))
-    ctx.send(ctx.actor, "You scorn the keeper.")
-
-# mood: shows the keeper's disposition toward the player.
-def _mood(ctx):
-    ctx.send(ctx.actor, "Disposition: %d" % ctx.disposition(_keeper(ctx), ctx.actor))
-
-# goto <room>: moves the player to another fixture room; they have no exits.
-def _goto(ctx):
-    ctx.teleport(ctx.actor, ctx.args)
-
 FIXTURE_COMMANDS = {
-    "goto": _goto,
-    "scorn": _scorn,
-    "mood": _mood,
     "bad": _bad,
-    "coins": _coins,
-    "grant": _grant,
-    "stun_keeper": _stun_keeper,
     "offer": _offer,
-    "armor": _armor,
 }
 
 room("respec_test_room",

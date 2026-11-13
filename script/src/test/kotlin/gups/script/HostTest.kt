@@ -3,6 +3,7 @@ package gups.script
 import gups.core.AttrValue
 import gups.core.Label
 import gups.core.model.DamageType
+import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
@@ -409,12 +410,12 @@ class HostTest {
           """
                 def _go(ctx):
                     a = ctx.actor
-                    ctx.give(a, ":coin", count = 5)
+                    ctx.grant_item(a, ":coin", count = 5)
                     coins = a.inventory()[0]
                     part = ctx.move_item(coins, ctx.room, index = 0, count = 2)
                     gem = ctx.spawn(":gem", ctx.room)
                     ctx.destroy(gem)
-                    ctx.give(a, part, count = 1)
+                    ctx.grant_item(a, part, count = 1)
                     ctx.destroy(coins, count = 1)
                     ctx.unlock_door(ctx.room, "north")
                     ctx.open_door("//zones/z:start", "north")
@@ -431,12 +432,12 @@ class HostTest {
                     coins = ctx.actor.inventory()[0]
                     ctx.move_item(coins, ctx.room, index = 0, count = coins.count + 1)
 
-                def _bad_give0(ctx):
-                    ctx.give(ctx.actor, ctx.actor.inventory()[0], count = 0)
+                def _bad_grant0(ctx):
+                    ctx.grant_item(ctx.actor, ctx.actor.inventory()[0], count = 0)
 
-                def _bad_givebig(ctx):
+                def _bad_grantbig(ctx):
                     coins = ctx.actor.inventory()[0]
-                    ctx.give(ctx.actor, coins, count = coins.count + 1)
+                    ctx.grant_item(ctx.actor, coins, count = coins.count + 1)
 
                 def _bad_destroy0(ctx):
                     ctx.destroy(ctx.actor.inventory()[0], count = 0)
@@ -450,12 +451,13 @@ class HostTest {
 
                 room("start", name = "Start",
                      commands = {"go": _go, "bad_move0": _bad_move0, "bad_movebig": _bad_movebig,
-                                 "bad_give0": _bad_give0, "bad_givebig": _bad_givebig,
+                                 "bad_grant0": _bad_grant0, "bad_grantbig": _bad_grantbig,
                                  "bad_destroy0": _bad_destroy0, "bad_destroybig": _bad_destroybig},
-                     exits = [exit("north", ":vault", door = door(state = "locked"))])
-                room("vault", exits = [exit("south", ":start", door = door(state = "locked"))], on_enter = _arrive)
+                     exits = [exit("north", ":vault", door = door(state = "locked", key = ":key"))])
+                room("vault", exits = [exit("south", ":start", door = door(state = "locked", key = ":key"))], on_enter = _arrive)
                 item("coin", stackable = True)
                 item("gem")
+                item("key")
                 """
         )
       )
@@ -479,8 +481,8 @@ class HostTest {
       listOf(
         "bad_move0" to "move_item",
         "bad_movebig" to "move_item",
-        "bad_give0" to "give",
-        "bad_givebig" to "give",
+        "bad_grant0" to "grant_item",
+        "bad_grantbig" to "grant_item",
         "bad_destroy0" to "destroy",
         "bad_destroybig" to "destroy",
       )) {
@@ -501,9 +503,9 @@ class HostTest {
           """
                 def _go(ctx):
                     a = ctx.actor
-                    ctx.give(a, ":coin", count = 5)
+                    ctx.grant_item(a, ":coin", count = 5)
                     first = a.inventory()[0]
-                    ctx.give(a, ":coin", count = 3)
+                    ctx.grant_item(a, ":coin", count = 3)
                     second = a.inventory()[1]
                     merged = ctx.merge_stack(second)
                     ctx.send(a, "count=%d stacks=%d same_id=%s" % (
@@ -528,9 +530,9 @@ class HostTest {
           """
                 def _go(ctx):
                     a = ctx.actor
-                    ctx.give(a, ":coin", count = 2)
+                    ctx.grant_item(a, ":coin", count = 2)
                     first = a.inventory()[0]
-                    ctx.give(a, ":coin", count = 2)
+                    ctx.grant_item(a, ":coin", count = 2)
                     second = a.inventory()[1]
                     ctx.set_attr(second, "serial", 7)
                     merged = ctx.merge_stack(second)
@@ -556,7 +558,7 @@ class HostTest {
           """
                 def _go(ctx):
                     a = ctx.actor
-                    ctx.give(a, ":gem")
+                    ctx.grant_item(a, ":gem")
                     gem = a.inventory()[0]
                     back = ctx.merge_stack(gem)
                     ctx.send(a, "same=%s" % (back.id == gem.id))
@@ -570,6 +572,44 @@ class HostTest {
     f.input(p, "go")
     f.run()
     assertContains(f.out(p), "same=True")
+  }
+
+  @Test
+  fun `lock_door locks a keyed door and refuses a keyless one`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+                def _lock(ctx):
+                    ctx.lock_door(ctx.room, "north")
+                    ctx.send(ctx.actor, "locked=" + ctx.room.exit("north").door.state)
+
+                def _lock_bare(ctx):
+                    ctx.lock_door(ctx.room, "east")
+
+                room("start", commands = {"seal": _lock, "lock_bare": _lock_bare},
+                     exits = [exit("north", ":vault", door = door(state = "open", key = ":key")),
+                              exit("east", ":vault", door = door(state = "closed"))])
+                room("vault", exits = [exit("south", ":start", door = door(state = "open", key = ":key")),
+                                       exit("west", ":start", door = door(state = "closed"))])
+                item("key")
+                """
+        )
+      )
+    val p = f.player()
+    f.input(p, "seal")
+    f.run()
+    assertContains(f.out(p), "locked=locked")
+    val vault = f.w.room(Label("//zones/z:vault"))
+    assertEquals(DoorState.LOCKED, vault.exits.getValue(Direction.SOUTH).door!!.state)
+    f.input(p, "lock_bare")
+    f.run()
+    val errors = f.diagnostics("script_error")
+    assertEquals(1, errors.size)
+    assertContains(errors.last().message, "has no lock")
+    val start = f.w.room(Label("//zones/z:start"))
+    assertEquals(DoorState.CLOSED, start.exits.getValue(Direction.EAST).door!!.state)
+    assertEquals(DoorState.CLOSED, vault.exits.getValue(Direction.WEST).door!!.state)
   }
 
   @Test

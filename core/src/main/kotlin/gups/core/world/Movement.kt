@@ -70,22 +70,36 @@ internal fun World.transition(
   )
 }
 
-/** The `teleport` verb: engine-validated, fires the exit and enter hooks. */
-fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
-  val from = actor.room
-  val req =
+/**
+ * Asks the ENTER restriction about [actor] going to [to] from where it is, with no direction, and
+ * runs nothing else; [teleport] also runs `before_enter`. Returns the refusal message, or null.
+ */
+fun World.mayEnter(actor: Actor, to: Room): String? =
+  restrictionRefusal(
+    gups.core.model.RestrictionPoint.ENTER,
     gups.core.model.RestrictionRequest(
       point = gups.core.model.RestrictionPoint.ENTER,
       actor = actor,
       room = to,
-      from = from,
+      from = actor.room,
       direction = null,
-    )
-  val refused = restrictionRefusal(gups.core.model.RestrictionPoint.ENTER, req)
-  if (refused != null) {
-    if (actor is Player) send(actor, refused)
-    return
+    ),
+  )
+
+/**
+ * The `teleport` verb: engine-validated, fires the exit and enter hooks. Asks the ENTER restriction
+ * and then `before_enter` in [to], with no direction; guards and `before_exit` don't run, since no
+ * exit is used. Returns the refusal or veto message, sending nothing and moving nothing, or null
+ * once the move is under way.
+ */
+fun World.teleport(actor: Actor, to: Room, index: Int? = null): String? {
+  mayEnter(actor, to)?.let {
+    return it
   }
+  dispatch(HookName.BEFORE_ENTER, null, to, HookContext(actor = actor, fromRoom = actor.room))
+    ?.let {
+      return it
+    }
   deferRemoval(actor, Deferred.Kind.TRANSITION) {
     if (!actor.inWorld) return@deferRemoval
     val from = actor.room
@@ -114,6 +128,7 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null) {
     dispatch(HookName.ON_ENTER, null, to, HookContext(actor = actor, fromRoom = from))
     fireTraitEvent(actor, TraitEvent.ROOM_ENTERED, mapOf("from_room" to from, "direction" to null))
   }
+  return null
 }
 
 /**

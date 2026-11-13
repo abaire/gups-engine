@@ -80,7 +80,7 @@ def _guide_hears(ctx):
         ctx.set_attr(ctx.actor, "ready", True)
         ctx.say(ctx.self, "Then off you go, %s. The arena is north." % ctx.actor.name)
     elif said(ctx.text, "key") and not ctx.actor.has_item(":brass_key"):
-        ctx.give(ctx.actor, ":brass_key")
+        ctx.grant_item(ctx.actor, ":brass_key")
         ctx.emote(ctx.self, "hands %s a brass key." % ctx.actor.name)
         quest.advance(ctx, ctx.actor, FIRST_STEPS, from_step=0)
 ```

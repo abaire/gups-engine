@@ -10,6 +10,13 @@ item("test_bread", name = "a loaf of bread", plural = "loaves of bread", stackab
      weight = 1, value = 5)
 item("test_axe", name = "a test axe", keywords = ["axe"], kind = "melee", wield = "wield",
      dice = "1d6", damage_type = "slash", weight = 4, value = 40)
+
+# Spawning a tracer raises a script error, which the tests read back through w.diagnostics():
+# a shop that lists one must read its catalog fields without ever spawning it.
+def _tracer_spawned(ctx):
+    fail("the tracer was spawned")
+
+item("test_tracer", name = "a test tracer", value = 9, on_spawn = _tracer_spawned)
 item("stolen_ring", name = "a stolen ring", keywords = ["ring"], tags = ["stolen"], value = 15)
 
 # A chest shop: the keeper stands in the room and the chest sits on the ground, locked.
@@ -19,6 +26,7 @@ TEST_SHOP = shop.define(
         shop.stock("//zones/tutorial:test_sword", count = 3, every = 600),
         shop.stock("//zones/tutorial:test_bread"),   # unlimited: spawned on demand, never stored
         shop.stock("//zones/tutorial:test_axe", count = 0),   # listed but never held: sell-only
+        shop.stock("//zones/tutorial:test_tracer", count = 0),
     ],
     till = shop.till(count = 100, every = 60, amount = 10),
     buy_markup = 120,
@@ -33,16 +41,25 @@ TEST_PACK_SHOP = shop.define(
     key = None,
     stock = [shop.stock("//zones/tutorial:test_bread", count = 5, every = 600)],
     till = shop.till(count = 50),
-    capacity = 20,
-    max_weight = 100,
 )
 
 # A shop whose container holds only three entries: unstacked swords each take one.
+def _small_chest_open(ctx):
+    shop.catch_up(ctx, ctx.self)
+
+def _small_chest_wake(ctx, elapsed_pulses):
+    shop.catch_up(ctx, ctx.self)
+
+item("test_small_chest", name = "a cramped chest", keywords = ["chest"],
+     container = container(capacity = 3, max_weight = 500, state = "closed",
+                           key = "//lib:shop_chest_key"),
+     on_open = _small_chest_open, on_wake = _small_chest_wake)
+
 SMALL_SHOP = shop.define(
     id = "small_shop",
+    container = "//zones/tutorial:test_small_chest",
     stock = [shop.stock("//zones/tutorial:test_sword", count = 5, every = 600)],
     till = shop.till(count = 10),
-    capacity = 3,
 )
 
 def _test_shop_open(ctx):

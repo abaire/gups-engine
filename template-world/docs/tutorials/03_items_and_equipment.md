@@ -523,7 +523,7 @@ Items are created and transferred through several mechanisms:
 * **Giving directly to an actor:**
 
   ```python
-  ctx.give(ctx.actor, ":brass_key")
+  ctx.grant_item(ctx.actor, ":brass_key")
   ```
 
   Spawns a new instance of `:brass_key` straight into the player's inventory (used in quests and NPC rewards).
@@ -669,7 +669,11 @@ custom attributes, and per-instance affects. This is preferred over simply remov
 An item's `weight` matters only because the rules give it meaning. Two rules exports turn it into a graded penalty:
 
 * **`carry_limit(ctx)`** is the hard cap that `get`, `give` and mob scavenging enforce. The template's is `ctx.actor.str
-  \* 10`, so a strength-10 player picks up at most 100 weight.
+  \* 10`, so a strength-10 player picks up at most 100 weight. Asked about an item, it also sees that item's type as
+  `ctx.item_info` (the struct `ctx.item_info(label)` returns), so a limit that varies by item type reads
+  `ctx.item_info.tags` or `.kind`. `ctx.item` is the instance, but it is `None` when `ctx.fits(label, actor)` asks about
+  a label with no item spawned, so only a rule about one particular instance should read it. Content that hands items to
+  a player asks `ctx.fits` first, since `give` and `spawn` don't check the limit.
 * **`encumbrance_level(ctx)`** gives the actor's encumbrance level, an int of at least 0 (0 means unencumbered). The
   engine gives a level no meaning: how many there are, where they start, and what they cost all belong to the world. The
   export sees `ctx.limit` (the actor's `carry_limit`) and `ctx.carried` (carried and worn weight, containers' contents

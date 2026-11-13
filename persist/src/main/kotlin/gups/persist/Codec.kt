@@ -620,11 +620,17 @@ internal fun World.encodePlayer(p: Player): PlayerRow {
 // ---- Overlaying a delta
 // ---------------------------------------------------------------------------
 
+/** A saved lock stays only if the prototype still has a key for it. */
+private fun restoredState(saved: String, key: Label?): DoorState =
+  DoorState.valueOf(saved.uppercase()).let {
+    if (it == DoorState.LOCKED && key == null) DoorState.CLOSED else it
+  }
+
 internal fun applyRoom(room: Room, p: RoomPayload) {
   for ((dir, state) in p.doors) room.exits.values
     .firstOrNull { it.direction.name == dir }
     ?.door
-    ?.state = DoorState.valueOf(state.uppercase())
+    ?.let { it.state = restoredState(state, it.key) }
   room.customAttributes.clear()
   room.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(room, p.timers)
@@ -704,7 +710,7 @@ internal fun applyItem(item: Item, p: ItemPayload) {
     }
   p.decayAt?.let { item.decayAt = it }
   item.nameOverride = p.nameOverride
-  p.containerState?.let { s -> item.container?.state = DoorState.valueOf(s.uppercase()) }
+  p.containerState?.let { s -> item.container?.let { it.state = restoredState(s, it.key) } }
   item.customAttributes.clear()
   item.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(item, p.timers)

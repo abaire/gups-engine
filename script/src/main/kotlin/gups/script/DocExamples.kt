@@ -768,9 +768,9 @@ object DocExamples {
             """
                 def _merge(ctx):
                     a = ctx.actor
-                    ctx.give(a, ":coin", count = 5)
+                    ctx.grant_item(a, ":coin", count = 5)
                     first = a.inventory()[0]
-                    ctx.give(a, ":coin", count = 3)
+                    ctx.grant_item(a, ":coin", count = 3)
                     second = a.inventory()[1]
                     merged = ctx.merge_stack(second)
                     ctx.send(a, "count=%d stacks=%d" % (merged.count, len(a.inventory())))

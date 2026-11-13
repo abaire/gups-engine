@@ -448,6 +448,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.fits" class="entry">
+<h4><code>fits(item_or_label, to, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>How many of count would fit at to, worked out as the put, get and give commands do, without moving or spawning anything: a container's free capacity and max_weight (open or locked isn't considered), an actor's carry_limit asked about the item, any number for a room. Errors on a label no loaded item has, or an item to that isn't a container.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.fits.item_or_label"><td><code>item_or_label</code></td><td>positional or named</td><td></td><td>Item view, or item prototype label.</td></tr>
+<tr id="ctx.fits.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Container item, actor, or room (or room label).</td></tr>
+<tr id="ctx.fits.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number asked about; defaults to the whole stack for an item, 1 for a label.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.forget" class="entry">
 <h4><code>forget(mob, subject = None, event = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Removes matching combat memories from mob; returns the number removed.</p>
@@ -472,18 +484,6 @@
 </tbody>
 </table>
 </article>
-<article id="ctx.give" class="entry">
-<h4><code>give(actor, label_or_item, count = None)</code> <span class="since">since api_version 1</span></h4>
-<p>Puts an item (a view, or a label to spawn) into an actor's inventory.</p>
-<table>
-<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
-<tbody>
-<tr id="ctx.give.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who receives the item.</td></tr>
-<tr id="ctx.give.label_or_item"><td><code>label_or_item</code></td><td>positional or named</td><td></td><td>Item view to move, or item prototype label to spawn.</td></tr>
-<tr id="ctx.give.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item.</td></tr>
-</tbody>
-</table>
-</article>
 <article id="ctx.gmcp" class="entry">
 <h4><code>gmcp(player, package, data)</code> <span class="since">since api_version 1</span></h4>
 <p>Sends a GMCP event to a player's client. Returns whether it was sent.</p>
@@ -493,6 +493,18 @@
 <tr id="ctx.gmcp.player"><td><code>player</code></td><td>positional or named</td><td></td><td>Actor who receives the event; mobs receive nothing.</td></tr>
 <tr id="ctx.gmcp.package"><td><code>package</code></td><td>positional or named</td><td></td><td>A GMCP package this package declared, or one nested in it.</td></tr>
 <tr id="ctx.gmcp.data"><td><code>data</code></td><td>positional or named</td><td></td><td>None, int, str, bool, list or dict (16 KB of JSON at most).</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.grant_item" class="entry">
+<h4><code>grant_item(actor, label_or_item, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Puts an item (a view, or a label to spawn) into an actor's inventory.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.grant_item.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who receives the item.</td></tr>
+<tr id="ctx.grant_item.label_or_item"><td><code>label_or_item</code></td><td>positional or named</td><td></td><td>Item view to move, or item prototype label to spawn.</td></tr>
+<tr id="ctx.grant_item.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item.</td></tr>
 </tbody>
 </table>
 </article>
@@ -633,12 +645,93 @@
 </article>
 <article id="ctx.lock_door" class="entry">
 <h4><code>lock_door(room, dir)</code> <span class="since">since api_version 1</span></h4>
-<p>Closes and locks the door.</p>
+<p>Closes and locks the door. Only a door with a key has a lock.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="ctx.lock_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
 <tr id="ctx.lock_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_drop" class="entry">
+<h4><code>may_drop(actor, item)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may drop an item they carry: the drop restriction. Changes nothing and runs no hook. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_drop.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would drop the item.</td></tr>
+<tr id="ctx.may_drop.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor carries.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_enter" class="entry">
+<h4><code>may_enter(actor, room)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may go to a room: the enter restriction, with no direction, from the room the actor is in. Hooks such as before_enter can't be asked, so teleport can still be vetoed. Changes nothing. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_enter.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would go.</td></tr>
+<tr id="ctx.may_enter.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Destination room or room label.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_give" class="entry">
+<h4><code>may_give(actor, item, to)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may give an item they carry to another actor, as the give command would: the receiver must be in the actor's room and not the actor, and the give restriction. Says nothing about what the receiver can carry. Changes nothing and runs no hook. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_give.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would hand the item over.</td></tr>
+<tr id="ctx.may_give.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor carries.</td></tr>
+<tr id="ctx.may_give.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Actor who would receive it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_learn" class="entry">
+<h4><code>may_learn(actor, skill, proficiency)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may have the skill, a label or skill view, at proficiency, as set_skill would: the learn restrictions. Changes nothing. Returns the refusal message, or None. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_learn.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would learn or raise the skill.</td></tr>
+<tr id="ctx.may_learn.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+<tr id="ctx.may_learn.proficiency"><td><code>proficiency</code></td><td>positional or named</td><td></td><td>Proficiency, 0 to 100.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_put" class="entry">
+<h4><code>may_put(actor, item, container)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may put an item they carry into a container, as the put command would: not the container itself, which must be open, and the put restriction. Says nothing about whether it fits. Changes nothing and runs no hook. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_put.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would put the item away.</td></tr>
+<tr id="ctx.may_put.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor carries.</td></tr>
+<tr id="ctx.may_put.container"><td><code>container</code></td><td>positional or named</td><td></td><td>A container item.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_remove" class="entry">
+<h4><code>may_remove(actor, item)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may take off an item they wear: the remove restriction. Changes nothing. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_remove.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would take the item off.</td></tr>
+<tr id="ctx.may_remove.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor wears.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.may_wear" class="entry">
+<h4><code>may_wear(actor, item, wield = False)</code> <span class="since">since api_version 1</span></h4>
+<p>Asks whether the actor may put on an item they carry, as wear (or wield) would: the slot choice, room, the wear restriction, and the remove restriction on the one item it would take off. Changes nothing. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.may_wear.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who would put the item on.</td></tr>
+<tr id="ctx.may_wear.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor carries.</td></tr>
+<tr id="ctx.may_wear.wield"><td><code>wield</code></td><td>positional or named</td><td><code>False</code></td><td>Ask about wielding it, as the wield command would.</td></tr>
 </tbody>
 </table>
 </article>
@@ -778,6 +871,17 @@
 <tbody>
 <tr id="ctx.remove_tag.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Item to untag.</td></tr>
 <tr id="ctx.remove_tag.tag"><td><code>tag</code></td><td>positional or named</td><td></td><td>Tag to remove.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.remove_worn" class="entry">
+<h4><code>remove_worn(actor, item)</code> <span class="since">since api_version 1</span></h4>
+<p>Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.remove_worn.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who takes the item off.</td></tr>
+<tr id="ctx.remove_worn.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor wears.</td></tr>
 </tbody>
 </table>
 </article>
@@ -1078,7 +1182,7 @@
 </article>
 <article id="ctx.teleport" class="entry">
 <h4><code>teleport(actor, room, index = None)</code> <span class="since">since api_version 1</span></h4>
-<p>Moves an actor to a room; fires the exit and enter hooks.</p>
+<p>Moves an actor to a room; fires the exit and enter hooks. Asks the enter restriction and before_enter first, with no direction; guards and before_exit don't run. Returns the refusal or veto message and moves nothing, or None once the actor has moved.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>
@@ -1117,17 +1221,6 @@
 <tbody>
 <tr id="ctx.unlock_door.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
 <tr id="ctx.unlock_door.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
-</tbody>
-</table>
-</article>
-<article id="ctx.unwear" class="entry">
-<h4><code>unwear(actor, item)</code> <span class="since">since api_version 1</span></h4>
-<p>Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.</p>
-<table>
-<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
-<tbody>
-<tr id="ctx.unwear.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who takes the item off.</td></tr>
-<tr id="ctx.unwear.item"><td><code>item</code></td><td>positional or named</td><td></td><td>An item the actor wears.</td></tr>
 </tbody>
 </table>
 </article>

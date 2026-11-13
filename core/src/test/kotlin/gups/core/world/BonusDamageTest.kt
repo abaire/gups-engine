@@ -475,6 +475,7 @@ class BonusDamageTest {
       slot = "wield",
       affect = Affect(1, "test", null, 0, 10),
       task = TaskInfo("task", 1, 2, 3, gups.core.model.Interrupt()),
+      itemProto = f.w.protos.item(T.BAG),
       limit = 100,
       carried = 50,
       encumbranceLevel = 2,

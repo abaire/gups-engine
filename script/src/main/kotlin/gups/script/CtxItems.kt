@@ -6,6 +6,7 @@ import gups.core.world.HookContext
 import gups.core.world.ITEM_NAME_MAX
 import gups.core.world.addItemTag
 import gups.core.world.destroy
+import gups.core.world.fits
 import gups.core.world.isShortLine
 import gups.core.world.moveItem
 import gups.core.world.removeItemTag
@@ -71,7 +72,7 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     }
 
   @StarlarkMethod(
-    name = "give",
+    name = "grant_item",
     doc = "Puts an item (a view, or a label to spawn) into an actor's inventory.",
     parameters =
       [
@@ -91,20 +92,21 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       ],
     useStarlarkThread = true,
   )
-  fun give(actor: Any, labelOrItem: Any, count: Any, thread: StarlarkThread): Any =
-    verb("give") {
-      val a = actorArg(actor, "give(actor)")
+  fun grantItem(actor: Any, labelOrItem: Any, count: Any, thread: StarlarkThread): Any =
+    verb("grant_item") {
+      val a = actorArg(actor, "grant_item(actor)")
       val to = ItemLocation.Carried(a.id)
       if (labelOrItem is ItemView) {
-        val i = itemArg(labelOrItem, "give(item)")
-        val n = intOrNull(count, "give(count)") ?: i.count
-        if (n !in 1..i.count) fail("give(count): must be between 1 and ${i.count}")
+        val i = itemArg(labelOrItem, "grant_item(item)")
+        val n = intOrNull(count, "grant_item(count)") ?: i.count
+        if (n !in 1..i.count) fail("grant_item(count): must be between 1 and ${i.count}")
         return@verb v(world.moveItem(i, to, n))
       }
-      val l = label(str(labelOrItem, "give(label_or_item)"), pkgOf(thread), "give(label)")
-      if (l !in world.protos.items) fail("give(label): there is no item $l")
-      val n = intOrNull(count, "give(count)") ?: 1
-      if (n < 1) fail("give(count): must be at least 1")
+      val l =
+        label(str(labelOrItem, "grant_item(label_or_item)"), pkgOf(thread), "grant_item(label)")
+      if (l !in world.protos.items) fail("grant_item(label): there is no item $l")
+      val n = intOrNull(count, "grant_item(count)") ?: 1
+      if (n < 1) fail("grant_item(count): must be at least 1")
       val made =
         if (world.protos.item(l).stackable) listOf(world.spawnItem(l, to, n))
         else List(n) { world.spawnItem(l, to) }
@@ -142,6 +144,51 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       if (n !in 1..i.count) fail("move_item(count): must be between 1 and ${i.count}")
       v(world.moveItem(i, location(to, index, "move_item(to)", thread), n))
     }
+
+  @StarlarkMethod(
+    name = "fits",
+    doc =
+      "How many of count would fit at to, worked out as the put, get and give commands do, without" +
+        " moving or spawning anything: a container's free capacity and max_weight (open or locked" +
+        " isn't considered), an actor's carry_limit asked about the item, any number for a room." +
+        " Errors on a label no loaded item has, or an item to that isn't a container.",
+    parameters =
+      [
+        Param(name = "item_or_label", named = true, doc = "Item view, or item prototype label."),
+        Param(name = "to", named = true, doc = "Container item, actor, or room (or room label)."),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "None",
+          doc = "Number asked about; defaults to the whole stack for an item, 1 for a label.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun fits(itemOrLabel: Any, to: Any, count: Any, thread: StarlarkThread): Any =
+    verb("fits") { sInt(fitsAnswer(itemOrLabel, to, intOrNull(count, "fits(count)"), thread)) }
+
+  private fun fitsAnswer(itemOrLabel: Any, to: Any, count: Int?, thread: StarlarkThread): Int {
+    val dest = fitsTarget(to, thread)
+    if (itemOrLabel is ItemView) {
+      val i = itemArg(itemOrLabel, "fits(item)")
+      val wanted = count ?: i.count
+      if (wanted !in 1..i.count) fail("fits(count): must be between 1 and ${i.count}")
+      return world.fits(i, dest, wanted)
+    }
+    val l = label(str(itemOrLabel, "fits(item_or_label)"), pkgOf(thread), "fits(label)")
+    if (l !in world.protos.items) fail("fits(label): there is no item $l")
+    if (count != null && count < 1) fail("fits(count): must be at least 1")
+    return world.fits(l, dest, count ?: 1)
+  }
+
+  private fun fitsTarget(to: Any, thread: StarlarkThread): Entity =
+    if (to is String) roomArg(to, "fits(to)", thread)
+    else
+      entityArg(to, "fits(to)").also {
+        if (it is gups.core.model.Item && it.container == null)
+          fail("fits(to): ${it.name} is not a container")
+      }
 
   @StarlarkMethod(
     name = "destroy",

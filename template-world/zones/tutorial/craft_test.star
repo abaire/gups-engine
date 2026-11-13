@@ -265,11 +265,11 @@ def test_learned_recipe_crafts_once_taught(t):
 def test_craft_check_refuses_and_adjusts(t):
     w, p = _lab(t)
     _rod_kit(w, p)
-    p.do("bonus 40")
+    w.set_attr(p.room, "bonus", 40)
     w.force_rng(ints = [50])   # prof 0: chance 20 - 10 + 40 = 50
     t.contains(p.do("craft rod"), "You forge a test rod.")
     t.contains(p.do("lastdone"), "DONE:rod:success:[\"a test rod\"]")
-    p.do("shut")
+    w.set_attr(p.room, "closed", True)
     w.spawn(_BAR, at = p)
     t.contains(p.do("craft plain_rod"), "The lab is closed.")
     t.eq(_count(p, _BAR), 1)

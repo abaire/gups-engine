@@ -2,17 +2,20 @@
 # :notice_test_room and the player hides or reveals there. Every function named test_* is a test
 # and gets `t`.
 
+def _hide(w, p):
+    w.ctx().apply_affect(p, "hidden", 200, flags = ["hidden"])
+
 def _world(t):
     return t.world(seed = 1, packages = ["//zones/tutorial"])
 
 def test_a_hidden_player_is_ignored_by_a_watcher_until_revealed(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":notice_test_room")
-    p.do("hide")
-    w.spawn(":test_watcher", at = ":notice_test_room")   # placed after the hide, so it can't attack mid-command
+    _hide(w, p)
+    w.spawn(":test_watcher", at = ":notice_test_room")
     w.run(pulses = 20)
     t.eq(len(p.fighting()), 0, "the watcher can't see the hidden player")
-    p.do("reveal")
+    w.ctx().remove_affect(p, "hidden")
     w.run(pulses = 20)
     t.true(len(p.fighting()) > 0, "the watcher attacks once the player is visible")
 
@@ -40,7 +43,7 @@ def test_a_deaf_mob_sees_a_visible_player(t):
 def test_a_listener_ignores_a_silent_hidden_player(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":notice_test_room")
-    p.do("hide")
+    _hide(w, p)
     w.spawn(":test_listener", at = ":notice_test_room")
     w.run(pulses = 20)
     t.eq(len(p.fighting()), 0, "the listener ignores a silent hidden player")
@@ -48,7 +51,7 @@ def test_a_listener_ignores_a_silent_hidden_player(t):
 def test_a_hidden_player_who_walks_in_is_not_heard(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":target_test_room")
-    p.do("hide")
+    _hide(w, p)
     p.do("west")
     w.spawn(":test_listener", at = ":target_test_room")
     w.run(pulses = 20)
@@ -66,7 +69,7 @@ def test_a_mob_with_chance_0_never_attacks(t):
 def test_a_hidden_player_who_speaks_is_heard(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":notice_test_room")
-    p.do("hide")
+    _hide(w, p)
     w.spawn(":test_listener", at = ":notice_test_room")
     w.run(pulses = 20)
     t.eq(len(p.fighting()), 0, "the listener ignores a silent hidden player")
@@ -77,7 +80,7 @@ def test_a_hidden_player_who_speaks_is_heard(t):
 def test_a_listener_ignores_noise_it_did_not_hear(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":notice_test_room")
-    p.do("hide")
+    _hide(w, p)
     p.do("say hello")
     w.run(pulses = 20)
     w.spawn(":test_listener", at = ":notice_test_room")

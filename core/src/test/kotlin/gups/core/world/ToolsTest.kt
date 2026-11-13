@@ -12,6 +12,7 @@ import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Mob
 import gups.core.model.Prototypes
+import gups.core.model.RestrictionPoint
 import gups.core.model.RoomProto
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -58,6 +59,17 @@ class ToolsTest {
     assertContains(f.out(b), "The Vault")
     f.input(b, "@goto ann")
     assertEquals(T.YARD, b.room.label, "any player, by default")
+    f.w.restrictions =
+      mapOf(
+        RestrictionPoint.ENTER to
+          listOf(gups.core.model.Restriction { _, _ -> "The vault is barred." })
+      )
+    f.out(b)
+    f.input(b, "@goto :vault")
+    assertEquals("The vault is barred.\n", f.out(b))
+    f.input(b, "@goto ann")
+    assertEquals("The vault is barred.\n", f.out(b))
+    f.w.restrictions = emptyMap()
     f.input(b, "@goto hall")
     assertEquals(
       "No player or room called 'hall'.\n",

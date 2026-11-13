@@ -198,7 +198,8 @@ r.addRestriction(
   recovery lag applies.
 * **Mob Navigation:** Mobs attempting to wander into a restricted room simply fail their step and remain where they are.
   A wandering NPC with `traits = ["mage"]` passes through `guild_mage` rooms freely!
-* **Teleportation (`teleport` / `@goto`):** The transition is blocked before the entity moves.
+* **Teleportation (`teleport` / `@goto`):** The transition is blocked before the entity moves, and `teleport` returns
+  the refusal instead of sending it; `@goto` tells the builder.
 
 ### 4. Skill Training Restrictions (`LEARN`)
 

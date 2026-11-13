@@ -63,7 +63,8 @@
 <tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
 <tr id="rules_ctx.helped"><td><code>helped</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In an assist standing event, the actor helped; None elsewhere.</td></tr>
 <tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
-<tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit.</td></tr>
+<tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit; None in carry_limit when fits asks about a label.</td></tr>
+<tr id="rules_ctx.item_info"><td><code>item_info</code></td><td>1</td><td>In carry_limit asked about an item or a label, the prototype's item_info struct, whether or not an instance exists; None elsewhere, and when the limit is asked without an item.</td></tr>
 <tr id="rules_ctx.limit"><td><code>limit</code></td><td>1</td><td>The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.</td></tr>
 <tr id="rules_ctx.past_leash"><td><code>past_leash</code></td><td>1</td><td>True in leash_return when ctx.actor stands past its leash; None elsewhere.</td></tr>
 <tr id="rules_ctx.pet"><td><code>pet</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In a standing event raised for a pet's owner, the pet; None elsewhere.</td></tr>

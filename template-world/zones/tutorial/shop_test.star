@@ -42,6 +42,13 @@ def test_open_spawns_locked_chest_and_gives_key(t):
     t.eq(contents.get("//zones/tutorial:test_sword", 0), 3)
     t.eq(contents.get("//lib:gold_coin", 0), 100)
 
+def test_open_and_list_read_the_catalog_without_spawning(t):
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":shop_test_room")
+    t.contains(p.do("list"), "the test shopkeeper offers:")
+    t.eq(len(w.diagnostics()), 0)   # a tracer spawn would have raised an error
+    t.false("lib:info" in _chest(w).attrs)
+
 def test_open_reuses_existing_chest(t):
     w = _world(t)
     room = w.room(":shop_test_room")
@@ -183,6 +190,53 @@ def test_buy_more_than_stocked_is_capped(t):
     out = p.do("buy sword")   # sold out: the line isn't offered
     t.contains(out, "doesn't sell that")
     t.not_contains(p.do("list"), "a test sword")
+
+def _weak_player(t, str):
+    """A player in the shop room whose carry limit is str * 10, with coins to spend."""
+    w = _world(t)
+    p = w.spawn_player("Tess", at = ":shop_test_room", stats = stats(str = str))
+    w.spawn("//lib:gold_coin", at = p, count = 1000)
+    return w, p
+
+def test_buy_is_capped_by_what_the_buyer_can_carry(t):
+    w, p = _weak_player(t, 1)   # a limit of 10
+    w.spawn("//zones/tutorial:test_sword", at = p, count = 1)   # weight 3 carried already
+    w.spawn("//zones/tutorial:test_sword", at = p, count = 1)   # 6 carried: room for one more
+    out = p.do("buy 3 sword")
+    t.contains(out, "You can only carry 1.")
+    t.contains(out, "You buy 1 a test sword for 60 gold coins.")
+    t.eq(_carried_count(p, "//zones/tutorial:test_sword"), 3)
+    t.eq(_coins(p), 940)
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 2)
+
+def test_buy_is_refused_when_nothing_more_can_be_carried(t):
+    w, p = _weak_player(t, 1)
+    for _ in range(4):   # 12 carried, over the limit of 10
+        w.spawn("//zones/tutorial:test_sword", at = p)
+    out = p.do("buy sword")
+    t.contains(out, "You can't carry that.")
+    t.not_contains(out, "You buy")
+    t.eq(_coins(p), 1000)   # no coins moved
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 3)
+    t.contains(p.do("buy bread"), "You can't carry that.")   # an unlimited line asks as a label
+    t.eq(_coins(p), 1000)
+
+def test_unlimited_line_is_capped_by_the_carry_limit_too(t):
+    w, p = _weak_player(t, 1)
+    out = p.do("buy 30 bread")   # 1 each, so 10 fit
+    t.contains(out, "You can only carry 10.")
+    t.contains(out, "You buy 10 a loaf of bread for 60 gold coins.")
+    t.eq(_carried_count(p, "//zones/tutorial:test_bread"), 10)
+
+def test_list_restocks_before_it_answers(t):
+    w, p = _shop_player(t)
+    p.do("drain sword")
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 0)
+    t.not_contains(p.do("list"), "a test sword")   # time hasn't passed
+    w.run(pulses = 600)
+    out = p.do("list")
+    t.contains(out, "a test sword 60 gold coins (1 left)")
+    t.eq(_contents(_chest(w)).get("//zones/tutorial:test_sword", 0), 1)   # really restocked
 
 def test_cannot_afford(t):
     w, p = _shop_player(t)
@@ -330,13 +384,16 @@ def test_keeper_trades_again_after_attacker_flees(t):
     t.contains(p.do("list"), "the shopkeeper offers:")
     t.contains(q.do("list"), "There's no shop here.")   # the attacker is next door
     q.do("east" if fled_to == "//zones/tutorial:armory" else "west")
-    t.contains(q.do("list"), "the shopkeeper offers:")
+    # The keeper attacks on sight before a tick-lane command runs, so the returning attacker
+    # is refused, and the keeper is fighting again, so the bystander is refused too.
+    t.contains(q.do("list"), "is busy fighting.")
+    t.contains(p.do("list"), "is busy fighting.")
 
 def test_capacity_counts_each_unstacked_item(t):
     w = _world(t)
     keeper = w.spawn(":test_small_keeper", at = ":shop_test_room")
     chest = [i for i in w.room(":shop_test_room").items()
-             if i.label == "//lib:shop_chest" and i.id != _chest(w).id][0]
+             if i.label == "//zones/tutorial:test_small_chest"][0]
     contents = _contents(chest)
     t.eq(contents.get("//zones/tutorial:test_sword", 0), 3)   # three entries, one sword each
     t.eq(contents.get("//lib:gold_coin", 0), 0)               # no entry left for the till

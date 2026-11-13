@@ -1,13 +1,15 @@
 # Tests for the trainer library, driven by the fixture in trainer_testdata.star. Every
 # function named test_* is a test and gets `t`. The fixture trainer stands in :trainer_test_room.
 
+load("//lib:trainer.star", "trainer")
+
 def _world(t):
     return t.world(seed = 1, packages = ["//zones/tutorial"])
 
 def test_practice_learns_a_new_skill_at_start(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":trainer_test_room")
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     t.contains(p.do("practice mend"), "You learn mend from the test trainer. (15%)")
     t.eq(p.skills["//skills/arcane:mend"], 15)
     t.contains(p.do("practice"), "You have 4 practice sessions.")   # spent one
@@ -15,12 +17,12 @@ def test_practice_learns_a_new_skill_at_start(t):
 def test_practice_raises_a_known_skill_and_caps(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":trainer_test_room")
-    p.do("grant 10")
+    trainer.grant_practices(w.ctx(), p, 10)
     t.contains(p.do("practice spark"), "You learn spark from the test trainer. (10%)")
     t.eq(p.skills["//skills/arcane:spark"], 10)
     t.contains(p.do("practice spark"), "You practice spark with the test trainer. (10% → 20%)")
     t.eq(p.skills["//skills/arcane:spark"], 20)
-    p.do("grant 7")
+    trainer.grant_practices(w.ctx(), p, 7)
     w.set_skill(p, "//skills/arcane:spark", 50)   # at the trainer's up_to
     t.contains(p.do("practice spark"), "You've learned all the test trainer can teach you about spark.")
     t.contains(p.do("practice"), "You have 15 practice sessions.")   # the cap spends nothing
@@ -37,7 +39,7 @@ def test_levels_change_the_practice_balance(t):
 def test_practice_offer_can_refuse_or_reprice(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":offer_test_room")
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     p.do("set_offer refuse")
     t.contains(p.do("practice spark"), "The trainer refuses you.")
     t.eq(p.skills.get("//skills/arcane:spark", 0), 0)
@@ -52,17 +54,18 @@ def test_practice_refusals(t):
     p = w.spawn_player("Tess", at = ":gate")   # no trainer here
     t.contains(p.do("practice spark"), "There's no trainer here.")
     p = w.spawn_player("Ash", at = ":trainer_test_room")
-    p.do("stun_trainer")
+    trainer_mob = [a for a in p.room.actors() if a.label == "//zones/tutorial:test_trainer"][0]
+    w.ctx().apply_affect(trainer_mob, "stun", 10, flags = ["stunned"])
     t.contains(p.do("practice spark"), "the test trainer can't teach right now.")
     w.run(pulses = 20)   # the stun wears off
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     t.contains(p.do("practice fizz"), "the test trainer can't teach you that.")
 
 def test_practice_alone_shows_balance_and_teaching(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":trainer_test_room")
-    p.do("grant 3")
-    p.do("grant 4")
+    trainer.grant_practices(w.ctx(), p, 3)
+    trainer.grant_practices(w.ctx(), p, 4)
     out = p.do("practice")
     t.contains(out, "You have 7 practice sessions.")
     t.contains(out, "the test trainer teaches:")
@@ -74,7 +77,7 @@ def test_practice_alone_shows_balance_and_teaching(t):
 def test_practice_never_raises_past_the_cap(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":trainer_test_room")
-    p.do("grant 2")
+    trainer.grant_practices(w.ctx(), p, 2)
     w.set_skill(p, "//skills/arcane:spark", 45)   # one gain of 10 would overshoot up_to = 50
     t.contains(p.do("practice spark"), "You practice spark with the test trainer. (45% → 50%)")
     t.eq(p.skills["//skills/arcane:spark"], 50)
@@ -82,7 +85,7 @@ def test_practice_never_raises_past_the_cap(t):
 def test_refund_returns_recorded_sessions(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":trainer_test_room")
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     p.do("practice spark")
     p.do("practice spark")
     p.do("practice mend")
@@ -95,7 +98,7 @@ def test_refund_returns_recorded_sessions(t):
 def test_refund_records_hook_costs(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":offer_test_room")
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     p.do("set_offer dict")
     p.do("practice spark")
     t.contains(p.do("refund"), "Refunded 2.")
@@ -104,7 +107,7 @@ def test_refund_records_hook_costs(t):
 def test_refused_session_records_nothing(t):
     w = _world(t)
     p = w.spawn_player("Tess", at = ":offer_test_room")
-    p.do("grant 5")
+    trainer.grant_practices(w.ctx(), p, 5)
     p.do("set_offer refuse")
     p.do("practice spark")
     t.contains(p.do("refund"), "Refunded 0.")

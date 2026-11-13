@@ -720,7 +720,7 @@ def _views(made):
     return made if type(made) == "list" else [made]
 
 def _make_items(ctx, actor, make, tier):
-    items = _views(ctx.give(actor, make["label"], make["count"]))
+    items = _views(ctx.grant_item(actor, make["label"], make["count"]))
     if tier != None:
         for item in items:
             _apply_tier(ctx, tier, item)

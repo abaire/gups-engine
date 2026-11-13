@@ -189,7 +189,10 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
 
   @StarlarkMethod(
     name = "teleport",
-    doc = "Moves an actor to a room; fires the exit and enter hooks.",
+    doc =
+      "Moves an actor to a room; fires the exit and enter hooks. Asks the enter restriction and" +
+        " before_enter first, with no direction; guards and before_exit don't run. Returns the" +
+        " refusal or veto message and moves nothing, or None once the actor has moved.",
     parameters =
       [
         Param(name = "actor", named = true, doc = "Actor to move."),
@@ -209,7 +212,6 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       val r = roomArg(room, "teleport(room)", thread)
       val i = intOrNull(index, "teleport(index)")
       if (i != null && i !in 0 until r.trackSize) fail("teleport(index): $i is outside ${r.label}")
-      world.teleport(actorArg(actor, "teleport(actor)"), r, i)
-      Starlark.NONE
+      world.teleport(actorArg(actor, "teleport(actor)"), r, i) ?: Starlark.NONE
     }
 }

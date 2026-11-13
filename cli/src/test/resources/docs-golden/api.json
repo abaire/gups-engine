@@ -1742,6 +1742,44 @@
         ]
       },
       {
+        "symbol": "ctx.fits",
+        "name": "fits",
+        "doc": "How many of count would fit at to, worked out as the put, get and give commands do, without moving or spawning anything: a container's free capacity and max_weight (open or locked isn't considered), an actor's carry_limit asked about the item, any number for a room. Errors on a label no loaded item has, or an item to that isn't a container.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.fits.item_or_label",
+            "name": "item_or_label",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item view, or item prototype label."
+          },
+          {
+            "symbol": "ctx.fits.to",
+            "name": "to",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Container item, actor, or room (or room label)."
+          },
+          {
+            "symbol": "ctx.fits.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number asked about; defaults to the whole stack for an item, 1 for a label."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.forget",
         "feature": "combat",
         "name": "forget",
@@ -1822,44 +1860,6 @@
         ]
       },
       {
-        "symbol": "ctx.give",
-        "name": "give",
-        "doc": "Puts an item (a view, or a label to spawn) into an actor's inventory.",
-        "since": 1,
-        "params": [
-          {
-            "symbol": "ctx.give.actor",
-            "name": "actor",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Actor who receives the item."
-          },
-          {
-            "symbol": "ctx.give.label_or_item",
-            "name": "label_or_item",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Item view to move, or item prototype label to spawn."
-          },
-          {
-            "symbol": "ctx.give.count",
-            "name": "count",
-            "positional": true,
-            "named": true,
-            "default": "None",
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item."
-          }
-        ]
-      },
-      {
         "symbol": "ctx.gmcp",
         "name": "gmcp",
         "doc": "Sends a GMCP event to a player's client. Returns whether it was sent.",
@@ -1894,6 +1894,44 @@
             "varargs": false,
             "kwargs": false,
             "doc": "None, int, str, bool, list or dict (16 KB of JSON at most)."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.grant_item",
+        "name": "grant_item",
+        "doc": "Puts an item (a view, or a label to spawn) into an actor's inventory.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.grant_item.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who receives the item."
+          },
+          {
+            "symbol": "ctx.grant_item.label_or_item",
+            "name": "label_or_item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Item view to move, or item prototype label to spawn."
+          },
+          {
+            "symbol": "ctx.grant_item.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Number of items to spawn or move; defaults to 1 for a label, or the whole stack for an item."
           }
         ]
       },
@@ -2186,7 +2224,7 @@
       {
         "symbol": "ctx.lock_door",
         "name": "lock_door",
-        "doc": "Closes and locks the door.",
+        "doc": "Closes and locks the door. Only a door with a key has a lock.",
         "since": 1,
         "params": [
           {
@@ -2208,6 +2246,242 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Direction of the exit."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_drop",
+        "name": "may_drop",
+        "doc": "Asks whether the actor may drop an item they carry: the drop restriction. Changes nothing and runs no hook. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_drop.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would drop the item."
+          },
+          {
+            "symbol": "ctx.may_drop.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor carries."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_enter",
+        "name": "may_enter",
+        "doc": "Asks whether the actor may go to a room: the enter restriction, with no direction, from the room the actor is in. Hooks such as before_enter can't be asked, so teleport can still be vetoed. Changes nothing. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_enter.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would go."
+          },
+          {
+            "symbol": "ctx.may_enter.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Destination room or room label."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_give",
+        "name": "may_give",
+        "doc": "Asks whether the actor may give an item they carry to another actor, as the give command would: the receiver must be in the actor's room and not the actor, and the give restriction. Says nothing about what the receiver can carry. Changes nothing and runs no hook. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_give.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would hand the item over."
+          },
+          {
+            "symbol": "ctx.may_give.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor carries."
+          },
+          {
+            "symbol": "ctx.may_give.to",
+            "name": "to",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would receive it."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_learn",
+        "name": "may_learn",
+        "doc": "Asks whether the actor may have the skill, a label or skill view, at proficiency, as set_skill would: the learn restrictions. Changes nothing. Returns the refusal message, or None. Needs the skills feature.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_learn.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would learn or raise the skill."
+          },
+          {
+            "symbol": "ctx.may_learn.skill",
+            "name": "skill",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Skill label, or the skill's view."
+          },
+          {
+            "symbol": "ctx.may_learn.proficiency",
+            "name": "proficiency",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Proficiency, 0 to 100."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_put",
+        "name": "may_put",
+        "doc": "Asks whether the actor may put an item they carry into a container, as the put command would: not the container itself, which must be open, and the put restriction. Says nothing about whether it fits. Changes nothing and runs no hook. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_put.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would put the item away."
+          },
+          {
+            "symbol": "ctx.may_put.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor carries."
+          },
+          {
+            "symbol": "ctx.may_put.container",
+            "name": "container",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "A container item."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_remove",
+        "name": "may_remove",
+        "doc": "Asks whether the actor may take off an item they wear: the remove restriction. Changes nothing. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_remove.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would take the item off."
+          },
+          {
+            "symbol": "ctx.may_remove.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor wears."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.may_wear",
+        "name": "may_wear",
+        "doc": "Asks whether the actor may put on an item they carry, as wear (or wield) would: the slot choice, room, the wear restriction, and the remove restriction on the one item it would take off. Changes nothing. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.may_wear.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who would put the item on."
+          },
+          {
+            "symbol": "ctx.may_wear.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor carries."
+          },
+          {
+            "symbol": "ctx.may_wear.wield",
+            "name": "wield",
+            "positional": true,
+            "named": true,
+            "default": "False",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Ask about wielding it, as the wield command would."
           }
         ]
       },
@@ -2628,6 +2902,34 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Tag to remove."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.remove_worn",
+        "name": "remove_worn",
+        "doc": "Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.remove_worn.actor",
+            "name": "actor",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Actor who takes the item off."
+          },
+          {
+            "symbol": "ctx.remove_worn.item",
+            "name": "item",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "An item the actor wears."
           }
         ]
       },
@@ -3561,7 +3863,7 @@
       {
         "symbol": "ctx.teleport",
         "name": "teleport",
-        "doc": "Moves an actor to a room; fires the exit and enter hooks.",
+        "doc": "Moves an actor to a room; fires the exit and enter hooks. Asks the enter restriction and before_enter first, with no direction; guards and before_exit don't run. Returns the refusal or veto message and moves nothing, or None once the actor has moved.",
         "since": 1,
         "params": [
           {
@@ -3668,34 +3970,6 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Direction of the exit."
-          }
-        ]
-      },
-      {
-        "symbol": "ctx.unwear",
-        "name": "unwear",
-        "doc": "Takes off an item the actor wears, back into the inventory, after asking the remove restriction. Sends nothing. Returns the refusal message, or None.",
-        "since": 1,
-        "params": [
-          {
-            "symbol": "ctx.unwear.actor",
-            "name": "actor",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "Actor who takes the item off."
-          },
-          {
-            "symbol": "ctx.unwear.item",
-            "name": "item",
-            "positional": true,
-            "named": true,
-            "default": null,
-            "varargs": false,
-            "kwargs": false,
-            "doc": "An item the actor wears."
           }
         ]
       },
@@ -4077,7 +4351,13 @@
         {
           "symbol": "rules_ctx.item",
           "name": "item",
-          "doc": "The item, for get_lag and carry_limit.",
+          "doc": "The item, for get_lag and carry_limit; None in carry_limit when fits asks about a label.",
+          "since": 1
+        },
+        {
+          "symbol": "rules_ctx.item_info",
+          "name": "item_info",
+          "doc": "In carry_limit asked about an item or a label, the prototype's item_info struct, whether or not an instance exists; None elsewhere, and when the limit is asked without an item.",
           "since": 1
         },
         {

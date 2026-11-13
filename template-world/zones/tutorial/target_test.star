@@ -67,7 +67,7 @@ def _setup_switch(t):
 def test_switcher_turns_on_the_healer(t):
     w, a, b, mob = _setup_switch(t)
     for i in range(3):
-        b.do("mend Ash")
+        w.ctx().heal(a, 5, "hp", source = b)
     t.eq(mob.primary_target, a, "the mob starts on the one it fights")
     w.run(pulses = 16)
     t.true(_fights(b), "the healer is engaged")
@@ -76,10 +76,10 @@ def test_switcher_turns_on_the_healer(t):
 def test_switcher_doesnt_thrash(t):
     w, a, b, mob = _setup_switch(t)
     for i in range(3):
-        b.do("mend Ash")
+        w.ctx().heal(a, 5, "hp", source = b)
     w.run(pulses = 16)
     t.eq(mob.primary_target, b, "the mob has turned on the healer")
-    a.do("mend Ash")
+    w.ctx().heal(a, 5, "hp", source = a)
     w.run(pulses = 8)
     t.eq(mob.primary_target, b, "a weaker event doesn't switch back")
 
@@ -142,7 +142,7 @@ def test_pacify_can_fail(t):
 def test_pacify_does_not_start_a_fight(t):
     w = _world(t)
     a = _caster(w, "Ash")
-    a.do("hide")
+    w.ctx().apply_affect(a, "hidden", 200, flags = ["hidden"])
     brute = w.spawn(":test_brute", at = ":target_test_room")
     t.contains(_cast_pacify(w, a, [1]), "calms")
     w.run(pulses = 12)

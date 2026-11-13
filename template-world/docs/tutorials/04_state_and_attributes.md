@@ -164,12 +164,12 @@ At runtime, relative labels and attribute keys resolve against the package of th
 Attributes are meant for script logic. Core game mechanics are built into the engine and must **not** be stored in
 attributes:
 
-| Game Concept  |              How to Read / Modify              |            NOT Attributes             |
-|---------------|------------------------------------------------|---------------------------------------|
-| Health / Mana | `ctx.heal()`, `ctx.damage()`, `actor.hp`       | `ctx.set_attr(actor, "hp", ...)` ❌    |
-| Position      | `exit()`, `ctx.teleport()`                     | `ctx.set_attr(actor, "room", ...)` ❌  |
-| Inventory     | `ctx.give()`, `ctx.take()`, `actor.has_item()` | `ctx.set_attr(actor, "items", ...)` ❌ |
-| Stats         | `stat_deltas` on equipment, `actor.stats`      | `ctx.set_attr(actor, "str", ...)` ❌   |
+| Game Concept  |                 How to Read / Modify                 |            NOT Attributes             |
+|---------------|------------------------------------------------------|---------------------------------------|
+| Health / Mana | `ctx.heal()`, `ctx.damage()`, `actor.hp`             | `ctx.set_attr(actor, "hp", ...)` ❌    |
+| Position      | `exit()`, `ctx.teleport()`                           | `ctx.set_attr(actor, "room", ...)` ❌  |
+| Inventory     | `ctx.grant_item()`, `ctx.take()`, `actor.has_item()` | `ctx.set_attr(actor, "items", ...)` ❌ |
+| Stats         | `stat_deltas` on equipment, `actor.stats`            | `ctx.set_attr(actor, "str", ...)` ❌   |
 
 ---
 

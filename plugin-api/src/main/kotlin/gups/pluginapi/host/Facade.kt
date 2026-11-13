@@ -9,6 +9,7 @@ import gups.core.model.Channel
 import gups.core.model.DamageType
 import gups.core.model.Entity
 import gups.core.model.Item
+import gups.core.model.ItemLocation
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Room
@@ -35,9 +36,11 @@ import gups.core.world.applyStanding
 import gups.core.world.awardXp
 import gups.core.world.custodian
 import gups.core.world.damage
+import gups.core.world.destroy
 import gups.core.world.disposition
 import gups.core.world.echo
 import gups.core.world.factionsOf
+import gups.core.world.fits
 import gups.core.world.forget
 import gups.core.world.gmcp
 import gups.core.world.gmcpWithin
@@ -47,7 +50,15 @@ import gups.core.world.heldAffects
 import gups.core.world.isInactive
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
+import gups.core.world.mayDrop
+import gups.core.world.mayEnter
+import gups.core.world.mayGive
+import gups.core.world.mayLearn
+import gups.core.world.mayPut
+import gups.core.world.mayRemove
+import gups.core.world.mayWear
 import gups.core.world.memoriesOf
+import gups.core.world.moveItem
 import gups.core.world.pendingLevels
 import gups.core.world.raiseStandingEvent
 import gups.core.world.remember
@@ -56,6 +67,7 @@ import gups.core.world.removeItemAffect
 import gups.core.world.removeItemTag
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
+import gups.core.world.removeWornItem
 import gups.core.world.reportSkillUse
 import gups.core.world.send
 import gups.core.world.setBaseMaxVital
@@ -65,6 +77,8 @@ import gups.core.world.setCharges
 import gups.core.world.setChoices
 import gups.core.world.setItemName
 import gups.core.world.setSkill
+import gups.core.world.spawnItem
+import gups.core.world.stack
 import gups.core.world.standing
 import gups.core.world.startTask
 import gups.core.world.stopTask
@@ -73,7 +87,6 @@ import gups.core.world.taskOf
 import gups.core.world.teleport
 import gups.core.world.traceRules
 import gups.core.world.transformItem
-import gups.core.world.unwearItem
 import gups.core.world.wearItem
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginEntity
@@ -82,6 +95,7 @@ import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginItemInfo
+import gups.pluginapi.PluginItemLocation
 import gups.pluginapi.PluginMemory
 import gups.pluginapi.PluginNamed
 import gups.pluginapi.PluginRng
@@ -309,6 +323,12 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
       return actor.skills.mapKeys { it.key.v }
     }
 
+  override val inventory: List<PluginItem>
+    get() = actor.inventory.map { ItemFacade(it, world) }
+
+  override val equipment: Map<String, PluginItem>
+    get() = actor.equipment.mapValues { ItemFacade(it.value, world) }
+
   override val task: PluginTask?
     get() = world.taskOf(actor)?.let { TaskFacade(it, world) }
 
@@ -373,6 +393,22 @@ internal class ItemFacade(val item: Item, private val world: World) :
 
   override val plural: String?
     get() = item.proto.plural
+
+  override val count: Int
+    get() = item.count
+
+  override val location: PluginItemLocation
+    get() =
+      when (val l = item.location) {
+        is ItemLocation.InRoom ->
+          PluginItemLocation.InRoom(RoomFacade(world.entity(l.room) as Room, world))
+        is ItemLocation.Carried ->
+          PluginItemLocation.Carried(ActorFacade(world.actor(l.actor)!!, world))
+        is ItemLocation.Equipped ->
+          PluginItemLocation.Equipped(ActorFacade(world.actor(l.actor)!!, world), l.slot)
+        is ItemLocation.Contained ->
+          PluginItemLocation.InContainer(ItemFacade(world.item(l.container)!!, world))
+      }
 }
 
 internal fun toPlugin(ha: HeldAffect): PluginItemAffect =
@@ -647,14 +683,112 @@ internal class WorldFacade(
     world.setCharges(itemOf(item, "set_charges(item)"), charges)
   }
 
-  override fun teleport(actor: PluginActor, room: PluginRoom) =
+  override fun teleport(actor: PluginActor, room: PluginRoom): String? =
     world.teleport(actorOf(actor, "teleport(actor)"), roomOf(room, "teleport(room)"))
+
+  override fun spawnItem(label: String, to: PluginEntity, count: Int): List<PluginItem> {
+    val l = itemLabel(label, "spawnItem(label)")
+    require(count >= 1) { "spawnItem(count): must be at least 1" }
+    val at = locationOf(to, "spawnItem(to)")
+    val made =
+      if (world.protos.item(l).stackable) listOf(world.spawnItem(l, at, count))
+      else List(count) { world.spawnItem(l, at) }
+    return made.map { ItemFacade(it, world) }
+  }
+
+  override fun moveItem(item: PluginItem, to: PluginEntity, count: Int?): PluginItem {
+    val i = itemOf(item, "moveItem(item)")
+    val n = stackCount(i, count, "moveItem(count)")
+    return ItemFacade(world.moveItem(i, locationOf(to, "moveItem(to)"), n), world)
+  }
+
+  override fun destroy(item: PluginItem, count: Int?) {
+    val i = itemOf(item, "destroy(item)")
+    world.destroy(i, stackCount(i, count, "destroy(count)"))
+  }
+
+  override fun mergeStack(item: PluginItem): PluginItem =
+    ItemFacade(world.stack(itemOf(item, "mergeStack(item)")), world)
+
+  private fun stackCount(item: Item, count: Int?, what: String): Int {
+    val n = count ?: item.count
+    require(n in 1..item.count) { "$what: must be between 1 and ${item.count}" }
+    return n
+  }
+
+  /** Where an item put at [to] lies: a room at track index 0, an inventory, or a container. */
+  private fun locationOf(to: PluginEntity, what: String): ItemLocation =
+    when (val target = entityOf(to, what)) {
+      is Room -> ItemLocation.InRoom(target.id, 0)
+      is Actor -> ItemLocation.Carried(target.id)
+      is Item -> {
+        require(target.container != null) { "$what: ${target.name} is not a container" }
+        ItemLocation.Contained(target.id)
+      }
+    }
 
   override fun wear(actor: PluginActor, item: PluginItem, wield: Boolean): String? =
     world.wearItem(actorOf(actor, "wear(actor)"), itemOf(item, "wear(item)"), wield)
 
-  override fun unwear(actor: PluginActor, item: PluginItem): String? =
-    world.unwearItem(actorOf(actor, "unwear(actor)"), itemOf(item, "unwear(item)"))
+  override fun removeWorn(actor: PluginActor, item: PluginItem): String? =
+    world.removeWornItem(actorOf(actor, "removeWorn(actor)"), itemOf(item, "removeWorn(item)"))
+
+  override fun mayWear(actor: PluginActor, item: PluginItem, wield: Boolean): String? =
+    world.mayWear(actorOf(actor, "mayWear(actor)"), itemOf(item, "mayWear(item)"), wield)
+
+  override fun mayRemove(actor: PluginActor, item: PluginItem): String? =
+    world.mayRemove(actorOf(actor, "mayRemove(actor)"), itemOf(item, "mayRemove(item)"))
+
+  override fun mayDrop(actor: PluginActor, item: PluginItem): String? =
+    world.mayDrop(actorOf(actor, "mayDrop(actor)"), itemOf(item, "mayDrop(item)"))
+
+  override fun mayGive(actor: PluginActor, item: PluginItem, to: PluginActor): String? =
+    world.mayGive(
+      actorOf(actor, "mayGive(actor)"),
+      itemOf(item, "mayGive(item)"),
+      actorOf(to, "mayGive(to)"),
+    )
+
+  override fun mayPut(actor: PluginActor, item: PluginItem, container: PluginItem): String? =
+    world.mayPut(
+      actorOf(actor, "mayPut(actor)"),
+      itemOf(item, "mayPut(item)"),
+      itemOf(container, "mayPut(container)"),
+    )
+
+  override fun mayEnter(actor: PluginActor, room: PluginRoom): String? =
+    world.mayEnter(actorOf(actor, "mayEnter(actor)"), roomOf(room, "mayEnter(room)"))
+
+  override fun mayLearn(actor: PluginActor, skill: String, proficiency: Int): String? {
+    needs(world, Feature.SKILLS, "mayLearn")
+    val label = knownSkill(skill, "mayLearn").label
+    require(proficiency in 0..100) {
+      "mayLearn(proficiency): proficiency must be 0..100, got $proficiency"
+    }
+    return world.mayLearn(preparedActorOf(actor, "mayLearn(actor)"), label, proficiency)
+  }
+
+  override fun fits(item: PluginItem, to: PluginEntity, count: Int?): Int {
+    val i = itemOf(item, "fits(item)")
+    return world.fits(i, fitsTarget(to), count ?: i.count)
+  }
+
+  override fun fits(label: String, to: PluginEntity, count: Int?): Int =
+    world.fits(itemLabel(label, "fits(label)"), fitsTarget(to), count ?: 1)
+
+  private fun itemLabel(label: String, what: String): Label {
+    val l = runCatching { Label(label) }.getOrNull()
+    require(l != null && world.protos.items.containsKey(l)) { "$what: '$label' is not an item" }
+    return l
+  }
+
+  private fun fitsTarget(to: PluginEntity): Entity {
+    val target = entityOf(to, "fits(to)")
+    require(target !is Item || target.container != null) {
+      "fits(to): ${target.name} is not a container"
+    }
+    return target
+  }
 
   override fun setChoices(actor: PluginActor, changes: Map<String, String?>): String? {
     val a = actorOf(actor, "setChoices(actor)")

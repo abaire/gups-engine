@@ -114,8 +114,20 @@ class RulesCtx internal constructor(private val frame: Frame, private val c: Rul
   )
   fun weapon(): Any = field { v(c.weapon) }
 
-  @StarlarkMethod(name = "item", structField = true, doc = "The item, for get_lag and carry_limit.")
+  @StarlarkMethod(
+    name = "item",
+    structField = true,
+    doc = "The item, for get_lag and carry_limit; None in carry_limit when fits asks about a label.",
+  )
   fun item(): Any = field { v(c.item) }
+
+  @StarlarkMethod(
+    name = "item_info",
+    structField = true,
+    doc =
+      "In carry_limit asked about an item or a label, the prototype's item_info struct, whether or not an instance exists; None elsewhere, and when the limit is asked without an item.",
+  )
+  fun itemInfo(): Any = field { c.itemProto?.let(::itemInfoStruct) ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "band",
@@ -1575,7 +1587,7 @@ internal val RULES_EXPORTS: List<RulesExportSpec> =
       export = RulesExport.CARRY_LIMIT,
       signature = "carry_limit(ctx)",
       returnType = "int",
-      ctxFields = listOf("actor", "item", "room", "pulse", "rng"),
+      ctxFields = listOf("actor", "item", "item_info", "room", "pulse", "rng"),
       doc = "Maximum weight the actor can carry without encumbrance.",
     ),
     RulesExportSpec(

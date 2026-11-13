@@ -111,27 +111,94 @@ class WearVerbsTest {
   }
 
   @Test
-  fun `unwear moves a worn item back to the inventory silently`() {
+  fun `remove_worn moves a worn item back to the inventory silently`() {
     val r = carry(p, ring)
     f.w.wearItem(p, r)
     f.out(p)
-    assertNull(f.w.unwearItem(p, r))
+    assertNull(f.w.removeWornItem(p, r))
     assertEquals(ItemLocation.Carried(p.id), r.location)
     assertEquals("", f.out(p))
   }
 
   @Test
-  fun `unwear asks the remove restriction`() {
+  fun `remove_worn asks the remove restriction`() {
     refuse(RestrictionPoint.REMOVE, ring, "The ring won't budge.")
     val r = carry(p, ring)
     f.w.wearItem(p, r)
-    assertEquals("The ring won't budge.", f.w.unwearItem(p, r))
+    assertEquals("The ring won't budge.", f.w.removeWornItem(p, r))
     assertEquals(ItemLocation.Equipped(p.id, "finger_l"), r.location)
   }
 
   @Test
-  fun `unwear needs an item the actor wears`() {
+  fun `remove_worn needs an item the actor wears`() {
     val r = carry(p, ring)
-    assertFailsWith<IllegalArgumentException> { f.w.unwearItem(p, r) }
+    assertFailsWith<IllegalArgumentException> { f.w.removeWornItem(p, r) }
+  }
+
+  @Test
+  fun `mayWear answers what wear would and moves nothing`() {
+    val s = carry(p, sword)
+    val gs = carry(p, greatsword)
+    f.w.wearItem(p, s, wield = true)
+    f.out(p)
+    assertNull(f.w.mayWear(p, carry(p, ring)))
+    assertNull(f.w.mayWear(p, gs, wield = true))
+    assertEquals(ItemLocation.Equipped(p.id, "wield"), s.location)
+    assertEquals(ItemLocation.Carried(p.id), gs.location)
+    assertEquals("You can't wear a pebble.", f.w.mayWear(p, carry(p, pebble)))
+    assertEquals("You can't wield a ring.", f.w.mayWear(p, carry(p, ring), wield = true))
+    assertEquals("", f.out(p))
+  }
+
+  @Test
+  fun `mayWear reports a full slot and the items in the way`() {
+    val sh = carry(p, shield)
+    val gs = carry(p, greatsword)
+    f.w.wearItem(p, carry(p, sword))
+    f.w.wearItem(p, sh)
+    assertEquals("You'd need to remove a sword, a shield first.", f.w.mayWear(p, gs))
+    val rings = List(3) { carry(p, ring) }
+    f.w.wearItem(p, rings[0])
+    f.w.wearItem(p, rings[1])
+    assertEquals("There's no room for a ring. Remove something first.", f.w.mayWear(p, rings[2]))
+  }
+
+  @Test
+  fun `mayWear asks the wear restriction and the remove restriction of what it displaces`() {
+    refuse(RestrictionPoint.WEAR, shield, "The shield won't sit on your arm.")
+    assertEquals("The shield won't sit on your arm.", f.w.mayWear(p, carry(p, shield)))
+    refuse(RestrictionPoint.REMOVE, sword, "The sword clings to your hand.")
+    f.w.wearItem(p, carry(p, sword))
+    assertEquals("The sword clings to your hand.", f.w.mayWear(p, carry(p, greatsword)))
+  }
+
+  @Test
+  fun `mayWear needs an item the actor carries`() {
+    val r = carry(f.player("Bob"), ring)
+    assertFailsWith<IllegalArgumentException> { f.w.mayWear(p, r) }
+    val worn = carry(p, ring)
+    f.w.wearItem(p, worn)
+    assertFailsWith<IllegalArgumentException> { f.w.mayWear(p, worn) }
+  }
+
+  @Test
+  fun `mayRemove asks the remove restriction and moves nothing`() {
+    val r = carry(p, ring)
+    f.w.wearItem(p, r)
+    assertNull(f.w.mayRemove(p, r))
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), r.location)
+    refuse(RestrictionPoint.REMOVE, ring, "The ring won't budge.")
+    assertEquals("The ring won't budge.", f.w.mayRemove(p, r))
+    assertEquals(ItemLocation.Equipped(p.id, "finger_l"), r.location)
+  }
+
+  @Test
+  fun `mayRemove needs an item the actor wears`() {
+    val r = carry(p, ring)
+    assertFailsWith<IllegalArgumentException> { f.w.mayRemove(p, r) }
+    val other = f.player("Bob")
+    val theirs = carry(other, ring)
+    f.w.wearItem(other, theirs)
+    assertFailsWith<IllegalArgumentException> { f.w.mayRemove(p, theirs) }
   }
 }

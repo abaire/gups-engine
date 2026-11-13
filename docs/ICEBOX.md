@@ -128,6 +128,25 @@ character creation and item equips without performance penalties? - Should world
 Starlark trait handlers for the trait events (`DAMAGED`, `AFFECT_GAINED` and the others), so a behavior doesn't need a
 plugin?
 
+### Mob item actions on a chosen item
+
+**Spec:** §4.5 (Mob actions). **Today:** a mob gets, drops, gives, puts or wears an item by queuing a typed command
+through `ctx.act`, for example `ctx.act(ctx.self, "get pinecone")` in `template-world/zones/tutorial/forager.star`. That
+pays lag and runs the same hooks and restrictions as the command, but a keyword can't name a particular item, so a mob
+that planned on one pinecone can pick up another, or one inside a container when the phrase happens to match. The engine
+already queues `get` and `wear` on a fixed item; `drop`, `give` and `put` only take a keyword. **Sketch:** `act_get(mob,
+item)`, `act_drop(mob, item)`, `act_give(mob, item, to)`, `act_put(mob, item, container)` and `act_wear(mob, item)`,
+with this bullet under §4.5 **Mob actions**:
+
+```text
+- `act_get`, `act_drop`, `act_give`, `act_put` and `act_wear` queue that command on the given item rather than a
+  keyword, so a mob acts on the item it chose. They are checked and resolved as the typed command is, and the item
+  must still be where the command would look for it when the action runs, or the action fails.
+```
+
+**Questions:** - Does `act_give` or `act_drop` take a count for stacks? - Is it worth adding before a mob needs one
+exact item rather than any item matching a keyword?
+
 ## Plugins
 
 ### Plugin marketplace, plugin hot reload, and plugin sandboxing

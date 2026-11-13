@@ -7,7 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 
-/** `ctx.wear` and `ctx.unwear`. */
+/** `ctx.wear` and `ctx.remove_worn`. */
 class WearVerbScriptTest {
   private val ZONE =
     """
@@ -23,10 +23,10 @@ class WearVerbScriptTest {
         ctx.send(ctx.actor, "WEAR:%s" % r)
 
     def _take_off(ctx):
-        ctx.send(ctx.actor, "UNWEAR:%s" % ctx.unwear(ctx.actor, _first(ctx, ctx.args)))
+        ctx.send(ctx.actor, "REMOVE_WORN:%s" % ctx.remove_worn(ctx.actor, _first(ctx, ctx.args)))
 
     def _gift(ctx):
-        ctx.give(ctx.actor, ":" + ctx.args)
+        ctx.grant_item(ctx.actor, ":" + ctx.args)
 
     def _floor(ctx):
         ctx.wear(ctx.actor, ctx.spawn(":amulet", ctx.room))
@@ -54,14 +54,14 @@ class WearVerbScriptTest {
   }
 
   @Test
-  fun `wear and unwear move a carried item on and off silently`() {
+  fun `wear and remove_worn move a carried item on and off silently`() {
     val f = fixture()
     val p = f.player()
     f.say(p, "gift amulet")
     val amulet = p.inventory.single()
     assertEquals("WEAR:None\n", f.say(p, "puton amulet"))
     assertEquals(ItemLocation.Equipped(p.id, "neck"), amulet.location)
-    assertEquals("UNWEAR:None\n", f.say(p, "takeoff amulet"))
+    assertEquals("REMOVE_WORN:None\n", f.say(p, "takeoff amulet"))
     assertEquals(ItemLocation.Carried(p.id), amulet.location)
   }
 
@@ -83,6 +83,6 @@ class WearVerbScriptTest {
     assertEquals(1, f.diagnostics("script_error").count { "wear(item)" in it.message })
     f.say(p, "gift amulet")
     f.say(p, "takeoff amulet")
-    assertEquals(1, f.diagnostics("script_error").count { "unwear(item)" in it.message })
+    assertEquals(1, f.diagnostics("script_error").count { "remove_worn(item)" in it.message })
   }
 }

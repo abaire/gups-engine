@@ -6,6 +6,7 @@ import gups.core.model.SkillProto
 import gups.core.rules.RulesContext
 import gups.core.world.HookContext
 import gups.core.world.SkillRoll
+import gups.core.world.mayLearn
 import gups.core.world.removeSkill
 import gups.core.world.reportSkillUse
 import gups.core.world.setSkill
@@ -53,6 +54,30 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       val n = int(proficiency, "set_skill(proficiency)")
       if (n !in 0..100) fail("set_skill(proficiency): must be 0 to 100, got $n")
       world.setSkill(a, l, n) ?: Starlark.NONE
+    }
+
+  @StarlarkMethod(
+    name = "may_learn",
+    doc =
+      "Asks whether the actor may have the skill, a label or skill view, at proficiency, as" +
+        " set_skill would: the learn restrictions. Changes nothing. Returns the refusal message," +
+        " or None. Needs the skills feature.",
+    parameters =
+      [
+        Param(name = "actor", named = true, doc = "Actor who would learn or raise the skill."),
+        Param(name = "skill", named = true, doc = "Skill label, or the skill's view."),
+        Param(name = "proficiency", named = true, doc = "Proficiency, 0 to 100."),
+      ],
+    useStarlarkThread = true,
+  )
+  fun mayLearn(actor: Any, skill: Any, proficiency: Any, thread: StarlarkThread): Any =
+    verb("may_learn") {
+      val a = actorArg(actor, "may_learn(actor)")
+      val l = skillArg(skill, "may_learn", thread)
+      if (l !in world.protos.skills) fail("may_learn(skill): unknown skill '${l.v}'")
+      val n = int(proficiency, "may_learn(proficiency)")
+      if (n !in 0..100) fail("may_learn(proficiency): must be 0 to 100, got $n")
+      world.mayLearn(a, l, n) ?: Starlark.NONE
     }
 
   @StarlarkMethod(

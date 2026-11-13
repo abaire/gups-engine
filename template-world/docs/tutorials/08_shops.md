@@ -68,8 +68,9 @@ keeper carries the key (`//lib:shop_chest_key`). Because stock is real items in 
 
 Restocking is time-based rather than instant because the chest's contents are observable. If a burglar takes three rings
 at minute one, the shop cannot have three rings again by minute two — players could loot the restock. Instead the line
-refills at its declared rate. The catch-up runs when the chest is opened or wakes, and before every `buy`, `sell` and
-`value`; `list` projects the same arithmetic and shows the result without applying it.
+refills at its declared rate. The catch-up runs when the chest is opened or wakes, and before every `list`, `buy`,
+`sell` and `value`. It adds only what fits: the container's own `capacity` and `max_weight` cap it, asked with
+`ctx.fits`.
 
 Every shop that uses `//lib:shop_chest` shares the single `//lib:shop_chest_key` prototype, so any one key opens every
 chest. A zone that wants its own key declares its own chest and key:
@@ -106,8 +107,6 @@ PEDDLER_SHOP = shop.define(
     key = None,
     stock = [shop.stock("//zones/meadow:bread", count = 5, every = 600)],
     till = shop.till(count = 50),
-    capacity = 20,
-    max_weight = 100,
 )
 ```
 
@@ -130,8 +129,9 @@ and one entry per line with the item's name, label, price and count (`null` for 
 shop window from it without parsing any text.
 
 * **`buy <count> <item>`** moves coins from the customer into the till and items out of the container in one command.
-  Asking for more than the shop holds buys what it has ("the shopkeeper only has 2."). A line with nothing in stock
-  isn't offered. A refusal (no match, or "you can't afford that") changes nothing.
+  Asking for more than the shop holds buys what it has ("the shopkeeper only has 2."), and no more than the buyer can
+  carry ("You can only carry 1."; "You can't carry that." when it is nothing). A line with nothing in stock isn't
+  offered. A refusal (no match, or "you can't afford that") changes nothing.
 * **`sell <count> <item>`** is the reverse, capped at what the till holds and at the container's capacity and weight.
 * **`value <item>`** reports what the keeper would pay without moving anything.
 * **The keeper must be fit to trade.** If the keeper is incapacitated or its container is missing, every command answers
@@ -140,8 +140,8 @@ shop window from it without parsing any text.
   attacker included, with "the shopkeeper is busy fighting." until the fight ends, and its stock keeps restocking
   meanwhile. The keeper bears no grudge afterwards. To give it one, have the keeper's `on_damage` hook record
   `ctx.actor` in an attribute and refuse that customer from `shop_price`.
-* **`list` changes nothing.** It runs in the fast lane, which is not replayed, so the library projects the stock the
-  next catch-up would hold and shows that, without spawning or moving a thing.
+* **`list` restocks first.** Like `buy` and `sell`, it catches the container up before it answers, so what it shows is
+  what a `buy` would find.
 
 A library that must run in worlds with and without a feature checks `ctx.has_feature("combat")` before touching combat
 fields, as the shop does.
@@ -173,9 +173,8 @@ def _shop_price(ctx, action, customer, item, label, count, price, refusal):
 
 and the mob carries `hooks = {"shop_price": _shop_price}`. Two contracts matter:
 
-* **`list` must not change the world.** `list` runs in the fast lane and is not part of a reproducible replay, so a hook
-  that spawns, moves or destroys anything when `action == "list"` would shift entity ids that a replay never sees. Price
-  and refuse, but do not mutate.
+* **Price and refuse, but do not mutate.** `list` asks the hook once for every line each time a customer lists, so a
+  hook that spawns, moves or destroys anything when `action == "list"` would change the world on every `list`.
 * **The hook sees the library's default price** for every action, so a discount like the one above is applied exactly
   once whether the customer lists, buys or is asked the value.
 

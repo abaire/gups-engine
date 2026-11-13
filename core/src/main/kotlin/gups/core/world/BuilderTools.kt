@@ -67,14 +67,14 @@ internal object BuilderTools {
     if (target === p) return w.send(p, "You're already there.")
     // Any player, unless taken away from this account.
     if (w.refuseRestricted(p, Capabilities.GOTO_PLAYER)) return
-    w.teleport(p, target.room, target.trackIndex)
+    w.teleport(p, target.room, target.trackIndex)?.let { w.send(p, it) }
   }
 
   private fun gotoRoom(w: World, p: Player, arg: String) {
     val label = labelArg(arg, p) ?: return w.send(p, "No player or room called '$arg'.")
     val room = w.roomOrNull(label) ?: return w.send(p, "There is no room $label.")
     if (!p.owns(room.label.pkg)) return w.send(p, NOT_YOURS)
-    w.teleport(p, room)
+    w.teleport(p, room)?.let { w.send(p, it) }
   }
 
   private fun stat(c: CommandCall) {
