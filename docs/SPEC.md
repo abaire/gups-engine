@@ -2996,20 +2996,38 @@ subsystems (`core` or `script`). It consists of three primary components:
   `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `spawnItem`, `moveItem`, `destroy`, `mergeStack`,
   `wear`, `removeWorn`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`,
   `reportSkillUse`, `skillRoll` (needs `skills`), `startTask`, `stopTask`, `setItemName`, `setBaseStat`,
-  `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `rules`), query methods (`mayWear`,
-  `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`, and including `skill(label)`, a loaded
-  skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's `PluginItemInfo` or null), RNG access,
-  and read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`); `PluginActor.task`
-  and `isBusy` report a timed task of either kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`,
-  `removeWorn`, `teleport`, `may*`, `fits`, `task` and `isBusy` follow the same rules as the script verbs. `teleport`
-  returns the refusal or veto, or null once the actor has moved. The item custody verbs `spawnItem`, `moveItem`,
-  `destroy` and `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack`
-  (§4.5): they skip the item restrictions and the commands' limits, and an item placed in a room lies at track index 0.
-  `spawnItem` returns a list: one stack for a stackable label, and `count` items otherwise. There is no `grantItem`:
-  `moveItem` or `spawnItem` with an actor as the destination puts the items in its inventory. All facade mutations
-  execute synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which
-  holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers
-  receive.
+  `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `openDoor`, `closeDoor`, `lockDoor`,
+  `unlockDoor`, `openContainer`, `closeContainer`, `lockContainer`, `unlockContainer`, `say`, `emote`, `emit`,
+  `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding`, `roll`, `spawnMob`, `act`, `actMove`,
+  `actAttack`, `actCast`, `moveToward`, `summon`, `setOwner`, `clearOwner`, `setLeash`, `resetLeash`, `startCombat`,
+  `stopCombat`, `clearContributions`, `groupAdd`, `groupRemove`, `groupSetLeader`, `groupDisband`, `rules`), query
+  methods (`mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`, `standingHistory`,
+  `enemiesNear`, `alliesNear`, `pathTo`, `plan`, `groupOf`, `groupMembers`, and including `skill(label)`, a loaded
+  skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's `PluginItemInfo` or null), RNG access
+  (`rng.int`, `rng.chance` and `rng.choice(list)`), and read-only views of live entities (`PluginRoom`, `PluginActor`,
+  `PluginItem`, `PluginSkill`, `PluginExit`, `PluginDoor`, `PluginGroup`, `PluginStandingTotals`, `PluginPlanAction`);
+  the views carry the fields of the `ctx` actor, room and item views (§4.5), named in camelCase, except the track
+  fields. `PluginActor.task` and `isBusy` report a timed task of either kind. `startTask`, `stopTask`, `skillRoll`,
+  `setItemName`, `wear`, `removeWorn`, `teleport`, `may*`, `fits`, `task` and `isBusy` follow the same rules as the
+  script verbs. `teleport` returns the refusal or veto, or null once the actor has moved. The item custody verbs
+  `spawnItem`, `moveItem`, `destroy` and `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy`
+  and `ctx.merge_stack` (§4.5): they skip the item restrictions and the commands' limits, and an item placed in a room
+  lies at track index 0. `spawnItem` returns a list: one stack for a stackable label, and `count` items otherwise.
+  `spawnMob(label, room, count)` makes `count` mobs as `ctx.spawn` does for a mob label and returns them: no owner, no
+  leash override and no spawn rule, a home room equal to `room`, at track index 0. The mob actions queue tick-lane
+  actions for a mob, never a player, and return whether the action was queued. The door and container verbs follow `ctx`
+  (§4.5): they run no hook, take no key and print nothing, and locking fails on a door or container without a `key`.
+  There is no `grantItem`: `moveItem` or `spawnItem` with an actor as the destination puts the items in its inventory.
+  All facade mutations execute synchronously on the world thread with invariant checking. `PluginWorld` extends
+  `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what
+  GMCP input handlers receive.
+
+**Parity with `ctx`:** every `ctx` verb and every field of the actor, item and room views has a facade counterpart that
+behaves the same way, named in camelCase (`open_door` → `openDoor`, `home_room` → `homeRoom`). The exceptions are the
+hook's context fields (`self`, `target`, `args`, …), verbs that only work inside a hook (`deny`), and gaps recorded for
+later. A change that adds a `ctx` verb or view field adds its facade counterpart in the same change, or records why
+there is none. A test in `:plugin-api` lists every `ctx` verb and view field and fails on any that has neither a
+counterpart nor a recorded exception.
 
 **Plugin capabilities and lifecycle:**
 
@@ -3256,7 +3274,8 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Weather Plugin ([samples/weather-plugin](../samples/weather-plugin/README.md)):** A complete sample plugin
   demonstrating all core extension points. It adds the `weather.now(room)` Starlark builtin (deterministic weather based
   on seed, pulse, and region), a player `weather` command, a `weather.soak(pulses)` effect primitive, a `Gups.Weather`
-  GMCP package, and an `onWorldStarted` lifecycle hook.
+  GMCP package, an `onWorldStarted` lifecycle hook, and an `every` handler that slams and locks keyed outdoor doors when
+  a storm starts and unlocks them when it passes.
 - **Heritage Plugin ([samples/heritage-plugin](../samples/heritage-plugin/README.md)):** A fantasy race and class sample
   plugin demonstrating character creation and restriction points for the template world schema. It defines `race` and
   `class` choices, mutual exclusion rules (e.g., dwarf mages disallowed), permanent stat/vital traits, class starter

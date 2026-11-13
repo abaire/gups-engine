@@ -36,6 +36,10 @@ say "spell" where a world or a skill chooses that word.
 
 - Follow test driven development practices. Write tests first, verify that they fail, then write code to pass the tests.
 
+- **Plugin facade parity:** when you add or change a `ctx` verb or a view field, add or change its `PluginWorld` or view
+  counterpart in the same change, or add it with a reason to the exception list in `CtxParityTest`. `./gradlew check`
+  fails otherwise.
+
 ## CodeScene
 
 After changing code, run `code_health_review` on the changed files. If Code Health drops, fix the issues, run the review

@@ -4,6 +4,55 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Plugin facade parity with ctx
+
+- The plugin facade now follows a parity rule: every `ctx` verb and view field has a facade counterpart or a recorded
+  reason why not, checked by `CtxParityTest`.
+- The facade gains the door and container verbs `openDoor`, `closeDoor`, `lockDoor`, `unlockDoor`, `openContainer`,
+  `closeContainer`, `lockContainer` and `unlockContainer`, which set the exit's or container's state as `ctx` does
+  (§4.5): no hook runs, no key is named and nothing is printed, and locking fails on a door or container without a
+  `key`.
+- The facade reads an exit: `PluginRoom.exit(dir)` returns a `PluginExit(direction, to, tags, door, key, passable,
+  oneWay)`, null when the room has no exit in that direction, and `PluginItem.containerState` reports a container's
+  state, null for an item that isn't a container.
+- The facade gains messaging and simulation verbs: `say(speaker, text)`, `emote(actor, text)`, `emit(room, channel,
+  event, intensity, text, actor)`, `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding(holder,
+  subject)` and `roll(dice)`, each behaving as the `ctx` verb of the same name. `emit` validates the channel with a
+  suggestion and emits nothing at an intensity of 0 or less.
+- The facade reads standing history: `standingHistory(holder, subject, since, via, event)` returns a
+  `PluginStandingTotals(gained, lost)`, needing the `standing` feature. `rng` gains `choice(list)`, a uniformly chosen
+  element of a non-empty list. `PluginRoom` gains `desc` and the names of its live `affects`.
+- Implementers of `PluginWorld` must add `source: PluginActor? = null` to `heal`. A `source` passed to `heal` is
+  credited with the healing, as with `damage`.
+- The facade gains mob verbs: `spawnMob(label, room, count = 1)` makes `count` mobs as `ctx.spawn` does for a mob label
+  and returns them, and `act(mob, commandLine)`, `actMove(mob, dir)`, `actAttack(mob, target)` and `actCast(mob, skill,
+  target = null)` queue tick-lane actions for a mob, never a player, returning whether the action was queued.
+  `actAttack` needs the `combat` feature and `actCast` the `skills` feature. `moveToward(mob, dir)`, `moveToward(mob,
+  room)` and `moveToward(mob, target)` queue one step toward a direction, a room or an actor, and `summon(caster, label,
+  count = 1, duration = null)` spawns mobs beside the caster as `ctx.summon` does, a `before_summon` veto returning an
+  empty list.
+- The facade gains the ownership and leash verbs `setOwner(mob, player)`, `clearOwner(mob)`, `setLeash(mob, leash)` and
+  `resetLeash(mob)`, and `PluginActor` reads `owner`, `homeRoom`, `leash` and `leashOverridden`, each as the `ctx` view
+  field of the same name.
+- The facade gains the combat verbs `startCombat(a, b)`, `stopCombat(a, b = null)` and `clearContributions(victim,
+  contributor = null)`, each as the `ctx` verb of the same name. `startCombat`, `stopCombat` and the new `PluginActor`
+  reads `fighting` and `primaryTarget` need the `combat` feature, and `startCombat` refuses an actor fighting itself or
+  one in a different room.
+- The facade gains the group verbs `groupAdd(member, to)`, `groupRemove(member)`, `groupSetLeader(member)` and
+  `groupDisband(member)`, each as the `ctx.group_*` verb of the same name, and a mob argument throws.
+- The facade reads the world and groups: `enemiesNear(actor, band)` and `alliesNear(actor, band)` (the opponents and
+  allies of `actor` within `"melee"`, `"near"` or `"far"`, by id), `pathTo(from, to)` (the directions of the shortest
+  passable walk, empty when already there, null when unreachable), `plan(facts, actions, goal, maxExpansions = 1024)`
+  (the GOAP planner's cheapest action names, `[]` when the goal holds, null when unreachable) and the group queries
+  `groupOf(actor)` (a `PluginGroup(id, leader, members)`) and `groupMembers(actor)`. A planning action is a
+  `PluginPlanAction(name, pre, effects, cost)`, whose fact values are `Boolean`, `Int`/`Long` or `String`.
+- The facade reads the remaining actor and item fields. `PluginActor` gains `inWorld`, `keywords`, `xp` (needs
+  `leveling`), `condition`, `senses`, `belowZeroSince(vital)`, `carriedWeight`, `encumbranceLevel`, `isCasting` and
+  `casting` (both need `skills`), `hasFlag(flag)`, `hasItem(label)`, `slots`, `waitState`, `movePace` and `recallRoom`,
+  and `PluginItem` gains `inWorld`, `dice`, `damageType`, `statDeltas` and `senseDeltas`, each returning what the `ctx`
+  actor or item view of the same name returns in the same world. `movePace` is hundredths of a pulse per room.
+- `samples/weather-plugin` locks keyed outdoor doors during storms, using the new facade door verbs.
+
 ### Respec shrines
 
 - `lock_door` now fails with a script error on a door without a `key`, as `lock_container` does, since only a door with

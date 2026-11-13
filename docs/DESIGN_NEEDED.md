@@ -83,30 +83,6 @@ entry. **Questions:** - Should the operator also agree in `MODULE.gups` (for exa
 (a plugin adding a sub-command to another's), attribute namespaces, or calling another plugin's builtins? - Does a
 dependency between plugins need a declared version range, and how does that relate to `PluginApi.VERSION`?
 
-### The rest of the `ctx` verbs on the plugin facade
-
-**Spec:** §4.5, §4.15. **Today:** `PluginWorld` has the item custody verbs (`spawnItem`, `moveItem`, `destroy`,
-`mergeStack`), the `may*` queries, `fits`, and the inventory, equipment and location reads, but none of these `ctx`
-verbs: `spawn` for mobs (`spawnItem` refuses a mob label), `open_door`, `close_door`, `lock_door`, `unlock_door` and the
-container verbs; `start_combat` and `stop_combat`; `summon`, `set_owner`, `clear_owner`, `set_leash`, `reset_leash` and
-the group verbs; `say`, `emote`, `emit`, the mob actions, `after`/`cancel` and `clear_standing`. Nothing on the facade
-knows about track positions: `spawnItem`, `moveItem` and `teleport` place at index 0 of a track room, and no read
-reports where along a track an item or actor is. (`callHook` is in [ICEBOX.md](ICEBOX.md), "Plugins calling custom
-hooks".) A plugin's own `every` or `onEvent` code can't do any of these; the documented workaround, a `//lib` that calls
-the plugin's builtins, only works when content drives the feature. **Example:** a weather plugin that slams and locks
-the doors of outdoor rooms when a storm starts, from its own `every` handler, and unlocks them when it passes. Today it
-can see the storm but can't touch a door. Likewise an invasion plugin can't spawn raiders into a town on a schedule.
-**Questions:** - Should a plugin spawn mobs through a separate `spawnMob(label, room, count)`, and what does a
-plugin-spawned mob get: an owner, a leash, a home room, and what does its `on_spawn` see as the source? - Do the door
-and container verbs skip the restrictions, as the custody verbs do, or does a plugin go through
-`before_open`/`before_unlock` and the key rules, the way a command does? Does locking need a key the plugin names, or
-none? - Does a plugin-started fight need an attacker that is an actor, or can a plugin be the source? How are
-`start_combat`'s engagement and contribution rules recorded for it? - Should `summon`, ownership, leash and group
-changes be facade verbs at all, or stay content-driven through `//lib`? - For `say`, `emote` and the mob actions, does
-the plugin speak as a mob it names, and do those actions run in the tick lane like a mob's own? - Should
-`after`/`cancel` be facade verbs, or is a plugin's own `every` scheduling enough? - Add them in batches as plugins need
-them (doors first, for the example), or all at once?
-
 ### Plugin timers (`after` and `cancel` on the facade)
 
 **Spec:** §3.3 (`ScriptTimer`), §4.5 (Timers), §4.15 (Periodic work), §5.1 (timer phase), §5.10, §5.11. **Today:** a

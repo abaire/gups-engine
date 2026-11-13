@@ -30,6 +30,47 @@ interface PluginGmcpWorld {
   /** Reads an attribute; a key without `ns:` is in the plugin's own namespace (its id). */
   fun getAttr(entity: PluginEntity, key: String, default: Any? = null): Any?
 
+  /**
+   * What [holder] did or lost with [subject] since [since] pulse, summing the standing changes in
+   * each direction; a negative [since] counts as 0. [via], when given, must be a mob and filters
+   * the changes it applied. [event], when given, is an exact event-name filter. Needs `standing`.
+   */
+  fun standingHistory(
+    holder: Any,
+    subject: Any,
+    since: Long,
+    via: PluginActor? = null,
+    event: String? = null,
+  ): PluginStandingTotals = throw UnsupportedOperationException("standingHistory is not supported")
+
+  /** Opponents of [actor] in its room within [band] ("melee", "near" or "far"), by id. */
+  fun enemiesNear(actor: PluginActor, band: String): List<PluginActor> =
+    throw UnsupportedOperationException("enemiesNear is not supported")
+
+  /** Allies of [actor] in its room within [band] ("melee", "near" or "far"), by id. */
+  fun alliesNear(actor: PluginActor, band: String): List<PluginActor> =
+    throw UnsupportedOperationException("alliesNear is not supported")
+
+  /** Directions of the shortest passable walk; empty when [from] is [to], null when unreachable. */
+  fun pathTo(from: PluginRoom, to: PluginRoom): List<String>? =
+    throw UnsupportedOperationException("pathTo is not supported")
+
+  /** Goal-oriented planning as `ctx.plan`; fact values are Boolean, Int/Long or String. */
+  fun plan(
+    facts: Map<String, Any>,
+    actions: List<PluginPlanAction>,
+    goal: Map<String, Any>,
+    maxExpansions: Int = 1024,
+  ): List<String>? = throw UnsupportedOperationException("plan is not supported")
+
+  /** The player group [actor] is in, its own or a pet's owner's, or null when it has none. */
+  fun groupOf(actor: PluginActor): PluginGroup? =
+    throw UnsupportedOperationException("groupOf is not supported")
+
+  /** The members of [actor]'s group, leader first; empty when it has none. */
+  fun groupMembers(actor: PluginActor): List<PluginActor> =
+    throw UnsupportedOperationException("groupMembers is not supported")
+
   // ---- Reads ----
 
   /** The names the world declares, in declaration order. */
@@ -96,7 +137,11 @@ interface PluginWorld : PluginGmcpWorld {
     source: PluginActor? = null,
   )
 
-  fun heal(target: PluginActor, amount: Int, vital: String)
+  /**
+   * Restores [amount] points of [target]'s [vital], up to its maximum, as `ctx.heal`. [source],
+   * when given, is credited with the healing: it gains standing with [target] and any assists.
+   */
+  fun heal(target: PluginActor, amount: Int, vital: String, source: PluginActor? = null)
 
   fun applyAffect(
     target: PluginActor,
@@ -365,6 +410,196 @@ interface PluginWorld : PluginGmcpWorld {
    */
   fun levelDown(actor: PluginActor, count: Int = 1): Int
 
+  // Doors and containers, as `ctx` sets them: no hook runs, no key is named and nothing is
+  // printed. Locking fails on a door or container without a key.
+
+  /** Opens the door in direction [dir] of [room], even if locked. */
+  fun openDoor(room: PluginRoom, dir: String): Unit =
+    throw UnsupportedOperationException("openDoor is not supported")
+
+  /** Closes an open door; a locked door stays locked. */
+  fun closeDoor(room: PluginRoom, dir: String): Unit =
+    throw UnsupportedOperationException("closeDoor is not supported")
+
+  /** Closes and locks the door in direction [dir] of [room]; only a door with a key has a lock. */
+  fun lockDoor(room: PluginRoom, dir: String): Unit =
+    throw UnsupportedOperationException("lockDoor is not supported")
+
+  /** Unlocks the door, leaving it closed. */
+  fun unlockDoor(room: PluginRoom, dir: String): Unit =
+    throw UnsupportedOperationException("unlockDoor is not supported")
+
+  /** Opens [item], a container, even if locked. */
+  fun openContainer(item: PluginItem): Unit =
+    throw UnsupportedOperationException("openContainer is not supported")
+
+  /** Closes an open container; a locked one stays locked. */
+  fun closeContainer(item: PluginItem): Unit =
+    throw UnsupportedOperationException("closeContainer is not supported")
+
+  /** Closes and locks the container; only a container whose prototype names a key has a lock. */
+  fun lockContainer(item: PluginItem): Unit =
+    throw UnsupportedOperationException("lockContainer is not supported")
+
+  /** Unlocks the container, leaving it closed. */
+  fun unlockContainer(item: PluginItem): Unit =
+    throw UnsupportedOperationException("unlockContainer is not supported")
+
+  // Messaging, as `ctx` sends it: say and emote speak as a named actor at once, and emit raises
+  // a perceivable event.
+
+  /** The [speaker] says [text] aloud; the room hears it and `on_say` fires, as `ctx.say`. */
+  fun say(speaker: PluginActor, text: String): Unit =
+    throw UnsupportedOperationException("say is not supported")
+
+  /** The room, [actor] included, sees "<actor> [text]", as `ctx.emote`. */
+  fun emote(actor: PluginActor, text: String): Unit =
+    throw UnsupportedOperationException("emote is not supported")
+
+  /** Raises a perceivable event in [room]; an intensity of 0 or less emits nothing. */
+  fun emit(
+    room: PluginRoom,
+    channel: String,
+    event: String,
+    intensity: Int = 1,
+    text: String? = null,
+    actor: PluginActor? = null,
+  ): Unit = throw UnsupportedOperationException("emit is not supported")
+
+  // Simulation, as `ctx` sets it: reasons are ref-counted by name.
+
+  /** Keeps [entity] simulated even outside the bubble, until the last [reason] is cleared. */
+  fun setActive(entity: PluginEntity, reason: String): Unit =
+    throw UnsupportedOperationException("setActive is not supported")
+
+  /** Removes a [setActive] reason from [entity]. */
+  fun clearActive(entity: PluginEntity, reason: String): Unit =
+    throw UnsupportedOperationException("clearActive is not supported")
+
+  /** Makes [entity] project a bubble of its own, until the last [reason] is cleared. */
+  fun setAnchor(entity: PluginEntity, reason: String): Unit =
+    throw UnsupportedOperationException("setAnchor is not supported")
+
+  /** Removes a [setAnchor] reason from [entity]. */
+  fun clearAnchor(entity: PluginEntity, reason: String): Unit =
+    throw UnsupportedOperationException("clearAnchor is not supported")
+
+  /** [holder] and [subject] as for [standing]; a null subject clears every record of the holder. */
+  fun clearStanding(holder: Any, subject: Any? = null): Unit =
+    throw UnsupportedOperationException("clearStanding is not supported")
+
+  /** Rolls dice such as "2d6+1" with the world's RNG. */
+  fun roll(dice: String): Int = throw UnsupportedOperationException("roll is not supported")
+
+  // Mobs: spawning, actions, summons, owners and leashes.
+
+  /**
+   * Spawns [count] of the mob prototype [label] in [room] as `ctx.spawn` does for a mob label, and
+   * returns them: no owner, no leash override and no spawn rule, a home room equal to [room], at
+   * track index 0. A label no loaded mob has, or a [count] below 1, is an error.
+   */
+  fun spawnMob(label: String, room: PluginRoom, count: Int = 1): List<PluginActor> =
+    throw UnsupportedOperationException("spawnMob is not supported")
+
+  /** Queues a command line for a mob, exactly as if it typed it; false when the queue is full. */
+  fun act(mob: PluginActor, commandLine: String): Boolean =
+    throw UnsupportedOperationException("act is not supported")
+
+  /** Queues a move through the exit in direction [dir]; false when the queue is full. */
+  fun actMove(mob: PluginActor, dir: String): Boolean =
+    throw UnsupportedOperationException("actMove is not supported")
+
+  /**
+   * Queues an attack against [target]; false when the queue is full. Needs the `combat` feature.
+   */
+  fun actAttack(mob: PluginActor, target: PluginActor): Boolean =
+    throw UnsupportedOperationException("actAttack is not supported")
+
+  /**
+   * Queues casting the skill [skill] at [target], or the skill's default target. Needs `skills`.
+   */
+  fun actCast(mob: PluginActor, skill: String, target: PluginActor? = null): Boolean =
+    throw UnsupportedOperationException("actCast is not supported")
+
+  /** Queues one step in direction [dir]; false when the queue is full. */
+  fun moveToward(mob: PluginActor, dir: String): Boolean =
+    throw UnsupportedOperationException("moveToward is not supported")
+
+  /** Queues one step toward [room]; false when there is no way. */
+  fun moveToward(mob: PluginActor, room: PluginRoom): Boolean =
+    throw UnsupportedOperationException("moveToward is not supported")
+
+  /** Queues one step toward [target], advancing within the room when it is in it. */
+  fun moveToward(mob: PluginActor, target: PluginActor): Boolean =
+    throw UnsupportedOperationException("moveToward is not supported")
+
+  /**
+   * Spawns mobs beside [caster] as `ctx.summon` does; a `before_summon` veto returns an empty list.
+   */
+  fun summon(
+    caster: PluginActor,
+    label: String,
+    count: Int = 1,
+    duration: Int? = null,
+  ): List<PluginActor> = throw UnsupportedOperationException("summon is not supported")
+
+  /** Makes [player] the owner of [mob]; returns whether anything changed. */
+  fun setOwner(mob: PluginActor, player: PluginActor): Boolean =
+    throw UnsupportedOperationException("setOwner is not supported")
+
+  /** Removes [mob]'s owner; returns whether it had one. */
+  fun clearOwner(mob: PluginActor): Boolean =
+    throw UnsupportedOperationException("clearOwner is not supported")
+
+  /** [leash] at least 0, or null to unleash. */
+  fun setLeash(mob: PluginActor, leash: Int?): Unit =
+    throw UnsupportedOperationException("setLeash is not supported")
+
+  /** Drops [mob]'s leash override so its prototype leash applies again. */
+  fun resetLeash(mob: PluginActor): Unit =
+    throw UnsupportedOperationException("resetLeash is not supported")
+
+  // Combat and groups, as `ctx` engages and manages them.
+
+  /**
+   * Engages two in-world actors in the same room in combat, as `ctx.start_combat` does.
+   *
+   * @throws IllegalStateException naming the combat feature when combat is disabled.
+   */
+  fun startCombat(a: PluginActor, b: PluginActor): Unit =
+    throw UnsupportedOperationException("startCombat is not supported")
+
+  /**
+   * Ends [a]'s fight with [b], or all of [a]'s fights when [b] is null, as `ctx.stop_combat` does.
+   *
+   * @throws IllegalStateException naming the combat feature when combat is disabled.
+   */
+  fun stopCombat(a: PluginActor, b: PluginActor? = null): Unit =
+    throw UnsupportedOperationException("stopCombat is not supported")
+
+  /**
+   * Empties [victim]'s contribution record, or removes one contributor's entry, as
+   * `ctx.clear_contributions` does.
+   */
+  fun clearContributions(victim: PluginActor, contributor: PluginActor? = null): Unit =
+    throw UnsupportedOperationException("clearContributions is not supported")
+
+  /** Adds [member] to [to]'s player group, creating one with [to] as leader when there is none. */
+  fun groupAdd(member: PluginActor, to: PluginActor): Unit =
+    throw UnsupportedOperationException("groupAdd is not supported")
+
+  /** Removes [member] from its player group; a group left with one member is disbanded. */
+  fun groupRemove(member: PluginActor): Unit =
+    throw UnsupportedOperationException("groupRemove is not supported")
+
+  /** Makes [member] the leader of its player group. */
+  fun groupSetLeader(member: PluginActor): Unit =
+    throw UnsupportedOperationException("groupSetLeader is not supported")
+
+  /** Dissolves [member]'s whole player group at once. */
+  fun groupDisband(member: PluginActor): Unit =
+    throw UnsupportedOperationException("groupDisband is not supported")
+
   // Standing (`standing` feature).
 
   /**
@@ -431,6 +666,20 @@ interface PluginWorld : PluginGmcpWorld {
 /** A declared stat or vital: the name scripts use and the label players see. */
 data class PluginNamed(val name: String, val label: String)
 
+/** What a holder gained and lost with a subject over a span, from [PluginWorld.standingHistory]. */
+data class PluginStandingTotals(val gained: Long, val lost: Long)
+
+/** One action of [PluginGmcpWorld.plan]: its preconditions and effects over facts, and its cost. */
+data class PluginPlanAction(
+  val name: String,
+  val pre: Map<String, Any> = emptyMap(),
+  val effects: Map<String, Any> = emptyMap(),
+  val cost: Int = 1,
+)
+
+/** A player group as a plugin sees it: the leader first, then the members in ascending id. */
+data class PluginGroup(val id: Long, val leader: PluginActor, val members: List<PluginActor>)
+
 /** What the world's `MODULE.gups` declares. */
 data class PluginSchema(
   val stats: List<PluginNamed>,
@@ -445,6 +694,9 @@ interface PluginRng {
 
   /** True with probability [pct] percent, as `ctx.rng.chance`. */
   fun chance(pct: Int): Boolean
+
+  /** One element of [items], uniformly, as `ctx.rng.choice`; an empty list throws. */
+  fun <T> choice(items: List<T>): T = throw UnsupportedOperationException("choice is not supported")
 }
 
 interface PluginEntity {
@@ -461,10 +713,21 @@ interface PluginRoom : PluginEntity {
   val tags: List<String>
   val size: String
 
+  /** The room's description. */
+  val desc: String
+    get() = throw UnsupportedOperationException("desc is not supported")
+
+  /** Names of the room's live affects, in id order. */
+  val affects: List<String>
+    get() = throw UnsupportedOperationException("affects is not supported")
+
   /** Direction → destination room label. */
   val exits: Map<String, String>
   val actors: List<PluginActor>
   val items: List<PluginItem>
+
+  /** The exit in direction [dir], or null when there is none. */
+  fun exit(dir: String): PluginExit? = throw UnsupportedOperationException("exit is not supported")
 }
 
 interface PluginActor : PluginEntity {
@@ -535,6 +798,94 @@ interface PluginActor : PluginEntity {
   /** True while the actor warms up a cast or runs a timed task. */
   val isBusy: Boolean
     get() = false
+
+  /** The in-world player that owns this mob (a pet), or null. */
+  val owner: PluginActor?
+    get() = throw UnsupportedOperationException("owner is not supported")
+
+  /** A mob's home room, or null for a player. */
+  val homeRoom: PluginRoom?
+    get() = throw UnsupportedOperationException("homeRoom is not supported")
+
+  /** A mob's effective leash; null for no leash or for a player. */
+  val leash: Int?
+    get() = throw UnsupportedOperationException("leash is not supported")
+
+  /** True while a leash override is in place; false for players and unoverridden mobs. */
+  val leashOverridden: Boolean
+    get() = throw UnsupportedOperationException("leashOverridden is not supported")
+
+  /** Actors engaged with this one, by id; needs the `combat` feature. */
+  val fighting: List<PluginActor>
+    get() = throw UnsupportedOperationException("fighting is not supported")
+
+  /** The actor this one is attacking, or null when it has no target or is not engaged. */
+  val primaryTarget: PluginActor?
+    get() = throw UnsupportedOperationException("primaryTarget is not supported")
+
+  /** False once the actor has died (mobs) or quit (players); how a plugin checks staleness. */
+  val inWorld: Boolean
+    get() = throw UnsupportedOperationException("inWorld is not supported")
+
+  /** Words that match this actor when targeting. */
+  val keywords: List<String>
+    get() = throw UnsupportedOperationException("keywords is not supported")
+
+  /** Current experience points; needs the `leveling` feature. */
+  val xp: Long
+    get() = throw UnsupportedOperationException("xp is not supported")
+
+  /** "ok", "incapacitated" or "dead". */
+  val condition: String
+    get() = throw UnsupportedOperationException("condition is not supported")
+
+  /** Effective score per declared channel. */
+  val senses: Map<String, Int>
+    get() = throw UnsupportedOperationException("senses is not supported")
+
+  /** The pulse [vital] last dropped below 0, or null. */
+  fun belowZeroSince(vital: String): Long? =
+    throw UnsupportedOperationException("belowZeroSince is not supported")
+
+  /** Weight of everything carried and worn. */
+  val carriedWeight: Int
+    get() = throw UnsupportedOperationException("carriedWeight is not supported")
+
+  /** The encumbrance level last worked out; 0 while it is unencumbered. */
+  val encumbranceLevel: Int
+    get() = throw UnsupportedOperationException("encumbranceLevel is not supported")
+
+  /** True while the actor is in casting warmup; needs the `skills` feature. */
+  val isCasting: Boolean
+    get() = throw UnsupportedOperationException("isCasting is not supported")
+
+  /** The skill being cast, or null; needs the `skills` feature. */
+  val casting: PluginSkill?
+    get() = throw UnsupportedOperationException("casting is not supported")
+
+  /** True if a trait, an affect or an item affect gives [flag]. */
+  fun hasFlag(flag: String): Boolean =
+    throw UnsupportedOperationException("hasFlag is not supported")
+
+  /** Whether the actor carries or wears an item of prototype [label]. */
+  fun hasItem(label: String): Boolean =
+    throw UnsupportedOperationException("hasItem is not supported")
+
+  /** Equipment slots this actor currently has. */
+  val slots: List<String>
+    get() = throw UnsupportedOperationException("slots is not supported")
+
+  /** Recovery pulses left. */
+  val waitState: Int
+    get() = throw UnsupportedOperationException("waitState is not supported")
+
+  /** Hundredths of a pulse per room; 100 is one room per pulse. */
+  val movePace: Int
+    get() = throw UnsupportedOperationException("movePace is not supported")
+
+  /** A player's recall room, or null for a mob. */
+  val recallRoom: PluginRoom?
+    get() = throw UnsupportedOperationException("recallRoom is not supported")
 }
 
 interface PluginItem : PluginEntity {
@@ -579,6 +930,10 @@ interface PluginItem : PluginEntity {
    */
   val affects: List<PluginItemAffect>
 
+  /** "open", "closed" or "locked"; null for an item that isn't a container. */
+  val containerState: String?
+    get() = throw UnsupportedOperationException("containerState is not supported")
+
   /** Items inside this container, ascending id. */
   val contents: List<PluginItem>
 
@@ -593,6 +948,26 @@ interface PluginItem : PluginEntity {
 
   /** Where this item is. */
   val location: PluginItemLocation
+
+  /** False once the item has been destroyed or decayed; how a plugin checks staleness. */
+  val inWorld: Boolean
+    get() = throw UnsupportedOperationException("inWorld is not supported")
+
+  /** Weapon damage dice such as "1d6", or null. */
+  val dice: String?
+    get() = throw UnsupportedOperationException("dice is not supported")
+
+  /** Weapon damage type, or the world's unarmed type. */
+  val damageType: String
+    get() = throw UnsupportedOperationException("damageType is not supported")
+
+  /** Stat changes while worn, by stat name. */
+  val statDeltas: Map<String, Int>
+    get() = throw UnsupportedOperationException("statDeltas is not supported")
+
+  /** Sense score changes by channel while worn. */
+  val senseDeltas: Map<String, Int>
+    get() = throw UnsupportedOperationException("senseDeltas is not supported")
 }
 
 /** Where an item is, as [PluginItem.location] reports it. */
@@ -627,6 +1002,20 @@ data class PluginItemAffect(
   /** Damage resistance adjustments while the affect reaches the holder, by damage type. */
   val resistDeltas: Map<String, Int> = emptyMap(),
 )
+
+/** An exit as a plugin sees it; read when the view is taken. */
+data class PluginExit(
+  val direction: String,
+  val to: String,
+  val tags: List<String>,
+  val door: PluginDoor?,
+  val key: String?,
+  val passable: Boolean,
+  val oneWay: Boolean,
+)
+
+/** A door's state as a plugin sees it: "open", "closed" or "locked". */
+data class PluginDoor(val state: String, val key: String?, val tags: List<String>)
 
 interface PluginSkill {
   val label: String

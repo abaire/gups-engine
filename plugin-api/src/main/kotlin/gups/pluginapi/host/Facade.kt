@@ -3,10 +3,19 @@ package gups.pluginapi.host
 import gups.core.AttrValue
 import gups.core.Label
 import gups.core.Rng
+import gups.core.ai.FactValue
+import gups.core.ai.GoapAction
+import gups.core.ai.GoapPlanner
+import gups.core.ai.PlanResult
 import gups.core.model.Actor
 import gups.core.model.AffectScope
+import gups.core.model.Band
 import gups.core.model.Channel
 import gups.core.model.DamageType
+import gups.core.model.Dice
+import gups.core.model.Direction
+import gups.core.model.DoorState
+import gups.core.model.Effect
 import gups.core.model.Entity
 import gups.core.model.Item
 import gups.core.model.ItemLocation
@@ -21,6 +30,7 @@ import gups.core.model.didYouMean
 import gups.core.rules.RulesContext
 import gups.core.world.AffectSpec
 import gups.core.world.BUILTIN_STANDING_EVENTS
+import gups.core.world.Castable
 import gups.core.world.Diagnostic
 import gups.core.world.Feature
 import gups.core.world.GMCP_PACKAGE_NAME
@@ -29,25 +39,47 @@ import gups.core.world.STANDING_EVENT_NAME
 import gups.core.world.StandingEvent
 import gups.core.world.TaskSpec
 import gups.core.world.World
+import gups.core.world.act
+import gups.core.world.actAdvance
+import gups.core.world.actAttack
+import gups.core.world.actCast
+import gups.core.world.actMove
+import gups.core.world.actorSlots
 import gups.core.world.addItemTag
 import gups.core.world.applyAffect
 import gups.core.world.applyItemAffect
 import gups.core.world.applyStanding
 import gups.core.world.awardXp
+import gups.core.world.carriedWeight
+import gups.core.world.clearActive
+import gups.core.world.clearAnchor
+import gups.core.world.clearContributions
+import gups.core.world.clearOwner
+import gups.core.world.clearStanding
 import gups.core.world.custodian
 import gups.core.world.damage
 import gups.core.world.destroy
 import gups.core.world.disposition
 import gups.core.world.echo
+import gups.core.world.emote
 import gups.core.world.factionsOf
 import gups.core.world.fits
 import gups.core.world.forget
 import gups.core.world.gmcp
 import gups.core.world.gmcpWithin
 import gups.core.world.grantTrait
+import gups.core.world.groupAdd
+import gups.core.world.groupDisband
+import gups.core.world.groupMembers
+import gups.core.world.groupOf
+import gups.core.world.groupRemove
+import gups.core.world.groupSetLeader
 import gups.core.world.heal
 import gups.core.world.heldAffects
+import gups.core.world.isDying
 import gups.core.world.isInactive
+import gups.core.world.isSimulated
+import gups.core.world.leash
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.mayDrop
@@ -59,7 +91,12 @@ import gups.core.world.mayRemove
 import gups.core.world.mayWear
 import gups.core.world.memoriesOf
 import gups.core.world.moveItem
+import gups.core.world.movePaceOf
+import gups.core.world.opponentsOf
+import gups.core.world.ownerOf
+import gups.core.world.pathTo
 import gups.core.world.pendingLevels
+import gups.core.world.perceive
 import gups.core.world.raiseStandingEvent
 import gups.core.world.remember
 import gups.core.world.removeAffect
@@ -69,19 +106,31 @@ import gups.core.world.removeSkill
 import gups.core.world.removeTrait
 import gups.core.world.removeWornItem
 import gups.core.world.reportSkillUse
+import gups.core.world.resetLeash
+import gups.core.world.say
 import gups.core.world.send
+import gups.core.world.setActive
+import gups.core.world.setAnchor
 import gups.core.world.setBaseMaxVital
 import gups.core.world.setBaseResist
 import gups.core.world.setBaseStat
 import gups.core.world.setCharges
 import gups.core.world.setChoices
+import gups.core.world.setContainerState
+import gups.core.world.setDoor
 import gups.core.world.setItemName
+import gups.core.world.setLeash
+import gups.core.world.setOwner
 import gups.core.world.setSkill
 import gups.core.world.spawnItem
 import gups.core.world.stack
 import gups.core.world.standing
+import gups.core.world.standingHistory
+import gups.core.world.startCombat
 import gups.core.world.startTask
+import gups.core.world.stopCombat
 import gups.core.world.stopTask
+import gups.core.world.summon
 import gups.core.world.takeXp
 import gups.core.world.taskOf
 import gups.core.world.teleport
@@ -89,21 +138,26 @@ import gups.core.world.traceRules
 import gups.core.world.transformItem
 import gups.core.world.wearItem
 import gups.pluginapi.PluginActor
+import gups.pluginapi.PluginDoor
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginExit
 import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
+import gups.pluginapi.PluginGroup
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginItemAffect
 import gups.pluginapi.PluginItemInfo
 import gups.pluginapi.PluginItemLocation
 import gups.pluginapi.PluginMemory
 import gups.pluginapi.PluginNamed
+import gups.pluginapi.PluginPlanAction
 import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginSkill
 import gups.pluginapi.PluginSkillRoll
+import gups.pluginapi.PluginStandingTotals
 import gups.pluginapi.PluginTask
 import gups.pluginapi.PluginTaskCall
 import gups.pluginapi.PluginTaskInterrupt
@@ -214,6 +268,12 @@ internal class RoomFacade(val room: Room, private val world: World) :
       return room.proto.size.name.lowercase()
     }
 
+  override val desc: String
+    get() = room.proto.desc
+
+  override val affects: List<String>
+    get() = room.liveAffects(world.roomClock).map { it.name }
+
   override val exits: Map<String, String>
     get() = room.exits.values.associate { it.direction.name to it.to.v }
 
@@ -222,6 +282,19 @@ internal class RoomFacade(val room: Room, private val world: World) :
 
   override val items: List<PluginItem>
     get() = room.items.map { ItemFacade(it, world) }
+
+  override fun exit(dir: String): PluginExit? {
+    val x = room.exits[Direction.parse(dir)] ?: return null
+    return PluginExit(
+      direction = x.direction.name,
+      to = x.to.v,
+      tags = x.tags.sorted(),
+      door = x.door?.let { PluginDoor(it.state.name.lowercase(), it.key?.v, it.tags.sorted()) },
+      key = x.door?.key?.v,
+      passable = x.passable,
+      oneWay = x.oneWay,
+    )
+  }
 }
 
 /** Fails with an `IllegalStateException` naming [feature] when [world] has it off. */
@@ -334,6 +407,96 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
 
   override val isBusy: Boolean
     get() = actor.isBusy
+
+  override val owner: PluginActor?
+    get() = world.ownerOf(actor)?.let { ActorFacade(it, world) }
+
+  override val homeRoom: PluginRoom?
+    get() = (actor as? Mob)?.homeRoom?.let { world.roomOrNull(it) }?.let { RoomFacade(it, world) }
+
+  override val leash: Int?
+    get() = (actor as? Mob)?.leash
+
+  override val leashOverridden: Boolean
+    get() = (actor as? Mob)?.leashOverride != null
+
+  override val fighting: List<PluginActor>
+    get() {
+      needs(world, Feature.COMBAT, "fighting")
+      return actor.fighting.mapNotNull { world.actor(it) }.map { ActorFacade(it, world) }
+    }
+
+  override val primaryTarget: PluginActor?
+    get() {
+      needs(world, Feature.COMBAT, "primaryTarget")
+      return actor.primaryTarget
+        ?.takeIf { it in actor.fighting }
+        ?.let { world.actor(it) }
+        ?.let { ActorFacade(it, world) }
+    }
+
+  override val inWorld: Boolean
+    get() = actor.inWorld
+
+  override val keywords: List<String>
+    get() = actor.keywords
+
+  override val xp: Long
+    get() {
+      needs(world, Feature.LEVELING, "xp")
+      return actor.xp
+    }
+
+  override val condition: String
+    get() = actor.condition.word
+
+  override val senses: Map<String, Int>
+    get() = actor.effectiveSenses(world.schema.allChannels).mapKeys { it.key.name }
+
+  override fun belowZeroSince(vital: String): Long? {
+    val name = declared(vital, schema.vitalNames, "vital", "belowZeroSince(vital)")
+    return actor.vitals.getValue(name).belowZeroSince
+  }
+
+  override val carriedWeight: Int
+    get() = actor.carriedWeight()
+
+  override val encumbranceLevel: Int
+    get() = actor.encumbranceLevel
+
+  override val isCasting: Boolean
+    get() {
+      needs(world, Feature.SKILLS, "isCasting")
+      return actor.isCasting
+    }
+
+  override val casting: PluginSkill?
+    get() {
+      needs(world, Feature.SKILLS, "casting")
+      return (actor.activity?.action as? Castable)?.skill?.let { SkillFacade(it) }
+    }
+
+  override fun hasFlag(flag: String): Boolean = actor.hasFlag(flag)
+
+  override fun hasItem(label: String): Boolean {
+    val l =
+      runCatching { Label(label) }.getOrNull()
+        ?: throw IllegalArgumentException("hasItem(label): '$label' is not an item")
+    return (actor.inventory + actor.equipment.values).any { it.protoLabel == l }
+  }
+
+  override val slots: List<String>
+    get() = world.actorSlots(actor)
+
+  override val waitState: Int
+    get() = actor.waitState
+
+  override val movePace: Int
+    get() = world.movePaceOf(RulesContext(world, actor))
+
+  override val recallRoom: PluginRoom?
+    get() =
+      (actor as? Player)?.recallRoom?.let { world.roomOrNull(it) }?.let { RoomFacade(it, world) }
 }
 
 internal class ItemFacade(val item: Item, private val world: World) :
@@ -385,6 +548,9 @@ internal class ItemFacade(val item: Item, private val world: World) :
   override val affects: List<PluginItemAffect>
     get() = item.heldAffects().map(::toPlugin)
 
+  override val containerState: String?
+    get() = item.container?.state?.name?.lowercase()
+
   override val contents: List<PluginItem>
     get() = item.contents.map { ItemFacade(it, world) }
 
@@ -409,6 +575,21 @@ internal class ItemFacade(val item: Item, private val world: World) :
         is ItemLocation.Contained ->
           PluginItemLocation.InContainer(ItemFacade(world.item(l.container)!!, world))
       }
+
+  override val inWorld: Boolean
+    get() = world.item(item.id) === item
+
+  override val dice: String?
+    get() = item.proto.dice?.toString()
+
+  override val damageType: String
+    get() = item.proto.damageType?.name ?: world.schema.unarmedDamageType
+
+  override val statDeltas: Map<String, Int>
+    get() = item.proto.statDeltas
+
+  override val senseDeltas: Map<String, Int>
+    get() = item.proto.senseDeltas.mapKeys { it.key.name }
 }
 
 internal fun toPlugin(ha: HeldAffect): PluginItemAffect =
@@ -446,6 +627,11 @@ internal class RngFacade(private val rngSupplier: () -> Rng) : PluginRng {
   override fun int(min: Int, max: Int): Int = rngSupplier().int(min, max)
 
   override fun chance(pct: Int): Boolean = rngSupplier().chance(pct)
+
+  override fun <T> choice(items: List<T>): T {
+    require(items.isNotEmpty()) { "choice(): the list is empty" }
+    return rngSupplier().choice(items)
+  }
 }
 
 /** The fields of [PluginWorld.rules] that become `ctx` fields of the same name. */
@@ -466,6 +652,18 @@ internal class WorldFacade(
       (a as? ActorFacade)?.actor
         ?: throw IllegalArgumentException("$what: not an actor of this world")
     require(actor.inWorld) { "$what: ${actor.name} is no longer in the world" }
+    return actor
+  }
+
+  private fun mobOf(a: PluginActor, what: String): Mob {
+    val actor = actorOf(a, what)
+    if (actor !is Mob) throw IllegalArgumentException("$what: must be a mob")
+    return actor
+  }
+
+  private fun playerOf(a: PluginActor, what: String): Player {
+    val actor = actorOf(a, what)
+    if (actor !is Player) throw IllegalArgumentException("$what: must be a player")
     return actor
   }
 
@@ -552,10 +750,15 @@ internal class WorldFacade(
     )
   }
 
-  override fun heal(target: PluginActor, amount: Int, vital: String) {
+  override fun heal(target: PluginActor, amount: Int, vital: String, source: PluginActor?) {
     require(amount >= 0) { "heal(amount): can't be negative; use damage()" }
     val name = declared(vital, world.schema.vitalNames, "vital", "heal(vital)")
-    world.heal(actorOf(target, "heal(target)"), name, amount)
+    world.heal(
+      actorOf(target, "heal(target)"),
+      name,
+      amount,
+      source?.let { actorOf(it, "heal(source)") },
+    )
   }
 
   override fun applyAffect(
@@ -782,6 +985,12 @@ internal class WorldFacade(
     return l
   }
 
+  private fun mobLabel(label: String, what: String): Label {
+    val l = runCatching { Label(label) }.getOrNull()
+    require(l != null && world.protos.mobs.containsKey(l)) { "$what: '$label' is not a mob" }
+    return l
+  }
+
   private fun fitsTarget(to: PluginEntity): Entity {
     val target = entityOf(to, "fits(to)")
     require(target !is Item || target.container != null) {
@@ -934,6 +1143,343 @@ internal class WorldFacade(
     return world.levelDown(actorOf(actor, "levelDown(actor)"), count)
   }
 
+  // Doors and containers, as `ctx` sets them: no hook runs, no key is named, nothing is
+  // printed; locking a door or container without a key fails.
+
+  private fun door(room: PluginRoom, dir: String, verb: String, to: (DoorState) -> DoorState) {
+    val r = roomOf(room, "$verb(room)")
+    val d = Direction.parse(dir)
+    val door =
+      r.exits[d]?.door ?: throw IllegalArgumentException("$verb(): ${r.label} has no door $d")
+    world.setDoor(r, d, to(door.state))
+  }
+
+  override fun openDoor(room: PluginRoom, dir: String) =
+    door(room, dir, "openDoor") { DoorState.OPEN }
+
+  override fun closeDoor(room: PluginRoom, dir: String) =
+    door(room, dir, "closeDoor") { if (it == DoorState.LOCKED) it else DoorState.CLOSED }
+
+  override fun lockDoor(room: PluginRoom, dir: String) =
+    door(room, dir, "lockDoor") { DoorState.LOCKED }
+
+  override fun unlockDoor(room: PluginRoom, dir: String) =
+    door(room, dir, "unlockDoor") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
+
+  private fun container(item: PluginItem, verb: String, to: (DoorState) -> DoorState) {
+    val i = itemOf(item, "$verb(item)")
+    val box =
+      i.container ?: throw IllegalArgumentException("$verb(item): ${i.name} is not a container")
+    world.setContainerState(i, to(box.state))
+  }
+
+  override fun openContainer(item: PluginItem) = container(item, "openContainer") { DoorState.OPEN }
+
+  override fun closeContainer(item: PluginItem) =
+    container(item, "closeContainer") { if (it == DoorState.LOCKED) it else DoorState.CLOSED }
+
+  override fun lockContainer(item: PluginItem) =
+    container(item, "lockContainer") { DoorState.LOCKED }
+
+  override fun unlockContainer(item: PluginItem) =
+    container(item, "unlockContainer") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
+
+  override fun say(speaker: PluginActor, text: String) {
+    world.say(actorOf(speaker, "say(speaker)"), text)
+  }
+
+  override fun emote(actor: PluginActor, text: String) {
+    world.emote(actorOf(actor, "emote(actor)"), text)
+  }
+
+  override fun emit(
+    room: PluginRoom,
+    channel: String,
+    event: String,
+    intensity: Int,
+    text: String?,
+    actor: PluginActor?,
+  ) {
+    declared(channel, world.schema.allChannels.map { it.name }, "channel", "emit(channel)")
+    require(event.isNotBlank()) { "emit(event): must not be empty" }
+    val at = roomOf(room, "emit(room)")
+    val cause = actor?.let { actorOf(it, "emit(actor)") }
+    if (intensity > 0) world.perceive(event, Channel(channel), at, cause, text, intensity)
+  }
+
+  /** A non-empty simulation reason, as the `ctx` reason verbs require. */
+  private fun simReason(reason: String, verb: String): String {
+    require(reason.isNotEmpty()) { "$verb(reason): must not be empty" }
+    return reason
+  }
+
+  override fun setActive(entity: PluginEntity, reason: String) {
+    world.setActive(entityOf(entity, "setActive(entity)"), simReason(reason, "setActive"))
+  }
+
+  override fun clearActive(entity: PluginEntity, reason: String) {
+    world.clearActive(entityOf(entity, "clearActive(entity)"), simReason(reason, "clearActive"))
+  }
+
+  override fun setAnchor(entity: PluginEntity, reason: String) {
+    world.setAnchor(entityOf(entity, "setAnchor(entity)"), simReason(reason, "setAnchor"))
+  }
+
+  override fun clearAnchor(entity: PluginEntity, reason: String) {
+    world.clearAnchor(entityOf(entity, "clearAnchor(entity)"), simReason(reason, "clearAnchor"))
+  }
+
+  override fun clearStanding(holder: Any, subject: Any?) {
+    needs(world, Feature.STANDING, "clearStanding")
+    val h = standingHolder(holder, "clearStanding")
+    val sub = subject?.let { standingSubject(it, h, "clearStanding") }
+    world.clearStanding(h, sub)
+  }
+
+  override fun standingHistory(
+    holder: Any,
+    subject: Any,
+    since: Long,
+    via: PluginActor?,
+    event: String?,
+  ): PluginStandingTotals {
+    needs(world, Feature.STANDING, "standingHistory")
+    val h = standingHolder(holder, "standingHistory")
+    val sub = standingSubject(subject, h, "standingHistory")
+    val viaId = via?.let { mobOf(it, "standingHistory(via)").id }
+    val totals = world.standingHistory(h, sub, since.coerceAtLeast(0L), viaId, event)
+    return PluginStandingTotals(totals.gained, totals.lost)
+  }
+
+  override fun roll(dice: String): Int {
+    val d =
+      try {
+        Dice.parse(dice)
+      } catch (e: IllegalArgumentException) {
+        throw IllegalArgumentException("roll(): ${e.message}", e)
+      }
+    return d.roll(world.rng)
+  }
+
+  // Mobs: spawning, actions, summons, owners and leashes.
+
+  override fun spawnMob(label: String, room: PluginRoom, count: Int): List<PluginActor> {
+    val l = mobLabel(label, "spawnMob(label)")
+    require(count >= 1) { "spawnMob(count): must be at least 1" }
+    val r = roomOf(room, "spawnMob(room)")
+    return List(count) { world.spawnMob(l, r, 0) }.map { ActorFacade(it, world) }
+  }
+
+  override fun act(mob: PluginActor, commandLine: String): Boolean =
+    world.act(mobOf(mob, "act(mob)"), commandLine)
+
+  override fun actMove(mob: PluginActor, dir: String): Boolean =
+    world.actMove(mobOf(mob, "actMove(mob)"), Direction.parse(dir))
+
+  override fun actAttack(mob: PluginActor, target: PluginActor): Boolean {
+    needs(world, Feature.COMBAT, "actAttack")
+    return world.actAttack(mobOf(mob, "actAttack(mob)"), actorOf(target, "actAttack(target)"))
+  }
+
+  override fun actCast(mob: PluginActor, skill: String, target: PluginActor?): Boolean {
+    needs(world, Feature.SKILLS, "actCast")
+    val proto =
+      world.protos.skills[skillLabel(skill, "actCast")]
+        ?: throw IllegalArgumentException("actCast(skill): there is no skill $skill")
+    return world.actCast(
+      mobOf(mob, "actCast(mob)"),
+      proto,
+      target?.let { actorOf(it, "actCast(target)") },
+    )
+  }
+
+  override fun moveToward(mob: PluginActor, dir: String): Boolean =
+    world.actMove(mobOf(mob, "moveToward(mob)"), Direction.parse(dir))
+
+  override fun moveToward(mob: PluginActor, room: PluginRoom): Boolean {
+    val m = mobOf(mob, "moveToward(mob)")
+    val dest = roomOf(room, "moveToward(room)")
+    val step = world.pathTo(m.room, dest)?.firstOrNull() ?: return false
+    return world.actMove(m, step)
+  }
+
+  override fun moveToward(mob: PluginActor, target: PluginActor): Boolean {
+    val m = mobOf(mob, "moveToward(mob)")
+    val t = actorOf(target, "moveToward(target)")
+    if (t.room === m.room) {
+      return if (t.trackIndex == m.trackIndex) false else world.actAdvance(m, t)
+    }
+    val step = world.pathTo(m.room, t.room)?.firstOrNull() ?: return false
+    return world.actMove(m, step)
+  }
+
+  override fun summon(
+    caster: PluginActor,
+    label: String,
+    count: Int,
+    duration: Int?,
+  ): List<PluginActor> {
+    val l = mobLabel(label, "summon(label)")
+    require(count >= 1) { "summon(count): must be at least 1" }
+    require(duration == null || duration >= 1) { "summon(duration): must be at least 1" }
+    val c = actorOf(caster, "summon(caster)")
+    return world.summon(c, Effect.Summon(l, count, duration)).map { ActorFacade(it, world) }
+  }
+
+  override fun setOwner(mob: PluginActor, player: PluginActor): Boolean =
+    world.setOwner(mobOf(mob, "setOwner(mob)"), playerOf(player, "setOwner(player)"))
+
+  override fun clearOwner(mob: PluginActor): Boolean =
+    world.clearOwner(mobOf(mob, "clearOwner(mob)"))
+
+  override fun setLeash(mob: PluginActor, leash: Int?) {
+    val m = mobOf(mob, "setLeash(mob)")
+    require(leash == null || leash >= 0) { "setLeash(leash): must be an int of at least 0 or null" }
+    world.setLeash(m, leash)
+  }
+
+  override fun resetLeash(mob: PluginActor) {
+    world.resetLeash(mobOf(mob, "resetLeash(mob)"))
+  }
+
+  // Combat and groups, as `ctx` engages and manages them.
+
+  override fun startCombat(a: PluginActor, b: PluginActor) {
+    needs(world, Feature.COMBAT, "startCombat")
+    val x = actorOf(a, "startCombat(a)")
+    val y = actorOf(b, "startCombat(b)")
+    if (x === y) throw IllegalArgumentException("startCombat(): an actor can't fight itself")
+    if (x.room !== y.room)
+      throw IllegalArgumentException(
+        "startCombat(): ${x.name} and ${y.name} are not in the same room"
+      )
+    for (d in listOf(x, y)) if (world.isDying(d))
+      throw IllegalArgumentException("startCombat(): ${d.name} is dying")
+    world.startCombat(x, y)
+  }
+
+  override fun stopCombat(a: PluginActor, b: PluginActor?) {
+    needs(world, Feature.COMBAT, "stopCombat")
+    world.stopCombat(actorOf(a, "stopCombat(a)"), b?.let { actorOf(it, "stopCombat(b)") })
+  }
+
+  override fun clearContributions(victim: PluginActor, contributor: PluginActor?) {
+    world.clearContributions(
+      actorOf(victim, "clearContributions(victim)"),
+      contributor?.let { actorOf(it, "clearContributions(contributor)") },
+    )
+  }
+
+  override fun groupAdd(member: PluginActor, to: PluginActor) {
+    world.groupAdd(playerOf(member, "groupAdd(member)"), playerOf(to, "groupAdd(to)"))
+  }
+
+  override fun groupRemove(member: PluginActor) {
+    world.groupRemove(playerOf(member, "groupRemove(member)"))
+  }
+
+  override fun groupSetLeader(member: PluginActor) {
+    world.groupSetLeader(playerOf(member, "groupSetLeader(member)"))
+  }
+
+  override fun groupDisband(member: PluginActor) {
+    world.groupDisband(playerOf(member, "groupDisband(member)"))
+  }
+
+  // World queries, as `ctx` answers them.
+
+  private fun bandOf(band: String, what: String): Band =
+    try {
+      Band.parse(band)
+    } catch (e: IllegalArgumentException) {
+      throw IllegalArgumentException("$what(band): '$band' is not one of 'melee', 'near', 'far'", e)
+    }
+
+  /** Actors of [a]'s room within [reach] that are simulated, excluding [a] itself. */
+  private fun nearby(a: Actor, reach: Band): List<Actor> =
+    a.room.actors.filter {
+      it !== a && world.isSimulated(it) && reach.reaches(Band.between(a.trackIndex, it.trackIndex))
+    }
+
+  override fun enemiesNear(actor: PluginActor, band: String): List<PluginActor> {
+    needs(world, Feature.COMBAT, "enemiesNear")
+    val a = actorOf(actor, "enemiesNear(actor)")
+    val foes = world.opponentsOf(a).toSet()
+    return nearby(a, bandOf(band, "enemiesNear"))
+      .filter { it in foes }
+      .map { ActorFacade(it, world) }
+  }
+
+  override fun alliesNear(actor: PluginActor, band: String): List<PluginActor> {
+    needs(world, Feature.COMBAT, "alliesNear")
+    val a = actorOf(actor, "alliesNear(actor)")
+    val ga = world.groupOf(a)
+    return nearby(a, bandOf(band, "alliesNear"))
+      .filter { x ->
+        x.id !in a.fighting && (x.isPlayer == a.isPlayer || (ga != null && world.groupOf(x) === ga))
+      }
+      .map { ActorFacade(it, world) }
+  }
+
+  override fun pathTo(from: PluginRoom, to: PluginRoom): List<String>? =
+    world.pathTo(roomOf(from, "pathTo(from)"), roomOf(to, "pathTo(to)"))?.map { it.name }
+
+  override fun plan(
+    facts: Map<String, Any>,
+    actions: List<PluginPlanAction>,
+    goal: Map<String, Any>,
+    maxExpansions: Int,
+  ): List<String>? {
+    val res =
+      GoapPlanner.plan(
+        planFactMap(facts, "facts"),
+        actions.map {
+          GoapAction(
+            name = it.name,
+            cost = it.cost,
+            pre = planFactMap(it.pre, "pre of '${it.name}'"),
+            effects = planFactMap(it.effects, "effects of '${it.name}'"),
+          )
+        },
+        planFactMap(goal, "goal"),
+        maxExpansions,
+      )
+    return when (res) {
+      is PlanResult.Found -> res.steps
+      is PlanResult.NotFound -> null
+    }
+  }
+
+  /** A planning fact map for [GoapPlanner.plan]; values must be Boolean, Int, Long or String. */
+  private fun planFactMap(v: Map<String, Any>, what: String): Map<String, FactValue> =
+    v.mapValues { (k, value) ->
+      when (value) {
+        is Boolean -> FactValue.Bool(value)
+        is Int -> FactValue.Num(value.toLong())
+        is Long -> FactValue.Num(value)
+        is String -> FactValue.Text(value)
+        else ->
+          throw IllegalArgumentException(
+            "plan($what): fact '$k' must be a Boolean, Int, Long or String"
+          )
+      }
+    }
+
+  override fun groupOf(actor: PluginActor): PluginGroup? {
+    val a = actorOf(actor, "groupOf(actor)")
+    val g = world.groupOf(a) ?: return null
+    return PluginGroup(
+      g.id.toLong(),
+      ActorFacade(g.leader, world),
+      world.groupMembers(a).map { ActorFacade(it, world) },
+    )
+  }
+
+  override fun groupMembers(actor: PluginActor): List<PluginActor> {
+    val a = actorOf(actor, "groupMembers(actor)")
+    return world.groupMembers(a).map { ActorFacade(it, world) }
+  }
+
   override fun disposition(holder: PluginActor, subject: PluginActor): Int {
     needs(world, Feature.STANDING, "disposition")
     return world.disposition(
@@ -1061,12 +1607,6 @@ internal class WorldFacade(
     val m = mobOf(mob, "forget(mob)")
     val subId = subject?.let { actorOf(it, "forget(subject)").id }
     return world.forget(m, subId, event)
-  }
-
-  private fun mobOf(a: PluginActor, what: String): Mob {
-    val actor = actorOf(a, what)
-    if (actor !is Mob) throw IllegalArgumentException("$what: ${actor.name} is not a mob")
-    return actor
   }
 
   private fun standingHolder(holder: Any, fn: String): StandingHolder =

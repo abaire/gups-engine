@@ -64,12 +64,13 @@ The engine finds it with `ServiceLoader`. The jar must have exactly one provider
 
 Plugins never see the engine's `World` or entities. They get a `PluginWorld` facade:
 
-- **verbs:** `send`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`, `getAttr`, `setAttr` and
-  `delAttr`. Each does what the `ctx` verb of the same name does, so the engine's invariants hold. `teleport` asks the
-  `enter` restriction and `before_enter` first, and returns the refusal or veto, or null once the actor has moved.
-  Attribute keys without `ns:` are in the plugin's own namespace (its id), and a plugin writes only its own namespace.
-  `damage(target, amount, type, vital)` and `heal(target, amount, vital)` name the vital they change, as the `ctx` verbs
-  do.
+- **verbs:** `send`, `gmcp`, `echo`, `damage`, `heal`, `applyAffect`, `removeAffect`, `teleport`, `getAttr`, `setAttr`
+  and `delAttr`. Each (except `gmcp`, which sends a GMCP event to a client) does what the `ctx` verb of the same name
+  does, so the engine's invariants hold. `teleport` asks the `enter` restriction and `before_enter` first, and returns
+  the refusal or veto, or null once the actor has moved. Attribute keys without `ns:` are in the plugin's own namespace
+  (its id), and a plugin writes only its own namespace. `damage(target, amount, type, vital, source)` and `heal(target,
+  amount, vital, source)` name the vital they change, as the `ctx` verbs do. A `source` passed to either is credited
+  with the effect.
 - **skills and items:** `skillRoll(actor, skill, item, target, event = "craft", adjust = 0)` rolls a skill outside a
   cast and returns a `PluginSkillRoll(chance, roll, success, power)`, as `ctx.skill_roll` does (it throws
   `IllegalStateException` naming `skills` when that feature is off); `setItemName(item, name)` sets or clears an item's
@@ -89,15 +90,61 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
 - **leveling:** `awardXp(actor, amount)`, `takeXp(actor, amount)`, `levelUp(actor)` and `levelDown(actor, count = 1)` do
   what `ctx.award_xp`, `ctx.take_xp`, `ctx.level_up` and `ctx.level_down` do. They throw `IllegalStateException` naming
   `leveling` when the feature is off, and `IllegalArgumentException` when `amount` or `count` is below 1.
+- **doors and containers:** `openDoor(room, dir)`, `closeDoor`, `lockDoor`, `unlockDoor`, `openContainer(item)`,
+  `closeContainer`, `lockContainer` and `unlockContainer` set the exit's or container's state, and `room.exit(dir)`
+  returns a `PluginExit(direction, to, tags, door, key, passable, oneWay)` view of the exit, where `door` is a
+  `PluginDoor(state, key, tags)`, null when the room has no exit in that direction, while `item.containerState` reads a
+  container's state, null for an item that isn't a container. The door and container verbs follow `ctx`: they run no
+  hook, take no key and print nothing, and locking fails on a door or container without a `key`.
+- **messaging and simulation:** `say(speaker, text)` and `emote(actor, text)` speak as a named actor at once, as
+  `ctx.say` and `ctx.emote` do. `emit(room, channel, event, intensity = 1, text = null, actor = null)` raises a
+  perceivable event on a declared channel; an `intensity` of 0 or less emits nothing, and an unknown channel throws with
+  a suggestion. `setActive(entity, reason)`, `clearActive`, `setAnchor(entity, reason)` and `clearAnchor` add and remove
+  named reasons that keep an entity simulated or projecting a bubble, as `ctx.set_active` and friends do;
+  `clearStanding(holder, subject = null)` removes a holder's standing records, and `roll(dice)` rolls a dice expression
+  such as `2d6+1` with the world's RNG.
+- **mobs:** `spawnMob(label, room, count = 1)` makes `count` mobs as `ctx.spawn` does for a mob label and returns them:
+  no owner, no leash override and no spawn rule, a home room equal to `room`, at track index 0. `act(mob, commandLine)`,
+  `actMove(mob, dir)`, `actAttack(mob, target)` and `actCast(mob, skill, target = null)` queue tick-lane actions for a
+  mob, never a player, and return whether the action was queued; `actAttack` needs the `combat` feature and `actCast`
+  the `skills` feature. `moveToward(mob, dir)`, `moveToward(mob, room)` and `moveToward(mob, target)` queue one step
+  toward a direction, a room or an actor, returning false when there is no way. `summon(caster, label, count = 1,
+  duration = null)` spawns mobs beside the caster as `ctx.summon` does; a `before_summon` veto returns an empty list.
+  `setOwner(mob, player)` makes an in-world player the owner of a mob and `clearOwner(mob)` releases it, each returning
+  whether anything changed; `setLeash(mob, leash)` overrides the mob's leash with an int of at least 0 or unleashes it
+  with null, and `resetLeash(mob)` drops the override. `PluginActor` reads `owner` (the in-world player or null),
+  `homeRoom` (a mob's home room or null), `leash` (a mob's effective leash) and `leashOverridden`.
+- **combat and groups:** `startCombat(a, b)`, `stopCombat(a, b = null)` and `clearContributions(victim, contributor =
+  null)` engage and disengage combat and credit contributions, as `ctx.start_combat`, `ctx.stop_combat` and
+  `ctx.clear_contributions` do; `startCombat`, `stopCombat` and the `PluginActor.fighting` / `primaryTarget` reads need
+  the `combat` feature, and `startCombat` refuses an actor fighting itself or one across rooms. `groupAdd(member, to)`,
+  `groupRemove(member)`, `groupSetLeader(member)` and `groupDisband(member)` manage player groups, as the `ctx.group_*`
+  verbs do, and a mob argument throws. `enemiesNear(actor, band)` and `alliesNear(actor, band)` return the opponents and
+  allies of `actor` in its room within `band` (`"melee"`, `"near"` or `"far"`), by id, as `ctx.enemies_near` and
+  `ctx.allies_near` do. `pathTo(from, to)` gives the directions of the shortest passable walk, empty when `from` is
+  `to`, null when unreachable. `plan(facts, actions, goal, maxExpansions = 1024)` runs the GOAP planner and returns the
+  cheapest action names that reach `goal`, `[]` when it already holds, null when unreachable; fact values are `Boolean`,
+  `Int`/`Long` or `String`, and an action is a `PluginPlanAction(name, pre, effects, cost)`. `groupOf(actor)` returns a
+  `PluginGroup(id, leader, members)` of the player group `actor` is in, and `groupMembers(actor)` its members, leader
+  first.
 - **schema names:** a vital, stat or damage type the world's `MODULE.gups` doesn't declare, in a verb or in a
   `statDeltas` key, throws `IllegalArgumentException` with a "did you mean" suggestion.
 - **reads:** `schema` (a `PluginSchema` with `stats` and `vitals`, each a `PluginNamed(name, label)`, and `damageTypes`,
-  in declaration order), `pulse`, `seed`, `rng` (seeded from the world), `rooms()`, `room(label)`, `regions()` and
-  `itemInfo(label)` (an item prototype's catalog fields as a `PluginItemInfo`, or null, as `ctx.item_info` gives them).
+  in declaration order), `pulse`, `seed`, `features` (the engine features that are on and the features loaded plugins
+  provide), `rng` (seeded from the world, with `int`, `chance` and `choice(list)`), `standingHistory(holder, subject,
+  since, via, event)` (the `PluginStandingTotals` of gains and losses, needing `standing`), `rooms()`, `room(label)`,
+  `regions()` and `itemInfo(label)` (an item prototype's catalog fields as a `PluginItemInfo`, or null, as
+  `ctx.item_info` gives them). The world also reads `enemiesNear(actor, band)`, `alliesNear`, `pathTo(from, to)`,
+  `plan(facts, actions, goal, maxExpansions)` and the group queries `groupOf(actor)` and `groupMembers(actor)`; a
+  `PluginActor` reads `fighting` and `primaryTarget` (both need `combat`). `PluginRoom` also reads `desc` and the names
+  of its live `affects`.
 - **diagnostics:** `diagnose(message)` records a `"plugin"` diagnostic; `log(message)` writes to the server log.
 - **views:** `PluginRoom`, `PluginActor` and `PluginItem` read current state on every access. A `PluginActor` has
   `stat(name)` (effective), `baseStat(name)`, `vital(name)`, `maxVital(name)` and `resist(type)` by schema name, plus
-  `level`, `pendingLevels`, `affects` and `hasAffect(name)`.
+  `level`, `pendingLevels`, `affects` and `hasAffect(name)`, and reads `inWorld`, `keywords`, `xp` (needs `leveling`),
+  `condition`, `senses`, `belowZeroSince(vital)`, `carriedWeight`, `encumbranceLevel`, `isCasting` and `casting` (both
+  need `skills`), `hasFlag(flag)`, `hasItem(label)`, `slots`, `waitState`, `movePace` and `recallRoom`. A `PluginItem`
+  reads `inWorld`, `dice`, `damageType`, `statDeltas` and `senseDeltas`.
 - **`PluginViews`** converts raw Starlark values for builtins installed with `addBuiltin(name, value, doc)`:
   `room(value)`, `actor(value)`, `item(value)`, and `world(thread)` for a method declared with `useStarlarkThread =
   true`.
