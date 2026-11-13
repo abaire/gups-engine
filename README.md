@@ -3,6 +3,8 @@
 The GUPS text MUD engine. The design lives in [docs/SPEC.md](docs/SPEC.md); decisions made where the spec is silent are
 logged in [docs/DECISIONS.md](docs/DECISIONS.md) until they are folded back in.
 
+Browse the [latest API reference](https://abaire.github.io/gups-engine/) generated from `main`.
+
 This project is a combination of an experiment using local LLMs (a Qwen 3.8 27B fine tune) to generate a complex project
 with minimal oversight and a possible teaching tool. Much/most of the code has not been reviewed in detail and should
 not be taken as a good example of best practices.
@@ -131,9 +133,10 @@ gups scenario --world local-world --package //zones/tutorial /tmp/flee.star
 
 **Generate the API reference.** `gups docs` writes the offline HTML reference of the whole Script API to `build/docs`
 (`--out DIR` to change it, `--world DIR` to include that world's plugins). `gups docs --json` writes `api.json` instead.
-The [online API reference](https://abaire.github.io/gups-engine/) is updated from `main`; its generated files are also
-kept on the `gh-pages` branch. To enable publishing in a repository, set **Settings → Pages → Build and deployment →
-Source** to **GitHub Actions** and allow the workflow to deploy to the `github-pages` environment.
+The [online API reference](https://abaire.github.io/gups-engine/) is generated from the latest successful build of
+`main`; its files are also kept on the `gh-pages` branch. To enable publishing in a repository, set **Settings → Pages →
+Build and deployment → Source** to **GitHub Actions** and allow the workflow to deploy to the `github-pages`
+environment.
 
 **Web client and shared-server login.** The bundled browser client runs over HTTPS and a WebSocket (`/ws`), rendering
 formatted text, input history (Up/Down arrows), and GMCP panels (vitals bars, room info, active affects, and tactical
