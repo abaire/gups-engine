@@ -48,6 +48,21 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
+## Mobs
+
+### Removing a mob without killing it
+
+**Spec:** §4.3 (`summon` primitive), §4.5 (`spawn`, `destroy`, `summon`), §4.2 (spawns), §5.4 (respawns), §4.15.
+**Today:** a mob leaves the world when it dies, when its `summoned` affect ends (it "fades away": a sight message, every
+engagement dropped, then removed), when a reload deletes its prototype or spawn rule, or as a debug mob when its spawner
+is gone. Neither `ctx` nor the plugin facade can remove one otherwise: `ctx.destroy` and `PluginWorld.destroy` take
+items only. A mob from `ctx.spawn`, with no spawn rule, stays until something kills it. **Example:** an invasion plugin
+spawns raiders into a town and, when the invasion ends, wants the survivors gone rather than slaughtered, with no
+corpses, loot or XP. **Questions:** - Should there be a verb (`ctx.despawn(mob)` and a facade counterpart), or should
+content give the mob a `summoned`-style affect and let it fade? - Does it fire a hook (`on_despawn`, or `on_death` with
+a reason), and what do players in the room see? - What happens to what the mob carries and wears: destroyed with it, or
+dropped? - May it remove a mob a spawn rule tracks (the zone then respawns it on schedule), or an owned pet?
+
 ## Plugins
 
 ### Plugins that share a GMCP package tree
@@ -92,9 +107,26 @@ the plugin speak as a mob it names, and do those actions run in the tick lane li
 `after`/`cancel` be facade verbs, or is a plugin's own `every` scheduling enough? - Add them in batches as plugins need
 them (doors first, for the example), or all at once?
 
-### In-game character respec and choice changes (Done in Milestone 52)
+### Plugin timers (`after` and `cancel` on the facade)
 
-**Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no
-built-in player command, trainer, or shrine mechanic to alter character choices after creation; these belong to plugins.
-**Questions:** - Should the engine or standard sample plugins provide a canonical respec flow (e.g. shrines, guild
-trainers)? - What restrictions, cooldowns, or currency costs should govern resetting choices or traits?
+**Spec:** §3.3 (`ScriptTimer`), §4.5 (Timers), §4.15 (Periodic work), §5.1 (timer phase), §5.10, §5.11. **Today:** a
+plugin schedules only through `every(pulses, doc, fn)`, which runs on a fixed period for the life of the world.
+`ctx.after` saves a `ScriptTimer` whose callback is rebound on reload by `(file, name)`; a plugin's Kotlin closure can't
+be saved or rebound that way, so the `ctx` semantics don't carry over. **Example:** a weather plugin that locks a door
+for exactly 40 pulses after a lightning strike. Today it stores the due pulse in an attribute and checks it from an
+`every` handler. **Questions:** - Is `every` plus attributes enough, so this belongs in [ICEBOX.md](ICEBOX.md)? - If
+not, how is a pending plugin timer identified across a save or restart: a callback the plugin registers by name at
+`register` time, with only the name and plain-value arguments saved? - Who owns the timer (an entity, the world, the
+plugin), and what happens to it when its owner leaves the world or the plugin fails to load? - How does `cancel` name
+it, and can a plugin cancel a script's timer or the reverse?
+
+### Track positions on the plugin facade
+
+**Spec:** §3.10 (`track` feature), §4.5 (Position, the `index` arguments, `act_advance`, `act_retreat`), §4.15, §5.5.
+**Today:** `spawnItem`, `moveItem` and `teleport` place at index 0 of a track room, and no facade read reports where
+along a track an item or actor is, or the band between two actors. The mob actions that move along a track
+(`act_advance`, `act_retreat`) aren't on the facade either. **Example:** an ambush plugin that spawns archers at the far
+end of a road and has them close in. **Questions:** - Do the existing verbs grow an `index` parameter (`teleport(actor,
+room, index = null)`), as `ctx` does, or does the facade get separate track-aware verbs? - Which reads to add:
+`PluginActor.trackIndex`, `PluginItem.trackIndex`, `bandOf(a, b)`, a room's `trackSize`? - What does each do in a world
+without `track`: error as `ctx` does when an `index` is passed, or quietly treat every room as size 1?
