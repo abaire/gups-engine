@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Declarations — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html" class="current">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Declarations</h1>
+<h2>Declarations</h2>
+<p class="intro">Package content declared in .star files.</p>
+<section id="container" class="entry">
+<h3><code>container</code> <span class="since">since api_version 1</span></h3>
+<p>Container settings, for item(container=...).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="container.capacity"><td><code>capacity</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>10</code></td><td></td><td>Maximum number of items the container holds.</td></tr>
+<tr id="container.max_weight"><td><code>max_weight</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>100</code></td><td></td><td>Maximum total weight the container holds.</td></tr>
+<tr id="container.state"><td><code>state</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'open'</code></td><td><code>open</code>, <code>closed</code>, <code>locked</code></td><td>Initial container state: 'open', 'closed' or 'locked'.</td></tr>
+<tr id="container.key"><td><code>key</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item prototype label required to lock or unlock the container.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;chest&quot;,
+    name = &quot;a wooden chest&quot;,
+    kind = &quot;container&quot;,
+    container = container(capacity = 5, max_weight = 50, state = &quot;closed&quot;),
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+chest = w.spawn(&quot;:chest&quot;, at = &quot;:start&quot;)
+t.eq(chest.label, &quot;//zones/ex:chest&quot;)</code></pre>
+</div>
+</section>
+<section id="damages" class="entry">
+<h3><code>damages</code> <span class="since">since api_version 1</span></h3>
+<p>Amounts of damage by type, such as damages(fire = 2). Used for the value of bonus_damage modifiers.</p>
+<p>Accepts any keyword arguments.</p>
+<div class="example">
+<p class="caption">Example</p>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+s = damages(fire = 2) + damages(slash = 1)
+t.eq(s.fire, 2)
+t.eq(s.slash, 1)
+t.eq(s.bludgeon, 0)</code></pre>
+</div>
+</section>
+<section id="door" class="entry">
+<h3><code>door</code> <span class="since">since api_version 1</span></h3>
+<p>A door, for exit(door=...).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="door.state"><td><code>state</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'closed'</code></td><td><code>open</code>, <code>closed</code>, <code>locked</code></td><td>Initial door state: 'open', 'closed' or 'locked'.</td></tr>
+<tr id="door.key"><td><code>key</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item prototype label required to lock or unlock the door.</td></tr>
+<tr id="door.tags"><td><code>tags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags the rules read, such as 'heavy', 'creaky' or 'transparent', to price sensing and muffling.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;iron_key&quot;, name = &quot;an iron key&quot;)
+
+room(&quot;vault&quot;,
+    desc = &quot;A cold vault. A heavy door leads west.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    exits = [exit(DIR.west, to = &quot;:start&quot;, one_way = True,
+                  door = door(state = DOOR.locked, key = &quot;:iron_key&quot;))],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:vault&quot;)
+t.contains(p.do(&quot;west&quot;), &quot;closed&quot;)
+t.eq(p.room, &quot;:vault&quot;)</code></pre>
+</div>
+</section>
+<section id="exit" class="entry">
+<h3><code>exit</code> <span class="since">since api_version 1</span></h3>
+<p>An exit, for room(exits=[...]).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
+<tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
+<tr id="exit.entry_index"><td><code>entry_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
+<tr id="exit.tags"><td><code>tags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags the rules read, such as 'soundproof' or 'sealed', to price sensing across the exit.</td></tr>
+<tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
+<tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;porch&quot;,
+    desc = &quot;A creaky porch. The start room is south.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    exits = [exit(DIR.south, to = &quot;:start&quot;, one_way = True)],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:porch&quot;)
+p.do(&quot;south&quot;)
+t.eq(p.room, &quot;:start&quot;)</code></pre>
+</div>
+</section>
+<section id="faction" class="entry">
+<h3><code>faction</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h3>
+<p>Declares a faction and its declared opinion of other factions.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="faction.id"><td><code>id</code> <span class="badge feature">feature: standing</span></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The faction's declaration name within the package.</td></tr>
+<tr id="faction.standing"><td><code>standing</code> <span class="badge feature">feature: standing</span></td><td><code>dict[label, int]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Declared opinion of other factions, by faction label, each in -100..100.</td></tr>
+<tr id="faction.doc"><td><code>doc</code> <span class="badge feature">feature: standing</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>''</code></td><td></td><td>Documentation describing the faction.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>faction(&quot;goblins&quot;, standing = {&quot;:orcs&quot;: -80})
+faction(&quot;orcs&quot;)
+
+room(&quot;clearing&quot;,
+    name = &quot;Forest Clearing&quot;,
+    desc = &quot;A quiet clearing between the trees.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+)</code></pre>
+</div>
+</section>
+<section id="global_command" class="entry">
+<h3><code>global_command</code> <span class="since">since api_version 1</span></h3>
+<p>Registers a command available everywhere. lib and rules packages only.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="global_command.name"><td><code>name</code></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Command verb players type.</td></tr>
+<tr id="global_command.fn"><td><code>fn</code></td><td><code>function</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Top-level handler function fn(ctx).</td></tr>
+<tr id="global_command.lane"><td><code>lane</code></td><td><code>str</code></td><td>positional or keyword</td><td>no</td><td><code>'fast'</code></td><td><code>fast</code>, <code>tick</code></td><td>Execution lane: 'fast' (immediate) or 'tick' (queued on the actor).</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _pulse(ctx):
+    ctx.send(ctx.actor, &quot;It is pulse %d.&quot; % ctx.pulse)
+
+# Only lib and rules packages may register global commands.
+global_command(&quot;pulse&quot;, _pulse, lane = &quot;fast&quot;)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+t.contains(p.do(&quot;pulse&quot;), &quot;It is pulse&quot;)</code></pre>
+</div>
+</section>
+<section id="global_hook" class="entry">
+<h3><code>global_hook</code> <span class="since">since api_version 1</span></h3>
+<p>Registers a hook that fires for every actor, wherever it is. lib and rules packages only.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="global_hook.name"><td><code>name</code></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>The hook to run globally: 'on_level_change', 'on_encumbrance_change', 'on_group_change', 'on_owner_change', 'on_disengage', 'on_death' or 'on_skill_use'.</td></tr>
+<tr id="global_hook.fn"><td><code>fn</code></td><td><code>function</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Top-level handler function fn(ctx).</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _step(ctx):
+    ctx.send(ctx.actor, &quot;Step %s-&gt;%s.&quot; % (ctx.old_level, ctx.new_level))
+
+# Only lib and rules packages may register global hooks.
+global_hook(&quot;on_level_change&quot;, _step)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+w.award_xp(p, 1000)
+t.contains(p.output(), &quot;Step 1-&gt;2.&quot;)</code></pre>
+</div>
+</section>
+<section id="gmcp_package" class="entry">
+<h3><code>gmcp_package</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a GMCP package this package sends with ctx.gmcp. lib and rules packages only.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="gmcp_package.name"><td><code>name</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The GMCP package name, two or more dot-separated parts.</td></tr>
+<tr id="gmcp_package.doc"><td><code>doc</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>&quot;&quot;</code></td><td></td><td>Shown in the docs.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Only lib and rules packages may declare GMCP packages.
+gmcp_package(&quot;Shop.Stock&quot;, doc = &quot;Items for sale where the player stands.&quot;)</code></pre>
+</div>
+</section>
+<section id="item" class="entry">
+<h3><code>item</code> <span class="since">since api_version 1</span></h3>
+<p>Declares an item prototype.</p>
+<p>Accepts the <a href="hooks.html">hooks</a> of a item as keyword arguments.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="item.id"><td><code>id</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The item's declaration name within the package.</td></tr>
+<tr id="item.name"><td><code>name</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>id with spaces</code></td><td></td><td>Display name shown to players.</td></tr>
+<tr id="item.plural"><td><code>plural</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Display name for stacks of 2 or more, such as 'gold coins'.</td></tr>
+<tr id="item.keywords"><td><code>keywords</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>words of name</code></td><td></td><td>Words players can use to target this item.</td></tr>
+<tr id="item.desc"><td><code>desc</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>''</code></td><td></td><td>Description shown when examining the item.</td></tr>
+<tr id="item.kind"><td><code>kind</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'misc'</code></td><td></td><td>Item category, such as 'misc', 'melee', 'ranged', 'armor' or 'key'.</td></tr>
+<tr id="item.range"><td><code>range</code> <span class="badge feature">feature: track</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'melee'</code></td><td><code>melee</code>, <code>near</code>, <code>far</code></td><td>Weapon reach band: 'melee', 'near' or 'far'.</td></tr>
+<tr id="item.weight"><td><code>weight</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Weight of one item.</td></tr>
+<tr id="item.value"><td><code>value</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Base price of one item; 0 by default.</td></tr>
+<tr id="item.wear"><td><code>wear</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Equipment slot or slot family the item is worn in.</td></tr>
+<tr id="item.wield"><td><code>wield</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Alias for wear, for weapons.</td></tr>
+<tr id="item.slot_cost"><td><code>slot_cost</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>How many slots of its family the item takes up; at least 1.</td></tr>
+<tr id="item.dice"><td><code>dice</code></td><td><code>dice</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Weapon damage dice such as '1d6+1'.</td></tr>
+<tr id="item.damage_type"><td><code>damage_type</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>unarmed_damage_type</code></td><td></td><td>Weapon damage type, a declared damage type such as DAMAGE.slash.</td></tr>
+<tr id="item.stat_deltas"><td><code>stat_deltas</code></td><td><code>stats</code></td><td>keyword</td><td>no</td><td><code>stats()</code></td><td></td><td>Stat adjustments applied while the item is worn, built with stats(...).</td></tr>
+<tr id="item.sense_deltas"><td><code>sense_deltas</code></td><td><code>dict[str, int]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Sense score changes by channel while the item is worn.</td></tr>
+<tr id="item.max_vital_deltas"><td><code>max_vital_deltas</code></td><td><code>vitals</code></td><td>keyword</td><td>no</td><td><code>vitals()</code></td><td></td><td>Vital maximum adjustments applied while the item is worn, built with vitals(...).</td></tr>
+<tr id="item.resist_deltas"><td><code>resist_deltas</code></td><td><code>resists</code></td><td>keyword</td><td>no</td><td><code>resists()</code></td><td></td><td>Damage resistance adjustments applied while the item is worn, built with resists(...).</td></tr>
+<tr id="item.tags"><td><code>tags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags for plugin restrictions and scripts.</td></tr>
+<tr id="item.stackable"><td><code>stackable</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if identical items merge into a stack.</td></tr>
+<tr id="item.decay_pulses"><td><code>decay_pulses</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Pulses before the item decays, or None for permanent items.</td></tr>
+<tr id="item.container"><td><code>container</code></td><td><code>container</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Container settings, built with container(...).</td></tr>
+<tr id="item.commands"><td><code>commands</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Item-local commands mapping verb name to fn(ctx).</td></tr>
+<tr id="item.hooks"><td><code>hooks</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Custom hooks, by name, run with ctx.call_hook.</td></tr>
+<tr id="item.equip_affects"><td><code>equip_affects</code></td><td><code>list[str | dict]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Affects applied when the item is worn: a flag held while worn, or {'flag': str, 'pulses': int} for a timed one. 'stunned' must be timed.</td></tr>
+<tr id="item.affects"><td><code>affects</code></td><td><code>list[item_affect]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Affects every instance carries, built with item_affect(...).</td></tr>
+<tr id="item.variants"><td><code>variants</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Related item prototypes by free-form name, for transform.</td></tr>
+<tr id="item.charges"><td><code>charges</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Uses before the item is spent, at least 1; None for unlimited.</td></tr>
+<tr id="item.empty"><td><code>empty</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'destroy'</code></td><td></td><td>After the last charge: 'destroy', 'keep', or the name of one of the item's variants.</td></tr>
+<tr id="item.use_effect"><td><code>use_effect</code></td><td><code>effect</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Effect primitive that use applies, with the user as caster.</td></tr>
+<tr id="item.use_target"><td><code>use_target</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'self'</code></td><td><code>enemy</code>, <code>ally</code>, <code>self</code>, <code>item</code>, <code>none</code>, <code>room</code></td><td>Whom use_effect acts on: 'enemy', 'ally', 'self', 'item' or 'none'.</td></tr>
+<tr id="item.use_lag"><td><code>use_lag</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Recovery lag in pulses after a use; at least 0.</td></tr>
+<tr id="item.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Rules modifiers active while the item is worn.</td></tr>
+<tr id="item.procs"><td><code>procs</code> <span class="badge feature">feature: combat</span></td><td><code>list[proc]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Combat procs that fire during auto-attack swings.</td></tr>
+<tr id="item.version"><td><code>version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Prototype schema version for persisted state migration.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;short_sword&quot;,
+    name = &quot;a short sword&quot;,
+    desc = &quot;A plain iron blade.&quot;,
+    kind = &quot;melee&quot;,
+    wield = &quot;wield&quot;,
+    dice = &quot;1d6&quot;,
+    damage_type = &quot;slash&quot;,
+    weight = 3,
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+w.spawn(&quot;:short_sword&quot;, at = p)
+t.contains(p.do(&quot;wield sword&quot;), &quot;You wield a short sword.&quot;)</code></pre>
+</div>
+</section>
+<section id="item_affect" class="entry">
+<h3><code>item_affect</code> <span class="since">since api_version 1</span></h3>
+<p>An affect an item carries, for item(affects=[...]).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="item_affect.name"><td><code>name</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The affect's name.</td></tr>
+<tr id="item_affect.applies"><td><code>applies</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'worn'</code></td><td><code>worn</code>, <code>carried</code></td><td>Where the affect reaches its holder: 'worn' or 'carried'.</td></tr>
+<tr id="item_affect.stat_deltas"><td><code>stat_deltas</code></td><td><code>stats</code></td><td>keyword</td><td>no</td><td><code>stats()</code></td><td></td><td>Stat adjustments applied while the affect reaches the holder, built with stats(...).</td></tr>
+<tr id="item_affect.sense_deltas"><td><code>sense_deltas</code></td><td><code>dict[str, int]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Sense score changes by channel while the affect reaches the holder.</td></tr>
+<tr id="item_affect.max_vital_deltas"><td><code>max_vital_deltas</code></td><td><code>vitals</code></td><td>keyword</td><td>no</td><td><code>vitals()</code></td><td></td><td>Vital maximum adjustments applied while the affect reaches the holder, built with vitals(...).</td></tr>
+<tr id="item_affect.resist_deltas"><td><code>resist_deltas</code></td><td><code>resists</code></td><td>keyword</td><td>no</td><td><code>resists()</code></td><td></td><td>Damage resistance adjustments applied while the affect reaches the holder, built with resists(...).</td></tr>
+<tr id="item_affect.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Rules modifiers active while the affect reaches the holder.</td></tr>
+<tr id="item_affect.flags"><td><code>flags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Status flags applied to the holder while the affect reaches it.</td></tr>
+<tr id="item_affect.procs"><td><code>procs</code> <span class="badge feature">feature: combat</span></td><td><code>list[proc]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Combat procs that fire during auto-attack swings.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;charm&quot;,
+    name = &quot;a lucky charm&quot;,
+    affects = [item_affect(&quot;luck&quot;, applies = &quot;carried&quot;, stat_deltas = stats(dex = 1))],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+base = p.dex
+w.spawn(&quot;:charm&quot;, at = p)
+t.eq(p.dex, base + 1)</code></pre>
+</div>
+</section>
+<section id="loot" class="entry">
+<h3><code>loot</code> <span class="since">since api_version 1</span></h3>
+<p>A loot roll, for mob(loot=[...]). chance is a percent from 0 to 100.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="loot.label"><td><code>label</code></td><td><code>label</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Item prototype label dropped on death.</td></tr>
+<tr id="loot.chance"><td><code>chance</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>100</code></td><td></td><td>Drop chance in percent, 0 to 100.</td></tr>
+<tr id="loot.count"><td><code>count</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Number of items dropped when the roll succeeds.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;rat_tail&quot;, name = &quot;a rat tail&quot;)
+
+mob(&quot;rat&quot;, vitals = vitals(hp = 4), loot = [loot(&quot;:rat_tail&quot;, chance = 100, count = 1)])</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+rat = w.spawn(&quot;:rat&quot;, at = &quot;:start&quot;)
+w.damage(rat, &quot;hp&quot;, pct = 100)
+# Loot drops into the corpse.
+corpse = [i for i in w.room(&quot;:start&quot;).items() if i.kind == &quot;corpse&quot;][0]
+t.eq([i.label for i in corpse.contents()], [&quot;//zones/ex:rat_tail&quot;])</code></pre>
+</div>
+</section>
+<section id="mob" class="entry">
+<h3><code>mob</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a mob prototype.</p>
+<p>Accepts the <a href="hooks.html">hooks</a> of a mob as keyword arguments.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="mob.id"><td><code>id</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The mob's declaration name within the package.</td></tr>
+<tr id="mob.name"><td><code>name</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>id with spaces</code></td><td></td><td>Display name shown to players.</td></tr>
+<tr id="mob.keywords"><td><code>keywords</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>words of name</code></td><td></td><td>Words players can use to target this mob.</td></tr>
+<tr id="mob.desc"><td><code>desc</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>''</code></td><td></td><td>Description shown when looking at the mob.</td></tr>
+<tr id="mob.level"><td><code>level</code> <span class="badge feature">feature: leveling</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Mob level.</td></tr>
+<tr id="mob.stats"><td><code>stats</code></td><td><code>stats</code></td><td>keyword</td><td>no</td><td><code>stats()</code></td><td></td><td>Base stats the mob starts from, built with stats(...).</td></tr>
+<tr id="mob.vitals"><td><code>vitals</code></td><td><code>vitals</code></td><td>keyword</td><td>no</td><td><code>vitals()</code></td><td></td><td>Maximum vitals the mob starts from, built with vitals(...).</td></tr>
+<tr id="mob.resists"><td><code>resists</code></td><td><code>resists</code></td><td>keyword</td><td>no</td><td><code>resists()</code></td><td></td><td>Damage resistance percentage by damage type, built with resists(...).</td></tr>
+<tr id="mob.skills"><td><code>skills</code> <span class="badge feature">feature: skills</span></td><td><code>dict[label, int]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Known skills mapping skill label to proficiency (0..100).</td></tr>
+<tr id="mob.senses"><td><code>senses</code></td><td><code>dict[str, int]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Base sense score by channel, merged over sight and sound at 1; 0 senses nothing on that channel.</td></tr>
+<tr id="mob.memory_pulses"><td><code>memory_pulses</code> <span class="badge feature">feature: combat</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Combat memory window in pulses, overriding module(memory_pulses); 0 keeps none, None uses the world's.</td></tr>
+<tr id="mob.think"><td><code>think</code></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Custom AI function fn(ctx) run on each think cycle.</td></tr>
+<tr id="mob.think_every"><td><code>think_every</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>4</code></td><td></td><td>Pulses between AI think cycles.</td></tr>
+<tr id="mob.leash"><td><code>leash</code></td><td><code>int | None</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Most exits from its home room the mob's own movement goes; None for no leash.</td></tr>
+<tr id="mob.hooks"><td><code>hooks</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Custom hooks, by name, run with ctx.call_hook.</td></tr>
+<tr id="mob.behaviors"><td><code>behaviors</code></td><td><code>list[behavior]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Built-in behaviors such as wander(...) or aggressive(...).</td></tr>
+<tr id="mob.dormant_recovery"><td><code>dormant_recovery</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'full'</code></td><td><code>full</code>, <code>regen</code>, <code>none</code></td><td>How the mob recovers when its room wakes from dormancy.</td></tr>
+<tr id="mob.loot"><td><code>loot</code></td><td><code>list[loot]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Loot rules rolled when the mob dies, built with loot(...).</td></tr>
+<tr id="mob.traits"><td><code>traits</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Traits defined by the world's plugins.</td></tr>
+<tr id="mob.factions"><td><code>factions</code> <span class="badge feature">feature: standing</span></td><td><code>list[label]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Faction labels the mob belongs to; when absent, its own prototype label.</td></tr>
+<tr id="mob.version"><td><code>version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Prototype schema version for persisted state migration.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;gatekeeper&quot;,
+    name = &quot;the gatekeeper&quot;,
+    desc = &quot;A stern woman with a ring of keys.&quot;,
+    level = 5,
+    vitals = vitals(hp = 40),
+    stats = stats(str = 12, dex = 10, con = 12, int = 10, wis = 10),
+    behaviors = [sentinel()],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+keeper = w.spawn(&quot;:gatekeeper&quot;, at = &quot;:start&quot;)
+t.eq(keeper.max_hp, 40)
+t.false(keeper.is_player)</code></pre>
+</div>
+</section>
+<section id="outcome" class="entry">
+<h3><code>outcome</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>A weighted outcome in a proc's outcome table.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="outcome.weight"><td><code>weight</code> <span class="badge feature">feature: combat</span></td><td><code>int</code></td><td>positional or keyword</td><td>no</td><td><code>100</code></td><td></td><td>Probability weight, a percent from 0 to 100.</td></tr>
+<tr id="outcome.skill"><td><code>skill</code> <span class="badge feature">feature: combat</span></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Skill or spell triggered on this outcome.</td></tr>
+<tr id="outcome.effect"><td><code>effect</code> <span class="badge feature">feature: combat</span></td><td><code>effect</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Effect primitive applied on this outcome.</td></tr>
+<tr id="outcome.target"><td><code>target</code> <span class="badge feature">feature: combat</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td><code>enemy</code>, <code>self</code>, <code>none</code></td><td>Target for the outcome: 'enemy', 'self' or 'none'.</td></tr>
+<tr id="outcome.message"><td><code>message</code> <span class="badge feature">feature: combat</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Message sent to the bearer instead of combat.proc.self.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;chaos_wand&quot;,
+    name = &quot;a chaos wand&quot;,
+    wear = &quot;wield&quot;,
+    dice = &quot;1d4&quot;,
+    procs = [
+        proc(
+            on = &quot;hit&quot;,
+            outcomes = [
+                outcome(50, effect = damage(dice = &quot;1d6&quot;, type = DAMAGE.fire)),
+                outcome(50, effect = heal(dice = &quot;1d4&quot;, vital = &quot;hp&quot;), target = &quot;self&quot;),
+            ],
+        ),
+    ],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+wand = w.spawn(&quot;:chaos_wand&quot;, at = p)
+t.eq(wand.kind, &quot;misc&quot;)</code></pre>
+</div>
+</section>
+<section id="package" class="entry">
+<h3><code>package</code> <span class="since">since api_version 1</span></h3>
+<p>Declares the package. Must be called exactly once, in package.star.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="package.api_version"><td><code>api_version</code></td><td><code>int</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The script API version this package targets.</td></tr>
+<tr id="package.kind"><td><code>kind</code></td><td><code>str</code></td><td>keyword</td><td>yes</td><td></td><td><code>zone</code>, <code>lib</code>, <code>rules</code>, <code>skills</code></td><td>Package kind: 'zone', 'lib', 'rules' or 'skills'.</td></tr>
+<tr id="package.title"><td><code>title</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>package path</code></td><td></td><td>Human-readable title of the package.</td></tr>
+<tr id="package.reset_world_ticks"><td><code>reset_world_ticks</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>World ticks (30 s each) between zone resets, or None for no periodic reset.</td></tr>
+<tr id="package.shared_namespaces"><td><code>shared_namespaces</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Attribute namespaces this privileged (lib or rules) package may write across packages.</td></tr>
+<tr id="package.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Zone-wide rules modifiers by modifier point name.</td></tr>
+<tr id="package.expected_tombstones"><td><code>expected_tombstones</code></td><td><code>list[label]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Prototype labels intentionally removed in this version, for migration checks.</td></tr>
+<tr id="package.migrate_noop"><td><code>migrate_noop</code></td><td><code>list[label]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Prototype labels whose version rose without needing a migrate() function.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>package(
+    api_version = 1,
+    kind = &quot;zone&quot;,
+    title = &quot;Examples&quot;,
+    reset_world_ticks = 10,
+)</code></pre>
+</div>
+</section>
+<section id="proc" class="entry">
+<h3><code>proc</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>A combat proc that fires during auto-attack swings.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="proc.on"><td><code>on</code> <span class="badge feature">feature: combat</span></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td><code>hit</code>, <code>struck</code>, <code>avoid</code></td><td>When the proc fires: 'hit', 'struck' or 'avoid'.</td></tr>
+<tr id="proc.chance"><td><code>chance</code> <span class="badge feature">feature: combat</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>100</code></td><td></td><td>Chance of firing, a percent from 0 to 100.</td></tr>
+<tr id="proc.skill"><td><code>skill</code> <span class="badge feature">feature: combat</span></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Skill or spell triggered by the proc.</td></tr>
+<tr id="proc.effect"><td><code>effect</code> <span class="badge feature">feature: combat</span></td><td><code>effect</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Effect primitive applied by the proc.</td></tr>
+<tr id="proc.target"><td><code>target</code> <span class="badge feature">feature: combat</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td><code>enemy</code>, <code>self</code>, <code>none</code></td><td>Target for the outcome: 'enemy', 'self' or 'none'.</td></tr>
+<tr id="proc.message"><td><code>message</code> <span class="badge feature">feature: combat</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Message sent to the bearer instead of combat.proc.self.</td></tr>
+<tr id="proc.outcomes"><td><code>outcomes</code> <span class="badge feature">feature: combat</span></td><td><code>list[outcome]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Weighted table of outcomes.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;ember_dagger&quot;,
+    name = &quot;an ember dagger&quot;,
+    wear = &quot;wield&quot;,
+    dice = &quot;1d4&quot;,
+    procs = [
+        proc(on = &quot;hit&quot;, chance = 10, effect = damage(dice = &quot;1d6&quot;, type = DAMAGE.fire)),
+    ],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+dagger = w.spawn(&quot;:ember_dagger&quot;, at = p)
+t.eq(dagger.kind, &quot;misc&quot;)</code></pre>
+</div>
+</section>
+<section id="region" class="entry">
+<h3><code>region</code> <span class="since">since api_version 1</span></h3>
+<p>Declares the modifiers of a region, a tag rooms carry with room(regions=[...]). Region names are world-wide.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="region.id"><td><code>id</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>World-wide region tag name.</td></tr>
+<tr id="region.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Rules modifiers active in rooms carrying this region tag.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _wading(ctx, base):
+    # Moving through water costs twice the usual movement points.
+    return base * 2
+
+region(&quot;shallows&quot;, modifiers = {&quot;move_cost&quot;: _wading})
+
+room(&quot;ford&quot;,
+    desc = &quot;Knee-deep water runs over smooth stones.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    regions = [&quot;shallows&quot;],
+)</code></pre>
+</div>
+</section>
+<section id="resists" class="entry">
+<h3><code>resists</code> <span class="since">since api_version 1</span></h3>
+<p>Percentages keyed by the world's declared damage types, such as resists(fire = 25). Used for mob resists.</p>
+<p>Accepts any keyword arguments.</p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;salamander&quot;, vitals = vitals(hp = 20), resists = resists(fire = 100, pierce = -25))</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+s = w.spawn(&quot;:salamander&quot;, at = &quot;:start&quot;)
+t.eq(s.resists.fire, 100)
+t.eq(s.resists.slash, 0)</code></pre>
+</div>
+</section>
+<section id="room" class="entry">
+<h3><code>room</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a room.</p>
+<p>Accepts the <a href="hooks.html">hooks</a> of a room as keyword arguments.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="room.id"><td><code>id</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The room's declaration name within the package.</td></tr>
+<tr id="room.name"><td><code>name</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>id with spaces</code></td><td></td><td>Display name shown to players.</td></tr>
+<tr id="room.desc"><td><code>desc</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>''</code></td><td></td><td>Room description shown when looking.</td></tr>
+<tr id="room.size"><td><code>size</code> <span class="badge feature">feature: track</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'normal'</code></td><td><code>cramped</code>, <code>normal</code>, <code>large</code></td><td>Track size: 'cramped' (1 slot), 'normal' (3 slots) or 'large' (6 slots).</td></tr>
+<tr id="room.regions"><td><code>regions</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Region tags that apply their modifiers in this room.</td></tr>
+<tr id="room.tags"><td><code>tags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags for plugin restrictions and scripts.</td></tr>
+<tr id="room.flags"><td><code>flags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td><code>always_active</code>, <code>dead_end_ok</code></td><td>Room flags such as 'always_active' or 'dead_end_ok'.</td></tr>
+<tr id="room.exits"><td><code>exits</code></td><td><code>list[exit]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Exits leading out of this room, built with exit(...).</td></tr>
+<tr id="room.spawns"><td><code>spawns</code></td><td><code>list[spawn]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Mob spawn rules for this room, built with spawn(...).</td></tr>
+<tr id="room.commands"><td><code>commands</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Room-local commands mapping verb name to fn(ctx).</td></tr>
+<tr id="room.hooks"><td><code>hooks</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Custom hooks, by name, run with ctx.call_hook.</td></tr>
+<tr id="room.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Room rules modifiers by modifier point name.</td></tr>
+<tr id="room.version"><td><code>version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Prototype schema version for persisted state migration.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;library&quot;,
+    name = &quot;The Library&quot;,
+    desc = &quot;Shelves of dusty books reach the ceiling.&quot;,
+    size = SIZE.large,
+    flags = [&quot;dead_end_ok&quot;],
+    exits = [exit(DIR.south, to = &quot;:start&quot;, one_way = True)],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:library&quot;)
+t.contains(p.do(&quot;look&quot;), &quot;The Library&quot;)</code></pre>
+</div>
+</section>
+<section id="skill" class="entry">
+<h3><code>skill</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Declares a skill or spell.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="skill.id"><td><code>id</code> <span class="badge feature">feature: skills</span></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The skill's declaration name within the package.</td></tr>
+<tr id="skill.kind"><td><code>kind</code> <span class="badge feature">feature: skills</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'skill'</code></td><td></td><td>Skill category, such as 'spell' or 'skill'.</td></tr>
+<tr id="skill.cost"><td><code>cost</code> <span class="badge feature">feature: skills</span></td><td><code>vitals</code></td><td>keyword</td><td>no</td><td><code>vitals()</code></td><td></td><td>Vitals spent on cast, built with vitals(...).</td></tr>
+<tr id="skill.warmup"><td><code>warmup</code> <span class="badge feature">feature: skills</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Pulses of casting warmup before the skill resolves.</td></tr>
+<tr id="skill.lag"><td><code>lag</code> <span class="badge feature">feature: skills</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Recovery wait-state pulses after the skill resolves.</td></tr>
+<tr id="skill.range"><td><code>range</code> <span class="badge feature">feature: skills</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'melee'</code></td><td><code>melee</code>, <code>near</code>, <code>far</code>, <code>self</code>, <code>room</code></td><td>Maximum target range.</td></tr>
+<tr id="skill.target"><td><code>target</code> <span class="badge feature">feature: skills</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'enemy'</code></td><td><code>enemy</code>, <code>ally</code>, <code>self</code>, <code>item</code>, <code>none</code>, <code>room</code></td><td>Kind of target the skill accepts.</td></tr>
+<tr id="skill.channels"><td><code>channels</code> <span class="badge feature">feature: skills</span></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Channels required and emitted when casting.</td></tr>
+<tr id="skill.interrupt"><td><code>interrupt</code> <span class="badge feature">feature: skills</span></td><td><code>dict[str, any]</code></td><td>keyword</td><td>no</td><td><code>{'damage_pct': None, 'stun': True}</code></td><td><code>damage_pct</code>, <code>stun</code></td><td>Warmup interruption rules ('damage_pct', 'stun').</td></tr>
+<tr id="skill.attack_while_casting"><td><code>attack_while_casting</code> <span class="badge feature">feature: skills</span></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if auto-attacks continue during warmup.</td></tr>
+<tr id="skill.effect"><td><code>effect</code> <span class="badge feature">feature: skills</span></td><td><code>effect</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Declarative effect primitive applied when the skill resolves.</td></tr>
+<tr id="skill.resolve"><td><code>resolve</code> <span class="badge feature">feature: skills</span></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Custom function fn(ctx) run when the skill resolves.</td></tr>
+<tr id="skill.tags"><td><code>tags</code> <span class="badge feature">feature: skills</span></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags for plugin restrictions and scripts.</td></tr>
+<tr id="skill.unrecognized"><td><code>unrecognized</code> <span class="badge feature">feature: skills</span></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Lines for players who don't recognize the skill: begin, room, victim, resisted_room, resisted_victim, noun.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;firebolt&quot;,
+    kind = &quot;spell&quot;,
+    cost = vitals(mana = 5),
+    warmup = 4,
+    lag = 4,
+    range = &quot;near&quot;,
+    target = &quot;enemy&quot;,
+    effect = damage(dice = &quot;2d6&quot;, type = DAMAGE.fire),
+)</code></pre>
+</div>
+</section>
+<section id="spawn" class="entry">
+<h3><code>spawn</code> <span class="since">since api_version 1</span></h3>
+<p>A spawn rule, for room(spawns=[...]).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="spawn.label"><td><code>label</code></td><td><code>label</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Mob prototype label to spawn.</td></tr>
+<tr id="spawn.count"><td><code>count</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Maximum number of instances maintained by this rule.</td></tr>
+<tr id="spawn.respawn_pulses"><td><code>respawn_pulses</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1200</code></td><td></td><td>Pulses before a slain mob respawns.</td></tr>
+<tr id="spawn.at_index"><td><code>at_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the room where the mob spawns.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;wolf&quot;, name = &quot;a grey wolf&quot;, vitals = vitals(hp = 12))
+
+room(&quot;den&quot;,
+    desc = &quot;A den that smells of wet fur.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    spawns = [spawn(&quot;:wolf&quot;, count = 2, respawn_pulses = 600, at_index = 1)],
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+t.eq(len(w.room(&quot;:den&quot;).actors()), 2)</code></pre>
+</div>
+</section>
+<section id="standing_delta" class="entry">
+<h3><code>standing_delta</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h3>
+<p>Builds a standing delta for rules.standing_change.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="standing_delta.holder"><td><code>holder</code> <span class="badge feature">feature: standing</span></td><td><code>Actor | str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Mob or faction label holding the opinion.</td></tr>
+<tr id="standing_delta.subject"><td><code>subject</code> <span class="badge feature">feature: standing</span></td><td><code>Actor | str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Actor or faction label the opinion is about.</td></tr>
+<tr id="standing_delta.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td><code>int</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Change in standing.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Helper for rules.standing_change:
+def _change(ctx):
+    return [standing_delta(ctx.actor, ctx.target, -25)]</code></pre>
+</div>
+</section>
+<section id="stats" class="entry">
+<h3><code>stats</code> <span class="since">since api_version 1</span></h3>
+<p>Numbers keyed by the world's declared stats, such as stats(str = 12). Used for stat_deltas, mob stats, and the results of encumbrance and starting_stats.</p>
+<p>Accepts any keyword arguments.</p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;iron_cap&quot;, kind = &quot;armor&quot;, wear = &quot;head&quot;, stat_deltas = stats(armor = 2, con = 1))</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;, stats = stats(con = 12))
+w.spawn(&quot;:iron_cap&quot;, at = p)
+p.do(&quot;wear cap&quot;)
+t.eq(p.con, 13)
+t.eq(p.base.con, 12)</code></pre>
+</div>
+</section>
+<section id="struct" class="entry">
+<h3><code>struct</code> <span class="since">since api_version 1</span></h3>
+<p>An immutable record of named fields, for example a library's exported functions: struct(start = _start).</p>
+<p>Accepts any keyword arguments.</p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _shout(ctx, text):
+    ctx.echo(ctx.actor.room, text.upper())
+
+# Other files load(&quot;:example.star&quot;, &quot;loud&quot;) and call loud.shout(ctx, &quot;hi&quot;).
+loud = struct(shout = _shout)</code></pre>
+</div>
+</section>
+<section id="vitals" class="entry">
+<h3><code>vitals</code> <span class="since">since api_version 1</span></h3>
+<p>Numbers keyed by the world's declared vitals, such as vitals(hp = 20). Used for skill cost, mob vitals, flee(below), and the results of mitigate, move_cost, regen and starting_stats.</p>
+<p>Accepts any keyword arguments.</p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;ember&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 5, move = 2), range = &quot;near&quot;,
+      effect = damage(dice = &quot;1d4&quot;, type = DAMAGE.fire))
+mob(&quot;scarecrow&quot;, vitals = vitals(hp = 15))</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+s = w.spawn(&quot;:scarecrow&quot;, at = &quot;:start&quot;)
+t.eq(s.max_hp, 15)
+t.eq(s.hp, 15)</code></pre>
+</div>
+</section>
+<h2>Settings</h2>
+<p class="intro">MODULE.gups (module) and server.gups (server).</p>
+<section id="damage_type" class="entry">
+<h3><code>damage_type</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a damage type with a label and an adjective, for MODULE.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="damage_type.name"><td><code>name</code></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>The damage type's name.</td></tr>
+<tr id="damage_type.label"><td><code>label</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>name capitalized</code></td><td></td><td>The name players see.</td></tr>
+<tr id="damage_type.adjective"><td><code>adjective</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>How a hit of this type is described in anonymous lines; a non-empty single line.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="messages" class="entry">
+<h3><code>messages</code> <span class="since">since api_version 1</span></h3>
+<p>Overrides engine messages in MESSAGES.gups, by message id.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="messages.texts"><td><code>texts</code></td><td><code>dict[str, str]</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Message text by id. {name} marks a placeholder and {{ a literal brace; see the message catalog in the reference.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="module" class="entry">
+<h3><code>module</code> <span class="since">since api_version 1</span></h3>
+<p>Declares the world's metadata in MODULE.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="module.engine"><td><code>engine</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Engine version the world was written for.</td></tr>
+<tr id="module.api_version"><td><code>api_version</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Script API version the world pins.</td></tr>
+<tr id="module.checkpoint_minutes"><td><code>checkpoint_minutes</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>30</code></td><td></td><td>Minutes between routine database checkpoints.</td></tr>
+<tr id="module.start_room"><td><code>start_room</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Room label where new characters start.</td></tr>
+<tr id="module.stats"><td><code>stats</code></td><td><code>list[str | stat]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The stats actors have, each a name or stat(name, label).</td></tr>
+<tr id="module.vitals"><td><code>vitals</code></td><td><code>list[str | vital]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The vitals actors have, each a name or vital(name, label).</td></tr>
+<tr id="module.damage_types"><td><code>damage_types</code></td><td><code>list[str | damage_type]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The damage types of the world, each a name or damage_type(name, label, adjective).</td></tr>
+<tr id="module.unarmed_damage_type"><td><code>unarmed_damage_type</code></td><td><code>str</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The damage type of an unarmed auto-attack; one of damage_types.</td></tr>
+<tr id="module.channels"><td><code>channels</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Perception channels beyond sight and sound.</td></tr>
+<tr id="module.channel_priority"><td><code>channel_priority</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Channels from strongest to weakest: a player is told the text of the first one they perceive. Channels left out follow, built-in ones first.</td></tr>
+<tr id="module.prompt"><td><code>prompt</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'&lt;' + '{v}v ' per vital + '&gt; '</code></td><td></td><td>The telnet prompt, with {vital} and {max_vital} placeholders.</td></tr>
+<tr id="module.plugins"><td><code>plugins</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Plugin jars in plugins/&lt;id&gt;.jar, each pinned by its 'sha256:&lt;hex&gt;' checksum.</td></tr>
+<tr id="module.aliases"><td><code>aliases</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Alias words for engine commands, such as {&quot;l&quot;: &quot;look&quot;}.</td></tr>
+<tr id="module.prefixes"><td><code>prefixes</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Single characters that stand for an engine command, such as {&quot;'&quot;: &quot;say&quot;}.</td></tr>
+<tr id="module.features"><td><code>features</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>['combat', 'track', 'skills', 'leveling', 'standing']</code></td><td></td><td>The engine features the world uses: combat, track, skills, leveling and standing. Fixed per database; changing it needs --wipe.</td></tr>
+<tr id="module.rename"><td><code>rename</code></td><td><code>dict[str, str]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td></td><td>Renames engine commands, such as {&quot;cast&quot;: &quot;invoke&quot;}. Aliases, prefixes and docs use the new names.</td></tr>
+<tr id="module.level_mode"><td><code>level_mode</code> <span class="badge feature">feature: leveling</span></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'auto'</code></td><td><code>auto</code>, <code>deferred</code></td><td>How earned levels apply: 'auto' (immediately) or 'deferred' (waiting for ctx.level_up). Not fixed per database; changing it needs only a restart.</td></tr>
+<tr id="module.standing_history_pulses"><td><code>standing_history_pulses</code> <span class="badge feature">feature: standing</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>14400</code></td><td></td><td>How long the engine keeps the history of standing changes, in pulses; at least 1. Not fixed per database; changing it needs only a restart.</td></tr>
+<tr id="module.memory_pulses"><td><code>memory_pulses</code> <span class="badge feature">feature: combat</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>How long a mob keeps a combat memory after it last happened, in pulses; 0 keeps none. Not fixed per database; changing it needs only a restart.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>module(
+    api_version = 1,
+    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+    stats = [
+        stat(&quot;str&quot;, label = &quot;Strength&quot;), stat(&quot;dex&quot;, label = &quot;Dexterity&quot;),
+        stat(&quot;con&quot;, label = &quot;Constitution&quot;), stat(&quot;int&quot;, label = &quot;Intelligence&quot;),
+        stat(&quot;wis&quot;, label = &quot;Wisdom&quot;), stat(&quot;cha&quot;, label = &quot;Charisma&quot;),
+        stat(&quot;speed&quot;, label = &quot;Speed&quot;), &quot;armor&quot;,
+    ],
+    vitals = [vital(&quot;hp&quot;, label = &quot;Hit points&quot;), &quot;mana&quot;, vital(&quot;move&quot;, label = &quot;Movement&quot;)],
+    damage_types = [&quot;bludgeon&quot;, &quot;slash&quot;, &quot;pierce&quot;, &quot;fire&quot;],
+    unarmed_damage_type = &quot;bludgeon&quot;,
+    channels = [&quot;spell&quot;],
+    prompt = &quot;&lt;{hp}hp {mana}m {move}mv&gt; &quot;,
+    checkpoint_minutes = 30,
+    start_room = &quot;//zones/ex:start&quot;,
+)</code></pre>
+</div>
+</section>
+<section id="server" class="entry">
+<h3><code>server</code> <span class="since">since api_version 1</span></h3>
+<p>Declares this server's settings in server.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="server.world"><td><code>world</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the course world directory.</td></tr>
+<tr id="server.db"><td><code>db</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the SQLite database file.</td></tr>
+<tr id="server.telnet"><td><code>telnet</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Raw telnet listen address (host:port or :port), or None to disable.</td></tr>
+<tr id="server.telnet_tls"><td><code>telnet_tls</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>TLS telnet listen address (host:port or :port).</td></tr>
+<tr id="server.https"><td><code>https</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>HTTPS and WebSocket listen address (host:port or :port).</td></tr>
+<tr id="server.admin"><td><code>admin</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Loopback admin HTTP listen address (host:port).</td></tr>
+<tr id="server.tls_cert"><td><code>tls_cert</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the TLS certificate PEM file.</td></tr>
+<tr id="server.tls_key"><td><code>tls_key</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the TLS private key PEM file.</td></tr>
+<tr id="server.admin_token_file"><td><code>admin_token_file</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the file containing the admin bearer token.</td></tr>
+<tr id="server.repository"><td><code>repository</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Git repository URL or path for deploys.</td></tr>
+<tr id="server.deploy_branch"><td><code>deploy_branch</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>'main'</code></td><td></td><td>Git branch deployed by the admin endpoint.</td></tr>
+<tr id="server.deploy_key_file"><td><code>deploy_key_file</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Path to the SSH deploy key file.</td></tr>
+<tr id="server.open_signup"><td><code>open_signup</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True to allow creating player accounts without an invite code.</td></tr>
+<tr id="server.max_characters"><td><code>max_characters</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>5</code></td><td></td><td>Maximum characters per account.</td></tr>
+<tr id="server.restriction_ladder"><td><code>restriction_ladder</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>['1d', '7d', 'permanent']</code></td><td></td><td>Default restriction durations for @restrict.</td></tr>
+<tr id="server.reserved_names"><td><code>reserved_names</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Character names players may not register.</td></tr>
+<tr id="server.shutdown_timeout"><td><code>shutdown_timeout</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>30</code></td><td></td><td>Seconds a shutdown waits for the final checkpoint to be saved.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="stat" class="entry">
+<h3><code>stat</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a stat with a label, for MODULE.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="stat.name"><td><code>name</code></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>The stat's name.</td></tr>
+<tr id="stat.label"><td><code>label</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>name capitalized</code></td><td></td><td>The name players see.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>module(
+    api_version = 1,
+    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+    stats = [
+        stat(&quot;str&quot;, label = &quot;Strength&quot;), stat(&quot;dex&quot;, label = &quot;Dexterity&quot;),
+        stat(&quot;con&quot;, label = &quot;Constitution&quot;), stat(&quot;int&quot;, label = &quot;Intelligence&quot;),
+        stat(&quot;wis&quot;, label = &quot;Wisdom&quot;), stat(&quot;cha&quot;, label = &quot;Charisma&quot;),
+        stat(&quot;speed&quot;, label = &quot;Speed&quot;), &quot;armor&quot;,
+    ],
+    vitals = [vital(&quot;hp&quot;, label = &quot;Hit points&quot;), &quot;mana&quot;, vital(&quot;move&quot;, label = &quot;Movement&quot;)],
+    damage_types = [&quot;bludgeon&quot;, &quot;slash&quot;, &quot;pierce&quot;, &quot;fire&quot;],
+    unarmed_damage_type = &quot;bludgeon&quot;,
+    channels = [&quot;spell&quot;],
+    prompt = &quot;&lt;{hp}hp {mana}m {move}mv&gt; &quot;,
+    checkpoint_minutes = 30,
+    start_room = &quot;//zones/ex:start&quot;,
+)</code></pre>
+</div>
+</section>
+<section id="vital" class="entry">
+<h3><code>vital</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a vital with a label, for MODULE.gups.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="vital.name"><td><code>name</code></td><td><code>str</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>The vital's name.</td></tr>
+<tr id="vital.label"><td><code>label</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>name capitalized</code></td><td></td><td>The name players see.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>module(
+    api_version = 1,
+    # Each stat and vital is a name, or stat(...) / vital(...) with a label.
+    stats = [
+        stat(&quot;str&quot;, label = &quot;Strength&quot;), stat(&quot;dex&quot;, label = &quot;Dexterity&quot;),
+        stat(&quot;con&quot;, label = &quot;Constitution&quot;), stat(&quot;int&quot;, label = &quot;Intelligence&quot;),
+        stat(&quot;wis&quot;, label = &quot;Wisdom&quot;), stat(&quot;cha&quot;, label = &quot;Charisma&quot;),
+        stat(&quot;speed&quot;, label = &quot;Speed&quot;), &quot;armor&quot;,
+    ],
+    vitals = [vital(&quot;hp&quot;, label = &quot;Hit points&quot;), &quot;mana&quot;, vital(&quot;move&quot;, label = &quot;Movement&quot;)],
+    damage_types = [&quot;bludgeon&quot;, &quot;slash&quot;, &quot;pierce&quot;, &quot;fire&quot;],
+    unarmed_damage_type = &quot;bludgeon&quot;,
+    channels = [&quot;spell&quot;],
+    prompt = &quot;&lt;{hp}hp {mana}m {move}mv&gt; &quot;,
+    checkpoint_minutes = 30,
+    start_room = &quot;//zones/ex:start&quot;,
+)</code></pre>
+</div>
+</section>
+<h2>Constants</h2>
+<p class="intro">Predeclared values in every package.</p>
+<section id="DAMAGE" class="entry">
+<h3><code>DAMAGE</code> <span class="since">since api_version 1</span></h3>
+<p>A struct of the world's declared damage types, such as DAMAGE.fire; a misspelling fails at that line.</p>
+<p>Type <code>struct</code>, value <code>struct()</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># A misspelling such as DAMAGE.fier fails at that line, with a suggestion.
+item(&quot;flame_tongue&quot;, kind = &quot;melee&quot;, wield = &quot;wield&quot;, dice = &quot;1d6&quot;,
+     damage_type = DAMAGE.fire)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+sword = w.spawn(&quot;:flame_tongue&quot;, at = &quot;:start&quot;)
+t.eq(sword.damage_type, &quot;fire&quot;)</code></pre>
+</div>
+</section>
+<section id="DIR" class="entry">
+<h3><code>DIR</code> <span class="since">since api_version 1</span></h3>
+<p>Standard exit directions, such as DIR.north and DIR.west.</p>
+<p>Type <code>struct</code>, value <code>struct(north = &quot;north&quot;, east = &quot;east&quot;, south = &quot;south&quot;, west = &quot;west&quot;, up = &quot;up&quot;, down = &quot;down&quot;, northeast = &quot;northeast&quot;, northwest = &quot;northwest&quot;, southeast = &quot;southeast&quot;, southwest = &quot;southwest&quot;)</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;crossroads&quot;,
+    name = &quot;The Crossroads&quot;,
+    desc = &quot;A fork in the path.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    exits = [
+        exit(DIR.north, to = &quot;:start&quot;, one_way = True),
+    ],
+)</code></pre>
+</div>
+</section>
+<section id="DOOR" class="entry">
+<h3><code>DOOR</code> <span class="since">since api_version 1</span></h3>
+<p>Door states: DOOR.open, DOOR.closed, DOOR.locked.</p>
+<p>Type <code>struct</code>, value <code>struct(open = &quot;open&quot;, closed = &quot;closed&quot;, locked = &quot;locked&quot;)</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;hall&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    exits = [exit(DIR.north, to = &quot;:start&quot;, one_way = True, door = door(state = DOOR.closed))],
+)</code></pre>
+</div>
+</section>
+<section id="MODIFIER" class="entry">
+<h3><code>MODIFIER</code> <span class="since">since api_version 1</span></h3>
+<p>Rules modifier points, such as MODIFIER.damage and MODIFIER.to_hit.</p>
+<p>Type <code>struct</code>, value <code>struct(to_hit = &quot;to_hit&quot;, damage = &quot;damage&quot;, bonus_damage = &quot;bonus_damage&quot;, defend_hit = &quot;defend_hit&quot;, receive_damage = &quot;receive_damage&quot;, mitigate = &quot;mitigate&quot;, initiative = &quot;initiative&quot;, cast_allowed = &quot;cast_allowed&quot;, move_cost = &quot;move_cost&quot;, move_pace = &quot;move_pace&quot;, regen = &quot;regen&quot;, advance_lag = &quot;advance_lag&quot;, retreat_lag = &quot;retreat_lag&quot;, retreat_fail_lag = &quot;retreat_fail_lag&quot;, flee_fail_lag = &quot;flee_fail_lag&quot;, skill_check = &quot;skill_check&quot;, skill_power = &quot;skill_power&quot;, item_power = &quot;item_power&quot;)</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _dampen(ctx, base):
+    return max(1, base // 2)
+
+room(&quot;padded_room&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    modifiers = {MODIFIER.damage: _dampen},
+)</code></pre>
+</div>
+</section>
+<section id="SEMI_PERMANENT" class="entry">
+<h3><code>SEMI_PERMANENT</code> <span class="since">since api_version 1</span></h3>
+<p>A duration (in pulses) that effectively never ends; accepted wherever a timed affect takes a duration.</p>
+<p>Type <code>int</code>, value <code>9223372036854775807</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># A burn that never ends on its own; dispel it to put it out.
+skill(&quot;immolate&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 5), range = &quot;near&quot;,
+      effect = apply_affect(name = &quot;burning&quot;, duration = SEMI_PERMANENT,
+                             flags = [&quot;burning&quot;]))</code></pre>
+</div>
+</section>
+<section id="SENSE" class="entry">
+<h3><code>SENSE</code> <span class="since">since api_version 1</span></h3>
+<p>Perception senses (SENSE.sight, SENSE.sound, declared senses) and SENSE.all.</p>
+<p>Type <code>struct</code>, value <code>struct(sight = &quot;sight&quot;, sound = &quot;sound&quot;, all = [&quot;sight&quot;, &quot;sound&quot;])</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;closet&quot;,
+    desc = &quot;A closet behind a thick curtain.&quot;,
+    flags = [&quot;dead_end_ok&quot;],
+    # Nothing gets through, if the rules honour the tag: no sight or sound.
+    exits = [exit(DIR.north, to = &quot;:start&quot;, one_way = True, tags = [&quot;sealed&quot;])],
+)</code></pre>
+</div>
+</section>
+<section id="SIZE" class="entry">
+<h3><code>SIZE</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Track size constants for rooms: SIZE.cramped, SIZE.normal, SIZE.large.</p>
+<p>Type <code>struct</code>, value <code>struct(cramped = &quot;cramped&quot;, normal = &quot;normal&quot;, large = &quot;large&quot;)</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>room(&quot;crawlway&quot;, desc = &quot;You can barely turn around.&quot;, size = SIZE.cramped, flags = [&quot;dead_end_ok&quot;])</code></pre>
+</div>
+</section>
+</main>
+</body>
+</html>

@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Changelog — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html" class="current">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Changelog</h1>
+<section class="changelog">
+<h1 id="changelog">Changelog</h1>
+<p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
+<h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="respec-shrines">Respec shrines</h3>
+<ul>
+<li><code>lock_door</code> now fails with a script error on a door without a <code>key</code>, as <code>lock_container</code> does, since only a door with
+a key has a lock. A <code>door(state=DOOR.locked)</code> or <code>container(state=...)</code> declared locked without a <code>key</code> now fails to
+load. Give the door or container a <code>key</code>, or declare it <code>closed</code> and veto <code>open</code> with <code>before_open</code>. A door or
+container left locked when its prototype loses its <code>key</code> comes back closed after a reload (doors) or a restore from
+the database (doors and containers).</li>
+<li><code>ctx.give</code> is renamed <code>ctx.grant_item</code>, since it puts an item in an actor's inventory with no giver and isn't the
+<code>give</code> command. The spec now says that <code>grant_item</code>, <code>move_item</code> and <code>destroy</code> take a worn item off without asking the
+<code>remove</code> restriction; <code>remove_worn</code> asks it.</li>
+<li><code>teleport</code> now runs <code>before_enter</code> in the destination room (with <code>ctx.direction</code> <code>None</code>) after the <code>enter</code>
+restriction, and returns the refusal or veto instead of sending it: <code>ctx.teleport</code> returns the message or <code>None</code>, and
+<code>PluginWorld.teleport</code> returns <code>String?</code>. <code>@goto</code> tells the builder the refusal. Implementers of <code>PluginWorld</code> must
+change <code>teleport</code>'s return type to <code>String?</code>.</li>
+<li><code>//lib:trainer.star</code> records the sessions spent per skill; <code>trainer.refund(ctx, actor, skill=None)</code> gives them back.</li>
+<li><code>samples/heritage-plugin</code>: <code>heritage.respec_menu</code>, <code>respec_check</code>, <code>respec</code> and <code>starter_skills</code>; <code>created</code> grants
+class starter skills for re-picked characters too; starter skills are <code>//skills/heritage_skills:*</code>.</li>
+<li>The heritage sample ships <code>world/</code> content: <code>lib/respec.star</code> (shrine keepers, the <code>respec</code> command, <code>respec_offer</code>,
+cooldowns, world-wide defaults) and a <code>//zones/shrine</code> example.</li>
+<li><code>respec.star</code>: the <code>reset</code> skill policy (refund through <code>trainer.refund</code>, forget, starter skills), the <code>&quot;respec&quot;</code>
+standing event, the <code>respec_done</code> hook, and a rebirth altar example.</li>
+<li>Heritage tutorial 04 walks through a respec shrine; <code>docs/PLUGINS.md</code> lists the respec builtins.</li>
+<li>New verbs <code>ctx.wear(actor, item, wield=False)</code> and <code>ctx.remove_worn(actor, item)</code>, and <code>PluginWorld.wear</code> /
+<code>removeWorn</code>: put a carried item on, or a worn one off, as the <code>wear</code>, <code>wield</code> and <code>remove</code> commands would, asking the
+same restrictions and sending nothing. They return the refusal or <code>None</code>. Script item verbs otherwise still skip item
+restrictions.</li>
+<li>New restriction queries <code>ctx.may_wear(actor, item, wield=False)</code>, <code>may_remove</code>, <code>may_drop</code>, <code>may_give(actor, item, to)</code>, <code>may_put(actor, item, container)</code>, <code>may_enter(actor, room)</code> and <code>may_learn(actor, skill, proficiency)</code>, and
+<code>PluginWorld.mayWear</code>, <code>mayRemove</code>, <code>mayDrop</code>, <code>mayGive</code>, <code>mayPut</code>, <code>mayEnter</code> and <code>mayLearn</code>: each returns the
+message the command or verb would refuse with, or <code>None</code>, and changes nothing. <code>wear</code>, <code>remove_worn</code> and <code>set_skill</code>
+share their checks with their queries.</li>
+<li><code>//lib:shop.star</code>: <code>sell</code> asks <code>may_give</code> with the keeper as receiver, so a <code>give</code> restriction refuses a sale and the
+item stays with the seller.</li>
+<li>New query <code>ctx.fits(item_or_label, to, count=None)</code> and <code>PluginWorld.fits(item | label, to, count)</code>: how many of
+<code>count</code> would fit in a container (its free <code>capacity</code> and <code>max_weight</code>), at an actor (their <code>carry_limit</code>) or in a
+room, worked out as <code>put</code>, <code>get</code> and <code>give</code> do, without moving or spawning anything. <code>spawn</code>, <code>give</code> and <code>move_item</code>
+still skip these limits.</li>
+<li>The rules <code>ctx</code> gains <code>item_info</code> in <code>carry_limit</code> asked about an item or a label: the prototype's <code>item_info</code> struct,
+so a limit that varies by item type reads <code>ctx.item_info.tags</code> or <code>.kind</code> whether or not an instance exists.
+<code>ctx.item</code> is <code>None</code> when <code>fits</code> asks about a label.</li>
+<li><code>//lib:shop.star</code>: <code>list</code> runs in the normal lane and restocks for real before it answers, as <code>buy</code> and <code>sell</code> do,
+instead of projecting the restock; <code>buy</code> sells no more than the buyer can carry (&quot;You can only carry N.&quot;, or &quot;You
+can't carry that.&quot; for nothing), and restocking and <code>sell</code> ask <code>ctx.fits</code> about the container. <code>shop.define</code> no longer
+takes <code>capacity</code> and <code>max_weight</code>: the container's own limits apply. Fix a call that passes them by dropping them, and
+give a shop that wants a smaller shelf a smaller container.</li>
+<li>Plugin API: <code>PluginWorld.spawnItem(label, to, count=1)</code> (returns a list: one stack for a stackable label, <code>count</code>
+items otherwise), <code>moveItem(item, to, count=null)</code>, <code>destroy(item, count=null)</code> and <code>mergeStack(item)</code>, with the
+semantics of <code>ctx.spawn</code> (items only), <code>ctx.move_item</code>, <code>ctx.destroy</code> and <code>ctx.merge_stack</code>: they skip item
+restrictions and the commands' limits, and room placement is at track index 0. There is no <code>give</code>; move or spawn to an
+actor instead. New reads <code>PluginItem.count</code>, <code>PluginItem.location</code> (a <code>PluginItemLocation</code>: <code>InRoom</code>, <code>Carried</code>,
+<code>Equipped</code> or <code>InContainer</code>), <code>PluginActor.inventory</code> and <code>PluginActor.equipment</code>. Implementers of <code>PluginWorld</code>,
+<code>PluginActor</code> and <code>PluginItem</code> (fakes in tests) add the new members.</li>
+<li>A worn item's <code>wear</code> restriction is asked again, for everything the wearer has on, whenever the item's effective tags,
+prototype (<code>transform</code>) or item affects change, including an item affect that expires. A refused item goes inactive
+and one no longer refused works again, as after a choice or trait change.</li>
+<li>Test harness: <code>w.ctx(self=None)</code> returns a ctx with every verb, as a hook owned by <code>self</code> (an entity or a label; the
+world's first room by label when omitted) would have it, for setting up state without typing commands or adding
+fixture commands. It has no other context fields, resolves labels relative to the test's package, runs verbs at once
+outside any pulse (mob actions queue, so <code>w.run</code> lets them happen) and stays usable for the rest of the test. <code>deny</code>
+is an error.</li>
+<li>A function defined in a <code>*_test.star</code> file can no longer be passed to <code>after</code>, <code>start_task</code> (<code>on_done</code>, <code>on_stop</code>) or
+an affect's <code>on_tick</code> or <code>on_expire</code>: it fails with &quot;defined in a test file&quot;, where before the callback was accepted
+and silently never ran. Define the callback in a content file or a <code>*_testdata.star</code> fixture.</li>
+</ul>
+<h3 id="timed-tasks-and-crafting">Timed tasks and crafting</h3>
+<ul>
+<li>The warmup slot is kernel: <code>stop</code>/<code>clear</code> cancel an activity in every world, and <code>interrupt_check</code> belongs to the
+kernel.</li>
+<li>A mob whose warmup a stun paused is still asked <code>chain_think</code> when the warmup resolves.</li>
+<li>Timed tasks in the kernel: an activity that waits like a warmup and ends completed, interrupted, cancelled, invalid or
+gone. New messages <code>task.busy</code>, <code>task.unable</code>, <code>task.interrupted</code>, <code>task.invalid</code> and <code>stop.task</code>.</li>
+<li><code>Char.Status</code> gains <code>&quot;task&quot;: {&quot;name&quot;, &quot;progress&quot;}</code> or null (kernel); <code>casting</code> reports casts only.</li>
+<li><code>ctx.start_task(actor, pulses, on_done, name=&quot;task&quot;, lag=0, interrupt=None, on_stop=None, **args)</code> and
+<code>ctx.stop_task(actor)</code>; the ctx field <code>task</code> in a task's callbacks and in <code>interrupt_check</code>; the actor view fields
+<code>task</code> and <code>is_busy</code>.</li>
+<li>The template's <code>interrupt_check</code> reads <code>(ctx.skill or ctx.task).interrupt</code>, so damage can break a timed task.</li>
+<li><code>ctx.skill_roll(actor, skill, item=None, target=None, event=&quot;craft&quot;, adjust=0)</code> rolls a skill outside a cast and
+returns <code>struct(chance, roll, success, power)</code> (<code>skills</code>); <code>skill_check</code> sees <code>ctx.event</code>, and its trace shows a
+non-zero <code>adjust</code>.</li>
+<li><code>ctx.set_item_name(item, name)</code> sets or clears an item's name override (kernel).</li>
+<li>Plugin API: <code>PluginWorld.startTask</code>, <code>stopTask</code>, <code>skillRoll</code> and <code>setItemName</code>; <code>PluginActor.task</code> and <code>isBusy</code>; the
+types <code>PluginTaskInterrupt</code>, <code>PluginTask</code>, <code>PluginTaskCall</code>, <code>PluginTaskStop</code>, <code>PluginTaskEnd</code> and <code>PluginSkillRoll</code>.</li>
+<li><code>samples/hunger-plugin</code> gains <code>hunger.dine(actor, amount, pulses)</code>, which eats over a timed task.</li>
+<li><code>ctx.item_info(label)</code> and <code>PluginWorld.itemInfo(label)</code> read an item prototype's catalog fields without spawning one
+(kernel).</li>
+<li><code>//lib:craft.star</code>: crafting stations (a room, ground item or carried item with a <code>craft_recipes</code> hook), the recipe
+constructors <code>craft.recipe</code>, <code>need</code>, <code>make</code>, <code>improve</code>, <code>failure</code> and <code>quality</code>, learned recipes (<code>craft.teach</code>,
+<code>craft.knows</code>), the <code>recipes</code> command and the GMCP packages <code>Craft.Recipes</code> and <code>Craft.Result</code>.</li>
+<li><code>craft &lt;recipe&gt; [on &lt;item&gt;]</code> runs a craft as a timed task: it rolls <code>skill_roll</code> when the recipe names a skill, then
+consumes the inputs and makes or improves an item, losing each input's <code>lose</code> on a failure. Quality tiers rename and
+enhance the result; the station's <code>craft_check</code> and <code>craft_done</code> hooks adjust, refuse and hear a craft; <code>Craft.Result</code>
+reports how it ended.</li>
+<li>The template world gains the <code>//skills/crafts</code> package (<code>smithing</code>, a <code>craft</code> skill that <code>cast_allowed</code> refuses to
+cast), a smithy east of the tutorial shop with a forge, a whetstone, a repair kit, tempering notes and a smith who
+teaches smithing, and tutorial chapter 12, &quot;Crafting&quot;.</li>
+</ul>
+<h3 id="recognizing-skills-and-trait-callbacks">Recognizing skills and trait callbacks</h3>
+<ul>
+<li><code>damage_types</code> accepts <code>damage_type(name, label=None, adjective=None)</code> beside plain names.</li>
+<li><code>skill(unrecognized={...})</code> gives the lines players who don't recognize a skill see, and the noun the engine's
+anonymous lines use (<code>ctx.skill.unrecognized</code>).</li>
+<li>New optional rules export <code>recognizes_skill(ctx)</code> (<code>ctx.source</code>, <code>ctx.cast_target</code>).</li>
+<li>Breaking: players who don't recognize a skill no longer see its name when it resolves, is resisted, or hits them. They
+see the skill's <code>unrecognized</code> line or a new <code>cast.anon.*</code> message.</li>
+<li>The warmup line now reaches only players who can see the caster.</li>
+<li>Plugins: <code>PluginTrait.on</code> trait callbacks (<code>SKILL_RECOGNIZED</code>) and <code>PluginWorld.skill(label)</code>.</li>
+<li>Plugin trait events <code>DAMAGED</code>, <code>HEALED</code>, <code>KILLED</code>, <code>DIED</code>, <code>LEVEL_CHANGED</code> and <code>ROOM_ENTERED</code> run synchronously for
+players and mobs.</li>
+<li>Plugin trait events <code>AFFECT_GAINED</code> and <code>AFFECT_LOST</code> report a bearer's own affects, including those its worn gear
+gives it.</li>
+<li>Plugins can declare optional rules exports (<code>addRulesExport</code>, <code>PluginWorld.rules</code>); rules calls gain <code>ctx.base</code> and
+<code>ctx.args</code>.</li>
+<li>Template world: <code>recognizes_skill</code> (Intelligence and Wisdom; skills tagged <code>subtle</code> are never recognized), damage type
+adjectives, and <code>spark</code> carries the <code>blue</code> tag and an <code>unrecognized</code> dict. The tutorial mentor now has mana, so it can
+cast <code>spark</code>.</li>
+<li>New sample <code>samples/bluemage-plugin</code>.</li>
+</ul>
+<h3 id="movement-pace-and-pursuit-catch-up">Movement pace and pursuit catch-up</h3>
+<ul>
+<li>New optional rules export <code>move_pace(ctx)</code> and modifier point <code>move_pace</code>: hundredths of a pulse per room (default
+100). Actor views gain <code>move_pace</code>.</li>
+<li>Walking pace: each move adds <code>move_pace</code> to a movement debt, and an actor moves only while the debt is below 100. Fast
+actors make up to four complete moves a pulse.</li>
+<li>Breaking (timing): a mob's think now runs the action it chooses in the same pulse, so mob actions happen one pulse
+sooner than before.</li>
+<li>Chained thinks: the optional rules export <code>chain_think(ctx)</code> lets a mob think again as soon as its action finishes
+(<code>ctx.behavior</code>, <code>ctx.command</code>, <code>ctx.exit</code>, <code>ctx.chain</code>). By default, <code>pursue</code>, <code>follow</code>, <code>heel</code> and walking home
+chain, so pursuers catch up at their <code>move_pace</code>.</li>
+<li>Plugins can adjust chained thinks with <code>addChainThink</code>.</li>
+</ul>
+<h3 id="mob-leashes-and-bounded-pursuit">Mob leashes and bounded pursuit</h3>
+<ul>
+<li><code>pursue</code> takes <code>range</code> (default 10 exits, <code>None</code> for no limit) and searches once per think instead of pathing to every
+match in the world; it no longer considers dead actors.</li>
+<li>Mobs have a <code>leash</code>: <code>mob(leash=)</code> (default <code>None</code>), the <code>set_leash</code> / <code>reset_leash</code> verbs, and the <code>leash</code> /
+<code>leash_overridden</code> view fields.</li>
+<li><code>wander</code>, <code>follow</code> and <code>pursue</code> stay within a mob's leash.</li>
+<li>A leashed mob outside its home ground walks all the way home once nothing outranks it (an engine proposal at priority
+20, source <code>leash</code>). It stays put while its <code>follow</code> leader or <code>pursue</code> quarry shares its room inside the leash.</li>
+<li><code>wander</code> outside its radius now heads home instead of standing still.</li>
+<li>New optional rules export <code>leash_return(ctx)</code> decides when a leashed mob heads home (<code>ctx.away</code>, <code>ctx.past_leash</code>).</li>
+</ul>
+<h3 id="target-preference-retargeting-and-combat-memory">Target preference, retargeting and combat memory</h3>
+<ul>
+<li>Breaking: <code>aggressive</code> no longer takes <code>via</code>. A mob notices on every channel it senses (its effective <code>senses</code> above
+0), so declare a deaf or blind mob through <code>mob(senses=)</code> instead.</li>
+<li><code>aggressive(prefer=)</code> and <code>assist(prefer=)</code>, with the optional <code>target_order(ctx)</code> rules export that picks among the
+candidates or returns <code>None</code> for nobody.</li>
+<li>New behavior <code>retarget(prefer, ...)</code>: an engaged mob asks <code>target_order</code> whom to fight and switches to its pick,
+including an actor not yet in the fight.</li>
+<li>Combat memory: with <code>module(memory_pulses=)</code> or <code>mob(memory_pulses=)</code>, a mob remembers who attacked and damaged it and
+when it arrived, merged per subject and event and forgotten after the window.</li>
+<li>Combat memory also records the events a mob perceives, and the entrances, casts, heals, helpful affects and kills it
+witnesses in its room.</li>
+<li>Logging in (with any pets) and respawning after death raise a perceived <code>enter</code> in the room, as walking in does, so
+mobs there witness the arrival and <code>on_perceive</code> sees it.</li>
+<li><code>ctx.memories(mob, ...)</code>, <code>ctx.remember(mob, subject, event, ...)</code> and <code>ctx.forget(mob, subject=None, event=None)</code>.</li>
+<li>The rules ctx <code>memories(...)</code>, so <code>target_order</code> and <code>can_perceive</code> can read what the mob remembers.</li>
+<li><code>actor.primary_target</code>: the actor an engaged actor is attacking, or <code>None</code> (feature <code>combat</code>).</li>
+<li>Plugins: <code>addTargetOrder</code>, <code>PluginWorld.memories</code>, <code>PluginWorld.remember</code> and <code>PluginWorld.forget</code>.</li>
+<li>The template world keeps combat memory for 5 minutes and ships a sample <code>target_order</code> (weakest, strongest, hated,
+threat with fading weights, arrival delay and switch hysteresis). A hidden actor moves silently, but one who makes
+noise can be noticed by sound for a moment.</li>
+<li>The template world has a <code>pacify</code> spell: it ends a mob's fight with the caster, makes the mob forget the caster with
+<code>ctx.forget</code>, and keeps it from noticing anyone for a while. A cast is now remembered before its effects and <code>resolve</code>
+run, so <code>resolve</code> can make a mob forget it.</li>
+</ul>
+<h3 id="skill-advancement-through-use">Skill advancement through use</h3>
+<ul>
+<li>The global <code>on_skill_use</code> hook (feature <code>skills</code>): every cast that resolves reports <code>&quot;fail&quot;</code>, <code>&quot;resist&quot;</code> or
+<code>&quot;success&quot;</code>, so a world can advance skills through use.</li>
+<li><code>ctx.report_skill_use(actor, skill, target=None, item=None)</code> fires <code>on_skill_use</code> with <code>&quot;report&quot;</code>, for skills that
+only rules read, such as an artificer's.</li>
+<li>Plugins: <code>PluginWorld.reportSkillUse</code> fires <code>on_skill_use</code> with <code>&quot;report&quot;</code>, and <code>onEvent(&quot;on_skill_use&quot;, ...)</code>
+delivers <code>skill</code>, <code>outcome</code>, <code>target</code>, <code>item</code> and <code>targets</code> after the script global hooks.</li>
+<li>The robot world has a sample <code>//lib:skill_gain.star</code>: deterministic advancement through use with a tunable curve, and
+a <code>self_repair</code> routine learned from a repair chip.</li>
+</ul>
+<h3 id="custom-creation-steps-and-base-values">Custom creation steps and base values</h3>
+<ul>
+<li>Plugins can set base stats, base vital maxima and base resists with <code>setBaseStat</code>, <code>setBaseMaxVital</code> and
+<code>setBaseResist</code>.</li>
+<li>Creation providers can declare custom steps (<code>PluginCreationStep</code>) shown after the choices, with a per-attempt seed,
+random streams, shared state and a preview actor, and a <code>prepare</code> callback that runs before a new character enters the
+world.</li>
+<li><code>spawn_player(steps = {...})</code> runs a world's custom creation steps in tests.</li>
+<li><code>starting_stats</code> draws from a per-attempt generator while a character is created through the creation steps.</li>
+</ul>
+<h3 id="feature-sized-plugins">Feature-sized plugins</h3>
+<ul>
+<li>
+<p><code>global_hook(&quot;on_death&quot;, fn)</code> fires once per death, after the victim's, room's and observers' <code>on_death</code> hooks and
+before the corpse and XP award, with <code>ctx.self</code> the victim and <code>ctx.actor</code> the killer.</p>
+</li>
+<li>
+<p><code>ctx.has_feature(name)</code> also reports features provided by plugins, and returns <code>False</code> (instead of raising an error)
+for a well-formed name that is not a known feature.</p>
+<p>Before:</p>
+<pre><code class="language-python">ctx.has_feature(&quot;hunger&quot;)  # raises: unknown feature 'hunger'
+</code></pre>
+<p>After, with no plugin providing <code>hunger</code>:</p>
+<pre><code class="language-python">ctx.has_feature(&quot;hunger&quot;)  # False
+</code></pre>
+</li>
+<li>
+<p>Plugins can provide features, refuse a world at load, run periodic work and listen to engine events; see
+<code>docs/PLUGINS.md</code>.</p>
+</li>
+</ul>
+<h3 id="groups-and-levels-in-who-and-score">Groups and levels in who and score</h3>
+<ul>
+<li><code>who</code> shows each player's level (with <code>leveling</code>) and group leader: new entries <code>leveling.who_level</code> and <code>who.group</code>,
+and new <code>{level}</code> and <code>{group}</code> placeholders in <code>who.player</code> and <code>who.linkdead</code>. Override a fragment to <code>&quot;&quot;</code> in
+<code>MESSAGES.gups</code> to hide it.</li>
+<li><code>score</code> shows <code>score.group</code> while the character is in a group.</li>
+</ul>
+<h3 id="standing-and-factions">Standing and factions</h3>
+<ul>
+<li>The optional <code>standing</code> feature module introduces factions, declared opinions and standing history. Leaving <code>features</code>
+out in <code>MODULE.gups</code> enables it along with all other features.</li>
+<li><code>faction(name, standing = {}, doc = &quot;&quot;)</code> declares a content faction <code>//&lt;package&gt;:&lt;name&gt;</code> and its declared opinions of
+other factions (each in -100..100). A faction with the same label as a mob prototype in the same package configures
+that prototype's implicit faction.</li>
+<li><code>mob(factions = [...])</code> specifies the factions a mob prototype belongs to; when omitted, it defaults to its own
+prototype label.</li>
+<li><code>module(standing_history_pulses = 14400)</code> sets how long the engine keeps standing history in pulses (at least 1; needs
+<code>standing</code>).</li>
+<li>Personal standing records on mobs, faction standing records on the world, history queries, and pruning. A mob's
+disposition toward an actor (what it thinks of them) defaults to the sum of the declared, faction-to-actor,
+faction-to-faction, and personal parts, clamped to -100..100.</li>
+<li>Optional rules exports <code>rules:factions(ctx)</code>, <code>rules:disposition(ctx)</code> and <code>rules:standing_change(ctx)</code>, with
+<code>rules_ctx.disposition_parts</code>, <code>rules_ctx.amount</code>, <code>rules_ctx.helped</code>, and <code>rules_ctx.pet</code>.</li>
+<li><code>standing_delta(holder, subject, amount)</code> constructs a delta value inside <code>rules.standing_change</code>.</li>
+<li>Rules <code>ctx</code> query methods <code>factions_of(actor)</code>, <code>standing(holder, subject)</code> (a record's amount) and
+<code>standing_history(holder, subject, since = 0, via = None, event = None)</code>.</li>
+<li>Built-in standing events: mobs remember attackers when <code>standing</code> is on, and the engine automatically raises <code>attack</code>,
+<code>kill</code>, <code>heal</code>, <code>help</code>, <code>assist</code>, and <code>give</code> events.</li>
+<li>Script hook context queries <code>ctx.disposition(holder, subject)</code>, <code>ctx.standing(holder, subject)</code> (a record's amount,
+not including declared faction opinions) and <code>ctx.factions_of(actor)</code>.</li>
+<li>Script hook context verbs <code>ctx.standing_history(holder, subject, since = 0, via = None, event = None)</code>,
+<code>ctx.standing_event(affected, actor, event, amount = 0, item = None)</code>, <code>ctx.adjust_standing(holder, subject, amount)</code>,
+and <code>ctx.clear_standing(holder, subject = None)</code>.</li>
+<li>Disposition thresholds on behaviors: <code>disposition_below</code> on <code>aggressive</code> and <code>pursue</code>, and <code>disposition_above</code> on
+<code>assist</code>, <code>guard</code> and <code>follow</code>.</li>
+<li>Saved standing: faction standing records in the <code>standings</code> database table, personal standing records with history in
+the mob payload, checkpoint pruning, and dropping of orphaned records on restore and reload.</li>
+<li><code>PluginRegistry.addDispositionModifier(doc, adjust)</code> allows plugins to adjust a disposition after the rules export in
+plugin-id order; <code>PluginRegistry.addFactions(doc, adjust)</code> allows plugins to adjust an actor's faction labels in
+plugin-id order.</li>
+<li><code>PluginWorld</code> exposes <code>disposition(holder, subject)</code>, <code>standing(holder, subject)</code>, <code>factionsOf(actor)</code>,
+<code>raiseStandingEvent(affected, actor, event, amount, item)</code> and <code>adjustStanding(holder, subject, amount)</code>.</li>
+<li>An actor's cached factions are forgotten when its owner changes, so a <code>factions</code> export may base a pet's factions on
+its owner. Asking for the factions or the disposition being worked out (<code>ctx.factions_of</code> of the same actor inside the
+<code>factions</code> export, or a plugin handler asking for the value it adjusts) is an error instead of endless recursion.</li>
+<li>Faction records about a pet held out of the world while its owner is offline are kept at checkpoints and on restore.</li>
+<li>The <code>standings</code> table is part of the base database schema; databases created before it need <code>--wipe</code>.</li>
+<li>The template world demonstrates standing and factions with <code>template-world/lib/factions.star</code> (<code>townsfolk</code> and
+<code>goblins</code>), <code>template-world/rules/standing.star</code> deltas with a gratitude ceiling and rate caps, disposition thresholds
+on tutorial mobs, and tutorial 11 on standing and factions.</li>
+</ul>
+<h3 id="pets-and-owners">Pets and owners</h3>
+<ul>
+<li><code>summon</code> (the effect primitive and the verb) now sets the owner of each mob it spawns to the caster when the caster is
+an in-world player. <code>summonedBy</code> and the owner are set before the mob's <code>on_spawn</code> runs.</li>
+<li><strong>Breaking:</strong> a mob's owner is its own <code>owner</code> field, no longer its <code>summonedBy</code> or <code>leader</code>. A mob that merely
+follows a player is no longer that player's pet for <code>xp_share</code>, groups or <code>allies_near</code>.</li>
+</ul>
+<pre><code class="language-python"># Before: a mob following a player counted as that player's pet in xp_share, group_of and allies_near.
+# After: only a mob whose owner is set counts.
+ctx.set_owner(wolf, player)
+</code></pre>
+<ul>
+<li><code>ctx.set_owner(mob, player)</code> and <code>ctx.clear_owner(mob)</code> set and remove a mob's owner. An owned mob gets the active
+reason <code>owner:&lt;player_id&gt;</code> while its owner is in the world, leaves its spawn rule, and stops fighting its owner's
+side. Both return whether anything changed.</li>
+<li>The actor view has an <code>owner</code> field: the view of the in-world player that owns the actor, or <code>None</code>. Because <code>owner</code>
+is now an actor view field, it can no longer be a stat or vital name.</li>
+<li><code>on_owner_change</code> is a global hook that fires after each change of a mob's owner, with <code>ctx.actor</code> the mob,
+<code>ctx.target</code> the owner gained or lost and <code>ctx.event</code> <code>&quot;set&quot;</code> or <code>&quot;clear&quot;</code>.</li>
+<li>A mob's <code>owner</code> is saved with it.</li>
+<li>Every built-in behavior that has a priority takes <code>priority=</code> (<code>wander</code>, <code>aggressive</code>, <code>assist</code>, <code>flee</code>, <code>follow</code>,
+<code>pursue</code>, <code>scavenge</code>); the old fixed values are now the defaults. Proposals sort by priority, then declaration order.</li>
+<li><code>heel(priority=30)</code> follows the mob's owner by the shortest path, however far. <code>defend(group=True, priority=50)</code>
+attacks whatever the owner, or with <code>group</code> the owner's in-room group members, are fighting (<code>combat</code> feature).</li>
+<li>A mob with an owner runs an owned behavior list instead of its prototype's <code>behaviors</code>: by default the prototype's
+<code>flee</code> and <code>sentinel</code> behaviors, then <code>heel()</code>, then <code>defend()</code> with <code>combat</code>. An owned mob's <code>aggressive</code> and
+<code>assist</code> never pick its owner, the owner's group members, or a pet of any of them.</li>
+<li><code>owned_behaviors(ctx)</code> is a new optional rules export that returns the list of behaviors an owned mob runs, with
+<code>ctx.actor</code> the mob, <code>ctx.target</code> the owner (<code>None</code> while the owner is offline) and <code>ctx.behaviors</code> the prototype's
+behaviors. Behavior constructors may be called inside it. A rules error keeps the default list, and the list is
+recomputed after a reload. When defined, the load-time dry run calls it with a throwaway mob and player.</li>
+<li><code>PluginRegistry.addOwnedBehaviors(doc, adjust)</code> allows plugins to adjust a mob's owned behavior list after the
+<code>owned_behaviors</code> rules export, in plugin-id order, receiving and returning behaviors as plain descriptor maps.</li>
+<li><strong>Breaking:</strong> when a mob with an owner becomes engaged with an actor, its owner in the same room is engaged with that
+actor too. When the owner's engagement with an opponent ends (by fleeing, leaving the room, <code>stop_combat</code>, death or
+quit), its in-room pets engaged with that opponent are disengaged as well and receive <code>on_disengage</code> with the owner's
+event.</li>
+</ul>
+<pre><code class="language-python"># Before: ordering or letting a pet fight left its owner out of the fight.
+# After: the owner is engaged with whatever its pet fights in the same room,
+# and the pet leaves the fight when its owner does.
+</code></pre>
+<ul>
+<li><code>order &lt;pet&gt; &lt;command&gt;</code> queues a command line on one of the player's pets in the room, with the pet paying its own
+warmup and lag and the player paying none. <code>order pets &lt;command&gt;</code> orders each of the player's pets in the room, in
+ascending id. Ordered actions are checked again when they run: if the owner is no longer in the room or no longer owns
+the pet, the action is dropped.</li>
+<li><code>before_order</code> is a vetoable hook on Mob (the pet) and Room evaluated before an order is queued, with <code>ctx.actor</code> the
+owner, <code>ctx.target</code> the pet and <code>ctx.text</code> the command line.</li>
+<li><code>PluginRestrictionPoint.ORDER</code> allows plugins to restrict ordering pets.</li>
+<li><code>before_summon</code> is a vetoable hook on Room and Mob (observer) evaluated before mobs are summoned by the <code>summon</code>
+primitive or <code>ctx.summon</code>, with <code>ctx.actor</code> the caster, <code>ctx.label</code> the prototype label and <code>ctx.count</code> the count. A
+veto stops the summon and <code>ctx.summon</code> returns <code>[]</code>.</li>
+<li><code>on_summon</code> is an observer hook on Room and Mob that fires after all mobs of a summon have spawned and any
+<code>on_owner_change</code> has fired, with <code>ctx.actor</code> the caster and <code>ctx.targets</code> the new mobs in spawn order.</li>
+<li><code>ctx.label</code> and <code>ctx.count</code> expose the prototype label and count in <code>before_summon</code>; <code>ctx.targets</code> also lists the
+summoned mobs in <code>on_summon</code>.</li>
+<li>Pets are stored with their owner across logout and restart: on quit, each pet leaves the world with what it carries
+and is saved in the player's immediate checkpoint. At login each pet is restored beside the player in ascending id,
+with its items, active <code>owner:</code> reason and owned behaviors. A held pet whose owner's character or prototype no longer
+exists is dropped with a log note.</li>
+<li>The tutorial zone defines a summonable spectral familiar (a pet with default owned behaviors) and the arcane school
+adds the <code>familiar</code> spell.</li>
+</ul>
+<h3 id="groups-and-shared-experience">Groups and shared experience</h3>
+<ul>
+<li>Each actor holds a transient record of the damage, healing and support other actors do toward fights against it, kept
+on the victim and never saved. Damage and healing an affect does from its own <code>on_tick</code> or <code>on_expire</code> hook, naming no
+<code>source</code>, are credited to the actor that applied the affect while it is in the world.</li>
+<li><code>heal</code> takes an optional <code>source</code>, the actor credited with the healing; an omitted or <code>None</code> source is the applier of
+the affect whose hook is running.</li>
+<li><code>clear_contributions(victim, contributor=None)</code> empties an actor's contribution record, or removes one contributor's
+entry. The engine never expires the record itself.</li>
+<li><code>xp_share(ctx)</code> splits a kill's experience pool among actors, after <code>xp_for_kill</code> prices it. <code>ctx.contributors</code> are
+the victim's contributors as structs, and <code>ctx.xp</code> is the pool. It is the one optional rules export: the default keeps
+today's behavior, paying the killer the whole pool. When defined, the load-time dry run calls it with a pool of 100
+and two contributors.</li>
+<li>Player groups are an in-memory set of players with a leader: <code>group_add(member, to)</code>, <code>group_remove(member)</code>,
+<code>group_set_leader(member)</code> and <code>group_disband(member)</code>, with the queries <code>group_of(actor)</code> and <code>group_members(actor)</code>.
+A group is session-scoped: a quit, a link-dead expiry, or any removal of a member from the world drops that member,
+the leader on leaving is replaced by the lowest-id remaining member, and a group left with one member is disbanded.</li>
+<li><code>on_group_change</code> is a global hook that fires for each group change, with <code>ctx.event</code> the <code>&quot;join&quot;</code>, <code>&quot;leave&quot;</code>,
+<code>&quot;leader&quot;</code> or <code>&quot;disband&quot;</code> and <code>ctx.group</code> the group after that step; <code>group_of</code> returns the same <code>group</code> view. Each
+change is complete before its events fire, and a hook that disbands the group drops the events still pending for it.</li>
+<li><code>ctx.contributors</code> now also lists every in-world member of a contributor's group, even with no contribution and
+wherever it is, so <code>xp_share</code> can pay an idle member; each carries <code>group</code> and <code>in_room</code>.</li>
+<li>The <code>Char.Group</code> GMCP state package shows a player's group, or <code>null</code> without one, recomputed when it changes.</li>
+<li><code>on_disengage</code> fires on an actor and its room, once for each actor that was engaged and has no opponent left, with
+<code>ctx.event</code> the <code>&quot;flee&quot;</code>, <code>&quot;death&quot;</code> or <code>&quot;stop&quot;</code>. A dying actor itself does not get the hook, and the engine clears no
+ledger: a world calls <code>clear_contributions</code> from it. It fires once the move, quit or death that ended the engagement
+has finished, so a hook can't re-engage an actor that is half gone, and a quitter does not get it.</li>
+<li>Nothing engages an actor while its death runs, so an <code>on_death</code> hook can't leave its killer fighting a removed mob:
+<code>ctx.start_combat</code> with a dying actor is an error naming it.</li>
+<li><code>allies_near</code> now also returns members of the actor's group, and their pets, within the band and not fighting it.</li>
+<li><code>global_hook</code> also accepts <code>on_disengage</code>, so a privileged package can react whenever any engaged actor loses its last
+opponent.</li>
+<li>The template world's <code>xp_share</code> splits a kill's pool by weighted damage, healing and support, pays a pet's share to
+its owner, pays a grouped member in the room a minimum share, and always sums to exactly the pool, so a solo kill pays
+as before.</li>
+<li>The template world's <code>//lib:group.star</code> adds the <code>group</code>, <code>invite</code>, <code>accept</code>, <code>leave</code>, <code>kick</code>, <code>leader</code>, <code>disband</code> and
+<code>gtell</code> commands (alias <code>gt</code>), and a <code>Group.Chat</code> GMCP event. The arcane school gains the ally spells <code>soothe</code> and
+<code>ward</code>.</li>
+<li>Tutorial 10 explains shared experience, the <code>xp_share</code> contract, tuning the constants and clearing contributions on
+<code>on_disengage</code>.</li>
+</ul>
+<pre><code class="language-python"># before: a player's grouped pet was not an ally
+# after: allies_near(player, &quot;near&quot;) includes the player's group members and their pets
+</code></pre>
+<h3 id="percent-chances-and-noticing">Percent chances and noticing</h3>
+<ul>
+<li><code>wander(chance)</code> is a whole percent from 0 to 100, not a 0..1 float; a float is a load error with a hint.</li>
+</ul>
+<pre><code class="language-python"># before
+wander(radius=4, chance=0.1)
+
+# after
+wander(radius=4, chance=10)
+</code></pre>
+<ul>
+<li><code>loot(chance)</code> is a whole percent from 0 to 100, not a 0..1 float; a float is a load error with a hint.</li>
+</ul>
+<pre><code class="language-python"># before
+mob(&quot;rat&quot;, loot=[loot(&quot;:tail&quot;, chance=0.25)])
+
+# after
+mob(&quot;rat&quot;, loot=[loot(&quot;:tail&quot;, chance=25)])
+</code></pre>
+<ul>
+<li><code>proc(chance)</code> and <code>outcome(weight)</code> are whole percents from 0 to 100, not 0..1 floats; a float is a load error with a
+hint. An outcome table's weights are percents whose total is at most 100, and the rest is &quot;nothing happens&quot;.</li>
+</ul>
+<pre><code class="language-python"># before
+item(&quot;ember_dagger&quot;, procs=[proc(on=&quot;hit&quot;, chance=0.25, effect=damage(...))])
+item(&quot;wand&quot;, procs=[proc(on=&quot;hit&quot;, outcomes=[outcome(0.4, effect=damage(...))])])
+
+# after
+item(&quot;ember_dagger&quot;, procs=[proc(on=&quot;hit&quot;, chance=25, effect=damage(...))])
+item(&quot;wand&quot;, procs=[proc(on=&quot;hit&quot;, outcomes=[outcome(40, effect=damage(...))])])
+</code></pre>
+<ul>
+<li>The harness's <code>w.force_rng(fractions=...)</code> is removed; force ints. Every chance now shares one int queue, so a forced
+int lands on the next roll of any kind (a proc's <code>chance</code>, a loot or wander roll, <code>rng.chance</code>, and so on).</li>
+<li><code>aggressive</code> gains <code>chance</code>, <code>via</code> and <code>unless_level_below</code>: it looks for a target with probability <code>chance</code> percent
+per think, notices a candidate only through the channels in <code>via</code> (a built-in or declared channel), and spares actors
+below <code>unless_level_below</code>. The new <code>notice</code> event is asked through <code>rules.can_perceive</code>; <code>aggressive</code> now asks
+<code>can_perceive</code> as the mob, so a mob with <code>senses = {&quot;sight&quot;: 0}</code> no longer attacks unless <code>via</code> names a channel it
+senses.</li>
+</ul>
+<pre><code class="language-python"># before
+aggressive(toward=&quot;players&quot;, unless_level_above=5)
+
+# after
+aggressive(toward=&quot;players&quot;, unless_level_above=5, unless_level_below=1, chance=50, via=[&quot;sight&quot;, &quot;sound&quot;])
+</code></pre>
+<ul>
+<li>The template world's <code>can_perceive</code> hides actors that carry the <code>hidden</code> flag from a <code>notice</code> on <code>sight</code>.</li>
+</ul>
+<h3 id="room-enchantments">Room enchantments</h3>
+<ul>
+<li>Rooms can carry timed affects (tags, modifiers, hooks).</li>
+<li>Room affects expire while their room is dormant, and are removed first on wake; the dormant regen catch-up accounts
+for room affects piece by piece.</li>
+<li><code>apply_affect</code> durations are 64-bit; pulse arithmetic saturates.</li>
+<li><code>SEMI_PERMANENT</code>: a predeclared constant for a duration that effectively never ends, accepted wherever a timed affect
+takes a duration, and never scaled by power. An affect that expires at that value reports <code>expires_at</code> and <code>remaining</code>
+as <code>None</code>; GMCP <code>Char.Affects</code> sends its <code>remaining</code> as null and <code>@stat</code> shows it as permanent.</li>
+<li><code>ctx.apply_affect</code> and <code>ctx.remove_affect</code> take a room as their target, applying a room affect (§3.3). A room's
+<code>add_tags</code> and <code>remove_tags</code> grant and withdraw tags for as long as the affect is live; both are an error on any other
+target. Actor-only fields (<code>stat_deltas</code>, <code>sense_deltas</code>, <code>max_vital_deltas</code>, <code>resist_deltas</code>, <code>procs</code>, <code>applies</code>) are
+an error on a room, and a room's affect needs a duration.</li>
+<li><code>room.affects</code> lists a room's live affects, by id. <code>room.tags</code> is the effective tags, so it includes a room affect's
+added tags and hides its removed ones.</li>
+<li>The <code>room</code> skill target: <code>skill(target=&quot;room&quot;)</code> enchants the caster's room and needs no keyword. Its <code>effect</code> may use
+<code>apply_affect</code>, <code>dispel</code>, <code>sequence</code> and plugin primitives; <code>apply_affect</code> attaches a room affect and <code>dispel</code> removes
+the room's matching affects (sending each one's <code>expire_msg</code>). The cast's power scales the room affect's duration,
+which it remembers. A <code>room</code> skill ignores <code>range</code>: <code>resolve</code> runs once with <code>ctx.target</code> <code>None</code>. If the caster is no
+longer in the room where the cast began when the warmup ends, the cast fails with the new <code>cast.moved</code> message. A
+<code>room</code> skill can't be a proc's skill (a diagnostic, as for an <code>item</code> skill), and <code>apply_affect</code> in a proc's effect
+can't take <code>add_tags</code> or <code>remove_tags</code>. <code>item(use_target=&quot;room&quot;)</code> is a load error.</li>
+<li>Plugin effect primitives run in <code>room</code> skills. <code>PluginEffectCall</code> gains <code>targetRoom</code>: the caster's room on a <code>room</code>
+skill, where <code>target</code> and <code>targetItem</code> are null, and null otherwise.</li>
+</ul>
+<h3 id="encumbrance-hook">Encumbrance hook</h3>
+<ul>
+<li><code>global_hook(&quot;on_encumbrance_change&quot;, fn)</code> for <code>lib</code> and <code>rules</code> packages: fires once for each change of an actor's
+encumbrance level, with <code>ctx.old_encumbrance_level</code> and <code>ctx.new_encumbrance_level</code>.</li>
+<li>The template world adds a flavor line at heavy encumbrance levels through the new hook.</li>
+</ul>
+<h3 id="acquiring-skills">Acquiring skills</h3>
+<ul>
+<li><code>ctx.set_skill</code>, <code>ctx.remove_skill</code> and <code>ctx.skill_info</code>, and the harness's <code>w.set_skill</code> and <code>w.remove_skill</code>.
+Setting a skill runs the <code>learn</code> restrictions, also when it raises a skill the actor knows.</li>
+<li>The <code>skills</code> command and the <code>Char.Skills</code> GMCP package.</li>
+<li><code>global_hook(&quot;on_level_change&quot;, fn)</code> for <code>lib</code> and <code>rules</code> packages: fires for every actor's level step.</li>
+<li><code>//lib:trainer.star</code>: trainers, practice sessions earned per level, <code>practice</code>, and the <code>practice_offer</code> hook. The
+template world has a <code>//skills/arcane</code> package with <code>spark</code> and <code>mend</code>.</li>
+<li>The tutorial zone's mentor teaches <code>spark</code> and <code>mend</code>; tutorial 09 covers trainers.</li>
+</ul>
+<h3 id="progressive-encumbrance">Progressive encumbrance</h3>
+<ul>
+<li>New kernel rules export <code>encumbrance_level(ctx)</code>, required in every ruleset: the actor's encumbrance level, an int of
+at least 0 (0 unencumbered); a negative result is a bad return value. It sees <code>ctx.limit</code> (the actor's <code>carry_limit</code>
+asked without an item) and <code>ctx.carried</code> (carried and worn weight, containers' contents included).</li>
+<li>New <code>rules_ctx</code> fields <code>limit</code> and <code>carried</code> (set in <code>encumbrance_level</code> and <code>encumbrance</code>, <code>None</code> elsewhere;
+<code>carry_limit</code>'s own ctx is unchanged) and <code>encumbrance_level</code> (set in <code>encumbrance</code>, <code>None</code> elsewhere).</li>
+<li>The actor view gains <code>encumbrance_level</code>: the level <code>rules.encumbrance_level</code> last gave; 0 while that rule runs.</li>
+<li><code>rules.encumbrance</code> now runs only while the level is above 0.</li>
+<li>New engine messages <code>encumbrance.up</code> (a higher nonzero level) and <code>encumbrance.down</code> (a lower nonzero level), each
+with <code>{level}</code> and <code>{was}</code>; <code>encumbrance.on</code> and <code>encumbrance.off</code> cover the transitions to and from 0.</li>
+<li>The template and robot worlds now define <code>encumbrance_level</code>, and existing rulesets must add it. The robot world's
+one-level formula keeps the old over-the-limit behavior, and the template grades the share of the limit, charging each
+level in dex, move and recovery pulses. A ruleset that wants the old behavior adds the one-level formula:</li>
+</ul>
+<pre><code class="language-python"># before: rulesets defined no level; only the stat penalty
+def encumbrance(ctx):
+    return stats(dex = -2)
+
+# after: the level is a required export; this formula keeps the old behavior
+def encumbrance_level(ctx):
+    return 1 if ctx.carried &gt; ctx.limit else 0
+</code></pre>
+<h3 id="skill-proficiency">Skill proficiency</h3>
+<ul>
+<li>Tutorial 03 covers proficiency: <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code>, <code>ctx.affect.power</code>, <code>ctx.power</code> and
+<code>ctx.summon</code>.</li>
+<li>Item <code>use_effect</code>s and item procs run at <code>item_power</code>; procs of an item's instance affect at the affect's power ×
+<code>item_power</code> / 100 (with <code>ctx.affect</code> set in that <code>item_power</code> call); actor-affect procs at the affect's power.</li>
+<li>Casts roll <code>skill_check</code> and run at <code>skill_power</code>: spells that fail fizzle early with <code>cast.failed.self</code> and
+<code>cast.failed.room</code>, paying cost and lag without triggering effects, resolvers, combat, or <code>on_cast</code>. Successful casts
+thread <code>power</code> to effects and expose <code>ctx.power</code> in custom <code>resolve</code>.</li>
+<li>New modifier points <code>skill_check</code> and <code>skill_power</code> (<code>skills</code>) and <code>item_power</code> (kernel). Plugin traits can modify
+them (<code>PluginModifierPoint</code>), and <code>PluginModifierCall</code> gains <code>item</code> and <code>event</code>.</li>
+<li>New rules exports <code>skill_check</code> and <code>skill_power</code> (<code>skills</code>) and <code>item_power</code> (kernel). Every ruleset must define
+them.</li>
+<li>Modifiers contributed by an affect see it as <code>ctx.affect</code> (<code>ctx.affect.power</code>).</li>
+<li>New hook verb <code>ctx.summon(caster, label, count=1, duration=None)</code>.</li>
+<li>The affect view exposes <code>power</code>, the percent strength the affect was applied at (100 when unscaled).</li>
+</ul>
+<h3 id="mob-planning">Mob planning</h3>
+<ul>
+<li>Added <code>ctx.plan(facts, actions, goal, max_expansions=1024)</code>: native, deterministic goal-oriented planning over
+equality facts. It returns the cheapest list of action names, <code>[]</code> when the goal holds, or <code>None</code> when unreachable or
+out of bounds, and spends no script steps.</li>
+<li>The template has <code>//lib:ai.star</code>: behavior trees (<code>selector</code>, <code>sequence</code>, <code>condition</code>, <code>action</code>, <code>inverter</code>, <code>steps</code>)
+re-evaluated from the root each <code>think</code>, a per-mob blackboard, and an <code>ai.goap</code> leaf that caches <code>ctx.plan</code> results.</li>
+<li>The tutorial zone's squirrel uses <code>//lib:ai.star</code> to fetch pinecones from the tar pit.</li>
+<li>Added <code>w.trace_lines()</code> to the test harness: the lines <code>w.trace()</code> has kept, so a test can check which verbs a hook
+called (for example, that a mob's blackboard isn't saved when unchanged).</li>
+<li>Tutorial 05 covers behavior trees and planning, and no longer says <code>ctx.target</code> is the opponent inside <code>think</code> (use
+<code>ctx.self.fighting()</code>).</li>
+</ul>
+<h3 id="spells-that-miss">Spells that miss</h3>
+<ul>
+<li>Script API entries can be owned by several features, either any of them or all of them. <code>api.json</code> writes <code>features</code>
+and <code>features_mode</code> for such entries instead of <code>feature</code>.</li>
+<li><code>to_hit</code> (the export) and the <code>to_hit</code> and <code>defend_hit</code> modifier points now belong to <code>combat</code> or <code>skills</code>. A world
+with <code>skills</code> and without <code>combat</code> must define <code>to_hit</code>, and the dry run calls it with a synthetic skill whenever
+<code>skills</code> is on.</li>
+<li>Enemy spells can miss. An <code>enemy</code> skill rolls <code>to_hit</code> (with <code>ctx.skill</code> set and no weapon or slot), the caster's
+<code>to_hit</code> chain and the victim's <code>defend_hit</code> chain, once per victim. A victim it doesn't land on gets neither the
+effect nor <code>resolve</code>, but the cost, lag and engagement still happen. A chance of 100 or more lands without a roll.
+<code>@trace rules</code> ends the line with <code>LAND</code>, <code>RESIST</code> or <code>auto LAND</code>.</li>
+<li>Added the messages <code>cast.resisted.self</code>, <code>cast.resisted.target</code> and <code>cast.resisted.room</code>.</li>
+<li><code>PluginModifierCall</code> has <code>skill</code>, the skill being cast when the rules call has one, so a trait modifier can tell a
+spell from a swing.</li>
+<li>The template's <code>to_hit</code> has a spell branch (<code>_spell_hit</code>: <code>int</code> against <code>wis</code>, and <code>area</code> spells always land), and the
+robot world's routines are resisted by <code>grit</code>.</li>
+</ul>
+<h3 id="combat-procs">Combat procs</h3>
+<ul>
+<li>Auto-attack swings fire procs: the attacker's <code>hit</code> procs after a landed hit, then the defender's <code>struck</code> procs; the
+defender's <code>avoid</code> procs on a miss. New engine messages <code>combat.proc.self</code> and <code>combat.proc.room</code>.</li>
+<li>Added <code>proc(...)</code> and <code>outcome(...)</code>, and <code>procs</code> on <code>item</code>, <code>item_affect</code> and <code>apply_affect</code> (the primitive and the
+verb): chance-based skills or effects that fire during auto-attack swings, with weighted one-of tables.</li>
+<li>The tutorial zone has an <code>ember_dagger</code> (<code>hit</code>), a <code>bramble_vest</code> (<code>struck</code>) and a <code>cracked_wand</code> (an outcome table).</li>
+<li>Added <code>w.force_rng(ints = [], fractions = [])</code> to the test harness: it queues the results of later rolls, so tests can
+force a proc or a hit without searching for a seed.</li>
+</ul>
+<h3 id="test-fixture-files">Test fixture files</h3>
+<ul>
+<li>A package may hold <code>*_testdata.star</code> files: test-only fixtures for content that only tests need. They are ordinary
+content files (same builtins, load order and declaration rules, one name space with the package's other files), loaded
+only by <code>gups test</code> and <code>gups scenario</code>. The server, <code>gups lint</code>, <code>gups fuzz</code> and every other command leave them out,
+so normal content that names a fixture fails with an unresolved label, whose error names the fixture file.</li>
+<li>Only test files and other fixture files may <code>load()</code> a <code>*_testdata.star</code> file.</li>
+</ul>
+<h3 id="typed-bonus-damage">Typed bonus damage</h3>
+<ul>
+<li>Added the <code>damages(**n)</code> typed value, keyed by damage type, and <code>+</code> between typed values of the same kind (<code>vitals</code>,
+<code>stats</code>, <code>resists</code>, <code>damages</code>), which adds them key by key.</li>
+<li>Added the kernel modifier point <code>bonus_damage</code> (<code>MODIFIER.bonus_damage</code>): the attacker's chain returns <code>damages(...)</code>
+parts that are each mitigated with their own type and applied with the hit as one damage event, for auto-attacks and
+the <code>damage(...)</code> effect.</li>
+<li><code>on_damage</code> has <code>ctx.parts</code>, the event's parts as <code>struct(type, losses)</code>.</li>
+<li>Plugin traits can declare <code>BONUS_DAMAGE</code> modifiers, which take and return a map from damage type to amount.</li>
+<li>The template's <code>mitigate</code> applies armor only to physical damage (<code>bludgeon</code>, <code>slash</code>, <code>pierce</code>); fire is reduced only
+by resists.</li>
+<li>The tutorial zone has a <code>flaming_sword</code> (a <code>bonus_damage</code> modifier on its own swings), an <code>ember_amulet</code> (a
+<code>bonus_damage</code> modifier on everything its wearer deals) and <code>oily_rags</code> (armor, and double fire through a
+<code>receive_damage</code> modifier).</li>
+</ul>
+<h3 id="harness-mob-actions">Harness mob actions</h3>
+<ul>
+<li>Added <code>w.act(mob, command_line)</code> to the test harness: it queues a command for a mob, as <code>ctx.act</code> does, so a test can
+have a mob wear an item.</li>
+</ul>
+<h3 id="scenario-traces">Scenario traces</h3>
+<ul>
+<li><code>gups scenario</code> prints the <code>w.trace()</code> record after the transcript even when the scenario passes, so the rules chains
+can be read without <code>@trace</code>.</li>
+</ul>
+<h3 id="defender-side-modifiers">Defender-side modifiers</h3>
+<ul>
+<li>A negative entry in <code>mitigate</code>'s result is now a gain to that vital, capped at its maximum, instead of being ignored;
+<code>on_damage</code> and <code>interrupt_check</code> count only the losses.</li>
+<li>Added the <code>defend_hit</code> modifier point (<code>MODIFIER.defend_hit</code>, <code>combat</code> feature): it runs on the defender's chain
+(zone, regions, room, then the defender's traits, affects and every active worn item, weapons included) after the
+attacker's <code>to_hit</code> chain, with the same <code>ctx</code>; <code>@trace rules</code> shows it after a <code>defender:defend_hit</code> step.</li>
+<li>Added the kernel modifier points <code>receive_damage</code> (int, the defender's chain after the attacker's <code>damage</code> chain and
+before <code>mitigate</code>) and <code>mitigate</code> (<code>vitals(...)</code>, the defender's chain after the <code>mitigate</code> export), for auto-attacks
+and the <code>damage(...)</code> effect; the <code>damage(...)</code> effect's trace now ends with the <code>mitigate</code> step.</li>
+<li>Plugin traits can declare <code>DEFEND_HIT</code>, <code>RECEIVE_DAMAGE</code> and <code>MITIGATE</code> modifiers; on these the <code>PluginModifierCall</code>'s
+<code>actor</code> is the trait's bearer, the defender. The heritage sample's elf trait has one, a <code>DEFEND_HIT</code> modifier scaled
+by its bearer's dex.</li>
+<li>The tutorial zone has a <code>shadow_cloak</code> (<code>defend_hit</code> and <code>receive_damage</code>) and a <code>siphon_amulet</code> (<code>mitigate</code> moving a
+tenth of hp loss into a mana gain).</li>
+</ul>
+<h3 id="the-damage-modifier-point-belongs-to-the-kernel">The <code>damage</code> modifier point belongs to the kernel</h3>
+<ul>
+<li>The <code>damage</code> modifier point no longer needs the <code>combat</code> feature: zones, regions, rooms, items, affects and plugin
+traits may declare it in any world, and it applies to the <code>damage(...)</code> effect primitive (<code>cast</code>, <code>use</code>). The
+<code>damage(ctx)</code> rules export still belongs to <code>combat</code>.</li>
+<li>The documented <code>ctx</code> fields of <code>to_hit</code>, <code>damage</code> (export and modifier point) and <code>mitigate</code> now list <code>damage_type</code>,
+and those of <code>to_hit</code> and <code>damage</code> list <code>slot</code>, which they already had.</li>
+</ul>
+<h3 id="shopkeepers-in-combat">Shopkeepers in combat</h3>
+<ul>
+<li><code>ctx.has_feature(name)</code> reports whether the world has a feature module on; an unknown name is an error.</li>
+<li><code>//lib:shop.star</code>: a keeper that is fighting refuses every customer with &quot;&lt;keeper&gt; is busy fighting.&quot;; restocking goes
+on, and worlds without combat are unaffected.</li>
+</ul>
+<h3 id="shops">Shops</h3>
+<ul>
+<li>Added <code>//lib:shop.star</code> to the template world: <code>shop.define(id, stock, ...)</code> describes a shop — stock lines with
+<code>count</code>/<code>every</code>/<code>amount</code> (<code>count</code> <code>None</code> is unlimited, <code>0</code> is sell-only), a <code>till</code>, <code>buy_markup</code> (120 by default) and
+<code>sell_rate</code> (50) — and the keeper's <code>on_spawn</code> calls <code>shop.open(ctx, keeper, shop)</code>, which fills and locks a chest in
+the keeper's room (or gives the keeper a carried pack) and gives it the key. Stock and till are real items in the
+container, restocked lazily over time while a keeper is present: the catch-up runs when the container opens or wakes
+and before every <code>buy</code>, <code>sell</code> and <code>value</code>; <code>list</code> projects the same arithmetic without applying it.</li>
+<li>The library registers the global commands <code>list</code> (fast lane), <code>buy</code>, <code>sell</code> and <code>value</code> (tick lane) and the GMCP
+package <code>Shop.Stock</code>, which <code>list</code> sends with the keeper's name, the currency label, and one entry per line with the
+item's name, label, price and count (<code>null</code> for unlimited stock). Prices start from <code>item(value = N)</code>: the customer
+pays <code>value * buy_markup / 100</code>, rounded up, at least 1, and the shop pays <code>value * sell_rate / 100</code>. The keeper's
+custom hook <code>shop_price</code> (M23's <code>hooks = {...}</code>) may return an int to change any price or a string to refuse any
+customer, and plugin handlers registered for the name join the chain.</li>
+<li>A shop is closed (&quot;The shop is closed.&quot;) when its keeper's condition isn't <code>ok</code> or its container is missing, and a
+stunned keeper answers &quot;&lt;Keeper&gt; is in no state to trade.&quot; while still restocking. A fighting keeper still trades.</li>
+<li>Added the library's items: <code>//lib:gold_coin</code> (a stackable currency, <code>value = 1</code>), <code>//lib:shop_chest</code> and
+<code>//lib:shop_pack</code> (stock containers whose <code>on_open</code>/<code>on_wake</code> run the library's catch-up) and <code>//lib:shop_chest_key</code>.</li>
+<li>The tutorial zone has a shopkeeper in a new shop room off the armory: it sells copper rings and wooden shields from a
+locked chest and healing draughts without limit, and its <code>shop_price</code> hook discounts buying and pays more for selling
+to customers with charisma above 10 and refuses items tagged <code>&quot;stolen&quot;</code>.</li>
+<li>Added <code>ctx.merge_stack(item)</code>: merges the item into a stack of the same prototype in the same place with identical
+attributes, decay deadline and charges (as <code>get</code> already did), and returns the view of the stack that now holds it
+(the item itself if nothing matched). Equipped items and items that can't stack are returned unchanged.</li>
+</ul>
+<h3 id="item-value-and-custom-hooks">Item value and custom hooks</h3>
+<ul>
+<li>Added <code>item(value = N)</code>, an item's base price, an int of at least 0 (default 0). The engine gives it no other meaning
+and shows it nowhere in <code>look</code>, <code>inventory</code> or <code>examine</code>; libraries such as shops read it. It is a prototype field, so
+a reload changes it for every instance and nothing is saved per instance.</li>
+<li><code>item.value</code> on item views and <code>PluginItem.value</code> on plugin item views expose the per-item base price.
+<code>//engine:corpse</code> has 0.</li>
+<li>The template world declares <code>cha</code> (Charisma): <code>stat(&quot;cha&quot;, label = &quot;Charisma&quot;)</code> in <code>MODULE.gups</code>, with
+<code>starting_stats</code> giving players 10 and mobs their declared value or 10, like the other ability stats. Existing
+template-based worlds need <code>--wipe</code> to pick it up.</li>
+<li>Added <code>hooks = {&quot;name&quot;: fn}</code> to <code>room</code>, <code>mob</code> and <code>item</code>: custom hooks of the builder's own naming, never fired by the
+engine. Names match <code>[a-z][a-z0-9_]*</code> and may not be catalog hook names (the error suggests passing the catalog hook
+as its keyword instead); each value is a top-level function. Scripts run them with <code>ctx.call_hook</code>.</li>
+<li>Added <code>ctx.call_hook(entity, name, **args)</code>: runs <code>entity</code>'s custom hook <code>name</code> as <code>fn(ctx, **args)</code> with <code>ctx.self</code>
+the entity, in the hook's own package, then every plugin handler for <code>name</code>, and returns the result as a fresh copy.
+Arguments may hold None, ints, strings, bools, lists, dicts and actor, item and room views (which the hook receives as
+its own views, or <code>None</code> if the entity left the world); results may not hold views. It returns <code>None</code> when the entity
+is gone, nothing handles the name, the package is quarantined or the hook fails, and more than 8 nested <code>call_hook</code>s
+is a script error.</li>
+<li><code>PluginRegistry.addHook(name, doc, handle)</code> registers a plugin handler for a custom hook name: after the entity's own
+hook, the plugin's handlers run in plugin-id order, each with a read-only <code>PluginGmcpWorld</code>, the entity, the arguments
+and the result so far as plain values, returning the new result as plain values (a <code>PluginHookCall</code>). A handler that
+throws records a <code>plugin</code> diagnostic and leaves the result unchanged. Names follow the custom hook rules; one plugin
+registers a name once, and several plugins may share it. A handler's <code>Int</code>s become <code>Long</code>s and its iterables lists;
+floats are refused.</li>
+</ul>
+<h3 id="starlark-gmcp-events">Starlark GMCP events</h3>
+<ul>
+<li>Added <code>gmcp_package(name, doc)</code> for <code>lib</code> and <code>rules</code> packages, declaring a GMCP package the package sends with
+<code>ctx.gmcp</code>. A name has two or more dot-separated parts, may not use the roots <code>Core</code>, <code>Char</code>, <code>Room</code>, <code>Comm</code> or
+<code>Gups</code>, and may not overlap an engine package, a plugin's package, or another declared name.</li>
+<li>Added <code>ctx.gmcp(player, package, data)</code>: sends the GMCP event <code>package</code> with <code>data</code> to <code>player</code>, after its pending
+text and before the prompt, returning whether it was sent. <code>package</code> must be, or nest in, a GMCP package the calling
+package declared. It returns <code>False</code> for a mob, a link-dead player, or a client that didn't ask for the package.
+<code>data</code> may hold <code>None</code>, ints, strings, bools, lists and dicts with string keys, nested at most 8 deep; its compact
+JSON form is at most 16 KB (<code>alloc_limit</code> beyond).</li>
+<li>Attribute values, timer arguments and each key of a <code>migrate</code> result may nest lists and dicts at most 8 deep and be at
+most 64 KB as compact JSON; a deeper or larger value raises <code>alloc_limit</code>. A value that shares one list many times or
+contains itself now fails at these caps instead of exhausting memory or the stack.</li>
+<li>The test harness accepts <code>w.spawn_player(..., gmcp = [...])</code>, the GMCP packages the test client supports (none by
+default), and <code>p.gmcp(package = None)</code>, which returns the GMCP messages received since the last call as <code>{&quot;package&quot;, &quot;data&quot;}</code> dicts, optionally only those in <code>package</code>'s tree, and drains them.</li>
+<li><code>gups docs --world</code> and the server's built-in docs list the GMCP packages the world's <code>lib</code> and <code>rules</code> packages
+declare, with each package's doc and declaring package.</li>
+</ul>
+<h3 id="plugin-gmcp-input-and-events">Plugin GMCP input and events</h3>
+<ul>
+<li><code>PluginRegistry.addGmcpEvent(pkg, doc)</code> declares a GMCP event package, sent with <code>PluginWorld.gmcp</code>.</li>
+<li><code>PluginWorld.gmcp(actor, pkg, data)</code> sends one GMCP message with a plain payload to the actor's session, queued with
+the session's text and never cached. It returns false, sending nothing, for a mob, a link-dead player or a client that
+doesn't support the package.</li>
+<li><code>PluginWorld</code> extends a new <code>PluginGmcpWorld</code>, which holds the reads (except <code>rng</code>), <code>send</code>, <code>gmcp</code>, <code>getAttr</code>,
+<code>diagnose</code> and <code>log</code>; it is what GMCP input handlers receive.</li>
+<li>GMCP package name checks are tightened: names are compared ignoring case, the reserved <code>Core</code> root is refused, and a
+plugin's state and event packages may not equal, contain or nest in an engine package, another plugin's package, or
+each other.</li>
+<li><code>PluginRegistry.onGmcp(pkg, doc, handle)</code> receives client GMCP messages for exactly <code>pkg</code> (ignoring case). The handler
+gets the sending player, the data as plain values, and a <code>PluginGmcpWorld</code>; it acts by calling <code>call.command(line)</code>
+once, which runs the line as if the player typed it, through the normal lanes, lag, restrictions and repro recording.
+An input package may not use the <code>Core</code> root or overlap an engine package or another plugin's package, but may share
+the plugin's own state and event tree.</li>
+<li><code>plugins.html</code> lists each plugin GMCP package with its kind (<code>state</code>, <code>event</code> or <code>input</code>), anchored
+<code>plugin-&lt;id&gt;.&lt;pkg&gt;.&lt;kind&gt;</code>.</li>
+</ul>
+<h3 id="consumables-and-charges">Consumables and charges</h3>
+<ul>
+<li><code>item(use_effect=..., use_target=..., use_lag=...)</code> allows items to apply declarative effect primitives on use with
+the user as caster, resolve targets (<code>self</code>, <code>ally</code>, <code>enemy</code>, <code>item</code> or <code>none</code>), and set recovery lag in pulses.</li>
+<li><code>item(charges=N, empty=...)</code> declares the uses an item has before being spent (<code>charges</code>, at least 1, or <code>None</code> for
+unlimited) and what happens when the last is spent (<code>empty</code>: <code>&quot;destroy&quot;</code>, <code>&quot;keep&quot;</code>, or the name of a variant). A
+stackable item may only have <code>charges = 1</code> and cannot <code>keep</code>.</li>
+<li><code>item.charges</code> and <code>item.max_charges</code> on item views expose uses left and the prototype's charges, or <code>None</code> when
+unlimited.</li>
+<li><code>ctx.set_charges(item, charges)</code> sets an item's remaining uses, from 0 to its prototype's charges; unlimited and
+stackable items are refused, and 0 does not run <code>empty</code>.</li>
+<li><code>PluginItem.charges</code> and <code>PluginItem.maxCharges</code> expose uses left and the prototype's charges, or <code>null</code> when
+unlimited. <code>Facade.setCharges(item, charges)</code> sets an item's remaining uses, from 0 to its prototype's charges;
+unlimited and stackable items are refused, and 0 does not run <code>empty</code>.</li>
+<li>An item with <code>charges</code> and none left is refused (&quot;There are no charges left in {item}.&quot;). After <code>on_use</code>, if the item
+is still in the world, the use spends one charge, or one item of a stack; the last charge runs the item's <code>empty</code>
+action: destroy it, keep it at 0 charges, or <code>transform</code> it into the named variant. An item without <code>charges</code> is never
+used up; <code>on_use</code> destroys it if it should be.</li>
+<li>Added kernel messages <code>use.self_only</code> (&quot;You can only use {item} on yourself.&quot;), <code>use.at_whom</code> (&quot;Use {item} on whom?&quot;),
+<code>use.on_what</code> (&quot;Use {item} on what?&quot;), <code>use.done</code> (&quot;You use {item}.&quot;), and <code>use.done.room</code> (&quot;{actor} uses {item}.&quot;).</li>
+<li><code>use &lt;item&gt; &lt;target item&gt;</code> now refuses a target item on the ground that is out of <code>get_lag</code> reach, even for items
+without a <code>use_effect</code>.</li>
+<li>The effect primitives <code>damage</code>, <code>heal</code>, <code>apply_affect</code>, <code>dispel</code>, <code>stun</code>, <code>summon</code> and <code>sequence</code> no longer need the
+<code>skills</code> feature; <code>knockback</code> and <code>pull</code> still need <code>track</code>.</li>
+</ul>
+<h3 id="lag-modifier-points-advance-lag-retreat-lag-retreat-fail-lag-and-flee-fail-lag">Lag modifier points: advance_lag, retreat_lag, retreat_fail_lag and flee_fail_lag</h3>
+<ul>
+<li>Added four modifier points (<code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, and <code>flee_fail_lag</code>, accessible via
+<code>MODIFIER.advance_lag</code>, etc.) allowing zone, region, room, affect, and item modifiers to adjust recovery lag.</li>
+<li>Lag modifier points run on the acting actor's modifier chain with the corresponding rules export's context
+(<code>ctx.target</code> and <code>ctx.band</code> for track lag points; <code>ctx.target == None</code> and <code>ctx.band == None</code> for <code>flee_fail_lag</code>).</li>
+<li>Intermediate steps in a lag modifier chain may go below 0, but the chain's final value is clamped to 0.</li>
+<li>Feature gating follows the exports: <code>advance_lag</code>, <code>retreat_lag</code>, and <code>retreat_fail_lag</code> require the <code>track</code> feature,
+while <code>flee_fail_lag</code> requires only <code>combat</code>.</li>
+<li><code>get_lag</code> is not a modifier point and sets pickup lag directly.</li>
+</ul>
+<h3 id="equipment-slots-slot-families-item-attacks-and-vital-and-resist-deltas">Equipment slots, slot families, item attacks, and vital and resist deltas</h3>
+<ul>
+<li>Added <code>slot_families()</code>, <code>actor_slots(ctx)</code> and <code>slot_cost(ctx)</code> rules exports, <code>item(slot_cost=)</code>, <code>max_vital_deltas</code>
+and <code>resist_deltas</code> on items and affects, <code>ctx.damage_type</code> and <code>ctx.slot</code>, item view <code>inactive</code>, actor view <code>slots</code>,
+spell damage through the <code>damage</code> chain, and attacks from every item with <code>dice</code>.</li>
+</ul>
+<h3 id="effects-on-items">Effects on items</h3>
+<ul>
+<li>Added the <code>item_affect(name, applies = &quot;worn&quot;, stat_deltas = stats(), sense_deltas = {}, modifiers = {}, flags = [])</code>
+declaration builtin for declaring prototype affects an item carries.</li>
+<li>Added <code>affects</code> to <code>item(...)</code>: affects every instance carries, built with <code>item_affect(...)</code>.</li>
+<li>Added <code>variants</code> to <code>item(...)</code>: free-form variant names mapped to related item prototype labels, for <code>transform</code>.</li>
+<li>A key that gains instance affects or tags in play leaves the keyring and shows in <code>inventory</code> until they are gone.</li>
+<li>Added <code>applies = None</code> to <code>apply_affect(...)</code>: allowed only on <code>item</code> skills, setting whether the affect reaches the
+holder while worn or carried (<code>&quot;worn&quot;</code> or <code>&quot;carried&quot;</code>; <code>None</code> means <code>&quot;worn&quot;</code>).</li>
+<li>Allowed <code>duration = None</code> in <code>apply_affect(...)</code> on <code>item</code> skills to attach a permanent item affect.</li>
+<li>An <code>item</code> skill's <code>effect</code> acts on the target item; it may use <code>apply_affect</code>, plugin primitives, and <code>sequence</code>
+combining them. Any other primitive fails the load.</li>
+<li><code>ctx.apply_affect(target, ...)</code> and <code>ctx.remove_affect(target, name)</code> accept an item as the target; on an item,
+<code>apply_affect</code> takes <code>applies = &quot;worn&quot; | &quot;carried&quot;</code> (<code>None</code>, the default, means <code>&quot;worn&quot;</code>) and allows <code>duration = None</code>
+for permanent affects.</li>
+<li>Added <code>ctx.add_tag(item, tag)</code> and <code>ctx.remove_tag(item, tag)</code>, returning whether the effective tags changed.</li>
+<li>Added <code>ctx.transform(item, label)</code> to swap an item's prototype in place, keeping its id, location, attributes,
+affects, tag changes, name and timers. A stack transformed into a non-stackable prototype keeps a count of 1; a
+container transformed into a non-container drops its contents on the ground; a locked container stays locked only if
+the new prototype has a <code>key</code>, else it ends up closed; an equipped item that no longer fits its slot moves to the
+inventory. It fails when the contents wouldn't fit the new container.</li>
+<li>Added <code>ctx.open_container(item)</code>, <code>ctx.close_container(item)</code>, <code>ctx.lock_container(item)</code> and
+<code>ctx.unlock_container(item)</code>. They mirror the door verbs and print nothing. <code>lock_container</code> fails on a container
+whose prototype has no <code>key</code>.</li>
+<li>Added <code>affects</code>, <code>has_tag(tag)</code> and <code>variants</code> to the item view; <code>item.tags</code> reflects effective tags.</li>
+<li>Added the <code>proto_affect</code> view for read-only views of prototype affects on items.</li>
+<li>Added <code>origin</code> (<code>&quot;instance&quot;</code> or <code>&quot;proto&quot;</code>) and <code>applies</code> (<code>&quot;worn&quot;</code> or <code>&quot;carried&quot;</code>, or <code>None</code> on actor affects) to
+affect views; <code>affect.host</code> is the actor or item carrying it.</li>
+<li><code>affect.expires_at</code> and <code>affect.remaining</code> are <code>None</code> for an affect that never expires, including untimed
+<code>equip_affects</code>.</li>
+<li><code>actor.flags</code> and <code>actor.has_flag(flag)</code> include flags from item affects.</li>
+</ul>
+<h3 id="experience-and-levels">Experience and levels</h3>
+<ul>
+<li>Added the <code>on_level_up(ctx)</code> rules export: called when an actor advances a level, returning <code>None</code> or a <code>struct</code> with
+optional <code>stats</code>, <code>max</code> and <code>current</code> deltas. It is required when the <code>leveling</code> feature is enabled and forbidden when
+it is off.</li>
+<li>Added the <code>leveling.level_down</code> message: sent when an actor loses one or more levels (<code>You have fallen to level {level}.</code>).</li>
+<li>Added optional <code>level_loss: int</code> to the <code>on_player_death(ctx)</code> return dictionary: the number of levels lost after the
+respawn. Allowed only when the <code>leveling</code> feature is enabled.</li>
+<li>Added <code>level_mode = &quot;auto&quot; | &quot;deferred&quot;</code> to <code>module(...)</code> in <code>MODULE.gups</code> (defaults to <code>&quot;auto&quot;</code>): chooses whether
+earned levels apply immediately or wait for an explicit script call (<code>ctx.level_up</code>). Requires the <code>leveling</code> feature.</li>
+<li>Added the <code>leveling.ready</code> message: sent in deferred level mode when an actor becomes eligible to advance (<code>You feel ready to advance.</code>).</li>
+<li>Added the read-only <code>pending_levels</code> field to the actor view: how many levels the actor has the XP for and has not
+been given. Requires the <code>leveling</code> feature.</li>
+<li>Changed the rules export to <code>xp_to_level(ctx, level)</code>, passing the actor whose threshold is being queried. <code>ctx.rng</code>,
+<code>ctx.roll</code> and <code>ctx.pulse</code> are not available in it, because it must give the same answer every time.</li>
+<li>Added the leveling ctx verbs: <code>ctx.award_xp(actor, amount)</code>, <code>ctx.take_xp(actor, amount)</code>, <code>ctx.level_up(actor)</code> and
+<code>ctx.level_down(actor, count=1)</code>. Each requires the <code>leveling</code> feature.</li>
+<li>Added leveling members to the plugin facade: <code>awardXp(actor, amount)</code>, <code>takeXp(actor, amount)</code>, <code>levelUp(actor)</code> and
+<code>levelDown(actor, count=1)</code> on <code>PluginWorld</code>, and <code>val pendingLevels: Int</code> on <code>PluginActor</code>. Each requires the
+<code>leveling</code> feature.</li>
+<li>Added the harness verbs to the <code>w</code> handle: <code>w.award_xp(actor, amount)</code>, <code>w.take_xp(actor, amount)</code>,
+<code>w.level_up(actor)</code> and <code>w.level_down(actor, count=1)</code>. Each requires the <code>leveling</code> feature.</li>
+<li>Added the <code>on_level_change</code> hook (attachable to mob, room and item) and its context fields <code>ctx.old_level</code> and
+<code>ctx.new_level</code>. Requires the <code>leveling</code> feature.</li>
+<li>Added the <code>leveling.score_ready</code> message: printed by <code>score</code> on the line after the level line while an actor has
+pending levels, in either level mode (<code>You are ready to advance.</code>).</li>
+<li>Changed the template world's rules: <code>xp_for_kill</code> pays 50 per victim level, scaled from 0% (victim 5 or more levels
+below) to 150% by the level difference; <code>xp_to_level</code> is the total-XP curve <code>500 * level * (level + 1)</code> (1000, 3000,
+6000, ...); <code>on_level_up</code> raises the hp, mana and move maxima and heals by the same amount; and <code>on_player_death</code>
+takes 10% of the XP earned within the current level, with a commented variant that also takes levels.</li>
+</ul>
+<h3 id="senses-and-perception-on-perceive-senses-sense-deltas-ctx-emit">Senses and perception: <code>on_perceive</code>, <code>senses</code>, <code>sense_deltas</code>, <code>ctx.emit</code></h3>
+<p>Every actor, player or mob, has a sense score per channel. <code>sight</code> and <code>sound</code> default to 1 and declared channels to 0;
+<code>mob(senses = {...})</code> and <code>starting_stats</code> merge over the defaults and take any score of 0 or more. A score of 0 senses
+nothing on that channel, even in the same room. <code>&quot;hearing&quot;</code> is gone; use <code>&quot;sound&quot;</code>. <code>sense_deltas</code> on <code>item(...)</code>,
+<code>apply_affect(...)</code>, <code>ctx.apply_affect(...)</code> and plugin traits (<code>PluginTrait.senseDeltas</code>) change the score while they
+last. <code>actor.senses</code> and <code>actor.base.senses</code> read it.</p>
+<p><code>on_nearby</code> is renamed <code>on_perceive</code> and gains <code>ctx.channel</code>, <code>ctx.intensity</code> and <code>ctx.cost</code>. Which events carry, how
+far and to whom is now decided by four rules exports, spread over as many files of the <code>//rules</code> package as you like (an
+export defined in two files is a load error): <code>sense_cost(ctx)</code> prices each hop, <code>can_perceive(ctx)</code> decides who
+notices, <code>perceive_message(ctx)</code> is what a player in another room is shown (replacing the engine's fixed &quot;Someone nearby
+shouts&quot;), and <code>door_intensity(ctx)</code> is how loud a door or container is. All four are required.</p>
+<p><code>ctx.emit(channel, event, intensity = 1, text = None, room = None, actor = None)</code> raises a perceivable event from a
+room, item or spell. <code>open</code>, <code>close</code>, <code>lock</code> and <code>unlock</code> on doors and containers fire <code>before_*</code> (vetoable) and <code>on_*</code>
+hooks, and <code>door(tags = [...])</code> gives <code>door_intensity</code> something to read. <code>emote</code> is now seen rather than heard.</p>
+<p><code>exit.door</code> is a door view instead of a string, and <code>exit.key</code> is unchanged.</p>
+<pre><code class="language-python"># before
+mob(&quot;wolf&quot;, senses = {&quot;hearing&quot;: 1}, on_nearby = _heard)
+if ctx.room.exit(&quot;north&quot;).door == &quot;closed&quot;: ...
+
+# after
+mob(&quot;wolf&quot;, senses = {&quot;sound&quot;: 1}, on_perceive = _heard)
+if ctx.room.exit(&quot;north&quot;).door.state == &quot;closed&quot;: ...
+</code></pre>
+<h3 id="added-advance-lag-retreat-lag-retreat-fail-lag-and-flee-fail-lag">Added <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code> and <code>flee_fail_lag</code></h3>
+<p>The recovery lags of <code>advance</code>, a successful <code>retreat</code>, a failed <code>retreat_check</code> and a failed <code>flee</code> are rules exports
+instead of fixed engine values. <code>advance_lag</code>, <code>retreat_lag</code> and <code>retreat_fail_lag</code> are required with the <code>track</code>
+feature and forbidden without it; <code>flee_fail_lag</code> goes with <code>combat</code>. Each returns the recovery in pulses (an int of at
+least 0; 0 means none) and replaces the action's recovery. <code>ctx.target</code> is the actor approached, retreated from or the
+pinner, and <code>ctx.band</code> the band after the step (<code>&quot;melee&quot;</code> for a failed retreat); <code>flee_fail_lag</code> has neither. A rules
+error gives 0.</p>
+<p><code>get_lag</code> now rejects negative values like the new exports do (neutral result 0, with a <code>script_error</code>); <code>None</code> still
+means out of reach.</p>
+<pre><code class="language-python"># before: nothing in rules/combat.star; the engine used 2, 2, 4 and 4
+
+# after
+def advance_lag(ctx):
+    return 2
+
+def retreat_lag(ctx):
+    return 2
+
+def retreat_fail_lag(ctx):
+    return 4
+
+def flee_fail_lag(ctx):
+    return 4
+</code></pre>
+<h3 id="added-tags-to-room-item-and-skill">Added <code>tags</code> to <code>room</code>, <code>item</code> and <code>skill</code></h3>
+<p>Rooms, items and skills take an optional <code>tags</code> list of identifiers (<code>[a-z][a-z0-9_]*</code>). Tags are stored sorted and
+deduplicated on the prototype, read via <code>.tags</code> on their respective views, and survive package reload.</p>
+<pre><code class="language-python">room(&quot;vault&quot;, name = &quot;The Vault&quot;, tags = [&quot;treasury&quot;, &quot;secure&quot;])
+item(&quot;heavy_plate&quot;, name = &quot;Heavy Plate&quot;, wear = &quot;body&quot;, tags = [&quot;heavy_armor&quot;])
+skill(&quot;magic_missile&quot;, kind = &quot;spell&quot;, target = &quot;enemy&quot;, tags = [&quot;arcane&quot;])
+</code></pre>
+<h3 id="added-traits-to-mob-prototypes">Added <code>traits</code> to mob prototypes</h3>
+<p>Mob prototypes can declare plugin-defined traits via <code>traits = [...]</code>. The traits are validated against loaded plugins
+and apply their stat, vital and resist deltas to the spawned mob. Prototype traits follow package reloads and cannot be
+removed in play.</p>
+<pre><code class="language-python">mob(&quot;mage_trainer&quot;, name = &quot;Mage Trainer&quot;, traits = [&quot;mage&quot;])
+</code></pre>
+<h3 id="actor-views-show-choices-traits-effective-maxima-and-resists">Actor views show choices, traits, effective maxima and resists</h3>
+<p>Actor views (<code>ctx.actor</code>, <code>ctx.self</code>, <code>ctx.target</code>, etc.) provide read-only access to character creation choices and
+traits: - <code>choices</code>: dictionary mapping choice ids to selected option ids. - <code>traits</code>: sorted list of effective trait
+names. - <code>has_trait(name)</code>: checks if the actor carries the given trait. - <code>max_&lt;vital&gt;</code> and <code>resists.&lt;type&gt;</code>: reflect
+effective values (base plus trait deltas). - <code>base.max_&lt;vital&gt;</code> and <code>base.resists.&lt;type&gt;</code>: reflect the underlying base
+values without trait deltas.</p>
+<h3 id="rules-starting-stats-runs-after-choices-and-traits"><code>rules.starting_stats</code> runs after choices and traits</h3>
+<p>When spawning players or mobs, <code>rules.starting_stats</code> now executes with the actor's choices and traits already set. The
+return values configure the base stats and vitals, with trait deltas layered on top. A mob's <code>ctx.actor.max_&lt;vital&gt;</code> now
+includes its prototype traits' deltas, so a ruleset that returns the prototype's maxima should read
+<code>ctx.actor.base.max_&lt;vital&gt;</code> instead, as the template does:</p>
+<pre><code class="language-python">max = vitals(hp = _or(a.base.max_hp, 10), mana = a.base.max_mana)
+</code></pre>
+<h3 id="harness-additions-spawn-player-choices-set-choices-grant-trait-remove-trait">Harness additions: <code>spawn_player(choices)</code>, <code>set_choices</code>, <code>grant_trait</code>, <code>remove_trait</code></h3>
+<p>Tests can configure character creation choices and modify traits directly: - <code>w.spawn_player(&quot;Name&quot;, choices = {&quot;race&quot;: &quot;elf&quot;, &quot;class&quot;: &quot;mage&quot;})</code> - <code>w.set_choices(player, {&quot;class&quot;: &quot;cleric&quot;})</code> - <code>w.grant_trait(actor, &quot;dwarf&quot;)</code> -
+<code>w.remove_trait(actor, &quot;dwarf&quot;)</code> - <code>player.choices</code>, <code>player.traits</code>, <code>player.has_trait(&quot;elf&quot;)</code></p>
+<h3 id="added-the-world-schema-module-stats-module-vitals-module-damage-types-module-unarmed-damage-type-module-channels-and-module-prompt">Added the world schema: <code>module.stats</code>, <code>module.vitals</code>, <code>module.damage_types</code>, <code>module.unarmed_damage_type</code>, <code>module.channels</code> and <code>module.prompt</code></h3>
+<p><code>MODULE.gups</code> is now required, and declares the names a world's actors are measured by. The engine names no stat, vital
+or damage type itself. <code>stat(name, label)</code> and <code>vital(name, label)</code> add a label; a plain string is the same with the
+default label.</p>
+<pre><code class="language-python">module(
+    api_version = 1,
+    stats = [stat(&quot;str&quot;, label = &quot;Strength&quot;), stat(&quot;dex&quot;, label = &quot;Dexterity&quot;), &quot;armor&quot;],
+    vitals = [vital(&quot;hp&quot;, label = &quot;Hit points&quot;), &quot;mana&quot;, &quot;move&quot;],
+    damage_types = [&quot;bludgeon&quot;, &quot;slash&quot;, &quot;fire&quot;],
+    unarmed_damage_type = &quot;bludgeon&quot;,
+    channels = [&quot;spell&quot;],
+    prompt = &quot;&lt;{hp}hp {mana}m {move}mv&gt; &quot;,
+)
+</code></pre>
+<p>The channel <code>spell</code> is no longer built in: a world that blocks or lists it declares it in <code>channels</code>. <code>ALL</code> lists the
+built-in channels and the declared ones. The schema is fixed per database; a start with different names refuses to run,
+and <code>gups serve --wipe</code> is the way forward (see below).</p>
+<h3 id="added-vitals-stats-resists-and-damage">Added <code>vitals(...)</code>, <code>stats(...)</code>, <code>resists(...)</code> and <code>DAMAGE</code></h3>
+<p>Wherever numbers are keyed by schema names, a constructor checks its keywords against the schema, with a suggestion for
+a misspelling. A plain dict is an error that names the constructor. <code>DAMAGE</code> is a struct of the declared damage types,
+so <code>DAMAGE.fier</code> fails at that line.</p>
+<p>Before:</p>
+<pre><code class="language-python">skill(&quot;fireball&quot;, cost = {&quot;mana&quot;: 25}, effect = damage(dice = &quot;4d6&quot;, type = &quot;fire&quot;))
+item(&quot;cap&quot;, wear = &quot;head&quot;, stat_deltas = {&quot;con&quot;: 1})
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">skill(&quot;fireball&quot;, cost = vitals(mana = 25), effect = damage(dice = &quot;4d6&quot;, type = DAMAGE.fire))
+item(&quot;cap&quot;, wear = &quot;head&quot;, stat_deltas = stats(con = 1))
+</code></pre>
+<h3 id="mob-hp-mana-move-armor-are-now-mob-vitals-and-a-stat-mob-stats-and-mob-resists-use-constructors"><code>mob(hp, mana, move, armor)</code> are now <code>mob(vitals)</code> and a stat; <code>mob(stats)</code> and <code>mob(resists)</code> use constructors</h3>
+<p>A mob declares the maxima of its vitals, its stats and its resists, all keyed by schema names. They are the input of
+<code>rules.starting_stats</code> at each spawn.</p>
+<p>Before:</p>
+<pre><code class="language-python">mob(&quot;goblin_scout&quot;, hp = 30, armor = 2, stats = {&quot;str&quot;: 10, &quot;dex&quot;: 14}, resists = {&quot;fire&quot;: -10})
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">mob(&quot;goblin_scout&quot;, vitals = vitals(hp = 30), stats = stats(str = 10, dex = 14, armor = 2),
+    resists = resists(fire = -10))
+</code></pre>
+<h3 id="heal-dice-is-now-heal-dice-vital-and-ctx-damage-and-ctx-heal-name-a-vital"><code>heal(dice)</code> is now <code>heal(dice, vital)</code>, and <code>ctx.damage</code> and <code>ctx.heal</code> name a vital</h3>
+<p>Damage and healing always change one named vital.</p>
+<p>Before:</p>
+<pre><code class="language-python">skill(&quot;mend&quot;, target = &quot;ally&quot;, effect = heal(dice = &quot;2d4&quot;))
+ctx.damage(target, 5, &quot;fire&quot;)
+ctx.heal(target, 5)
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">skill(&quot;mend&quot;, target = &quot;ally&quot;, effect = heal(dice = &quot;2d4&quot;, vital = &quot;hp&quot;))
+ctx.damage(target, 5, DAMAGE.fire, &quot;hp&quot;)
+ctx.heal(target, 5, &quot;hp&quot;)
+</code></pre>
+<h3 id="damage-dice-type-goes-through-rules-mitigate-to-any-vitals"><code>damage(dice, type)</code> goes through <code>rules.mitigate</code> to any vitals</h3>
+<p>The <code>damage</code> effect primitive and auto-attacks use the vital losses <code>rules.mitigate</code> returns. The raw <code>ctx.damage</code> verb
+makes one loss and skips <code>mitigate</code>.</p>
+<h3 id="flee-at-hp-pct-is-now-flee-below"><code>flee(at_hp_pct)</code> is now <code>flee(below)</code></h3>
+<p>The mob flees when any listed vital is at or below that percentage of its maximum.</p>
+<p>Before:</p>
+<pre><code class="language-python">mob(&quot;hare&quot;, behaviors = [flee(at_hp_pct = 50)])
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">mob(&quot;hare&quot;, behaviors = [flee(below = vitals(hp = 50))])
+</code></pre>
+<h3 id="the-actor-view-s-fields-come-from-the-schema">The actor view's fields come from the schema</h3>
+<p>Each stat (effective), each vital and <code>max_&lt;vital&gt;</code>, <code>base.&lt;stat&gt;</code>, <code>resists.&lt;type&gt;</code>, <code>below_zero_since(vital)</code> and
+<code>condition</code> replace the fixed <code>hp</code>, <code>max_hp</code>, <code>mana</code>, <code>move</code>, <code>stats</code>, <code>armor</code> and <code>resists</code> fields. An undeclared name
+is an error with a suggestion, so <code>ctx.actor.lfe</code> suggests <code>life</code>.</p>
+<p>Before:</p>
+<pre><code class="language-python">ctx.actor.stats[&quot;dex&quot;]
+ctx.actor.armor
+ctx.actor.resists.get(&quot;fire&quot;, 0)
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">ctx.actor.dex
+ctx.actor.armor
+ctx.actor.resists.fire
+</code></pre>
+<h3 id="on-damage-has-losses-and-amount-is-their-total"><code>on_damage</code> has <code>losses</code>, and <code>amount</code> is their total</h3>
+<p><code>ctx.losses</code> is a <code>vitals(...)</code> value with the loss of each vital; <code>ctx.amount</code> is their sum.</p>
+<h3 id="the-rules-package-is-required-with-starting-stats-and-condition">The rules package is required, with <code>starting_stats</code> and <code>condition</code></h3>
+<p>The engine has no built-in ruleset and nothing to fall back to. <code>//rules:combat.star</code> must define every export, and
+loading it runs a dry run of each against synthetic actors. A rules function that fails at run time gives a neutral
+result, records a <code>script_error</code> and raises a <code>rules_error</code> alert (this replaces the <code>rules_fallback</code> alert); the rules
+package is never quarantined.</p>
+<ul>
+<li><code>starting_stats(ctx)</code> returns <code>struct(stats = stats(...), max = vitals(...), current = vitals(...))</code>, every field
+optional.</li>
+<li><code>condition(ctx)</code> returns <code>&quot;ok&quot;</code>, <code>&quot;incapacitated&quot;</code> or <code>&quot;dead&quot;</code>.</li>
+<li><code>mitigate</code>, <code>move_cost</code> and <code>regen</code> return <code>vitals(...)</code>, <code>encumbrance</code> returns <code>stats(...)</code>, and <code>on_player_death</code>
+may return <code>&quot;vitals&quot;: vitals(...)</code>.</li>
+<li><code>interrupt_check(ctx, amount)</code> gets the total of the damage event's losses.</li>
+</ul>
+<p>Before:</p>
+<pre><code class="language-python">def mitigate(ctx, amount, type):
+    return max(1, amount - ctx.defender.armor // 2)
+
+def regen(ctx):
+    return {&quot;hp&quot;: 1, &quot;mana&quot;: 1, &quot;move&quot;: 2}
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">def mitigate(ctx, amount, type):
+    return vitals(hp = max(1, amount - ctx.defender.armor // 2))
+
+def regen(ctx):
+    return vitals(hp = 1, mana = 1, move = 2)
+</code></pre>
+<h3 id="conditions-incapacitation-and-death-from-any-vital">Conditions: incapacitation and death from any vital</h3>
+<p>An actor's condition is decided by <code>rules.condition</code> after any change to one of its vitals and at every world tick. An
+incapacitated actor takes no actions or auto-attacks and its tick-lane commands are refused with &quot;You can't do that
+while incapacitated.&quot;; a <code>dead</code> condition kills, in or out of combat.</p>
+<h3 id="spawn-player-and-w-damage-in-tests-name-vitals"><code>spawn_player</code> and <code>w.damage</code> in tests name vitals</h3>
+<p>Before:</p>
+<pre><code class="language-python">p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;, hp = 30, stats = {&quot;str&quot;: 12})
+w.damage(rat, pct = 100)
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;, vitals = vitals(hp = 30), stats = stats(str = 12))
+w.damage(rat, &quot;hp&quot;, pct = 100)
+</code></pre>
+<h3 id="added-char-schema-and-char-vitals-keys-follow-the-schema">Added <code>Char.Schema</code>, and <code>Char.Vitals</code> keys follow the schema</h3>
+<p><code>Char.Schema</code> carries the stats and vitals with their labels, the damage types and the enabled features. <code>Char.Vitals</code>
+has <code>&lt;vital&gt;</code> and <code>max&lt;vital&gt;</code> for each declared vital. The telnet prompt is generated from <code>module.prompt</code>, and the web
+client draws one bar per vital.</p>
+<h3 id="added-gups-serve-wipe">Added <code>gups serve --wipe</code></h3>
+<p>A server wipe takes a <code>prewipe</code> backup, deletes every character and item, ignores saved world state like <code>--fresh</code>, and
+records the world's current schema. Accounts, restrictions and tokens stay. <code>gups migrate-check</code> fails when the
+snapshot's schema differs from the pull request's.</p>
+<h3 id="added-module-aliases">Added <code>module.aliases</code></h3>
+<p><code>MODULE.gups</code> sets the alias words for engine commands, such as <code>l</code> for <code>look</code>. The engine no longer has built-in
+aliases, so a world keeps <code>l</code>, <code>i</code>, <code>inv</code>, <code>eq</code>, <code>k</code>, <code>attack</code>, <code>c</code> and <code>take</code> only by listing them, as the template
+world does.</p>
+<h3 id="added-module-prefixes">Added <code>module.prefixes</code></h3>
+<p><code>MODULE.gups</code> sets the single characters that stand for an engine command at the start of a line, such as <code>'</code> for <code>say</code>.
+A world keeps <code>'</code> only by listing it, as the template world does.</p>
+<h3 id="added-server-shutdown-timeout">Added <code>server.shutdown_timeout</code></h3>
+<p><code>server.gups</code> can set how many seconds a shutdown waits for the final checkpoint.</p>
+<h3 id="package-reset-pulses-is-now-package-reset-world-ticks"><code>package(reset_pulses)</code> is now <code>package(reset_world_ticks)</code></h3>
+<p>A zone's reset interval is given in world ticks (30 seconds each), so a reset always lands on a world tick.</p>
+<p>Before:</p>
+<pre><code class="language-python">package(api_version = 1, kind = &quot;zone&quot;, reset_pulses = 7200)
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">package(api_version = 1, kind = &quot;zone&quot;, reset_world_ticks = 60)
+</code></pre>
+<h3 id="dispel-filter-is-now-dispel-name-flag-all-count"><code>dispel(filter)</code> is now <code>dispel(name, flag, all, count)</code></h3>
+<p><code>dispel</code> takes keyword criteria instead of a filter string: <code>name</code> (a trailing <code>*</code> matches a prefix), <code>flag</code> (a string
+or a list), <code>all = True</code>, and an optional <code>count</code>. At least one of <code>name</code>, <code>flag</code> or <code>all</code> is required. Affects flagged
+<code>intrinsic</code> are never dispelled, and a dispelled affect now sends its <code>expire_msg</code>.</p>
+<p>Before:</p>
+<pre><code class="language-python">skill(&quot;cure&quot;, kind = &quot;spell&quot;, target = &quot;ally&quot;, effect = dispel(filter = &quot;poison*&quot;))
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">skill(&quot;cure&quot;, kind = &quot;spell&quot;, target = &quot;ally&quot;, effect = dispel(name = &quot;poison*&quot;))
+</code></pre>
+<h3 id="item-equip-affects-entries-can-be-timed-and-a-stun-must-be"><code>item(equip_affects)</code> entries can be timed, and a stun must be</h3>
+<p>An <code>equip_affects</code> entry is now a flag name, held while the item is worn, or <code>{&quot;flag&quot;: ..., &quot;pulses&quot;: n}</code>, applied for
+<code>n</code> pulses when the item is equipped. Worn items' affects are real affects on the wearer (SPEC §4.6). A bare <code>&quot;stunned&quot;</code>
+no longer loads.</p>
+<p>Before:</p>
+<pre><code class="language-python">item(&quot;dazing_helm&quot;, wear = &quot;head&quot;, equip_affects = [&quot;stunned&quot;])
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">item(&quot;dazing_helm&quot;, wear = &quot;head&quot;, equip_affects = [{&quot;flag&quot;: &quot;stunned&quot;, &quot;pulses&quot;: 4}])
+</code></pre>
+<h3 id="exits-and-doors-carry-tags-instead-of-blocked-channels">Exits and doors carry tags instead of blocked channels</h3>
+<p><code>exit(senses_blocked)</code>, <code>door(open_senses_blocked)</code>, <code>door(closed_senses_blocked)</code>, the views' <code>senses_blocked</code>,
+<code>open_senses_blocked</code> and <code>closed_senses_blocked</code>, and <code>ctx.set_exit_senses_blocked</code> are gone. <code>exit(tags = [...])</code> and
+the exit view's <code>tags</code> take their place, and <code>rules.sense_cost</code> reads the tags, the door's <code>state</code> and its <code>tags</code>. The
+template's <code>sense_cost</code> blocks every channel through an exit tagged <code>sealed</code>, <code>sound</code> through one tagged <code>soundproof</code>,
+and <code>sight</code> through a closed door unless it is tagged <code>transparent</code>.</p>
+<p>A <code>sense_cost</code> of 0 is now a free hop; only a negative result blocks it.</p>
+<p>Before:</p>
+<pre><code class="language-python">exit(&quot;east&quot;, to = &quot;:long_hall&quot;, senses_blocked = ALL)
+</code></pre>
+<p>After:</p>
+<pre><code class="language-python">exit(&quot;east&quot;, to = &quot;:long_hall&quot;, tags = [&quot;sealed&quot;])
+</code></pre>
+<h3 id="added-module-features-combat-track-skills-and-leveling">Added <code>module.features</code>: <code>combat</code>, <code>track</code>, <code>skills</code> and <code>leveling</code></h3>
+<p>A world lists the engine features it uses; leaving the line out turns all four on, so existing worlds are unchanged.
+<code>track</code> needs <code>combat</code>. A feature that is off doesn't exist for the world: its commands give &quot;Huh?&quot; and are left out of
+<code>help</code> and <code>gups docs --world</code>, and its declarations, declaration arguments, hooks, behaviors, package kinds, effect
+primitives, modifier points and rules exports are refused (see the next entries). The set is recorded in
+<code>meta.world_features</code> with the schema: a start with different features refuses to run, and <code>gups serve --wipe</code> is the
+way forward. <code>gups migrate-check</code> fails on a changed set.</p>
+<pre><code class="language-python">module(
+    api_version = 1,
+    features = [&quot;combat&quot;, &quot;skills&quot;],
+)
+</code></pre>
+<h3 id="features-that-are-off-refuse-their-declarations-hooks-behaviors-and-rules">Features that are off refuse their declarations, hooks, behaviors and rules</h3>
+<p>With a feature off, a package that uses one of its entries fails to load with &quot;<code>&lt;name&gt;</code> needs the <code>&lt;feature&gt;</code> feature&quot;:</p>
+<ul>
+<li><code>skills</code>: <code>skill(...)</code>, the <code>skills</code> package kind, <code>mob(skills)</code>, the hooks <code>before_cast</code>, <code>on_cast_start</code> and
+<code>on_cast</code>, the modifier point <code>cast_allowed</code>, the effect primitives <code>damage</code>, <code>heal</code>, <code>apply_affect</code>, <code>dispel</code>,
+<code>stun</code>, <code>summon</code> and <code>sequence</code>.</li>
+<li><code>combat</code>: the hooks <code>before_attack</code> and <code>on_combat_tick</code>, the behaviors <code>aggressive</code>, <code>assist</code> and <code>flee</code>, the
+modifier points <code>to_hit</code>, <code>damage</code> and <code>initiative</code>.</li>
+<li><code>track</code>: <code>room(size)</code>, <code>exit(entry_index)</code>, <code>spawn(at_index)</code>, <code>item(range)</code>, the effect primitives <code>knockback</code> and
+<code>pull</code>, and, for a skill, the ranges <code>melee</code>, <code>near</code> and <code>far</code> (a skill may omit <code>range</code>, or use <code>self</code> or <code>room</code>).</li>
+<li><code>leveling</code>: <code>mob(level)</code> and <code>aggressive(unless_level_above)</code>.</li>
+</ul>
+<p>The rules package may not define the exports of a feature that is off, and must define those of one that is on:
+<code>to_hit</code>, <code>damage</code>, <code>initiative</code> and <code>flee_chance</code> (<code>combat</code>), <code>cast_allowed</code> and <code>interrupt_check</code> (<code>skills</code>),
+<code>retreat_check</code> and <code>get_lag</code> (<code>track</code>), <code>xp_for_kill</code> and <code>xp_to_level</code> (<code>leveling</code>). <code>on_player_death</code>'s <code>xp_loss</code> is
+an error without <code>leveling</code>.</p>
+<h3 id="ctx-verbs-and-view-fields-of-a-feature-that-is-off-raise-name-needs-the-feature-feature"><code>ctx</code> verbs and view fields of a feature that is off raise &quot;<code>&lt;name&gt;</code> needs the <code>&lt;feature&gt;</code> feature&quot;</h3>
+<p><code>ctx.start_combat</code>, <code>ctx.stop_combat</code>, <code>ctx.enemies_near</code>, <code>ctx.allies_near</code>, <code>ctx.act_attack</code> and the <code>fighting</code> method
+(<code>combat</code>); <code>ctx.act_advance</code>, <code>ctx.act_retreat</code>, a non-zero <code>index</code> of <code>ctx.teleport</code>, <code>ctx.spawn</code> and <code>ctx.move_item</code>,
+the actor's <code>track_index</code> and <code>band_of</code>, the room's <code>size</code> and <code>track_size</code>, an exit's <code>entry_index</code>, an item's <code>range</code>
+and an item location's <code>index</code> (<code>track</code>); <code>ctx.act_cast</code>, and an actor's <code>skills</code>, <code>casting</code> and <code>is_casting</code>
+(<code>skills</code>); an actor's <code>level</code> and <code>xp</code> (<code>leveling</code>). Without <code>track</code> the rules <code>ctx.band</code> is <code>None</code>.</p>
+<h3 id="added-module-rename">Added <code>module.rename</code></h3>
+<p><code>rename = {&quot;cast&quot;: &quot;invoke&quot;}</code> renames engine commands that aren't <code>@</code> tools. Aliases, prefixes, reserved exit and
+character names, <code>help</code> and the docs use the new names; the old name is free for <code>global_command</code> and plugin commands. A
+rename of a command that doesn't exist (or whose feature is off), to a name that isn't <code>[a-z][a-z0-9_]*</code> or is a
+direction, another command or an alias stops the server. <code>rename</code> needs only a restart.</p>
+<h3 id="added-messages-gups-and-the-engine-message-catalog">Added <code>MESSAGES.gups</code> and the engine message catalog</h3>
+<p>Every player-facing engine message is an entry of a catalog with a stable id (<code>cast.begin.known</code>), named placeholders
+and default text. A world overrides entries with one <code>messages({...})</code> call in <code>MESSAGES.gups</code>; an unknown id, an
+unknown placeholder or a missing required one stops the server, and an id of a feature that is off warns. The file is
+read at startup only, and a deploy that changes it is refused. <code>api.json</code> lists the catalog under <code>messages</code>, and <code>gups docs</code> shows it on <code>world.html</code>.</p>
+<pre><code class="language-python">messages({
+    &quot;cast.begin.known&quot;: &quot;{actor}'s implant whines as it spins up {skill}.&quot;,
+    &quot;cast.begin.unknown&quot;: &quot;{actor}'s implant whines.&quot;,
+})
+</code></pre>
+<h3 id="added-feature-to-api-json-entries-and-world-html">Added <code>feature</code> to <code>api.json</code> entries, and <code>world.html</code></h3>
+<p>Entries owned by a feature carry <code>feature</code>, and <code>gups docs --world</code> leaves out the entries of features the world has
+off.</p>
+<h3 id="added-plugin-requiredfeatures-and-pluginworld-features">Added plugin <code>requiredFeatures</code> and <code>PluginWorld.features</code></h3>
+<p>A plugin that needs features lists their ids in <code>GupsPlugin.requiredFeatures</code>; it is skipped with &quot;needs the '&lt;feature&gt;'
+feature&quot; when one is off. <code>PluginActor.level</code> and <code>PluginRoom.size</code> throw <code>IllegalStateException</code> naming the feature
+when <code>leveling</code> or <code>track</code> is off.</p>
+<h3 id="item-quantities-pluralization-and-all">Item quantities, pluralization, and all</h3>
+<ul>
+<li><code>item(...)</code> takes an optional <code>plural</code> (for example <code>plural = &quot;gold coins&quot;</code>), the display name of a stack of 2 or
+more. <code>item.plural</code> reads it on the item view, and <code>PluginItem.plural</code> exposes it to plugins.</li>
+<li>Item commands match a phrase of keywords instead of one word: every word of the phrase must match the start of one of
+the item's keywords, the words of a keyword, or its plural words, and articles are ignored unless the phrase is only
+articles, so <code>get gold coin</code>, <code>get coins</code> and <code>get the coin</code> all find <code>a gold coin</code>, and <code>get an</code> still finds <code>an anvil</code>. <code>get 2.coin</code> picks the second match, as the other item commands do.</li>
+<li>A blank <code>plural</code> fails to load.</li>
+<li><code>get &lt;what&gt; [[from] &lt;container&gt;]</code> and <code>drop &lt;what&gt;</code> take an item specifier <code>&lt;what&gt;</code> instead of a single word: a
+<code>&lt;keyword&gt;</code>, a <code>&lt;ordinal&gt;.&lt;keyword&gt;</code>, a <code>&lt;count&gt; &lt;keyword&gt;</code>, a <code>&lt;count&gt; &lt;ordinal&gt;.&lt;keyword&gt;</code>, <code>all</code>, or <code>all &lt;keyword&gt;</code>. A keyword may be a phrase. The <code>from</code> preposition in <code>get</code> is optional: without it, <code>get &lt;item&gt; &lt;container&gt;</code> takes from the container when the last word names a container that holds a match, and <code>get all &lt;container&gt;</code> loots it; otherwise the whole phrase is a ground item.</li>
+<li>Bare <code>all</code> in <code>get</code>, <code>drop</code>, <code>give</code> and <code>put</code> skips items tagged <code>no_all</code> (such as <code>//engine:corpse</code>) and keyring-only
+keys; an explicit keyword (<code>all &lt;keyword&gt;</code>, <code>&lt;count&gt; &lt;keyword&gt;</code>, or a bare <code>&lt;keyword&gt;</code>) ignores both exclusions.</li>
+<li>A requested count is capped to what the source holds and to what the actor can carry. When the carry limit caps the
+transfer, the actor is told &quot;You can't carry that much.&quot; A <code>get</code> from a container the actor already carries is not
+capped, since the load does not change.</li>
+<li>Each source stack runs <code>before_get</code> / <code>before_drop</code>, the move, and <code>on_get</code> / <code>on_drop</code> once; a single command can
+collect across several stacks, each with its own message. A stack that the <code>before_*</code> hook destroys or moves away is
+skipped.</li>
+<li><code>look</code>, <code>inventory</code> and <code>keyring</code> show a stack of 2 or more as <code>&quot;&lt;count&gt; &lt;plural&gt;&quot;</code> when the prototype declares a
+<code>plural</code> and the item has no name override, and as <code>&quot;&lt;name&gt; (&lt;count&gt;)&quot;</code> otherwise.</li>
+<li>The engine's corpse prototype carries the <code>no_all</code> tag, which keeps an item out of bare <code>all</code> in <code>get</code>, <code>drop</code>, <code>give</code>
+and <code>put</code>.</li>
+<li><code>move_item(item, to, index=0, count=None)</code> moves the whole item, or <code>count</code> of a stack, and returns the moved item's
+view. A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and fires
+no <code>on_spawn</code>. Moving part of an equipped or non-stackable item is an error.</li>
+<li><code>give(actor, label_or_item, count=None)</code>: <code>count</code> now also bounds how much of an item view is moved (it previously
+only applied to labels). <code>destroy(item, count=None)</code> removes the whole item, or <code>count</code> of a stack.</li>
+<li><code>give &lt;what&gt; [to] &lt;target&gt;</code> and <code>put &lt;what&gt; [in|into] &lt;container&gt;</code> take the same item specifier <code>&lt;what&gt;</code> as <code>get</code> and
+<code>drop</code>, and the <code>to</code>, <code>in</code> and <code>into</code> prepositions are optional, so <code>give 5 coins bob</code> and <code>put 3 coins chest</code> work. A
+<code>give</code> is capped to the receiver's carry limit (&quot;&lt;Target&gt; can't carry that much.&quot; when capped) and fires <code>on_give</code>
+once per stack moved; a <code>put</code> is capped to the container's free item capacity and <code>max_weight</code> (&quot;&lt;Container&gt; is full.&quot;
+and &quot;&lt;Item&gt; won't fit in &lt;container&gt;.&quot;) and never moves the target container itself. The usage strings become &quot;Usage:
+give &lt;item|count item|all [item]&gt; [to] &lt;target&gt;&quot; and &quot;Usage: put &lt;item|count item|all [item]&gt; [in|into] &lt;container&gt;&quot;.</li>
+<li><code>ctx.split</code> is removed; use <code>move_item(..., count=n)</code> to move part of a stack.</li>
+</ul>
+<pre><code class="language-python"># before
+part = ctx.split(coins, 2)
+ctx.move_item(part, ctx.room)
+
+# after
+part = ctx.move_item(coins, ctx.room, index = 0, count = 2)
+</code></pre>
+<h2 id="api_version-1-2">api_version 1</h2>
+<p>Initial (unstable) script API.</p>
+<h3 id="added-module-plugins">Added <code>module.plugins</code></h3>
+<p><code>MODULE.gups</code> can pin plugin jars.</p>
+</section>
+</main>
+</body>
+</html>

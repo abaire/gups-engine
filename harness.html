@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test harness — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html" class="current">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Test harness</h1>
+<p>Objects of <code>*_test.star</code> tests: <code>t</code> is the test, <code>w</code> a world, <code>p</code> a player.</p>
+<section id="diagnostic" class="entry">
+<h2><code>diagnostic</code> <span class="since">since api_version 1</span></h2>
+<p>A read-only diagnostic entry from w.diagnostics().</p>
+<div class="example">
+<p class="caption">Example</p>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+p.do(&quot;look&quot;)
+# A script error in a hook is recorded, not raised: fail on any.
+for d in w.diagnostics():
+    t.fail(&quot;%s:%s %s (%s)&quot; % (d.file, d.line, d.message, d.kind))</code></pre>
+</div>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="diagnostic.file"><td><code>file</code></td><td>1</td><td>The Starlark file where the error occurred, or None.</td></tr>
+<tr id="diagnostic.hook"><td><code>hook</code></td><td>1</td><td>The hook, command or timer name, or None.</td></tr>
+<tr id="diagnostic.kind"><td><code>kind</code></td><td>1</td><td>Diagnostic category, such as 'script_error', 'step_limit' or 'quarantine'.</td></tr>
+<tr id="diagnostic.label"><td><code>label</code></td><td>1</td><td>The prototype label involved, or None.</td></tr>
+<tr id="diagnostic.line"><td><code>line</code></td><td>1</td><td>1-based source line number, or None.</td></tr>
+<tr id="diagnostic.message"><td><code>message</code></td><td>1</td><td>Human-readable diagnostic message.</td></tr>
+<tr id="diagnostic.package"><td><code>package</code></td><td>1</td><td>The package the diagnostic was charged to, or None.</td></tr>
+<tr id="diagnostic.pulse"><td><code>pulse</code></td><td>1</td><td>Game pulse when the diagnostic was recorded.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="p" class="entry">
+<h2><code>p</code> <span class="since">since api_version 1</span></h2>
+<p>A test player: its view fields plus do(line), output() and gmcp().</p>
+<p>Starlark type <code>player</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;, vitals = vitals(hp = 30))
+t.true(p.is_player)
+t.contains(p.do(&quot;look&quot;), &quot;Start&quot;)
+t.eq(p.hp, 30)</code></pre>
+</div>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.affects"><td><code>affects</code></td><td>1</td><td>Active affects on this actor, including untimed ones from worn items.</td></tr>
+<tr id="p.attrs"><td><code>attrs</code></td><td>1</td><td>Custom attributes; your package's own keys by short name.</td></tr>
+<tr id="p.base"><td><code>base</code></td><td>1</td><td>Base stat values, without affects, equipment or encumbrance: base.dex.</td></tr>
+<tr id="p.carried_weight"><td><code>carried_weight</code></td><td>1</td><td>Weight of everything carried and worn.</td></tr>
+<tr id="p.casting"><td><code>casting</code></td><td>1</td><td>The skill being cast, or None.</td></tr>
+<tr id="p.choices"><td><code>choices</code></td><td>1</td><td>Chosen character creation options by choice id: a dict, empty for mobs.</td></tr>
+<tr id="p.condition"><td><code>condition</code></td><td>1</td><td>'ok', 'incapacitated' or 'dead', as the rules last decided.</td></tr>
+<tr id="p.encumbrance_level"><td><code>encumbrance_level</code></td><td>1</td><td>The encumbrance level rules.encumbrance_level last gave; 0 while that rule runs.</td></tr>
+<tr id="p.flags"><td><code>flags</code></td><td>1</td><td>Flags from traits, affects and item affects, sorted.</td></tr>
+<tr id="p.home_room"><td><code>home_room</code></td><td>1</td><td>A mob's home room label; None for players.</td></tr>
+<tr id="p.id"><td><code>id</code></td><td>1</td><td>The entity's id.</td></tr>
+<tr id="p.in_world"><td><code>in_world</code></td><td>1</td><td>False once the actor has died (mobs) or quit.</td></tr>
+<tr id="p.is_busy"><td><code>is_busy</code></td><td>1</td><td>True while the actor warms up a cast or runs a timed task.</td></tr>
+<tr id="p.is_casting"><td><code>is_casting</code></td><td>1</td><td>True while the actor is in casting warmup.</td></tr>
+<tr id="p.is_player"><td><code>is_player</code></td><td>1</td><td>True for a player, False for a mob.</td></tr>
+<tr id="p.keywords"><td><code>keywords</code></td><td>1</td><td>Words that match this actor when targeting.</td></tr>
+<tr id="p.label"><td><code>label</code></td><td>1</td><td>The prototype label.</td></tr>
+<tr id="p.leash"><td><code>leash</code></td><td>1</td><td>A mob's effective leash in exits from home; None for no leash or a player.</td></tr>
+<tr id="p.leash_overridden"><td><code>leash_overridden</code></td><td>1</td><td>True while a `set_leash` override is in place; False for players and unoverridden mobs.</td></tr>
+<tr id="p.level"><td><code>level</code></td><td>1</td><td>The actor's level.</td></tr>
+<tr id="p.move_pace"><td><code>move_pace</code></td><td>1</td><td>Hundredths of a pulse per room this actor walks at now; 100 is one room per pulse.</td></tr>
+<tr id="p.name"><td><code>name</code></td><td>1</td><td>The entity's display name.</td></tr>
+<tr id="p.owner"><td><code>owner</code></td><td>1</td><td>The in-world player that owns this mob (a pet), or None.</td></tr>
+<tr id="p.pending_levels"><td><code>pending_levels</code></td><td>1</td><td>How many levels the actor has the XP for and has not been given. A read costs one xp_to_level call per pending level, plus one.</td></tr>
+<tr id="p.primary_target"><td><code>primary_target</code></td><td>1</td><td>The actor this one is attacking, or None when it has no target or is not engaged.</td></tr>
+<tr id="p.recall_room"><td><code>recall_room</code></td><td>1</td><td>A player's recall room label; None for mobs.</td></tr>
+<tr id="p.resists"><td><code>resists</code></td><td>1</td><td>Damage resistance percentage by declared damage type: resists.fire.</td></tr>
+<tr id="p.room"><td><code>room</code></td><td>1</td><td>The room the actor is currently in.</td></tr>
+<tr id="p.senses"><td><code>senses</code></td><td>1</td><td>Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.</td></tr>
+<tr id="p.skills"><td><code>skills</code></td><td>1</td><td>Skill label to proficiency (0-100).</td></tr>
+<tr id="p.slots"><td><code>slots</code></td><td>1</td><td>Equipment slots this actor currently has, a subset of equipment_slots().</td></tr>
+<tr id="p.task"><td><code>task</code></td><td>1</td><td>The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.</td></tr>
+<tr id="p.track_index"><td><code>track_index</code></td><td>1</td><td>Position along the room's 1D track.</td></tr>
+<tr id="p.traits"><td><code>traits</code></td><td>1</td><td>Sorted names of the known traits the actor carries.</td></tr>
+<tr id="p.wait_state"><td><code>wait_state</code></td><td>1</td><td>Recovery pulses left.</td></tr>
+<tr id="p.xp"><td><code>xp</code></td><td>1</td><td>Current experience points.</td></tr>
+</tbody>
+</table>
+<h3>Methods</h3>
+<article id="p.band_of" class="entry">
+<h4><code>band_of(other)</code> <span class="since">since api_version 1</span></h4>
+<p>'melee', 'near' or 'far' to another actor or item in the same room; None elsewhere.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.band_of.other"><td><code>other</code></td><td>positional or named</td><td></td><td>Actor or item in the same room.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.below_zero_since" class="entry">
+<h4><code>below_zero_since(vital)</code> <span class="since">since api_version 1</span></h4>
+<p>The pulse the vital last dropped below 0, or None while it is 0 or more.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.below_zero_since.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>A declared vital.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.do" class="entry">
+<h4><code>do(line)</code> <span class="since">since api_version 1</span></h4>
+<p>Enters a command line, runs pulses until the player's queued actions and casts are done, and returns the output since the last do() or output().</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.do.line"><td><code>line</code></td><td>positional or named</td><td></td><td>Command line, as the player would type it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.equipped" class="entry">
+<h4><code>equipped(slot)</code> <span class="since">since api_version 1</span></h4>
+<p>The item in an equipment slot, or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.equipped.slot"><td><code>slot</code></td><td>positional or named</td><td></td><td>Equipment slot name, such as 'wield' or 'body'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.fighting" class="entry">
+<h4><code>fighting()</code> <span class="since">since api_version 1</span></h4>
+<p>Actors engaged with this one.</p>
+</article>
+<article id="p.gmcp" class="entry">
+<h4><code>gmcp(package = None)</code> <span class="since">since api_version 1</span></h4>
+<p>GMCP messages received since the last call, as {'package', 'data'} dicts.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.gmcp.package"><td><code>package</code></td><td>positional or named</td><td><code>None</code></td><td>A GMCP package name, or None for every message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.has_flag" class="entry">
+<h4><code>has_flag(flag)</code> <span class="since">since api_version 1</span></h4>
+<p>True if a trait, an affect or an item affect gives this flag, such as 'no_regen'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.has_flag.flag"><td><code>flag</code></td><td>positional or named</td><td></td><td>Flag name, such as 'no_regen'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.has_item" class="entry">
+<h4><code>has_item(label)</code> <span class="since">since api_version 1</span></h4>
+<p>Whether the actor carries or wears an item of this prototype.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.has_item.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Item prototype label.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.has_trait" class="entry">
+<h4><code>has_trait(name)</code> <span class="since">since api_version 1</span></h4>
+<p>True if the actor carries this trait.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="p.has_trait.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Trait name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="p.inventory" class="entry">
+<h4><code>inventory()</code> <span class="since">since api_version 1</span></h4>
+<p>Carried items (not equipment).</p>
+</article>
+<article id="p.output" class="entry">
+<h4><code>output()</code> <span class="since">since api_version 1</span></h4>
+<p>Output received since the last do() or output().</p>
+</article>
+</section>
+<section id="t" class="entry">
+<h2><code>t</code> <span class="since">since api_version 1</span></h2>
+<p>The test context: makes worlds and checks results.</p>
+<div class="example">
+<p class="caption">Example</p>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;)
+t.eq(p.room, &quot;:start&quot;)
+t.ne(p.room, &quot;:elsewhere&quot;)
+t.not_contains(p.do(&quot;look&quot;), &quot;Elsewhere&quot;)</code></pre>
+</div>
+<h3>Methods</h3>
+<article id="t.contains" class="entry">
+<h4><code>contains(container, item, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless a string contains a substring, or a list or dict contains an item.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.contains.container"><td><code>container</code></td><td>positional or named</td><td></td><td>String, list or dict to search.</td></tr>
+<tr id="t.contains.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Substring, element or key to find.</td></tr>
+<tr id="t.contains.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.eq" class="entry">
+<h4><code>eq(actual, expected, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless actual == expected. An entity view equals its label, so t.eq(p.room, ':hall') works.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.eq.actual"><td><code>actual</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.eq.expected"><td><code>expected</code></td><td>positional or named</td><td></td><td>Expected value.</td></tr>
+<tr id="t.eq.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.fail" class="entry">
+<h4><code>fail(msg)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails the test.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.fail.msg"><td><code>msg</code></td><td>positional or named</td><td></td><td>Failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.false" class="entry">
+<h4><code>false(value, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless the value is falsy.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.false.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.false.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.ne" class="entry">
+<h4><code>ne(actual, unexpected, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails if actual == unexpected.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.ne.actual"><td><code>actual</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.ne.unexpected"><td><code>unexpected</code></td><td>positional or named</td><td></td><td>Value it must not equal.</td></tr>
+<tr id="t.ne.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.not_contains" class="entry">
+<h4><code>not_contains(container, item, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails if a string contains a substring, or a list or dict contains an item.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.not_contains.container"><td><code>container</code></td><td>positional or named</td><td></td><td>String, list or dict to search.</td></tr>
+<tr id="t.not_contains.item"><td><code>item</code></td><td>positional or named</td><td></td><td>Substring, element or key that must be absent.</td></tr>
+<tr id="t.not_contains.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.true" class="entry">
+<h4><code>true(value, msg = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Fails unless the value is truthy.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.true.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value under test.</td></tr>
+<tr id="t.true.msg"><td><code>msg</code></td><td>positional or named</td><td><code>None</code></td><td>Extra text for the failure message.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="t.world" class="entry">
+<h4><code>world(seed = 0, packages = None, rules = None, bubble = False)</code> <span class="since">since api_version 1</span></h4>
+<p>A fresh headless world with the given packages (default: this test's package) and the rules package. The `load` argument is spelled `packages`, since load is a Starlark keyword. rules names another rules package to use instead of //rules. bubble=True keeps a reality bubble, so only rooms near players are simulated; by default every room is.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="t.world.seed"><td><code>seed</code></td><td>positional or named</td><td><code>0</code></td><td>Random seed for the world.</td></tr>
+<tr id="t.world.packages"><td><code>packages</code></td><td>positional or named</td><td><code>None</code></td><td>Packages to load, or None for this test's package.</td></tr>
+<tr id="t.world.rules"><td><code>rules</code></td><td>positional or named</td><td><code>None</code></td><td>Rules package label such as //rules_alt, or None for //rules.</td></tr>
+<tr id="t.world.bubble"><td><code>bubble</code></td><td>positional or named</td><td><code>False</code></td><td>True to simulate only rooms near players; by default every room is simulated.</td></tr>
+</tbody>
+</table>
+</article>
+</section>
+<section id="w" class="entry">
+<h2><code>w</code> <span class="since">since api_version 1</span></h2>
+<p>A headless test world.</p>
+<p>Starlark type <code>world</code></p>
+<div class="example">
+<p class="caption">Example</p>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:start&quot;, vitals = vitals(hp = 20))
+w.damage(p, &quot;hp&quot;, amount = 5)
+t.eq(p.hp, 15)
+w.set_attr(p, &quot;visits&quot;, 1)
+t.eq(w.get_attr(p, &quot;visits&quot;), 1)</code></pre>
+</div>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.pulse"><td><code>pulse</code></td><td>1</td><td>Game time.</td></tr>
+</tbody>
+</table>
+<h3>Methods</h3>
+<article id="w.act" class="entry">
+<h4><code>act(mob, command_line)</code> <span class="since">since api_version 1</span></h4>
+<p>Queues a command line for a mob, exactly as if it typed it, like ctx.act. Returns whether the line was accepted; run pulses to let it happen.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.act.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob that acts; players are refused.</td></tr>
+<tr id="w.act.command_line"><td><code>command_line</code></td><td>positional or named</td><td></td><td>The command line, as a player would type it.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.award_xp" class="entry">
+<h4><code>award_xp(actor, amount)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Awards experience points to actor, applying pending levels in auto mode or sending the ready notice in deferred mode. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.award_xp.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to receive experience.</td></tr>
+<tr id="w.award_xp.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to award; must be at least 1.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.ctx" class="entry">
+<h4><code>ctx(self = None)</code> <span class="since">since api_version 1</span></h4>
+<p>A ctx with the verbs of ctx, as a hook owned by self would have it, for setting up state without typing commands. It has no other context fields (actor, target and the rest are None) and labels resolve relative to the test's package. Verbs run at once, outside any pulse; mob actions only queue, so run pulses to let them happen. It stays usable for the rest of the test. deny is an error, and so is passing a function defined in a test file to a verb that keeps it to call later (after, start_task, an affect's on_tick or on_expire).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.ctx.self"><td><code>self</code></td><td>positional or named</td><td><code>None</code></td><td>The ctx's owner, an entity or a label; the world's first room by label when omitted.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.damage" class="entry">
+<h4><code>damage(target, vital, amount = None, pct = None, type = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Damages one vital of an actor by amount, or by pct of that vital's maximum. Fires on_damage; death is processed at once.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.damage.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Actor to damage.</td></tr>
+<tr id="w.damage.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital that loses the points.</td></tr>
+<tr id="w.damage.amount"><td><code>amount</code></td><td>positional or named</td><td><code>None</code></td><td>Points of damage, or None to use pct.</td></tr>
+<tr id="w.damage.pct"><td><code>pct</code></td><td>positional or named</td><td><code>None</code></td><td>Percentage of the vital's maximum, or None to use amount.</td></tr>
+<tr id="w.damage.type"><td><code>type</code></td><td>positional or named</td><td><code>None</code></td><td>A declared damage type, or None for the unarmed type.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.diagnostics" class="entry">
+<h4><code>diagnostics()</code> <span class="since">since api_version 1</span></h4>
+<p>Script and engine problems logged so far.</p>
+</article>
+<article id="w.force_rng" class="entry">
+<h4><code>force_rng(ints = [])</code> <span class="since">since api_version 1</span></h4>
+<p>Queues the results of later rolls: each rng.int (and so rng.chance, and every engine chance such as a proc's, loot's or wander's) takes the next queued int, before the seeded stream resumes. A forced int outside the roll's range is an error.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.force_rng.ints"><td><code>ints</code></td><td>positional or named</td><td><code>[]</code></td><td>Results for later integer rolls, in order.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.get_attr" class="entry">
+<h4><code>get_attr(entity, key, default = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Reads an attribute directly. Unprefixed keys are in the test package's namespace.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.get_attr.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="w.get_attr.key"><td><code>key</code></td><td>positional or named</td><td></td><td>Attribute key.</td></tr>
+<tr id="w.get_attr.default"><td><code>default</code></td><td>positional or named</td><td><code>None</code></td><td>Value returned when the key is absent.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.grant_trait" class="entry">
+<h4><code>grant_trait(actor, name)</code> <span class="since">since api_version 1</span></h4>
+<p>Grants a trait to an actor, returning the refusal message or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.grant_trait.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor to grant the trait to.</td></tr>
+<tr id="w.grant_trait.name"><td><code>name</code></td><td>positional or named</td><td></td><td>The trait name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.level_down" class="entry">
+<h4><code>level_down(actor, count = 1)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Lowers actor by up to count levels, stopping at level 1. Returns the number of levels actually lost. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.level_down.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to lower.</td></tr>
+<tr id="w.level_down.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of level steps to unwind; must be at least 1.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.level_up" class="entry">
+<h4><code>level_up(actor)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Applies one pending level to actor, in either level mode. In deferred mode, sends the ready notice again if more levels are still pending. Returns True if a level was gained, or False if none was pending. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.level_up.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to advance.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.quarantined" class="entry">
+<h4><code>quarantined()</code> <span class="since">since api_version 1</span></h4>
+<p>Packages currently quarantined.</p>
+</article>
+<article id="w.remove_skill" class="entry">
+<h4><code>remove_skill(actor, skill)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Forgets the skill, a label or skill view, and returns whether the actor knew it. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.remove_skill.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who forgets the skill.</td></tr>
+<tr id="w.remove_skill.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.remove_trait" class="entry">
+<h4><code>remove_trait(actor, name)</code> <span class="since">since api_version 1</span></h4>
+<p>Removes a granted trait from an actor, returning the refusal message or None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.remove_trait.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor to remove the trait from.</td></tr>
+<tr id="w.remove_trait.name"><td><code>name</code></td><td>positional or named</td><td></td><td>The trait name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.room" class="entry">
+<h4><code>room(label)</code> <span class="since">since api_version 1</span></h4>
+<p>A view of a room.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.room.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Room label.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.run" class="entry">
+<h4><code>run(pulses = 1)</code> <span class="since">since api_version 1</span></h4>
+<p>Advances game time.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.run.pulses"><td><code>pulses</code></td><td>positional or named</td><td><code>1</code></td><td>Pulses to advance.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.set_attr" class="entry">
+<h4><code>set_attr(entity, key, value)</code> <span class="since">since api_version 1</span></h4>
+<p>Sets an attribute directly. Unprefixed keys are in the test package's namespace.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.set_attr.entity"><td><code>entity</code></td><td>positional or named</td><td></td><td>Actor, item or room.</td></tr>
+<tr id="w.set_attr.key"><td><code>key</code></td><td>positional or named</td><td></td><td>Attribute key.</td></tr>
+<tr id="w.set_attr.value"><td><code>value</code></td><td>positional or named</td><td></td><td>Value to store, or None to delete the key.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.set_choices" class="entry">
+<h4><code>set_choices(player, changes)</code> <span class="since">since api_version 1</span></h4>
+<p>Changes or removes answers for a player, exactly as a plugin's setChoices does.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.set_choices.player"><td><code>player</code></td><td>positional or named</td><td></td><td>The player to modify.</td></tr>
+<tr id="w.set_choices.changes"><td><code>changes</code></td><td>positional or named</td><td></td><td>Map of choice id to option id, with None removing an answer.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.set_skill" class="entry">
+<h4><code>set_skill(actor, skill, proficiency)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h4>
+<p>Sets actor's skill, a label or skill view, at proficiency (0 to 100), or raises it, running the learn restrictions. Returns the refusal message or None. Needs the skills feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.set_skill.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor who learns or raises the skill.</td></tr>
+<tr id="w.set_skill.skill"><td><code>skill</code></td><td>positional or named</td><td></td><td>Skill label, or the skill's view.</td></tr>
+<tr id="w.set_skill.proficiency"><td><code>proficiency</code></td><td>positional or named</td><td></td><td>Proficiency, 0 to 100.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.spawn" class="entry">
+<h4><code>spawn(label, at, index = 0, count = 1)</code> <span class="since">since api_version 1</span></h4>
+<p>Spawns a mob or item and returns its view.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.spawn.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Mob or item prototype label.</td></tr>
+<tr id="w.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room label or view, actor, or container item.</td></tr>
+<tr id="w.spawn.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
+<tr id="w.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.spawn_player" class="entry">
+<h4><code>spawn_player(name, at, level = 1, vitals = None, stats = None, skills = None, index = 0, choices = None, gmcp = None, steps = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Adds a connected player and returns its handle. The numbers come from rules.starting_stats; vitals and stats override them.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.spawn_player.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Player name.</td></tr>
+<tr id="w.spawn_player.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Starting room label.</td></tr>
+<tr id="w.spawn_player.level"><td><code>level</code></td><td>positional or named</td><td><code>1</code></td><td>Player level.</td></tr>
+<tr id="w.spawn_player.vitals"><td><code>vitals</code></td><td>positional or named</td><td><code>None</code></td><td>Starting and maximum vitals, built with vitals(...), or None for the rules'.</td></tr>
+<tr id="w.spawn_player.stats"><td><code>stats</code></td><td>positional or named</td><td><code>None</code></td><td>Base stats, built with stats(...), or None for the rules'.</td></tr>
+<tr id="w.spawn_player.skills"><td><code>skills</code></td><td>positional or named</td><td><code>None</code></td><td>Known skills mapping skill label to proficiency, or None.</td></tr>
+<tr id="w.spawn_player.index"><td><code>index</code></td><td>positional or named</td><td><code>0</code></td><td>Track index in the starting room.</td></tr>
+<tr id="w.spawn_player.choices"><td><code>choices</code></td><td>positional or named</td><td><code>None</code></td><td>Character creation answers, or None.</td></tr>
+<tr id="w.spawn_player.gmcp"><td><code>gmcp</code></td><td>positional or named</td><td><code>None</code></td><td>GMCP packages this test client supports, or None for none.</td></tr>
+<tr id="w.spawn_player.steps"><td><code>steps</code></td><td>positional or named</td><td><code>None</code></td><td>Lines for the creation provider's custom steps by step id, or None to skip the steps.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.take_xp" class="entry">
+<h4><code>take_xp(actor, amount)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h4>
+<p>Removes up to amount experience points from actor, never going below 0. Never changes level and sends no message. Returns the amount actually removed. Needs the leveling feature.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.take_xp.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>Actor to remove experience from.</td></tr>
+<tr id="w.take_xp.amount"><td><code>amount</code></td><td>positional or named</td><td></td><td>Points to remove; must be at least 1.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.trace" class="entry">
+<h4><code>trace(on = True)</code> <span class="since">since api_version 1</span></h4>
+<p>Records every hook and verb call; shown when the test fails, and always in a scenario.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.trace.on"><td><code>on</code></td><td>positional or named</td><td><code>True</code></td><td>True to start recording, False to stop.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.trace_lines" class="entry">
+<h4><code>trace_lines()</code> <span class="since">since api_version 1</span></h4>
+<p>The lines w.trace() has kept so far, oldest first, each starting with its [pulse]; the trace keeps them.</p>
+</article>
+</section>
+</main>
+</body>
+</html>

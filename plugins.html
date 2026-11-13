@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plugins — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html" class="current">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Plugins</h1>
+<section id="guide" class="guide">
+<h1 id="writing-plugins">Writing Plugins</h1>
+<p>Plugins are <code>.jar</code> files that extend the engine with host builtins, commands, effect primitives, GMCP packages and a
+world-start hook (SPEC.md §4.15). This guide uses the sample plugin in <code>samples/weather-plugin</code> as its running example:
+deterministic weather by region. For step-by-step tutorials on building plugins from scratch, see the
+Weather Plugin Walkthrough, the
+Heritage Plugin Walkthrough (character creation and traits), and
+the Curse Plugin Walkthrough (item affects, custody propagation,
+item restrictions, prototype transforms, and containment filters).</p>
+<p>There are <strong>no compatibility promises</strong>. After the engine's first release, <code>PluginApi.VERSION</code> changes whenever the
+plugin interface or the facade changes. Until then, the interface is still being designed and changes stay at version 1
+(as unreleased <code>api_version</code> 1 does for scripts); plugins are rebuilt against each engine build anyway. Plugins built
+for another version are refused at load, and must be rebuilt.</p>
+<h2 id="building-a-plugin">Building a plugin</h2>
+<p>A plugin compiles against <code>plugin-api</code> only. It sees <code>gups.pluginapi.*</code> and the Starlark library
+(<code>net.starlark.java.*</code>), never the engine's own modules. The sample's Gradle setup:</p>
+<pre><code class="language-kotlin">dependencies {
+    implementation(project(&quot;:plugin-api&quot;))
+}
+
+tasks.jar {
+    archiveFileName = &quot;weather.jar&quot;
+    from(layout.projectDirectory.dir(&quot;src/plugin&quot;))
+}
+</code></pre>
+<p>A plugin is one class implementing <code>GupsPlugin</code>, with a no-argument constructor:</p>
+<pre><code class="language-kotlin">class WeatherPlugin : GupsPlugin {
+    override val id = &quot;weather&quot;
+    override val pluginApiVersion = PluginApi.VERSION
+    override val doc = &quot;Deterministic weather by region: a sample of every plugin extension point.&quot;
+</code></pre>
+<ul>
+<li><code>id</code> matches <code>[a-z][a-z0-9_]*</code>. Scripts reach the plugin's builtins and effects as fields of a global with that name
+(<code>weather.now(room)</code>), so it can't be a predeclared name such as <code>room</code>.</li>
+<li><code>pluginApiVersion</code> must equal <code>PluginApi.VERSION</code>.</li>
+<li><code>requiredFeatures</code> (default none) lists the features the plugin needs: engine features such as <code>setOf(&quot;leveling&quot;)</code>, or
+features another plugin provides (Feature-sized plugins). A world that has one of them off,
+or that names one neither the engine nor a loading plugin has, skips the plugin with <code>plugin '&lt;id&gt;': needs the '&lt;feature&gt;' feature</code>. <code>PluginWorld.features</code> lists the features the world has (the engine features that are on and
+those loaded plugins provide), for a plugin that only uses some of them optionally; <code>PluginActor.level</code> throws an
+<code>IllegalStateException</code> naming <code>leveling</code>, and <code>PluginRoom.size</code> one naming <code>track</code>, when the feature is off.</li>
+<li>Command names are checked against the world's engine commands after <code>rename</code>: a plugin command may take a name the
+world renamed away (or whose feature is off), and may not take the new name.</li>
+<li><code>register(r)</code> adds everything through the <code>PluginRegistry</code>. It is atomic: if it throws, or registers an invalid or
+clashing name, the plugin adds nothing and is skipped with a warning.</li>
+</ul>
+<p>The jar names the class in <code>META-INF/services/gups.pluginapi.GupsPlugin</code>, one line:</p>
+<pre><code class="language-text">gups.sample.weather.WeatherPlugin
+</code></pre>
+<p>The engine finds it with <code>ServiceLoader</code>. The jar must have exactly one provider.</p>
+<h2 id="what-plugins-can-touch">What plugins can touch</h2>
+<p>Plugins never see the engine's <code>World</code> or entities. They get a <code>PluginWorld</code> facade:</p>
+<ul>
+<li><strong>verbs:</strong> <code>send</code>, <code>echo</code>, <code>damage</code>, <code>heal</code>, <code>applyAffect</code>, <code>removeAffect</code>, <code>teleport</code>, <code>getAttr</code>, <code>setAttr</code> and
+<code>delAttr</code>. Each does what the <code>ctx</code> verb of the same name does, so the engine's invariants hold. <code>teleport</code> asks the
+<code>enter</code> restriction and <code>before_enter</code> first, and returns the refusal or veto, or null once the actor has moved.
+Attribute keys without <code>ns:</code> are in the plugin's own namespace (its id), and a plugin writes only its own namespace.
+<code>damage(target, amount, type, vital)</code> and <code>heal(target, amount, vital)</code> name the vital they change, as the <code>ctx</code> verbs
+do.</li>
+<li><strong>skills and items:</strong> <code>skillRoll(actor, skill, item, target, event = &quot;craft&quot;, adjust = 0)</code> rolls a skill outside a
+cast and returns a <code>PluginSkillRoll(chance, roll, success, power)</code>, as <code>ctx.skill_roll</code> does (it throws
+<code>IllegalStateException</code> naming <code>skills</code> when that feature is off); <code>setItemName(item, name)</code> sets or clears an item's
+name override, as <code>ctx.set_item_name</code> does; <code>wear(actor, item, wield = false)</code> and <code>removeWorn(actor, item)</code> put a
+carried item on and take a worn one off, as <code>ctx.wear</code> and <code>ctx.remove_worn</code> do: they ask the <code>WEAR</code> and <code>REMOVE</code>
+restrictions, return the refusal or null, and send nothing. <code>mayWear(actor, item, wield = false)</code>, <code>mayRemove</code>,
+<code>mayDrop</code>, <code>mayGive(actor, item, to)</code>, <code>mayPut(actor, item, container)</code>, <code>mayEnter(actor, room)</code> and <code>mayLearn(actor, skill, proficiency)</code> ask whether the matching command or verb would refuse, as the <code>ctx.may_*</code> queries do: each
+returns the refusal message or null, moves nothing and runs no hook. An argument the command couldn't act on, such as
+an item the actor doesn't carry, throws <code>IllegalArgumentException</code>. <code>fits(item, to, count = null)</code> and <code>fits(label, to, count = null)</code> return how many of <code>count</code> would fit at <code>to</code>, a container item, an actor or a room, as <code>ctx.fits</code>
+does: the container's free capacity and weight, an actor's <code>carry_limit</code> asked about the item, any number for a room.
+They change nothing; an unknown label, a <code>to</code> that isn't a container, or a count outside the stack's throws
+<code>IllegalArgumentException</code>.</li>
+<li><strong>timed tasks:</strong> <code>startTask</code>, <code>stopTask</code>, <code>PluginActor.task</code> and <code>PluginActor.isBusy</code>; see
+Timed tasks.</li>
+<li><strong>leveling:</strong> <code>awardXp(actor, amount)</code>, <code>takeXp(actor, amount)</code>, <code>levelUp(actor)</code> and <code>levelDown(actor, count = 1)</code> do
+what <code>ctx.award_xp</code>, <code>ctx.take_xp</code>, <code>ctx.level_up</code> and <code>ctx.level_down</code> do. They throw <code>IllegalStateException</code> naming
+<code>leveling</code> when the feature is off, and <code>IllegalArgumentException</code> when <code>amount</code> or <code>count</code> is below 1.</li>
+<li><strong>schema names:</strong> a vital, stat or damage type the world's <code>MODULE.gups</code> doesn't declare, in a verb or in a
+<code>statDeltas</code> key, throws <code>IllegalArgumentException</code> with a &quot;did you mean&quot; suggestion.</li>
+<li><strong>reads:</strong> <code>schema</code> (a <code>PluginSchema</code> with <code>stats</code> and <code>vitals</code>, each a <code>PluginNamed(name, label)</code>, and <code>damageTypes</code>,
+in declaration order), <code>pulse</code>, <code>seed</code>, <code>rng</code> (seeded from the world), <code>rooms()</code>, <code>room(label)</code>, <code>regions()</code> and
+<code>itemInfo(label)</code> (an item prototype's catalog fields as a <code>PluginItemInfo</code>, or null, as <code>ctx.item_info</code> gives them).</li>
+<li><strong>diagnostics:</strong> <code>diagnose(message)</code> records a <code>&quot;plugin&quot;</code> diagnostic; <code>log(message)</code> writes to the server log.</li>
+<li><strong>views:</strong> <code>PluginRoom</code>, <code>PluginActor</code> and <code>PluginItem</code> read current state on every access. A <code>PluginActor</code> has
+<code>stat(name)</code> (effective), <code>baseStat(name)</code>, <code>vital(name)</code>, <code>maxVital(name)</code> and <code>resist(type)</code> by schema name, plus
+<code>level</code>, <code>pendingLevels</code>, <code>affects</code> and <code>hasAffect(name)</code>.</li>
+<li><strong><code>PluginViews</code></strong> converts raw Starlark values for builtins installed with <code>addBuiltin(name, value, doc)</code>:
+<code>room(value)</code>, <code>actor(value)</code>, <code>item(value)</code>, and <code>world(thread)</code> for a method declared with <code>useStarlarkThread = true</code>.</li>
+</ul>
+<p>Every call runs on the world thread.</p>
+<h2 id="extension-points">Extension points</h2>
+<h3 id="builtins">Builtins</h3>
+<p><code>addBuiltin</code> binds the Starlark arguments to the declared parameters (missing required → error, unknown keyword → error,
+missing optional → its <code>defaultValue</code>) and converts them: ints to <code>Long</code>, floats to <code>Double</code>, <code>None</code> to <code>null</code>, lists to
+<code>List</code>, dicts to <code>Map</code>, and room, actor and item views to <code>PluginRoom</code>, <code>PluginActor</code> and <code>PluginItem</code>. The return value
+converts back. A builtin runs only while the world does, from a hook or command; anywhere else (top-level package code,
+a test function's own body) it fails.</p>
+<pre><code class="language-kotlin">r.addBuiltin(
+    name = &quot;now&quot;,
+    doc = &quot;The weather in a room: 'clear', 'rain' or 'storm'. Indoor rooms are always 'clear'.&quot;,
+    params = listOf(PluginParam(&quot;room&quot;, &quot;room&quot;, &quot;The room to look at.&quot;)),
+    returnType = &quot;str&quot;,
+) { world, pos, _ -&gt;
+    val room =
+        pos[0] as? PluginRoom
+            ?: throw IllegalArgumentException(&quot;weather.now(room): expected a room&quot;)
+    stateFor(world, room)
+}
+</code></pre>
+<p>The weather is a pure function of the seed, the one-minute window (<code>WINDOW</code> is 240 pulses) and the room's region, so
+tests are deterministic:</p>
+<pre><code class="language-kotlin">fun stateFor(world: PluginGmcpWorld, room: PluginRoom, pulse: Long = world.pulse): String {
+    val region = room.regions.minOrNull() ?: return &quot;clear&quot;
+    var z = world.seed xor (pulse / WINDOW) * -0x61c8864680b583ebL xor region.hashCode().toLong()
+    z = (z xor (z ushr 30)) * -0x40a7b892e31b1a47L
+    z = (z xor (z ushr 27)) * -0x6b2fb644ecceee15L
+    z = z xor (z ushr 31)
+    return STATES[((z ushr 1) % STATES.size).toInt()]
+}
+</code></pre>
+<h3 id="commands">Commands</h3>
+<p>Commands take a lane (<code>FAST</code> runs at once, <code>TICK</code> queues on the actor) and a minimum role. They may not shadow engine
+commands, directions or another plugin's commands, and a script <code>global_command</code> with the same name is skipped.</p>
+<pre><code class="language-kotlin">r.addCommand(
+    &quot;weather&quot;,
+    PluginLane.FAST,
+    PluginRole.PLAYER,
+    &quot;Describes the weather where you stand.&quot;,
+) { call -&gt;
+    val room = call.actor.room
+    call.world.send(
+        call.actor,
+        if (room.regions.isEmpty()) &quot;You are indoors.&quot;
+        else &quot;The weather here is ${stateFor(call.world, room)}.&quot;,
+    )
+    call.world.gmcp(call.actor, &quot;Gups.Forecast&quot;, forecast(call.world, room))
+}
+</code></pre>
+<h3 id="effect-primitives">Effect primitives</h3>
+<p>An effect primitive is called in package code like an engine one, and its value works wherever theirs does:
+<code>skill(effect = weather.soak(pulses = 3))</code>, or inside <code>sequence(...)</code>. Its arguments must be plain values (no entities),
+because the effect is part of a frozen prototype. The engine calls <code>apply</code> when the skill resolves; <code>target</code> is null for
+<code>target = &quot;none&quot;</code> skills.</p>
+<pre><code class="language-kotlin">r.addEffectPrimitive(
+    name = &quot;soak&quot;,
+    doc = &quot;Soaks the target: dex -1 for the given number of pulses.&quot;,
+    params =
+        listOf(
+            PluginParam(
+                &quot;pulses&quot;,
+                &quot;int&quot;,
+                &quot;How long the target stays soaked.&quot;,
+                required = false,
+                defaultValue = 2L,
+            )
+        ),
+) { call -&gt;
+    val target = call.target ?: return@addEffectPrimitive
+    val pulses = (call.args[&quot;pulses&quot;] as Number).toInt()
+    call.world.applyAffect(target, &quot;soaked&quot;, duration = pulses, statDeltas = mapOf(&quot;dex&quot; to -1))
+}
+</code></pre>
+<p>On an <code>item</code> skill, <code>call.targetItem</code> is the item and <code>call.target</code> is null:</p>
+<pre><code class="language-kotlin">r.addEffectPrimitive(
+    name = &quot;bestow&quot;,
+    doc = &quot;Bestows a curse on an item by tagging it cursed.&quot;,
+    params = emptyList(),
+) { call -&gt;
+    val item = call.targetItem ?: return@addEffectPrimitive
+    call.world.addTag(item, &quot;cursed&quot;)
+}
+</code></pre>
+<p>On a <code>room</code> skill, <code>call.targetRoom</code> is the caster's room, and both <code>call.target</code> and <code>call.targetItem</code> are null. A
+primitive written for an actor or item target that gets a room call has no view of its usual target; ignore it or behave
+as when handed no item.</p>
+<h3 id="gmcp-packages">GMCP packages</h3>
+<p>A state package's producer runs in phase 7 for each player whose client supports the package, and only changed payloads
+are sent. Return plain values.</p>
+<pre><code class="language-kotlin">r.addGmcp(&quot;Gups.Weather&quot;, &quot;The weather where the player stands.&quot;) { world, actor -&gt;
+    mapOf(&quot;state&quot; to stateFor(world, actor.room), &quot;region&quot; to actor.room.regions.minOrNull())
+}
+</code></pre>
+<p>An event package sends one message at a time with <code>world.gmcp</code>. It is queued with the session's text and never cached;
+it returns <code>false</code>, sending nothing, for a mob, a link-dead player, or a client that doesn't support the package. A
+plugin may send only under a package it declared, or one nested in it. The <code>weather</code> command above sends the forecast
+after its text.</p>
+<pre><code class="language-kotlin">r.addGmcpEvent(
+    &quot;Gups.Forecast&quot;,
+    &quot;The weather now and in the next minute where the player stands.&quot;,
+)
+</code></pre>
+<p>An input package receives GMCP messages from the player's client for exactly that package (ignoring case). The handler
+gets the sending player, the data as plain values (<code>String</code>, <code>Long</code>, <code>Double</code>, <code>Boolean</code>, <code>List</code>, <code>Map</code> or <code>null</code>), and
+a read-only <code>PluginGmcpWorld</code>, which can read, send text and send GMCP events but not change the world. To act, it calls
+<code>call.command(line)</code> at most once, which runs the line as if the player typed it, through the normal lanes, lag,
+restrictions and repro recording.</p>
+<pre><code class="language-kotlin">r.onGmcp(
+    &quot;Gups.Weather.Get&quot;,
+    &quot;Sends Gups.Forecast, or with {\&quot;describe\&quot;: true} runs `weather`.&quot;,
+) { call -&gt;
+    if ((call.data as? Map&lt;*, *&gt;)?.get(&quot;describe&quot;) == true) call.command(&quot;weather&quot;)
+    else call.world.gmcp(call.actor, &quot;Gups.Forecast&quot;, forecast(call.world, call.actor.room))
+}
+</code></pre>
+<p>Names have at least two dot-separated parts and are compared ignoring case. No package may use the reserved <code>Core</code> root
+or overlap an engine package (<code>Char.*</code>, <code>Room.*</code>, <code>Comm.Channel.Text</code>, <code>Gups.Trace</code>) or another plugin's package. An
+input package may share the plugin's own state and event tree, but a plugin's state and event packages may not equal,
+contain or nest in each other. A handler that throws is recorded as a <code>&quot;plugin&quot;</code> diagnostic.</p>
+<p>Inbound messages are limited. A body over 4096 bytes (UTF-8), nested more than 8 levels deep, or not valid JSON is
+malformed: the handler doesn't run and the message counts as dropped input, like a flood, so a client that keeps sending
+them is disconnected. Each message takes a token from the session's line limit and then one from the fast-lane bucket
+(&quot;Slow down.&quot; when there is none); <code>command</code> charges nothing more. Messages for a package no plugin registered, and
+messages sent before the player has a character, are ignored.</p>
+<h3 id="custom-hook-handlers">Custom hook handlers</h3>
+<p>Scripts declare custom hooks on rooms, mobs and items (<code>hooks = {&quot;name&quot;: fn}</code>) and run them with <code>ctx.call_hook(entity, name, **args)</code>. A plugin joins the chain of a custom hook name with <code>addHook</code>, and its handler runs after the entity's
+own hook, in plugin-id order. The handler gets a read-only <code>PluginGmcpWorld</code>, the entity, the arguments and the result
+so far — all as plain values, with entities as plugin entity views — and returns the new result as plain values only. A
+handler that throws is recorded as a <code>&quot;plugin&quot;</code> diagnostic and leaves the result unchanged. Names match
+<code>[a-z][a-z0-9_]*</code> and may not be a catalog hook name; one plugin registers a name once, and several plugins may share
+it.</p>
+<p>The hook runs on the entity the script names (for a shop, the keeper), so anything else the handler needs arrives in
+<code>call.args</code>. A <code>null</code> result means &quot;keep the default&quot;, so a handler that adjusts a price starts from the result so far
+when there is one and from the default otherwise. From <code>samples/curse-plugin</code>, where <code>bearsCurse</code> checks the item and
+what it holds for the <code>cursed</code> tag:</p>
+<pre><code class="language-kotlin">r.addHook(&quot;shop_price&quot;, &quot;Charges 25 more to buy a cursed item.&quot;) { call -&gt;
+    val item = call.args[&quot;item&quot;] as? PluginItem
+    val buying = call.args[&quot;action&quot;] == &quot;buy&quot; || call.args[&quot;action&quot;] == &quot;list&quot;
+    val price = if (call.result == null) call.args[&quot;price&quot;] as? Long else call.result as? Long
+    if (buying &amp;&amp; price != null &amp;&amp; item?.let(::bearsCurse) == true) price + 25L else call.result
+}
+</code></pre>
+<p>Script ints arrive as <code>Long</code>. A handler may return <code>Int</code>s and any <code>Iterable</code>; they reach the next handler and the script
+as <code>Long</code>s and lists. Floats and other types are refused like a throw.</p>
+<h3 id="rules-exports">Rules exports</h3>
+<p>A plugin can let the world tune its numbers by declaring an optional rules export with <code>addRulesExport</code>. The name is the
+plugin id, an underscore and a snake_case name, and the type is <code>PluginRulesType.INT</code> or <code>BOOL</code>. Declare it, then ask
+for the value where the plugin needs it, passing what the plugin would use by itself as <code>base</code>:</p>
+<pre><code class="language-text">r.addRulesExport(&quot;bluemage_learn_chance&quot;, &quot;Percent chance a blue mage learns the skill.&quot;, PluginRulesType.INT)
+
+val pct = (world.rules(
+    &quot;bluemage_learn_chance&quot;,
+    mapOf(&quot;actor&quot; to bearer, &quot;source&quot; to caster, &quot;skill&quot; to skill, &quot;base&quot; to base, &quot;power&quot; to power),
+    default = base,
+) as Long).toInt().coerceIn(0, 33)
+</code></pre>
+<p>The world defines the export in its rules package (<code>def bluemage_learn_chance(ctx): return ctx.base + ctx.actor.int - 10</code>). <code>actor</code>, <code>target</code>, <code>source</code>, <code>skill</code> and <code>item</code> become those <code>ctx</code> fields, <code>base</code> becomes <code>ctx.base</code>, and any
+other field is in the <code>ctx.args</code> dict. When the world doesn't define the export, or the call fails, <code>rules</code> returns the
+default, so the plugin works without any world support. Clamp the result after the call, since the world's value is
+untrusted.</p>
+<p>A world that doesn't load the plugin must not define the export: it is then an ordinary &quot;is not a rules export&quot; load
+error. The load-time dry run calls each defined export once with <code>ctx.base</code> 0 (or <code>False</code>) and empty <code>ctx.args</code>, so a
+rule should read <code>ctx.args</code> with <code>get</code>. <code>@trace rules</code> shows each call.</p>
+<h3 id="character-creation-traits-and-restrictions">Character creation, traits and restrictions</h3>
+<p>Plugins can define traits, character creation choices and operational restrictions (<code>samples/heritage-plugin</code>):</p>
+<h4 id="traits">Traits</h4>
+<p>Traits carry stat, max-vital and resist deltas, flags, and modifiers. They are registered on the plugin registry. A
+modifier at a defender point (<code>DEFEND_HIT</code>, <code>RECEIVE_DAMAGE</code> or <code>MITIGATE</code>) runs on the chain of the actor being hit, so
+the call's <code>actor</code> is the trait's bearer, the defender, and <code>other</code> the attacker. The <code>BONUS_DAMAGE</code> modifier takes and
+returns a <code>Map&lt;String, Long&gt;</code> keyed by damage type; return the base with entries added. <code>actor</code> is the attacker. The
+heritage plugin's elf is harder to hit the higher its dexterity:</p>
+<pre><code class="language-kotlin">r.addTrait(
+    PluginTrait(
+        name = &quot;elf&quot;,
+        label = &quot;Elf&quot;,
+        doc = &quot;Nimble and magical, but fragile.&quot;,
+        statDeltas = mapOf(&quot;dex&quot; to 2, &quot;con&quot; to -1),
+        maxVitalDeltas = mapOf(&quot;mana&quot; to 10),
+        modifiers =
+            mapOf(
+                PluginModifierPoint.DEFEND_HIT to
+                    PluginModifier { call, base -&gt;
+                        // On a defender point call.actor is the bearer, the one being swung at.
+                        (base as Long) - call.actor.stat(&quot;dex&quot;) / 2
+                    }
+            ),
+    )
+)
+</code></pre>
+<p>A modifier tells a spell from a swing by <code>call.skill</code>: the skill being cast (a <code>PluginSkill</code>) when the rules call has
+one, which is an enemy spell's <code>TO_HIT</code> and <code>DEFEND_HIT</code> roll and a spell's <code>DAMAGE</code>, <code>RECEIVE_DAMAGE</code> and <code>MITIGATE</code>
+chains, and null otherwise. A <code>DEFEND_HIT</code> modifier returning <code>if (call.skill?.kind == &quot;spell&quot;) 0L else base</code> makes its
+bearer resist every enemy spell of kind <code>&quot;spell&quot;</code> cast at it, while swings roll as usual.</p>
+<p>Traits can also react. <code>on</code> maps an event to a <code>PluginTraitHandler</code> that runs for each bearer when the event happens to
+it, and unlike a modifier it may change the world through <code>call.world</code>. The call carries the <code>bearer</code>, the <code>event</code> and
+its <code>fields</code>, where ints are <code>Long</code>, actors are <code>PluginActor</code> and rooms are <code>PluginRoom</code> and items are <code>PluginItem</code>:</p>
+<ul>
+<li><code>SKILL_RECOGNIZED</code>: a player recognized a skill they don't know, after a cast that succeeded or was resisted. Fields:
+<code>source</code>, <code>skill</code> (the label), <code>outcome</code>, <code>target</code> (a <code>PluginActor</code> or null) and <code>power</code>.</li>
+<li><code>DAMAGED</code>: the bearer took damage with a positive loss. Fields: <code>source</code> (a <code>PluginActor</code> or null), <code>amount</code>, <code>type</code>
+(the damage type's name), <code>losses</code> (vital name to loss) and <code>parts</code> (a list of maps with <code>type</code> and <code>losses</code>).</li>
+<li><code>HEALED</code>: the bearer gained vital points from a heal. Fields: <code>source</code> (a <code>PluginActor</code> or null), <code>vital</code>, <code>amount</code>
+(after the maximum cap) and <code>requested</code>.</li>
+<li><code>KILLED</code>: the bearer landed the killing blow. Field: <code>victim</code>.</li>
+<li><code>DIED</code>: the bearer died. Field: <code>killer</code> (a <code>PluginActor</code> or null). The handler can't prevent the death.</li>
+<li><code>LEVEL_CHANGED</code>: the bearer gained or lost a level, once per step, with leveling enabled. Fields: <code>old_level</code> and
+<code>new_level</code>.</li>
+<li><code>ROOM_ENTERED</code>: the bearer arrived by walking, fleeing or teleporting. Fields: <code>from_room</code> (a <code>PluginRoom</code>) and
+<code>direction</code> (a <code>String</code>, or null for a teleport).</li>
+<li><code>AFFECT_GAINED</code>: an affect was put on the bearer, new or replacing one that ran out sooner. Fields: <code>name</code>, <code>flags</code> (a
+sorted list of <code>String</code>s), <code>source</code> (a <code>PluginActor</code> or null), <code>source_item</code> (the <code>PluginItem</code> the affect lasts while
+it is worn, or null), <code>power</code>, <code>expires_at</code> (the absolute pulse, or null when it never runs out) and <code>replaced</code> (a
+<code>Boolean</code>).</li>
+<li><code>AFFECT_LOST</code>: an affect came off the bearer, by expiry, <code>remove_affect</code>, <code>dispel</code> or its item coming off, after its
+<code>on_expire</code>. Fields: <code>name</code>, <code>flags</code>, <code>source</code>, <code>source_item</code>, <code>power</code> and <code>reason</code> (<code>&quot;expired&quot;</code> or <code>&quot;removed&quot;</code>).</li>
+</ul>
+<p>Handlers run synchronously where the event happens, right after the script hooks on entities, the room and items there.
+At death and at a level change they run before the global hooks and plugin event listeners. Bearers can be players or
+mobs, except for <code>SKILL_RECOGNIZED</code>, which is players only. A handler that causes another event (a <code>DAMAGED</code> handler
+that deals damage, say) is cut off by the cascade depth, with a <code>cascade</code> diagnostic. <code>call.world.skill(label)</code> returns
+a loaded skill's view, or null. A handler that throws records a <code>plugin</code> diagnostic. A replaced affect fires only
+<code>AFFECT_GAINED</code>, with <code>replaced</code> true, and restoring a saved actor fires neither. See <code>samples/bluemage-plugin</code> for a
+trait that learns skills from <code>SKILL_RECOGNIZED</code>.</p>
+<p>A trait that reacts when its bearer is hurt (from <code>samples/bluemage-plugin</code>, which registers it with
+<code>PluginTraitEvent.DAMAGED to PluginTraitHandler(::onDamaged)</code>):</p>
+<pre><code class="language-kotlin">private fun onDamaged(call: PluginTraitCall) {
+    val world = call.world
+    val source = call.fields[&quot;source&quot;] as? PluginActor ?: return
+    // Only the first blow from each new attacker, so a long fight doesn't repeat the line.
+    if (source.isPlayer || world.getAttr(call.bearer, STUDIED, null) == source.id) return
+    world.setAttr(call.bearer, STUDIED, source.id)
+    world.send(call.bearer, &quot;You study how ${source.name} fights.&quot;)
+}
+</code></pre>
+<h4 id="creation-provider">Creation provider</h4>
+<p>A plugin registers at most one creation provider that presents choices (such as race and class) at login:</p>
+<pre><code class="language-kotlin">r.setCreation(
+    object : PluginCreation {
+        override val choices =
+            listOf(
+                PluginChoice(&quot;race&quot;, &quot;Race&quot;, RACE_OPTIONS),
+                PluginChoice(&quot;class&quot;, &quot;Class&quot;, CLASS_OPTIONS),
+            )
+
+        override fun available(
+            world: PluginWorld,
+            choice: String,
+            answers: Map&lt;String, String&gt;,
+        ): List&lt;String&gt; =
+            when (choice) {
+                &quot;race&quot; -&gt; listOf(&quot;human&quot;, &quot;elf&quot;, &quot;dwarf&quot;)
+                &quot;class&quot; -&gt;
+                    if (answers[&quot;race&quot;] == &quot;dwarf&quot;) listOf(&quot;warrior&quot;, &quot;cleric&quot;)
+                    else listOf(&quot;warrior&quot;, &quot;mage&quot;, &quot;cleric&quot;)
+                else -&gt; emptyList()
+            }
+
+        override fun validate(world: PluginWorld, answers: Map&lt;String, String&gt;): String? =
+            if (answers[&quot;race&quot;] == &quot;dwarf&quot; &amp;&amp; answers[&quot;class&quot;] == &quot;mage&quot;) {
+                &quot;Dwarves cannot be mages.&quot;
+            } else null
+
+        override fun startRoom(world: PluginWorld, answers: Map&lt;String, String&gt;): String? = null
+
+        override fun prepare(world: PluginWorld, actor: PluginActor, attempt: PluginCreationAttempt) {
+            val bonus = attempt.state[&quot;bonus_str&quot;] as? Int ?: 0
+            if (bonus &gt; 0) {
+                world.setBaseStat(actor, &quot;str&quot;, actor.baseStat(&quot;str&quot;) + bonus)
+            }
+        }
+
+        override fun created(world: PluginWorld, actor: PluginActor, newCharacter: Boolean) {
+            // Both new and re-picked characters get the starter skills their class lacks.
+            for (label in STARTER_SKILLS[actor.choices[&quot;class&quot;]].orEmpty()) {
+                if (label in actor.skills) continue
+                try {
+                    world.setSkill(actor, label, 25)
+                } catch (_: IllegalArgumentException) {
+                    // Skill not defined in world
+                }
+            }
+        }
+    }
+)
+
+val STARTER_SKILLS =
+    mapOf(
+        &quot;mage&quot; to listOf(&quot;//skills/heritage_skills:magic_missile&quot;),
+        &quot;cleric&quot; to listOf(&quot;//skills/heritage_skills:minor_heal&quot;),
+    )
+</code></pre>
+<p><code>samples/heritage-plugin</code> keeps this loop in <code>HeritageCreation.grantStarterSkills</code>, which its <code>heritage.starter_skills</code>
+builtin also calls after a respec.</p>
+<h5 id="prepare">prepare</h5>
+<p><code>prepare</code> runs before a new character enters the world, after traits and <code>starting_stats</code> have been applied. While
+<code>prepare</code> runs, base-value setters (<code>setBaseStat</code>, <code>setBaseMaxVital</code>, <code>setBaseResist</code>), trait verbs (<code>grantTrait</code>,
+<code>removeTrait</code>), skill verbs (<code>setSkill</code>, <code>removeSkill</code>), and attributes (<code>setAttr</code>, <code>delAttr</code>) accept the pre-entry
+character. Any vital whose current value was not explicitly specified by <code>starting_stats</code> is refilled to its effective
+maximum once <code>prepare</code> returns. Read stats from <code>actor.baseStat(...)</code> rather than <code>preview</code> so adjustments stack on top
+of the world's <code>starting_stats</code>.</p>
+<h5 id="custom-steps">Custom steps</h5>
+<p>A provider may declare custom steps (<code>PluginCreationStep</code>) in its <code>steps</code> list, shown in order after the choices and
+before confirmation. Each step provides:</p>
+<ul>
+<li><code>id</code>: identifier <code>[a-z][a-z0-9_]*</code>, unique among steps and distinct from choice ids.</li>
+<li><code>title</code>: display heading (e.g. <code>&quot;Stats&quot;</code>).</li>
+<li><code>applies(world, attempt)</code>: whether the step runs for the current attempt. Skipped if false.</li>
+<li><code>show(world, attempt)</code>: returns <code>PluginStepView(text, gmcp)</code> to present prompts, instructions and state.</li>
+<li><code>input(world, attempt, line)</code>: handles player input lines, returning <code>PluginStepReply.Stay(message)</code> to redisplay with
+an optional message or <code>PluginStepReply.Done</code> to advance to the next step.</li>
+<li><code>summary(world, attempt)</code>: optional single-line summary string appended to the confirmation prompt and GMCP summaries.</li>
+</ul>
+<p>Every step receives the <code>PluginCreationAttempt</code>:</p>
+<pre><code class="language-kotlin">interface PluginCreationAttempt {
+    val name: String
+    val answers: Map&lt;String, String&gt;
+    val seed: Long
+    val state: MutableMap&lt;String, Any?&gt;
+    val preview: PluginActor
+    fun rng(stream: Int): PluginRng
+}
+</code></pre>
+<p>The <code>state</code> map is shared across all steps and <code>prepare</code>. If a player navigates <code>back</code> to a choice or changes an answer,
+<code>state</code> is cleared, previous step progress is reset, and the <code>preview</code> actor is reconstructed.</p>
+<h5 id="adding-rolls-with-attempt-rng">Adding rolls with attempt.rng</h5>
+<p>While the heritage sample implements point-buy, providers can implement dice rolls or random attribute assignment using
+deterministic random streams from <code>attempt.rng(stream)</code>:</p>
+<pre><code class="language-kotlin">val rollRng = attempt.rng(0)
+val rolledStrength = rollRng.int(1, 6) + rollRng.int(1, 6) + rollRng.int(1, 6)
+attempt.state[&quot;rolled_str&quot;] = rolledStrength
+</code></pre>
+<p>Best practices for random creation steps:</p>
+<ul>
+<li><strong>Numbered streams:</strong> Use stream 0 for initial rolls, stream 1 for the first reroll, stream 2 for the second, etc.</li>
+<li><strong>Reroll limit:</strong> Track reroll counts in <code>attempt.state</code> to enforce a hard cap.</li>
+<li><strong>Anti-farming guarantee:</strong> <code>attempt.seed</code> is derived deterministically from the world seed, account ID, and creation
+counter. Canceling creation, typing <code>back</code>, or disconnecting replays the exact same random sequence, preventing
+players from repeatedly reconnecting to farm optimal stats. The world seed is drawn anew when the server starts, so
+the sequence changes only across server restarts, which players can't cause. Each call to <code>attempt.rng(stream)</code> within
+one step call continues the same stream; the next call (the next line the player types) starts it again.</li>
+<li><strong>Pre-entry application:</strong> Apply the rolled values in <code>prepare</code> with <code>world.setBaseStat</code> and <code>world.setBaseMaxVital</code>.</li>
+</ul>
+<p>For a full step-by-step walkthrough, see the
+Character Creation Provider Tutorial.</p>
+<h4 id="restrictions">Restrictions</h4>
+<p>Restrictions intercept operations (<code>WEAR</code>, <code>ENTER</code>, <code>CAST</code>, <code>LEARN</code>, <code>REMOVE</code>, <code>DROP</code>, <code>GIVE</code>, <code>PUT</code>, <code>ORDER</code>) and can
+refuse them. <code>ORDER</code> is a player giving an order to one of its pets: <code>call.actor</code> is the owner and <code>call.target</code> the
+pet:</p>
+<pre><code class="language-kotlin">r.addRestriction(PluginRestrictionPoint.WEAR, &quot;Mages cannot wear heavy armor.&quot;) { call -&gt;
+    val actor = call.actor
+    val item = call.item
+    if (actor.hasTrait(&quot;mage&quot;) &amp;&amp; item != null &amp;&amp; &quot;heavy_armor&quot; in item.tags) {
+        &quot;Your spellcraft can't work through that much metal.&quot;
+    } else null
+}
+</code></pre>
+<p>Item restrictions guard commands only, for players and for mobs acting through commands. Script and facade verbs
+(<code>move_item</code>, <code>grant_item</code>, <code>destroy</code>, <code>transform</code>) and the engine's own moves (death, decay) don't run them. The <code>WEAR</code>
+restriction is also asked again about worn items after a change of choices or traits; a refused item stays worn but is
+inactive, contributing nothing, until a later re-check allows it. For details on item restrictions and swap validation,
+see the Item Restriction Points Tutorial.</p>
+<h4 id="modifying-choices-in-play">Modifying choices in play</h4>
+<p>A plugin can let players change choices through builtins or commands using <code>PluginWorld.setChoices</code>:</p>
+<pre><code class="language-kotlin">r.addBuiltin(
+    name = &quot;choose&quot;,
+    doc = &quot;Sets or changes a character's choice. Returns the refusal message or None.&quot;,
+    params =
+        listOf(
+            PluginParam(&quot;actor&quot;, &quot;actor&quot;, &quot;The actor to modify.&quot;),
+            PluginParam(&quot;choice&quot;, &quot;str&quot;, &quot;The choice id to set.&quot;),
+            PluginParam(
+                &quot;option&quot;,
+                &quot;str&quot;,
+                &quot;The option id, or None to clear.&quot;,
+                required = false,
+                defaultValue = null,
+            ),
+        ),
+    returnType = &quot;str&quot;,
+) { world, pos, _ -&gt;
+    val actor =
+        pos[0] as? PluginActor
+            ?: throw IllegalArgumentException(&quot;heritage.choose(actor): expected an actor&quot;)
+    val choice =
+        pos[1] as? String
+            ?: throw IllegalArgumentException(&quot;heritage.choose(choice): expected a string&quot;)
+    val option = if (pos.size &gt; 2) pos[2] as? String else null
+    world.setChoices(actor, mapOf(choice to option))
+}
+</code></pre>
+<h4 id="respec-builtins">Respec builtins</h4>
+<p>The heritage sample also registers four builtins for respec shrines, so world content can offer in-session changes with
+its own price, cooldown and skill policy. The engine sets none of those.</p>
+<ul>
+<li><code>heritage.respec_menu(actor, choices, allow_same=False)</code> lists each choice with its current option and every option
+with its refusal or <code>None</code>.</li>
+<li><code>heritage.respec_check(actor, phrase, choices, allow_same=False)</code> matches the player's words to one option and says
+whether it may be picked, changing nothing.</li>
+<li><code>heritage.respec(actor, choice, option, allow_same=False)</code> re-checks and then calls <code>setChoices</code>.</li>
+<li><code>heritage.starter_skills(actor)</code> grants the class's starter skills the actor lacks.</li>
+</ul>
+<p>The sample's <code>world/lib/respec.star</code> builds shrine keepers on them. See
+Tutorial 04: Runtime Choice Changes.</p>
+<h4 id="base-values">Base values</h4>
+<p>A plugin can set an actor's base stats, base vital maxima, and base resistances directly using <code>setBaseStat</code>,
+<code>setBaseMaxVital</code>, and <code>setBaseResist</code>. For example, a trainer command or builtin can train a character's base strength:</p>
+<pre><code class="language-kotlin">val currentBase = actor.baseStat(&quot;str&quot;)
+world.setBaseStat(actor, &quot;str&quot;, currentBase + 1)
+</code></pre>
+<p>Lowering a vital maximum caps <code>current</code> at the new effective maximum; raising it leaves <code>current</code> untouched. Changes
+refresh encumbrance and equipment fit and persist with the actor.</p>
+<h3 id="item-affects-tags-and-transform">Item affects, tags and transform</h3>
+<p>The facade allows plugins to inspect and manipulate items, their effective tags, instance affects, and prototype
+transforms:</p>
+<ul>
+<li><strong>Tags:</strong> <code>world.addTag(item, tag)</code> and <code>world.removeTag(item, tag)</code> add or remove per-instance tags. Effective tags
+(<code>item.tags</code>, <code>item.hasTag(tag)</code>) reflect prototype tags plus added minus removed tags.</li>
+<li><strong>Charges:</strong> <code>world.setCharges(item, charges)</code> sets an item's remaining uses, from 0 to its prototype's charges
+(<code>item.maxCharges</code>); setting 0 does not run its <code>empty</code> action. Refuses unlimited and stackable items. <code>item.charges</code>
+reads uses left (<code>null</code> when unlimited), so <code>if (item.charges == 0) call.world.setCharges(item, item.maxCharges!!)</code>
+recharges an empty item.</li>
+<li><strong>Custody:</strong> <code>world.spawnItem(label, to, count = 1)</code> spawns items at a room, an actor's inventory or a container item
+and returns a list: one stack for a stackable label, <code>count</code> separate items otherwise. <code>world.moveItem(item, to, count = null)</code> moves the whole stack or <code>count</code> of it and returns the item now there; <code>world.destroy(item, count = null)</code>
+removes it; <code>world.mergeStack(item)</code> folds it into an identical stack and returns the stack that holds it. They follow
+<code>ctx.spawn</code>, <code>ctx.move_item</code>, <code>ctx.destroy</code> and <code>ctx.merge_stack</code>: they skip item restrictions and the commands' carry
+and container limits (<code>world.fits</code> asks those), and room placement is at track index 0. There is no <code>grantItem</code>:
+<code>moveItem</code> or <code>spawnItem</code> with an actor as the destination puts the items in its inventory. A mob label, unknown
+label, count below 1 or non-container item as destination is an error.</li>
+<li><strong>Where things are:</strong> <code>item.count</code> is the stack's size, <code>item.location</code> is a <code>PluginItemLocation</code> (<code>InRoom(room)</code>,
+<code>Carried(actor)</code>, <code>Equipped(actor, slot)</code> or <code>InContainer(container)</code>), <code>actor.inventory</code> lists carried items by id
+(not worn ones) and <code>actor.equipment</code> maps slot to worn item in slot order, inactive ones included.</li>
+<li><strong>Instance affects:</strong> <code>world.applyItemAffect(item, name, duration, applies = &quot;worn&quot;, ...)</code> and
+<code>world.removeItemAffect(item, name)</code> apply or remove instance affects. Setting <code>duration = null</code> creates a permanent
+affect. <code>applies</code> must be <code>&quot;worn&quot;</code> or <code>&quot;carried&quot;</code>.</li>
+<li><strong>Transform:</strong> <code>world.transform(item, label)</code> swaps an item's prototype in place, preserving its id, location,
+attributes, instance affects and tag changes. The curse sample's <code>lift</code> primitive does this for an item skill's
+<code>call.targetItem</code>, here bound to <code>item</code>:</li>
+</ul>
+<pre><code class="language-kotlin">val clean = item.variants[&quot;uncursed&quot;]
+if (clean != null) {
+    call.world.transform(item, clean)
+} else {
+    call.world.removeTag(item, &quot;cursed&quot;)
+}
+</code></pre>
+<p>Prefer <code>transform</code> over removing a tag when the clean version is its own prototype. Tag changes are kept across a
+<code>transform</code>, so removing a prototype tag first would leave the new item with a stray <code>-cursed</code> change, and an item with
+tag changes never merges into a stack. For an end-to-end example, see the
+Curse Plugin Walkthrough.</p>
+<h3 id="containment-filters">Containment filters</h3>
+<p>Containment filters intercept carried item affects reaching their holder through containers:</p>
+<pre><code class="language-kotlin">r.addContainmentFilter(&quot;Blocks carried affects behind warded containers.&quot;) { call -&gt;
+    call.container.hasTag(&quot;warded&quot;) &amp;&amp; call.item.hasTag(&quot;cursed&quot;)
+}
+</code></pre>
+<p>When the engine recomputes an actor's holdings, registered containment filters are called for each container along the
+path to a carried item affect. Returning <code>true</code> blocks the affect from propagating beyond that container. If a filter
+throws an exception, the exception is logged as a <code>&quot;plugin&quot;</code> diagnostic and the affect is not blocked.</p>
+<p>Filters never see worn or directly carried items: only an affect behind at least one container is filtered. The engine
+caches the result and recomputes it only when custody, item affects, item tags or prototypes change, so a filter may
+read only the container's and item's label, kind, tags and affects. A filter that reads anything else (attributes, the
+holder's stats, the pulse, randomness) gives answers the cache won't notice changing. Filters must also be fast and
+side-effect free. For a detailed guide and testing examples, see the
+Containment Filters Tutorial.</p>
+<h3 id="owned-behaviors">Owned behaviors</h3>
+<p>While a mob has an owner it runs an owned behavior list instead of its prototype's behaviors. A plugin's
+<code>addOwnedBehaviors</code> handler adjusts that list after the world's <code>owned_behaviors</code> rules export: the handler gets
+<code>call.mob</code>, <code>call.owner</code> and <code>call.behaviors</code>, and returns the new list, for example the same maps with <code>heel</code>'s
+<code>priority</code> raised to <code>80L</code>.</p>
+<p>Adjusters run in plugin-id order, each getting the list so far and returning the new one. <code>call.owner</code> is null while the
+owner is offline. Each behavior is a plain map: <code>kind</code> (the builtin's name, such as <code>&quot;heel&quot;</code> or <code>&quot;defend&quot;</code>) and its
+builtin arguments by name, with ints as <code>Long</code>, actor filters (<code>toward</code>, <code>allies</code>, <code>target</code>) as lists of strings, where
+a label pattern is absolute (<code>//pkg:name*</code>) or a bare <code>name*</code> matching in any package (a <code>:</code>-relative pattern is
+invalid, since a plugin has no package), <code>below</code> as a map of vital names to <code>Long</code>, and <code>exit</code> as a direction name. An
+invalid map, or an adjuster that throws, records a <code>&quot;plugin&quot;</code> diagnostic and leaves the list unchanged.</p>
+<p>The list is computed when a mob gains an owner, when a pet is restored at its owner's login, and after a reload, so an
+adjuster should depend only on the mob, its owner and the list it is given. A descriptor's <code>prefer</code> is plain values, and
+<code>retarget</code> is a kind like the others.</p>
+<h3 id="target-order">Target order</h3>
+<p>A behavior with <code>prefer</code> (<code>aggressive</code>, <code>assist</code>, <code>retarget</code>) asks the world's <code>target_order</code> rules export whom to
+attack. A plugin's <code>addTargetOrder(doc, choose)</code> handler adjusts that choice afterwards, in plugin-id order. The handler
+gets <code>call.world</code> (read-only), <code>call.mob</code>, <code>call.behavior</code>, <code>call.prefer</code> as plain values (<code>Long</code>, <code>String</code>, <code>Boolean</code>,
+<code>List</code>, <code>Map</code>), <code>call.candidates</code> in ascending id, <code>call.current</code>, <code>call.ally</code> and <code>call.choice</code>, the choice so far. It
+returns <code>PluginTargetChoice.Default</code> (choose as without <code>prefer</code>), <code>Nobody</code>, or <code>Pick(actor)</code> with one of the
+candidates; returning <code>call.choice</code> keeps it. A pick that isn't a candidate, or a handler that throws, records a
+<code>&quot;plugin&quot;</code> diagnostic and keeps the choice so far. Handlers aren't called for a behavior without <code>prefer</code>, and must be
+fast and side-effect free.</p>
+<h3 id="chained-thinks">Chained thinks</h3>
+<p>A mob whose think chose a tick-lane action is, once that action finishes, asked whether to think again as soon as it can
+act, ignoring <code>think_every</code> (the <code>chain_think</code> rules export, §4.6). The built-in chasers (<code>pursue</code>, <code>follow</code>, <code>heel</code>,
+<code>leash</code>) chain by default, so they keep moving at their <code>move_pace</code>. A plugin's <code>addChainThink(doc, decide)</code> handler
+adjusts that answer afterwards, in plugin-id order. The handler gets <code>call.world</code> (read-only), <code>call.mob</code>, <code>call.source</code>
+(the behavior that ended), <code>call.command</code>, <code>call.exit</code> (the direction name last crossed, or <code>null</code> for a non-move
+action), <code>call.chain</code> (how many chained thinks this mob has done in a row) and <code>call.chained</code>, the answer so far, and
+returns the new answer. A handler that throws records a <code>&quot;plugin&quot;</code> diagnostic and keeps the answer so far. Handlers must
+be fast and side-effect free. The weather sample makes a storm wash out the trail, so a chaser caught in one goes back
+to its cadence:</p>
+<pre><code class="language-kotlin">r.addChainThink(&quot;Storms wash out the trail, so chasers stop chaining.&quot;) { call -&gt;
+  call.chained &amp;&amp; stateFor(call.world, call.mob.room) != &quot;storm&quot;
+}
+</code></pre>
+<h3 id="standing-and-factions">Standing and factions</h3>
+<p>Plugins take part in standing (§5.14 of the spec) through <code>addDispositionModifier</code> and <code>addFactions</code>:</p>
+<ul>
+<li><code>addDispositionModifier(doc, adjust)</code>: adjusts what one actor thinks of another after the rules <code>disposition</code> export,
+in plugin-id order. Handlers receive <code>call.world</code>, <code>call.holder</code>, <code>call.subject</code> and <code>call.disposition</code>, and return
+the adjusted value, which is clamped to <code>-100..100</code>.</li>
+<li><code>addFactions(doc, adjust)</code>: adjusts an actor's faction list after the rules <code>factions</code> export, in plugin-id order.
+Handlers receive <code>call.world</code>, <code>call.actor</code>, and <code>call.factions</code>, and return the replacement list of faction label
+strings. Unknown faction labels are dropped with a <code>&quot;plugin&quot;</code> diagnostic.</li>
+</ul>
+<p>A handler that throws, or that asks for the disposition or the factions it is adjusting, records a <code>&quot;plugin&quot;</code> diagnostic
+and leaves the value unchanged.</p>
+<p><code>PluginWorld</code> provides:</p>
+<ul>
+<li><code>disposition(holder, subject)</code>: what one <code>PluginActor</code> thinks of another, after the rules export and the modifiers.</li>
+<li><code>standing(holder, subject)</code>: the amount of one standing record, or 0. The holder is a mob <code>PluginActor</code> or a faction
+label string, the subject a <code>PluginActor</code> or a faction label string. Declared faction opinions are not records.</li>
+<li><code>factionsOf(actor)</code>: the faction labels <code>actor</code> belongs to.</li>
+<li><code>raiseStandingEvent(affected, actor, event, amount = 0, item = null)</code>: raises a world standing event on <code>affected</code> by
+<code>actor</code>.</li>
+<li><code>adjustStanding(holder, subject, amount)</code>: changes a standing record directly.</li>
+</ul>
+<p>Combat memory (a mob's transient record of what it experienced and witnessed) is also on <code>PluginWorld</code>:</p>
+<ul>
+<li><code>memories(mob, subject = null, event = null, since = 0)</code>: the mob's memories, newest first, as <code>PluginMemory</code>; a
+negative <code>since</code> counts as 0.</li>
+<li><code>remember(mob, subject, event, skill = null, amount = 0, target = null)</code>: records a memory on a mob.</li>
+<li><code>forget(mob, subject = null, event = null)</code>: removes the matching memories (all when both filters are null) and
+returns how many it removed.</li>
+</ul>
+<h3 id="timed-tasks">Timed tasks</h3>
+<p><code>startTask(actor, pulses, name, lag, interrupt, onStop, onDone)</code> keeps an actor busy for <code>pulses</code>, like a cast's warmup,
+then calls <code>onDone</code>; it follows the rules of <code>ctx.start_task</code>. It returns null when the task started, or the refusal for
+the actor (&quot;You're busy.&quot;). <code>onStop</code>, if given, gets a <code>PluginTaskStop</code> whose <code>reason</code> is <code>INTERRUPTED</code>, <code>CANCELLED</code>,
+<code>INVALID</code> or <code>GONE</code>. Both callbacks get a fresh <code>world</code>, the <code>actor</code> and the <code>task</code>. A callback that throws is a
+<code>plugin</code> diagnostic; the task has ended either way.</p>
+<p>The hunger sample's <code>dine</code> builtin eats over a task, lowering hunger only when the meal completes:</p>
+<pre><code class="language-kotlin">// The engine names the task in its lines: &quot;You stop eating.&quot;
+world.startTask(actor, intArg(pos[2], &quot;pulses&quot;), &quot;eating&quot;) { done -&gt;
+  feed(done.world, done.actor, amount)
+  done.world.send(done.actor, &quot;You finish eating.&quot;)
+}
+</code></pre>
+<p><code>lag</code> (recovery once it completes) and <code>interrupt</code> (a <code>PluginTaskInterrupt(stun, damagePct)</code>) are optional, as is
+<code>onStop</code>.</p>
+<p><code>stop</code> and <code>clear</code> cancel the task and the engine says &quot;You stop eating.&quot;, so name a task with a gerund phrase.
+<code>stopTask(actor)</code> cancels a task of either kind, script or plugin, and <code>PluginActor.task</code> describes whichever is
+running. Tasks are not saved.</p>
+<h3 id="world-start">World start</h3>
+<p><code>onWorldStarted</code> callbacks run once the world has loaded, in plugin-id order.</p>
+<pre><code class="language-kotlin">r.onWorldStarted { world -&gt;
+    val regions = world.regions()
+    world.log(&quot;weather: tracking ${regions.size} region(s): ${regions.joinToString(&quot;, &quot;)}&quot;)
+}
+</code></pre>
+<p>A failure in a command, effect, GMCP producer, GMCP input handler, start callback, periodic work or event listener is
+recorded as a <code>&quot;plugin&quot;</code> diagnostic and the pulse goes on. An exception from a builtin is a script error in the calling
+hook.</p>
+<h2 id="feature-sized-plugins">Feature-sized plugins</h2>
+<p>The samples above each add one mechanic. A feature-sized plugin is a complete system: it provides a named feature a
+world can have on, refuses a world that can't support it, does periodic work, listens to engine events and offers a
+builtin for hooks. <code>samples/hunger-plugin</code> (hunger sample) is one: it provides the
+<code>hunger</code> feature, refuses a world with no <code>hp</code> vital, raises each player's hunger once per world tick, warns them as it
+grows, resets it on death and adds <code>hunger.eat</code>. Its <code>register</code> reads the schema, runs the world checks and adds the
+periodic work, the event listener and the builtin.</p>
+<h3 id="provided-and-required-features">Provided and required features</h3>
+<p>A plugin declares the features it provides with <code>providedFeatures</code>. A provided feature is <code>[a-z][a-z0-9_]*</code>, and may not
+be an engine feature id (<code>combat</code>, <code>track</code>, <code>skills</code>, <code>leveling</code>, <code>standing</code>) or a reserved name; a plugin that breaks
+this is skipped with <code>provides invalid feature '&lt;name&gt;'</code>. If two plugins provide the same feature, the one with the
+larger id is skipped. A script tests a provided feature with <code>ctx.has_feature(&quot;hunger&quot;)</code>, which returns <code>False</code> when no
+loaded plugin provides it. A plugin's namespace (<code>hunger.eat</code>) exists only while the plugin loads, so a file that calls
+it fails to load without the plugin whatever <code>has_feature</code> guards; the guard is for code that only reads the plugin's
+attributes, such as <code>ctx.get_attr(ctx.actor, &quot;hunger:hunger&quot;, 0)</code>.</p>
+<p>Another plugin may name a provided feature in its <code>requiredFeatures</code>, next to engine features. A plugin is skipped with
+<code>needs the '&lt;feature&gt;' feature</code> when a feature it requires is neither an enabled engine feature nor provided by a plugin
+that is loading, and that skip cascades: a plugin whose provider failed a check, refused the world or threw from
+<code>register</code> is skipped too, and its registrations are discarded.</p>
+<p>Built-in features are not plugins: they reach into the world's own state and phases (the combat round, track slots, XP
+loss at death), so they stay inside the engine and are turned on in <code>MODULE.gups</code>. A plugin adds a feature through the
+plugin interface instead. A plugin's feature is not recorded in the world's saved features; adding or removing a plugin
+needs only a restart.</p>
+<pre><code class="language-kotlin">override val providedFeatures: Set&lt;String&gt; = setOf(&quot;hunger&quot;)
+</code></pre>
+<h3 id="world-checks-and-refusal">World checks and refusal</h3>
+<p><code>r.schema</code> is the world's <code>MODULE.gups</code> schema (stats, vitals and damage types, in declaration order) and <code>r.features</code>
+the enabled engine features plus every feature a loading plugin provides. A plugin that needs a particular vital, stat
+or damage type checks the schema and calls <code>r.refuse(reason)</code>, which skips the plugin with the warning <code>plugin '&lt;id&gt;': refused: &lt;reason&gt;</code>, a <code>plugin</code> diagnostic and a <code>plugin_load</code> alert. Anything it registered before refusing is
+discarded. Refusing is better than silently doing nothing: a world that turns off the vital hunger needs gets a loud
+warning.</p>
+<pre><code class="language-kotlin">if (&quot;hp&quot; !in r.schema.vitals.map { it.name }) r.refuse(&quot;needs an 'hp' vital&quot;)
+if (r.schema.damageTypes.isEmpty()) r.refuse(&quot;needs a damage type&quot;)
+</code></pre>
+<h3 id="periodic-work">Periodic work</h3>
+<p><code>every(pulses, doc, callback)</code> runs the callback on every pulse where <code>pulse % pulses == 0</code>; <code>pulses</code> is at least 8 (one
+combat round), and a smaller value fails <code>register</code>. It runs after the world tick's work and before perceptions are
+delivered, in plugin-id order and then registration order. The callback gets a <code>PluginTickCall</code> with <code>world</code> and
+<code>actors</code>: every simulated actor in the world, sorted by id, so mobs in dormant rooms are left alone. A failure is
+recorded as a <code>&quot;plugin&quot;</code> diagnostic, and the next run happens as scheduled.</p>
+<pre><code class="language-kotlin">r.every(120, &quot;Raises hunger once per world tick.&quot;) { call -&gt;
+    for (actor in call.actors) {
+        if (!actor.isPlayer) continue
+        val hunger = ((call.world.getAttr(actor, &quot;hunger&quot;, 0L) as? Long) ?: 0L) + 1
+        val next = hunger.coerceAtMost(STARVING)
+        call.world.setAttr(actor, &quot;hunger&quot;, next)
+        when (next) {
+            HUNGRY -&gt; call.world.send(actor, &quot;You are getting hungry.&quot;)
+            STARVING -&gt; {
+                call.world.send(actor, &quot;You are starving.&quot;)
+                call.world.damage(actor, 1, damageType, &quot;hp&quot;)
+            }
+        }
+    }
+}
+</code></pre>
+<h3 id="engine-event-listeners">Engine event listeners</h3>
+<p><code>onEvent(name, doc, listener)</code> listens to an engine event and runs after the scripts' global hook for it. The listener
+gets a <code>PluginEventCall</code> with <code>world</code>, <code>event</code>, the <code>actor</code> and the event's <code>fields</code>. The seven events are
+<code>on_level_change</code> (with <code>old_level</code> and <code>new_level</code>), <code>on_encumbrance_change</code> (with <code>old_encumbrance_level</code> and
+<code>new_encumbrance_level</code>), <code>on_group_change</code> (with <code>event</code> and a <code>group</code>), <code>on_owner_change</code> (with <code>target</code> and <code>event</code>),
+<code>on_disengage</code> (with <code>event</code>), <code>on_death</code> (with <code>killer</code>, or null) and <code>on_skill_use</code> (with <code>skill</code>, <code>outcome</code>,
+<code>target</code>, <code>item</code>, and <code>targets</code>, the landed actors). Any other name fails <code>register</code>. Ints arrive as <code>Long</code>s and actors
+as <code>PluginActor</code>s. A listener can't veto or change the event, but may change the world as a script global hook may;
+listeners run in plugin-id order, then registration order. A listener for an event whose feature is off, such as
+<code>on_level_change</code> without <code>leveling</code>, registers and never runs. At <code>on_death</code> the victim is still in the world, so the
+listener can still change it.</p>
+<pre><code class="language-kotlin">r.onEvent(&quot;on_death&quot;, &quot;Death resets hunger.&quot;) { call -&gt;
+    call.world.setAttr(call.actor, &quot;hunger&quot;, null)
+}
+</code></pre>
+<h3 id="the-builtin">The builtin</h3>
+<p><code>hunger.eat(actor, amount)</code> lowers an actor's hunger by <code>amount</code>, not below 0, and returns the new value. A builtin runs
+only from a hook or command, so an item's <code>on_use</code> hook calls it to feed the actor:</p>
+<pre><code class="language-python">def _feed(ctx):
+    hunger.eat(ctx.actor, 3)
+</code></pre>
+<p><code>hunger.dine(actor, amount, pulses)</code> eats over a timed task: the actor is busy for <code>pulses</code>, hunger
+drops only when the meal completes, and <code>stop</code> cancels it (&quot;You stop eating.&quot;) with hunger unchanged. It returns None
+once the meal starts, or the refusal message.</p>
+<h2 id="installing-a-plugin">Installing a plugin</h2>
+<p>Put the jar at <code>plugins/&lt;id&gt;.jar</code> in the course world repository and pin its checksum in <code>MODULE.gups</code>:</p>
+<pre><code class="language-bash">shasum -a 256 plugins/weather.jar
+</code></pre>
+<pre><code class="language-python">module(
+    api_version = 1,
+    plugins = {&quot;weather&quot;: &quot;sha256:&lt;the 64 hex digits shasum printed&gt;&quot;},
+)
+</code></pre>
+<p>The server, <code>gups test</code>, <code>gups lint</code>, <code>gups fuzz</code>, <code>gups migrate-check</code>, <code>gups repro</code> and <code>gups docs --world</code> all load
+the same jars. A jar in <code>plugins/</code> that <code>MODULE.gups</code> doesn't pin is ignored with a warning. Adding, removing or
+changing a plugin needs a restart: deploys that touch <code>plugins/</code> or <code>MODULE.gups</code> are refused.</p>
+<p>A plugin that is missing, fails its checksum, has another id or API version, or fails in <code>register</code> is skipped with a
+warning (logged, recorded as a diagnostic, and sent to instructors). Packages that use it then fail to load, and the
+server starts without them.</p>
+<h2 id="trust">Trust</h2>
+<p>A plugin is trusted code with full JVM access: there is no sandbox. Only instructors can approve changes to
+<code>MODULE.gups</code> and <code>plugins/</code> (CODEOWNERS), so review a plugin as you would engine code:</p>
+<ul>
+<li>Build the jar yourself from reviewed source, and pin the checksum of that build.</li>
+<li>Check that it imports only <code>gups.pluginapi.*</code>, <code>net.starlark.java.*</code>, Kotlin and the JDK.</li>
+<li>Look for file, network, process, reflection or class-loading calls; a game plugin rarely needs any.</li>
+<li>Check that builtins are deterministic where tests rely on them (no clock or unseeded randomness).</li>
+<li>Make sure it fails loudly rather than silently, and that its commands don't need a higher role than they declare.</li>
+<li>Re-review on every engine upgrade, since plugins must be rebuilt then.</li>
+</ul>
+</section>
+<h2 id="loaded-plugins">This world's plugins</h2>
+<p>No plugins are loaded.</p>
+</main>
+</body>
+</html>

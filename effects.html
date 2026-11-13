@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Effects and behaviors — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html" class="current">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Effects and behaviors</h1>
+<h2>Effect primitives</h2>
+<p class="intro">Declarative effects for skill(effect=...), item(use_effect=...) and hooks.</p>
+<section id="apply_affect" class="entry">
+<h3><code>apply_affect(name, duration, stat_deltas = None, flags = [], tick_every = None, on_tick = None, on_expire = None, expire_msg = '', modifiers = {}, sense_deltas = {}, max_vital_deltas = None, resist_deltas = None, applies = None, procs = [], add_tags = [], remove_tags = [])</code> <span class="since">since api_version 1</span></h3>
+<p>Attach a timed buff or debuff.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="apply_affect.name"><td><code>name</code></td><td>positional or named</td><td></td><td>Affect name; applying the same name again replaces the existing affect.</td></tr>
+<tr id="apply_affect.duration"><td><code>duration</code></td><td>positional or named</td><td></td><td>Duration in pulses; None makes an item affect permanent.</td></tr>
+<tr id="apply_affect.stat_deltas"><td><code>stat_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Stat adjustments while the affect lasts, built with stats(...).</td></tr>
+<tr id="apply_affect.flags"><td><code>flags</code></td><td>positional or named</td><td><code>[]</code></td><td>Flags the affect grants, such as 'no_regen'.</td></tr>
+<tr id="apply_affect.tick_every"><td><code>tick_every</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses between on_tick calls, or None for no ticking.</td></tr>
+<tr id="apply_affect.on_tick"><td><code>on_tick</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called every tick_every pulses.</td></tr>
+<tr id="apply_affect.on_expire"><td><code>on_expire</code></td><td>positional or named</td><td><code>None</code></td><td>Top-level function fn(ctx) called when the affect expires or is removed.</td></tr>
+<tr id="apply_affect.expire_msg"><td><code>expire_msg</code></td><td>positional or named</td><td><code>''</code></td><td>Text sent to the target when the affect ends.</td></tr>
+<tr id="apply_affect.modifiers"><td><code>modifiers</code></td><td>positional or named</td><td><code>{}</code></td><td>Rules modifiers active while the affect lasts, by modifier point name.</td></tr>
+<tr id="apply_affect.sense_deltas"><td><code>sense_deltas</code></td><td>positional or named</td><td><code>{}</code></td><td>Sense score changes by channel while the affect lasts.</td></tr>
+<tr id="apply_affect.max_vital_deltas"><td><code>max_vital_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Vital maximum adjustments while the affect lasts, built with vitals(...).</td></tr>
+<tr id="apply_affect.resist_deltas"><td><code>resist_deltas</code></td><td>positional or named</td><td><code>None</code></td><td>Damage resistance adjustments while the affect lasts, built with resists(...).</td></tr>
+<tr id="apply_affect.applies"><td><code>applies</code></td><td>positional or named</td><td><code>None</code></td><td>Item affects only: 'worn' or 'carried'.</td></tr>
+<tr id="apply_affect.procs"><td><code>procs</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>[]</code></td><td>Combat procs that fire during auto-attack swings.</td></tr>
+<tr id="apply_affect.add_tags"><td><code>add_tags</code></td><td>positional or named</td><td><code>[]</code></td><td>Tags a room gains while the affect lasts; a room affect only.</td></tr>
+<tr id="apply_affect.remove_tags"><td><code>remove_tags</code></td><td>positional or named</td><td><code>[]</code></td><td>Tags a room loses while the affect lasts; a room affect only.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;slow&quot;,
+    kind = &quot;spell&quot;,
+    cost = vitals(mana = 4),
+    range = &quot;near&quot;,
+    effect = apply_affect(
+        name = &quot;slowed&quot;,
+        duration = 40,
+        stat_deltas = stats(dex = -2),
+        expire_msg = &quot;You feel quick again.&quot;,
+    ),
+)</code></pre>
+</div>
+</section>
+<section id="damage" class="entry">
+<h3><code>damage(dice, type = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Deal damage.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="damage.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Damage dice such as '2d6+1'.</td></tr>
+<tr id="damage.type"><td><code>type</code></td><td>positional or named</td><td><code>None</code></td><td>A declared damage type, such as DAMAGE.fire; the unarmed type if omitted.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;frost_shard&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 3), range = &quot;near&quot;,
+      effect = damage(dice = &quot;1d8+1&quot;, type = DAMAGE.fire))</code></pre>
+</div>
+</section>
+<section id="dispel" class="entry">
+<h3><code>dispel(name = None, flag = None, all = False, count = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Remove the target's affects that match every given criterion. Affects flagged 'intrinsic' are never removed.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="dispel.name"><td><code>name</code></td><td>positional or named</td><td><code>None</code></td><td>Affect name to remove; a trailing * matches every name with that prefix.</td></tr>
+<tr id="dispel.flag"><td><code>flag</code></td><td>positional or named</td><td><code>None</code></td><td>A flag, or a list of flags; matches affects carrying any of them.</td></tr>
+<tr id="dispel.all"><td><code>all</code></td><td>positional or named</td><td><code>False</code></td><td>True to match every affect.</td></tr>
+<tr id="dispel.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Most affects to remove, oldest first, or None to remove every match.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Removes &quot;poison&quot;, &quot;poison_strong&quot; and every other affect named poison...
+skill(&quot;cure&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 6), target = &quot;ally&quot;,
+      effect = dispel(name = &quot;poison*&quot;))
+# Lifts at most one curse, whatever it is called.
+skill(&quot;uncurse&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 8), target = &quot;ally&quot;,
+      effect = dispel(flag = &quot;curse&quot;, count = 1))</code></pre>
+</div>
+</section>
+<section id="heal" class="entry">
+<h3><code>heal(dice, vital)</code> <span class="since">since api_version 1</span></h3>
+<p>Restore a vital, up to its maximum.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="heal.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Amount restored, as dice such as '2d4'.</td></tr>
+<tr id="heal.vital"><td><code>vital</code></td><td>positional or named</td><td></td><td>The declared vital to restore.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;mend&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 5), target = &quot;ally&quot;,
+      effect = heal(dice = &quot;2d4&quot;, vital = &quot;hp&quot;))</code></pre>
+</div>
+</section>
+<section id="knockback" class="entry">
+<h3><code>knockback(steps)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Push the target along the track.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="knockback.steps"><td><code>steps</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td></td><td>Track positions to push the target, at least 1.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;shove&quot;, cost = vitals(move = 10), effect = knockback(steps = 2))</code></pre>
+</div>
+</section>
+<section id="pull" class="entry">
+<h3><code>pull(steps)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Draw the target along the track.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="pull.steps"><td><code>steps</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td></td><td>Track positions to draw the target, at least 1.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;hook&quot;, cost = vitals(move = 10), range = &quot;near&quot;, effect = pull(steps = 1))</code></pre>
+</div>
+</section>
+<section id="sequence" class="entry">
+<h3><code>sequence(*effects)</code> <span class="since">since api_version 1</span></h3>
+<p>Combine several effects.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="sequence.effects"><td><code>*effects</code></td><td>extra positional</td><td></td><td>Effects applied in order.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;thunderclap&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 8),
+      effect = sequence(damage(dice = &quot;1d6&quot;, type = DAMAGE.pierce), stun(pulses = 4)))</code></pre>
+</div>
+</section>
+<section id="stun" class="entry">
+<h3><code>stun(pulses)</code> <span class="since">since api_version 1</span></h3>
+<p>Stun the target.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="stun.pulses"><td><code>pulses</code></td><td>positional or named</td><td></td><td>Pulses the target is stunned, at least 1.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>skill(&quot;bash&quot;, cost = vitals(move = 15), lag = 8, effect = stun(pulses = 8))</code></pre>
+</div>
+</section>
+<section id="summon" class="entry">
+<h3><code>summon(label, count = 1, duration = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Spawn mobs beside the caster.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="summon.label"><td><code>label</code></td><td>positional or named</td><td></td><td>Mob prototype label to spawn.</td></tr>
+<tr id="summon.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number of mobs to spawn, at least 1.</td></tr>
+<tr id="summon.duration"><td><code>duration</code></td><td>positional or named</td><td><code>None</code></td><td>Pulses before the summoned mobs vanish, or None to keep them.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;wisp&quot;, name = &quot;a glowing wisp&quot;, vitals = vitals(hp = 5))
+
+skill(&quot;call_wisps&quot;, kind = &quot;spell&quot;, cost = vitals(mana = 10), target = &quot;none&quot;,
+      effect = summon(label = &quot;:wisp&quot;, count = 2, duration = 80))</code></pre>
+</div>
+</section>
+<h2>Behaviors</h2>
+<p class="intro">Built-in mob behaviors for mob(behaviors=[...]).</p>
+<section id="aggressive" class="entry">
+<h3><code>aggressive(toward = 'players', unless_level_above = None, unless_level_below = None, chance = 100, disposition_below = None, prefer = None, priority = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Behavior: attacks matching actors it notices. toward is 'players', 'mobs', 'all' or label patterns.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="aggressive.toward"><td><code>toward</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>'players'</code></td><td>Who to attack: 'players', 'mobs', 'all', or label patterns such as 'goblin_*'.</td></tr>
+<tr id="aggressive.unless_level_above"><td><code>unless_level_above</code> <span class="badge feature">feature: leveling</span></td><td>positional or named</td><td><code>None</code></td><td>Spare actors above this level, or None to attack any level.</td></tr>
+<tr id="aggressive.unless_level_below"><td><code>unless_level_below</code> <span class="badge feature">feature: leveling</span></td><td>positional or named</td><td><code>None</code></td><td>Spare actors below this level, or None to attack any level.</td></tr>
+<tr id="aggressive.chance"><td><code>chance</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>100</code></td><td>Percent chance of looking for a target on each think, 0 to 100.</td></tr>
+<tr id="aggressive.disposition_below"><td><code>disposition_below</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Attack only targets whose disposition is strictly below this threshold (-100..100).</td></tr>
+<tr id="aggressive.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Plain data passed to the world's target_order; None chooses as described.</td></tr>
+<tr id="aggressive.priority"><td><code>priority</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;bandit&quot;, vitals = vitals(hp = 20), behaviors = [aggressive(toward = &quot;players&quot;, unless_level_above = 5, chance = 50)])</code></pre>
+</div>
+</section>
+<section id="assist" class="entry">
+<h3><code>assist(allies, disposition_above = None, prefer = None, priority = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Behavior: joins fights alongside allies, given as label patterns such as 'goblin_*'.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="assist.allies"><td><code>allies</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Allies to help, as label patterns such as 'goblin_*'.</td></tr>
+<tr id="assist.disposition_above"><td><code>disposition_above</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Help allies and spare opponents whose disposition is strictly above this threshold (-100..100).</td></tr>
+<tr id="assist.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Plain data passed to the world's target_order; None chooses as described.</td></tr>
+<tr id="assist.priority"><td><code>priority</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;goblin_scout&quot;, vitals = vitals(hp = 10))
+mob(&quot;goblin_chief&quot;, vitals = vitals(hp = 30), behaviors = [assist(allies = [&quot;goblin_*&quot;])])</code></pre>
+</div>
+</section>
+<section id="defend" class="entry">
+<h3><code>defend(group = True, priority = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Behavior: attacks whatever its owner is fighting; with group, whatever the owner's in-room group members are fighting.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="defend.group"><td><code>group</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>True</code></td><td>Also defend the owner's in-room group members.</td></tr>
+<tr id="defend.priority"><td><code>priority</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Joins whatever its owner, or the owner's group, is fighting.
+mob(&quot;guard_dog&quot;, vitals = vitals(hp = 15), behaviors = [heel(), defend(group = True)])</code></pre>
+</div>
+</section>
+<section id="flee" class="entry">
+<h3><code>flee(below, priority = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Behavior: flees when any listed vital is at or below its percentage of its maximum.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="flee.below"><td><code>below</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td></td><td>Percentages (0..100) by vital, built with vitals(...).</td></tr>
+<tr id="flee.priority"><td><code>priority</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;hare&quot;, vitals = vitals(hp = 6), behaviors = [flee(below = vitals(hp = 50))])</code></pre>
+</div>
+</section>
+<section id="follow" class="entry">
+<h3><code>follow(target, disposition_above = None, priority = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: follows the first matching actor it meets ('players', 'mobs' or label patterns).</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="follow.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Who to follow: 'players', 'mobs', or label patterns.</td></tr>
+<tr id="follow.disposition_above"><td><code>disposition_above</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Follow only leaders whose disposition is strictly above this threshold (-100..100).</td></tr>
+<tr id="follow.priority"><td><code>priority</code></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;stray_dog&quot;, name = &quot;a stray dog&quot;, vitals = vitals(hp = 8), behaviors = [follow(target = &quot;players&quot;)])</code></pre>
+</div>
+</section>
+<section id="guard" class="entry">
+<h3><code>guard(exit, allies = 'mobs', disposition_above = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: denies an exit to everyone who isn't an ally (default: other mobs) while the guard is present.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="guard.exit"><td><code>exit</code></td><td>positional or named</td><td></td><td>Direction of the exit to guard.</td></tr>
+<tr id="guard.allies"><td><code>allies</code></td><td>positional or named</td><td><code>'mobs'</code></td><td>Who may pass: 'players', 'mobs', 'all', or label patterns.</td></tr>
+<tr id="guard.disposition_above"><td><code>disposition_above</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Actors whose disposition is strictly above this threshold (-100..100) are allowed through.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Players can't go north while the sentry is here; other mobs can.
+mob(&quot;sentry&quot;, vitals = vitals(hp = 30), behaviors = [sentinel(), guard(exit = &quot;north&quot;, allies = &quot;mobs&quot;)])</code></pre>
+</div>
+</section>
+<section id="heel" class="entry">
+<h3><code>heel(priority = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: follows its owner by the shortest path, however far. Does nothing for a mob without an owner in the world.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="heel.priority"><td><code>priority</code></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code># Idle until the mob has an owner; then it trails the owner anywhere.
+mob(&quot;tame_hound&quot;, vitals = vitals(hp = 15), behaviors = [heel(priority = 40)])</code></pre>
+</div>
+</section>
+<section id="pursue" class="entry">
+<h3><code>pursue(target, disposition_below = None, priority = None, range = 10)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: heads for the nearest matching actor within range exits.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="pursue.target"><td><code>target</code></td><td>positional or named</td><td></td><td>Who to pursue: 'players', 'mobs', or label patterns.</td></tr>
+<tr id="pursue.disposition_below"><td><code>disposition_below</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Pursue only targets whose disposition is strictly below this threshold (-100..100).</td></tr>
+<tr id="pursue.priority"><td><code>priority</code></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+<tr id="pursue.range"><td><code>range</code></td><td>positional or named</td><td><code>10</code></td><td>Exits searched from the mob's room; None searches the whole world.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;hound&quot;, vitals = vitals(hp = 15), behaviors = [pursue(target = &quot;players&quot;)])</code></pre>
+</div>
+</section>
+<section id="retarget" class="entry">
+<h3><code>retarget(prefer = None, toward = 'players', disposition_below = None, chance = 100, priority = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Behavior: while engaged, asks target_order whom to fight and switches to its pick if that is not the primary target.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="retarget.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Plain data passed to the world's target_order; required.</td></tr>
+<tr id="retarget.toward"><td><code>toward</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>'players'</code></td><td>Non-engaged actors in the room to consider: 'players', 'mobs', 'all', or label patterns.</td></tr>
+<tr id="retarget.disposition_below"><td><code>disposition_below</code> <span class="badge feature">feature: standing</span></td><td>positional or named</td><td><code>None</code></td><td>Consider only non-engaged targets whose disposition is strictly below this threshold (-100..100).</td></tr>
+<tr id="retarget.chance"><td><code>chance</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>100</code></td><td>Percent chance of asking target_order on each think, 0 to 100.</td></tr>
+<tr id="retarget.priority"><td><code>priority</code> <span class="badge feature">feature: combat</span></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;ogre&quot;, vitals = vitals(hp = 50), behaviors = [aggressive(prefer = &quot;weakest&quot;), retarget(prefer = &quot;weakest&quot;, chance = 50)])</code></pre>
+</div>
+</section>
+<section id="scavenge" class="entry">
+<h3><code>scavenge(priority = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: picks up items lying within reach.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="scavenge.priority"><td><code>priority</code></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;magpie&quot;, vitals = vitals(hp = 4), behaviors = [scavenge()])</code></pre>
+</div>
+</section>
+<section id="sentinel" class="entry">
+<h3><code>sentinel()</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: never leaves its room.</p>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;statue&quot;, name = &quot;a watchful statue&quot;, vitals = vitals(hp = 100), behaviors = [sentinel()])</code></pre>
+</div>
+</section>
+<section id="wander" class="entry">
+<h3><code>wander(radius = 3, chance = 10, priority = None)</code> <span class="since">since api_version 1</span></h3>
+<p>Behavior: with a percent chance per think, steps through a random open exit within radius exits of home.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="wander.radius"><td><code>radius</code></td><td>positional or named</td><td><code>3</code></td><td>Maximum distance from home, in exits.</td></tr>
+<tr id="wander.chance"><td><code>chance</code></td><td>positional or named</td><td><code>10</code></td><td>Percent chance of taking a step on each think, 0 to 100.</td></tr>
+<tr id="wander.priority"><td><code>priority</code></td><td>positional or named</td><td><code>None</code></td><td>Proposal priority; higher wins. None uses the behavior's default.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;deer&quot;, vitals = vitals(hp = 10), behaviors = [wander(radius = 2, chance = 20)])</code></pre>
+</div>
+</section>
+</main>
+</body>
+</html>

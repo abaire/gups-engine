@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html" class="current">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Rules</h1>
+<section id="rules_ctx" class="entry">
+<h2><code>rules_ctx</code> <span class="since">since api_version 1</span></h2>
+<p>The read-only context of a rules call or modifier.</p>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.action"><td><code>action</code></td><td>1</td><td>For door_intensity: 'open', 'close', 'lock' or 'unlock'.</td></tr>
+<tr id="rules_ctx.actor"><td><code>actor</code></td><td>1</td><td>Whom the call is about: the attacker, caster, mover or regenerating actor.</td></tr>
+<tr id="rules_ctx.affect"><td><code>affect</code></td><td>1</td><td>In a modifier contributed by an actor affect or an item instance affect, that affect's view; None everywhere else.</td></tr>
+<tr id="rules_ctx.ally"><td><code>ally</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order for 'assist', the ally being helped; None elsewhere.</td></tr>
+<tr id="rules_ctx.amount"><td><code>amount</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In standing_change, the healing done or the count given; otherwise None.</td></tr>
+<tr id="rules_ctx.args"><td><code>args</code></td><td>1</td><td>Extra fields a plugin passed to its rules export; None elsewhere.</td></tr>
+<tr id="rules_ctx.attacker"><td><code>attacker</code></td><td>1</td><td>For attack calls, the same as actor.</td></tr>
+<tr id="rules_ctx.away"><td><code>away</code></td><td>1</td><td>Pulses since ctx.actor became eligible to go home, in leash_return; None elsewhere.</td></tr>
+<tr id="rules_ctx.band"><td><code>band</code> <span class="badge feature">feature: track</span></td><td>1</td><td>'melee', 'near' or 'far' between actor and target, or None.</td></tr>
+<tr id="rules_ctx.base"><td><code>base</code></td><td>1</td><td>The plugin's own value, in a plugin-declared rules export; None elsewhere.</td></tr>
+<tr id="rules_ctx.behavior"><td><code>behavior</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, 'aggressive', 'assist' or 'retarget'; None elsewhere.</td></tr>
+<tr id="rules_ctx.behaviors"><td><code>behaviors</code></td><td>1</td><td>The mob's prototype behaviors, as behavior values, in owned_behaviors; None elsewhere.</td></tr>
+<tr id="rules_ctx.candidates"><td><code>candidates</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the non-empty candidate actor list in ascending id order; None elsewhere.</td></tr>
+<tr id="rules_ctx.carried"><td><code>carried</code></td><td>1</td><td>The weight carried and worn, containers' contents included; None outside encumbrance_level and encumbrance.</td></tr>
+<tr id="rules_ctx.cast_target"><td><code>cast_target</code></td><td>1</td><td>The cast's target actor, in recognizes_skill; None elsewhere.</td></tr>
+<tr id="rules_ctx.chain"><td><code>chain</code></td><td>1</td><td>In chain_think, how many chained thinks in a row led to that action; None elsewhere.</td></tr>
+<tr id="rules_ctx.channel"><td><code>channel</code></td><td>1</td><td>For the perception calls: the channel name, such as 'sound'.</td></tr>
+<tr id="rules_ctx.command"><td><code>command</code></td><td>1</td><td>In chain_think, the command line of the action that finished; None elsewhere.</td></tr>
+<tr id="rules_ctx.contributors"><td><code>contributors</code></td><td>1</td><td>The victim's contributors, as contributor structs, in xp_share; None elsewhere.</td></tr>
+<tr id="rules_ctx.cost"><td><code>cost</code></td><td>1</td><td>For can_perceive and perceive_message: the attenuation summed along the cheapest path from the event's room; 0 in that room.</td></tr>
+<tr id="rules_ctx.current"><td><code>current</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the primary target when it is in candidates (the ally's for assist, the mob's for retarget); None elsewhere.</td></tr>
+<tr id="rules_ctx.current_since"><td><code>current_since</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order for 'retarget', the pulse the mob's primary target last changed; None elsewhere.</td></tr>
+<tr id="rules_ctx.damage_type"><td><code>damage_type</code></td><td>1</td><td>The damage type as a string in auto-attack to_hit and damage calls, damage chains and mitigate, otherwise None.</td></tr>
+<tr id="rules_ctx.defender"><td><code>defender</code></td><td>1</td><td>For attack calls, the one attacked; also the one taking damage in mitigate.</td></tr>
+<tr id="rules_ctx.disposition_parts"><td><code>disposition_parts</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In rules.disposition, a struct with declared, faction_to_actor, faction_to_faction, personal and total; None elsewhere.</td></tr>
+<tr id="rules_ctx.dispositions"><td><code>dispositions</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order with the standing feature on, actor's disposition toward each candidate; None elsewhere.</td></tr>
+<tr id="rules_ctx.encumbrance_level"><td><code>encumbrance_level</code></td><td>1</td><td>The level encumbrance_level just gave; None outside encumbrance.</td></tr>
+<tr id="rules_ctx.event"><td><code>event</code></td><td>1</td><td>For can_perceive and perceive_message: the event name, such as 'say' or 'combat'; in skill_check, a skill_roll's event, or None for a cast.</td></tr>
+<tr id="rules_ctx.exit"><td><code>exit</code></td><td>1</td><td>For sense_cost: the exit of ctx.room leading back toward the signal's source. For door_intensity: the door's exit, or None for a container.</td></tr>
+<tr id="rules_ctx.helped"><td><code>helped</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In an assist standing event, the actor helped; None elsewhere.</td></tr>
+<tr id="rules_ctx.intensity"><td><code>intensity</code></td><td>1</td><td>For can_perceive and perceive_message: the event's strength where it happened.</td></tr>
+<tr id="rules_ctx.item"><td><code>item</code></td><td>1</td><td>The item, for get_lag and carry_limit; None in carry_limit when fits asks about a label.</td></tr>
+<tr id="rules_ctx.item_info"><td><code>item_info</code></td><td>1</td><td>In carry_limit asked about an item or a label, the prototype's item_info struct, whether or not an instance exists; None elsewhere, and when the limit is asked without an item.</td></tr>
+<tr id="rules_ctx.limit"><td><code>limit</code></td><td>1</td><td>The actor's carry limit asked without an item; None outside encumbrance_level and encumbrance.</td></tr>
+<tr id="rules_ctx.past_leash"><td><code>past_leash</code></td><td>1</td><td>True in leash_return when ctx.actor stands past its leash; None elsewhere.</td></tr>
+<tr id="rules_ctx.pet"><td><code>pet</code> <span class="badge feature">feature: standing</span></td><td>1</td><td>In a standing event raised for a pet's owner, the pet; None elsewhere.</td></tr>
+<tr id="rules_ctx.prefer"><td><code>prefer</code> <span class="badge feature">feature: combat</span></td><td>1</td><td>In target_order, the behavior's prefer value; None elsewhere.</td></tr>
+<tr id="rules_ctx.pulse"><td><code>pulse</code></td><td>1</td><td>Game time; not available in xp_to_level.</td></tr>
+<tr id="rules_ctx.rng"><td><code>rng</code></td><td>1</td><td>The seeded random number generator; not available in xp_to_level.</td></tr>
+<tr id="rules_ctx.room"><td><code>room</code></td><td>1</td><td>The actor's room; for sense_cost, the room the signal enters.</td></tr>
+<tr id="rules_ctx.skill"><td><code>skill</code></td><td>1</td><td>The skill being cast or evaluated, or None.</td></tr>
+<tr id="rules_ctx.slot"><td><code>slot</code></td><td>1</td><td>The slot of the swinging item in an auto-attack swing, 'wield' for an unarmed swing, otherwise None.</td></tr>
+<tr id="rules_ctx.source"><td><code>source</code></td><td>1</td><td>For can_perceive and perceive_message: the actor who caused the event, or None.</td></tr>
+<tr id="rules_ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For can_perceive and perceive_message: the room the event happened in.</td></tr>
+<tr id="rules_ctx.tags"><td><code>tags</code></td><td>1</td><td>For door_intensity: the door's or container's tags, sorted.</td></tr>
+<tr id="rules_ctx.target"><td><code>target</code></td><td>1</td><td>The other actor of the call, if any: the defender, the pinner, the victim, the killer, or the actor advanced on or retreated from.</td></tr>
+<tr id="rules_ctx.task"><td><code>task</code></td><td>1</td><td>In interrupt_check for an actor running a timed task, the task view, struct(name, started_at, ends_at, remaining, interrupt); None everywhere else.</td></tr>
+<tr id="rules_ctx.text"><td><code>text</code></td><td>1</td><td>For can_perceive and perceive_message: the event's text, or None.</td></tr>
+<tr id="rules_ctx.via_exit"><td><code>via_exit</code></td><td>1</td><td>For can_perceive and perceive_message: the listener's exit leading toward the event, or None in the event's own room.</td></tr>
+<tr id="rules_ctx.weapon"><td><code>weapon</code></td><td>1</td><td>The weapon used in an attack, or None for unarmed.</td></tr>
+<tr id="rules_ctx.xp"><td><code>xp</code></td><td>1</td><td>The experience pool a kill is being settled for, in xp_share; None elsewhere.</td></tr>
+</tbody>
+</table>
+<h3>Methods</h3>
+<article id="rules_ctx.deny" class="entry">
+<h4><code>deny(msg)</code> <span class="since">since api_version 1</span></h4>
+<p>Refuses a cast; valid only in cast_allowed and its modifiers.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.deny.msg"><td><code>msg</code></td><td>positional or named</td><td></td><td>Text shown to the caster.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.factions_of" class="entry">
+<h4><code>factions_of(actor)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>The faction labels actor belongs to, as a list of strings.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.factions_of.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.memories" class="entry">
+<h4><code>memories(subject = None, event = None, since = 0)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
+<p>Queries combat memories of ctx.actor, newest first; [] when ctx.actor is not a mob.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.memories.subject"><td><code>subject</code></td><td>positional or named</td><td><code>None</code></td><td>Optional actor view filter.</td></tr>
+<tr id="rules_ctx.memories.event"><td><code>event</code></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
+<tr id="rules_ctx.memories.since"><td><code>since</code></td><td>positional or named</td><td><code>0</code></td><td>Minimum pulse.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>mob(&quot;guard&quot;, name = &quot;Guard&quot;, behaviors = [aggressive(prefer = &quot;grudge&quot;)])
+
+def _taunt(ctx):
+    ctx.remember(ctx.here(&quot;guard&quot;), ctx.actor, &quot;taunt&quot;, amount = 10)
+    ctx.send(ctx.actor, &quot;mems=%d&quot; % len(ctx.memories(ctx.here(&quot;guard&quot;), event = &quot;taunt&quot;)))
+
+room(&quot;post&quot;, name = &quot;Post&quot;, desc = &quot;Post.&quot;, flags = [&quot;dead_end_ok&quot;],
+     commands = {&quot;taunt&quot;: _taunt})</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+w.spawn(&quot;:guard&quot;, at = &quot;:post&quot;)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:post&quot;)
+t.contains(p.do(&quot;taunt&quot;), &quot;mems=1&quot;)
+for d in w.diagnostics():
+    t.fail(&quot;%s&quot; % d.message)</code></pre>
+</div>
+</article>
+<article id="rules_ctx.roll" class="entry">
+<h4><code>roll(dice)</code> <span class="since">since api_version 1</span></h4>
+<p>Rolls dice such as '2d6+1' with the seeded rng; not available in xp_to_level.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.roll.dice"><td><code>dice</code></td><td>positional or named</td><td></td><td>Dice expression such as '2d6+1'.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.standing" class="entry">
+<h4><code>standing(holder, subject)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.standing.holder"><td><code>holder</code></td><td>positional or named</td><td></td><td>Mob view or faction label holding the record.</td></tr>
+<tr id="rules_ctx.standing.subject"><td><code>subject</code></td><td>positional or named</td><td></td><td>Actor view or faction label the record is about.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="rules_ctx.standing_history" class="entry">
+<h4><code>standing_history(holder, subject, since = 0, via = None, event = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
+<p>Queries standing history for holder and subject since a pulse.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="rules_ctx.standing_history.holder"><td><code>holder</code></td><td>positional or named</td><td></td><td>Mob view or faction label holding the opinion.</td></tr>
+<tr id="rules_ctx.standing_history.subject"><td><code>subject</code></td><td>positional or named</td><td></td><td>Actor view or faction label the opinion is about.</td></tr>
+<tr id="rules_ctx.standing_history.since"><td><code>since</code></td><td>positional or named</td><td><code>0</code></td><td>Start pulse for the query.</td></tr>
+<tr id="rules_ctx.standing_history.via"><td><code>via</code></td><td>positional or named</td><td><code>None</code></td><td>Optional mob view filtering the event source.</td></tr>
+<tr id="rules_ctx.standing_history.event"><td><code>event</code></td><td>positional or named</td><td><code>None</code></td><td>Optional event name filter.</td></tr>
+</tbody>
+</table>
+</article>
+</section>
+<h2>Exports</h2>
+<p class="intro">Functions the files of //rules export for the engine to call.</p>
+<section id="rules-actor_slots" class="entry">
+<h3><code>actor_slots</code> <span class="since">since api_version 1</span></h3>
+<p>The slots ctx.actor has, a subset of equipment_slots().</p>
+<p>Signature <code>actor_slots(ctx)</code>, returns <code>list[str]</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-advance_lag" class="entry">
+<h3><code>advance_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step.</p>
+<p>Signature <code>advance_lag(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-can_perceive" class="entry">
+<h3><code>can_perceive</code> <span class="since">since api_version 1</span></h3>
+<p>Whether ctx.actor, a candidate listener, notices the event. Asked for every simulated actor in a room the event reaches, the room it happened in included, except the actor who caused it.</p>
+<p>Signature <code>can_perceive(ctx)</code>, returns <code>bool</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.source"><code>source</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.source_room"><code>source_room</code></a>, <a href="rules.html#rules_ctx.via_exit"><code>via_exit</code></a>, <a href="rules.html#rules_ctx.channel"><code>channel</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.intensity"><code>intensity</code></a>, <a href="rules.html#rules_ctx.cost"><code>cost</code></a>, <a href="rules.html#rules_ctx.text"><code>text</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-carry_limit" class="entry">
+<h3><code>carry_limit</code> <span class="since">since api_version 1</span></h3>
+<p>Maximum weight the actor can carry without encumbrance.</p>
+<p>Signature <code>carry_limit(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.item_info"><code>item_info</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-cast_allowed" class="entry">
+<h3><code>cast_allowed</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Returns None if casting is allowed, or ctx.deny(msg) to refuse.</p>
+<p>Signature <code>cast_allowed(ctx)</code>, returns <code>None | denial</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-chain_think" class="entry">
+<h3><code>chain_think</code> <span class="since">since api_version 1</span></h3>
+<p>Whether ctx.actor, a mob, thinks again as soon as it can act.</p>
+<p>Signature <code>chain_think(ctx)</code>, returns <code>bool</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.behavior"><code>behavior</code></a>, <a href="rules.html#rules_ctx.command"><code>command</code></a>, <a href="rules.html#rules_ctx.exit"><code>exit</code></a>, <a href="rules.html#rules_ctx.chain"><code>chain</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-condition" class="entry">
+<h3><code>condition</code> <span class="since">since api_version 1</span></h3>
+<p>The actor's life state: 'ok', 'incapacitated' or 'dead'. Asked after any change to one of its vitals and at each world tick.</p>
+<p>Signature <code>condition(ctx)</code>, returns <code>str</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-damage" class="entry">
+<h3><code>damage</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Raw attack damage before modifiers and mitigation.</p>
+<p>Signature <code>damage(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-disposition" class="entry">
+<h3><code>disposition</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h3>
+<p>What ctx.actor thinks of ctx.target, an int in -100..100.</p>
+<p>Signature <code>disposition(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.disposition_parts"><code>disposition_parts</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-door_intensity" class="entry">
+<h3><code>door_intensity</code> <span class="since">since api_version 1</span></h3>
+<p>The sound intensity of ctx.action ('open', 'close', 'lock' or 'unlock') on a door (ctx.exit) or container (ctx.item); 0 or less is silent.</p>
+<p>Signature <code>door_intensity(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.action"><code>action</code></a>, <a href="rules.html#rules_ctx.tags"><code>tags</code></a>, <a href="rules.html#rules_ctx.exit"><code>exit</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-encumbrance" class="entry">
+<h3><code>encumbrance</code> <span class="since">since api_version 1</span></h3>
+<p>Stat deltas applied while the encumbrance level is above 0.</p>
+<p>Signature <code>encumbrance(ctx)</code>, returns <code>stats</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.limit"><code>limit</code></a>, <a href="rules.html#rules_ctx.carried"><code>carried</code></a>, <a href="rules.html#rules_ctx.encumbrance_level"><code>encumbrance_level</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-encumbrance_level" class="entry">
+<h3><code>encumbrance_level</code> <span class="since">since api_version 1</span></h3>
+<p>The actor's encumbrance level, 0 for none; the world decides what the levels mean.</p>
+<p>Signature <code>encumbrance_level(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.limit"><code>limit</code></a>, <a href="rules.html#rules_ctx.carried"><code>carried</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-equipment_slots" class="entry">
+<h3><code>equipment_slots</code> <span class="since">since api_version 1</span></h3>
+<p>Equipment slot names in display and modifier evaluation order.</p>
+<p>Signature <code>equipment_slots()</code>, returns <code>list[str]</code></p>
+</section>
+<section id="rules-factions" class="entry">
+<h3><code>factions</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h3>
+<p>The faction labels of ctx.actor.</p>
+<p>Signature <code>factions(ctx)</code>, returns <code>list[str]</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-flee_chance" class="entry">
+<h3><code>flee_chance</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Chance in percent for a fleeing actor to escape through an exit.</p>
+<p>Signature <code>flee_chance(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-flee_fail_lag" class="entry">
+<h3><code>flee_fail_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Recovery lag after a failed flee, whether the roll failed or the exit refused. ctx.target is None.</p>
+<p>Signature <code>flee_fail_lag(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-get_lag" class="entry">
+<h3><code>get_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Wait-state pulses for picking up an item at band, or None if out of reach.</p>
+<p>Signature <code>get_lag(ctx, band)</code>, returns <code>int | None</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-initiative" class="entry">
+<h3><code>initiative</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Combat round initiative score; higher acts first.</p>
+<p>Signature <code>initiative(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-interrupt_check" class="entry">
+<h3><code>interrupt_check</code> <span class="since">since api_version 1</span></h3>
+<p>True if a damage event with this total loss interrupts the cast being warmed up (ctx.skill) or the timed task (ctx.task).</p>
+<p>Signature <code>interrupt_check(ctx, amount)</code>, returns <code>bool</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.task"><code>task</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-item_power" class="entry">
+<h3><code>item_power</code> <span class="since">since api_version 1</span></h3>
+<p>Percent strength of what ctx.item does for ctx.actor: use or proc.</p>
+<p>Signature <code>item_power(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.affect"><code>affect</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-leash_return" class="entry">
+<h3><code>leash_return</code> <span class="since">since api_version 1</span></h3>
+<p>Whether a leashed mob outside its home ground heads home this think.</p>
+<p>Signature <code>leash_return(ctx)</code>, returns <code>bool</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.away"><code>away</code></a>, <a href="rules.html#rules_ctx.past_leash"><code>past_leash</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-mitigate" class="entry">
+<h3><code>mitigate</code> <span class="since">since api_version 1</span></h3>
+<p>The vital losses that amount damage of type causes the defender.</p>
+<p>Signature <code>mitigate(ctx, amount, type)</code>, returns <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-move_cost" class="entry">
+<h3><code>move_cost</code> <span class="since">since api_version 1</span></h3>
+<p>The vitals spent when leaving a room.</p>
+<p>Signature <code>move_cost(ctx)</code>, returns <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-move_pace" class="entry">
+<h3><code>move_pace</code> <span class="since">since api_version 1</span></h3>
+<p>Hundredths of a pulse per room for ctx.actor walking through ctx.exit; 100 is one room per pulse.</p>
+<p>Signature <code>move_pace(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.exit"><code>exit</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-on_level_up" class="entry">
+<h3><code>on_level_up</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h3>
+<p>Stat and vital deltas awarded when an actor reaches a new level, as a struct(stats = stats(...), max = vitals(...), current = vitals(...)) or None.</p>
+<p>Signature <code>on_level_up(ctx)</code>, returns <code>struct | None</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-on_player_death" class="entry">
+<h3><code>on_player_death</code> <span class="since">since api_version 1</span></h3>
+<p>Player death outcome as {'respawn': label, 'vitals': vitals(...), 'xp_loss': int, 'level_loss': int}; vitals sets the respawned character's current vitals.</p>
+<p>Signature <code>on_player_death(ctx)</code>, returns <code>dict[str, any]</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-owned_behaviors" class="entry">
+<h3><code>owned_behaviors</code> <span class="since">since api_version 1</span></h3>
+<p>The behaviors a mob runs while a player owns it; ctx.actor is the mob, ctx.target its owner.</p>
+<p>Signature <code>owned_behaviors(ctx)</code>, returns <code>list</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.behaviors"><code>behaviors</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-perceive_message" class="entry">
+<h3><code>perceive_message</code> <span class="since">since api_version 1</span></h3>
+<p>What a player in another room is told about an event they can_perceive, or None for nothing. The room of the event is told as it happens and never asked.</p>
+<p>Signature <code>perceive_message(ctx)</code>, returns <code>str | None</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.source"><code>source</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.source_room"><code>source_room</code></a>, <a href="rules.html#rules_ctx.via_exit"><code>via_exit</code></a>, <a href="rules.html#rules_ctx.channel"><code>channel</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.intensity"><code>intensity</code></a>, <a href="rules.html#rules_ctx.cost"><code>cost</code></a>, <a href="rules.html#rules_ctx.text"><code>text</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-recognizes_skill" class="entry">
+<h3><code>recognizes_skill</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Whether ctx.actor, a player watching ctx.source cast ctx.skill, recognizes it without knowing it.</p>
+<p>Signature <code>recognizes_skill(ctx)</code>, returns <code>bool</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.source"><code>source</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.cast_target"><code>cast_target</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-regen" class="entry">
+<h3><code>regen</code> <span class="since">since api_version 1</span></h3>
+<p>What each vital gains per world tick; negative values lose.</p>
+<p>Signature <code>regen(ctx)</code>, returns <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-retreat_check" class="entry">
+<h3><code>retreat_check</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Chance in percent to retreat along the track when pinned in melee.</p>
+<p>Signature <code>retreat_check(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-retreat_fail_lag" class="entry">
+<h3><code>retreat_fail_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is &quot;melee&quot;.</p>
+<p>Signature <code>retreat_fail_lag(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-retreat_lag" class="entry">
+<h3><code>retreat_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step.</p>
+<p>Signature <code>retreat_lag(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-sense_cost" class="entry">
+<h3><code>sense_cost</code> <span class="since">since api_version 1</span></h3>
+<p>What a perceivable event on ctx.channel loses crossing ctx.exit into ctx.room, one hop toward the listeners. The price is added to the event's cost; a negative price blocks the hop. ctx.actor is None.</p>
+<p>Signature <code>sense_cost(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.exit"><code>exit</code></a>, <a href="rules.html#rules_ctx.channel"><code>channel</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-skill_check" class="entry">
+<h3><code>skill_check</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Percent chance that ctx.actor gets ctx.skill off. ctx.event names a skill_roll's purpose, such as 'craft'; a cast leaves it None.</p>
+<p>Signature <code>skill_check(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-skill_power" class="entry">
+<h3><code>skill_power</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Percent strength of a successful cast; 100 is the skill as declared.</p>
+<p>Signature <code>skill_power(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-slot_cost" class="entry">
+<h3><code>slot_cost</code> <span class="since">since api_version 1</span></h3>
+<p>How many slots of its family ctx.item takes up when ctx.actor wears it; at least 1.</p>
+<p>Signature <code>slot_cost(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-slot_families" class="entry">
+<h3><code>slot_families</code> <span class="since">since api_version 1</span></h3>
+<p>Slot families: a family name to its ordered concrete slots.</p>
+<p>Signature <code>slot_families()</code>, returns <code>dict[str, list[str]]</code></p>
+</section>
+<section id="rules-standing_change" class="entry">
+<h3><code>standing_change</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h3>
+<p>The changes a standing event makes, as a list of standing_delta(...) values.</p>
+<p>Signature <code>standing_change(ctx)</code>, returns <code>list</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.amount"><code>amount</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.affect"><code>affect</code></a>, <a href="rules.html#rules_ctx.helped"><code>helped</code></a>, <a href="rules.html#rules_ctx.pet"><code>pet</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-starting_stats" class="entry">
+<h3><code>starting_stats</code> <span class="since">since api_version 1</span></h3>
+<p>Numbers for a new character or spawned mob, as struct(stats = stats(...), max = vitals(...), current = vitals(...)); every field is optional and a current value left out equals the maximum.</p>
+<p>Signature <code>starting_stats(ctx)</code>, returns <code>struct(stats, max, current)</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-target_order" class="entry">
+<h3><code>target_order</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Which candidate ctx.actor attacks or switches to, or None to propose nothing.</p>
+<p>Signature <code>target_order(ctx)</code>, returns <code>actor</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.behavior"><code>behavior</code></a>, <a href="rules.html#rules_ctx.prefer"><code>prefer</code></a>, <a href="rules.html#rules_ctx.candidates"><code>candidates</code></a>, <a href="rules.html#rules_ctx.current"><code>current</code></a>, <a href="rules.html#rules_ctx.current_since"><code>current_since</code></a>, <a href="rules.html#rules_ctx.dispositions"><code>dispositions</code></a>, <a href="rules.html#rules_ctx.ally"><code>ally</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-to_hit" class="entry">
+<h3><code>to_hit</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat or skills</span></h3>
+<p>Hit chance in percent before modifiers, for an auto-attack swing or an enemy spell (ctx.skill set, no weapon or slot).</p>
+<p>Signature <code>to_hit(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-xp_for_kill" class="entry">
+<h3><code>xp_for_kill</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h3>
+<p>Experience points awarded to actor for slaying target.</p>
+<p>Signature <code>xp_for_kill(ctx)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-xp_share" class="entry">
+<h3><code>xp_share</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h3>
+<p>Splits a kill's experience pool among actors.</p>
+<p>Signature <code>xp_share(ctx)</code>, returns <code>dict</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.xp"><code>xp</code></a>, <a href="rules.html#rules_ctx.contributors"><code>contributors</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="rules-xp_to_level" class="entry">
+<h3><code>xp_to_level</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h3>
+<p>The total XP at which the given level ends for the actor.</p>
+<p>Signature <code>xp_to_level(ctx, level)</code>, returns <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a></p>
+</section>
+<h2>Modifier points</h2>
+<p class="intro">Values zones, regions, rooms, affects and worn items can adjust.</p>
+<section id="modifier-advance_lag" class="entry">
+<h3><code>advance_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Adjusts the recovery lag in pulses after advance. ctx.target is the actor approached; ctx.band is the band after the step. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-bonus_damage" class="entry">
+<h3><code>bonus_damage</code> <span class="since">since api_version 1</span></h3>
+<p>Adds typed damage parts to an auto-attack hit or a damage(...) effect, on the attacker's chain; each part is mitigated with its own type and applied with the hit as one damage event.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>damages</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-cast_allowed" class="entry">
+<h3><code>cast_allowed</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Returns None to allow casting, or ctx.deny(msg) to refuse.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>None | denial</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-damage" class="entry">
+<h3><code>damage</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts damage before mitigation, for auto-attacks and the damage(...) effect.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-defend_hit" class="entry">
+<h3><code>defend_hit</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat or skills</span></h3>
+<p>Adjusts an auto-attack's or enemy spell's hit chance on the defender's chain, after the attacker's to_hit chain. ctx.defender is the actor whose modifiers run; ctx.attacker is still the swinger or caster.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-flee_fail_lag" class="entry">
+<h3><code>flee_fail_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Adjusts the recovery lag after a failed flee. ctx.target and ctx.band are None. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-initiative" class="entry">
+<h3><code>initiative</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Adjusts combat round initiative.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-item_power" class="entry">
+<h3><code>item_power</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the percent strength of what ctx.item does for ctx.actor: use or proc. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.event"><code>event</code></a>, <a href="rules.html#rules_ctx.affect"><code>affect</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-mitigate" class="entry">
+<h3><code>mitigate</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the vital losses mitigate returned, on the defender's chain. A negative loss is a gain to that vital.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-move_cost" class="entry">
+<h3><code>move_cost</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the vitals spent for leaving a room.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-move_pace" class="entry">
+<h3><code>move_pace</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the walking pace in hundredths of a pulse per room. The final result is clamped to at least 100 / MOVES_PER_PULSE_MAX (25).</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.exit"><code>exit</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-receive_damage" class="entry">
+<h3><code>receive_damage</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the raw damage of a hit or damage(...) effect on the defender's chain, after the attacker's damage chain and before mitigate. A negative result counts as 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-regen" class="entry">
+<h3><code>regen</code> <span class="since">since api_version 1</span></h3>
+<p>Adjusts the per-tick regeneration of each vital.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>vitals</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-retreat_fail_lag" class="entry">
+<h3><code>retreat_fail_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Adjusts the recovery lag after a failed retreat_check. ctx.target is the pinner; ctx.band is &quot;melee&quot;. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-retreat_lag" class="entry">
+<h3><code>retreat_lag</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: track</span></h3>
+<p>Adjusts the recovery lag after a successful retreat. ctx.target is the threat; ctx.band is the band after the step. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-skill_check" class="entry">
+<h3><code>skill_check</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Adjusts the percent chance that ctx.actor gets ctx.skill off.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-skill_power" class="entry">
+<h3><code>skill_power</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Adjusts the percent strength of a successful cast. The final result is clamped to 0.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.item"><code>item</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="modifier-to_hit" class="entry">
+<h3><code>to_hit</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat or skills</span></h3>
+<p>Adjusts hit chance in percent, for swings and enemy spells.</p>
+<p>Signature <code>fn(ctx, base)</code>, value <code>int</code></p>
+<p>rules_ctx fields: <a href="rules.html#rules_ctx.actor"><code>actor</code></a>, <a href="rules.html#rules_ctx.attacker"><code>attacker</code></a>, <a href="rules.html#rules_ctx.defender"><code>defender</code></a>, <a href="rules.html#rules_ctx.target"><code>target</code></a>, <a href="rules.html#rules_ctx.weapon"><code>weapon</code></a>, <a href="rules.html#rules_ctx.band"><code>band</code></a>, <a href="rules.html#rules_ctx.skill"><code>skill</code></a>, <a href="rules.html#rules_ctx.room"><code>room</code></a>, <a href="rules.html#rules_ctx.damage_type"><code>damage_type</code></a>, <a href="rules.html#rules_ctx.slot"><code>slot</code></a>, <a href="rules.html#rules_ctx.pulse"><code>pulse</code></a>, <a href="rules.html#rules_ctx.rng"><code>rng</code></a></p>
+</section>
+</main>
+</body>
+</html>

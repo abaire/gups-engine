@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hooks — GUPS API Reference (api_version 1)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<div class="brand">GUPS API Reference <span class="engine">engine 0.1.0-SNAPSHOT</span> <span class="badge">api_version 1</span></div>
+<nav>
+<a href="index.html">Overview</a>
+<a href="declarations.html">Declarations</a>
+<a href="hooks.html" class="current">Hooks</a>
+<a href="ctx.html">ctx and views</a>
+<a href="effects.html">Effects and behaviors</a>
+<a href="rules.html">Rules</a>
+<a href="harness.html">Test harness</a>
+<a href="world.html">World</a>
+<a href="plugins.html">Plugins</a>
+<a href="changelog.html">Changelog</a>
+<a href="api.json">api.json</a>
+</nav>
+</header>
+<main>
+<h1>Hooks</h1>
+<table>
+<thead><tr><th>Hook</th><th>Signature</th><th>Vetoable</th><th>Attaches to</th></tr></thead>
+<tbody>
+<tr><td><a href="#hook-before_attack"><code>before_attack</code></a> <span class="badge feature">feature: combat</span></td><td><code>fn(ctx)</code></td><td>yes</td><td>mob, item</td></tr>
+<tr><td><a href="#hook-before_cast"><code>before_cast</code></a> <span class="badge feature">feature: skills</span></td><td><code>fn(ctx)</code></td><td>yes</td><td>mob, item, room</td></tr>
+<tr><td><a href="#hook-before_close"><code>before_close</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-before_drop"><code>before_drop</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, mob</td></tr>
+<tr><td><a href="#hook-before_enter"><code>before_enter</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-before_exit"><code>before_exit</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-before_get"><code>before_get</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, mob</td></tr>
+<tr><td><a href="#hook-before_lock"><code>before_lock</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-before_open"><code>before_open</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-before_order"><code>before_order</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>mob, room</td></tr>
+<tr><td><a href="#hook-before_summon"><code>before_summon</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-before_unlock"><code>before_unlock</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-before_use"><code>before_use</code></a></td><td><code>fn(ctx)</code></td><td>yes</td><td>item</td></tr>
+<tr><td><a href="#hook-on_cast"><code>on_cast</code></a> <span class="badge feature">feature: skills</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item, room</td></tr>
+<tr><td><a href="#hook-on_cast_start"><code>on_cast_start</code></a> <span class="badge feature">feature: skills</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item, room</td></tr>
+<tr><td><a href="#hook-on_close"><code>on_close</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-on_combat_tick"><code>on_combat_tick</code></a> <span class="badge feature">feature: combat</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item</td></tr>
+<tr><td><a href="#hook-on_damage"><code>on_damage</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item</td></tr>
+<tr><td><a href="#hook-on_death"><code>on_death</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
+<tr><td><a href="#hook-on_disengage"><code>on_disengage</code></a> <span class="badge feature">feature: combat</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
+<tr><td><a href="#hook-on_drop"><code>on_drop</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, mob</td></tr>
+<tr><td><a href="#hook-on_encumbrance_change"><code>on_encumbrance_change</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>Global only</td></tr>
+<tr><td><a href="#hook-on_enter"><code>on_enter</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-on_exit"><code>on_exit</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-on_get"><code>on_get</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, mob</td></tr>
+<tr><td><a href="#hook-on_give"><code>on_give</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item</td></tr>
+<tr><td><a href="#hook-on_group_change"><code>on_group_change</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>Global only</td></tr>
+<tr><td><a href="#hook-on_level_change"><code>on_level_change</code></a> <span class="badge feature">feature: leveling</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room, item</td></tr>
+<tr><td><a href="#hook-on_load"><code>on_load</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob, item</td></tr>
+<tr><td><a href="#hook-on_lock"><code>on_lock</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-on_open"><code>on_open</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-on_owner_change"><code>on_owner_change</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>Global only</td></tr>
+<tr><td><a href="#hook-on_perceive"><code>on_perceive</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob</td></tr>
+<tr><td><a href="#hook-on_reset"><code>on_reset</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room</td></tr>
+<tr><td><a href="#hook-on_say"><code>on_say</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
+<tr><td><a href="#hook-on_skill_use"><code>on_skill_use</code></a> <span class="badge feature">feature: skills</span></td><td><code>fn(ctx)</code></td><td>no</td><td>Global only</td></tr>
+<tr><td><a href="#hook-on_spawn"><code>on_spawn</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob, item</td></tr>
+<tr><td><a href="#hook-on_summon"><code>on_summon</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob</td></tr>
+<tr><td><a href="#hook-on_tell"><code>on_tell</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob</td></tr>
+<tr><td><a href="#hook-on_tick"><code>on_tick</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>room, mob, item</td></tr>
+<tr><td><a href="#hook-on_unlock"><code>on_unlock</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, room, mob</td></tr>
+<tr><td><a href="#hook-on_use"><code>on_use</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item</td></tr>
+<tr><td><a href="#hook-on_wake"><code>on_wake</code></a></td><td><code>fn(ctx, elapsed_pulses)</code></td><td>no</td><td>room, mob, item</td></tr>
+</tbody>
+</table>
+<section id="hook-before_attack" class="entry">
+<h3><code>before_attack</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Fires before an attack swing; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.weapon"><code>weapon</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_cast" class="entry">
+<h3><code>before_cast</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Fires before casting begins; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: mob, item, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.skill"><code>skill</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_close" class="entry">
+<h3><code>before_close</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor starts closing a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_drop" class="entry">
+<h3><code>before_drop</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor drops an item; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_enter" class="entry">
+<h3><code>before_enter</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor enters the room; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.from_room"><code>from_room</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_exit" class="entry">
+<h3><code>before_exit</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor leaves the room through an exit; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.to_room"><code>to_room</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_get" class="entry">
+<h3><code>before_get</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor picks up an item; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_lock" class="entry">
+<h3><code>before_lock</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor starts locking a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_open" class="entry">
+<h3><code>before_open</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor starts opening a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_order" class="entry">
+<h3><code>before_order</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before a pet is ordered; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: mob, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.text"><code>text</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_summon" class="entry">
+<h3><code>before_summon</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before mobs are summoned; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.label"><code>label</code></a>, <a href="ctx.html#ctx.count"><code>count</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_unlock" class="entry">
+<h3><code>before_unlock</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor starts unlocking a door or container; return ctx.deny(msg) to veto. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-before_use" class="entry">
+<h3><code>before_use</code> <span class="since">since api_version 1</span></h3>
+<p>Fires before an actor uses an item; return ctx.deny(msg) to veto.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Vetoable: return <a href="ctx.html#ctx.deny"><code>ctx.deny(msg)</code></a> to refuse the action.</p>
+<p>Attaches to: item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_cast" class="entry">
+<h3><code>on_cast</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Fires after a skill resolves.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, item, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.skill"><code>skill</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_cast_start" class="entry">
+<h3><code>on_cast_start</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Fires when a skill enters casting warmup.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, item, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.skill"><code>skill</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_close" class="entry">
+<h3><code>on_close</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after a door or container is closed. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_combat_tick" class="entry">
+<h3><code>on_combat_tick</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Fires once per combat round on each fighting mob and its equipped items.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.targets"><code>targets</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_damage" class="entry">
+<h3><code>on_damage</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an actor takes damage.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.amount"><code>amount</code></a>, <a href="ctx.html#ctx.type"><code>type</code></a>, <a href="ctx.html#ctx.losses"><code>losses</code></a>, <a href="ctx.html#ctx.parts"><code>parts</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_death" class="entry">
+<h3><code>on_death</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an actor dies; also a global hook (lib and rules packages).</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_disengage" class="entry">
+<h3><code>on_disengage</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
+<p>Fires when an engaged actor has no opponent left; ctx.event is 'flee', 'death' or 'stop'.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.event"><code>event</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_drop" class="entry">
+<h3><code>on_drop</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after an actor drops an item.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_encumbrance_change" class="entry">
+<h3><code>on_encumbrance_change</code> <span class="since">since api_version 1</span></h3>
+<p>Global hook: fires once for each change of an actor's encumbrance level.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: Global only</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.old_encumbrance_level"><code>old_encumbrance_level</code></a>, <a href="ctx.html#ctx.new_encumbrance_level"><code>new_encumbrance_level</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_enter" class="entry">
+<h3><code>on_enter</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after an actor enters the room.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.from_room"><code>from_room</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_exit" class="entry">
+<h3><code>on_exit</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after an actor leaves the room through an exit.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.to_room"><code>to_room</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_get" class="entry">
+<h3><code>on_get</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after an actor picks up an item.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_give" class="entry">
+<h3><code>on_give</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an actor gives an item to another actor.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_group_change" class="entry">
+<h3><code>on_group_change</code> <span class="since">since api_version 1</span></h3>
+<p>Global hook: fires for each player-group change, with ctx.event the 'join', 'leave', 'leader' or 'disband'.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: Global only</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.event"><code>event</code></a>, <a href="ctx.html#ctx.group"><code>group</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_level_change" class="entry">
+<h3><code>on_level_change</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: leveling</span></h3>
+<p>Fires once per level step when an actor's level changes up or down.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, room, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.old_level"><code>old_level</code></a>, <a href="ctx.html#ctx.new_level"><code>new_level</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_load" class="entry">
+<h3><code>on_load</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when a room is created on world load or reload, or when a mob or item is loaded.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_lock" class="entry">
+<h3><code>on_lock</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after a door or container is locked. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_open" class="entry">
+<h3><code>on_open</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after a door or container is opened. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_owner_change" class="entry">
+<h3><code>on_owner_change</code> <span class="since">since api_version 1</span></h3>
+<p>Global hook: fires after a mob's owner is set or cleared, with ctx.actor the mob, ctx.target the owner and ctx.event 'set' or 'clear'.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: Global only</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.event"><code>event</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_perceive" class="entry">
+<h3><code>on_perceive</code> <span class="since">since api_version 1</span></h3>
+<p>Fires on a mob when `rules.can_perceive` lets it notice an event on a channel, in its room or carried to it from farther away.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.event"><code>event</code></a>, <a href="ctx.html#ctx.channel"><code>channel</code></a>, <a href="ctx.html#ctx.intensity"><code>intensity</code></a>, <a href="ctx.html#ctx.cost"><code>cost</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.source_room"><code>source_room</code></a>, <a href="ctx.html#ctx.via_exit"><code>via_exit</code></a>, <a href="ctx.html#ctx.text"><code>text</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_reset" class="entry">
+<h3><code>on_reset</code> <span class="since">since api_version 1</span></h3>
+<p>Fires on a room when its zone resets.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_say" class="entry">
+<h3><code>on_say</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an actor says something aloud in the room.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.text"><code>text</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_skill_use" class="entry">
+<h3><code>on_skill_use</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: skills</span></h3>
+<p>Global hook: fires for each use of a skill, with ctx.outcome 'fail', 'resist', 'success' or 'report'.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: Global only</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.skill"><code>skill</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.targets"><code>targets</code></a>, <a href="ctx.html#ctx.outcome"><code>outcome</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_spawn" class="entry">
+<h3><code>on_spawn</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when a mob or item is freshly spawned, or on a room when a spawn rule fires.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_summon" class="entry">
+<h3><code>on_summon</code> <span class="since">since api_version 1</span></h3>
+<p>Fires once every mob of the summon has spawned.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.targets"><code>targets</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_tell" class="entry">
+<h3><code>on_tell</code> <span class="since">since api_version 1</span></h3>
+<p>Fires on a mob when an actor sends it a tell.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.text"><code>text</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_tick" class="entry">
+<h3><code>on_tick</code> <span class="since">since api_version 1</span></h3>
+<p>Fires on each world tick while simulated.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_unlock" class="entry">
+<h3><code>on_unlock</code> <span class="since">since api_version 1</span></h3>
+<p>Fires after a door or container is unlocked. For a door ctx.direction is set and ctx.item is None; for a container it is the other way around.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item, room, mob</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.direction"><code>direction</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_use" class="entry">
+<h3><code>on_use</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an actor uses an item.</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.item"><code>item</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_wake" class="entry">
+<h3><code>on_wake</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when an entity wakes from dormancy as the reality bubble reaches its room.</p>
+<p>Signature <code>fn(ctx, elapsed_pulses)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: room, mob, item</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.elapsed_pulses"><code>elapsed_pulses</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+</main>
+</body>
+</html>
