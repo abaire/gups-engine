@@ -65,6 +65,14 @@ jobs:
           cli/build/install/gups/bin/gups test --world template-world //...
           test -f cli/build/install/gups/docs/index.html
 
+      - name: Upload the API reference for Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.platform == 'linux-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-docs
+          path: cli/build/install/gups/docs/
+          if-no-files-found: error
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -116,6 +124,58 @@ jobs:
         with:
           name: gups-docs
           path: cli/build/distributions/gups-docs-*.zip
+
+  publish-docs:
+    name: Publish API reference
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: docs-pages
+      cancel-in-progress: true
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: pages-docs
+          path: ${{ runner.temp }}/gups-docs
+
+      - name: Update the documentation branch
+        run: |
+          test -f "$RUNNER_TEMP/gups-docs/index.html"
+          git worktree add --detach "$RUNNER_TEMP/gh-pages"
+          existing_branch="$(git ls-remote --heads origin refs/heads/gh-pages)"
+          if [ -n "$existing_branch" ]; then
+            git fetch --depth=1 origin refs/heads/gh-pages:refs/remotes/origin/gh-pages
+            git -C "$RUNNER_TEMP/gh-pages" switch -c gh-pages --track origin/gh-pages
+          else
+            git -C "$RUNNER_TEMP/gh-pages" switch --orphan gh-pages
+          fi
+          rsync -a --delete --exclude=.git "$RUNNER_TEMP/gups-docs/" "$RUNNER_TEMP/gh-pages/"
+          touch "$RUNNER_TEMP/gh-pages/.nojekyll"
+          git -C "$RUNNER_TEMP/gh-pages" add -A
+          if ! git -C "$RUNNER_TEMP/gh-pages" diff --cached --quiet; then
+            git -C "$RUNNER_TEMP/gh-pages" -c user.name=github-actions[bot] \
+              -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+              commit -m "Update API reference"
+            git -C "$RUNNER_TEMP/gh-pages" push origin gh-pages
+          fi
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/gups-docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   release:
     name: GitHub release
