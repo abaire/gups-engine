@@ -38,21 +38,6 @@ corpse. A player corpse decays like any other and drops its contents on the grou
 players loot a player's corpse? - Does a player corpse last longer than a mob's, or is it protected? - Should the owner
 be able to recover their corpse after logging out?
 
-### A hook when an item is destroyed
-
-**Spec:** §4.4 (hooks), §4.5 (`destroy`, `merge_stack`, `transform`), §4.9 (`charges` and `empty`), §4.15 (plugin
-listeners), §5.4 (corpse decay). **Today:** no hook fires when an item leaves the world. `ctx.destroy`, the facade
-`destroy`, a last charge spent with `empty="destroy"`, decay, a reload that deletes the prototype, and the belongings of
-a mob that dies or is despawned all remove items silently; only `on_spawn` marks an item's arrival. Mobs gain
-`on_despawn` (on the mob, its room and globally) when they are removed without dying. **Example:** a quest item that
-must not be lost wants to restart its quest when it is destroyed, or a plugin that tracks unique artifacts wants to know
-one is gone. **Questions:** - Which removals fire it: only a whole `destroy`, or also decay, spent charges, reloads and
-the belongings of a removed mob? - Does removing part of a stack (`destroy(item, count)` below the stack's count) fire
-it? - When a container is destroyed, do the items inside get the hook too, and in what order? - Do `merge_stack` (an
-item absorbed into another stack) and `transform` count as destruction? - Where does it fire: the item only, its holder
-or room, globally, and to plugin listeners? Item churn makes a global hook far busier than any actor hook. - Is it fired
-before the item leaves, so the hook still sees where it was and what it held?
-
 ## Perception and the world
 
 ### Global and cross-zone event subscriptions

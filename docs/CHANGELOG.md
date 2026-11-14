@@ -4,6 +4,19 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### A hook when an item is destroyed
+
+- New hook `on_destroy` fires on an item that stops existing (a whole `destroy`, decay, or a last charge), then its
+  room, before anything is removed; a destroyed container's contents get it too, container first, and may escape by
+  moving out. `ctx.destroyed_root` is the item whose destruction began it: the item itself, or the container it goes
+  with.
+- Merges, partial stack removals, `transform`, reloads, death and despawn fire no `on_destroy`.
+- `on_destroy` can be a global hook: `global_hook("on_destroy", fn)` runs for every destroyed item, with `ctx.self` the
+  item.
+- Plugins can listen to `on_destroy` with the new `onItemEvent`, whose call carries the item.
+- The template world gains a `salvage` command, and its tutorial zone shows `on_destroy` with an exploding flask, a key
+  that escapes a salvaged satchel, and a ghost that rises from a rotting corpse.
+
 ### Removing a mob without killing it
 
 - New hook `on_despawn` fires on a mob that leaves the world without dying, then its room, then globally, before the mob

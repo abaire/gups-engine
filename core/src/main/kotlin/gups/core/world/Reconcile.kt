@@ -83,7 +83,7 @@ private fun World.retireRemovedRooms(next: Prototypes, notes: MutableList<String
       is Player -> shiftOutOfRoom(a, next, fallback)
       is Mob -> removeMobForReload(a)
     }
-    for (i in gone.items) destroy(i)
+    for (i in gone.items) removeItem(i)
     roomsByLabel.remove(gone.label)
     entities.remove(gone.id)
     removed += gone.id
@@ -162,7 +162,7 @@ private fun World.reconcileItems(next: Prototypes, notes: MutableList<String>) {
       }
       else -> {
         notes += "item ${item.protoLabel} ($item) despawned: its prototype is gone"
-        destroy(item)
+        removeItem(item)
       }
     }
     item.dirty = true

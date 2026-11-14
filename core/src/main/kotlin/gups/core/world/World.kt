@@ -269,6 +269,9 @@ class World(
   /** Plugin event listeners per global-hookable hook, in plugin id then registration order. */
   val pluginEvents: MutableMap<HookName, MutableList<EventListener>> = LinkedHashMap()
 
+  /** Plugin item event listeners per hook, in plugin id then registration order. */
+  val pluginItemEvents: MutableMap<HookName, MutableList<ItemEventListener>> = LinkedHashMap()
+
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
 
@@ -332,6 +335,10 @@ class World(
   internal val dying = HashSet<EntityId>()
   /** Mobs whose `on_despawn` hooks are running right now. */
   internal val despawning = HashSet<EntityId>()
+  /** Roots of the destroys whose `on_destroy` hooks are running right now. */
+  internal val destroyRoots = HashSet<EntityId>()
+  /** Items whose `on_destroy` hooks have run in a destroy that hasn't finished. */
+  internal val destroyNotified = HashSet<EntityId>()
   internal var cascadeDepth = 0
   /** Nesting depth of work that holds affect events back until it has finished. */
   internal var affectEventHold = 0

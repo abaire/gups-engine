@@ -65,12 +65,12 @@ def test_the_dummy_mends_itself(t):
 def test_a_reset_restocks_the_armory(t):
     w = _world(t)
     armory = w.room(":armory")
-    t.eq(len(armory.items()), 1)
+    t.eq(len(armory.items()), 2)
     p = w.spawn_player("Tess", at = ":armory")
     p.do("get sword")
-    t.eq(len(armory.items()), 0)
-    w.run(pulses = 1200)
     t.eq(len(armory.items()), 1)
+    w.run(pulses = 1200)
+    t.eq(len(armory.items()), 2)
 
 def test_hooks_never_crash_quietly(t):
     # After everything above, nothing in this zone should have logged a script error.

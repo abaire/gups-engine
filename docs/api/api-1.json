@@ -2908,6 +2908,16 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_destroy",
+      "name": "on_destroy",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["item", "room"],
+      "ctx_fields": ["self", "item", "actor", "event", "destroyed_root", "room", "pulse", "rng"],
+      "doc": "Fires when an item stops existing (destroy, decay or a last charge), before it goes; container first; also a global hook (lib and rules packages).",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_disengage",
       "feature": "combat",
       "name": "on_disengage",
@@ -3198,6 +3208,12 @@
         "symbol": "ctx.count",
         "name": "count",
         "doc": "How many mobs are being summoned, for before_summon.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.destroyed_root",
+        "name": "destroyed_root",
+        "doc": "For on_destroy, the item whose destruction began it: the item itself, or the container it is destroyed with.",
         "since": 1
       },
       {
@@ -4290,7 +4306,7 @@
       {
         "symbol": "ctx.destroy",
         "name": "destroy",
-        "doc": "Removes an item and everything inside it, or count of a stack.",
+        "doc": "Removes an item and everything inside it, firing on_destroy on each first, or count of a stack, firing nothing.",
         "since": 1,
         "params": [
           {

@@ -245,7 +245,7 @@ fun World.stack(item: Item): Item {
   val into = stackPeers(item)?.firstOrNull { it !== item && it.stacksWith(item) } ?: return item
   into.count += item.count
   into.dirty = true
-  destroy(item)
+  removeItem(item)
   return into
 }
 
@@ -266,30 +266,15 @@ private fun Item.stacksWith(other: Item): Boolean =
     charges == other.charges &&
     customAttributes == other.customAttributes
 
-/**
- * The `destroy` verb: removes [item] and everything inside it, or only [count] of a stack when
- * [count] is less than its count.
- */
-fun World.destroy(item: Item, count: Int = item.count) {
+/** Removes [item] and everything inside it at once, firing no hooks: merges and reloads. */
+internal fun World.removeItem(item: Item) {
   require(item.id in entities) { "$item is not in the world" }
-  require(count in 1..item.count) {
-    "destroy: count must be between 1 and ${item.count}, got $count"
-  }
-  if (count == item.count) {
-    val holder = custodian(item)
-    if (holder is Player && !item.debug)
-      itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
-    unindex(item)
-    markRemoved(item)
-    forgetItemTree(item)
-    holder?.let { refreshHoldings(it) }
-    return
-  }
   val holder = custodian(item)
   if (holder is Player && !item.debug)
-    itemEvents += ItemEvent(item.id, pulse, item.location, item.location, "reduce")
-  item.count -= count
-  item.dirty = true
+    itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
+  unindex(item)
+  markRemoved(item)
+  forgetItemTree(item)
   holder?.let { refreshHoldings(it) }
 }
 
@@ -315,7 +300,7 @@ internal fun World.spendCharge(item: Item) {
     if (item.charges!! > 0) return
   }
   when (val empty = item.proto.empty) {
-    EmptyAction.Destroy -> destroy(item, 1)
+    EmptyAction.Destroy -> destroy(item, 1, DestroyCause.EMPTY)
     EmptyAction.Keep -> Unit
     is EmptyAction.Variant -> becomeVariant(item, item.proto.variants.getValue(empty.name))
   }
@@ -323,6 +308,7 @@ internal fun World.spendCharge(item: Item) {
 
 /** Turns one of [item] into [label]: the item itself, or one split off a stack and restacked. */
 private fun World.becomeVariant(item: Item, label: Label) {
+  if (isBeingDestroyed(item)) return
   if (item.count == 1) return transformItem(item, label)
   val loc = item.location
   val thatLocation = (loc as? ItemLocation.Equipped)?.let { ItemLocation.Carried(it.actor) } ?: loc
@@ -350,7 +336,7 @@ internal fun World.decay(item: Item) {
       tellSight(room as Room, "decay", null, msg(KernelMsg.DECAYS, "item" to item.name))
     }
   }
-  destroy(item)
+  destroy(item, cause = DestroyCause.DECAY)
 }
 
 /** Forgets [item] and its contents without touching the holder's index. */
@@ -374,11 +360,15 @@ private fun World.checkTarget(item: Item, to: ItemLocation) {
       require(worn == null || worn === item) { "${a.name} already wears something in ${to.slot}" }
     }
     is ItemLocation.Contained -> {
-      var c: Item? = requireNotNull(item(to.container)) { "No container ${to.container}" }
-      requireNotNull(c!!.container) { "$c is not a container" }
+      val c0 = requireNotNull(item(to.container)) { "No container ${to.container}" }
+      requireNotNull(c0.container) { "$c0 is not a container" }
+      var c: Item? = c0
       while (c != null) {
         require(c !== item) { "Putting $item into ${to.container} would make a containment cycle" }
         c = (c.location as? ItemLocation.Contained)?.let { item(it.container) }
+      }
+      require(!(c0.id in destroyNotified && isBeingDestroyed(c0))) {
+        "${c0.name} is being destroyed"
       }
     }
   }

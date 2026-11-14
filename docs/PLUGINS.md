@@ -927,6 +927,25 @@ r.onEvent("on_death", "Death resets hunger.") { call ->
 }
 ```
 
+### Item event listeners
+
+`onItemEvent(name, doc, listener)` listens to an engine event about an item and runs after the scripts' global hooks for
+it. `on_destroy` is the only supported event; any other name fails `register`. Listeners run in plugin-id order, then
+registration order, and can't veto or change the event. The listener gets a `PluginItemEventCall` with `world`, `event`,
+`item` (a `PluginItem`, still in the world), and `fields`: `actor` (the holder as a `PluginActor`, or `null` on the
+ground), `event` (the cause: `"destroy"`, `"decay"`, or `"empty"`), and `destroyed_root` (the `PluginItem` whose
+destruction began it: the item itself, or the container it is destroyed with). A listener runs only for an item whose
+global hooks run, so an item that escaped its container's destruction doesn't reach it. A throw records a `plugin`
+diagnostic, and the item is still destroyed.
+
+```kotlin
+r.onItemEvent("on_destroy", "Tracks unique artifacts.") { call ->
+    if (call.item.hasTag("artifact")) {
+        call.world.log("artifact ${call.item.name} lost (${call.fields["event"]})")
+    }
+}
+```
+
 ### The builtin
 
 `hunger.eat(actor, amount)` lowers an actor's hunger by `amount`, not below 0, and returns the new value. A builtin runs

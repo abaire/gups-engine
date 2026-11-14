@@ -165,6 +165,12 @@ interface PluginRegistry {
    */
   fun onEvent(name: String, doc: String, fn: (PluginEventCall) -> Unit) {}
 
+  /**
+   * Listens to an engine event about an item, after the scripts' global hooks for it; it can't veto
+   * or change the event. Only on_destroy; any other name fails register.
+   */
+  fun onItemEvent(name: String, doc: String, fn: (PluginItemEventCall) -> Unit) {}
+
   fun addTrait(trait: PluginTrait)
 
   /**
@@ -338,6 +344,20 @@ data class PluginEventCall(
   /** The actor the event is about: the global hook's ctx.self. */
   val actor: PluginActor,
   /** The event's ctx fields as plain values. */
+  val fields: Map<String, Any?>,
+)
+
+/** One run of a plugin's item event listener, after the scripts' global hooks. */
+data class PluginItemEventCall(
+  val world: PluginWorld,
+  /** The event: on_destroy. */
+  val event: String,
+  /** The item the event is about, still in the world. */
+  val item: PluginItem,
+  /**
+   * The event's ctx fields as plain values: actor (the holder, or null), event (the cause) and
+   * destroyed_root (the item whose destruction began it: the item itself, or a container).
+   */
   val fields: Map<String, Any?>,
 )
 

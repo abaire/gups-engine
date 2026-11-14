@@ -430,6 +430,23 @@
             ]
         },
         {
+            "label": "//zones/tutorial:rotten_ghost",
+            "name": "a rotten ghost",
+            "keywords": [
+                "rotten",
+                "ghost"
+            ],
+            "level": 1,
+            "stats": {},
+            "vitals": {
+                "hp": 10
+            },
+            "resists": {},
+            "skills": {},
+            "traits": [],
+            "factions": null
+        },
+        {
             "label": "//zones/tutorial:shopkeeper",
             "name": "the shopkeeper",
             "keywords": [
@@ -899,6 +916,17 @@
             "value": 0
         },
         {
+            "label": "//zones/tutorial:satchel",
+            "name": "a traveler's satchel",
+            "keywords": [
+                "satchel"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
+        },
+        {
             "label": "//zones/tutorial:shadow_cloak",
             "name": "a shadow cloak",
             "keywords": [
@@ -1036,6 +1064,18 @@
             "wear": null,
             "weight": 1,
             "value": 9
+        },
+        {
+            "label": "//zones/tutorial:volatile_flask",
+            "name": "a volatile flask",
+            "keywords": [
+                "volatile",
+                "flask"
+            ],
+            "kind": "misc",
+            "wear": null,
+            "weight": 1,
+            "value": 0
         },
         {
             "label": "//zones/tutorial:whetstone",

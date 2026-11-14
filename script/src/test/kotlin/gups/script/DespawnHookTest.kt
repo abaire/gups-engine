@@ -226,7 +226,7 @@ class DespawnHookTest {
     val err = r.errors.first { it.pkg == "lib" }
     assertContains(
       err.message,
-      "can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage, on_death, on_despawn and on_skill_use can",
+      "can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage, on_death, on_despawn, on_destroy and on_skill_use can",
     )
   }
 

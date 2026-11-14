@@ -201,3 +201,11 @@ mob("gate_guard",
     factions = ["//lib:townsfolk"],
     behaviors = [guard(exit = DIR.north, disposition_above = 50)],
 )
+
+mob("rotten_ghost",
+    name = "a rotten ghost",
+    keywords = ["rotten", "ghost"],
+    desc = "A pale, tattered apparition reeking of the grave.",
+    vitals = vitals(hp = 10),
+    behaviors = [wander()],
+)

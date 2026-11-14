@@ -192,7 +192,8 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
 
   @StarlarkMethod(
     name = "destroy",
-    doc = "Removes an item and everything inside it, or count of a stack.",
+    doc =
+      "Removes an item and everything inside it, firing on_destroy on each first, or count of a stack, firing nothing.",
     parameters =
       [
         Param(name = "item", named = true, doc = "Item to remove from the world."),

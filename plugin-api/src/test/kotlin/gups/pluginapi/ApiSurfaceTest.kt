@@ -18,6 +18,7 @@ class ApiSurfaceTest {
       PluginRefused::class,
       PluginTickCall::class,
       PluginEventCall::class,
+      PluginItemEventCall::class,
       PluginLane::class,
       PluginRole::class,
       PluginParam::class,

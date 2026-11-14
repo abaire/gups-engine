@@ -225,7 +225,7 @@ class GlobalHookTest {
   }
 
   @Test
-  fun `an unaccepted name fails to load, listing the eight global hook names`() {
+  fun `an unaccepted name fails to load, listing the nine global hook names`() {
     val r =
       loadZonePackage(
         mapOf(
@@ -242,7 +242,7 @@ class GlobalHookTest {
       )
     assertContains(
       onlyPackageError(r, "lib").message,
-      "can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage, on_death, on_despawn and on_skill_use can",
+      "can't be a global hook; only on_level_change, on_encumbrance_change, on_group_change, on_owner_change, on_disengage, on_death, on_despawn, on_destroy and on_skill_use can",
     )
   }
 

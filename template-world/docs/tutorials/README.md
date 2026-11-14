@@ -48,6 +48,7 @@ persistence, and linking to official specifications and generated API references
    * The rules that decide who notices what (`sense_cost`, `can_perceive`, `perceive_message`, `door_intensity`)
    * Reacting to level changes with `on_level_change`
    * Asynchronous timers with `ctx.after()`
+   * Reacting to destruction with `on_destroy`
 7. **[07. Testing and Verifying Your Zone](07_testing_your_zone.md)**
    * The Starlark test harness API (`*_test.star`)
    * Spawning virtual players and executing simulated commands

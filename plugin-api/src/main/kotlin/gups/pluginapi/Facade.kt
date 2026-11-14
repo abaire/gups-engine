@@ -208,7 +208,8 @@ interface PluginWorld : PluginGmcpWorld {
 
   /**
    * Removes [count] (by default the whole stack) of [item] from the world, with everything inside
-   * it when whole, as `ctx.destroy` does. A [count] outside 1..the stack's is an error.
+   * it when whole, firing `on_destroy` on each first (or nothing when [count] is less than the
+   * stack's count), as `ctx.destroy` does. A [count] outside 1..the stack's is an error.
    */
   fun destroy(item: PluginItem, count: Int? = null)
 

@@ -28,6 +28,7 @@ import gups.pluginapi.PluginFactionsCall
 import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginGmcpWorld
 import gups.pluginapi.PluginHookCall
+import gups.pluginapi.PluginItemEventCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginModifierPoint
 import gups.pluginapi.PluginNamed
@@ -141,6 +142,7 @@ internal class PluginRegistryImpl(
   val started = mutableListOf<(PluginWorld) -> Unit>()
   val periodic = mutableListOf<Triple<Int, String, (PluginTickCall) -> Unit>>()
   val events = mutableListOf<Triple<String, String, (PluginEventCall) -> Unit>>()
+  val itemEvents = mutableListOf<Triple<String, String, (PluginItemEventCall) -> Unit>>()
   val traits = mutableMapOf<String, PluginTrait>()
   val rulesExports = LinkedHashMap<String, PluginRulesExportInfo>()
   private var _creation: PluginCreation? = null
@@ -320,6 +322,13 @@ internal class PluginRegistryImpl(
     events += Triple(name, doc, fn)
   }
 
+  override fun onItemEvent(name: String, doc: String, fn: (PluginItemEventCall) -> Unit) {
+    require(name in ITEM_EVENT_NAMES) {
+      "onItemEvent(): '$name' is not an item event; expected one of ${ITEM_EVENT_NAMES.joinToString(", ")}"
+    }
+    itemEvents += Triple(name, doc, fn)
+  }
+
   override fun addRulesExport(name: String, doc: String, type: PluginRulesType) {
     require(Regex("${Regex.escape(pluginId)}_[a-z][a-z0-9_]*").matches(name)) {
       "addRulesExport(): '$name' must be '${pluginId}_' then a snake_case name"
@@ -435,6 +444,9 @@ internal class PluginRegistryImpl(
           HookName.ON_SKILL_USE,
         )
         .map { it.scriptName }
+
+    /** The item events a plugin may listen to, in declaration order. */
+    val ITEM_EVENT_NAMES = listOf(HookName.ON_DESTROY).map { it.scriptName }
   }
 }
 

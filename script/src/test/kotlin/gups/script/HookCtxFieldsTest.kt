@@ -2,7 +2,6 @@ package gups.script
 
 import gups.core.Label
 import gups.core.WORLD_TICK_PULSES
-import gups.core.model.Actor
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.world.HookContext
@@ -12,6 +11,7 @@ import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.awardXp
 import gups.core.world.despawn
+import gups.core.world.destroy
 import gups.core.world.groupAdd
 import gups.core.world.setOwner
 import gups.core.world.spawnItem
@@ -40,7 +40,7 @@ class HookCtxFieldsTest {
       return inner.invokeHook(world, owner, hook, ctx)
     }
 
-    override fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) {
+    override fun invokeGlobal(world: World, hook: HookName, subject: Entity, ctx: HookContext) {
       calls += hook to ctx
       inner.invokeGlobal(world, hook, subject, ctx)
     }
@@ -118,7 +118,7 @@ class HookCtxFieldsTest {
     p.skills[Label("//zones/z:mark")] = 100
     f.w.spawnItem(Label("//zones/z:rock"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:cup"), ItemLocation.Carried(p.id))
-    f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
+    val key = f.w.spawnItem(Label("//zones/z:key"), ItemLocation.Carried(p.id))
     f.w.spawnItem(Label("//zones/z:chest"), ItemLocation.Carried(p.id))
     // A heavy load, so the encumbrance level changes and the global hook fires.
     f.w.spawnItem(Label("//zones/z:lead"), ItemLocation.Carried(p.id))
@@ -159,6 +159,7 @@ class HookCtxFieldsTest {
     assertTrue(far.isDormant)
     f.w.teleport(p, far)
     f.w.despawn(f.w.spawnMob(Label("//zones/z:wolf"), far))
+    f.w.destroy(key)
     f.run()
 
     val seen =
