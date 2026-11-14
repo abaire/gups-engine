@@ -61,6 +61,7 @@ private val GLOBAL_HOOK_NAMES =
     "on_owner_change",
     "on_disengage",
     "on_death",
+    "on_despawn",
     "on_skill_use",
   )
 

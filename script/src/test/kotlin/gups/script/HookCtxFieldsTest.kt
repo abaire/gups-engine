@@ -11,6 +11,7 @@ import gups.core.world.HookOutcome
 import gups.core.world.ScriptHost
 import gups.core.world.World
 import gups.core.world.awardXp
+import gups.core.world.despawn
 import gups.core.world.groupAdd
 import gups.core.world.setOwner
 import gups.core.world.spawnItem
@@ -157,6 +158,7 @@ class HookCtxFieldsTest {
     val far = f.w.room(Label("//zones/z:far"))
     assertTrue(far.isDormant)
     f.w.teleport(p, far)
+    f.w.despawn(f.w.spawnMob(Label("//zones/z:wolf"), far))
     f.run()
 
     val seen =

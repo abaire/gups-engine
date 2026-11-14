@@ -1470,6 +1470,24 @@
         ]
       },
       {
+        "symbol": "ctx.despawn",
+        "name": "despawn",
+        "doc": "Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.despawn.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to remove."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.destroy",
         "name": "destroy",
         "doc": "Removes an item and everything inside it, or count of a stack.",

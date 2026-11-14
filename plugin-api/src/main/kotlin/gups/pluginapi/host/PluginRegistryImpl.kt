@@ -431,6 +431,7 @@ internal class PluginRegistryImpl(
           HookName.ON_OWNER_CHANGE,
           HookName.ON_DISENGAGE,
           HookName.ON_DEATH,
+          HookName.ON_DESPAWN,
           HookName.ON_SKILL_USE,
         )
         .map { it.scriptName }

@@ -58,6 +58,7 @@ import gups.core.world.clearOwner
 import gups.core.world.clearStanding
 import gups.core.world.custodian
 import gups.core.world.damage
+import gups.core.world.despawn
 import gups.core.world.destroy
 import gups.core.world.disposition
 import gups.core.world.echo
@@ -76,6 +77,7 @@ import gups.core.world.groupRemove
 import gups.core.world.groupSetLeader
 import gups.core.world.heal
 import gups.core.world.heldAffects
+import gups.core.world.isDespawning
 import gups.core.world.isDying
 import gups.core.world.isInactive
 import gups.core.world.isSimulated
@@ -1332,6 +1334,12 @@ internal class WorldFacade(
   override fun clearOwner(mob: PluginActor): Boolean =
     world.clearOwner(mobOf(mob, "clearOwner(mob)"))
 
+  override fun despawn(mob: PluginActor) {
+    val m = mobOf(mob, "despawn(mob)")
+    require(!world.isDying(m)) { "despawn(mob): ${m.name} is dying" }
+    world.despawn(m)
+  }
+
   override fun setLeash(mob: PluginActor, leash: Int?) {
     val m = mobOf(mob, "setLeash(mob)")
     require(leash == null || leash >= 0) { "setLeash(leash): must be an int of at least 0 or null" }
@@ -1344,6 +1352,13 @@ internal class WorldFacade(
 
   // Combat and groups, as `ctx` engages and manages them.
 
+  private fun requireCombatReady(d: Actor) {
+    if (world.isDying(d)) throw IllegalArgumentException("startCombat(): ${d.name} is dying")
+    if (world.isDespawning(d)) {
+      throw IllegalArgumentException("startCombat(): ${d.name} is leaving the world")
+    }
+  }
+
   override fun startCombat(a: PluginActor, b: PluginActor) {
     needs(world, Feature.COMBAT, "startCombat")
     val x = actorOf(a, "startCombat(a)")
@@ -1353,8 +1368,8 @@ internal class WorldFacade(
       throw IllegalArgumentException(
         "startCombat(): ${x.name} and ${y.name} are not in the same room"
       )
-    for (d in listOf(x, y)) if (world.isDying(d))
-      throw IllegalArgumentException("startCombat(): ${d.name} is dying")
+    requireCombatReady(x)
+    requireCombatReady(y)
     world.startCombat(x, y)
   }
 
@@ -1583,18 +1598,7 @@ internal class WorldFacade(
     if (!STANDING_EVENT_NAME.matches(event)) {
       throw IllegalArgumentException("remember(event): must match [a-z][a-z0-9_]*, got '$event'")
     }
-    val sk =
-      if (skill == null) {
-        null
-      } else {
-        val l =
-          runCatching { Label(skill) }.getOrNull()
-            ?: throw IllegalArgumentException("remember(skill): invalid skill label '$skill'")
-        if (l !in world.protos.skills) {
-          throw IllegalArgumentException("remember(skill): unknown skill '$skill'")
-        }
-        l
-      }
+    val sk = skill?.let { knownSkill(it, "remember").label }
     if (amount < 0L) {
       throw IllegalArgumentException("remember(amount): must be non-negative, got $amount")
     }
@@ -1850,6 +1854,14 @@ internal fun toHookResult(v: Any?, what: String): Any? =
     else -> throw IllegalArgumentException("$what: ${v::class.java.name} is not a plain value")
   }
 
+private fun toAttrMap(v: Map<*, *>, what: String): AttrValue.M =
+  AttrValue.M(
+    v.entries.associate { (k, x) ->
+      (k as? String ?: throw IllegalArgumentException("$what: map keys must be strings")) to
+        toAttr(x ?: throw IllegalArgumentException("$what: maps can't hold null"), what)
+    }
+  )
+
 /** A plain value as an attribute: Int/Long, String, Boolean, List and Map with String keys. */
 internal fun toAttr(v: Any, what: String): AttrValue =
   when (v) {
@@ -1861,13 +1873,7 @@ internal fun toAttr(v: Any, what: String): AttrValue =
       AttrValue.L(
         v.map { toAttr(it ?: throw IllegalArgumentException("$what: lists can't hold null"), what) }
       )
-    is Map<*, *> ->
-      AttrValue.M(
-        v.entries.associate { (k, x) ->
-          (k as? String ?: throw IllegalArgumentException("$what: map keys must be strings")) to
-            toAttr(x ?: throw IllegalArgumentException("$what: maps can't hold null"), what)
-        }
-      )
+    is Map<*, *> -> toAttrMap(v, what)
     else ->
       throw IllegalArgumentException(
         "$what: ${v::class.simpleName} can't be stored (use Long, String, Boolean, List or Map)"

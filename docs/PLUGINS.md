@@ -112,7 +112,8 @@ Plugins never see the engine's `World` or entities. They get a `PluginWorld` fac
   duration = null)` spawns mobs beside the caster as `ctx.summon` does; a `before_summon` veto returns an empty list.
   `setOwner(mob, player)` makes an in-world player the owner of a mob and `clearOwner(mob)` releases it, each returning
   whether anything changed; `setLeash(mob, leash)` overrides the mob's leash with an int of at least 0 or unleashes it
-  with null, and `resetLeash(mob)` drops the override. `PluginActor` reads `owner` (the in-world player or null),
+  with null, and `resetLeash(mob)` drops the override. `despawn(mob)` removes a mob as `ctx.despawn` does: no corpse,
+  loot or XP, nothing printed, and its belongings go with it. `PluginActor` reads `owner` (the in-world player or null),
   `homeRoom` (a mob's home room or null), `leash` (a mob's effective leash) and `leashOverridden`.
 - **combat and groups:** `startCombat(a, b)`, `stopCombat(a, b = null)` and `clearContributions(victim, contributor =
   null)` engage and disengage combat and credit contributions, as `ctx.start_combat`, `ctx.stop_combat` and
@@ -910,15 +911,15 @@ r.every(120, "Raises hunger once per world tick.") { call ->
 ### Engine event listeners
 
 `onEvent(name, doc, listener)` listens to an engine event and runs after the scripts' global hook for it. The listener
-gets a `PluginEventCall` with `world`, `event`, the `actor` and the event's `fields`. The seven events are
+gets a `PluginEventCall` with `world`, `event`, the `actor` and the event's `fields`. The eight events are
 `on_level_change` (with `old_level` and `new_level`), `on_encumbrance_change` (with `old_encumbrance_level` and
 `new_encumbrance_level`), `on_group_change` (with `event` and a `group`), `on_owner_change` (with `target` and `event`),
-`on_disengage` (with `event`), `on_death` (with `killer`, or null) and `on_skill_use` (with `skill`, `outcome`,
-`target`, `item`, and `targets`, the landed actors). Any other name fails `register`. Ints arrive as `Long`s and actors
-as `PluginActor`s. A listener can't veto or change the event, but may change the world as a script global hook may;
-listeners run in plugin-id order, then registration order. A listener for an event whose feature is off, such as
-`on_level_change` without `leveling`, registers and never runs. At `on_death` the victim is still in the world, so the
-listener can still change it.
+`on_disengage` (with `event`), `on_death` (with `killer`, or null), `on_despawn` (no fields; the mob is still in the
+world, holding its belongings) and `on_skill_use` (with `skill`, `outcome`, `target`, `item`, and `targets`, the landed
+actors). Any other name fails `register`. Ints arrive as `Long`s and actors as `PluginActor`s. A listener can't veto or
+change the event, but may change the world as a script global hook may; listeners run in plugin-id order, then
+registration order. A listener for an event whose feature is off, such as `on_level_change` without `leveling`,
+registers and never runs. At `on_death` the victim is still in the world, so the listener can still change it.
 
 ```kotlin
 r.onEvent("on_death", "Death resets hunger.") { call ->

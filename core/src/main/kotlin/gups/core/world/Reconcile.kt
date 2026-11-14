@@ -81,7 +81,7 @@ private fun World.retireRemovedRooms(next: Prototypes, notes: MutableList<String
   for (gone in roomsByLabel.values.filter { it.label !in next.rooms }) {
     for (a in gone.actors) when (a) {
       is Player -> shiftOutOfRoom(a, next, fallback)
-      is Mob -> despawn(a)
+      is Mob -> removeMobForReload(a)
     }
     for (i in gone.items) destroy(i)
     roomsByLabel.remove(gone.label)
@@ -128,7 +128,7 @@ private fun World.rebindMobs(
     val p = next.mobs[m.protoLabel]
     if (p == null) {
       notes += "mob ${m.protoLabel} ($m) despawned: its prototype is gone"
-      despawn(m)
+      removeMobForReload(m)
     } else {
       refill[m] = rebind(m, p, old.mobs[m.protoLabel] ?: m.proto)
     }
@@ -254,7 +254,7 @@ private fun nextChargesFor(item: Item, p: ItemProto): Int? =
   }
 
 /** Disengages a mob, clears its action and removes it from its room. */
-private fun World.despawn(m: Mob) {
+private fun World.removeMobForReload(m: Mob) {
   disengageAll(m, null)
   endActivity(m, TaskEnd.GONE)
   m.actionQueue.clear()

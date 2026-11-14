@@ -275,10 +275,7 @@ internal fun World.endAffect(
 }
 
 private fun World.dismissSummon(a: Actor) {
-  if (a !is Mob || !a.inWorld) return
-  tellSight(a.room, "exit", a, msg(KernelMsg.AFFECT_FADES, "actor" to a.name.cap()), a)
-  disengageAll(a, null)
-  removeActor(a)
+  if (a is Mob) fadeAway(a)
 }
 
 // ---- Item affects ----------------------------------------------------------------------------

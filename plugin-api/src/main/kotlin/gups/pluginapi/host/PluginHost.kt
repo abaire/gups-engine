@@ -116,6 +116,7 @@ internal constructor(
         mapOf("target" to ctx.target?.let { ActorFacade(it, w) }, "event" to ctx.event)
       HookName.ON_DISENGAGE -> mapOf("event" to ctx.event)
       HookName.ON_DEATH -> mapOf("killer" to ctx.actor?.let { ActorFacade(it, w) })
+      HookName.ON_DESPAWN -> emptyMap()
       HookName.ON_SKILL_USE ->
         mapOf(
           "skill" to ctx.skill!!.label.v,

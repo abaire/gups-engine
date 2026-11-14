@@ -149,6 +149,52 @@ class FacadeMobsTest {
     assertContains(e.message!!, "at least 0")
   }
 
+  @Test
+  fun `despawn removes a mob, rejects players and second calls`() {
+    val wolf = ActorFacade(w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a"))), w)
+    assertTrue(wolf.inWorld)
+    f.despawn(wolf)
+    assertFalse(wolf.inWorld)
+    assertFalse(roomA.actors.any { it.id == wolf.id })
+
+    val second = assertFailsWith<IllegalArgumentException> { f.despawn(wolf) }
+    assertContains(second.message!!, "no longer in the world")
+
+    val onPlayer = assertFailsWith<IllegalArgumentException> { f.despawn(player) }
+    assertEquals("despawn(mob): must be a mob", onPlayer.message)
+  }
+
+  @Test
+  fun `despawn on a spawn-rule mob lets the rule respawn it after its deadline`() {
+    val w2 =
+      world(
+        files =
+          mapOf(
+            "zones/z/package.star" to "package(api_version = 1, kind = \"zone\", title = \"Z\")",
+            "zones/z/rooms.star" to
+              """
+              room("a", name = "Glade", desc = "A glade.", flags = ["dead_end_ok"],
+                   spawns = [spawn(":wolf", respawn_pulses = 2)])
+              mob("wolf", name = "a wolf", keywords = ["wolf"])
+              """,
+          )
+      )
+    val f2 = WorldFacade(w2, "weather") {}
+    w2.spawnPlayer("Ann", Label("//zones/z:a"))
+    val room = f2.room("//zones/z:a")!!
+    val wolf = room.actors.single { it.name == "a wolf" }
+    assertTrue(wolf.inWorld)
+
+    f2.despawn(wolf)
+    assertFalse(wolf.inWorld)
+    assertTrue(room.actors.none { it.name == "a wolf" })
+
+    w2.runPulses(120)
+    val wolves = room.actors.filter { it.name == "a wolf" }
+    assertEquals(1, wolves.size)
+    assertTrue(wolves.single().inWorld)
+  }
+
   companion object {
     val MOB_FILES =
       mapOf(

@@ -4,6 +4,19 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Removing a mob without killing it
+
+- New hook `on_despawn` fires on a mob that leaves the world without dying, then its room, then globally, before the mob
+  is removed.
+- `ctx.despawn(mob)` takes a mob out of the world without killing it: no corpse, loot or XP, nothing printed, and its
+  belongings go with it.
+- The plugin facade gains `despawn(mob)`, following `ctx.despawn`.
+- Plugins can listen to `on_despawn` with `onEvent`.
+- A summon fading and a debug mob expiring now fire `on_despawn`, and their opponents get `on_disengage` with `"stop"`.
+  A debug mob's fade line is now a sight message.
+- An actor that leaves the world while still engaged, by any route, now frees its opponents, who get `on_disengage` with
+  `"stop"`. Before, an aborted login could leave a mob fighting a player who was gone.
+
 ### Plugin facade parity with ctx
 
 - The plugin facade now follows a parity rule: every `ctx` verb and view field has a facade counterpart or a recorded

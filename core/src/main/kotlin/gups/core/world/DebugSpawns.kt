@@ -28,10 +28,7 @@ internal fun World.expireDebugMobs() {
 }
 
 private fun World.despawnDebug(m: Mob) {
-  if (!m.inWorld) return
-  disengageAll(m, null)
-  val room = m.room
+  if (!m.inWorld || isLeaving(m)) return
   for (item in m.inventory + m.equipment.values) markDebug(item)
-  removeActor(m)
-  echo(room, "${m.name.cap()} fades away.")
+  fadeAway(m)
 }

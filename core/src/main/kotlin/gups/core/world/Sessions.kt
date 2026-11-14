@@ -194,7 +194,6 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
     pet.dirty = true
     for (item in pet.inventory + pet.equipment.values) markDirtyTree(item)
   }
-  despawnDebugMobs(player)
   // Logout saves the character and everything it carries, at once.
   player.dirty = true
   for (item in player.inventory + player.equipment.values) markDirtyTree(item)
@@ -204,6 +203,7 @@ fun World.quit(player: Player, message: String = msg(KernelMsg.QUIT_GOODBYE)) {
   stowPets(player, pets)
   removeActor(player)
   echo(room, msg(KernelMsg.QUIT_LEFT, "name" to player.name))
+  despawnDebugMobs(player)
   fireDisengage(freed, "stop")
 }
 

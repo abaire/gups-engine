@@ -28,6 +28,7 @@ internal fun World.processDeath(victim: Actor) {
 }
 
 private fun World.runDeath(victim: Actor) {
+  if (isDespawning(victim)) return
   if (!victim.inWorld || victim.condition != Condition.DEAD) return
   val standing = askCondition(victim)
   if (standing != Condition.DEAD) return setCondition(victim, standing)
@@ -58,8 +59,8 @@ private fun World.runDeath(victim: Actor) {
 private fun World.killerOf(victim: Actor): Actor? =
   victim.lastAttacker?.let(::actor)?.takeIf { it.inWorld && it !== victim }
 
-/** Clears what a dying actor was in the middle of. */
-private fun World.wipeActivity(victim: Actor) {
+/** Clears what a dying or despawning actor was in the middle of. */
+internal fun World.wipeActivity(victim: Actor) {
   victim.contributions.clear()
   endActivity(victim, TaskEnd.GONE)
   victim.actionQueue.clear()

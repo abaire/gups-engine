@@ -65,7 +65,7 @@ cross-zone event listeners do not wake dormant reality bubbles or violate pulse 
 
 ## Mobs
 
-### Removing a mob without killing it
+### Removing a mob without killing it (Done in Milestone 54)
 
 **Spec:** §4.3 (`summon` primitive), §4.5 (`spawn`, `destroy`, `summon`), §4.2 (spawns), §5.4 (respawns), §4.15.
 **Today:** a mob leaves the world when it dies, when its `summoned` affect ends (it "fades away": a sight message, every

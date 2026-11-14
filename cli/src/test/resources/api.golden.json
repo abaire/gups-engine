@@ -2898,6 +2898,16 @@
       "since": 1
     },
     {
+      "symbol": "hook:on_despawn",
+      "name": "on_despawn",
+      "signature": "fn(ctx)",
+      "vetoable": false,
+      "attach_to": ["mob", "room"],
+      "ctx_fields": ["self", "actor", "room", "pulse", "rng"],
+      "doc": "Fires when a mob leaves the world without dying, before it goes; also a global hook (lib and rules packages).",
+      "since": 1
+    },
+    {
       "symbol": "hook:on_disengage",
       "feature": "combat",
       "name": "on_disengage",
@@ -4256,6 +4266,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Text shown to the actor whose action is refused."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.despawn",
+        "name": "despawn",
+        "doc": "Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.despawn.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to remove."
           }
         ]
       },

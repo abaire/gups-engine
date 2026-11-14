@@ -356,6 +356,16 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.despawn" class="entry">
+<h4><code>despawn(mob)</code> <span class="since">since api_version 1</span></h4>
+<p>Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.despawn.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to remove.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.destroy" class="entry">
 <h4><code>destroy(item, count = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Removes an item and everything inside it, or count of a stack.</p>

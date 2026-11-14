@@ -551,6 +551,14 @@ interface PluginWorld : PluginGmcpWorld {
   fun clearOwner(mob: PluginActor): Boolean =
     throw UnsupportedOperationException("clearOwner is not supported")
 
+  /**
+   * Takes [mob] out of the world without killing it, as `ctx.despawn` does: no corpse, loot or XP,
+   * nothing printed, and its belongings go with it. A player, a mob not in the world, or a dying
+   * mob is an error.
+   */
+  fun despawn(mob: PluginActor): Unit =
+    throw UnsupportedOperationException("despawn is not supported")
+
   /** [leash] at least 0, or null to unleash. */
   fun setLeash(mob: PluginActor, leash: Int?): Unit =
     throw UnsupportedOperationException("setLeash is not supported")

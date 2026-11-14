@@ -102,6 +102,14 @@ enum class HookName(
   ON_DEATH("on_death"),
 
   /**
+   * Invoked when a mob leaves the world without dying, on the mob, then its room, then globally.
+   *
+   * [HookContext.actor] is the mob. It runs before the mob is removed, so the mob still holds its
+   * belongings; the opponents it freed hear `on_disengage` with "stop" afterwards.
+   */
+  ON_DESPAWN("on_despawn"),
+
+  /**
    * Invoked when an actor's level changes up or down, once per level step.
    *
    * [HookContext.actor] is the actor whose level changed, [HookContext.oldLevel] is the level
