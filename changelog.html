@@ -29,6 +29,19 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="a-hook-when-an-item-is-destroyed">A hook when an item is destroyed</h3>
+<ul>
+<li>New hook <code>on_destroy</code> fires on an item that stops existing (a whole <code>destroy</code>, decay, or a last charge), then its
+room, before anything is removed; a destroyed container's contents get it too, container first, and may escape by
+moving out. <code>ctx.destroyed_root</code> is the item whose destruction began it: the item itself, or the container it goes
+with.</li>
+<li>Merges, partial stack removals, <code>transform</code>, reloads, death and despawn fire no <code>on_destroy</code>.</li>
+<li><code>on_destroy</code> can be a global hook: <code>global_hook(&quot;on_destroy&quot;, fn)</code> runs for every destroyed item, with <code>ctx.self</code> the
+item.</li>
+<li>Plugins can listen to <code>on_destroy</code> with the new <code>onItemEvent</code>, whose call carries the item.</li>
+<li>The template world gains a <code>salvage</code> command, and its tutorial zone shows <code>on_destroy</code> with an exploding flask, a key
+that escapes a salvaged satchel, and a ghost that rises from a rotting corpse.</li>
+</ul>
 <h3 id="removing-a-mob-without-killing-it">Removing a mob without killing it</h3>
 <ul>
 <li>New hook <code>on_despawn</code> fires on a mob that leaves the world without dying, then its room, then globally, before the mob

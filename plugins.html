@@ -786,6 +786,21 @@ registers and never runs. At <code>on_death</code> the victim is still in the wo
     call.world.setAttr(call.actor, &quot;hunger&quot;, null)
 }
 </code></pre>
+<h3 id="item-event-listeners">Item event listeners</h3>
+<p><code>onItemEvent(name, doc, listener)</code> listens to an engine event about an item and runs after the scripts' global hooks for
+it. <code>on_destroy</code> is the only supported event; any other name fails <code>register</code>. Listeners run in plugin-id order, then
+registration order, and can't veto or change the event. The listener gets a <code>PluginItemEventCall</code> with <code>world</code>, <code>event</code>,
+<code>item</code> (a <code>PluginItem</code>, still in the world), and <code>fields</code>: <code>actor</code> (the holder as a <code>PluginActor</code>, or <code>null</code> on the
+ground), <code>event</code> (the cause: <code>&quot;destroy&quot;</code>, <code>&quot;decay&quot;</code>, or <code>&quot;empty&quot;</code>), and <code>destroyed_root</code> (the <code>PluginItem</code> whose
+destruction began it: the item itself, or the container it is destroyed with). A listener runs only for an item whose
+global hooks run, so an item that escaped its container's destruction doesn't reach it. A throw records a <code>plugin</code>
+diagnostic, and the item is still destroyed.</p>
+<pre><code class="language-kotlin">r.onItemEvent(&quot;on_destroy&quot;, &quot;Tracks unique artifacts.&quot;) { call -&gt;
+    if (call.item.hasTag(&quot;artifact&quot;)) {
+        call.world.log(&quot;artifact ${call.item.name} lost (${call.fields[&quot;event&quot;]})&quot;)
+    }
+}
+</code></pre>
 <h3 id="the-builtin">The builtin</h3>
 <p><code>hunger.eat(actor, amount)</code> lowers an actor's hunger by <code>amount</code>, not below 0, and returns the new value. A builtin runs
 only from a hook or command, so an item's <code>on_use</code> hook calls it to feed the actor:</p>
