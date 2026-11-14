@@ -121,7 +121,8 @@ the <code>skills</code> feature. <code>moveToward(mob, dir)</code>, <code>moveTo
 toward a direction, a room or an actor, returning false when there is no way. <code>summon(caster, label, count = 1, duration = null)</code> spawns mobs beside the caster as <code>ctx.summon</code> does; a <code>before_summon</code> veto returns an empty list.
 <code>setOwner(mob, player)</code> makes an in-world player the owner of a mob and <code>clearOwner(mob)</code> releases it, each returning
 whether anything changed; <code>setLeash(mob, leash)</code> overrides the mob's leash with an int of at least 0 or unleashes it
-with null, and <code>resetLeash(mob)</code> drops the override. <code>PluginActor</code> reads <code>owner</code> (the in-world player or null),
+with null, and <code>resetLeash(mob)</code> drops the override. <code>despawn(mob)</code> removes a mob as <code>ctx.despawn</code> does: no corpse,
+loot or XP, nothing printed, and its belongings go with it. <code>PluginActor</code> reads <code>owner</code> (the in-world player or null),
 <code>homeRoom</code> (a mob's home room or null), <code>leash</code> (a mob's effective leash) and <code>leashOverridden</code>.</li>
 <li><strong>combat and groups:</strong> <code>startCombat(a, b)</code>, <code>stopCombat(a, b = null)</code> and <code>clearContributions(victim, contributor = null)</code> engage and disengage combat and credit contributions, as <code>ctx.start_combat</code>, <code>ctx.stop_combat</code> and
 <code>ctx.clear_contributions</code> do; <code>startCombat</code>, <code>stopCombat</code> and the <code>PluginActor.fighting</code> / <code>primaryTarget</code> reads need
@@ -772,15 +773,15 @@ recorded as a <code>&quot;plugin&quot;</code> diagnostic, and the next run happe
 </code></pre>
 <h3 id="engine-event-listeners">Engine event listeners</h3>
 <p><code>onEvent(name, doc, listener)</code> listens to an engine event and runs after the scripts' global hook for it. The listener
-gets a <code>PluginEventCall</code> with <code>world</code>, <code>event</code>, the <code>actor</code> and the event's <code>fields</code>. The seven events are
+gets a <code>PluginEventCall</code> with <code>world</code>, <code>event</code>, the <code>actor</code> and the event's <code>fields</code>. The eight events are
 <code>on_level_change</code> (with <code>old_level</code> and <code>new_level</code>), <code>on_encumbrance_change</code> (with <code>old_encumbrance_level</code> and
 <code>new_encumbrance_level</code>), <code>on_group_change</code> (with <code>event</code> and a <code>group</code>), <code>on_owner_change</code> (with <code>target</code> and <code>event</code>),
-<code>on_disengage</code> (with <code>event</code>), <code>on_death</code> (with <code>killer</code>, or null) and <code>on_skill_use</code> (with <code>skill</code>, <code>outcome</code>,
-<code>target</code>, <code>item</code>, and <code>targets</code>, the landed actors). Any other name fails <code>register</code>. Ints arrive as <code>Long</code>s and actors
-as <code>PluginActor</code>s. A listener can't veto or change the event, but may change the world as a script global hook may;
-listeners run in plugin-id order, then registration order. A listener for an event whose feature is off, such as
-<code>on_level_change</code> without <code>leveling</code>, registers and never runs. At <code>on_death</code> the victim is still in the world, so the
-listener can still change it.</p>
+<code>on_disengage</code> (with <code>event</code>), <code>on_death</code> (with <code>killer</code>, or null), <code>on_despawn</code> (no fields; the mob is still in the
+world, holding its belongings) and <code>on_skill_use</code> (with <code>skill</code>, <code>outcome</code>, <code>target</code>, <code>item</code>, and <code>targets</code>, the landed
+actors). Any other name fails <code>register</code>. Ints arrive as <code>Long</code>s and actors as <code>PluginActor</code>s. A listener can't veto or
+change the event, but may change the world as a script global hook may; listeners run in plugin-id order, then
+registration order. A listener for an event whose feature is off, such as <code>on_level_change</code> without <code>leveling</code>,
+registers and never runs. At <code>on_death</code> the victim is still in the world, so the listener can still change it.</p>
 <pre><code class="language-kotlin">r.onEvent(&quot;on_death&quot;, &quot;Death resets hunger.&quot;) { call -&gt;
     call.world.setAttr(call.actor, &quot;hunger&quot;, null)
 }

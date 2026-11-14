@@ -29,6 +29,19 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="removing-a-mob-without-killing-it">Removing a mob without killing it</h3>
+<ul>
+<li>New hook <code>on_despawn</code> fires on a mob that leaves the world without dying, then its room, then globally, before the mob
+is removed.</li>
+<li><code>ctx.despawn(mob)</code> takes a mob out of the world without killing it: no corpse, loot or XP, nothing printed, and its
+belongings go with it.</li>
+<li>The plugin facade gains <code>despawn(mob)</code>, following <code>ctx.despawn</code>.</li>
+<li>Plugins can listen to <code>on_despawn</code> with <code>onEvent</code>.</li>
+<li>A summon fading and a debug mob expiring now fire <code>on_despawn</code>, and their opponents get <code>on_disengage</code> with <code>&quot;stop&quot;</code>.
+A debug mob's fade line is now a sight message.</li>
+<li>An actor that leaves the world while still engaged, by any route, now frees its opponents, who get <code>on_disengage</code> with
+<code>&quot;stop&quot;</code>. Before, an aborted login could leave a mob fighting a player who was gone.</li>
+</ul>
 <h3 id="plugin-facade-parity-with-ctx">Plugin facade parity with ctx</h3>
 <ul>
 <li>The plugin facade now follows a parity rule: every <code>ctx</code> verb and view field has a facade counterpart or a recorded

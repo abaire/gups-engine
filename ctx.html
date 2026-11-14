@@ -437,6 +437,34 @@ for d in w.diagnostics():
 </tbody>
 </table>
 </article>
+<article id="ctx.despawn" class="entry">
+<h4><code>despawn(mob)</code> <span class="since">since api_version 1</span></h4>
+<p>Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.despawn.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to remove.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>def _dismiss(ctx):
+    ctx.echo(ctx.room, &quot;The wolf slinks away.&quot;)
+    ctx.despawn(ctx.here(&quot;wolf&quot;))
+
+room(&quot;camp&quot;, name = &quot;Camp&quot;, desc = &quot;A camp.&quot;, flags = [&quot;dead_end_ok&quot;],
+     commands = {&quot;dismiss&quot;: _dismiss})
+mob(&quot;wolf&quot;, name = &quot;a wolf&quot;, keywords = [&quot;wolf&quot;], vitals = vitals(hp = 10))</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+p = w.spawn_player(&quot;Tess&quot;, at = &quot;:camp&quot;)
+w.spawn(&quot;:wolf&quot;, at = &quot;:camp&quot;)
+t.contains(p.do(&quot;dismiss&quot;), &quot;The wolf slinks away.&quot;)
+t.eq([a.name for a in w.room(&quot;:camp&quot;).actors()], [&quot;Tess&quot;])
+for d in w.diagnostics():
+    t.fail(&quot;%s&quot; % d.message)</code></pre>
+</div>
+</article>
 <article id="ctx.destroy" class="entry">
 <h4><code>destroy(item, count = None)</code> <span class="since">since api_version 1</span></h4>
 <p>Removes an item and everything inside it, or count of a stack.</p>

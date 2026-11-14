@@ -47,6 +47,7 @@
 <tr><td><a href="#hook-on_combat_tick"><code>on_combat_tick</code></a> <span class="badge feature">feature: combat</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item</td></tr>
 <tr><td><a href="#hook-on_damage"><code>on_damage</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, item</td></tr>
 <tr><td><a href="#hook-on_death"><code>on_death</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
+<tr><td><a href="#hook-on_despawn"><code>on_despawn</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
 <tr><td><a href="#hook-on_disengage"><code>on_disengage</code></a> <span class="badge feature">feature: combat</span></td><td><code>fn(ctx)</code></td><td>no</td><td>mob, room</td></tr>
 <tr><td><a href="#hook-on_drop"><code>on_drop</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>item, mob</td></tr>
 <tr><td><a href="#hook-on_encumbrance_change"><code>on_encumbrance_change</code></a></td><td><code>fn(ctx)</code></td><td>no</td><td>Global only</td></tr>
@@ -224,6 +225,14 @@
 <p>Not vetoable.</p>
 <p>Attaches to: mob, room</p>
 <p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.target"><code>target</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
+</section>
+<section id="hook-on_despawn" class="entry">
+<h3><code>on_despawn</code> <span class="since">since api_version 1</span></h3>
+<p>Fires when a mob leaves the world without dying, before it goes; also a global hook (lib and rules packages).</p>
+<p>Signature <code>fn(ctx)</code></p>
+<p>Not vetoable.</p>
+<p>Attaches to: mob, room</p>
+<p>ctx fields: <a href="ctx.html#ctx.self"><code>self</code></a>, <a href="ctx.html#ctx.actor"><code>actor</code></a>, <a href="ctx.html#ctx.room"><code>room</code></a>, <a href="ctx.html#ctx.pulse"><code>pulse</code></a>, <a href="ctx.html#ctx.rng"><code>rng</code></a></p>
 </section>
 <section id="hook-on_disengage" class="entry">
 <h3><code>on_disengage</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h3>
