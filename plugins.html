@@ -77,12 +77,12 @@ clashing name, the plugin adds nothing and is skipped with a warning.</li>
 <h2 id="what-plugins-can-touch">What plugins can touch</h2>
 <p>Plugins never see the engine's <code>World</code> or entities. They get a <code>PluginWorld</code> facade:</p>
 <ul>
-<li><strong>verbs:</strong> <code>send</code>, <code>echo</code>, <code>damage</code>, <code>heal</code>, <code>applyAffect</code>, <code>removeAffect</code>, <code>teleport</code>, <code>getAttr</code>, <code>setAttr</code> and
-<code>delAttr</code>. Each does what the <code>ctx</code> verb of the same name does, so the engine's invariants hold. <code>teleport</code> asks the
-<code>enter</code> restriction and <code>before_enter</code> first, and returns the refusal or veto, or null once the actor has moved.
-Attribute keys without <code>ns:</code> are in the plugin's own namespace (its id), and a plugin writes only its own namespace.
-<code>damage(target, amount, type, vital)</code> and <code>heal(target, amount, vital)</code> name the vital they change, as the <code>ctx</code> verbs
-do.</li>
+<li><strong>verbs:</strong> <code>send</code>, <code>gmcp</code>, <code>echo</code>, <code>damage</code>, <code>heal</code>, <code>applyAffect</code>, <code>removeAffect</code>, <code>teleport</code>, <code>getAttr</code>, <code>setAttr</code>
+and <code>delAttr</code>. Each (except <code>gmcp</code>, which sends a GMCP event to a client) does what the <code>ctx</code> verb of the same name
+does, so the engine's invariants hold. <code>teleport</code> asks the <code>enter</code> restriction and <code>before_enter</code> first, and returns
+the refusal or veto, or null once the actor has moved. Attribute keys without <code>ns:</code> are in the plugin's own namespace
+(its id), and a plugin writes only its own namespace. <code>damage(target, amount, type, vital, source)</code> and <code>heal(target, amount, vital, source)</code> name the vital they change, as the <code>ctx</code> verbs do. A <code>source</code> passed to either is credited
+with the effect.</li>
 <li><strong>skills and items:</strong> <code>skillRoll(actor, skill, item, target, event = &quot;craft&quot;, adjust = 0)</code> rolls a skill outside a
 cast and returns a <code>PluginSkillRoll(chance, roll, success, power)</code>, as <code>ctx.skill_roll</code> does (it throws
 <code>IllegalStateException</code> naming <code>skills</code> when that feature is off); <code>setItemName(item, name)</code> sets or clears an item's
@@ -100,15 +100,58 @@ Timed tasks.</li>
 <li><strong>leveling:</strong> <code>awardXp(actor, amount)</code>, <code>takeXp(actor, amount)</code>, <code>levelUp(actor)</code> and <code>levelDown(actor, count = 1)</code> do
 what <code>ctx.award_xp</code>, <code>ctx.take_xp</code>, <code>ctx.level_up</code> and <code>ctx.level_down</code> do. They throw <code>IllegalStateException</code> naming
 <code>leveling</code> when the feature is off, and <code>IllegalArgumentException</code> when <code>amount</code> or <code>count</code> is below 1.</li>
+<li><strong>doors and containers:</strong> <code>openDoor(room, dir)</code>, <code>closeDoor</code>, <code>lockDoor</code>, <code>unlockDoor</code>, <code>openContainer(item)</code>,
+<code>closeContainer</code>, <code>lockContainer</code> and <code>unlockContainer</code> set the exit's or container's state, and <code>room.exit(dir)</code>
+returns a <code>PluginExit(direction, to, tags, door, key, passable, oneWay)</code> view of the exit, where <code>door</code> is a
+<code>PluginDoor(state, key, tags)</code>, null when the room has no exit in that direction, while <code>item.containerState</code> reads a
+container's state, null for an item that isn't a container. The door and container verbs follow <code>ctx</code>: they run no
+hook, take no key and print nothing, and locking fails on a door or container without a <code>key</code>.</li>
+<li><strong>messaging and simulation:</strong> <code>say(speaker, text)</code> and <code>emote(actor, text)</code> speak as a named actor at once, as
+<code>ctx.say</code> and <code>ctx.emote</code> do. <code>emit(room, channel, event, intensity = 1, text = null, actor = null)</code> raises a
+perceivable event on a declared channel; an <code>intensity</code> of 0 or less emits nothing, and an unknown channel throws with
+a suggestion. <code>setActive(entity, reason)</code>, <code>clearActive</code>, <code>setAnchor(entity, reason)</code> and <code>clearAnchor</code> add and remove
+named reasons that keep an entity simulated or projecting a bubble, as <code>ctx.set_active</code> and friends do;
+<code>clearStanding(holder, subject = null)</code> removes a holder's standing records, and <code>roll(dice)</code> rolls a dice expression
+such as <code>2d6+1</code> with the world's RNG.</li>
+<li><strong>mobs:</strong> <code>spawnMob(label, room, count = 1)</code> makes <code>count</code> mobs as <code>ctx.spawn</code> does for a mob label and returns them:
+no owner, no leash override and no spawn rule, a home room equal to <code>room</code>, at track index 0. <code>act(mob, commandLine)</code>,
+<code>actMove(mob, dir)</code>, <code>actAttack(mob, target)</code> and <code>actCast(mob, skill, target = null)</code> queue tick-lane actions for a
+mob, never a player, and return whether the action was queued; <code>actAttack</code> needs the <code>combat</code> feature and <code>actCast</code>
+the <code>skills</code> feature. <code>moveToward(mob, dir)</code>, <code>moveToward(mob, room)</code> and <code>moveToward(mob, target)</code> queue one step
+toward a direction, a room or an actor, returning false when there is no way. <code>summon(caster, label, count = 1, duration = null)</code> spawns mobs beside the caster as <code>ctx.summon</code> does; a <code>before_summon</code> veto returns an empty list.
+<code>setOwner(mob, player)</code> makes an in-world player the owner of a mob and <code>clearOwner(mob)</code> releases it, each returning
+whether anything changed; <code>setLeash(mob, leash)</code> overrides the mob's leash with an int of at least 0 or unleashes it
+with null, and <code>resetLeash(mob)</code> drops the override. <code>PluginActor</code> reads <code>owner</code> (the in-world player or null),
+<code>homeRoom</code> (a mob's home room or null), <code>leash</code> (a mob's effective leash) and <code>leashOverridden</code>.</li>
+<li><strong>combat and groups:</strong> <code>startCombat(a, b)</code>, <code>stopCombat(a, b = null)</code> and <code>clearContributions(victim, contributor = null)</code> engage and disengage combat and credit contributions, as <code>ctx.start_combat</code>, <code>ctx.stop_combat</code> and
+<code>ctx.clear_contributions</code> do; <code>startCombat</code>, <code>stopCombat</code> and the <code>PluginActor.fighting</code> / <code>primaryTarget</code> reads need
+the <code>combat</code> feature, and <code>startCombat</code> refuses an actor fighting itself or one across rooms. <code>groupAdd(member, to)</code>,
+<code>groupRemove(member)</code>, <code>groupSetLeader(member)</code> and <code>groupDisband(member)</code> manage player groups, as the <code>ctx.group_*</code>
+verbs do, and a mob argument throws. <code>enemiesNear(actor, band)</code> and <code>alliesNear(actor, band)</code> return the opponents and
+allies of <code>actor</code> in its room within <code>band</code> (<code>&quot;melee&quot;</code>, <code>&quot;near&quot;</code> or <code>&quot;far&quot;</code>), by id, as <code>ctx.enemies_near</code> and
+<code>ctx.allies_near</code> do. <code>pathTo(from, to)</code> gives the directions of the shortest passable walk, empty when <code>from</code> is
+<code>to</code>, null when unreachable. <code>plan(facts, actions, goal, maxExpansions = 1024)</code> runs the GOAP planner and returns the
+cheapest action names that reach <code>goal</code>, <code>[]</code> when it already holds, null when unreachable; fact values are <code>Boolean</code>,
+<code>Int</code>/<code>Long</code> or <code>String</code>, and an action is a <code>PluginPlanAction(name, pre, effects, cost)</code>. <code>groupOf(actor)</code> returns a
+<code>PluginGroup(id, leader, members)</code> of the player group <code>actor</code> is in, and <code>groupMembers(actor)</code> its members, leader
+first.</li>
 <li><strong>schema names:</strong> a vital, stat or damage type the world's <code>MODULE.gups</code> doesn't declare, in a verb or in a
 <code>statDeltas</code> key, throws <code>IllegalArgumentException</code> with a &quot;did you mean&quot; suggestion.</li>
 <li><strong>reads:</strong> <code>schema</code> (a <code>PluginSchema</code> with <code>stats</code> and <code>vitals</code>, each a <code>PluginNamed(name, label)</code>, and <code>damageTypes</code>,
-in declaration order), <code>pulse</code>, <code>seed</code>, <code>rng</code> (seeded from the world), <code>rooms()</code>, <code>room(label)</code>, <code>regions()</code> and
-<code>itemInfo(label)</code> (an item prototype's catalog fields as a <code>PluginItemInfo</code>, or null, as <code>ctx.item_info</code> gives them).</li>
+in declaration order), <code>pulse</code>, <code>seed</code>, <code>features</code> (the engine features that are on and the features loaded plugins
+provide), <code>rng</code> (seeded from the world, with <code>int</code>, <code>chance</code> and <code>choice(list)</code>), <code>standingHistory(holder, subject, since, via, event)</code> (the <code>PluginStandingTotals</code> of gains and losses, needing <code>standing</code>), <code>rooms()</code>, <code>room(label)</code>,
+<code>regions()</code> and <code>itemInfo(label)</code> (an item prototype's catalog fields as a <code>PluginItemInfo</code>, or null, as
+<code>ctx.item_info</code> gives them). The world also reads <code>enemiesNear(actor, band)</code>, <code>alliesNear</code>, <code>pathTo(from, to)</code>,
+<code>plan(facts, actions, goal, maxExpansions)</code> and the group queries <code>groupOf(actor)</code> and <code>groupMembers(actor)</code>; a
+<code>PluginActor</code> reads <code>fighting</code> and <code>primaryTarget</code> (both need <code>combat</code>). <code>PluginRoom</code> also reads <code>desc</code> and the names
+of its live <code>affects</code>.</li>
 <li><strong>diagnostics:</strong> <code>diagnose(message)</code> records a <code>&quot;plugin&quot;</code> diagnostic; <code>log(message)</code> writes to the server log.</li>
 <li><strong>views:</strong> <code>PluginRoom</code>, <code>PluginActor</code> and <code>PluginItem</code> read current state on every access. A <code>PluginActor</code> has
 <code>stat(name)</code> (effective), <code>baseStat(name)</code>, <code>vital(name)</code>, <code>maxVital(name)</code> and <code>resist(type)</code> by schema name, plus
-<code>level</code>, <code>pendingLevels</code>, <code>affects</code> and <code>hasAffect(name)</code>.</li>
+<code>level</code>, <code>pendingLevels</code>, <code>affects</code> and <code>hasAffect(name)</code>, and reads <code>inWorld</code>, <code>keywords</code>, <code>xp</code> (needs <code>leveling</code>),
+<code>condition</code>, <code>senses</code>, <code>belowZeroSince(vital)</code>, <code>carriedWeight</code>, <code>encumbranceLevel</code>, <code>isCasting</code> and <code>casting</code> (both
+need <code>skills</code>), <code>hasFlag(flag)</code>, <code>hasItem(label)</code>, <code>slots</code>, <code>waitState</code>, <code>movePace</code> and <code>recallRoom</code>. A <code>PluginItem</code>
+reads <code>inWorld</code>, <code>dice</code>, <code>damageType</code>, <code>statDeltas</code> and <code>senseDeltas</code>.</li>
 <li><strong><code>PluginViews</code></strong> converts raw Starlark values for builtins installed with <code>addBuiltin(name, value, doc)</code>:
 <code>room(value)</code>, <code>actor(value)</code>, <code>item(value)</code>, and <code>world(thread)</code> for a method declared with <code>useStarlarkThread = true</code>.</li>
 </ul>

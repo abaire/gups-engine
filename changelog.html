@@ -29,6 +29,48 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="plugin-facade-parity-with-ctx">Plugin facade parity with ctx</h3>
+<ul>
+<li>The plugin facade now follows a parity rule: every <code>ctx</code> verb and view field has a facade counterpart or a recorded
+reason why not, checked by <code>CtxParityTest</code>.</li>
+<li>The facade gains the door and container verbs <code>openDoor</code>, <code>closeDoor</code>, <code>lockDoor</code>, <code>unlockDoor</code>, <code>openContainer</code>,
+<code>closeContainer</code>, <code>lockContainer</code> and <code>unlockContainer</code>, which set the exit's or container's state as <code>ctx</code> does
+(§4.5): no hook runs, no key is named and nothing is printed, and locking fails on a door or container without a
+<code>key</code>.</li>
+<li>The facade reads an exit: <code>PluginRoom.exit(dir)</code> returns a <code>PluginExit(direction, to, tags, door, key, passable, oneWay)</code>, null when the room has no exit in that direction, and <code>PluginItem.containerState</code> reports a container's
+state, null for an item that isn't a container.</li>
+<li>The facade gains messaging and simulation verbs: <code>say(speaker, text)</code>, <code>emote(actor, text)</code>, <code>emit(room, channel, event, intensity, text, actor)</code>, <code>setActive</code>, <code>clearActive</code>, <code>setAnchor</code>, <code>clearAnchor</code>, <code>clearStanding(holder, subject)</code> and <code>roll(dice)</code>, each behaving as the <code>ctx</code> verb of the same name. <code>emit</code> validates the channel with a
+suggestion and emits nothing at an intensity of 0 or less.</li>
+<li>The facade reads standing history: <code>standingHistory(holder, subject, since, via, event)</code> returns a
+<code>PluginStandingTotals(gained, lost)</code>, needing the <code>standing</code> feature. <code>rng</code> gains <code>choice(list)</code>, a uniformly chosen
+element of a non-empty list. <code>PluginRoom</code> gains <code>desc</code> and the names of its live <code>affects</code>.</li>
+<li>Implementers of <code>PluginWorld</code> must add <code>source: PluginActor? = null</code> to <code>heal</code>. A <code>source</code> passed to <code>heal</code> is
+credited with the healing, as with <code>damage</code>.</li>
+<li>The facade gains mob verbs: <code>spawnMob(label, room, count = 1)</code> makes <code>count</code> mobs as <code>ctx.spawn</code> does for a mob label
+and returns them, and <code>act(mob, commandLine)</code>, <code>actMove(mob, dir)</code>, <code>actAttack(mob, target)</code> and <code>actCast(mob, skill, target = null)</code> queue tick-lane actions for a mob, never a player, returning whether the action was queued.
+<code>actAttack</code> needs the <code>combat</code> feature and <code>actCast</code> the <code>skills</code> feature. <code>moveToward(mob, dir)</code>, <code>moveToward(mob, room)</code> and <code>moveToward(mob, target)</code> queue one step toward a direction, a room or an actor, and <code>summon(caster, label, count = 1, duration = null)</code> spawns mobs beside the caster as <code>ctx.summon</code> does, a <code>before_summon</code> veto returning an
+empty list.</li>
+<li>The facade gains the ownership and leash verbs <code>setOwner(mob, player)</code>, <code>clearOwner(mob)</code>, <code>setLeash(mob, leash)</code> and
+<code>resetLeash(mob)</code>, and <code>PluginActor</code> reads <code>owner</code>, <code>homeRoom</code>, <code>leash</code> and <code>leashOverridden</code>, each as the <code>ctx</code> view
+field of the same name.</li>
+<li>The facade gains the combat verbs <code>startCombat(a, b)</code>, <code>stopCombat(a, b = null)</code> and <code>clearContributions(victim, contributor = null)</code>, each as the <code>ctx</code> verb of the same name. <code>startCombat</code>, <code>stopCombat</code> and the new <code>PluginActor</code>
+reads <code>fighting</code> and <code>primaryTarget</code> need the <code>combat</code> feature, and <code>startCombat</code> refuses an actor fighting itself or
+one in a different room.</li>
+<li>The facade gains the group verbs <code>groupAdd(member, to)</code>, <code>groupRemove(member)</code>, <code>groupSetLeader(member)</code> and
+<code>groupDisband(member)</code>, each as the <code>ctx.group_*</code> verb of the same name, and a mob argument throws.</li>
+<li>The facade reads the world and groups: <code>enemiesNear(actor, band)</code> and <code>alliesNear(actor, band)</code> (the opponents and
+allies of <code>actor</code> within <code>&quot;melee&quot;</code>, <code>&quot;near&quot;</code> or <code>&quot;far&quot;</code>, by id), <code>pathTo(from, to)</code> (the directions of the shortest
+passable walk, empty when already there, null when unreachable), <code>plan(facts, actions, goal, maxExpansions = 1024)</code>
+(the GOAP planner's cheapest action names, <code>[]</code> when the goal holds, null when unreachable) and the group queries
+<code>groupOf(actor)</code> (a <code>PluginGroup(id, leader, members)</code>) and <code>groupMembers(actor)</code>. A planning action is a
+<code>PluginPlanAction(name, pre, effects, cost)</code>, whose fact values are <code>Boolean</code>, <code>Int</code>/<code>Long</code> or <code>String</code>.</li>
+<li>The facade reads the remaining actor and item fields. <code>PluginActor</code> gains <code>inWorld</code>, <code>keywords</code>, <code>xp</code> (needs
+<code>leveling</code>), <code>condition</code>, <code>senses</code>, <code>belowZeroSince(vital)</code>, <code>carriedWeight</code>, <code>encumbranceLevel</code>, <code>isCasting</code> and
+<code>casting</code> (both need <code>skills</code>), <code>hasFlag(flag)</code>, <code>hasItem(label)</code>, <code>slots</code>, <code>waitState</code>, <code>movePace</code> and <code>recallRoom</code>,
+and <code>PluginItem</code> gains <code>inWorld</code>, <code>dice</code>, <code>damageType</code>, <code>statDeltas</code> and <code>senseDeltas</code>, each returning what the <code>ctx</code>
+actor or item view of the same name returns in the same world. <code>movePace</code> is hundredths of a pulse per room.</li>
+<li><code>samples/weather-plugin</code> locks keyed outdoor doors during storms, using the new facade door verbs.</li>
+</ul>
 <h3 id="respec-shrines">Respec shrines</h3>
 <ul>
 <li><code>lock_door</code> now fails with a script error on a door without a <code>key</code>, as <code>lock_container</code> does, since only a door with
