@@ -213,6 +213,23 @@ internal object HookCatalog {
         doc = "Fires when an actor dies; also a global hook (lib and rules packages).",
       ),
       HookSpec(
+        hook = HookName.ON_DESPAWN,
+        signature = "fn(ctx)",
+        attachTo = listOf(M, R),
+        ctxFields = listOf("self", "actor", "room", "pulse", "rng"),
+        doc =
+          "Fires when a mob leaves the world without dying, before it goes; also a global hook (lib and rules packages).",
+      ),
+      HookSpec(
+        hook = HookName.ON_DESTROY,
+        signature = "fn(ctx)",
+        attachTo = listOf(I, R),
+        ctxFields =
+          listOf("self", "item", "actor", "event", "destroyed_root", "room", "pulse", "rng"),
+        doc =
+          "Fires when an item stops existing (destroy, decay or a last charge), before it goes; container first; also a global hook (lib and rules packages).",
+      ),
+      HookSpec(
         hook = HookName.ON_LEVEL_CHANGE,
         signature = "fn(ctx)",
         attachTo = listOf(M, R, I),

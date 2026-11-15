@@ -401,6 +401,12 @@
         "since": 1
       },
       {
+        "symbol": "ctx.destroyed_root",
+        "name": "destroyed_root",
+        "doc": "For on_destroy, the item whose destruction began it: the item itself, or the container it is destroyed with.",
+        "since": 1
+      },
+      {
         "symbol": "ctx.direction",
         "name": "direction",
         "doc": "The movement direction name, for enter and exit hooks.",
@@ -1470,9 +1476,27 @@
         ]
       },
       {
+        "symbol": "ctx.despawn",
+        "name": "despawn",
+        "doc": "Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.despawn.mob",
+            "name": "mob",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "The mob to remove."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.destroy",
         "name": "destroy",
-        "doc": "Removes an item and everything inside it, or count of a stack.",
+        "doc": "Removes an item and everything inside it, firing on_destroy on each first, or count of a stack, firing nothing.",
         "since": 1,
         "params": [
           {

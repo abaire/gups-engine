@@ -7,7 +7,8 @@ API: * **Host Builtins:** Exposing `weather.now(room)` to Starlark zone scripts.
 fast-lane `weather` command for players to inspect current conditions. * **Effect Primitives:** Providing
 `weather.soak(pulses)` for spells and combat skills. * **Client Telemetry (GMCP):** Broadcasting real-time weather
 updates to web and MUD clients via `Gups.Weather`. * **Lifecycle Hooks:** Registering startup logic with
-`onWorldStarted` to index outdoor regions and log diagnostics.
+`onWorldStarted` to index outdoor regions and log diagnostics. * **Periodic Work:** An `every` handler that slams and
+locks keyed outdoor doors when a storm starts, and unlocks them when it passes.
 
 ---
 

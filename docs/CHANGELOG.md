@@ -4,6 +4,92 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Mudlet automapper
+
+- GMCP `Room.Info` gains `num` (a stable map number per room), `area` and `area_name`; `exits` now maps each direction
+  (short names for the standard ten) to the destination's `num`, and door states move to a new `doors` map.
+- The engine ships a Mudlet mapper script that draws the map from `Room.Info` as a player explores.
+- Double-clicking a room on the Mudlet map walks there, one step per room.
+- The server serves the Mudlet mapper as `/mudlet/gups-mapper.mpackage`.
+- GMCP clients are sent `Client.GUI` when they take a character, so Mudlet installs the mapper package itself.
+- `--public-url` / `public_url` tells a production server its public address so Mudlet can be offered the mapper;
+  `--dev` offers it from the docs port automatically.
+
+### A hook when an item is destroyed
+
+- New hook `on_destroy` fires on an item that stops existing (a whole `destroy`, decay, or a last charge), then its
+  room, before anything is removed; a destroyed container's contents get it too, container first, and may escape by
+  moving out. `ctx.destroyed_root` is the item whose destruction began it: the item itself, or the container it goes
+  with.
+- Merges, partial stack removals, `transform`, reloads, death and despawn fire no `on_destroy`.
+- `on_destroy` can be a global hook: `global_hook("on_destroy", fn)` runs for every destroyed item, with `ctx.self` the
+  item.
+- Plugins can listen to `on_destroy` with the new `onItemEvent`, whose call carries the item.
+- The template world gains a `salvage` command, and its tutorial zone shows `on_destroy` with an exploding flask, a key
+  that escapes a salvaged satchel, and a ghost that rises from a rotting corpse.
+
+### Removing a mob without killing it
+
+- New hook `on_despawn` fires on a mob that leaves the world without dying, then its room, then globally, before the mob
+  is removed.
+- `ctx.despawn(mob)` takes a mob out of the world without killing it: no corpse, loot or XP, nothing printed, and its
+  belongings go with it.
+- The plugin facade gains `despawn(mob)`, following `ctx.despawn`.
+- Plugins can listen to `on_despawn` with `onEvent`.
+- A summon fading and a debug mob expiring now fire `on_despawn`, and their opponents get `on_disengage` with `"stop"`.
+  A debug mob's fade line is now a sight message.
+- An actor that leaves the world while still engaged, by any route, now frees its opponents, who get `on_disengage` with
+  `"stop"`. Before, an aborted login could leave a mob fighting a player who was gone.
+
+### Plugin facade parity with ctx
+
+- The plugin facade now follows a parity rule: every `ctx` verb and view field has a facade counterpart or a recorded
+  reason why not, checked by `CtxParityTest`.
+- The facade gains the door and container verbs `openDoor`, `closeDoor`, `lockDoor`, `unlockDoor`, `openContainer`,
+  `closeContainer`, `lockContainer` and `unlockContainer`, which set the exit's or container's state as `ctx` does
+  (§4.5): no hook runs, no key is named and nothing is printed, and locking fails on a door or container without a
+  `key`.
+- The facade reads an exit: `PluginRoom.exit(dir)` returns a `PluginExit(direction, to, tags, door, key, passable,
+  oneWay)`, null when the room has no exit in that direction, and `PluginItem.containerState` reports a container's
+  state, null for an item that isn't a container.
+- The facade gains messaging and simulation verbs: `say(speaker, text)`, `emote(actor, text)`, `emit(room, channel,
+  event, intensity, text, actor)`, `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding(holder,
+  subject)` and `roll(dice)`, each behaving as the `ctx` verb of the same name. `emit` validates the channel with a
+  suggestion and emits nothing at an intensity of 0 or less.
+- The facade reads standing history: `standingHistory(holder, subject, since, via, event)` returns a
+  `PluginStandingTotals(gained, lost)`, needing the `standing` feature. `rng` gains `choice(list)`, a uniformly chosen
+  element of a non-empty list. `PluginRoom` gains `desc` and the names of its live `affects`.
+- Implementers of `PluginWorld` must add `source: PluginActor? = null` to `heal`. A `source` passed to `heal` is
+  credited with the healing, as with `damage`.
+- The facade gains mob verbs: `spawnMob(label, room, count = 1)` makes `count` mobs as `ctx.spawn` does for a mob label
+  and returns them, and `act(mob, commandLine)`, `actMove(mob, dir)`, `actAttack(mob, target)` and `actCast(mob, skill,
+  target = null)` queue tick-lane actions for a mob, never a player, returning whether the action was queued.
+  `actAttack` needs the `combat` feature and `actCast` the `skills` feature. `moveToward(mob, dir)`, `moveToward(mob,
+  room)` and `moveToward(mob, target)` queue one step toward a direction, a room or an actor, and `summon(caster, label,
+  count = 1, duration = null)` spawns mobs beside the caster as `ctx.summon` does, a `before_summon` veto returning an
+  empty list.
+- The facade gains the ownership and leash verbs `setOwner(mob, player)`, `clearOwner(mob)`, `setLeash(mob, leash)` and
+  `resetLeash(mob)`, and `PluginActor` reads `owner`, `homeRoom`, `leash` and `leashOverridden`, each as the `ctx` view
+  field of the same name.
+- The facade gains the combat verbs `startCombat(a, b)`, `stopCombat(a, b = null)` and `clearContributions(victim,
+  contributor = null)`, each as the `ctx` verb of the same name. `startCombat`, `stopCombat` and the new `PluginActor`
+  reads `fighting` and `primaryTarget` need the `combat` feature, and `startCombat` refuses an actor fighting itself or
+  one in a different room.
+- The facade gains the group verbs `groupAdd(member, to)`, `groupRemove(member)`, `groupSetLeader(member)` and
+  `groupDisband(member)`, each as the `ctx.group_*` verb of the same name, and a mob argument throws.
+- The facade reads the world and groups: `enemiesNear(actor, band)` and `alliesNear(actor, band)` (the opponents and
+  allies of `actor` within `"melee"`, `"near"` or `"far"`, by id), `pathTo(from, to)` (the directions of the shortest
+  passable walk, empty when already there, null when unreachable), `plan(facts, actions, goal, maxExpansions = 1024)`
+  (the GOAP planner's cheapest action names, `[]` when the goal holds, null when unreachable) and the group queries
+  `groupOf(actor)` (a `PluginGroup(id, leader, members)`) and `groupMembers(actor)`. A planning action is a
+  `PluginPlanAction(name, pre, effects, cost)`, whose fact values are `Boolean`, `Int`/`Long` or `String`.
+- The facade reads the remaining actor and item fields. `PluginActor` gains `inWorld`, `keywords`, `xp` (needs
+  `leveling`), `condition`, `senses`, `belowZeroSince(vital)`, `carriedWeight`, `encumbranceLevel`, `isCasting` and
+  `casting` (both need `skills`), `hasFlag(flag)`, `hasItem(label)`, `slots`, `waitState`, `movePace` and `recallRoom`,
+  and `PluginItem` gains `inWorld`, `dice`, `damageType`, `statDeltas` and `senseDeltas`, each returning what the `ctx`
+  actor or item view of the same name returns in the same world. `movePace` is hundredths of a pulse per room.
+- `samples/weather-plugin` locks keyed outdoor doors during storms, using the new facade door verbs.
+
 ### Respec shrines
 
 - `lock_door` now fails with a script error on a door without a `key`, as `lock_container` does, since only a door with

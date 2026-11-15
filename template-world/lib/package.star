@@ -9,6 +9,8 @@
 #
 # group.star exports nothing to load: its commands (group, invite, accept, gtell, ...) and hooks
 # register in every world that includes lib.
+# salvage.star exports nothing to load: its `salvage` command registers in every world that
+# includes lib.
 #
 # lib is a privileged package kind: it may register global commands, such as `quests`.
 

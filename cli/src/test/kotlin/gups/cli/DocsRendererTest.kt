@@ -176,7 +176,8 @@ class DocsRendererTest {
           "dependencies {" !in it &&
           "setBaseStat" !in it &&
           "PluginCreationAttempt" !in it &&
-          "attempt.rng" !in it
+          "attempt.rng" !in it &&
+          "onItemEvent" !in it
       }
     assertTrue(fromSample.size >= 10, "${fromSample.size} sample blocks")
     val weatherDedented = weatherSource.lines().joinToString("\n") { it.trimStart() }

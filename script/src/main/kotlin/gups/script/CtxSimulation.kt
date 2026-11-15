@@ -7,6 +7,8 @@ import gups.core.world.HookContext
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
 import gups.core.world.clearOwner
+import gups.core.world.despawn
+import gups.core.world.isDying
 import gups.core.world.resetLeash
 import gups.core.world.setActive
 import gups.core.world.setAnchor
@@ -92,6 +94,21 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
     verb("clear_owner") {
       val m = (mob as? ActorView)?.actor as? Mob ?: fail("clear_owner(mob): must be a mob")
       world.clearOwner(m)
+    }
+
+  @StarlarkMethod(
+    name = "despawn",
+    doc =
+      "Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.",
+    parameters = [Param(name = "mob", named = true, doc = "The mob to remove.")],
+  )
+  fun despawn(mob: Any): Any =
+    verb("despawn") {
+      val m = (mob as? ActorView)?.actor as? Mob ?: fail("despawn(mob): must be a mob")
+      if (!m.inWorld) fail("despawn(mob): ${m.name} is not in the world")
+      if (world.isDying(m)) fail("despawn(mob): ${m.name} is dying")
+      world.despawn(m)
+      Starlark.NONE
     }
 
   @StarlarkMethod(

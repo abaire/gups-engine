@@ -315,6 +315,79 @@ room("inn",
 
 ---
 
+## 9. Reacting to Destruction: `on_destroy`
+
+When an item stops existing, `on_destroy` fires before anything is removed—first on the item, then on the room it is in
+(and globally if registered with `global_hook`). Mobs and other items in the room do not receive it, and the hook cannot
+veto the destruction.
+
+* **What fires it:** a whole-item `ctx.destroy(item)` (or plugin `destroy`), the last charge of an item with `empty =
+  "destroy"`, decay (including a decaying corpse), and the contents of an item destroyed in any of those ways.
+* **What doesn't:** partial stack removals, `merge_stack`, `transform`, reloads, mob death (belongings move to the
+  corpse), and `despawn`.
+* **Context:** `ctx.event` is the cause—`"destroy"`, `"empty"`, or `"decay"`—and `ctx.actor` is whoever holds the item
+  (following containers), or `None` on the ground.
+
+Checking `ctx.event` and `ctx.actor` lets an item react only to specific causes, like `volatile_flask` in `items.star`:
+
+```python
+def _flask_bursts(ctx):
+    if ctx.event == "destroy" and ctx.actor != None:
+        ctx.echo(ctx.room, "The volatile flask bursts in a gout of flame!")
+        ctx.damage(ctx.actor, 8, DAMAGE.fire, "hp")
+
+item("volatile_flask",
+    name="a volatile flask",
+    keywords=["volatile", "flask"],
+    desc="A sealed glass flask filled with swirling amber liquid.",
+    on_destroy=_flask_bursts,
+)
+```
+
+### Containers and Escaping Contents
+
+When a container is destroyed, the engine walks **container-first**: it fires `on_destroy` on the container, then reads
+its remaining contents in ascending id order and fires `on_destroy` on each with the root's `ctx.event`.
+
+An item *inside* a destroyed container can escape by moving out (for example with `ctx.move_item`) during the
+container's hook or its own hook—it survives and its remaining hooks are skipped. The destroyed root itself cannot
+escape, even if moved.
+
+`ctx.destroyed_root` tells the two apart: it is the item whose destruction began the walk, so it equals `ctx.self` only
+for the destroyed root. In `items.star`, `brass_key` checks `ctx.destroyed_root != ctx.self` to clatter free onto the
+room floor when its `satchel` is salvaged, while refusing direct salvage with `tags = ["no_salvage"]`:
+
+```python
+def _key_destroyed(ctx):
+    if ctx.destroyed_root != ctx.self:
+        ctx.move_item(ctx.self, ctx.room)
+        ctx.echo(ctx.room, "The brass key clatters free.")
+
+item("brass_key",
+    name="a brass key",
+    keywords=["brass", "key"],
+    desc="A small brass key stamped with an anvil.",
+    tags=["no_salvage"],
+    on_destroy=_key_destroyed,
+)
+```
+
+### Room Hooks for Engine Prototypes
+
+Because `on_destroy` also fires on `ctx.room`, a room can react to items whose prototypes live outside your zone—such as
+`//engine:corpse`, which the engine creates when a mob dies. In `rooms.star`, the `arena` room watches for decaying
+corpses and raises a `rotten_ghost`:
+
+```python
+def _arena_destroy(ctx):
+    if ctx.item.label == "//engine:corpse" and ctx.event == "decay":
+        if not [a for a in ctx.self.actors() if a.label.endswith(":rotten_ghost")]:
+            ctx.echo(ctx.self, "A rotten ghost rises from the rotting corpse.")
+            ctx.spawn(":rotten_ghost", ctx.self)
+```
+
+---
+
 ## Reference Links
 
 * **Reference Implementation:** [`template-world/zones/tutorial/mobs.star`](../../zones/tutorial/mobs.star)

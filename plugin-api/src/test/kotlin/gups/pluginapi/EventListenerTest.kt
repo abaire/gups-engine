@@ -5,14 +5,17 @@ import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.model.DamageType
+import gups.core.model.ItemLocation
 import gups.core.world.Feature
 import gups.core.world.Features
 import gups.core.world.HookName
 import gups.core.world.attach
 import gups.core.world.awardXp
 import gups.core.world.damage
+import gups.core.world.despawn
 import gups.core.world.groupAdd
 import gups.core.world.handle
+import gups.core.world.spawnItem
 import gups.core.world.submit
 import gups.pluginapi.host.ActorFacade
 import gups.pluginapi.host.PluginHost
@@ -314,6 +317,70 @@ class EventListenerTest {
     assertFalse(ran, "with skills off the listener must never run")
     assertTrue(
       w.diagnostics.none { it.kind == "plugin" },
+      w.diagnostics.joinToString("\n") { it.message },
+    )
+  }
+
+  @Test
+  fun `an on_despawn listener runs after the script global hook, with the mob in world, holding its item, and empty fields`() {
+    var calls = 0
+    var seen: String? = null
+    var inWorldSeen = false
+    var itemNamesSeen: List<String> = emptyList()
+    var fieldsSeen: Map<String, Any?>? = null
+    val plugin =
+      eventPlugin(
+        "despawn",
+        listOf(
+          "on_despawn" to
+            { call ->
+              calls++
+              seen = call.world.getAttr(call.actor.room, "lib:despawn_log", "") as String?
+              inWorldSeen = call.actor.inWorld
+              itemNamesSeen = call.actor.inventory.map { it.name }
+              fieldsSeen = call.fields
+            }
+        ),
+      )
+    val w =
+      world(
+        files =
+          zone +
+            mapOf(
+              "zones/z/items.star" to
+                """
+                item("bone", name = "a bone", desc = "A bone.", keywords = ["bone"])
+                """,
+              "lib/package.star" to "package(api_version = 1, kind = \"lib\")",
+              "lib/g.star" to
+                """
+                def _g(ctx):
+                    ctx.set_attr(ctx.self.room, "despawn_log", ctx.get_attr(ctx.self.room, "despawn_log", "") + "script,")
+                global_hook("on_despawn", _g)
+                """,
+            ),
+        plugins = PluginHost.of(plugin),
+      )
+    val mob = w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.spawnItem(Label("//zones/z:bone"), ItemLocation.Carried(mob.id))
+    w.despawn(mob)
+    assertEquals(1, calls, "the on_despawn listener must run exactly once")
+    assertEquals("script,", seen, "the plugin must run after the script global hook")
+    assertTrue(inWorldSeen, "the mob must still be in the world when on_despawn runs")
+    assertEquals(listOf("a bone"), itemNamesSeen, "the mob must still hold its item")
+    assertEquals(emptyMap<String, Any?>(), fieldsSeen)
+    assertFalse(mob.inWorld, "the mob must be removed after despawn")
+  }
+
+  @Test
+  fun `a throwing on_despawn listener records a plugin diagnostic and the mob is still removed`() {
+    val plugin = eventPlugin("boom", listOf("on_despawn" to { _ -> error("boom") }))
+    val w = world(zone, plugins = PluginHost.of(plugin))
+    val mob = w.spawnMob(Label("//zones/z:wolf"), w.room(Label("//zones/z:a")))
+    w.despawn(mob)
+    assertFalse(mob.inWorld, "the mob must still be removed when a listener throws")
+    assertTrue(
+      w.diagnostics.any { it.kind == "plugin" && it.message.contains("on_despawn") },
       w.diagnostics.joinToString("\n") { it.message },
     )
   }

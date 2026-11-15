@@ -39,6 +39,7 @@
 <tr id="ctx.channel"><td><code>channel</code></td><td>1</td><td>For on_perceive: the channel the event travelled on, such as 'sound'.</td></tr>
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
 <tr id="ctx.count"><td><code>count</code></td><td>1</td><td>How many mobs are being summoned, for before_summon.</td></tr>
+<tr id="ctx.destroyed_root"><td><code>destroyed_root</code></td><td>1</td><td>For on_destroy, the item whose destruction began it: the item itself, or the container it is destroyed with.</td></tr>
 <tr id="ctx.direction"><td><code>direction</code></td><td>1</td><td>The movement direction name, for enter and exit hooks.</td></tr>
 <tr id="ctx.elapsed_pulses"><td><code>elapsed_pulses</code></td><td>1</td><td>Pulses spent dormant, for on_wake.</td></tr>
 <tr id="ctx.event"><td><code>event</code></td><td>1</td><td>For on_perceive: 'say', 'emote', 'shout', 'combat_start', 'combat', 'death', 'enter', 'exit', 'open', 'close', 'lock', 'unlock' or the event a script passed to ctx.emit. For on_group_change: 'join', 'leave', 'leader' or 'disband'. For on_owner_change: 'set' or 'clear'. For on_disengage: 'flee', 'death' or 'stop'.</td></tr>
@@ -356,9 +357,19 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.despawn" class="entry">
+<h4><code>despawn(mob)</code> <span class="since">since api_version 1</span></h4>
+<p>Takes a mob out of the world without killing it: no corpse, loot or XP, and nothing printed. What it carries and wears goes with it; on_despawn fires first. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.despawn.mob"><td><code>mob</code></td><td>positional or named</td><td></td><td>The mob to remove.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.destroy" class="entry">
 <h4><code>destroy(item, count = None)</code> <span class="since">since api_version 1</span></h4>
-<p>Removes an item and everything inside it, or count of a stack.</p>
+<p>Removes an item and everything inside it, firing on_destroy on each first, or count of a stack, firing nothing.</p>
 <table>
 <thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
 <tbody>

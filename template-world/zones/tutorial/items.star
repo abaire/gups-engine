@@ -3,12 +3,21 @@
 load("//lib:quest.star", "quest")
 load(":helpers.star", "FIRST_STEPS")
 
+def _key_destroyed(ctx):
+    # A lost key would lock the armory for good, and only items inside a destroyed item can
+    # escape. When the key itself is the destroyed root, moving it would not save it.
+    if ctx.destroyed_root != ctx.self:
+        ctx.move_item(ctx.self, ctx.room)
+        ctx.echo(ctx.room, "The brass key clatters free.")
+
 item("brass_key",
     name = "a brass key",
     # Keywords are what players type: "get key". They default to the words of the name,
     # minus articles, so this line only makes the default explicit.
     keywords = ["brass", "key"],
     desc = "A small brass key stamped with an anvil.",
+    tags = ["no_salvage"],
+    on_destroy = _key_destroyed,
 )
 
 def _on_get_sword(ctx):
@@ -242,4 +251,25 @@ item("cracked_wand",
         outcome(1, effect = damage(dice = "1d12", type = DAMAGE.fire), target = "self",
                 message = "The wand cracks open and explodes in your hand!"),
     ])],
+)
+
+item("satchel",
+    name = "a traveler's satchel",
+    keywords = ["satchel"],
+    desc = "A worn leather satchel with a brass buckle.",
+    container = container(capacity = 5, max_weight = 50, state = "open"),
+)
+
+def _flask_bursts(ctx):
+    # ctx.event distinguishes an explicit destroy (such as salvage) from decay or a spent
+    # charge; only breaking the flask while held triggers the blast.
+    if ctx.event == "destroy" and ctx.actor != None:
+        ctx.echo(ctx.room, "The volatile flask bursts in a gout of flame!")
+        ctx.damage(ctx.actor, 8, DAMAGE.fire, "hp")
+
+item("volatile_flask",
+    name = "a volatile flask",
+    keywords = ["volatile", "flask"],
+    desc = "A sealed glass flask filled with swirling amber liquid.",
+    on_destroy = _flask_bursts,
 )

@@ -128,8 +128,8 @@ gups-engine/
                PluginWorld facade, plus the engine-side loader and host
                (gups.pluginapi.host); unstable, documented
   cli/         the `gups` binary, the docs renderer (§4.16)
-  webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
-               as resources
+  webclient/   static browser client (plain ES modules with JSDoc) and the Mudlet mapper
+               script, bundled into the jar as resources
   samples/     sample plugins: weather-plugin, heritage-plugin (race and class), curse-plugin,
                hunger-plugin and bluemage-plugin (§4.15); robot-world, a small non-fantasy course world with its own schema and
                features (§3.9, §3.10)
@@ -146,8 +146,8 @@ gups-engine/
   `kotlinx-coroutines` as an `api` dependency, because `WorldLoop`'s public API uses it.
 - `script`, `persist`, `net`, and `auth` depend on `core` and never on each other.
 - `harness` depends on `core` and `script` only. It never touches `net` or `persist`.
-- `cli` is the only module that wires everything together. `net` reads the web client's files through a class loader
-  that `cli` hands it, so it doesn't depend on `webclient`.
+- `cli` is the only module that wires everything together. `net` reads the web client's files and the Mudlet mapper
+  script through a class loader that `cli` hands it, so it doesn't depend on `webclient`.
 - `plugin-api` depends on `core` and `script` with `implementation`, and exposes only `api(libs.starlark)`. Plugins
   compile against `gups.pluginapi.*` and `net.starlark.java.*` alone; no public type in `gups.pluginapi` mentions a
   `core` or `script` type (a reflection test checks it). Plugins are loaded through `ServiceLoader` from the world's
@@ -270,12 +270,12 @@ gups-engine/
 
 ### 2.4 Runtime Profiles
 
-|   Flag    |                                                                                                                                                                                                                                          Effect                                                                                                                                                                                                                                           |
-|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--dev`   | Raw telnet on `127.0.0.1:4000` (`--port` changes the port). Auto-creates a passwordless local `instructor` account bound to localhost. Auto-reload on file save. `@eval` and `@reload` enabled. Loads every package under `--world` (default: the current directory); packages that fail to load are reported and left out. Serves the API reference over plain HTTP at `http://127.0.0.1:4080/docs/` (`--docs-port PORT` changes the port; `0` picks a free one). Checkpoints still run. |
-| `--prod`  | Account logins (§5.12). Listeners as configured: raw telnet only when asked, telnet over TLS, and HTTPS with the web client and `/docs/` (at least one is required). The admin port is always on. `@eval`, `@reload`, auto-reload and the file watcher are off. Deploys only through `gups deploy` / `@deploy`. The §3.8 check runs at each world tick, not every pulse. Requires a `git` binary. `--docs-port` is a usage error.                                                         |
-| `--fresh` | Usable with either profile. Ignores saved **world** state (mob positions, ground items, room and zone state) and boots purely from the `.star` definitions. Accounts, characters, and items whose location chain ends in a player character are still loaded.                                                                                                                                                                                                                             |
-| `--wipe`  | A server wipe, usable with either profile. Like `--fresh`, and also deletes every character and every item, then records the current schema and features (§3.9). Accounts, restrictions, web tokens and setup codes are kept. A `prewipe` backup (§5.11) is taken first.                                                                                                                                                                                                                  |
+|   Flag    |                                                                                                                                                                                                                                                                                              Effect                                                                                                                                                                                                                                                                                               |
+|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--dev`   | Raw telnet on `127.0.0.1:4000` (`--port` changes the port). Auto-creates a passwordless local `instructor` account bound to localhost. Auto-reload on file save. `@eval` and `@reload` enabled. Loads every package under `--world` (default: the current directory); packages that fail to load are reported and left out. Serves the API reference over plain HTTP at `http://127.0.0.1:4080/docs/` (`--docs-port PORT` changes the port; `0` picks a free one). The same port serves the Mudlet mapper package, which GMCP clients are offered at that address (§4.10). Checkpoints still run. |
+| `--prod`  | Account logins (§5.12). Listeners as configured: raw telnet only when asked, telnet over TLS, and HTTPS with the web client and `/docs/` (at least one is required). The admin port is always on. `@eval`, `@reload`, auto-reload and the file watcher are off. Deploys only through `gups deploy` / `@deploy`. The §3.8 check runs at each world tick, not every pulse. Requires a `git` binary. `--docs-port` is a usage error.                                                                                                                                                                 |
+| `--fresh` | Usable with either profile. Ignores saved **world** state (mob positions, ground items, room and zone state) and boots purely from the `.star` definitions. Accounts, characters, and items whose location chain ends in a player character are still loaded.                                                                                                                                                                                                                                                                                                                                     |
+| `--wipe`  | A server wipe, usable with either profile. Like `--fresh`, and also deletes every character and every item, then records the current schema and features (§3.9). Accounts, restrictions, web tokens and setup codes are kept. A `prewipe` backup (§5.11) is taken first.                                                                                                                                                                                                                                                                                                                          |
 
 - **Database:** `--db` defaults to `<world>/.gups/world.db` in both profiles. The hidden directory is skipped by the
   package scan and the file watcher. `gups backup`, `restore` and `repro` take the same `--world` and `--db`.
@@ -293,6 +293,7 @@ gups-engine/
     db = "/srv/gups/world.db",
     telnet_tls = ":4443",
     https = ":443",                          # web client, WebSocket and /docs/
+    public_url = "https://mud.example.edu",  # where players reach https; offers Mudlet the mapper (§4.10)
     telnet = None,                           # raw telnet off; e.g. ":4000" to enable
     admin = "127.0.0.1:9090",
     tls_cert = "/etc/gups/fullchain.pem",
@@ -316,6 +317,9 @@ gups-engine/
   - **Listeners:** `--telnet`/`telnet` (binds every interface), `--telnet-tls`/`telnet_tls`, and `--https`/`https`. Both
     TLS listeners share one certificate: `--tls-cert` and `--tls-key` (`tls_cert`, `tls_key`), or `--self-signed`, which
     needs a TLS listener.
+  - **Public URL:** `--public-url`/`public_url`, the absolute `http` or `https` address players reach the HTTPS listener
+    at, such as `https://mud.example.edu`, or one with a path behind a proxy. It needs `--https`. With it, GMCP clients
+    are offered the Mudlet mapper package (§4.10); without it they aren't, and startup logs a warning.
   - **Admin port:** `--admin`/`admin` (default `127.0.0.1:9090`) and
     `--admin-token-file`/`admin_token_file`/`GUPS_ADMIN_TOKEN_FILE` (§4.14).
   - **Accounts:** `--open-signup`/`--no-open-signup`, `--max-characters`, `reserved_names`, `restriction_ladder`.
@@ -811,14 +815,14 @@ The engine is a kernel plus five feature modules. A world lists the features it 
 ["combat", "track", "skills", "leveling", "standing"]`; leaving `features` out turns all five on, and listing all five
 is the same as leaving it out.
 
-|      Feature       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Requires |
-|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
-| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect`, `remove_affect` and `summon` verbs, `before_summon` and `on_summon`), pet ownership (`set_owner`, `clear_owner`, `on_owner_change`), mob leashes (`set_leash`, `reset_leash`), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, the `order` command, `before_order` and the `ORDER` restriction point, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; the activity slot (warmups, interrupts, the `interrupt_check` export), timed tasks (`start_task`, `stop_task`, `actor.task`, `is_busy`), `stop` and `clear`, `set_item_name`, `wear`, `remove_worn`, the `may_*` restriction queries, `fits`, `item_info`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `starting_stats`, `condition`, `on_player_death` | —        |
-| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `aggressive(prefer=)`, `assist(prefer=)`, `retarget`, the `target_order` export, combat memory with `memory_pulses` (module and mob), `memories`, `remember` and `forget`; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | —        |
-| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `combat` |
-| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, `cast_allowed`, `skill_check`, `skill_power`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, the global `on_skill_use` hook, `act_cast`, the `set_skill`, `remove_skill`, `skill_info` and `report_skill_use` and `skill_roll` verbs, `casting` in `Char.Status`, the `skills` command, `Char.Skills`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | —        |
-| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_share`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`, global `on_level_change` hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | —        |
-| `standing`         | Factions, standing and disposition: the `faction` declaration, `mob(factions=)`, `standing_history_pulses`, the `disposition_below` and `disposition_above` behavior arguments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | —        |
+|      Feature       |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Requires |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+| kernel (always on) | Sessions, the scheduler, persistence, hooks, timers, affects (the `apply_affect`, `remove_affect` and `summon` verbs, `before_summon` and `on_summon`), pet ownership (`set_owner`, `clear_owner`, `on_owner_change`), mob removal (`despawn`, `on_despawn`), item destruction (`on_destroy`), mob leashes (`set_leash`, `reset_leash`), movement through exits, `look`, communication, `who`/`help`/`score`/`quit`, the `order` command, `before_order` and the `ORDER` restriction point, items and equipment, item affects (`item_affect`, item `affects` and `variants`), doors and containers, `use`; the activity slot (warmups, interrupts, the `interrupt_check` export), timed tasks (`start_task`, `stop_task`, `actor.task`, `is_busy`), `stop` and `clear`, `set_item_name`, `wear`, `remove_worn`, the `may_*` restriction queries, `fits`, `item_info`; vitals, conditions, incapacitation, death, corpses and respawn; the `damage` and `heal` verbs and `mitigate`; the `damage`, `bonus_damage`, `receive_damage` and `mitigate` modifier points; the effect primitives `damage`, `heal`, `apply_affect`, `dispel`, `stun`, `summon` and `sequence`; `regen`, `move_cost`, `carry_limit`, `encumbrance_level`, `encumbrance`, `item_power`, `starting_stats`, `condition`, `on_player_death` | —        |
+| `combat`           | Engagement, `kill`, `flee`, combat rounds, initiative, auto-attacks, owner and pet engagement coupling; `initiative`, `flee_chance`, `flee_fail_lag` (the export and its modifier point); the `damage` export; `before_attack`, `on_combat_tick`, `on_disengage`; `proc()`, `outcome()` and every `procs` argument, and the proc messages; the `aggressive`, `assist`, `flee` and `defend` behaviors; `aggressive(prefer=)`, `assist(prefer=)`, `retarget`, the `target_order` export, combat memory with `memory_pulses` (module and mob), `memories`, `remember` and `forget`; `start_combat`, `stop_combat`, `enemies_near`, `allies_near`; the `fighting` and `initiative` fields of `Char.Status`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | —        |
+| `track`            | Track indices and bands, room `size`, exit `entry_index`, spawn `at_index`, item `range`, `advance` and `retreat`, pinning, `retreat_check`, `advance_lag`, `retreat_lag`, `retreat_fail_lag` (the exports and their modifier points), `get_lag`, `knockback` and `pull`, the `SIZE` constants, `Room.Bands`, `@where`, `band_of`, a non-zero `index` argument of `teleport`, `spawn` and `move_item`, the skill ranges `melee`, `near` and `far`, `act_advance`/`act_retreat`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `combat` |
+| `skills`           | `skill()` declarations and the `skills` package kind, mob and player skills, `cast`, `cast_allowed`, `skill_check`, `skill_power`, skill costs, `before_cast`/`on_cast_start`/`on_cast`, the global `on_skill_use` hook, `act_cast`, the `set_skill`, `remove_skill`, `skill_info` and `report_skill_use` and `skill_roll` verbs, `casting` in `Char.Status`, the `skills` command, `Char.Skills`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | —        |
+| `leveling`         | `level`, `xp` and `levelGains`, `xp_for_kill`, `xp_share`, `xp_to_level`, `on_level_up`, `on_level_change`, the `award_xp`, `take_xp`, `level_up` and `level_down` verbs, `pending_levels`, XP and level loss at death, `aggressive(unless_level_above)`, level and XP in `Char.Status`, `score` and `who`, global `on_level_change` hooks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | —        |
+| `standing`         | Factions, standing and disposition: the `faction` declaration, `mob(factions=)`, `standing_history_pulses`, the `disposition_below` and `disposition_above` behavior arguments                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | —        |
 
 - **A feature that is off doesn't exist** for the world:
   - Its commands don't exist ("Huh?"), and `help` and `gups docs --world` leave them out.
@@ -1198,7 +1202,7 @@ caster, the victim and the room are told. The cost and lag are paid either way, 
 | `knockback(steps)`                                                                                                                                                                                                                                                  | Push the target away from the caster. On a shared index it goes toward the side with more room, ties toward the back (higher index). Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `pull(steps)`                                                                                                                                                                                                                                                       | Draw the target toward the caster, never past it. Clamped to the track. `track` feature only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `stun(pulses)`                                                                                                                                                                                                                                                      | Stun the target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `summon(label, count=1, duration=None)`                                                                                                                                                                                                                             | Spawn mobs beside the caster, each with `summonedBy` set to the caster. When the caster is an in-world player, each mob's owner is set to it (§4.5 `set_owner`). `summonedBy` and the owner are set before the mob's `on_spawn` runs. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the mob fades away, disengages and leaves the world. Observers can veto it with `before_summon` (§4.4).                                                                                                                                                                                                           |
+| `summon(label, count=1, duration=None)`                                                                                                                                                                                                                             | Spawn mobs beside the caster, each with `summonedBy` set to the caster. When the caster is an in-world player, each mob's owner is set to it (§4.5 `set_owner`). `summonedBy` and the owner are set before the mob's `on_spawn` runs. With a `duration`, each gets a `summoned` affect; when it expires or is removed, the room sees the mob fade away and it is despawned as by `despawn` (§4.5): `on_despawn` fires and its opponents get `on_disengage` with `"stop"`. Observers can veto it with `before_summon` (§4.4).                                                                                                             |
 | `sequence(*effects)`                                                                                                                                                                                                                                                | Combine several primitives, passed as varargs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 4.4 Hook Catalog
@@ -1206,41 +1210,43 @@ caster, the victim and the room are told. The cost and lag are paid either way, 
 Every hook is a named top-level function. Hooks named `before_*` may return `ctx.deny(msg)` to veto the action. Any
 other return value means "allow". The return values of `on_*` hooks are ignored.
 
-|                             Hook                              |   Veto    |               Attach to               |                                   Key ctx fields                                    |
-|---------------------------------------------------------------|-----------|---------------------------------------|-------------------------------------------------------------------------------------|
-| `on_load`                                                     | —         | Room, Mob, Item                       | `self`                                                                              |
-| `on_spawn`                                                    | —         | Room, Mob, Item                       | `self`, `item`                                                                      |
-| `on_reset`                                                    | —         | Room (zone reset)                     | `self`                                                                              |
-| `on_wake(ctx, elapsed_pulses)`                                | —         | Room, Mob, Item                       | `self`, `elapsed_pulses`                                                            |
-| `before_enter` / `on_enter`                                   | ✓ / —     | Room, Mob (observer)                  | `actor`, `direction`, `from_room`                                                   |
-| `before_exit` / `on_exit`                                     | ✓ / —     | Room, Mob (observer)                  | `actor`, `direction`, `to_room`                                                     |
-| `on_say`                                                      | —         | Mob, Room                             | `actor`, `text`                                                                     |
-| `on_tell`                                                     | —         | Mob                                   | `actor`, `text` (no `target`)                                                       |
-| `before_get` / `on_get`                                       | ✓ / —     | Item, Mob (observer)                  | `actor`, `item`                                                                     |
-| `before_drop` / `on_drop`                                     | ✓ / —     | Item, Mob (observer)                  | `actor`, `item`                                                                     |
-| `before_use` / `on_use`                                       | ✓ / —     | Item                                  | `actor`, `item`, `target`                                                           |
-| `on_give`                                                     | —         | Mob (receiver), Item                  | `actor`, `item`, `target`                                                           |
-| `before_attack`                                               | ✓         | Mob, Item (equipped)                  | `actor`, `target`, `weapon`                                                         |
-| `before_cast` / `on_cast_start` / `on_cast`                   | ✓ / — / — | Mob, Item (equipped), Room            | `actor`, `skill`, `target`                                                          |
-| `before_order`                                                | ✓         | Mob (the pet), Room                   | `actor` (the owner), `target` (the pet), `text` (the command line)                  |
-| `before_summon` / `on_summon`                                 | ✓ / —     | Room, Mob (observer)                  | `actor` (the caster), `label`, `count` / `actor`, `targets` (the summoned mobs)     |
-| `on_damage`                                                   | —         | Mob, Item (equipped)                  | `actor` (source), `target`, `amount`, `type`, `losses`, `parts`                     |
-| `on_death`                                                    | —         | Mob, Room, global (§4.9)              | `actor` (killer), `target`                                                          |
-| `on_level_change`                                             | —         | Mob, Room, Item (carried or equipped) | `actor`, `old_level`, `new_level`                                                   |
-| `on_encumbrance_change`                                       | —         | Global only (§4.9)                    | `actor`, `old_encumbrance_level`, `new_encumbrance_level`                           |
-| `on_group_change`                                             | —         | Global only (§4.9)                    | `actor`, `group`, `event` (`"join"`, `"leave"`, `"leader"` or `"disband"`)          |
-| `on_owner_change`                                             | —         | Global only (§4.9)                    | `actor`, `target`, `event` (`"set"` or `"clear"`)                                   |
-| `on_skill_use`                                                | —         | Global only (§4.9)                    | `actor`, `skill`, `target`, `item`, `targets`, `outcome`                            |
-| `on_combat_tick`                                              | —         | Mob, Item (equipped)                  | `self`, `actor`, `targets`                                                          |
-| `on_disengage`                                                | —         | Mob, Room                             | `actor`, `event` (`"flee"`, `"death"` or `"stop"`)                                  |
-| `on_tick`                                                     | —         | Any (world tick)                      | `self`                                                                              |
-| `on_perceive`                                                 | —         | Mob (§5.7)                            | `event`, `channel`, `intensity`, `cost`, `actor`, `text`, `source_room`, `via_exit` |
-| `before_open`, `before_close`, `before_lock`, `before_unlock` | ✓         | Item, Room, Mob (§5.7)                | `actor`, `direction` (a door) or `item` (a container)                               |
-| `on_open`, `on_close`, `on_lock`, `on_unlock`                 | —         | Item, Room, Mob (§5.7)                | `actor`, `direction` (a door) or `item` (a container)                               |
-| `think`                                                       | —         | Mob                                   | `self`, `proposals`                                                                 |
-| `commands[verb]`                                              | —         | Room, Item                            | `actor`, `args`, `target`, `item`                                                   |
-| affect `on_tick`                                              | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`                                |
-| affect `on_expire`                                            | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`, `reason`                      |
+|                             Hook                              |   Veto    |               Attach to               |                                        Key ctx fields                                         |
+|---------------------------------------------------------------|-----------|---------------------------------------|-----------------------------------------------------------------------------------------------|
+| `on_load`                                                     | —         | Room, Mob, Item                       | `self`                                                                                        |
+| `on_spawn`                                                    | —         | Room, Mob, Item                       | `self`, `item`                                                                                |
+| `on_reset`                                                    | —         | Room (zone reset)                     | `self`                                                                                        |
+| `on_wake(ctx, elapsed_pulses)`                                | —         | Room, Mob, Item                       | `self`, `elapsed_pulses`                                                                      |
+| `before_enter` / `on_enter`                                   | ✓ / —     | Room, Mob (observer)                  | `actor`, `direction`, `from_room`                                                             |
+| `before_exit` / `on_exit`                                     | ✓ / —     | Room, Mob (observer)                  | `actor`, `direction`, `to_room`                                                               |
+| `on_say`                                                      | —         | Mob, Room                             | `actor`, `text`                                                                               |
+| `on_tell`                                                     | —         | Mob                                   | `actor`, `text` (no `target`)                                                                 |
+| `before_get` / `on_get`                                       | ✓ / —     | Item, Mob (observer)                  | `actor`, `item`                                                                               |
+| `before_drop` / `on_drop`                                     | ✓ / —     | Item, Mob (observer)                  | `actor`, `item`                                                                               |
+| `before_use` / `on_use`                                       | ✓ / —     | Item                                  | `actor`, `item`, `target`                                                                     |
+| `on_give`                                                     | —         | Mob (receiver), Item                  | `actor`, `item`, `target`                                                                     |
+| `before_attack`                                               | ✓         | Mob, Item (equipped)                  | `actor`, `target`, `weapon`                                                                   |
+| `before_cast` / `on_cast_start` / `on_cast`                   | ✓ / — / — | Mob, Item (equipped), Room            | `actor`, `skill`, `target`                                                                    |
+| `before_order`                                                | ✓         | Mob (the pet), Room                   | `actor` (the owner), `target` (the pet), `text` (the command line)                            |
+| `before_summon` / `on_summon`                                 | ✓ / —     | Room, Mob (observer)                  | `actor` (the caster), `label`, `count` / `actor`, `targets` (the summoned mobs)               |
+| `on_damage`                                                   | —         | Mob, Item (equipped)                  | `actor` (source), `target`, `amount`, `type`, `losses`, `parts`                               |
+| `on_death`                                                    | —         | Mob, Room, global (§4.9)              | `actor` (killer), `target`                                                                    |
+| `on_despawn`                                                  | —         | Mob, Room, global (§4.9)              | `actor` (the mob)                                                                             |
+| `on_destroy`                                                  | —         | Item, Room, global (§4.9)             | `item`, `actor` (the holder), `event` (`"destroy"`, `"decay"` or `"empty"`), `destroyed_root` |
+| `on_level_change`                                             | —         | Mob, Room, Item (carried or equipped) | `actor`, `old_level`, `new_level`                                                             |
+| `on_encumbrance_change`                                       | —         | Global only (§4.9)                    | `actor`, `old_encumbrance_level`, `new_encumbrance_level`                                     |
+| `on_group_change`                                             | —         | Global only (§4.9)                    | `actor`, `group`, `event` (`"join"`, `"leave"`, `"leader"` or `"disband"`)                    |
+| `on_owner_change`                                             | —         | Global only (§4.9)                    | `actor`, `target`, `event` (`"set"` or `"clear"`)                                             |
+| `on_skill_use`                                                | —         | Global only (§4.9)                    | `actor`, `skill`, `target`, `item`, `targets`, `outcome`                                      |
+| `on_combat_tick`                                              | —         | Mob, Item (equipped)                  | `self`, `actor`, `targets`                                                                    |
+| `on_disengage`                                                | —         | Mob, Room                             | `actor`, `event` (`"flee"`, `"death"` or `"stop"`)                                            |
+| `on_tick`                                                     | —         | Any (world tick)                      | `self`                                                                                        |
+| `on_perceive`                                                 | —         | Mob (§5.7)                            | `event`, `channel`, `intensity`, `cost`, `actor`, `text`, `source_room`, `via_exit`           |
+| `before_open`, `before_close`, `before_lock`, `before_unlock` | ✓         | Item, Room, Mob (§5.7)                | `actor`, `direction` (a door) or `item` (a container)                                         |
+| `on_open`, `on_close`, `on_lock`, `on_unlock`                 | —         | Item, Room, Mob (§5.7)                | `actor`, `direction` (a door) or `item` (a container)                                         |
+| `think`                                                       | —         | Mob                                   | `self`, `proposals`                                                                           |
+| `commands[verb]`                                              | —         | Room, Item                            | `actor`, `args`, `target`, `item`                                                             |
+| affect `on_tick`                                              | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`                                          |
+| affect `on_expire`                                            | —         | Affect                                | `self` (host: an actor, an item or a room), `affect`, `reason`                                |
 
 **Observer semantics:** Hooks on a mob fire for actions *by others in the same room*. `ctx.self` is always the hook's
 owner.
@@ -1310,14 +1316,40 @@ world's (§4.9). Its return value is ignored.
 
 **`on_disengage`** fires when an actor that was engaged has no opponent left, once for each such actor. `ctx.event` is
 `"flee"` after a successful flee, `"death"` when it was freed by an opponent's death, and `"stop"` otherwise
-(`stop_combat`, an opponent leaving the room, or a quit). The event names how the engagement ended, so the actor that
-fled and the opponents it left behind all see `"flee"`. The dying actor itself does not get the hook. It fires only once
-the move, quit or death that ended the engagement has finished: an actor that walked away or fled is already in its new
-room, so its room hooks are those of the room it reached, a quitter has already left (so it does not get the hook), and
-a dead actor has been removed or respawned, after `on_death` and before the XP award. A hook therefore can't re-engage
-an actor that is half gone. Whether an actor is simulated, and so gets the hook, is judged where the fight was: a mob
-that flees into a dormant room still gets it. The engine clears no ledger itself: a world calls `clear_contributions`
-from this hook. It fires the room and entity hooks as `on_death` does, then the global hook.
+(`stop_combat`, an opponent leaving the room, an opponent despawning (§4.5), a quit, or an opponent leaving the world
+any other way). The event names how the engagement ended, so the actor that fled and the opponents it left behind all
+see `"flee"`. The dying actor itself does not get the hook. It fires only once the move, quit or death that ended the
+engagement has finished: an actor that walked away or fled is already in its new room, so its room hooks are those of
+the room it reached, a quitter has already left (so it does not get the hook), and a dead actor has been removed or
+respawned, after `on_death` and before the XP award. A hook therefore can't re-engage an actor that is half gone.
+Whether an actor is simulated, and so gets the hook, is judged where the fight was: a mob that flees into a dormant room
+still gets it. The engine clears no ledger itself: a world calls `clear_contributions` from this hook. It fires the room
+and entity hooks as `on_death` does, then the global hook.
+
+**`on_despawn`** fires when a mob leaves the world without dying: `despawn` (§4.5), a summon fading (§4.3) or a debug
+mob expiring (§4.9). `ctx.actor` is the mob. It fires on the mob's own hook, then the room's, then globally; observers
+in the room don't get it. It runs after the mob's engagements have ended and before it is removed, so the mob is still
+in its room with everything it carries and wears, and a hook may move items off it. It can't be vetoed and its return
+value is ignored. While it runs, nothing can engage the mob, damage can't kill it, and despawning it again does nothing.
+The opponents it freed get `on_disengage` with `"stop"` once it has gone. A mob removed by a reload (§4.11) gets no
+hook.
+
+**`on_destroy`** fires when an item stops existing: a whole-item `destroy` (§4.5), the last of an item whose `empty` is
+`"destroy"` (§4.9), or decay. `ctx.item` is the item, `ctx.actor` whoever holds it, following containers (`None` on the
+ground), and `ctx.event` the cause: `"destroy"`, `"empty"` or `"decay"`. `ctx.destroyed_root` is the item whose
+destruction began it: the item itself, or the container it is being destroyed with. It fires on the item, then on the
+room it is in, then globally; observers in the room don't get it. It runs before anything is removed, so the item is
+still where it was, holding what it held. A destroyed item's contents go with it and get the hook too, container first:
+once an item's hooks have run, the items inside it *then* are visited in ascending id order, each with the cause of the
+item whose destruction began it. An item inside that is moved out of the destroyed item before its turn, or by its own
+hooks, survives, and its remaining hooks, the global one included, are skipped. The destroyed item itself is removed
+wherever it ends up. While the hooks run, putting or spawning anything into an item whose hooks have already run is an
+error, and destroying an item still inside the destroyed one does nothing. Destroying something that holds the destroyed
+item (from one of these hooks, say) walks it as usual, but items whose hooks have already run don't run them again; what
+they hold is still visited, with the new cause. An item removed from the world by its own hooks gets none of its
+remaining hooks. Removing part of a stack, merging stacks (`merge_stack`, §4.5), `transform`, a reload (§4.11), a mob's
+death (its belongings go to the corpse) and a despawn (its belongings go with the mob) fire nothing. It can't be vetoed
+and its return value is ignored.
 
 **Timing:**
 
@@ -1424,6 +1456,7 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 | Tasks             | `start_task(actor, pulses, on_done, name="task", lag=0, interrupt={"stun": True, "damage_pct": None}, on_stop=None, **args) -> str or None`, `stop_task(actor) -> bool`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Pets              | `set_owner(mob, player)`, `clear_owner(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Mobs              | `despawn(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Leash             | `set_leash(mob, leash)`, `reset_leash(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Standing          | `standing_event(affected, actor, event, amount=0, item=None)`, `adjust_standing(holder, subject, amount)`, `clear_standing(holder, subject=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`, `skill_info(label) -> skill | None`, `group_of(actor) -> group | None`, `group_members(actor) -> [actor]`, `plan(facts, actions, goal, max_expansions=1024) -> [name] | None`, `disposition(holder, subject) -> int`, `standing(holder, subject) -> int`, `factions_of(actor) -> [str]`, `standing_history(holder, subject, since=0, via=None, event=None) -> struct(gained, lost)`, `memories(mob, subject=None, event=None, since=0)`, `item_info(label)` |
@@ -1491,6 +1524,13 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
   `summon` primitive (§4.3). Returns the mobs as a list. It is not scaled by power. When `caster` is an in-world player,
   each mob's owner is set to it. `summonedBy` and the owner are set before the mob's `on_spawn` runs. Observers can veto
   it with `before_summon` (§4.4).
+- **`despawn`:** `ctx.despawn(mob)` takes `mob` out of the world without killing it and returns `None`. Its engagements
+  end and its action, task and queue are cleared; `on_despawn` (§4.4) fires; the mob and everything it carries and wears
+  leave the world; then the opponents it freed get `on_disengage` with `"stop"`. Nothing is printed, no corpse is made,
+  no loot is rolled and no XP is awarded: content that wants a message sends one, and content that wants to keep an item
+  moves it off the mob first. A mob a spawn rule tracks leaves its rule, which respawns it on schedule (§5.4). An owned
+  pet is gone for good, as at death, and `on_owner_change` doesn't fire. A player, an actor not in the world, or a mob
+  whose death is running is an error; despawning a mob whose `on_despawn` hooks are running does nothing. Kernel.
 - **`set_skill`, `remove_skill` and `skill_info`:** `set_skill` gives `actor` the skill `skill` (a label or skill view)
   at `proficiency` (0 to 100), or changes the proficiency it has. It first asks the `learn` restrictions (§4.19) and
   returns the refusal message, changing nothing, or `None` once the skill is set. `remove_skill` forgets the skill and
@@ -1531,8 +1571,9 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
     A moved part is a new item with the stack's attributes, name override, debug flag and decay deadline, and doesn't
     fire `on_spawn`. Moving part of an equipped or non-stackable item is an error. A moved part also copies the stack's
     instance affects and tag changes.
-  - `destroy(item, count=None)` removes the item and everything inside it, or, when `count` is less than the stack's
-    count, removes that many from the stack.
+  - `destroy(item, count=None)` removes the item and everything inside it, firing `on_destroy` (§4.4) with `"destroy"`
+    on each before any of them goes, or, when `count` is less than the stack's count, removes that many from the stack
+    and fires nothing.
   - `spawn`, `grant_item` and `move_item` don't check what the commands check about where an item goes: a container may
     be closed or locked, and its `capacity` and `max_weight`, like an actor's carry limit, may be exceeded. Content that
     moves items for a player asks `fits` first.
@@ -1560,8 +1601,8 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
     Kernel.
   - Verbs never merge stacks, except `merge_stack(item)`, which merges the item into a stack of the same prototype in
     the same place with identical attributes, decay deadline and charges, as `get` does, and returns the view of the
-    stack that now holds it (the item itself if nothing matched). An item with instance affects or tag changes never
-    merges into a stack.
+    stack that now holds it (the item itself if nothing matched). The item absorbed into the stack fires no
+    `on_destroy`. An item with instance affects or tag changes never merges into a stack.
   - `transform(item, label)` keeps the item's id, location, count, attributes, affects, tag changes, name and timers. A
     stack into a non-stackable prototype keeps one of its count; a container into a non-container drops its contents on
     the ground; a locked container stays locked only if the new prototype has a `key`, else it is closed. It refuses a
@@ -2308,29 +2349,34 @@ uses the default names. Every player-facing message here is the default text of 
   the ground ("Use {item} on what?"); `none` nothing. A target item on the ground, with or without a `use_effect`, must
   also be within `get_lag` reach. The order is: `before_use` (can veto), the `use_effect` with the user as caster,
   `on_use`, then, if the item is still in the world, one charge spent (or one item of a stack) and on the last, the
-  item's `empty` action: destroy it, keep it at 0 charges, or `transform` it into the named variant. An item without
-  `charges` is never used up; `on_use` destroys it if it should be. A use that isn't refused or vetoed sets the user's
-  recovery lag to `use_lag`. When the item has a `use_effect` and no `on_use` hook, the user sees "You use {item}." and
-  onlookers "{actor} uses {item}." before the effect.
+  item's `empty` action: destroy it (`on_destroy` with `"empty"`, §4.4; for a stack, only the last one fires it), keep
+  it at 0 charges, or `transform` it into the named variant. An item without `charges` is never used up; `on_use`
+  destroys it if it should be. A use that isn't refused or vetoed sets the user's recovery lag to `use_lag`. When the
+  item has a `use_effect` and no `on_use` hook, the user sees "You use {item}." and onlookers "{actor} uses {item}."
+  before the effect.
 - **Stacks:** `get`, `drop`, `give` and `put` merge a stackable item into a stack of the same prototype in the same
   place with identical attributes and decay deadline, and no timers or name override on either (§3.8 inv. 8).
 
 **Global commands:** Privileged packages may register global commands: `global_command("quests", fn, lane="fast")`. This
 is how `//lib:quest.star` provides `quests`, which lists active and finished quests.
 
-**Global hooks:** Privileged packages may register a hook that fires for every actor, wherever it is:
-`global_hook("on_level_change", fn)`. `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`,
-`on_disengage`, `on_death` and `on_skill_use` are the hooks that can be global. A global `on_disengage` fires after that
-actor's `on_disengage` hooks on mobs and rooms, with the same ctx fields. A global `on_death` fires once for every actor
-that dies, players and mobs, after that death's `on_death` hooks on the victim, the room and observers, and before the
-corpse is made and XP is awarded; `ctx.self` and `ctx.target` are the victim and `ctx.actor` the killer, or `None`.
-`on_level_change` fires once per level step for every actor, players and mobs, after that step's `on_level_change` hooks
-on mobs, rooms and items, with the same ctx fields; `ctx.self` is the actor. `on_encumbrance_change`, `on_group_change`,
-`on_owner_change` and `on_death` belong to the kernel, so they fire in every world. Global hooks run in package label
-order, then in the order they were registered. In a world without `leveling` (for `on_level_change`), `combat` (for
-`on_disengage`) or `skills` (for `on_skill_use`) the declaration loads and the hook never fires, so a library can serve
-worlds with and without it. At death and at a level change, the bearers' trait handlers (§4.15) run after the hooks on
-entities, the room and items, and before the global hooks. Plugin event listeners (§4.15) run after them.
+**Global hooks:** Privileged packages may register a hook that fires for every actor (or, for `on_destroy`, every item),
+wherever it is: `global_hook("on_level_change", fn)`. `on_level_change`, `on_encumbrance_change`, `on_group_change`,
+`on_owner_change`, `on_disengage`, `on_death`, `on_despawn`, `on_destroy` and `on_skill_use` are the hooks that can be
+global. A global `on_disengage` fires after that actor's `on_disengage` hooks on mobs and rooms, with the same ctx
+fields. A global `on_death` fires once for every actor that dies, players and mobs, after that death's `on_death` hooks
+on the victim, the room and observers, and before the corpse is made and XP is awarded; `ctx.self` and `ctx.target` are
+the victim and `ctx.actor` the killer, or `None`. A global `on_despawn` fires once for every mob that despawns, after
+its own and its room's `on_despawn` hooks, with the same ctx fields; `ctx.self` and `ctx.actor` are the mob. A global
+`on_destroy` fires once for every item destroyed, after its own and its room's `on_destroy` hooks, with the same ctx
+fields; `ctx.self` and `ctx.item` are the item. `on_level_change` fires once per level step for every actor, players and
+mobs, after that step's `on_level_change` hooks on mobs, rooms and items, with the same ctx fields; `ctx.self` is the
+actor. `on_encumbrance_change`, `on_group_change`, `on_owner_change`, `on_death`, `on_despawn` and `on_destroy` belong
+to the kernel, so they fire in every world. Global hooks run in package label order, then in the order they were
+registered. In a world without `leveling` (for `on_level_change`), `combat` (for `on_disengage`) or `skills` (for
+`on_skill_use`) the declaration loads and the hook never fires, so a library can serve worlds with and without it. At
+death and at a level change, the bearers' trait handlers (§4.15) run after the hooks on entities, the room and items,
+and before the global hooks. Plugin event listeners (§4.15) run after them.
 
 **Reserved exit names:** an exit's direction or custom name may not be the name or alias of an engine command the world
 has (after `rename`, §3.10), or the name of any global command. Such an exit fails its package's load with a diagnostic
@@ -2427,7 +2473,8 @@ outside `core` are tools, and an `@` prefix only matches other `@` commands.
   spawned entity is flagged `debug`). Mobs appear at the builder's index; items go into the builder's inventory (a
   stackable item as one stack). Debug entities have no audit trail and are never saved, so debug spawns can't leak into
   the real economy:
-  - A debug mob despawns at the first world tick after its spawner is gone, or after 30 minutes.
+  - A debug mob fades away as a summon does (§4.3), and is despawned as by `despawn` (§4.5), at the first world tick
+    after its spawner is gone, or after 30 minutes. It also goes when its spawner logs out.
   - Killing a debug mob awards no XP. Everything it drops (inventory, loot, corpse) is `debug` too.
 
 **Instructor commands** (global):
@@ -2551,20 +2598,21 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   the world, which hands each to the plugin that registered it (§4.15) and ignores the rest. The server sends these,
   with lowercase field names:
 
-  |       Package       |                                                                                                                                                 Payload                                                                                                                                                 |                                               Sent                                               |
-  |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-  | `Char.Schema`       | `{"stats": [{"name", "label"}], "vitals": [{"name", "label"}], "damage_types": [names], "features": [names]}`                                                                                                                                                                                           | Once a session takes a character, and when the client starts supporting it                       |
-  | `Char.Vitals`       | `{"<vital>", "max<vital>"}` for every declared vital, for example `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}`                                                                                                                                                                               | When any field changed                                                                           |
-  | `Char.Status`       | `{"name", "level", "xp", "xp_next", "wait", "task": {"name", "progress"} or null, "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}`; `level`, `xp` and `xp_next` only with `leveling`, `casting` only with `skills`, `initiative` and `fighting` only with `combat` | When changed                                                                                     |
-  | `Char.Affects`      | `[{"name", "remaining", "flags"}]`                                                                                                                                                                                                                                                                      | When the set or a whole second of time left changed                                              |
-  | `Room.Info`         | `{"label", "name", "exits": {dir: "open"/"closed"/"locked"/null}, "regions"}`                                                                                                                                                                                                                           | On entering a room, and when a door here changes                                                 |
-  | `Room.Bands`        | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only                                                                                                                                                                              | When anything in the room moves, arrives or leaves                                               |
-  | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}`                                                                                                                                                                                                                                | With each message                                                                                |
-  | `Gups.Trace`        | `{"line"}`                                                                                                                                                                                                                                                                                              | Builders with `@trace` on, instead of the `[trace]` text lines                                   |
-  | `Char.Creation`     | `{"name", "step": "choice"/"custom"/"confirm", "choice": {...} or null, "custom": {"id", "title", "data"} or null, "answers": [...], "summaries": [{"step", "title", "text"}]}`, or `null`                                                                                                              | With each creation prompt (§5.12), before the session has a character; `null` when the steps end |
-  | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                                                           | When changed; only in worlds with a creation provider or a trait                                 |
-  | `Char.Skills`       | `{"skills": [{"label", "name", "kind", "proficiency"}]}`, sorted by name; only with `skills`                                                                                                                                                                                                            | When changed                                                                                     |
-  | `Char.Group`        | `null`, or `{"id", "leader", "members": [{"name", "leader", "in_room", "level", "vitals"}]}`; `leader` is the leader's name at the top and a bool in a member, and `level` appears only with `leveling`                                                                                                 | When changed                                                                                     |
+  |       Package       |                                                                                                                                                 Payload                                                                                                                                                 |                                                         Sent                                                          |
+  |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+  | `Char.Schema`       | `{"stats": [{"name", "label"}], "vitals": [{"name", "label"}], "damage_types": [names], "features": [names]}`                                                                                                                                                                                           | Once a session takes a character, and when the client starts supporting it                                            |
+  | `Char.Vitals`       | `{"<vital>", "max<vital>"}` for every declared vital, for example `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}`                                                                                                                                                                               | When any field changed                                                                                                |
+  | `Char.Status`       | `{"name", "level", "xp", "xp_next", "wait", "task": {"name", "progress"} or null, "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}`; `level`, `xp` and `xp_next` only with `leveling`, `casting` only with `skills`, `initiative` and `fighting` only with `combat` | When changed                                                                                                          |
+  | `Char.Affects`      | `[{"name", "remaining", "flags"}]`                                                                                                                                                                                                                                                                      | When the set or a whole second of time left changed                                                                   |
+  | `Room.Info`         | `{"num", "label", "name", "area", "area_name", "exits": {dir: num or null}, "doors": {dir: "open"/"closed"/"locked"}, "regions"}`                                                                                                                                                                       | On entering a room, and when a door here changes                                                                      |
+  | `Room.Bands`        | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only                                                                                                                                                                              | When anything in the room moves, arrives or leaves                                                                    |
+  | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}`                                                                                                                                                                                                                                | With each message                                                                                                     |
+  | `Gups.Trace`        | `{"line"}`                                                                                                                                                                                                                                                                                              | Builders with `@trace` on, instead of the `[trace]` text lines                                                        |
+  | `Char.Creation`     | `{"name", "step": "choice"/"custom"/"confirm", "choice": {...} or null, "custom": {"id", "title", "data"} or null, "answers": [...], "summaries": [{"step", "title", "text"}]}`, or `null`                                                                                                              | With each creation prompt (§5.12), before the session has a character; `null` when the steps end                      |
+  | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                                                           | When changed; only in worlds with a creation provider or a trait                                                      |
+  | `Char.Skills`       | `{"skills": [{"label", "name", "kind", "proficiency"}]}`, sorted by name; only with `skills`                                                                                                                                                                                                            | When changed                                                                                                          |
+  | `Char.Group`        | `null`, or `{"id", "leader", "members": [{"name", "leader", "in_room", "level", "vitals"}]}`; `leader` is the leader's name at the top and a bool in a member, and `level` appears only with `leveling`                                                                                                 | When changed                                                                                                          |
+  | `Client.GUI`        | `{"version", "url"}`                                                                                                                                                                                                                                                                                    | Once each time a session takes a character, to every client with GMCP on, when the server knows its public URL (§2.4) |
 
   `Room.Bands` entries carry entity ids, only ever for the viewer's own room, so clients can key their band view and
   tell identical mobs apart. Plugins may add state and event packages, and receive GMCP input (§4.15). `lib` and `rules`
@@ -2577,16 +2625,18 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
 - **GMCP delivery:**
 
   - A package is sent only when GMCP is on and `Core.Supports` listed it, or a module above it (`Char` covers
-    `Char.Vitals`), compared case-insensitively. Versions in the entries are ignored. `Set` replaces the list,
-    `Add`/`Remove` change it, and `DONT GMCP` turns everything off. `Core.Hello`'s client and version are kept.
+    `Char.Vitals`), compared case-insensitively. The one exception is `Client.GUI`, which goes to every client with GMCP
+    on whatever `Core.Supports` lists, because Mudlet doesn't list it. Versions in the entries are ignored. `Set`
+    replaces the list, `Add`/`Remove` change it, and `DONT GMCP` turns everything off. `Core.Hello`'s client and version
+    are kept.
   - A `Core.*` message with malformed JSON counts as a protocol error (§6.4); other packages are ignored.
   - GMCP waits in the session with its text and goes out after the text and before the prompt. A flush with only GMCP
     sends no prompt.
   - Every phase-7 flush recomputes the state packages (`Char.Vitals`, `Char.Status`, `Char.Affects`, `Char.Traits`,
     `Char.Skills`, `Char.Group`, `Room.Info`, `Room.Bands`) and sends those whose whole payload changed. The cache
     resets when a session takes a character, so a reconnect gets everything again. Events (`Comm.Channel.Text`,
-    `Gups.Trace`, `Char.Creation`) are never cached. `Char.Creation` is the one package sent to a session without a
-    character.
+    `Gups.Trace`, `Char.Creation`, `Client.GUI`) are never cached. `Char.Creation` is the one package sent to a session
+    without a character.
   - IAC bytes in a payload are doubled.
 - **GMCP input:** a client message for a package other than `Core.*` is parsed into plain values (strings, integers,
   other numbers, booleans, lists, objects and null) and queued with the session's typed lines, keeping their order. A
@@ -2605,8 +2655,17 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     (kernel); `casting` reports casts only, `casting.skill` being the skill's name with `progress` 0–100 through the
     warmup; `fighting` lists names; plus the character's own initiative.
   - `Char.Affects`: `remaining` is whole seconds, or null for an affect that never ends; `flags` are sorted.
-  - `Room.Info`: `exits` maps every exit's direction to its door state, or null when it has no door; `regions` are
-    sorted.
+  - `Room.Info`: `num` is the room's map number (below). `area` is `//` and the room's package path, and `area_name` is
+    that package's zone `title` (the package path when it has none). `exits` maps every exit to its destination's `num`,
+    or null when that room isn't loaded; the ten standard directions are keyed by their short names (`n`, `ne`, `e`,
+    `se`, `s`, `sw`, `w`, `nw`, `u`, `d`) and other exits by their own. `doors` maps each exit that has a door, under
+    the same key, to `"open"`, `"closed"` or `"locked"`. `regions` are sorted. Nothing is hidden: every exit `look`
+    lists is here, with its destination.
+  - **Room map numbers:** a room's `num` is FNV-1a (32-bit) over the UTF-8 bytes of its label, with the top bit cleared;
+    a result of 0 becomes 1. Rooms are numbered in ascending label order, and a room whose number is taken tries its
+    label followed by `#1`, `#2`, … until one is free. The numbers are recomputed whenever prototypes load or reload and
+    are never stored, so a room keeps its number across restarts unless a newly added room collides with it and sorts
+    first.
   - `Room.Bands`: actors (the viewer excluded) and ground items of the viewer's room, by band from the viewer's index:
     actors first, then items, each in ascending id.
   - `Comm.Channel.Text`: `say` goes to everyone in the room, the speaker included. `tell` and `whisper` go to both ends.
@@ -2626,6 +2685,9 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     the member is in the recipient's room. `vitals` has the keys of `Char.Vitals`. A client with no group gets `null`
     once, then nothing until it changes. The bundled web client draws it as a group panel (each member's vitals bars,
     the leader marked, members elsewhere dimmed) and marks group members in its band view.
+  - `Client.GUI`: `version` is the Mudlet mapper package's version and `url` is the public URL followed by
+    `/mudlet/gups-mapper.mpackage`. Mudlet installs the package, or replaces an older version, without asking (unless
+    the player turned that off); a client that knows nothing of it ignores it.
 - **WebSocket framing:** One JSON message per frame: `{"t":"text","d":"..."}` |
   `{"t":"gmcp","p":"Char.Vitals","d":{...}}` | `{"t":"input","d":"..."}`.
   - Also from the server: `prompt`, `hide` (true or false, for password prompts), and `error` before a close. Also from
@@ -2653,6 +2715,7 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   | `POST /api/code`, `POST /api/signup`  | Web sign-up with a one-time code (below).                                                                                |
   | `GET /ws`                             | WebSocket upgrade (framing above).                                                                                       |
   | `GET /docs`, `/docs/`, `/docs/<file>` | The API reference, no login needed (§4.16).                                                                              |
+  | `GET /mudlet/gups-mapper.mpackage`    | The Mudlet mapper package (below), no login needed, `no-cache`.                                                          |
 
   - Errors answer `{"error": message}`: 401 for a wrong login or password, 429 while locked out, 403 for a disabled
     account, 400 for a malformed body.
@@ -2689,6 +2752,30 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     tooltip.
   - It shows the character's skills from `Char.Skills` in a small panel, each with its kind and proficiency, hidden
     while it knows none.
+- **Mudlet mapper:** `mapper.lua`, in the `webclient` module, is a Mudlet script that draws the map from `Room.Info`. At
+  startup the server wraps it as the package `gups-mapper.mpackage`: a zip holding `config.lua` (which names the package
+  `gups-mapper` and gives its version) and `gups-mapper.xml` (the script in Mudlet's XML package format), with fixed
+  entry order and timestamps, so the same script always gives the same bytes. Its version is the first 16 hex digits of
+  a SHA-256 over the script, so it changes exactly when the script does. `--prod` serves it on `--https`, and `--dev` on
+  the docs port. It is written for Lua 5.1 and 5.2 alike.
+  - Each room is the Mudlet room numbered `num`, holding its label as room user data `gups_label`. Other rooms with that
+    label are deleted, and a room at `num` with a different label is replaced.
+  - Areas are keyed by `area` (area user data `gups_area`) and named `area_name`, with ` (<area>)` added when another
+    area already has that name, and then ` {Collision 1}`, ` {Collision 2}`, … until the name is free. A changed
+    `area_name` renames the area.
+  - A new room entered by a standard direction from the previous room, in the same area, is placed one step from it that
+    way (`n` is +y, `e` +x, `u` +z). Any other new room goes to the area's origin, or the nearest free spot around it.
+    Rooms may overlap, and a placed room is never moved.
+  - Each `Room.Info` sets the room's name, links every exit whose destination is mapped, gives standard exits whose
+    destination isn't mapped a stub, adds custom exits as special exits, marks doors (except on `u` and `d`, which
+    Mudlet can't draw doors on), removes exits and doors that are gone, and centers the map on the room. It also links
+    the previous room's exits that lead here, so the way back is drawn at once.
+  - Double-clicking a room on the map walks there one step at a time: the script sends the first direction, and each
+    `Room.Info` for the next room on the path sends the next one. A `Room.Info` for any other room stops the walk with
+    "Walk interrupted.", except one for the room the player is still in (sent again when, say, a door there changes),
+    which the walk ignores, and a command the player sends stops it quietly. One step at a time keeps a long walk within
+    the input limits. A step that fails, such as into a closed door, produces no `Room.Info`, so the walk sends nothing
+    more and waits, without a message, until the player's next command ends it.
 - **Limits:**
   - Input line ≤ 512 bytes (UTF-8); the rest is dropped and the client is told "Your line was longer than 512 bytes and
     was cut short."
@@ -2996,20 +3083,38 @@ subsystems (`core` or `script`). It consists of three primary components:
   `addTag`, `removeTag`, `transform`, `setCharges`, `teleport`, `spawnItem`, `moveItem`, `destroy`, `mergeStack`,
   `wear`, `removeWorn`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`,
   `reportSkillUse`, `skillRoll` (needs `skills`), `startTask`, `stopTask`, `setItemName`, `setBaseStat`,
-  `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `rules`), query methods (`mayWear`,
-  `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`, and including `skill(label)`, a loaded
-  skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's `PluginItemInfo` or null), RNG access,
-  and read-only views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`); `PluginActor.task`
-  and `isBusy` report a timed task of either kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`,
-  `removeWorn`, `teleport`, `may*`, `fits`, `task` and `isBusy` follow the same rules as the script verbs. `teleport`
-  returns the refusal or veto, or null once the actor has moved. The item custody verbs `spawnItem`, `moveItem`,
-  `destroy` and `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack`
-  (§4.5): they skip the item restrictions and the commands' limits, and an item placed in a room lies at track index 0.
-  `spawnItem` returns a list: one stack for a stackable label, and `count` items otherwise. There is no `grantItem`:
-  `moveItem` or `spawnItem` with an actor as the destination puts the items in its inventory. All facade mutations
-  execute synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which
-  holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers
-  receive.
+  `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `openDoor`, `closeDoor`, `lockDoor`,
+  `unlockDoor`, `openContainer`, `closeContainer`, `lockContainer`, `unlockContainer`, `say`, `emote`, `emit`,
+  `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding`, `roll`, `spawnMob`, `act`, `actMove`,
+  `actAttack`, `actCast`, `moveToward`, `summon`, `setOwner`, `clearOwner`, `despawn`, `setLeash`, `resetLeash`,
+  `startCombat`, `stopCombat`, `clearContributions`, `groupAdd`, `groupRemove`, `groupSetLeader`, `groupDisband`,
+  `rules`), query methods (`mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`,
+  `standingHistory`, `enemiesNear`, `alliesNear`, `pathTo`, `plan`, `groupOf`, `groupMembers`, and including
+  `skill(label)`, a loaded skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's
+  `PluginItemInfo` or null), RNG access (`rng.int`, `rng.chance` and `rng.choice(list)`), and read-only views of live
+  entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`, `PluginExit`, `PluginDoor`, `PluginGroup`,
+  `PluginStandingTotals`, `PluginPlanAction`); the views carry the fields of the `ctx` actor, room and item views
+  (§4.5), named in camelCase, except the track fields. `PluginActor.task` and `isBusy` report a timed task of either
+  kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`, `removeWorn`, `teleport`, `may*`, `fits`, `task`
+  and `isBusy` follow the same rules as the script verbs. `teleport` returns the refusal or veto, or null once the actor
+  has moved. The item custody verbs `spawnItem`, `moveItem`, `destroy` and `mergeStack` follow `ctx.spawn` (items only),
+  `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack` (§4.5): they skip the item restrictions and the commands' limits,
+  and an item placed in a room lies at track index 0. `spawnItem` returns a list: one stack for a stackable label, and
+  `count` items otherwise. `spawnMob(label, room, count)` makes `count` mobs as `ctx.spawn` does for a mob label and
+  returns them: no owner, no leash override and no spawn rule, a home room equal to `room`, at track index 0.
+  `despawn(mob)` removes a mob as `ctx.despawn` does. The mob actions queue tick-lane actions for a mob, never a player,
+  and return whether the action was queued. The door and container verbs follow `ctx` (§4.5): they run no hook, take no
+  key and print nothing, and locking fails on a door or container without a `key`. There is no `grantItem`: `moveItem`
+  or `spawnItem` with an actor as the destination puts the items in its inventory. All facade mutations execute
+  synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which holds the
+  reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers receive.
+
+**Parity with `ctx`:** every `ctx` verb and every field of the actor, item and room views has a facade counterpart that
+behaves the same way, named in camelCase (`open_door` → `openDoor`, `home_room` → `homeRoom`). The exceptions are the
+hook's context fields (`self`, `target`, `args`, …), verbs that only work inside a hook (`deny`), and gaps recorded for
+later. A change that adds a `ctx` verb or view field adds its facade counterpart in the same change, or records why
+there is none. A test in `:plugin-api` lists every `ctx` verb and view field and fails on any that has neither a
+counterpart nor a recorded exception.
 
 **Plugin capabilities and lifecycle:**
 
@@ -3059,15 +3164,23 @@ subsystems (`core` or `script`). It consists of three primary components:
   world sorted by id, so dormant mobs are left alone as regen leaves them. A plugin may register several. A throw
   records a `plugin` diagnostic; the next run happens as scheduled.
 - **Event listeners:** `onEvent(name, doc, fn)` listens to one of the events that can be global hooks (§4.9):
-  `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`, `on_disengage`, `on_death` and
-  `on_skill_use`. Any other name fails `register`. A listener runs each time the event's global hooks run, after them,
-  in plugin-id then registration order, and can't veto or change the event. The call carries a `PluginWorld`, the event
-  name, `actor` (the global hook's `ctx.self`) and `fields`, the event's `ctx` fields as plain values: `old_level` and
-  `new_level`; `old_encumbrance_level` and `new_encumbrance_level`; `event` and `group` (a map with `id`, `leader` and
-  `members`); `target` and `event`; `event`; `killer` (or null) for `on_death`; and for `on_skill_use`, `skill` (the
-  skill's label), `outcome` (`"fail"`, `"resist"`, `"success"` or `"report"`), `target` (or null), `item` (or null) and
-  `targets` (the landed actors). Ints are `Long`s and actors `PluginActor`s. A listener for an event whose feature is
-  off registers and never runs. A throw records a `plugin` diagnostic.
+  `on_level_change`, `on_encumbrance_change`, `on_group_change`, `on_owner_change`, `on_disengage`, `on_death`,
+  `on_despawn` and `on_skill_use`. Any other name fails `register`. A listener runs each time the event's global hooks
+  run, after them, in plugin-id then registration order, and can't veto or change the event. The call carries a
+  `PluginWorld`, the event name, `actor` (the global hook's `ctx.self`) and `fields`, the event's `ctx` fields as plain
+  values: `old_level` and `new_level`; `old_encumbrance_level` and `new_encumbrance_level`; `event` and `group` (a map
+  with `id`, `leader` and `members`); `target` and `event`; `event`; `killer` (or null) for `on_death`; none for
+  `on_despawn`, whose `actor` is the mob, still in the world; and for `on_skill_use`, `skill` (the skill's label),
+  `outcome` (`"fail"`, `"resist"`, `"success"` or `"report"`), `target` (or null), `item` (or null) and `targets` (the
+  landed actors). Ints are `Long`s and actors `PluginActor`s. A listener for an event whose feature is off registers and
+  never runs. A throw records a `plugin` diagnostic.
+- **Item event listeners:** `onItemEvent(name, doc, fn)` listens to an engine event about an item; `on_destroy` is the
+  only one, and any other name fails `register`. A listener runs each time the event's global hooks run, after them, in
+  plugin-id then registration order, and can't veto or change the event. The call carries a `PluginWorld`, the event
+  name, `item` (a `PluginItem`, still in the world) and `fields`: `actor`, the holder as a `PluginActor` (or null on the
+  ground), `event`, the cause (`"destroy"`, `"decay"` or `"empty"`), and `destroyed_root`, the `PluginItem` whose
+  destruction began it. A listener runs only for an item whose global hooks run, so an item that escaped its container's
+  destruction doesn't reach it. A throw records a `plugin` diagnostic, and the item is still destroyed.
 - **Trait callbacks:** `PluginTrait(on = mapOf(event to handler))` runs the handler for each bearer of the trait when
   the event happens to it (§4.19). Handlers run synchronously where the event happens, for each simulated bearer,
   players and mobs (except `SKILL_RECOGNIZED`, which is players only). The call carries a `PluginWorld`, which may
@@ -3201,6 +3314,8 @@ subsystems (`core` or `script`). It consists of three primary components:
 - `World.pluginGmcp`: Stores plugin GMCP producers by package name.
 - `World.pluginPeriodic`: Plugin periodic work, each with its period, run by `runPulse`.
 - `World.pluginEvents`: plugin event listeners by hook name, run by `dispatchGlobal` after the script global hooks.
+- `World.pluginItemEvents`: plugin item event listeners by hook name, run by `dispatchGlobalItem` after the script
+  global hooks.
 - `CommandRegistry.registerPlugin` and `pluginCommands`: Registers plugin commands; `clearGlobals()` clears only script
   global commands, preserving plugin commands.
 - `WorldPluginWiring` (in `script`): Manages `globals` (plugin namespaces by id, predeclared in every package, test
@@ -3256,7 +3371,8 @@ subsystems (`core` or `script`). It consists of three primary components:
 - **Weather Plugin ([samples/weather-plugin](../samples/weather-plugin/README.md)):** A complete sample plugin
   demonstrating all core extension points. It adds the `weather.now(room)` Starlark builtin (deterministic weather based
   on seed, pulse, and region), a player `weather` command, a `weather.soak(pulses)` effect primitive, a `Gups.Weather`
-  GMCP package, and an `onWorldStarted` lifecycle hook.
+  GMCP package, an `onWorldStarted` lifecycle hook, and an `every` handler that slams and locks keyed outdoor doors when
+  a storm starts and unlocks them when it passes.
 - **Heritage Plugin ([samples/heritage-plugin](../samples/heritage-plugin/README.md)):** A fantasy race and class sample
   plugin demonstrating character creation and restriction points for the template world schema. It defines `race` and
   `class` choices, mutual exclusion rules (e.g., dwarf mages disallowed), permanent stat/vital traits, class starter
@@ -3928,7 +4044,9 @@ and work with or without it (§3.10). Combat resolution is implemented in
     says `dead` for the respawned player, that is a rules error, and the player's vitals are set to their maxima. After
     the respawn the player loses `level_loss` levels.
   - Corpses decay after `CORPSE_DECAY_PULSES` ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)).
-    Decay drops a container's contents where it lay.
+    Decay drops a container's contents where it lay, then the container fires `on_destroy` with `"decay"` (§4.4); the
+    dropped contents don't. A container that decays while carried or inside another takes its contents with it, and they
+    get the hook too.
   - Death clears `casting`, the queue, and engagement. It's processed exactly once. During phases 2 and 3 it's deferred
     to the end of the current initiative tier (§5.4.1).
 - **Levelling** (the `leveling` feature): XP is gained from kills and `award_xp` and lost to `take_xp` and
@@ -4129,13 +4247,13 @@ never propagated and never sent to `on_perceive`, only used to decide whether th
   order and gets the first line for a channel they pass. The context's intensity is 2 for combat, the door's own for
   doors and containers, and 1 otherwise.
 
-|                                                                                                              Event                                                                                                               |                              Channels                               |
-|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
-| `emote`, `enter`/`exit` (also teleport, respawn and a summon fading), `drop`, `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast` (its warmup line and its resolution), item decay, `incapacitated`, `recovered` | `sight`                                                             |
-| `whisper` (the gesture seen by bystanders; its words go only to the target)                                                                                                                                                      | `sight`                                                             |
-| `say`                                                                                                                                                                                                                            | `sound`                                                             |
-| `combat_start`, `combat`, `death`                                                                                                                                                                                                | `sight`, then `sound`                                               |
-| door or container `open`, `close`, `lock`, `unlock`                                                                                                                                                                              | `sight`, then `sound` (only when `rules.door_intensity` is above 0) |
+|                                                                                                                     Event                                                                                                                     |                              Channels                               |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `emote`, `enter`/`exit` (also teleport, respawn and a summon or debug mob fading), `drop`, `give`, `put`, `wield`, `wear`, `get`, `advance`, `retreat`, `cast` (its warmup line and its resolution), item decay, `incapacitated`, `recovered` | `sight`                                                             |
+| `whisper` (the gesture seen by bystanders; its words go only to the target)                                                                                                                                                                   | `sight`                                                             |
+| `say`                                                                                                                                                                                                                                         | `sound`                                                             |
+| `combat_start`, `combat`, `death`                                                                                                                                                                                                             | `sight`, then `sound`                                               |
+| door or container `open`, `close`, `lock`, `unlock`                                                                                                                                                                                           | `sight`, then `sound` (only when `rules.door_intensity` is above 0) |
 
 A `say` has no sight alternative, and `shout` has its own delivery.
 
@@ -4283,7 +4401,7 @@ The reality bubble and room simulation lifecycle are implemented in
      or carried by its mobs).
   4. A missed zone reset is applied to the room, after the room's expired affects are gone: its spawns, then `on_reset`.
   5. Respawns that are due fill.
-  6. Items that decayed go.
+  6. Items that decayed go, firing `on_destroy` (§4.4).
   7. `on_wake(ctx, elapsed_pulses)` fires on the room, then its mobs, then its items (each ascending id), as they were
      before the respawns.
   - **Mob vitals** recover according to the mob's `dormant_recovery`:
@@ -4830,6 +4948,8 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     survives a crash.
   - **Telnet:** option negotiation is checked against recorded client transcripts (Mudlet, TinTin++, raw `nc`), over TLS
     too.
+  - **Mudlet mapper:** the script runs under LuaJ against a Lua stand-in for Mudlet's mapper API, fed `Room.Info`
+    sequences.
   - **Schema:** every test that touches vitals runs against two fixture schemas: the template's, and a non-fantasy one
     with no `hp` or `mana`.
   - **Plugins:** no `core` or `script` type appears in the public `gups.pluginapi` surface.

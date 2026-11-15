@@ -48,6 +48,21 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
+## Mobs
+
+### Removing a mob without killing it (Done in Milestone 54)
+
+**Spec:** §4.3 (`summon` primitive), §4.5 (`spawn`, `destroy`, `summon`), §4.2 (spawns), §5.4 (respawns), §4.15.
+**Today:** a mob leaves the world when it dies, when its `summoned` affect ends (it "fades away": a sight message, every
+engagement dropped, then removed), when a reload deletes its prototype or spawn rule, or as a debug mob when its spawner
+is gone. Neither `ctx` nor the plugin facade can remove one otherwise: `ctx.destroy` and `PluginWorld.destroy` take
+items only. A mob from `ctx.spawn`, with no spawn rule, stays until something kills it. **Example:** an invasion plugin
+spawns raiders into a town and, when the invasion ends, wants the survivors gone rather than slaughtered, with no
+corpses, loot or XP. **Questions:** - Should there be a verb (`ctx.despawn(mob)` and a facade counterpart), or should
+content give the mob a `summoned`-style affect and let it fade? - Does it fire a hook (`on_despawn`, or `on_death` with
+a reason), and what do players in the room see? - What happens to what the mob carries and wears: destroyed with it, or
+dropped? - May it remove a mob a spawn rule tracks (the zone then respawns it on schedule), or an owned pet?
+
 ## Plugins
 
 ### Plugins that share a GMCP package tree
@@ -68,33 +83,59 @@ entry. **Questions:** - Should the operator also agree in `MODULE.gups` (for exa
 (a plugin adding a sub-command to another's), attribute namespaces, or calling another plugin's builtins? - Does a
 dependency between plugins need a declared version range, and how does that relate to `PluginApi.VERSION`?
 
-### The rest of the `ctx` verbs on the plugin facade
+### Plugin timers (`after` and `cancel` on the facade)
 
-**Spec:** §4.5, §4.15. **Today:** `PluginWorld` has the item custody verbs (`spawnItem`, `moveItem`, `destroy`,
-`mergeStack`), the `may*` queries, `fits`, and the inventory, equipment and location reads, but none of these `ctx`
-verbs: `spawn` for mobs (`spawnItem` refuses a mob label), `open_door`, `close_door`, `lock_door`, `unlock_door` and the
-container verbs; `start_combat` and `stop_combat`; `summon`, `set_owner`, `clear_owner`, `set_leash`, `reset_leash` and
-the group verbs; `say`, `emote`, `emit`, the mob actions, `after`/`cancel` and `clear_standing`. Nothing on the facade
-knows about track positions: `spawnItem`, `moveItem` and `teleport` place at index 0 of a track room, and no read
-reports where along a track an item or actor is. (`callHook` is in [ICEBOX.md](ICEBOX.md), "Plugins calling custom
-hooks".) A plugin's own `every` or `onEvent` code can't do any of these; the documented workaround, a `//lib` that calls
-the plugin's builtins, only works when content drives the feature. **Example:** a weather plugin that slams and locks
-the doors of outdoor rooms when a storm starts, from its own `every` handler, and unlocks them when it passes. Today it
-can see the storm but can't touch a door. Likewise an invasion plugin can't spawn raiders into a town on a schedule.
-**Questions:** - Should a plugin spawn mobs through a separate `spawnMob(label, room, count)`, and what does a
-plugin-spawned mob get: an owner, a leash, a home room, and what does its `on_spawn` see as the source? - Do the door
-and container verbs skip the restrictions, as the custody verbs do, or does a plugin go through
-`before_open`/`before_unlock` and the key rules, the way a command does? Does locking need a key the plugin names, or
-none? - Does a plugin-started fight need an attacker that is an actor, or can a plugin be the source? How are
-`start_combat`'s engagement and contribution rules recorded for it? - Should `summon`, ownership, leash and group
-changes be facade verbs at all, or stay content-driven through `//lib`? - For `say`, `emote` and the mob actions, does
-the plugin speak as a mob it names, and do those actions run in the tick lane like a mob's own? - Should
-`after`/`cancel` be facade verbs, or is a plugin's own `every` scheduling enough? - Add them in batches as plugins need
-them (doors first, for the example), or all at once?
+**Spec:** §3.3 (`ScriptTimer`), §4.5 (Timers), §4.15 (Periodic work), §5.1 (timer phase), §5.10, §5.11. **Today:** a
+plugin schedules only through `every(pulses, doc, fn)`, which runs on a fixed period for the life of the world.
+`ctx.after` saves a `ScriptTimer` whose callback is rebound on reload by `(file, name)`; a plugin's Kotlin closure can't
+be saved or rebound that way, so the `ctx` semantics don't carry over. **Example:** a weather plugin that locks a door
+for exactly 40 pulses after a lightning strike. Today it stores the due pulse in an attribute and checks it from an
+`every` handler. **Questions:** - Is `every` plus attributes enough, so this belongs in [ICEBOX.md](ICEBOX.md)? - If
+not, how is a pending plugin timer identified across a save or restart: a callback the plugin registers by name at
+`register` time, with only the name and plain-value arguments saved? - Who owns the timer (an entity, the world, the
+plugin), and what happens to it when its owner leaves the world or the plugin fails to load? - How does `cancel` name
+it, and can a plugin cancel a script's timer or the reverse?
 
-### In-game character respec and choice changes (Done in Milestone 52)
+### Track positions on the plugin facade
 
-**Spec:** §4.19. **Today:** the engine provides mutation primitives (`setChoices`, `grantTrait`, `removeTrait`), but no
-built-in player command, trainer, or shrine mechanic to alter character choices after creation; these belong to plugins.
-**Questions:** - Should the engine or standard sample plugins provide a canonical respec flow (e.g. shrines, guild
-trainers)? - What restrictions, cooldowns, or currency costs should govern resetting choices or traits?
+**Spec:** §3.10 (`track` feature), §4.5 (Position, the `index` arguments, `act_advance`, `act_retreat`), §4.15, §5.5.
+**Today:** `spawnItem`, `moveItem` and `teleport` place at index 0 of a track room, and no facade read reports where
+along a track an item or actor is, or the band between two actors. The mob actions that move along a track
+(`act_advance`, `act_retreat`) aren't on the facade either. **Example:** an ambush plugin that spawns archers at the far
+end of a road and has them close in. **Questions:** - Do the existing verbs grow an `index` parameter (`teleport(actor,
+room, index = null)`), as `ctx` does, or does the facade get separate track-aware verbs? - Which reads to add:
+`PluginActor.trackIndex`, `PluginItem.trackIndex`, `bandOf(a, b)`, a room's `trackSize`? - What does each do in a world
+without `track`: error as `ctx` does when an `index` is passed, or quietly treat every room as size 1?
+
+## Networking and clients
+
+### Mudlet automapper support (Done in Milestone 56)
+
+**Spec:** §3.1 (room declarations), §4.10 (Network Protocol, `Room.Info`, HTTP endpoints), §5.10 (Persistence).
+**Today:** Mudlet's map dock is empty on a fresh profile because Mudlet's C++ mapper visual canvas only renders rooms
+created by a client Lua script (listening to `gmcp.Room.Info` or scraping text) or imported from a map file (via GMCP
+`Client.Map`). GUPS's `Room.Info` payload (`{"label", "name", "exits": {dir: "open"/"closed"/"locked"/null},
+"regions"}`) is designed for the bundled web client and diverges from the standard GMCP `Room.Info` schema expected by
+Mudlet's `generic_mapper` and standard GMCP mapper scripts: - Mudlet's mapper graph keys every room and exit target by a
+stable positive integer ID (`num`), whereas GUPS rooms are identified by string labels (`//zones/tutorial:gate`) and
+ephemeral runtime `EntityId`s (`Room.id.v`), with no integer vnum in `Room.Info`. - Standard `Room.Info.exits` maps
+direction strings (typically short names like `"n"`, `"s"`, `"u"`) to destination room `num` integers (`{"n": 102}`),
+whereas GUPS maps full direction names (`"north"`) to door states (`"open"`, `"closed"`, `"locked"`, or `null`). -
+Standard `Room.Info` includes `"area"` (string area/zone name, whereas GUPS sends `"regions"`, a sorted list of strings)
+and `"environment"` (terrain string for room coloring), plus optional `"coords"` (`x`, `y`, `z`). - Even with a
+Mudlet-compatible `Room.Info`, Mudlet's built-in `generic_mapper` defaults to text scraping until configured or bridged,
+unless Mudlet receives a GMCP `Client.Map {"url": "..."}` pointing to a server-hosted MMP XML map or a `Client.GUI
+{"version": "...", "url": "..."}` pointing to a `.mpackage` containing a GMCP mapper bridge script. **Questions:** -
+Which mechanism should populate Mudlet's map: (a) a GMCP mapper script delivered automatically via `Client.GUI` (or
+documented for students to install), (b) a server-generated MMP XML map served over HTTP and advertised via
+`Client.Map`, or (c) adapting `Room.Info` to work with Mudlet's built-in `generic_mapper`? - How should rooms get stable
+integer IDs (`num`) for Mudlet: a deterministic hash of `room.label.v` (handling collisions), a persisted label-to-int
+table in SQLite, or an index assigned in package/declaration order? - How should `Room.Info` carry both exit destination
+IDs (for Mudlet) and door states (for the web client): move door states to a separate `"doors"` map, nest exit objects,
+or add Mudlet-specific fields alongside existing ones? - Should `Room.Info` include `"area"` (derived from the first
+region in `room.regions` or from the package path `room.label.pkg`) and `"environment"` (from a room tag or attribute)?
+- Should room prototypes in Starlark optionally declare `(x, y, z)` coordinates, or should coordinates be laid out
+automatically from the exit graph (or left to Mudlet's incremental layout)? - Should destination room numbers in `exits`
+be omitted or masked for unvisited rooms, closed doors, or custom non-compass exits so the payload does not spoil hidden
+areas? - In `gups serve --dev` (where the main HTTPS server is off and only `DocsServer` runs on `--docs-port`), should
+`DocsServer` host the `.mpackage` or MMP XML map if `Client.GUI` or `Client.Map` is used?

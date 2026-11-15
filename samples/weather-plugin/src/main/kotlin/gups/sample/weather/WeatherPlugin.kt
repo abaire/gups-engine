@@ -8,6 +8,7 @@ import gups.pluginapi.PluginParam
 import gups.pluginapi.PluginRegistry
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
+import gups.pluginapi.PluginWorld
 
 /**
  * The sample plugin: deterministic weather by region, using every extension point. A room is
@@ -79,9 +80,20 @@ class WeatherPlugin : GupsPlugin {
     r.addChainThink("Storms wash out the trail, so chasers stop chaining.") { call ->
       call.chained && stateFor(call.world, call.mob.room) != "storm"
     }
+    registerPeriodicDoors(r)
     r.onWorldStarted { world ->
       val regions = world.regions()
       world.log("weather: tracking ${regions.size} region(s): ${regions.joinToString(", ")}")
+    }
+  }
+
+  /** Registers the every handler that locks and unlocks outdoor doors as storms come and go. */
+  private fun registerPeriodicDoors(r: PluginRegistry) {
+    r.every(
+      WINDOW.toInt(),
+      "Storms slam and lock outdoor doors; they unlock when the storm passes.",
+    ) {
+      stormDoors(it.world)
     }
   }
 
@@ -104,5 +116,48 @@ class WeatherPlugin : GupsPlugin {
     /** The weather in [room] now and in the next window. */
     fun forecast(world: PluginGmcpWorld, room: PluginRoom): Map<String, String> =
       mapOf("now" to stateFor(world, room), "next" to stateFor(world, room, world.pulse + WINDOW))
+
+    /**
+     * The work of the every handler: it runs at each window boundary, when the weather can change.
+     * A first pass unlocks the doors a storm that just passed locked, and a second locks the keyed
+     * doors of the rooms a storm just hit. Both passes walk the rooms sorted by label, so a door
+     * shared by a storming and a clearing room is never unlocked after being locked in the same
+     * run. The list of directions the plugin locked lives in the room's "locked" attribute, so a
+     * storm that lasts several windows re-lists nothing and a door the plugin did not lock is never
+     * unlocked.
+     */
+    fun stormDoors(world: PluginWorld) {
+      for (room in world.rooms()) unlockPassedStorm(world, room)
+      for (room in world.rooms()) lockIncomingStorm(world, room)
+    }
+
+    /** When the storm has passed, unlock the doors the plugin locked and drop the list. */
+    private fun unlockPassedStorm(world: PluginWorld, room: PluginRoom) {
+      if (stateFor(world, room) == "storm") return
+      val locked = world.getAttr(room, "locked") as? List<*> ?: return
+      for (dir in locked.filterIsInstance<String>()) {
+        if (room.exit(dir)?.door?.state == "locked") world.unlockDoor(room, dir)
+      }
+      world.delAttr(room, "locked")
+    }
+
+    /** When a storm hits an outdoor room, slam and lock each of its keyed doors not yet locked. */
+    private fun lockIncomingStorm(world: PluginWorld, room: PluginRoom) {
+      if (stateFor(world, room) != "storm") return
+      for (dir in room.exits.keys.sorted()) lockOneDoor(world, room, dir)
+    }
+
+    /**
+     * Slam and lock one of the room's keyed doors, adding its direction to the room's list only
+     * once, since a storm can last several windows.
+     */
+    private fun lockOneDoor(world: PluginWorld, room: PluginRoom, dir: String) {
+      val door = room.exit(dir)?.door ?: return
+      if (door.key == null || door.state == "locked") return
+      if (door.state == "open") world.echo(room, "The storm slams the door to the $dir shut.")
+      world.lockDoor(room, dir)
+      val listed = (world.getAttr(room, "locked") as? List<*>).orEmpty().filterIsInstance<String>()
+      if (dir !in listed) world.setAttr(room, "locked", listed + dir)
+    }
   }
 }

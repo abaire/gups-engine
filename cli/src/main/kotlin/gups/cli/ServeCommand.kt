@@ -93,6 +93,12 @@ class Serve : CliktCommand(name = "serve") {
         help = "--prod: use a throwaway self-signed certificate, for local testing.",
       )
       .flag()
+  val publicUrl by
+    option(
+      "--public-url",
+      metavar = "URL",
+      help = "--prod: public URL of --https, e.g. https://mud.example.edu.",
+    )
   val adminAddress by
     option(
       "--admin",
@@ -201,6 +207,7 @@ class Serve : CliktCommand(name = "serve") {
         telnet,
         telnetTls,
         https,
+        publicUrl,
         tlsCert,
         tlsKey,
         openSignup,
@@ -226,6 +233,7 @@ class Serve : CliktCommand(name = "serve") {
     val cfg = readConfig()
     val dir = prodWorldDir(world, cfg)
     val listeners = prodListeners(cfg)
+    val url = publicUrl(publicUrl, cfg, listeners.site != null)
     val login = loginSettings(cfg, openSignup, maxCharacters)
     checkRestrictionLadder(cfg.restrictionLadder)
     val timeout = shutdownSeconds(cfg)
@@ -245,6 +253,7 @@ class Serve : CliktCommand(name = "serve") {
         deploySettings(cfg, repository, deployBranch, deployKeyFile),
         forceCommit,
         timeout * 1000L,
+        publicUrl = url,
       ),
       wipe = wipe,
     ) {

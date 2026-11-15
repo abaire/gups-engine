@@ -245,7 +245,8 @@ class BlueMagePluginTest {
       source: PluginActor?,
     ) = TODO()
 
-    override fun heal(target: PluginActor, amount: Int, vital: String) = TODO()
+    override fun heal(target: PluginActor, amount: Int, vital: String, source: PluginActor?) =
+      TODO()
 
     override fun applyAffect(
       target: PluginActor,

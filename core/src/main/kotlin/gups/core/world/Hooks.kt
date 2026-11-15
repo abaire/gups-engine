@@ -102,6 +102,20 @@ enum class HookName(
   ON_DEATH("on_death"),
 
   /**
+   * Invoked when a mob leaves the world without dying, on the mob, then its room, then globally.
+   *
+   * [HookContext.actor] is the mob. It runs before the mob is removed, so the mob still holds its
+   * belongings; the opponents it freed hear `on_disengage` with "stop" afterwards.
+   */
+  ON_DESPAWN("on_despawn"),
+
+  /**
+   * Invoked when an item stops existing, on the item, then the room it is in, before anything is
+   * removed. A destroyed container's contents get it too, container first.
+   */
+  ON_DESTROY("on_destroy"),
+
+  /**
    * Invoked when an actor's level changes up or down, once per level step.
    *
    * [HookContext.actor] is the actor whose level changed, [HookContext.oldLevel] is the level
@@ -278,6 +292,8 @@ data class HookContext(
   val landed: List<Actor>? = null,
   /** The task whose callback is running, or null. */
   val task: TaskInfo? = null,
+  /** For on_destroy, the item whose destruction took this one down: itself, or a container. */
+  val destroyedRoot: Item? = null,
 )
 
 /** Outcome result of a package reload operation. */
@@ -308,6 +324,11 @@ fun interface CustomHookHandler {
 /** A plugin listener for a global-hookable event: the actor the event is about and its context. */
 fun interface EventListener {
   fun handle(world: World, subject: Actor, ctx: HookContext)
+}
+
+/** A plugin listener for an item event: the item and its context. */
+fun interface ItemEventListener {
+  fun handle(world: World, item: Item, ctx: HookContext)
 }
 
 /**
@@ -345,7 +366,7 @@ interface ScriptHost {
    * Runs every global [hook] registered by loaded packages, with [ctx], whose `ctx.self` is
    * [subject].
    */
-  fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) = Unit
+  fun invokeGlobal(world: World, hook: HookName, subject: Entity, ctx: HookContext) = Unit
 
   /** Evaluates rules modifier [ref] for [point], returning modified value or [base] on error. */
   fun modify(
@@ -462,21 +483,41 @@ internal fun World.invokeOn(owner: Entity, hook: HookName, ctx: HookContext) {
  */
 internal fun World.dispatchGlobal(hook: HookName, ctx: HookContext, subject: Actor? = ctx.actor) {
   if (subject == null) return
+  // on_level_change fires only when leveling is on, mirroring the gate in the script layer.
+  val listeners =
+    if (hook != HookName.ON_LEVEL_CHANGE || Feature.LEVELING in features)
+      pluginEvents[hook].orEmpty()
+    else emptyList()
+  runGlobal(hook, ctx, subject, listeners.map { { it.handle(this, subject, ctx) } })
+}
+
+/** Runs every global [hook] about [item], with [item] as `ctx.self`. */
+internal fun World.dispatchGlobalItem(hook: HookName, ctx: HookContext, item: Item) =
+  runGlobal(
+    hook,
+    ctx,
+    item,
+    pluginItemEvents[hook].orEmpty().map { { it.handle(this, item, ctx) } },
+  )
+
+/** Runs the scripts' global [hook] on [subject], then each plugin listener, isolating failures. */
+private fun World.runGlobal(
+  hook: HookName,
+  ctx: HookContext,
+  subject: Entity,
+  listeners: List<() -> Unit>,
+) {
   withCascadeGuard(hook.scriptName) {
     try {
       scripts.invokeGlobal(this, hook, subject, ctx)
     } catch (e: Exception) {
       diagnose("script", "${hook.scriptName} failed: ${e.message}", e)
     }
-    // Plugin listeners run after the script global hooks. on_level_change fires only when leveling
-    // is on, mirroring the gate in the script layer.
-    if (hook != HookName.ON_LEVEL_CHANGE || Feature.LEVELING in features) {
-      for (listener in pluginEvents[hook].orEmpty()) {
-        try {
-          listener.handle(this, subject, ctx)
-        } catch (e: Exception) {
-          diagnose("plugin", "${hook.scriptName} listener failed: ${e.message}", e)
-        }
+    for (listener in listeners) {
+      try {
+        listener()
+      } catch (e: Exception) {
+        diagnose("plugin", "${hook.scriptName} listener failed: ${e.message}", e)
       }
     }
   }

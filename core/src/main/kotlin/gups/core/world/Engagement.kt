@@ -29,14 +29,14 @@ internal fun World.startCombat(a: Actor, b: Actor, coupled: Boolean) {
 }
 
 /**
- * Whether [a] and [b] can be set against each other. An actor whose death is being run is about to
- * be removed or respawned; engaging it now would leave its opponent fighting someone who is gone.
+ * Whether [a] and [b] can be set against each other. An actor whose death or despawn is being run
+ * is about to leave; engaging it now would leave its opponent fighting someone who is gone.
  */
 private fun World.canEngage(a: Actor, b: Actor): Boolean {
   if (a === b) return false
   if (!a.inWorld || !b.inWorld) return false
   if (a.room !== b.room) return false
-  return !isDying(a) && !isDying(b)
+  return !isLeaving(a) && !isLeaving(b)
 }
 
 private fun World.engage(a: Actor, b: Actor) {

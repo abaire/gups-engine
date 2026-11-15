@@ -9,7 +9,7 @@
  * @typedef {{name: string, remaining: number, flags: string[]}} Affect
  * @typedef {{id: number, name: string, kind: "actor" | "item"}} BandEntry
  * @typedef {{melee: BandEntry[], near: BandEntry[], far: BandEntry[]}} Bands
- * @typedef {{label: string, name: string, exits: Object<string, string|null>, regions: string[]}} RoomInfo
+ * @typedef {{num: number, label: string, name: string, area: string, area_name: string, exits: Object<string, number|null>, doors: Object<string, string>, regions: string[]}} RoomInfo
  */
 
 /** How many bar colors the stylesheet defines; bars cycle through them. */

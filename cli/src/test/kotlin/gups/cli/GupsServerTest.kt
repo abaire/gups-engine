@@ -15,6 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -104,7 +105,12 @@ class GupsServerTest {
       explained(logs) {
         val telnet = port.get(10, TimeUnit.SECONDS)
         assertEquals(telnet, server.ports["telnet"])
+        assertEquals(telnet, server.ports.values.first())
         val docs = assertNotNull(server.ports["docs"])
+        assertEquals(
+          "http://127.0.0.1:$docs/mudlet/gups-mapper.mpackage",
+          assertNotNull(server.world.clientGui).url,
+        )
         val http = java.net.http.HttpClient.newHttpClient()
         val page =
           http.send(
@@ -451,5 +457,43 @@ class GupsServerTest {
       runner.join(10_000)
     }
     assertContains(logs, "Reloading //zones/tutorial")
+  }
+
+  @Test
+  fun `prod server configures clientGui from publicUrl or logs a warning`() {
+    val root = copyTemplate()
+    val tls = gups.net.ServerTls.selfSigned(Files.createTempDirectory(tmp, "tls"))
+
+    fun runWith(publicUrl: String?): Pair<String?, String> {
+      val logs = StringBuffer()
+      val server =
+        GupsServer(
+          WorldDir(root),
+          port = 0,
+          prod = ProdOptions(null, web = TlsListener("127.0.0.1", 0, tls), publicUrl = publicUrl),
+        ) {
+          logs.append(it).append('\n')
+        }
+      assertTrue(server.boot(), logs.toString())
+      val port = CompletableFuture<Int>()
+      val runner = thread { runBlocking(Dispatchers.Default) { server.run { port.complete(it) } } }
+      try {
+        port.get(10, TimeUnit.SECONDS)
+        return server.world.clientGui?.url to logs.toString()
+      } finally {
+        server.stop()
+        runner.join(10_000)
+      }
+    }
+
+    val (noUrlGui, noUrlLogs) = runWith(null)
+    assertNull(noUrlGui)
+    val warning = "No public_url is set, so Mudlet clients won't be offered the mapper package."
+    assertContains(noUrlLogs, warning)
+    assertEquals(1, noUrlLogs.split(warning).size - 1)
+
+    val (withUrlGui, withUrlLogs) = runWith("https://mud.example.edu")
+    assertEquals("https://mud.example.edu/mudlet/gups-mapper.mpackage", withUrlGui)
+    assertEquals(0, withUrlLogs.split(warning).size - 1)
   }
 }
