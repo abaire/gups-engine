@@ -24,6 +24,7 @@ dependencies {
   implementation(libs.commonmark)
   implementation(libs.kotlinx.serialization.json)
   testImplementation(libs.selenium.java)
+  testImplementation(libs.luaj.jse)
   // Test plugins and buildPluginJar (PluginIntegrationTest).
   testImplementation(testFixtures(project(":plugin-api")))
 }

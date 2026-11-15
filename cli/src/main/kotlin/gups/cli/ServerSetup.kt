@@ -7,6 +7,7 @@ import gups.net.ServerTls
 import gups.script.ServerConfig
 import gups.script.WorldDir
 import java.io.File
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -111,4 +112,28 @@ internal fun loginSettings(
     )
   if (login.maxCharacters < 1) throw UsageError("--max-characters must be at least 1")
   return login
+}
+
+private fun URI.isHttpScheme(): Boolean =
+  scheme.equals("http", ignoreCase = true) || scheme.equals("https", ignoreCase = true)
+
+private fun URI.isValidPublicUrl(): Boolean =
+  isHttpScheme() && host != null && listOfNotNull(query, fragment).isEmpty()
+
+/**
+ * The checked public URL of the flag, else the configuration, without a trailing slash; null when
+ * neither is set.
+ */
+internal fun publicUrl(flag: String?, cfg: ServerConfig, hasHttps: Boolean): String? {
+  val raw = flag ?: cfg.publicUrl ?: return null
+  val uri = runCatching { URI(raw) }.getOrNull()
+  if (uri == null || !uri.isValidPublicUrl()) {
+    throw UsageError(
+      "--public-url must be an absolute http or https URL such as https://mud.example.edu"
+    )
+  }
+  if (!hasHttps) {
+    throw UsageError("--public-url needs --https, which serves the Mudlet package")
+  }
+  return raw.trimEnd('/')
 }

@@ -8,6 +8,7 @@ import gups.core.WebAccounts
 import gups.core.WebLogin
 import gups.core.WorldControlEvent
 import gups.core.WorldInbox
+import gups.core.world.isUnsolicitedGmcp
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -71,6 +72,10 @@ private val AUTH_WAIT = 30.seconds
 /** How often live sockets' tokens are checked for expiry and revocation. */
 val TOKEN_CHECK_INTERVAL: Duration = Duration.ofMinutes(1)
 
+/** The first 8 bytes of [digest] as 16 lowercase hex digits, for cache-busting versions. */
+internal fun shortHash(digest: ByteArray): String =
+  digest.take(8).joinToString("") { "%02x".format(it) }
+
 /**
  * The web client's files, served unchanged: `index.html` at `/`, and every other file under
  * `/assets/<hash>/`, where the hash covers all of them, so a new engine version never mixes with
@@ -83,7 +88,7 @@ class WebAssets(private val files: Map<String, ByteArray>) {
         md.update(name.toByteArray())
         md.update(bytes)
       }
-      md.digest().take(8).joinToString("") { "%02x".format(it) }
+      shortHash(md.digest())
     }
 
   /** `index.html` with `%ASSETS%` replaced by the asset prefix. */
@@ -147,11 +152,20 @@ fun Route.mountDocs(docs: Map<String, ByteArray>) {
   get("/docs/{name}") { call.file(call.parameters["name"].orEmpty()) }
 }
 
+/** Serves [pkg] at [MudletPackage.PATH] with no login. */
+fun Route.mountMudlet(pkg: MudletPackage) {
+  get(MudletPackage.PATH) {
+    call.response.header(HttpHeaders.CacheControl, "no-cache")
+    call.respondBytes(pkg.bytes, ContentType.Application.Zip)
+  }
+}
+
 /** A plain-HTTP listener serving only the API reference, for `serve --dev`. */
 class DocsServer(
   private val docs: Map<String, ByteArray>,
   private val host: String,
   private val port: Int,
+  private val mudlet: MudletPackage? = null,
 ) {
   private var server:
     EmbeddedServer<NettyApplicationEngine, NettyApplicationEngine.Configuration>? =
@@ -169,7 +183,10 @@ class DocsServer(
           }
         },
       ) {
-        routing { mountDocs(docs) }
+        routing {
+          mountDocs(docs)
+          mudlet?.let { mountMudlet(it) }
+        }
       }
     s.start(wait = false)
     server = s
@@ -224,6 +241,7 @@ class WebServer(
   private val tokenCheck: Duration = TOKEN_CHECK_INTERVAL,
   /** The API reference's files, served at `/docs/` with no login. */
   private val docs: Map<String, ByteArray> = emptyMap(),
+  private val mudlet: MudletPackage? = null,
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private val live = ConcurrentHashMap.newKeySet<Socket>()
@@ -274,6 +292,7 @@ class WebServer(
           post("/api/logout") { logout(call) }
           webSocket("/ws") { serve(this) }
           if (docs.isNotEmpty()) mountDocs(docs)
+          mudlet?.let { mountMudlet(it) }
         }
       }
     s.start(wait = false)
@@ -457,7 +476,8 @@ class WebServer(
           if (wantsGmcp(pkg)) put(toJson(mapOf("t" to "gmcp", "p" to pkg, "d" to data)).toString())
         }
 
-        override fun wantsGmcp(pkg: String): Boolean = supportsGmcp(supports, pkg)
+        override fun wantsGmcp(pkg: String): Boolean =
+          isUnsolicitedGmcp(pkg) || supportsGmcp(supports, pkg)
 
         override fun close(reason: String) {
           if (ended.get()) return

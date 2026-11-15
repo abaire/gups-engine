@@ -84,6 +84,16 @@ class GmcpPackageTest {
   }
 
   @Test
+  fun `a name may not overlap Client GUI`() {
+    val r =
+      load(
+        mapOf("lib/package.star" to libPkg(), "lib/a.star" to "gmcp_package(\"Client.GUI\")"),
+        "lib",
+      )
+    assertContains(only(r, "lib").message, "overlaps the engine's Client.GUI")
+  }
+
+  @Test
   fun `two names in one package may not nest`() {
     val r =
       load(

@@ -128,8 +128,8 @@ gups-engine/
                PluginWorld facade, plus the engine-side loader and host
                (gups.pluginapi.host); unstable, documented
   cli/         the `gups` binary, the docs renderer (§4.16)
-  webclient/   static browser client (plain ES modules with JSDoc), bundled into the jar
-               as resources
+  webclient/   static browser client (plain ES modules with JSDoc) and the Mudlet mapper
+               script, bundled into the jar as resources
   samples/     sample plugins: weather-plugin, heritage-plugin (race and class), curse-plugin,
                hunger-plugin and bluemage-plugin (§4.15); robot-world, a small non-fantasy course world with its own schema and
                features (§3.9, §3.10)
@@ -146,8 +146,8 @@ gups-engine/
   `kotlinx-coroutines` as an `api` dependency, because `WorldLoop`'s public API uses it.
 - `script`, `persist`, `net`, and `auth` depend on `core` and never on each other.
 - `harness` depends on `core` and `script` only. It never touches `net` or `persist`.
-- `cli` is the only module that wires everything together. `net` reads the web client's files through a class loader
-  that `cli` hands it, so it doesn't depend on `webclient`.
+- `cli` is the only module that wires everything together. `net` reads the web client's files and the Mudlet mapper
+  script through a class loader that `cli` hands it, so it doesn't depend on `webclient`.
 - `plugin-api` depends on `core` and `script` with `implementation`, and exposes only `api(libs.starlark)`. Plugins
   compile against `gups.pluginapi.*` and `net.starlark.java.*` alone; no public type in `gups.pluginapi` mentions a
   `core` or `script` type (a reflection test checks it). Plugins are loaded through `ServiceLoader` from the world's
@@ -270,12 +270,12 @@ gups-engine/
 
 ### 2.4 Runtime Profiles
 
-|   Flag    |                                                                                                                                                                                                                                          Effect                                                                                                                                                                                                                                           |
-|-----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--dev`   | Raw telnet on `127.0.0.1:4000` (`--port` changes the port). Auto-creates a passwordless local `instructor` account bound to localhost. Auto-reload on file save. `@eval` and `@reload` enabled. Loads every package under `--world` (default: the current directory); packages that fail to load are reported and left out. Serves the API reference over plain HTTP at `http://127.0.0.1:4080/docs/` (`--docs-port PORT` changes the port; `0` picks a free one). Checkpoints still run. |
-| `--prod`  | Account logins (§5.12). Listeners as configured: raw telnet only when asked, telnet over TLS, and HTTPS with the web client and `/docs/` (at least one is required). The admin port is always on. `@eval`, `@reload`, auto-reload and the file watcher are off. Deploys only through `gups deploy` / `@deploy`. The §3.8 check runs at each world tick, not every pulse. Requires a `git` binary. `--docs-port` is a usage error.                                                         |
-| `--fresh` | Usable with either profile. Ignores saved **world** state (mob positions, ground items, room and zone state) and boots purely from the `.star` definitions. Accounts, characters, and items whose location chain ends in a player character are still loaded.                                                                                                                                                                                                                             |
-| `--wipe`  | A server wipe, usable with either profile. Like `--fresh`, and also deletes every character and every item, then records the current schema and features (§3.9). Accounts, restrictions, web tokens and setup codes are kept. A `prewipe` backup (§5.11) is taken first.                                                                                                                                                                                                                  |
+|   Flag    |                                                                                                                                                                                                                                                                                              Effect                                                                                                                                                                                                                                                                                               |
+|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--dev`   | Raw telnet on `127.0.0.1:4000` (`--port` changes the port). Auto-creates a passwordless local `instructor` account bound to localhost. Auto-reload on file save. `@eval` and `@reload` enabled. Loads every package under `--world` (default: the current directory); packages that fail to load are reported and left out. Serves the API reference over plain HTTP at `http://127.0.0.1:4080/docs/` (`--docs-port PORT` changes the port; `0` picks a free one). The same port serves the Mudlet mapper package, which GMCP clients are offered at that address (§4.10). Checkpoints still run. |
+| `--prod`  | Account logins (§5.12). Listeners as configured: raw telnet only when asked, telnet over TLS, and HTTPS with the web client and `/docs/` (at least one is required). The admin port is always on. `@eval`, `@reload`, auto-reload and the file watcher are off. Deploys only through `gups deploy` / `@deploy`. The §3.8 check runs at each world tick, not every pulse. Requires a `git` binary. `--docs-port` is a usage error.                                                                                                                                                                 |
+| `--fresh` | Usable with either profile. Ignores saved **world** state (mob positions, ground items, room and zone state) and boots purely from the `.star` definitions. Accounts, characters, and items whose location chain ends in a player character are still loaded.                                                                                                                                                                                                                                                                                                                                     |
+| `--wipe`  | A server wipe, usable with either profile. Like `--fresh`, and also deletes every character and every item, then records the current schema and features (§3.9). Accounts, restrictions, web tokens and setup codes are kept. A `prewipe` backup (§5.11) is taken first.                                                                                                                                                                                                                                                                                                                          |
 
 - **Database:** `--db` defaults to `<world>/.gups/world.db` in both profiles. The hidden directory is skipped by the
   package scan and the file watcher. `gups backup`, `restore` and `repro` take the same `--world` and `--db`.
@@ -293,6 +293,7 @@ gups-engine/
     db = "/srv/gups/world.db",
     telnet_tls = ":4443",
     https = ":443",                          # web client, WebSocket and /docs/
+    public_url = "https://mud.example.edu",  # where players reach https; offers Mudlet the mapper (§4.10)
     telnet = None,                           # raw telnet off; e.g. ":4000" to enable
     admin = "127.0.0.1:9090",
     tls_cert = "/etc/gups/fullchain.pem",
@@ -316,6 +317,9 @@ gups-engine/
   - **Listeners:** `--telnet`/`telnet` (binds every interface), `--telnet-tls`/`telnet_tls`, and `--https`/`https`. Both
     TLS listeners share one certificate: `--tls-cert` and `--tls-key` (`tls_cert`, `tls_key`), or `--self-signed`, which
     needs a TLS listener.
+  - **Public URL:** `--public-url`/`public_url`, the absolute `http` or `https` address players reach the HTTPS listener
+    at, such as `https://mud.example.edu`, or one with a path behind a proxy. It needs `--https`. With it, GMCP clients
+    are offered the Mudlet mapper package (§4.10); without it they aren't, and startup logs a warning.
   - **Admin port:** `--admin`/`admin` (default `127.0.0.1:9090`) and
     `--admin-token-file`/`admin_token_file`/`GUPS_ADMIN_TOKEN_FILE` (§4.14).
   - **Accounts:** `--open-signup`/`--no-open-signup`, `--max-characters`, `reserved_names`, `restriction_ladder`.
@@ -2594,20 +2598,21 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   the world, which hands each to the plugin that registered it (§4.15) and ignores the rest. The server sends these,
   with lowercase field names:
 
-  |       Package       |                                                                                                                                                 Payload                                                                                                                                                 |                                               Sent                                               |
-  |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
-  | `Char.Schema`       | `{"stats": [{"name", "label"}], "vitals": [{"name", "label"}], "damage_types": [names], "features": [names]}`                                                                                                                                                                                           | Once a session takes a character, and when the client starts supporting it                       |
-  | `Char.Vitals`       | `{"<vital>", "max<vital>"}` for every declared vital, for example `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}`                                                                                                                                                                               | When any field changed                                                                           |
-  | `Char.Status`       | `{"name", "level", "xp", "xp_next", "wait", "task": {"name", "progress"} or null, "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}`; `level`, `xp` and `xp_next` only with `leveling`, `casting` only with `skills`, `initiative` and `fighting` only with `combat` | When changed                                                                                     |
-  | `Char.Affects`      | `[{"name", "remaining", "flags"}]`                                                                                                                                                                                                                                                                      | When the set or a whole second of time left changed                                              |
-  | `Room.Info`         | `{"label", "name", "exits": {dir: "open"/"closed"/"locked"/null}, "regions"}`                                                                                                                                                                                                                           | On entering a room, and when a door here changes                                                 |
-  | `Room.Bands`        | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only                                                                                                                                                                              | When anything in the room moves, arrives or leaves                                               |
-  | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}`                                                                                                                                                                                                                                | With each message                                                                                |
-  | `Gups.Trace`        | `{"line"}`                                                                                                                                                                                                                                                                                              | Builders with `@trace` on, instead of the `[trace]` text lines                                   |
-  | `Char.Creation`     | `{"name", "step": "choice"/"custom"/"confirm", "choice": {...} or null, "custom": {"id", "title", "data"} or null, "answers": [...], "summaries": [{"step", "title", "text"}]}`, or `null`                                                                                                              | With each creation prompt (§5.12), before the session has a character; `null` when the steps end |
-  | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                                                           | When changed; only in worlds with a creation provider or a trait                                 |
-  | `Char.Skills`       | `{"skills": [{"label", "name", "kind", "proficiency"}]}`, sorted by name; only with `skills`                                                                                                                                                                                                            | When changed                                                                                     |
-  | `Char.Group`        | `null`, or `{"id", "leader", "members": [{"name", "leader", "in_room", "level", "vitals"}]}`; `leader` is the leader's name at the top and a bool in a member, and `level` appears only with `leveling`                                                                                                 | When changed                                                                                     |
+  |       Package       |                                                                                                                                                 Payload                                                                                                                                                 |                                                         Sent                                                          |
+  |---------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+  | `Char.Schema`       | `{"stats": [{"name", "label"}], "vitals": [{"name", "label"}], "damage_types": [names], "features": [names]}`                                                                                                                                                                                           | Once a session takes a character, and when the client starts supporting it                                            |
+  | `Char.Vitals`       | `{"<vital>", "max<vital>"}` for every declared vital, for example `{"hp", "maxhp", "mana", "maxmana", "move", "maxmove"}`                                                                                                                                                                               | When any field changed                                                                                                |
+  | `Char.Status`       | `{"name", "level", "xp", "xp_next", "wait", "task": {"name", "progress"} or null, "casting": {"skill", "progress"} or null, "initiative" or null, "fighting": [names]}`; `level`, `xp` and `xp_next` only with `leveling`, `casting` only with `skills`, `initiative` and `fighting` only with `combat` | When changed                                                                                                          |
+  | `Char.Affects`      | `[{"name", "remaining", "flags"}]`                                                                                                                                                                                                                                                                      | When the set or a whole second of time left changed                                                                   |
+  | `Room.Info`         | `{"num", "label", "name", "area", "area_name", "exits": {dir: num or null}, "doors": {dir: "open"/"closed"/"locked"}, "regions"}`                                                                                                                                                                       | On entering a room, and when a door here changes                                                                      |
+  | `Room.Bands`        | `{"melee": [...], "near": [...], "far": [...]}`, each entry `{"id", "name", "kind": "actor"/"item"}`; `track` feature only                                                                                                                                                                              | When anything in the room moves, arrives or leaves                                                                    |
+  | `Comm.Channel.Text` | `{"channel": "say"/"tell"/"whisper"/"shout"/"gossip", "talker", "text"}`                                                                                                                                                                                                                                | With each message                                                                                                     |
+  | `Gups.Trace`        | `{"line"}`                                                                                                                                                                                                                                                                                              | Builders with `@trace` on, instead of the `[trace]` text lines                                                        |
+  | `Char.Creation`     | `{"name", "step": "choice"/"custom"/"confirm", "choice": {...} or null, "custom": {"id", "title", "data"} or null, "answers": [...], "summaries": [{"step", "title", "text"}]}`, or `null`                                                                                                              | With each creation prompt (§5.12), before the session has a character; `null` when the steps end                      |
+  | `Char.Traits`       | `{"choices": [{"choice", "title", "option", "label"}], "traits": [{"name", "label", "doc"}]}`                                                                                                                                                                                                           | When changed; only in worlds with a creation provider or a trait                                                      |
+  | `Char.Skills`       | `{"skills": [{"label", "name", "kind", "proficiency"}]}`, sorted by name; only with `skills`                                                                                                                                                                                                            | When changed                                                                                                          |
+  | `Char.Group`        | `null`, or `{"id", "leader", "members": [{"name", "leader", "in_room", "level", "vitals"}]}`; `leader` is the leader's name at the top and a bool in a member, and `level` appears only with `leveling`                                                                                                 | When changed                                                                                                          |
+  | `Client.GUI`        | `{"version", "url"}`                                                                                                                                                                                                                                                                                    | Once each time a session takes a character, to every client with GMCP on, when the server knows its public URL (§2.4) |
 
   `Room.Bands` entries carry entity ids, only ever for the viewer's own room, so clients can key their band view and
   tell identical mobs apart. Plugins may add state and event packages, and receive GMCP input (§4.15). `lib` and `rules`
@@ -2620,16 +2625,18 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
 - **GMCP delivery:**
 
   - A package is sent only when GMCP is on and `Core.Supports` listed it, or a module above it (`Char` covers
-    `Char.Vitals`), compared case-insensitively. Versions in the entries are ignored. `Set` replaces the list,
-    `Add`/`Remove` change it, and `DONT GMCP` turns everything off. `Core.Hello`'s client and version are kept.
+    `Char.Vitals`), compared case-insensitively. The one exception is `Client.GUI`, which goes to every client with GMCP
+    on whatever `Core.Supports` lists, because Mudlet doesn't list it. Versions in the entries are ignored. `Set`
+    replaces the list, `Add`/`Remove` change it, and `DONT GMCP` turns everything off. `Core.Hello`'s client and version
+    are kept.
   - A `Core.*` message with malformed JSON counts as a protocol error (§6.4); other packages are ignored.
   - GMCP waits in the session with its text and goes out after the text and before the prompt. A flush with only GMCP
     sends no prompt.
   - Every phase-7 flush recomputes the state packages (`Char.Vitals`, `Char.Status`, `Char.Affects`, `Char.Traits`,
     `Char.Skills`, `Char.Group`, `Room.Info`, `Room.Bands`) and sends those whose whole payload changed. The cache
     resets when a session takes a character, so a reconnect gets everything again. Events (`Comm.Channel.Text`,
-    `Gups.Trace`, `Char.Creation`) are never cached. `Char.Creation` is the one package sent to a session without a
-    character.
+    `Gups.Trace`, `Char.Creation`, `Client.GUI`) are never cached. `Char.Creation` is the one package sent to a session
+    without a character.
   - IAC bytes in a payload are doubled.
 - **GMCP input:** a client message for a package other than `Core.*` is parsed into plain values (strings, integers,
   other numbers, booleans, lists, objects and null) and queued with the session's typed lines, keeping their order. A
@@ -2648,8 +2655,17 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     (kernel); `casting` reports casts only, `casting.skill` being the skill's name with `progress` 0–100 through the
     warmup; `fighting` lists names; plus the character's own initiative.
   - `Char.Affects`: `remaining` is whole seconds, or null for an affect that never ends; `flags` are sorted.
-  - `Room.Info`: `exits` maps every exit's direction to its door state, or null when it has no door; `regions` are
-    sorted.
+  - `Room.Info`: `num` is the room's map number (below). `area` is `//` and the room's package path, and `area_name` is
+    that package's zone `title` (the package path when it has none). `exits` maps every exit to its destination's `num`,
+    or null when that room isn't loaded; the ten standard directions are keyed by their short names (`n`, `ne`, `e`,
+    `se`, `s`, `sw`, `w`, `nw`, `u`, `d`) and other exits by their own. `doors` maps each exit that has a door, under
+    the same key, to `"open"`, `"closed"` or `"locked"`. `regions` are sorted. Nothing is hidden: every exit `look`
+    lists is here, with its destination.
+  - **Room map numbers:** a room's `num` is FNV-1a (32-bit) over the UTF-8 bytes of its label, with the top bit cleared;
+    a result of 0 becomes 1. Rooms are numbered in ascending label order, and a room whose number is taken tries its
+    label followed by `#1`, `#2`, … until one is free. The numbers are recomputed whenever prototypes load or reload and
+    are never stored, so a room keeps its number across restarts unless a newly added room collides with it and sorts
+    first.
   - `Room.Bands`: actors (the viewer excluded) and ground items of the viewer's room, by band from the viewer's index:
     actors first, then items, each in ascending id.
   - `Comm.Channel.Text`: `say` goes to everyone in the room, the speaker included. `tell` and `whisper` go to both ends.
@@ -2669,6 +2685,9 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     the member is in the recipient's room. `vitals` has the keys of `Char.Vitals`. A client with no group gets `null`
     once, then nothing until it changes. The bundled web client draws it as a group panel (each member's vitals bars,
     the leader marked, members elsewhere dimmed) and marks group members in its band view.
+  - `Client.GUI`: `version` is the Mudlet mapper package's version and `url` is the public URL followed by
+    `/mudlet/gups-mapper.mpackage`. Mudlet installs the package, or replaces an older version, without asking (unless
+    the player turned that off); a client that knows nothing of it ignores it.
 - **WebSocket framing:** One JSON message per frame: `{"t":"text","d":"..."}` |
   `{"t":"gmcp","p":"Char.Vitals","d":{...}}` | `{"t":"input","d":"..."}`.
   - Also from the server: `prompt`, `hide` (true or false, for password prompts), and `error` before a close. Also from
@@ -2696,6 +2715,7 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
   | `POST /api/code`, `POST /api/signup`  | Web sign-up with a one-time code (below).                                                                                |
   | `GET /ws`                             | WebSocket upgrade (framing above).                                                                                       |
   | `GET /docs`, `/docs/`, `/docs/<file>` | The API reference, no login needed (§4.16).                                                                              |
+  | `GET /mudlet/gups-mapper.mpackage`    | The Mudlet mapper package (below), no login needed, `no-cache`.                                                          |
 
   - Errors answer `{"error": message}`: 401 for a wrong login or password, 429 while locked out, 403 for a disabled
     account, 400 for a malformed body.
@@ -2732,6 +2752,30 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     tooltip.
   - It shows the character's skills from `Char.Skills` in a small panel, each with its kind and proficiency, hidden
     while it knows none.
+- **Mudlet mapper:** `mapper.lua`, in the `webclient` module, is a Mudlet script that draws the map from `Room.Info`. At
+  startup the server wraps it as the package `gups-mapper.mpackage`: a zip holding `config.lua` (which names the package
+  `gups-mapper` and gives its version) and `gups-mapper.xml` (the script in Mudlet's XML package format), with fixed
+  entry order and timestamps, so the same script always gives the same bytes. Its version is the first 16 hex digits of
+  a SHA-256 over the script, so it changes exactly when the script does. `--prod` serves it on `--https`, and `--dev` on
+  the docs port. It is written for Lua 5.1 and 5.2 alike.
+  - Each room is the Mudlet room numbered `num`, holding its label as room user data `gups_label`. Other rooms with that
+    label are deleted, and a room at `num` with a different label is replaced.
+  - Areas are keyed by `area` (area user data `gups_area`) and named `area_name`, with ` (<area>)` added when another
+    area already has that name, and then ` {Collision 1}`, ` {Collision 2}`, … until the name is free. A changed
+    `area_name` renames the area.
+  - A new room entered by a standard direction from the previous room, in the same area, is placed one step from it that
+    way (`n` is +y, `e` +x, `u` +z). Any other new room goes to the area's origin, or the nearest free spot around it.
+    Rooms may overlap, and a placed room is never moved.
+  - Each `Room.Info` sets the room's name, links every exit whose destination is mapped, gives standard exits whose
+    destination isn't mapped a stub, adds custom exits as special exits, marks doors (except on `u` and `d`, which
+    Mudlet can't draw doors on), removes exits and doors that are gone, and centers the map on the room. It also links
+    the previous room's exits that lead here, so the way back is drawn at once.
+  - Double-clicking a room on the map walks there one step at a time: the script sends the first direction, and each
+    `Room.Info` for the next room on the path sends the next one. A `Room.Info` for any other room stops the walk with
+    "Walk interrupted.", except one for the room the player is still in (sent again when, say, a door there changes),
+    which the walk ignores, and a command the player sends stops it quietly. One step at a time keeps a long walk within
+    the input limits. A step that fails, such as into a closed door, produces no `Room.Info`, so the walk sends nothing
+    more and waits, without a message, until the player's next command ends it.
 - **Limits:**
   - Input line ≤ 512 bytes (UTF-8); the rest is dropped and the client is told "Your line was longer than 512 bytes and
     was cut short."
@@ -4904,6 +4948,8 @@ When a hook raises an error, exceeds a limit, or passes a bad verb argument:
     survives a crash.
   - **Telnet:** option negotiation is checked against recorded client transcripts (Mudlet, TinTin++, raw `nc`), over TLS
     too.
+  - **Mudlet mapper:** the script runs under LuaJ against a Lua stand-in for Mudlet's mapper API, fed `Room.Info`
+    sequences.
   - **Schema:** every test that touches vitals runs against two fixture schemas: the template's, and a non-fantasy one
     with no `hp` or `mana`.
   - **Plugins:** no `core` or `script` type appears in the public `gups.pluginapi` surface.

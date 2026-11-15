@@ -1,5 +1,6 @@
 package gups.net
 
+import gups.core.world.isUnsolicitedGmcp
 import java.io.ByteArrayOutputStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -461,10 +462,11 @@ class TelnetConnection(private val write: (ByteArray) -> Unit) {
   }
 
   /**
-   * True if GMCP is on and the client supports [pkg] or a module above it (`Char` covers
-   * `Char.Vitals`).
+   * True if GMCP is on and either [pkg] goes to every GMCP client or the client supports [pkg] or a
+   * module above it (`Char` covers `Char.Vitals`).
    */
-  fun wantsGmcp(pkg: String): Boolean = gmcp && supportsGmcp(gmcpSupports, pkg)
+  fun wantsGmcp(pkg: String): Boolean =
+    gmcp && (isUnsolicitedGmcp(pkg) || supportsGmcp(gmcpSupports, pkg))
 
   /** `IAC SB GMCP <pkg> <json> IAC SE`, with any IAC byte in the payload doubled. */
   fun encodeGmcp(pkg: String, data: Any?): ByteArray {

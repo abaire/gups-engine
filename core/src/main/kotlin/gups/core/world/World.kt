@@ -275,6 +275,12 @@ class World(
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
 
+  /**
+   * The Mudlet package offered to clients that take a character, or null when the server has no
+   * public URL. Set once before any listener starts.
+   */
+  @Volatile var clientGui: ClientGui? = null
+
   // Alert rate limits, the engine-error window and step samples.
   internal val alertTimes = HashMap<String, Long>()
   internal val rulesFaultTimes = HashMap<String, Long>()

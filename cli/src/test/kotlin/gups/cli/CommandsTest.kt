@@ -1,5 +1,6 @@
 package gups.cli
 
+import com.github.ajalt.clikt.core.UsageError
 import com.github.ajalt.clikt.testing.test
 import gups.core.EngineInfo
 import gups.core.fixtures.TempFiles
@@ -7,12 +8,15 @@ import gups.core.fixtures.tempDb
 import gups.harness.HarnessApi
 import gups.script.ApiDiff
 import gups.script.ScriptApi
+import gups.script.ServerConfig
 import gups.script.testing.tempWorld
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CommandsTest {
@@ -524,6 +528,10 @@ class CommandsTest {
       "are for --prod",
     )
     assertContains(
+      gupsCommand().test(listOf("serve", "--dev", "--public-url", "https://x")).stderr,
+      "are for --prod",
+    )
+    assertContains(
       gupsCommand()
         .test(
           listOf("serve", "--prod", "--world", world, "--telnet", ":0", "--shutdown-timeout", "0")
@@ -542,5 +550,27 @@ class CommandsTest {
     assertEquals("0.0.0.0" to 4000, parseAddress(":4000"))
     assertEquals("::1" to 4001, parseAddress("[::1]:4001"))
     assertEquals("127.0.0.1" to 0, parseAddress("127.0.0.1:0"))
+  }
+
+  @Test
+  fun `publicUrl validates and normalizes the flag and configuration`() {
+    assertNull(publicUrl(null, ServerConfig(), hasHttps = false))
+    assertEquals(
+      "https://flag.edu",
+      publicUrl("https://flag.edu/", ServerConfig(publicUrl = "https://cfg.edu"), hasHttps = true),
+    )
+    assertEquals(
+      "https://x.edu/gups",
+      publicUrl(null, ServerConfig(publicUrl = "https://x.edu/gups/"), hasHttps = true),
+    )
+    assertEquals("HTTP://x.edu", publicUrl("HTTP://x.edu///", ServerConfig(), hasHttps = true))
+    for (bad in
+      listOf("ftp://x", "x.edu", "https://x.edu/?a=1", "https://x.edu/#frag", "https:///p")) {
+      val err = assertFailsWith<UsageError> { publicUrl(bad, ServerConfig(), hasHttps = true) }
+      assertContains(err.message.orEmpty(), "absolute http or https URL")
+    }
+    val noHttps =
+      assertFailsWith<UsageError> { publicUrl("https://x.edu", ServerConfig(), hasHttps = false) }
+    assertContains(noHttps.message.orEmpty(), "needs --https")
   }
 }

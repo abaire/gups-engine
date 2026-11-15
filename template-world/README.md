@@ -72,6 +72,15 @@ Run static checks:
 gups lint //...
 ```
 
+## Playing with Mudlet
+
+With `gups serve --dev`, connect Mudlet to `localhost` port `4000`. When you enter the world, Mudlet installs the GUPS
+mapper by itself and the map fills in as you walk. Double-click a room on the map to walk there.
+
+On the course server, it works the same once the instructor has set `public_url`. If the server can't offer it (no
+`public_url`, or "Allow server to install script packages" is off in Mudlet's settings), download
+`<server>/mudlet/gups-mapper.mpackage` and install it from Mudlet's Package Manager.
+
 ## World Building & Tutorials
 
 To learn how to create zones, rooms, mobs, items, and quests using Starlark, see the

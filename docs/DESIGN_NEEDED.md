@@ -109,7 +109,7 @@ without `track`: error as `ctx` does when an `index` is passed, or quietly treat
 
 ## Networking and clients
 
-### Mudlet automapper support
+### Mudlet automapper support (Done in Milestone 56)
 
 **Spec:** §3.1 (room declarations), §4.10 (Network Protocol, `Room.Info`, HTTP endpoints), §5.10 (Persistence).
 **Today:** Mudlet's map dock is empty on a fresh profile because Mudlet's C++ mapper visual canvas only renders rooms

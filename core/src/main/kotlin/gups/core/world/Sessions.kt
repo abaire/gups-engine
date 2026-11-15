@@ -83,6 +83,7 @@ fun World.attach(session: SessionId, player: Player) {
   s.player = player
   s.gmcpLast.clear()
   player.session = session
+  clientGui?.let { gmcp(player, CLIENT_GUI_GMCP, mapOf("version" to it.version, "url" to it.url)) }
   player.linkDeadSince = null
   player.lastInputPulse = pulse
 }

@@ -4,6 +4,17 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Mudlet automapper
+
+- GMCP `Room.Info` gains `num` (a stable map number per room), `area` and `area_name`; `exits` now maps each direction
+  (short names for the standard ten) to the destination's `num`, and door states move to a new `doors` map.
+- The engine ships a Mudlet mapper script that draws the map from `Room.Info` as a player explores.
+- Double-clicking a room on the Mudlet map walks there, one step per room.
+- The server serves the Mudlet mapper as `/mudlet/gups-mapper.mpackage`.
+- GMCP clients are sent `Client.GUI` when they take a character, so Mudlet installs the mapper package itself.
+- `--public-url` / `public_url` tells a production server its public address so Mudlet can be offered the mapper;
+  `--dev` offers it from the docs port automatically.
+
 ### A hook when an item is destroyed
 
 - New hook `on_destroy` fires on an item that stops existing (a whole `destroy`, decay, or a last charge), then its

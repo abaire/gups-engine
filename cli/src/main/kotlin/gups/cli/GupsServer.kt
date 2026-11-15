@@ -19,6 +19,7 @@ import gups.core.WorldControlEvent
 import gups.core.loop.WorldLoop
 import gups.core.model.Prototypes
 import gups.core.world.Boot
+import gups.core.world.ClientGui
 import gups.core.world.DevLogin
 import gups.core.world.Diagnostic
 import gups.core.world.LoginHandler
@@ -28,6 +29,7 @@ import gups.core.world.alert
 import gups.harness.HarnessApi
 import gups.net.CERT_CHECK_INTERVAL
 import gups.net.DocsServer
+import gups.net.MudletPackage
 import gups.net.ServerTls
 import gups.net.TelnetServer
 import gups.net.WebAssets
@@ -88,6 +90,8 @@ class ProdOptions(
   val shutdownTimeoutMs: Long = SHUTDOWN_WAIT_MS,
   /** `/healthz` fails once the world thread hasn't pulsed for this long. */
   val stallMs: Long = STALL_MS,
+  /** The public URL of the HTTPS listener, without a trailing slash; null for none. */
+  val publicUrl: String? = null,
 )
 
 /** Where the admin port listens, and its bearer token (null: only `/healthz` works). */
@@ -169,6 +173,8 @@ class GupsServer(
   /** Failed logins are counted once for telnet and the web. */
   private val limiter = LoginLimiter()
 
+  private val mudlet by lazy { MudletPackage.fromClasspath() }
+
   private val webServer by lazy {
     prod?.web?.let { w ->
       WebServer(
@@ -184,6 +190,7 @@ class GupsServer(
         sessionIds,
         w.tls,
         docs = docs,
+        mudlet = mudlet,
       )
     }
   }
@@ -192,7 +199,7 @@ class GupsServer(
   private var docs: Map<String, ByteArray> = emptyMap()
 
   private val docsServer by lazy {
-    docsPort?.takeIf { prod == null }?.let { DocsServer(docs, "127.0.0.1", it) }
+    docsPort?.takeIf { prod == null }?.let { DocsServer(docs, "127.0.0.1", it, mudlet) }
   }
 
   /**
@@ -674,6 +681,21 @@ class GupsServer(
     prod?.admin?.let { gups.net.AdminServer(admin, it.token, it.host, it.port) }
   }
 
+  private fun configureClientGui(docsBound: Int?) {
+    val pkg = mudlet
+    val base =
+      if (prod == null) {
+        docsBound?.let { "http://127.0.0.1:$it" }
+      } else {
+        if (prod.web != null && prod.publicUrl == null) {
+          log("No public_url is set, so Mudlet clients won't be offered the mapper package.")
+        }
+        prod.publicUrl
+      }
+    world.clientGui =
+      if (pkg != null && base != null) ClientGui(pkg.version, base + MudletPackage.PATH) else null
+  }
+
   /**
    * Runs until [stop]. [ready] gets the first listener's bound port once all are up; [ports] has
    * each.
@@ -685,6 +707,8 @@ class GupsServer(
         // Shutdown ends with a final checkpoint.
         if (persistence != null) world.checkpointNow("shutdown")
       }
+    val docsBound = docsServer?.start()
+    configureClientGui(docsBound)
     ports =
       listeners.associate { it.transport to it.start() } +
         listOfNotNull(
@@ -692,7 +716,7 @@ class GupsServer(
           adminServer?.let { "admin" to it.start() },
         ) +
         // Last, so ready() still gets the telnet port.
-        listOfNotNull(docsServer?.let { "docs" to it.start() })
+        listOfNotNull(docsBound?.let { "docs" to it })
     val certs = prod?.tls?.tls ?: prod?.web?.tls
     val certChecks = launch(Dispatchers.IO) { certReloadLoop(certs) }
     val watcher = WorldWatcher(dir)

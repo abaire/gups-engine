@@ -1,11 +1,21 @@
 package gups.core.world
 
+import gups.core.CapturingSink
+import gups.core.Label
 import gups.core.SessionId
 import gups.core.WorldControlEvent
 import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.Channel
+import gups.core.model.Direction
+import gups.core.model.DoorState
+import gups.core.model.Exit
+import gups.core.model.ExitProto
 import gups.core.model.Player
+import gups.core.model.Prototypes
+import gups.core.model.RoomProto
+import gups.core.model.ZoneProto
+import gups.core.model.mapNumberHash
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -77,9 +87,13 @@ class GmcpTest(private val fs: FixtureSchema) {
     assertEquals(listOf("Room.Info", "Room.Bands"), sink.packages())
     assertEquals(
       mapOf(
+        "num" to mapNumberHash("//t:yard"),
         "label" to "//t:yard",
         "name" to "The Yard",
-        "exits" to mapOf("south" to null),
+        "area" to "//t",
+        "area_name" to "t",
+        "exits" to mapOf("s" to mapNumberHash("//t:hall")),
+        "doors" to emptyMap<String, String>(),
         "regions" to emptyList<String>(),
       ),
       f.w.gmcpPayload(p, "Room.Info"),
@@ -87,10 +101,58 @@ class GmcpTest(private val fs: FixtureSchema) {
     f.w.teleport(p, f.w.room(T.HALL))
     f.run()
     sink.take()
-    f.w.room(T.HALL).exits.getValue(gups.core.model.Direction.SOUTH).door!!.state =
-      gups.core.model.DoorState.OPEN
+    val southDoor = f.w.room(T.HALL).exits.getValue(Direction.SOUTH).door!!
+    southDoor.state = DoorState.CLOSED
+    f.run()
+    assertEquals(listOf("Room.Info"), sink.packages(), "closing a door here changed")
+    @Suppress("UNCHECKED_CAST")
+    val hallClosed = f.w.gmcpPayload(p, "Room.Info") as Map<String, Any?>
+    assertEquals(mapOf("s" to "closed"), hallClosed["doors"])
+    southDoor.state = DoorState.OPEN
     f.run()
     assertEquals(listOf("Room.Info"), sink.packages(), "a door here changed")
+    @Suppress("UNCHECKED_CAST") val hallOpen = f.w.gmcpPayload(p, "Room.Info") as Map<String, Any?>
+    assertEquals(mapOf("s" to "open"), hallOpen["doors"])
+  }
+
+  @Test
+  fun `Room Info keeps custom exit names, maps unloaded destinations to null, and uses zone title`() {
+    val customRoom = Label("//t:nexus")
+    val nowhere = Label("//t:nowhere")
+    val base = T.protos(fs)
+    val protos =
+      Prototypes(
+        rooms =
+          base.rooms.values +
+            RoomProto(
+              customRoom,
+              "The Nexus",
+              exits = listOf(ExitProto(Direction("portal"), T.HALL)),
+            ),
+        mobs = base.mobs.values.toList(),
+        items = T.items,
+        skills = base.skills.values.toList(),
+        zones = listOf(ZoneProto("t", title = "Test Zone")),
+      )
+    val f = Fixture(protos = protos)
+    @Suppress("UNCHECKED_CAST")
+    (f.w.room(customRoom).exits as MutableMap<Direction, Exit>)[Direction("rift")] =
+      Exit(ExitProto(Direction("rift"), nowhere))
+    val (p, _) = f.gmcpPlayer("Ann", at = customRoom)
+    f.run()
+    assertEquals(
+      mapOf(
+        "num" to mapNumberHash("//t:nexus"),
+        "label" to "//t:nexus",
+        "name" to "The Nexus",
+        "area" to "//t",
+        "area_name" to "Test Zone",
+        "exits" to mapOf("portal" to mapNumberHash("//t:hall"), "rift" to null),
+        "doors" to emptyMap<String, String>(),
+        "regions" to emptyList<String>(),
+      ),
+      f.w.gmcpPayload(p, "Room.Info"),
+    )
   }
 
   @Test
@@ -395,5 +457,59 @@ class GmcpTest(private val fs: FixtureSchema) {
     f.run(2)
     assertFalse("Char.Group" in annSink.packages())
     assertFalse("Char.Group" in benSink.packages())
+  }
+
+  @Test
+  fun `Client GUI is sent once per attach when configured and GMCP is on`() {
+    val f = Fixture()
+    f.w.clientGui = ClientGui("abc123", "https://mud.example.edu/mudlet/gups-mapper.mpackage")
+    val p = f.w.spawnPlayer("Ann", T.HALL)
+    val sink = CapturingSink(setOf("Char"))
+    val id1 = SessionId(nextSession++)
+    f.w.handle(WorldControlEvent.Connect(id1, sink))
+    f.w.attach(id1, p)
+    f.run()
+    val first = sink.drainGmcp().filter { it.first == "Client.GUI" }
+    assertEquals(
+      listOf(
+        "Client.GUI" to
+          mapOf(
+            "version" to "abc123",
+            "url" to "https://mud.example.edu/mudlet/gups-mapper.mpackage",
+          )
+      ),
+      first,
+    )
+    f.run(3)
+    assertTrue(sink.drainGmcp().none { it.first == "Client.GUI" }, "not sent again on later pulses")
+
+    // Reconnecting sends it again.
+    val again = CapturingSink(setOf("Char"))
+    val id2 = SessionId(nextSession++)
+    f.w.handle(WorldControlEvent.Connect(id2, again))
+    f.w.attach(id2, p)
+    f.run()
+    assertEquals(1, again.drainGmcp().count { it.first == "Client.GUI" })
+
+    // A sink with no GMCP supports gets nothing.
+    val plain = CapturingSink()
+    val p2 = f.w.spawnPlayer("Ben", T.HALL)
+    val id3 = SessionId(nextSession++)
+    f.w.handle(WorldControlEvent.Connect(id3, plain))
+    f.w.attach(id3, p2)
+    f.run()
+    assertEquals(emptyList(), plain.drainGmcp())
+  }
+
+  @Test
+  fun `Client GUI is not sent when clientGui is null`() {
+    val f = Fixture()
+    val p = f.w.spawnPlayer("Ann", T.HALL)
+    val sink = CapturingSink(setOf("Char"))
+    val id = SessionId(nextSession++)
+    f.w.handle(WorldControlEvent.Connect(id, sink))
+    f.w.attach(id, p)
+    f.run()
+    assertTrue(sink.drainGmcp().none { it.first == "Client.GUI" })
   }
 }

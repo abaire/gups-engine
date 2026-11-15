@@ -1,6 +1,7 @@
 package gups.core
 
 import gups.core.world.gmcpWithin
+import gups.core.world.isUnsolicitedGmcp
 
 /** Input from a connected client session, in the order it arrived. */
 sealed interface ClientEvent {
@@ -121,7 +122,10 @@ interface OutputSink {
    */
   fun gmcp(pkg: String, data: Any?) = Unit
 
-  /** True if the client negotiated support for GMCP package [pkg] via `Core.Supports`. */
+  /**
+   * True if the client should get GMCP package [pkg]: it listed the package or a module above it in
+   * `Core.Supports`, or [pkg] is one the engine sends to every client with GMCP on.
+   */
   fun wantsGmcp(pkg: String): Boolean = false
 
   /**
@@ -163,7 +167,8 @@ class CapturingSink(
     gmcpMessages += pkg to data
   }
 
-  override fun wantsGmcp(pkg: String): Boolean = supports.any { gmcpWithin(pkg, it) }
+  override fun wantsGmcp(pkg: String): Boolean =
+    supports.isNotEmpty() && isUnsolicitedGmcp(pkg) || supports.any { gmcpWithin(pkg, it) }
 
   override fun close(reason: String) {
     closedReason = reason
