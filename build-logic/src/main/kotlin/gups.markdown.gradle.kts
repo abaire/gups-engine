@@ -51,7 +51,7 @@ configure<SpotlessExtension> {
       "**/local-world-test/**",
       "**/.gups/**",
     )
-    flexmark().emulationProfile("GITHUB_DOC").formatterOptions(mapOf("RIGHT_MARGIN" to "120"))
+    flexmark().emulationProfile("COMMONMARK").formatterOptions(mapOf("RIGHT_MARGIN" to "120"))
     trimTrailingWhitespace()
     endWithNewline()
   }
