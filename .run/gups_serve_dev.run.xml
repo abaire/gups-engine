@@ -1,11 +1,10 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="gups serve --dev" type="JetRunConfigurationType" folderName="gups CLI">
+  <configuration default="false" name="gups serve --dev local-world" type="JetRunConfigurationType" folderName="gups CLI">
     <option name="MAIN_CLASS_NAME" value="gups.cli.MainKt" />
     <module name="gups-engine.cli.main" />
     <option name="PROGRAM_PARAMETERS" value="serve --dev --world local-world" />
-    <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
-    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
     <shortenClasspath name="NONE" />
+    <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
