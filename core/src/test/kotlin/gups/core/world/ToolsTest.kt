@@ -6,6 +6,7 @@ import gups.core.Restriction
 import gups.core.Role
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.AffectScope
+import gups.core.model.Channel
 import gups.core.model.Item
 import gups.core.model.ItemAffect
 import gups.core.model.ItemLocation
@@ -152,12 +153,19 @@ class ToolsTest {
     assertFalse(goblins[1].inWorld)
 
     val c = f.builder("Cy")
+    val sighted = f.player("Sighted")
+    val blind = f.player("Blind")
+    f.w.applyAffect(blind, AffectSpec("blind", 10_000, senseDeltas = mapOf(Channel.SIGHT to -10)))
     f.input(c, "@spawn :goblin")
     val left = f.w.actors.filterIsInstance<Mob>().single()
+    f.out(sighted)
+    f.out(blind)
     f.run(DEBUG_MOB_PULSES.toInt() - 120)
     assertTrue(left.inWorld)
     f.run(240)
     assertFalse(left.inWorld, "gone after 30 minutes")
+    assertContains(f.out(sighted), "A goblin fades away.")
+    assertFalse("fades away" in f.out(blind))
   }
 
   @Test

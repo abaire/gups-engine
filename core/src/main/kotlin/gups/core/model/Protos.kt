@@ -511,6 +511,9 @@ class Prototypes(
   /** Room prototypes indexed by canonical label. */
   val rooms: Map<Label, RoomProto> = unique("room", rooms) { it.label }
 
+  /** Every room's map number, for clients that key their maps by integer. */
+  val roomNumbers: Map<Label, Long> by lazy { roomNumbers(this.rooms.keys) }
+
   /** Mob prototypes indexed by canonical label. */
   val mobs: Map<Label, MobProto> = unique("mob", mobs) { it.label }
 

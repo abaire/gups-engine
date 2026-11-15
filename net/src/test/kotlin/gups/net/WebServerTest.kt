@@ -21,6 +21,7 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -157,11 +158,12 @@ class WebServerTest {
 
   private fun serve(
     tls: ServerTls? = null,
+    mudlet: MudletPackage? = null,
     block: (Inbox, Accounts, WebServer, String, HttpClient) -> Unit,
   ) {
     val inbox = Inbox()
     val accounts = Accounts()
-    val server = WebServer(inbox, accounts, assets, port = 0, tls = tls)
+    val server = WebServer(inbox, accounts, assets, port = 0, tls = tls, mudlet = mudlet)
     val port = runBlocking { server.start() }
     val http = HttpClient.newBuilder().sslContext(trustAll).build()
     try {
@@ -192,6 +194,9 @@ class WebServerTest {
 
   private fun HttpClient.get(url: String): HttpResponse<String> =
     send(HttpRequest.newBuilder(URI(url)).build(), HttpResponse.BodyHandlers.ofString())
+
+  private fun HttpClient.getBytes(url: String): HttpResponse<ByteArray> =
+    send(HttpRequest.newBuilder(URI(url)).build(), HttpResponse.BodyHandlers.ofByteArray())
 
   private fun HttpClient.socket(base: String, cookie: String? = null): Pair<WebSocket, Frames> {
     val frames = Frames()
@@ -303,13 +308,16 @@ class WebServerTest {
       connect.sink.prompt("> ")
       connect.sink.hideInput(true)
       connect.sink.gmcp("Char.Vitals", mapOf("hp" to 1))
+      assertTrue(connect.sink.wantsGmcp("Client.GUI"))
+      connect.sink.gmcp("Client.GUI", mapOf("version" to "v1", "url" to "https://x/m.mpackage"))
       assertEquals(
         listOf(
           """{"t":"text","d":"{red}Hello{/}"}""",
           """{"t":"prompt","d":"> "}""",
           """{"t":"hide","d":true}""",
+          """{"t":"gmcp","p":"Client.GUI","d":{"version":"v1","url":"https://x/m.mpackage"}}""",
         ),
-        List(3) { frames.next() },
+        List(4) { frames.next() },
       )
       ws.sendText("""{"t":"gmcp","p":"Core.Supports.Set","d":["Char 1"]}""", true)
       awaitSupported(connect.sink, "Char.Vitals")
@@ -392,4 +400,44 @@ class WebServerTest {
       ws.abort()
       assertIs<WorldControlEvent.Disconnect>(inbox.next())
     }
+
+  @Test
+  fun `WebServer serves Mudlet package when configured and 404s otherwise`() {
+    val pkg = MudletPackage("-- mapper\n".toByteArray())
+    serve(mudlet = pkg) { _, _, _, base, http ->
+      val res = http.getBytes("$base${MudletPackage.PATH}")
+      assertEquals(200, res.statusCode())
+      assertContains(res.headers().firstValue("Content-Type").get(), "application/zip")
+      assertEquals("no-cache", res.headers().firstValue("Cache-Control").get())
+      assertContentEquals(pkg.bytes, res.body())
+    }
+    serve { _, _, _, base, http ->
+      assertEquals(404, http.get("$base${MudletPackage.PATH}").statusCode())
+    }
+  }
+
+  @Test
+  fun `DocsServer serves Mudlet package when configured and 404s otherwise`() {
+    val pkg = MudletPackage("-- mapper\n".toByteArray())
+    val withPkg = DocsServer(emptyMap(), "127.0.0.1", 0, pkg)
+    val portWith = runBlocking { withPkg.start() }
+    val http = HttpClient.newHttpClient()
+    try {
+      val res = http.getBytes("http://127.0.0.1:$portWith${MudletPackage.PATH}")
+      assertEquals(200, res.statusCode())
+      assertContains(res.headers().firstValue("Content-Type").get(), "application/zip")
+      assertEquals("no-cache", res.headers().firstValue("Cache-Control").get())
+      assertContentEquals(pkg.bytes, res.body())
+    } finally {
+      withPkg.stop()
+    }
+
+    val withoutPkg = DocsServer(emptyMap(), "127.0.0.1", 0)
+    val portWithout = runBlocking { withoutPkg.start() }
+    try {
+      assertEquals(404, http.get("http://127.0.0.1:$portWithout${MudletPackage.PATH}").statusCode())
+    } finally {
+      withoutPkg.stop()
+    }
+  }
 }

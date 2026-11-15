@@ -400,12 +400,16 @@ class CombatTest(private val fs: FixtureSchema) {
     f.w.applyEffect(Effect.Summon(T.GOBLIN, count = 2, duration = 50), p, null)
     val (a, b) = f.w.room(T.YARD).actors.filterIsInstance<Mob>()
     f.w.startCombat(a, p)
+    f.out(p)
     f.w.applyEffect(Effect.Dispel(flags = setOf("summoned")), p, a)
+    f.run(1)
     assertFalse(a.inWorld, "dispelling banishes it")
     assertTrue(p.fighting.isEmpty())
+    assertContains(f.out(p), "A goblin fades away.")
     assertTrue(b.inWorld)
     f.runTo(60)
     assertFalse(b.inWorld, "expiry banishes it")
+    assertContains(f.out(p), "A goblin fades away.")
     assertTrue(f.w.room(T.YARD).items.isEmpty(), "a banished summon leaves no corpse")
   }
 
@@ -676,5 +680,25 @@ class CombatTest(private val fs: FixtureSchema) {
     assertContains(out, "Your sword refuses to strike.")
     assertContains(out, "You hit a training dummy.")
     assertEquals(1000 - 3, g.current(fs.health))
+  }
+
+  @Test
+  fun `an actor leaving the world while engaged frees its opponents and tells them`() {
+    val f = Fixture()
+    // Loaded for a login that never entered, so no session: unload takes it straight back out.
+    val ann = f.w.spawnPlayer("Ann", T.HALL)
+    val g = f.mob(T.GOBLIN)
+    f.w.startCombat(g, ann)
+    assertTrue(g.isEngaged)
+    val disengaged = mutableListOf<Pair<String, String?>>()
+    f.w.pluginEvents.getOrPut(HookName.ON_DISENGAGE) { mutableListOf() } +=
+      EventListener { _, subject, ctx ->
+        disengaged += subject.name to ctx.event
+      }
+
+    f.w.unload(ann)
+    assertFalse(ann.inWorld)
+    assertFalse(g.isEngaged, "nobody is left fighting an actor who is gone")
+    assertEquals(listOf<Pair<String, String?>>(g.name to "stop"), disengaged)
   }
 }

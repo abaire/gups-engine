@@ -4,6 +4,7 @@ import gups.core.CASCADE_MAX_DEPTH
 import gups.core.model.Actor
 import gups.core.model.DamageType
 import gups.core.model.Direction
+import gups.core.model.Entity
 import gups.core.model.Trait
 import gups.core.model.TraitEvent
 import gups.core.model.TraitHandler
@@ -261,7 +262,7 @@ class TraitEventsTest {
     // RecordingHost skips global on_death, so record it here.
     val scripts =
       object : ScriptHost by host {
-        override fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) {
+        override fun invokeGlobal(world: World, hook: HookName, subject: Entity, ctx: HookContext) {
           if (hook == HookName.ON_DEATH) order += "global hook"
         }
       }

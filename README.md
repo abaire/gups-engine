@@ -166,6 +166,7 @@ track bands).
   gups serve --prod --world local-world \
     --telnet-tls :4443 \
     --https :443 \
+    --public-url https://mud.example.edu \
     --tls-cert /etc/gups/fullchain.pem \
     --tls-key /etc/gups/privkey.pem \
     --admin 127.0.0.1:9090

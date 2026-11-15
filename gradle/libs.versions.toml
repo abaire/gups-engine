@@ -16,6 +16,7 @@ slf4j = "2.0.19"
 ktfmt = "0.59"
 commonmark = "0.31.0"
 spotless = "8.10.4"
+luaj = "3.0.1"
 
 [libraries]
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
@@ -41,6 +42,8 @@ micrometer-prometheus = { module = "io.micrometer:micrometer-registry-prometheus
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 # The headless browser test of the web client, Linux CI only.
 selenium-java = { module = "org.seleniumhq.selenium:selenium-java", version.ref = "selenium" }
+# LuaJ for testing the Mudlet mapper script.
+luaj-jse = { module = "org.luaj:luaj-jse", version.ref = "luaj" }
 # The changelog and plugin guide in the HTML reference.
 commonmark = { module = "org.commonmark:commonmark", version.ref = "commonmark" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }

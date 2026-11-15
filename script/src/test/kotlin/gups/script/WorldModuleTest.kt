@@ -355,6 +355,7 @@ class WorldModuleTest {
                 world = "/srv/gups/world",
                 telnet = ":4000",
                 telnet_tls = ":4443",
+                public_url = "https://x.edu",
                 open_signup = True,
                 max_characters = 3,
                 reserved_names = ["Gandalf"],
@@ -374,6 +375,7 @@ class WorldModuleTest {
         world = "/srv/gups/world",
         telnet = ":4000",
         telnetTls = ":4443",
+        publicUrl = "https://x.edu",
         openSignup = true,
         maxCharacters = 3,
         reservedNames = listOf("Gandalf"),
@@ -381,6 +383,7 @@ class WorldModuleTest {
       ),
       c,
     )
+    assertNull(ServerConfig().publicUrl)
     // The shutdown timeout is configurable, not a fixed 30 s.
     assertEquals(30, ServerConfig().shutdownTimeout)
     assertContains(

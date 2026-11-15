@@ -18,6 +18,7 @@ import gups.core.world.Features
 import gups.core.world.GmcpInput
 import gups.core.world.HookContext
 import gups.core.world.HookName
+import gups.core.world.ItemEventListener
 import gups.core.world.PeriodicWork
 import gups.core.world.PluginEffectRunner
 import gups.core.world.TickCommand
@@ -29,6 +30,7 @@ import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
 import gups.pluginapi.PluginEventCall
 import gups.pluginapi.PluginHookCall
+import gups.pluginapi.PluginItemEventCall
 import gups.pluginapi.PluginLane
 import gups.pluginapi.PluginTickCall
 import gups.script.WorldPluginWiring
@@ -116,6 +118,13 @@ internal constructor(
         mapOf("target" to ctx.target?.let { ActorFacade(it, w) }, "event" to ctx.event)
       HookName.ON_DISENGAGE -> mapOf("event" to ctx.event)
       HookName.ON_DEATH -> mapOf("killer" to ctx.actor?.let { ActorFacade(it, w) })
+      HookName.ON_DESPAWN -> emptyMap()
+      HookName.ON_DESTROY ->
+        mapOf(
+          "actor" to ctx.actor?.let { ActorFacade(it, w) },
+          "event" to ctx.event,
+          "destroyed_root" to ctx.destroyedRoot?.let { ItemFacade(it, w) },
+        )
       HookName.ON_SKILL_USE ->
         mapOf(
           "skill" to ctx.skill!!.label.v,
@@ -176,6 +185,7 @@ internal constructor(
     }
     installHooks(world)
     installEvents(world)
+    installItemEvents(world)
     installEffects(world)
   }
 
@@ -341,6 +351,28 @@ internal constructor(
             )
           }
         }
+      }
+    }
+  }
+
+  private fun installItemEvents(world: World) {
+    world.pluginItemEvents.clear()
+    for (p in plugins) {
+      for ((name, _, fn) in p.reg.itemEvents) {
+        val hook = HookName.entries.first { it.scriptName == name }
+        world.pluginItemEvents.getOrPut(hook) { mutableListOf() } +=
+          ItemEventListener { w, item, ctx ->
+            guard(w, p.id, "onItemEvent '$name'") {
+              fn(
+                PluginItemEventCall(
+                  facade(w, p.id),
+                  name,
+                  ItemFacade(item, w),
+                  fieldsOf(w, hook, ctx),
+                )
+              )
+            }
+          }
       }
     }
   }

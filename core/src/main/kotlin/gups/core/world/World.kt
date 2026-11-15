@@ -269,8 +269,17 @@ class World(
   /** Plugin event listeners per global-hookable hook, in plugin id then registration order. */
   val pluginEvents: MutableMap<HookName, MutableList<EventListener>> = LinkedHashMap()
 
+  /** Plugin item event listeners per hook, in plugin id then registration order. */
+  val pluginItemEvents: MutableMap<HookName, MutableList<ItemEventListener>> = LinkedHashMap()
+
   /** Production deploys, when the server can run them. */
   var deploys: Deploys? = null
+
+  /**
+   * The Mudlet package offered to clients that take a character, or null when the server has no
+   * public URL. Set once before any listener starts.
+   */
+  @Volatile var clientGui: ClientGui? = null
 
   // Alert rate limits, the engine-error window and step samples.
   internal val alertTimes = HashMap<String, Long>()
@@ -330,6 +339,12 @@ class World(
   internal val removedThisPhase = HashSet<EntityId>()
   /** Actors whose death is being processed right now. */
   internal val dying = HashSet<EntityId>()
+  /** Mobs whose `on_despawn` hooks are running right now. */
+  internal val despawning = HashSet<EntityId>()
+  /** Roots of the destroys whose `on_destroy` hooks are running right now. */
+  internal val destroyRoots = HashSet<EntityId>()
+  /** Items whose `on_destroy` hooks have run in a destroy that hasn't finished. */
+  internal val destroyNotified = HashSet<EntityId>()
   internal var cascadeDepth = 0
   /** Nesting depth of work that holds affect events back until it has finished. */
   internal var affectEventHold = 0
@@ -695,11 +710,13 @@ class World(
 
   /**
    * Takes [a] and everything it carries out of the world; [stow] keeps a mob's rows for a later
-   * restore.
+   * restore. Callers normally end [a]'s engagements first; any still standing end here, and those
+   * opponents hear `on_disengage` with "stop" once [a] is gone, so nobody is left fighting it.
    */
   internal fun removeActor(a: Actor, stow: Boolean = false) {
     // While the actor is still in the world, since a task's callback often belongs to the actor.
     endActivity(a, TaskEnd.GONE)
+    val freed = unlinkAll(a)
     if (a is Player) leaveGroupOnRemoval(a)
     a.room.actorIndex.remove(a.id)
     actorIndex.remove(a.id)
@@ -715,6 +732,7 @@ class World(
     }
     for (item in a.inventoryIndex.values + a.equipmentIndex.values) forgetItemTree(item)
     if (a is Mob && !stow) releaseSpawn(a)
+    fireDisengage(freed, "stop")
   }
 
   internal fun fillSpawn(s: SpawnState) {

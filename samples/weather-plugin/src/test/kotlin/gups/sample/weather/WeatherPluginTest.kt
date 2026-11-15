@@ -6,9 +6,11 @@ import gups.harness.TestRunner
 import gups.pluginapi.PluginActor
 import gups.pluginapi.PluginCommandCall
 import gups.pluginapi.PluginCreation
+import gups.pluginapi.PluginDoor
 import gups.pluginapi.PluginEffect
 import gups.pluginapi.PluginEffectCall
 import gups.pluginapi.PluginEntity
+import gups.pluginapi.PluginExit
 import gups.pluginapi.PluginGmcpCall
 import gups.pluginapi.PluginItem
 import gups.pluginapi.PluginLane
@@ -20,6 +22,7 @@ import gups.pluginapi.PluginRng
 import gups.pluginapi.PluginRole
 import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
+import gups.pluginapi.PluginTickCall
 import gups.pluginapi.PluginTrait
 import gups.pluginapi.PluginWorld
 import gups.pluginapi.host.PluginLoader
@@ -50,6 +53,10 @@ class WeatherPluginTest {
     val gmcpInputs = mutableMapOf<String, (PluginGmcpCall) -> Unit>()
     val started = mutableListOf<(PluginWorld) -> Unit>()
     val chainThinks = mutableListOf<(gups.pluginapi.PluginChainThinkCall) -> Boolean>()
+
+    data class Every(val pulses: Int, val doc: String, val fn: (PluginTickCall) -> Unit)
+
+    val every = mutableListOf<Every>()
 
     override fun addBuiltin(name: String, value: StarlarkValue, doc: String) = TODO()
 
@@ -145,12 +152,25 @@ class WeatherPluginTest {
     override fun onWorldStarted(fn: (PluginWorld) -> Unit) {
       started += fn
     }
+
+    override fun every(pulses: Int, doc: String, fn: (PluginTickCall) -> Unit) {
+      every += Every(pulses, doc, fn)
+    }
   }
 
-  private class FakeRoom(override val regions: List<String>) : PluginRoom {
+  /** A door's key and its mutable state; the same instance backs both sides of a passage. */
+  private class Door(val key: String?, var state: String)
+
+  private class FakeRoom(
+    override val regions: List<String>,
+    override val label: String = "//zones/valley:x",
+    override val name: String = "X",
+    /** Direction to destination label, for each exit the room has. */
+    private val exitTo: Map<String, String> = emptyMap(),
+    /** The doors of the exits, by direction; an exit not listed has no door. */
+    private val doors: Map<String, Door> = emptyMap(),
+  ) : PluginRoom {
     override val id = 1L
-    override val label = "//zones/valley:x"
-    override val name = "X"
     override val flags: Set<String>
       get() = TODO()
 
@@ -158,7 +178,7 @@ class WeatherPluginTest {
       get() = TODO()
 
     override val exits: Map<String, String>
-      get() = TODO()
+      get() = exitTo
 
     override val actors: List<PluginActor>
       get() = TODO()
@@ -168,6 +188,23 @@ class WeatherPluginTest {
 
     override val tags: List<String>
       get() = emptyList()
+
+    override fun exit(dir: String): PluginExit? {
+      val to = exitTo[dir] ?: return null
+      val door = doors[dir]
+      return PluginExit(
+        dir,
+        to,
+        emptyList(),
+        door?.let { PluginDoor(it.state, it.key, emptyList()) },
+        door?.key,
+        true,
+        false,
+      )
+    }
+
+    /** The mutable door the exit in [dir] has, or null when it has none. */
+    fun doorOf(dir: String): Door? = doors[dir]
   }
 
   private class FakeActor(override val room: PluginRoom) : PluginActor {
@@ -232,11 +269,17 @@ class WeatherPluginTest {
     override val seed: Long = 42,
     override var pulse: Long = 0,
     private val regionList: List<String> = emptyList(),
+    /** The rooms of the world, already in label order, as the engine's returns them. */
+    val rooms: List<PluginRoom> = emptyList(),
   ) : PluginWorld {
     val sent = mutableListOf<String>()
     val gmcpSent = mutableListOf<Pair<String, Any?>>()
     val affects = mutableListOf<List<Any>>()
     val logs = mutableListOf<String>()
+    val echoes = mutableListOf<Pair<PluginRoom, String>>()
+    val lockedDoors = mutableListOf<Pair<String, String>>()
+    val unlockedDoors = mutableListOf<Pair<String, String>>()
+    private val attrs = HashMap<Any, MutableMap<String, Any?>>()
 
     override fun send(target: PluginActor, text: String) {
       sent += text
@@ -265,7 +308,26 @@ class WeatherPluginTest {
 
     override fun regions(): List<String> = regionList
 
-    override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) = TODO()
+    override fun echo(room: PluginRoom, text: String, exclude: List<PluginActor>) {
+      echoes += room to text
+    }
+
+    override fun lockDoor(room: PluginRoom, dir: String) {
+      val door =
+        (room as FakeRoom).doorOf(dir)
+          ?: throw IllegalArgumentException("lockDoor(): ${room.label} has no door $dir")
+      check(door.key != null) { "lockDoor(): ${room.label} door $dir has no lock" }
+      door.state = "locked"
+      lockedDoors += room.label to dir
+    }
+
+    override fun unlockDoor(room: PluginRoom, dir: String) {
+      val door =
+        (room as FakeRoom).doorOf(dir)
+          ?: throw IllegalArgumentException("unlockDoor(): ${room.label} has no door $dir")
+      if (door.state == "locked") door.state = "closed"
+      unlockedDoors += room.label to dir
+    }
 
     override fun damage(
       target: PluginActor,
@@ -275,7 +337,8 @@ class WeatherPluginTest {
       source: PluginActor?,
     ) = TODO()
 
-    override fun heal(target: PluginActor, amount: Int, vital: String) = TODO()
+    override fun heal(target: PluginActor, amount: Int, vital: String, source: PluginActor?) =
+      TODO()
 
     override val schema: PluginSchema
       get() = TODO()
@@ -337,16 +400,21 @@ class WeatherPluginTest {
 
     override fun mergeStack(item: PluginItem): PluginItem = TODO()
 
-    override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? = TODO()
+    override fun getAttr(entity: PluginEntity, key: String, default: Any?): Any? =
+      attrs[entity]?.getOrElse(key) { default } ?: default
 
-    override fun setAttr(entity: PluginEntity, key: String, value: Any?) = TODO()
+    override fun setAttr(entity: PluginEntity, key: String, value: Any?) {
+      attrs.getOrPut(entity) { mutableMapOf() }[key] = value
+    }
 
-    override fun delAttr(entity: PluginEntity, key: String) = TODO()
+    override fun delAttr(entity: PluginEntity, key: String) {
+      attrs[entity]?.remove(key)
+    }
 
     override val rng: PluginRng
       get() = TODO()
 
-    override fun rooms(): List<PluginRoom> = TODO()
+    override fun rooms(): List<PluginRoom> = rooms
 
     override fun room(label: String): PluginRoom? = TODO()
 
@@ -547,6 +615,179 @@ class WeatherPluginTest {
     assertEquals(listOf("weather: tracking 2 region(s): meadow, valley"), w.logs)
   }
 
+  // ---- The every handler: storms lock and unlock keyed outdoor doors -------------------------
+
+  /**
+   * The first window from the first one on (the every handler first runs at pulse 240) in which the
+   * region storms and the next window does not, so the storm is one the handler can lock and one it
+   * can unlock.
+   */
+  private fun stormWindow(world: PluginWorld, room: PluginRoom): Long {
+    var k = 1L
+    while (
+      WeatherPlugin.stateFor(world, room, k * 240) != "storm" ||
+        WeatherPlugin.stateFor(world, room, (k + 1) * 240) == "storm"
+    ) {
+      k++
+    }
+    return k
+  }
+
+  @Test
+  fun `the every handler is registered for the weather window`() {
+    val every = registry.every.single()
+    assertEquals(240, every.pulses)
+    assertEquals(
+      "Storms slam and lock outdoor doors; they unlock when the storm passes.",
+      every.doc,
+    )
+  }
+
+  @Test
+  fun `a storm slams a keyed open door and locks it`() {
+    val door = Door(":cabin_key", "open")
+    val field: PluginRoom =
+      FakeRoom(
+        listOf("meadow"),
+        "//zones/valley:field",
+        "Field",
+        mapOf("south" to ":cabin"),
+        mapOf("south" to door),
+      )
+    val cabin =
+      FakeRoom(
+        emptyList(),
+        "//zones/valley:cabin",
+        "Cabin",
+        mapOf("north" to ":field"),
+        mapOf("north" to door),
+      )
+    val world = FakeWorld(seed = 0, rooms = listOf(field, cabin))
+    world.pulse = stormWindow(world, field) * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("locked", field.exit("south")!!.door!!.state)
+    assertEquals(listOf(field to "The storm slams the door to the south shut."), world.echoes)
+    assertEquals(listOf("south"), world.getAttr(field, "locked"))
+  }
+
+  @Test
+  fun `a keyed closed door is locked silently`() {
+    val door = Door(":cabin_key", "closed")
+    val field =
+      FakeRoom(
+        listOf("meadow"),
+        "//zones/valley:field",
+        "Field",
+        mapOf("south" to ":cabin"),
+        mapOf("south" to door),
+      )
+    val world = FakeWorld(seed = 0, rooms = listOf(field))
+    world.pulse = stormWindow(world, field) * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("locked", field.exit("south")!!.door!!.state)
+    assertEquals(
+      emptyList<Pair<PluginRoom, String>>(),
+      world.echoes,
+      "a closed door is locked without a slam",
+    )
+    assertEquals(listOf("south"), world.getAttr(field, "locked"))
+  }
+
+  @Test
+  fun `unkeyed and already-locked doors are left alone`() {
+    val keyed = Door(":key", "open")
+    val unkeyed = Door(null, "open")
+    val preLocked = Door(":other_key", "locked")
+    val field: PluginRoom =
+      FakeRoom(
+        listOf("meadow"),
+        "//zones/valley:field",
+        "Field",
+        mapOf("south" to ":a", "east" to ":b", "north" to ":c"),
+        mapOf("south" to keyed, "east" to unkeyed, "north" to preLocked),
+      )
+    val world = FakeWorld(seed = 0, rooms = listOf(field))
+    world.pulse = stormWindow(world, field) * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("open", field.exit("east")!!.door!!.state, "the unkeyed door has no lock")
+    assertEquals("locked", field.exit("north")!!.door!!.state, "the pre-locked door is left alone")
+    assertEquals("locked", field.exit("south")!!.door!!.state, "the keyed door is locked")
+    assertEquals(
+      listOf("south"),
+      world.getAttr(field, "locked"),
+      "only the plugin's door is listed",
+    )
+    assertEquals(
+      listOf(field to "The storm slams the door to the south shut."),
+      world.echoes,
+      "only the open keyed door slams",
+    )
+  }
+
+  @Test
+  fun `the storm unlocks only the doors it locked, when it passes`() {
+    val pluginDoor = Door(":plugin_key", "open")
+    val playerDoor = Door(":player_key", "locked")
+    val field =
+      FakeRoom(
+        listOf("meadow"),
+        "//zones/valley:field",
+        "Field",
+        mapOf("south" to ":a", "east" to ":b"),
+        mapOf("south" to pluginDoor, "east" to playerDoor),
+      )
+    val world = FakeWorld(seed = 0, rooms = listOf(field))
+    val k = stormWindow(world, field)
+    world.pulse = k * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("locked", field.exit("south")!!.door!!.state, "the plugin locked its door")
+    assertEquals(
+      "locked",
+      field.exit("east")!!.door!!.state,
+      "the player's lock holds through the storm",
+    )
+    // A stray entry someone else wrote into the list is skipped, not fatal.
+    world.setAttr(field, "locked", listOf(42L) + world.getAttr(field, "locked") as List<*>)
+    world.pulse = (k + 1) * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("closed", field.exit("south")!!.door!!.state, "the plugin unlocked its own door")
+    assertEquals("locked", field.exit("east")!!.door!!.state, "the player's door stays locked")
+    assertNull(world.getAttr(field, "locked"))
+  }
+
+  @Test
+  fun `an indoor room is never touched`() {
+    val indoorDoor = Door(":key", "open")
+    val outdoorDoor = Door(":other", "open")
+    val cabin =
+      FakeRoom(
+        emptyList(),
+        "//zones/valley:cabin",
+        "Cabin",
+        mapOf("east" to ":den"),
+        mapOf("east" to indoorDoor),
+      )
+    val field =
+      FakeRoom(
+        listOf("meadow"),
+        "//zones/valley:field",
+        "Field",
+        mapOf("south" to ":cabin"),
+        mapOf("south" to outdoorDoor),
+      )
+    val world = FakeWorld(seed = 0, rooms = listOf(cabin, field))
+    world.pulse = stormWindow(world, field) * 240
+    registry.every.single().fn(PluginTickCall(world, emptyList()))
+    assertEquals("open", cabin.exit("east")!!.door!!.state, "the indoor door is untouched")
+    assertEquals("locked", field.exit("south")!!.door!!.state, "the outdoor door is locked")
+    assertEquals(emptyList<Pair<String, String>>(), world.unlockedDoors)
+    assertEquals(
+      emptyList<Pair<PluginRoom, String>>(),
+      world.echoes.filter { it.first === cabin },
+      "the indoor room never slams",
+    )
+  }
+
   // ---- End to end: the built weather.jar through gups test's TestRunner -----------------------
 
   private fun write(root: Path, path: String, text: String) {
@@ -555,26 +796,16 @@ class WeatherPluginTest {
     p.writeText(text.trimIndent() + "\n")
   }
 
-  @Test
-  fun `the built jar runs through TestRunner`() {
-    val tmp = TempFiles.dir("gups-weather")
-    val jar = tmp.resolve("plugins/weather.jar").also { it.parent.createDirectories() }
-    Path.of(System.getProperty("gups.sample.weatherJar")).copyTo(jar)
-    val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
+  /** The valley zone: a cabin and a field behind a keyed door, and its test cases. */
+  private fun writeValleyWorld(tmp: Path, lockPulse: Long) {
+    write(tmp, "zones/valley/package.star", """package(api_version = 1, kind = "zone")""")
     write(
       tmp,
-      "MODULE.gups",
-      schema.replaceFirst(
-        "module(",
-        "module(\n    plugins = {\"weather\": \"${PluginLoader.sha256(jar)}\"},",
-      ),
+      "zones/valley/items.star",
+      """
+            item("cabin_key", name = "a cabin key", desc = "A key to the cabin door.")
+            """,
     )
-    val rules = Path.of(System.getProperty("gups.templateWorld")).resolve("rules")
-    Files.list(rules)
-      .use { s -> s.toList() }
-      .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
-    gups.script.testing.TestWorlds.makeSpellsLand(tmp.resolve("rules"))
-    write(tmp, "zones/valley/package.star", """package(api_version = 1, kind = "zone")""")
     write(
       tmp,
       "zones/valley/rooms.star",
@@ -582,8 +813,8 @@ class WeatherPluginTest {
             def _sky(ctx):
                 ctx.send(ctx.actor, "The sky is " + weather.now(ctx.room) + ".")
 
-            room("cabin", name = "Cabin", desc = "A snug cabin.", exits = [exit("north", ":field")])
-            room("field", name = "Field", desc = "An open field.", regions = ["meadow"], exits = [exit("south", ":cabin")], on_enter = _sky)
+            room("cabin", name = "Cabin", desc = "A snug cabin.", exits = [exit("north", ":field", door = door(state = DOOR.open, key = ":cabin_key"))])
+            room("field", name = "Field", desc = "An open field.", regions = ["meadow"], exits = [exit("south", ":cabin", door = door(state = DOOR.open, key = ":cabin_key"))], on_enter = _sky)
             skill("rain_call", kind = "spell", target = "self", effect = weather.soak(pulses = 3))
             """,
     )
@@ -609,8 +840,40 @@ class WeatherPluginTest {
                 p.do("cast rain_call")
                 w.run(pulses = 2)
                 t.true("soaked" in [a.name for a in p.affects])
+
+            def test_a_storm_locks_the_field_door(t):
+                w = t.world()
+                p = w.spawn_player("Ann", at = ":field")
+                w.run(pulses = $lockPulse)
+                t.contains(p.do("open south"), "The door south is locked.")
             """,
     )
+  }
+
+  @Test
+  fun `the built jar runs through TestRunner`() {
+    val tmp = TempFiles.dir("gups-weather")
+    val jar = tmp.resolve("plugins/weather.jar").also { it.parent.createDirectories() }
+    Path.of(System.getProperty("gups.sample.weatherJar")).copyTo(jar)
+    val schema = Path.of(System.getProperty("gups.templateWorld")).resolve("MODULE.gups").readText()
+    write(
+      tmp,
+      "MODULE.gups",
+      schema.replaceFirst(
+        "module(",
+        "module(\n    plugins = {\"weather\": \"${PluginLoader.sha256(jar)}\"},",
+      ),
+    )
+    val rules = Path.of(System.getProperty("gups.templateWorld")).resolve("rules")
+    Files.list(rules)
+      .use { s -> s.toList() }
+      .forEach { it.copyTo(tmp.resolve("rules").createDirectories().resolve(it.fileName)) }
+    gups.script.testing.TestWorlds.makeSpellsLand(tmp.resolve("rules"))
+    // The harness world runs with seed 0 and the field's region is "meadow". The every(240)
+    // handler first runs at pulse 240, so the first storm it can lock is the first storm window
+    // from window 1 on; one extra pulse lands past the boundary that locks the door.
+    val lockPulse = stormWindow(FakeWorld(seed = 0), FakeRoom(listOf("meadow"))) * 240 + 1
+    writeValleyWorld(tmp, lockPulse)
     val logs = mutableListOf<String>()
     val dir = WorldDir(tmp)
     val (module, error) = WorldModule.read(dir)
@@ -619,7 +882,7 @@ class WeatherPluginTest {
       assertEquals(emptyList(), host.warnings)
       val report = TestRunner(dir, plugins = host).run(listOf("//zones/valley"))
       assertEquals(emptyList(), report.problems)
-      assertEquals(3, report.results.size, report.results.joinToString("\n"))
+      assertEquals(4, report.results.size, report.results.joinToString("\n"))
       for (r in report.results) assertEquals(Status.PASS, r.status, "${r.name}: ${r.message}")
     }
     assertContains(logs, "plugin 'weather': weather: tracking 1 region(s): meadow")

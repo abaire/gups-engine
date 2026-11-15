@@ -61,6 +61,8 @@ data class ServerConfig(
   val telnet: String? = null,
   val telnetTls: String? = null,
   val https: String? = null,
+  /** The address players reach `https` at; null offers clients no Mudlet package. */
+  val publicUrl: String? = null,
   val admin: String? = null,
   val tlsCert: String? = null,
   val tlsKey: String? = null,
@@ -100,6 +102,12 @@ data class ServerConfig(
               "https",
               "str",
               "HTTPS and WebSocket listen address (host:port or :port).",
+              default = "None",
+            ),
+            DeclParam(
+              "public_url",
+              "str",
+              "Public http(s) URL players reach the HTTPS listener at.",
               default = "None",
             ),
             DeclParam(
@@ -201,6 +209,7 @@ data class ServerConfig(
             telnet = d.str("telnet"),
             telnetTls = d.str("telnet_tls"),
             https = d.str("https"),
+            publicUrl = d.str("public_url"),
             admin = d.str("admin"),
             tlsCert = d.str("tls_cert"),
             tlsKey = d.str("tls_key"),

@@ -287,4 +287,16 @@ class TelnetConnectionTest {
     p.feed(IAC, 254, 1)
     assertEquals(emptyList(), p.take(), "DONT ECHO is never answered, so nothing loops")
   }
+
+  @Test
+  fun `wantsGmcp accepts Client GUI whenever GMCP is on`() {
+    val p = Probe()
+    p.conn.start()
+    p.take()
+    assertFalse(p.conn.wantsGmcp("Client.GUI"), "before GMCP is on")
+    p.feed(IAC, 253, 201)
+    p.feed(IAC, SB, 201, "Core.Supports.Set [\"Char 1\"]", IAC, SE)
+    assertTrue(p.conn.wantsGmcp("Client.GUI"))
+    assertTrue(p.conn.wantsGmcp("client.gui"))
+  }
 }

@@ -2,6 +2,7 @@ package gups.core.world
 
 import gups.core.model.ActivityState
 import gups.core.model.Band
+import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Player
 import gups.core.pulsesToSeconds
@@ -25,9 +26,22 @@ private val STATE_PACKAGES =
     "Room.Bands",
   )
 
+/** Where clients can fetch the Mudlet mapper package, and its version. */
+data class ClientGui(val version: String, val url: String)
+
+/** The package that offers clients the Mudlet mapper. */
+const val CLIENT_GUI_GMCP = "Client.GUI"
+
+/** Packages sent to every client with GMCP on, whatever it listed in `Core.Supports`. */
+val UNSOLICITED_GMCP: Set<String> = setOf(CLIENT_GUI_GMCP)
+
+/** True if [pkg] is one of [UNSOLICITED_GMCP], ignoring case. */
+fun isUnsolicitedGmcp(pkg: String): Boolean = UNSOLICITED_GMCP.any { it.equals(pkg, true) }
+
 /** Every package the engine sends; plugin packages may not overlap them. */
 val ENGINE_GMCP_PACKAGES: Set<String> =
-  (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace", "Char.Creation")).toSortedSet()
+  (STATE_PACKAGES + listOf("Comm.Channel.Text", "Gups.Trace", "Char.Creation") + UNSOLICITED_GMCP)
+    .toSortedSet()
 
 /** A GMCP package clients may send, and what handles it. */
 class GmcpInput(
@@ -207,15 +221,30 @@ private fun World.groupPayload(p: Player): Map<String, Any?>? {
   }
 }
 
-private fun roomInfoPayload(p: Player): Map<String, Any?> {
+private val SHORT_NAMES = Direction.ALIASES.entries.associate { (s, l) -> l to s }
+
+private fun exitKey(d: Direction): String = SHORT_NAMES[d.name] ?: d.name
+
+private fun World.roomInfoPayload(p: Player): Map<String, Any?> {
   val room = p.room
-  return mapOf(
-    "label" to room.label.v,
-    "name" to room.name,
-    "exits" to
-      room.exits.values.associate { x -> x.direction.name to x.door?.state?.let(::doorWord) },
-    "regions" to room.regions.sorted(),
-  )
+  val exits = LinkedHashMap<String, Long?>(room.exits.size)
+  val doors = LinkedHashMap<String, String>()
+  for (x in room.exits.values) {
+    val key = exitKey(x.direction)
+    exits[key] = protos.roomNumbers[x.to]
+    val door = x.door
+    if (door != null) doors[key] = doorWord(door.state)
+  }
+  return LinkedHashMap<String, Any?>().also { out ->
+    out["num"] = protos.roomNumbers.getValue(room.label)
+    out["label"] = room.label.v
+    out["name"] = room.name
+    out["area"] = "//" + room.label.pkg
+    out["area_name"] = protos.zones[room.label.pkg]?.title ?: room.label.pkg
+    out["exits"] = exits
+    out["doors"] = doors
+    out["regions"] = room.regions.sorted()
+  }
 }
 
 /** Only the viewer's own room, from the viewer's own index. */

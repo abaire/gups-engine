@@ -164,6 +164,14 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   fun power(): Any = field { extras.power?.let(::sInt) ?: Starlark.NONE }
 
   @StarlarkMethod(
+    name = "destroyed_root",
+    structField = true,
+    doc =
+      "For on_destroy, the item whose destruction began it: the item itself, or the container it is destroyed with.",
+  )
+  fun destroyedRoot(): Any = field { v(hc.destroyedRoot) }
+
+  @StarlarkMethod(
     name = "weapon",
     structField = true,
     doc = "The weapon used in an attack, or None for unarmed.",

@@ -1080,6 +1080,29 @@ object DocExamples {
                     t.fail("%s" % d.message)
             """,
         ),
+      "ctx.despawn" to
+        ex(
+          pkg =
+            """
+                def _dismiss(ctx):
+                    ctx.echo(ctx.room, "The wolf slinks away.")
+                    ctx.despawn(ctx.here("wolf"))
+
+                room("camp", name = "Camp", desc = "A camp.", flags = ["dead_end_ok"],
+                     commands = {"dismiss": _dismiss})
+                mob("wolf", name = "a wolf", keywords = ["wolf"], vitals = vitals(hp = 10))
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                p = w.spawn_player("Tess", at = ":camp")
+                w.spawn(":wolf", at = ":camp")
+                t.contains(p.do("dismiss"), "The wolf slinks away.")
+                t.eq([a.name for a in w.room(":camp").actors()], ["Tess"])
+                for d in w.diagnostics():
+                    t.fail("%s" % d.message)
+            """,
+        ),
       "ctx.set_leash" to
         ex(
           pkg =

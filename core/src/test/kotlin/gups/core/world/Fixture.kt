@@ -228,11 +228,14 @@ class RecordingHost : ScriptHost {
     return h(world, owner, ctx) ?: HookOutcome.Allow
   }
 
-  override fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) {
-    // on_level_change and on_death also fire on the attached path, which invokeHook records;
-    // running the same registered handler here would double it. The other global hooks
+  override fun invokeGlobal(world: World, hook: HookName, subject: Entity, ctx: HookContext) {
+    // on_level_change, on_death and on_destroy also fire on the attached path, which invokeHook
+    // records; running the same registered handler here would double it. The other global hooks
     // (encumbrance, group, owner, disengage) fire only here.
-    if (hook == HookName.ON_LEVEL_CHANGE || hook == HookName.ON_DEATH) return
+    if (
+      hook == HookName.ON_LEVEL_CHANGE || hook == HookName.ON_DEATH || hook == HookName.ON_DESTROY
+    )
+      return
     val h = handlers[hook] ?: return
     calls += "${hook.scriptName}:global"
     h(world, subject, ctx)

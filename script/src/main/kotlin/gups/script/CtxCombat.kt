@@ -7,6 +7,7 @@ import gups.core.world.awardXp
 import gups.core.world.clearContributions
 import gups.core.world.damage
 import gups.core.world.heal
+import gups.core.world.isDespawning
 import gups.core.world.isDying
 import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
@@ -189,7 +190,10 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
       if (x === y) fail("start_combat(): an actor can't fight itself")
       if (x.room !== y.room)
         fail("start_combat(): ${x.name} and ${y.name} are not in the same room")
-      for (d in listOf(x, y)) if (world.isDying(d)) fail("start_combat(): ${d.name} is dying")
+      for (d in listOf(x, y)) {
+        if (world.isDying(d)) fail("start_combat(): ${d.name} is dying")
+        if (world.isDespawning(d)) fail("start_combat(): ${d.name} is leaving the world")
+      }
       world.startCombat(x, y)
       Starlark.NONE
     }

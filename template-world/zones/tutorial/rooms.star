@@ -36,6 +36,11 @@ def _hall_enter(ctx):
         # A library helper: it stores the quest in the player's attributes and tells them.
         quest.start(ctx, ctx.actor, FIRST_STEPS)
 
+def _stock_hall(ctx):
+    if not [i for i in ctx.self.items() if i.label.endswith(":satchel")]:
+        s = ctx.spawn(":satchel", ctx.self)
+        ctx.spawn(":brass_key", s)
+
 room("hall",
     name = "The Hall of Lessons",
     desc = "A long, bright hall. Doors lead east and north, a dark passage west; the gate is south.",
@@ -53,6 +58,8 @@ room("hall",
     # Spawns refill on zone reset, and respawn_pulses after the last one leaves the world.
     spawns = [spawn(":guide", at_index = 2)],
     on_enter = _hall_enter,
+    on_load = _stock_hall,
+    on_reset = _stock_hall,
 )
 
 def _stock_tar_pit(ctx):
@@ -91,11 +98,12 @@ room("gravel",
 
 def _stock_armory(ctx):
     # on_load runs once when the world starts; on_reset at every zone reset. Both keep a
-    # practice sword on the armory floor without ever stacking up duplicates.
+    # practice sword and a volatile flask on the armory floor without ever stacking up duplicates.
     # (ctx.find(":practice_sword") would also count swords carried by players in the room.)
-    on_floor = [i for i in ctx.self.items() if i.label.endswith(":practice_sword")]
-    if not on_floor:
-        ctx.spawn(":practice_sword", ctx.self)
+    for label in (":practice_sword", ":volatile_flask"):
+        on_floor = [i for i in ctx.self.items() if i.label.endswith(label)]
+        if not on_floor:
+            ctx.spawn(label, ctx.self)
 
 room("armory",
     name = "The Armory",
@@ -147,6 +155,14 @@ def _stock_arena(ctx):
         if not on_floor:
             ctx.spawn(label, ctx.self)
 
+def _arena_destroy(ctx):
+    # Corpses use the engine's own prototype, so a room hook (or global hook) is the only
+    # way to react when one decays here.
+    if ctx.item.label == "//engine:corpse" and ctx.event == "decay":
+        if not [a for a in ctx.self.actors() if a.label.endswith(":rotten_ghost")]:
+            ctx.echo(ctx.self, "A rotten ghost rises from the rotting corpse.")
+            ctx.spawn(":rotten_ghost", ctx.self)
+
 room("arena",
     name = "The Practice Arena",
     desc = "Sand, a few benches, and a battered training dummy at the far end.",
@@ -157,4 +173,5 @@ room("arena",
     on_enter = _arena_enter,
     on_load = _stock_arena,
     on_reset = _stock_arena,
+    on_destroy = _arena_destroy,
 )

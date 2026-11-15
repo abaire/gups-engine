@@ -358,7 +358,7 @@ class StarlarkHost(
   override fun hasHook(owner: Entity, hook: HookName): Boolean =
     hook in scripts.hooks(owner.protoLabel)
 
-  override fun invokeGlobal(world: World, hook: HookName, subject: Actor, ctx: HookContext) {
+  override fun invokeGlobal(world: World, hook: HookName, subject: Entity, ctx: HookContext) {
     if (hook == HookName.ON_LEVEL_CHANGE && Feature.LEVELING !in world.features) return
     for (pkg in scripts.packages.values.sortedBy { it.path }) {
       for (decl in pkg.globalHooks) {
