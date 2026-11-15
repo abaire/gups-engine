@@ -106,3 +106,36 @@ end of a road and has them close in. **Questions:** - Do the existing verbs grow
 room, index = null)`), as `ctx` does, or does the facade get separate track-aware verbs? - Which reads to add:
 `PluginActor.trackIndex`, `PluginItem.trackIndex`, `bandOf(a, b)`, a room's `trackSize`? - What does each do in a world
 without `track`: error as `ctx` does when an `index` is passed, or quietly treat every room as size 1?
+
+## Networking and clients
+
+### Mudlet automapper support
+
+**Spec:** §3.1 (room declarations), §4.10 (Network Protocol, `Room.Info`, HTTP endpoints), §5.10 (Persistence).
+**Today:** Mudlet's map dock is empty on a fresh profile because Mudlet's C++ mapper visual canvas only renders rooms
+created by a client Lua script (listening to `gmcp.Room.Info` or scraping text) or imported from a map file (via GMCP
+`Client.Map`). GUPS's `Room.Info` payload (`{"label", "name", "exits": {dir: "open"/"closed"/"locked"/null},
+"regions"}`) is designed for the bundled web client and diverges from the standard GMCP `Room.Info` schema expected by
+Mudlet's `generic_mapper` and standard GMCP mapper scripts: - Mudlet's mapper graph keys every room and exit target by a
+stable positive integer ID (`num`), whereas GUPS rooms are identified by string labels (`//zones/tutorial:gate`) and
+ephemeral runtime `EntityId`s (`Room.id.v`), with no integer vnum in `Room.Info`. - Standard `Room.Info.exits` maps
+direction strings (typically short names like `"n"`, `"s"`, `"u"`) to destination room `num` integers (`{"n": 102}`),
+whereas GUPS maps full direction names (`"north"`) to door states (`"open"`, `"closed"`, `"locked"`, or `null`). -
+Standard `Room.Info` includes `"area"` (string area/zone name, whereas GUPS sends `"regions"`, a sorted list of strings)
+and `"environment"` (terrain string for room coloring), plus optional `"coords"` (`x`, `y`, `z`). - Even with a
+Mudlet-compatible `Room.Info`, Mudlet's built-in `generic_mapper` defaults to text scraping until configured or bridged,
+unless Mudlet receives a GMCP `Client.Map {"url": "..."}` pointing to a server-hosted MMP XML map or a `Client.GUI
+{"version": "...", "url": "..."}` pointing to a `.mpackage` containing a GMCP mapper bridge script. **Questions:** -
+Which mechanism should populate Mudlet's map: (a) a GMCP mapper script delivered automatically via `Client.GUI` (or
+documented for students to install), (b) a server-generated MMP XML map served over HTTP and advertised via
+`Client.Map`, or (c) adapting `Room.Info` to work with Mudlet's built-in `generic_mapper`? - How should rooms get stable
+integer IDs (`num`) for Mudlet: a deterministic hash of `room.label.v` (handling collisions), a persisted label-to-int
+table in SQLite, or an index assigned in package/declaration order? - How should `Room.Info` carry both exit destination
+IDs (for Mudlet) and door states (for the web client): move door states to a separate `"doors"` map, nest exit objects,
+or add Mudlet-specific fields alongside existing ones? - Should `Room.Info` include `"area"` (derived from the first
+region in `room.regions` or from the package path `room.label.pkg`) and `"environment"` (from a room tag or attribute)?
+- Should room prototypes in Starlark optionally declare `(x, y, z)` coordinates, or should coordinates be laid out
+automatically from the exit graph (or left to Mudlet's incremental layout)? - Should destination room numbers in `exits`
+be omitted or masked for unvisited rooms, closed doors, or custom non-compass exits so the payload does not spoil hidden
+areas? - In `gups serve --dev` (where the main HTTPS server is off and only `DocsServer` runs on `--docs-port`), should
+`DocsServer` host the `.mpackage` or MMP XML map if `Client.GUI` or `Client.Map` is used?
