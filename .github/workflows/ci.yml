@@ -169,7 +169,7 @@ jobs:
             git -C "$RUNNER_TEMP/gh-pages" push origin gh-pages
           fi
 
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/gups-docs
 
