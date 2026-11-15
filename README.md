@@ -21,6 +21,8 @@ GUPS splits the work into three layers, each in its own language:
 
 Builders are the main audience: they never touch Kotlin, and `gups docs` documents everything they can call. Plugins are
 for mechanics a world needs that Starlark can't express, and they reach the world only through the `PluginWorld` facade.
+For a top-down guide to designing a new world—from foundational schema and rules decisions to building zones with agents
+and `gups-builder`—see [docs/WORLD_DESIGN_GUIDE.md](docs/WORLD_DESIGN_GUIDE.md).
 
 ## Building
 
@@ -194,7 +196,8 @@ track bands).
 A course world is its own git repository, one per term, holding the zones, rules and libraries students write. Every
 release ships `course-world-template-<version>.tar.gz`, a copy of [`template-world/`](template-world) whose CI workflow
 is pinned to that release's `gups` image. Build it from a checkout with `./gradlew :cli:courseWorldTemplateArchive` (it
-lands in `cli/build/distributions/`).
+lands in `cli/build/distributions/`). See [docs/WORLD_DESIGN_GUIDE.md](docs/WORLD_DESIGN_GUIDE.md) for a step-by-step
+guide to planning a new world's schema, rules, plugins, and zones.
 
 1. **Unpack it and make it a repository:**
 
