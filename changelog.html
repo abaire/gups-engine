@@ -29,6 +29,17 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="mudlet-automapper">Mudlet automapper</h3>
+<ul>
+<li>GMCP <code>Room.Info</code> gains <code>num</code> (a stable map number per room), <code>area</code> and <code>area_name</code>; <code>exits</code> now maps each direction
+(short names for the standard ten) to the destination's <code>num</code>, and door states move to a new <code>doors</code> map.</li>
+<li>The engine ships a Mudlet mapper script that draws the map from <code>Room.Info</code> as a player explores.</li>
+<li>Double-clicking a room on the Mudlet map walks there, one step per room.</li>
+<li>The server serves the Mudlet mapper as <code>/mudlet/gups-mapper.mpackage</code>.</li>
+<li>GMCP clients are sent <code>Client.GUI</code> when they take a character, so Mudlet installs the mapper package itself.</li>
+<li><code>--public-url</code> / <code>public_url</code> tells a production server its public address so Mudlet can be offered the mapper;
+<code>--dev</code> offers it from the docs port automatically.</li>
+</ul>
 <h3 id="a-hook-when-an-item-is-destroyed">A hook when an item is destroyed</h3>
 <ul>
 <li>New hook <code>on_destroy</code> fires on an item that stops existing (a whole <code>destroy</code>, decay, or a last charge), then its

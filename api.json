@@ -2428,6 +2428,18 @@
           "since": 1
         },
         {
+          "symbol": "server.public_url",
+          "name": "public_url",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Public http(s) URL players reach the HTTPS listener at.",
+          "since": 1
+        },
+        {
           "symbol": "server.admin",
           "name": "admin",
           "type": "str",
