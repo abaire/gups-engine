@@ -26,6 +26,11 @@ mob("guide",
     )
 ```
 
+`desc` is what a player sees when they `look <mob>`, followed by a line describing the mob's health. Without a `desc`,
+the player sees "You see nothing special about the guide." before the health line; a world can reword that line by
+overriding the engine message `look.nothing_special` in its `MESSAGES.gups`. The guide's description is checked in
+[`look_test.star`](../../zones/tutorial/look_test.star).
+
 ### Essential Attributes:
 
 * **`level`:** The mob's combat tier. Used by world rules for XP, hit chances, and difficulty scaling.

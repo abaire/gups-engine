@@ -13,11 +13,19 @@ Items are declared with `item()`. At minimum, an item specifies its label identi
 # zones/tutorial/items.star
 item("brass_key",
      name="a brass key",
-     # Keywords determine what players type: "get key" or "examine brass"
+     # Keywords determine what players type: "get key" or "look brass"
      keywords=["brass", "key"],
      desc="A small brass key stamped with an anvil.",
      )
 ```
+
+### Describing an Item
+
+`desc` is what a player sees when they `look <item>`, whether the item is on the ground or carried. Write one for every
+item: players often can't tell what an unfamiliar item is from its name alone, and the description is where you say.
+Without a `desc`, `look` answers "You see nothing special about a brass key." A world can reword that line by overriding
+the engine message `look.nothing_special` in its `MESSAGES.gups`; the replacement may use `{name}`. The tutorial zone's
+items all have a `desc`, and [`look_test.star`](../../zones/tutorial/look_test.star) checks both cases.
 
 ### Keyword Matching Rules
 
