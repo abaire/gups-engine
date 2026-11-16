@@ -48,6 +48,44 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
+### Trick exits with a varying destination
+
+**Spec:** §3.3 (Exit: a fixed `to` label), §4.4 (`before_exit`), §4.5 (`teleport`), §4.7 (`wander`, `follow`, `pursue`,
+leashes), §4.10 (`Room.Info` exits, the Mudlet mapper), §5.5 (walking, movement debt, `flee`), §5.7 (perception across
+exits), §5.9 (`path_to`), §7.3 (reverse-exit and dead-end gates). **Today:** an exit's destination is the `to` label it
+loads with, and nothing changes it at runtime. A world can fake an exit whose destination comes from a roll or a timer
+(a maze passage, a shifting portal, a tide-dependent stair) only by calling `ctx.teleport` in the room's `before_exit`
+and then returning `ctx.deny(...)`. Allowing the walk instead would make the move look the same direction up again in
+the room the actor was just teleported to. The workaround prints the veto text after the new room's `look`, skips
+`move_cost` and movement debt, makes a `flee` that way count as a failure (lag, still engaged) after the actor has
+already left, teleports mobs that walk, wander or pursue through it while `path_to` still plans with the declared room,
+and prices perception through the declared room. `Room.Info` reports the declared destination, so Mudlet's mapper draws
+the exit to a room the player may never reach, places each room the player actually lands in at the area's origin with
+no link, and stops a map walk through the exit with "Walk interrupted.". **Example:** a "shifting corridor" whose north
+exit leads to one of three vaults, picked anew for each traveler, and a sea stair that goes down to the grotto at low
+tide and to a drowned cave at high tide. **Questions:** - Where does the destination come from: a list of candidate
+labels on `exit()` (with weights, picked by the engine's rng), a hook such as `before_exit` returning a destination
+instead of a veto, a rules export asked for each crossing, or a verb that retargets an exit for a while (`set_exit_to`,
+restored on reset)? A candidate list can be validated at load and lets the engine know every possible destination; a
+hook or retargeting verb covers timers and world state but leaves the set open. - Is the destination picked per crossing
+(each traveler may land somewhere different) or per exit for a period (everyone who goes north this hour lands in the
+same place)? A per-period pick behaves like an ordinary exit while it lasts, so following, perception and pathfinding
+can use it unchanged. - Does a group or a pet following its leader through the exit land with the leader, or roll its
+own destination? - Does a redirected crossing count as a walk through the exit: `move_cost`, `move_pace` and debt,
+`entry_index` (whose: the exit's, or one per candidate?), `before_enter` in the room actually reached, the `enter`
+restriction, `on_exit` with `ctx.to_room` the real destination? What happens if the room picked refuses the actor: is
+the crossing denied, or is another candidate tried? - How does `flee` treat such an exit: does it succeed and end
+engagement like a walk? - What do mobs do: may `wander`, `follow` and `pursue` take a trick exit, how does `path_to`
+treat it (skip it, use the current destination, or count every candidate as reachable), and how does a leash count
+distance through it? - Which room does perception price through the exit (`sense_cost`, `via_exit`): the current
+destination, every candidate, or none? - What does `look` show, and what does `Room.Info` send for the exit: the current
+destination's `num`, `null` (as for an unloaded room, so Mudlet draws a stub), or a new marker? Sending the real
+destination gives away the trick and is wrong for a per-crossing pick; `null` keeps the map honest but means a map walk
+can never route through the exit. - Should the Mudlet mapper link the room the player came from to the room they arrived
+in when no declared exit led there, or leave the jump undrawn? - How do the CI gates treat a trick exit: does each
+candidate need an exit back unless the exit is `one_way`, and does an exit with candidates count as an exit for the
+dead-end gate? - Is it a kernel feature, or part of an existing feature such as `track`?
+
 ## Mobs
 
 ### Removing a mob without killing it (Done in Milestone 54)
