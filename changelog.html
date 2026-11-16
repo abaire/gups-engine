@@ -29,6 +29,22 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="trick-exits">Trick exits</h3>
+<ul>
+<li>An exit may have no single destination: <code>exit.to</code> and <code>PluginExit.to</code> are <code>None</code>/null for an exit whose destination is
+picked per crossing, and <code>PluginRoom.exits</code> maps such an exit to null. GMCP <code>Room.Info</code> sends null for it.</li>
+<li>Walking or fleeing through an exit picked per crossing picks the room once, then is an ordinary walk to it: the hooks,
+restriction, cost, pace and arrival all use that room, and a refusal denies the crossing.</li>
+<li><code>exit(to = [...])</code> or <code>exit(to = {label: weight})</code> declares an exit whose destination is picked per crossing,
+optionally by a <code>pick = fn</code> function; such an exit is one-way unless <code>one_way = False</code>, and can't have a door.</li>
+<li>Exit views gain <code>original_to</code>, <code>candidates</code> and <code>weights</code>; <code>PluginExit</code> gains <code>originalTo</code>, <code>candidates</code> and
+<code>weights</code>.</li>
+<li>The reverse-exit gate checks every candidate of an exit picked per crossing that is declared <code>one_way = False</code>, and
+accepts such an exit as the way back from any of its candidates.</li>
+<li>New verb <code>set_exit_to(room, dir, to)</code> (and <code>PluginWorld.setExitTo</code>) changes where an ordinary exit leads until set
+back with <code>None</code>; the change is saved and survives zone resets.</li>
+<li>The template's tutorial zone has a shifting passage west of the gravel path and a tide stair down from it.</li>
+</ul>
 <h3 id="mudlet-automapper">Mudlet automapper</h3>
 <ul>
 <li>GMCP <code>Room.Info</code> gains <code>num</code> (a stable map number per room), <code>area</code> and <code>area_name</code>; <code>exits</code> now maps each direction

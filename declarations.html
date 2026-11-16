@@ -101,11 +101,12 @@ t.eq(p.room, &quot;:vault&quot;)</code></pre>
 <thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
 <tbody>
 <tr id="exit.direction"><td><code>direction</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Exit direction name, such as 'north', 'up' or a custom word.</td></tr>
-<tr id="exit.to"><td><code>to</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label.</td></tr>
+<tr id="exit.to"><td><code>to</code></td><td><code>label | list[label] | dict[label, int]</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Destination room label, or a list of candidate labels or dict of label to weight for an exit picked per crossing.</td></tr>
+<tr id="exit.pick"><td><code>pick</code></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>fn(ctx) choosing a destination per crossing, from ctx.candidates.</td></tr>
 <tr id="exit.entry_index"><td><code>entry_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the destination room where travellers arrive, or -1 for the back.</td></tr>
 <tr id="exit.tags"><td><code>tags</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Tags the rules read, such as 'soundproof' or 'sealed', to price sensing across the exit.</td></tr>
 <tr id="exit.door"><td><code>door</code></td><td><code>door</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional door on this exit, built with door(...).</td></tr>
-<tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit.</td></tr>
+<tr id="exit.one_way"><td><code>one_way</code></td><td><code>bool</code></td><td>keyword</td><td>no</td><td><code>False</code></td><td></td><td>True if this exit intentionally has no return exit (defaults to True when picked per crossing, else False).</td></tr>
 </tbody>
 </table>
 <div class="example">
