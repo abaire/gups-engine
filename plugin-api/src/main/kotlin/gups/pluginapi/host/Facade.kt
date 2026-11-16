@@ -120,6 +120,7 @@ import gups.core.world.setCharges
 import gups.core.world.setChoices
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
+import gups.core.world.setExitTo
 import gups.core.world.setItemName
 import gups.core.world.setLeash
 import gups.core.world.setOwner
@@ -276,8 +277,8 @@ internal class RoomFacade(val room: Room, private val world: World) :
   override val affects: List<String>
     get() = room.liveAffects(world.roomClock).map { it.name }
 
-  override val exits: Map<String, String>
-    get() = room.exits.values.associate { it.direction.name to it.to.v }
+  override val exits: Map<String, String?>
+    get() = room.exits.values.associate { it.direction.name to it.to?.v }
 
   override val actors: List<PluginActor>
     get() = room.actors.map { ActorFacade(it, world) }
@@ -289,7 +290,10 @@ internal class RoomFacade(val room: Room, private val world: World) :
     val x = room.exits[Direction.parse(dir)] ?: return null
     return PluginExit(
       direction = x.direction.name,
-      to = x.to.v,
+      to = x.to?.v,
+      originalTo = x.originalTo?.v,
+      candidates = x.candidates.keys.map { it.v },
+      weights = x.candidates.mapKeys { it.key.v },
       tags = x.tags.sorted(),
       door = x.door?.let { PluginDoor(it.state.name.lowercase(), it.key?.v, it.tags.sorted()) },
       key = x.door?.key?.v,
@@ -1167,6 +1171,13 @@ internal class WorldFacade(
 
   override fun unlockDoor(room: PluginRoom, dir: String) =
     door(room, dir, "unlockDoor") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
+
+  override fun setExitTo(room: PluginRoom, dir: String, to: String?) {
+    val r = roomOf(room, "setExitTo(room)")
+    val d = Direction.parse(dir)
+    val target = to?.let { requireNotNull(world.roomOrNull(Label(it))) { "unknown room $it" } }
+    world.setExitTo(r, d, target)
+  }
 
   private fun container(item: PluginItem, verb: String, to: (DoorState) -> DoorState) {
     val i = itemOf(item, "$verb(item)")

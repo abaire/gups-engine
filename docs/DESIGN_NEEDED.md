@@ -48,7 +48,7 @@ publish/subscribe event bus or cross-zone notification system. **Questions:** - 
 channels or global event subscriptions (e.g., world-wide weather shifts, regional faction events)? - How to ensure
 cross-zone event listeners do not wake dormant reality bubbles or violate pulse execution budgets?
 
-### Trick exits with a varying destination
+### Trick exits with a varying destination (Done in Milestone 57)
 
 **Spec:** §3.3 (Exit: a fixed `to` label), §4.4 (`before_exit`), §4.5 (`teleport`), §4.7 (`wander`, `follow`, `pursue`,
 leashes), §4.10 (`Room.Info` exits, the Mudlet mapper), §5.5 (walking, movement debt, `flee`), §5.7 (perception across

@@ -286,11 +286,17 @@ internal object DeclarationSpecs {
           ),
           DeclParam(
             "to",
-            "label",
-            "Destination room label.",
+            "label | list[label] | dict[label, int]",
+            "Destination room label, or a list of candidate labels or dict of label to weight for an exit picked per crossing.",
             positional = true,
             keyword = true,
             required = true,
+          ),
+          DeclParam(
+            "pick",
+            "function",
+            "fn(ctx) choosing a destination per crossing, from ctx.candidates.",
+            default = "None",
           ),
           DeclParam(
             "entry_index",
@@ -313,7 +319,7 @@ internal object DeclarationSpecs {
           DeclParam(
             "one_way",
             "bool",
-            "True if this exit intentionally has no return exit.",
+            "True if this exit intentionally has no return exit (defaults to True when picked per crossing, else False).",
             default = "False",
           ),
         ),

@@ -447,4 +447,123 @@ class LinterTest {
     assertContains(report.renderMarkdown(), "❌ Error")
     assertContains(report.renderMarkdown(), "1 error, 0 warnings")
   }
+
+  @Test
+  fun `one-way-by-default per-crossing exit with no returns lints clean and is not a dead end`() {
+    val report =
+      lintRooms(
+        """
+        room("corridor", name = "Corridor", exits = [exit("north", to = [":a", ":b"])])
+        room("a", name = "A", flags = ["dead_end_ok"], exits = [])
+        room("b", name = "B", flags = ["dead_end_ok"], exits = [])
+        """
+      )
+    assertTrue(report.ok, report.findings.joinToString { it.message })
+    assertTrue(report.errors.none { "dead-end" in it.message })
+  }
+
+  @Test
+  fun `per-crossing exit with one_way False and missing return reports an error`() {
+    val report =
+      lintRooms(
+        """
+        room("corridor", name = "Corridor", exits = [exit("north", to = [":a", ":b"], one_way = False)])
+        room("a", name = "A", exits = [exit("south", to = ":corridor")])
+        room("b", name = "B", flags = ["dead_end_ok"], exits = [])
+        """
+      )
+    assertFalse(report.ok)
+    val err = report.errors.first { it.message.contains("no reverse exit") }
+    assertContains(
+      err.message,
+      "has no reverse exit in //zones/z:b leading 'south' back to //zones/z:corridor",
+    )
+  }
+
+  @Test
+  fun `ordinary returns from each candidate to corridor are accepted through far-side matching`() {
+    val report =
+      lintRooms(
+        """
+        room("corridor", name = "Corridor", exits = [exit("north", to = [":a", ":b"])])
+        room("a", name = "A", exits = [exit("south", to = ":corridor")])
+        room("b", name = "B", exits = [exit("south", to = ":corridor")])
+        """
+      )
+    assertTrue(report.ok, report.findings.joinToString { it.message })
+  }
+
+  @Test
+  fun `ordinary return with a door against a per-crossing exit reports doors do not match`() {
+    val report =
+      lintRooms(
+        """
+        room("corridor", name = "Corridor", exits = [exit("north", to = [":a", ":b"])])
+        room("a", name = "A", exits = [exit("south", to = ":corridor", door = door(state = "closed"))])
+        room("b", name = "B", exits = [exit("south", to = ":corridor")])
+        """
+      )
+    assertFalse(report.ok)
+    assertContains(report.errors.first().message, "doors do not match")
+  }
+
+  @Test
+  fun `base gate ignores exit pick changes but flags candidate changes`() {
+    fun worldContent(pickFn: String, candidates: String) =
+      """
+      def _pick_a(ctx): return ":a"
+      def _pick_b(ctx): return ":b"
+      room("corridor", name = "Corridor", exits = [exit("north", to = $candidates, pick = $pickFn)], version = 1)
+      room("a", name = "A", flags = ["dead_end_ok"], exits = [])
+      room("b", name = "B", flags = ["dead_end_ok"], exits = [])
+      room("c", name = "C", flags = ["dead_end_ok"], exits = [])
+      """
+        .trimIndent()
+
+    val baseRoot =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to worldContent("_pick_a", """[":a", ":b"]"""),
+        )
+      )
+    val baseProtos =
+      ScriptLoader(WorldDir(baseRoot), ScriptLimits.HARNESS)
+        .load(WorldDir(baseRoot).packages())
+        .prototypes()
+
+    val pickChangedRoot =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to worldContent("_pick_b", """[":a", ":b"]"""),
+        )
+      )
+    val pickReport = Linter(WorldDir(pickChangedRoot), basePrototypes = baseProtos).lint()
+    assertTrue(pickReport.ok, pickReport.errors.joinToString { it.message })
+
+    val candidatesChangedRoot =
+      tempWorld(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to worldContent("_pick_a", """[":a", ":c"]"""),
+        )
+      )
+    val candidatesReport =
+      Linter(WorldDir(candidatesChangedRoot), basePrototypes = baseProtos).lint()
+    assertFalse(candidatesReport.ok)
+    assertTrue(
+      candidatesReport.errors.any {
+        "room prototype declaration changed since base without a version bump" in it.message
+      }
+    )
+  }
+}
+
+internal fun lintRooms(roomsStar: String): Linter.Report {
+  val root =
+    tempWorld(
+      mapOf("zones/z/package.star" to zonePkg(), "zones/z/rooms.star" to roomsStar.trimIndent())
+    )
+  return Linter(WorldDir(root)).lint()
 }

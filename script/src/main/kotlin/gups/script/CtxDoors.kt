@@ -5,6 +5,7 @@ import gups.core.model.Entity
 import gups.core.world.HookContext
 import gups.core.world.setContainerState
 import gups.core.world.setDoor
+import gups.core.world.setExitTo
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Starlark
@@ -80,6 +81,34 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   )
   fun unlockDoor(room: Any, dir: Any, thread: StarlarkThread): Any =
     door(room, dir, thread, "unlock_door") { if (it == DoorState.LOCKED) DoorState.CLOSED else it }
+
+  @StarlarkMethod(
+    name = "set_exit_to",
+    doc = "Points the exit in direction dir at room to; None restores its declared destination.",
+    parameters =
+      [
+        Param(name = "room", named = true, doc = "Room, or room label, that has the exit."),
+        Param(name = "dir", named = true, doc = "Direction of the exit."),
+        Param(
+          name = "to",
+          named = true,
+          doc = "Destination room, room label, or None to restore the declared destination.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun setExitTo(room: Any, dir: Any, to: Any, thread: StarlarkThread): Any =
+    verb("set_exit_to") {
+      val r = roomArg(room, "set_exit_to(room)", thread)
+      val d = dir(dir, "set_exit_to(dir)")
+      val target = if (to == Starlark.NONE) null else roomArg(to, "set_exit_to(to)", thread)
+      try {
+        world.setExitTo(r, d, target)
+      } catch (e: IllegalArgumentException) {
+        fail("set_exit_to(): ${e.message}")
+      }
+      Starlark.NONE
+    }
 
   internal fun container(item: Any, name: String, to: (DoorState) -> DoorState): Any =
     verb(name) {

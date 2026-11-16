@@ -756,4 +756,138 @@ class HostTest {
     assertContains(f.out(p), "a blade hums at a rat.")
     assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
   }
+
+  @Test
+  fun `exit pick chooses candidate and sees ctx candidates`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _pick_b(ctx):
+              ctx.set_attr(ctx.self, "seen_candidates", ctx.candidates)
+              ctx.set_attr(ctx.self, "seen_dir", ctx.direction)
+              return ":b"
+
+          room("start", exits = [exit("north", to = [":a", ":b"], pick = _pick_b)])
+          room("a")
+          room("b")
+          """
+        )
+      )
+    val p = f.player()
+    f.input(p, "north")
+    f.run()
+    assertEquals("//zones/z:b", p.room.label.v)
+    val start = f.w.room(Label("//zones/z:start"))
+    assertEquals(
+      AttrValue.L(listOf(AttrValue.S("//zones/z:a"), AttrValue.S("//zones/z:b"))),
+      start.customAttributes["z:seen_candidates"],
+    )
+    assertEquals(AttrValue.S("north"), start.customAttributes["z:seen_dir"])
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+  }
+
+  @Test
+  fun `exit pick returning None, crashing, or returning non-candidate falls back to weighted roll`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _pick_none(ctx):
+              return None
+
+          def _pick_crash(ctx):
+              return {}["missing"]
+
+          def _pick_bad(ctx):
+              return ":nowhere"
+
+          room("start", exits = [
+              exit("north", to = [":a", ":b"], pick = _pick_none),
+              exit("east", to = [":a", ":b"], pick = _pick_crash),
+              exit("south", to = [":a", ":b"], pick = _pick_bad),
+          ])
+          room("a", exits = [exit("back", ":start")])
+          room("b", exits = [exit("back", ":start")])
+          """
+        )
+      )
+    val p = f.player()
+    val candidates = setOf("//zones/z:a", "//zones/z:b")
+
+    f.input(p, "north")
+    f.run()
+    assertTrue(p.room.label.v in candidates, p.room.label.v)
+    assertTrue(f.diagnostics().isEmpty(), f.diagnostics().toString())
+
+    f.input(p, "back")
+    f.run()
+    f.input(p, "east")
+    f.run()
+    assertTrue(p.room.label.v in candidates, p.room.label.v)
+    assertEquals(1, f.diagnostics("script_error").size)
+
+    f.input(p, "back")
+    f.run()
+    f.input(p, "south")
+    f.run()
+    assertTrue(p.room.label.v in candidates, p.room.label.v)
+    val errs = f.diagnostics("script_error")
+    assertEquals(2, errs.size)
+    assertContains(errs[1].message, "not one of the exit's candidates")
+  }
+
+  @Test
+  fun `exit view exposes original_to, candidates, weights and effective one_way`() {
+    val f =
+      ScriptFixture(
+        zone(
+          """
+          def _inspect(ctx):
+              ex_trick = ctx.room.exit("north")
+              ex_ord = ctx.room.exit("south")
+              ctx.set_attr(ctx.self, "trick_to", ex_trick.to)
+              ctx.set_attr(ctx.self, "trick_orig", ex_trick.original_to)
+              ctx.set_attr(ctx.self, "trick_cands", ex_trick.candidates)
+              ctx.set_attr(ctx.self, "trick_weights", ex_trick.weights)
+              ctx.set_attr(ctx.self, "trick_ow", ex_trick.one_way)
+              ctx.set_attr(ctx.self, "ord_to", ex_ord.to)
+              ctx.set_attr(ctx.self, "ord_orig", ex_ord.original_to)
+              ctx.set_attr(ctx.self, "ord_cands", ex_ord.candidates)
+              ctx.set_attr(ctx.self, "ord_weights", ex_ord.weights)
+              ctx.set_attr(ctx.self, "ord_ow", ex_ord.one_way)
+
+          room("start",
+              exits = [
+                  exit("north", to = {":a": 3, ":b": 1}),
+                  exit("south", to = ":a"),
+              ],
+              commands = {"inspect": _inspect})
+          room("a")
+          room("b")
+          """
+        )
+      )
+    val p = f.player()
+    f.input(p, "inspect")
+    f.run()
+    val start = f.w.room(Label("//zones/z:start"))
+    assertEquals(null, start.customAttributes["z:trick_to"])
+    assertEquals(null, start.customAttributes["z:trick_orig"])
+    assertEquals(
+      AttrValue.L(listOf(AttrValue.S("//zones/z:a"), AttrValue.S("//zones/z:b"))),
+      start.customAttributes["z:trick_cands"],
+    )
+    assertEquals(
+      AttrValue.M(mapOf("//zones/z:a" to AttrValue.I(3), "//zones/z:b" to AttrValue.I(1))),
+      start.customAttributes["z:trick_weights"],
+    )
+    assertEquals(AttrValue.B(true), start.customAttributes["z:trick_ow"])
+
+    assertEquals(AttrValue.S("//zones/z:a"), start.customAttributes["z:ord_to"])
+    assertEquals(AttrValue.S("//zones/z:a"), start.customAttributes["z:ord_orig"])
+    assertEquals(AttrValue.L(emptyList()), start.customAttributes["z:ord_cands"])
+    assertEquals(AttrValue.M(emptyMap()), start.customAttributes["z:ord_weights"])
+    assertEquals(AttrValue.B(false), start.customAttributes["z:ord_ow"])
+  }
 }

@@ -194,6 +194,8 @@ data class RoomPayload(
   @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   /** Door states that differ from the prototype, by direction. */
   val doors: Map<String, String> = emptyMap(),
+  /** Exit destinations changed with set_exit_to, by direction. */
+  val exitTargets: Map<String, String> = emptyMap(),
   val attrs: JsonObject = JsonObject(emptyMap()),
   val timers: List<TimerJson> = emptyList(),
   /** `set_active` and `set_anchor` reasons. */
@@ -456,35 +458,37 @@ internal fun World.locationJson(loc: ItemLocation): LocationJson =
 
 private fun <T> delta(live: T, proto: T): T? = if (live == proto) null else live
 
+private fun encodeRoom(e: Room): RoomPayload =
+  RoomPayload(
+    doors =
+      e.exits.values
+        .mapNotNull { x ->
+          val state = x.door?.state ?: return@mapNotNull null
+          val was = e.proto.exits.first { it.direction == x.direction }.door?.state
+          if (state == was) null else x.direction.name to state.name.lowercase()
+        }
+        .toMap(),
+    exitTargets =
+      e.exits.values.filter { it.to != it.originalTo }.associate { it.direction.name to it.to!!.v },
+    attrs = attrsJson(e.customAttributes),
+    timers = timersJson(e),
+    active = e.activeReasons.toList(),
+    anchor = e.anchorReasons.toList(),
+    affects = e.affects.map(::affectJson),
+  )
+
 internal fun World.encode(e: Entity): EntityRow? =
   when (e) {
-    is Room -> {
-      val p =
-        RoomPayload(
-          doors =
-            e.exits.values
-              .mapNotNull { x ->
-                val state = x.door?.state ?: return@mapNotNull null
-                val was = e.proto.exits.first { it.direction == x.direction }.door?.state
-                if (state == was) null else x.direction.name to state.name.lowercase()
-              }
-              .toMap(),
-          attrs = attrsJson(e.customAttributes),
-          timers = timersJson(e),
-          active = e.activeReasons.toList(),
-          anchor = e.anchorReasons.toList(),
-          affects = e.affects.map(::affectJson),
-        )
+    is Room ->
       EntityRow(
         e.id.v,
         "room",
         e.protoLabel.v,
         e.protoVersion,
         null,
-        JSON.encodeToString(RoomPayload.serializer(), p),
+        JSON.encodeToString(RoomPayload.serializer(), encodeRoom(e)),
         pulse,
       )
-    }
     is Mob -> {
       val p = e.proto
       val payload =
@@ -626,11 +630,25 @@ private fun restoredState(saved: String, key: Label?): DoorState =
     if (it == DoorState.LOCKED && key == null) DoorState.CLOSED else it
   }
 
-internal fun applyRoom(room: Room, p: RoomPayload) {
+private fun restoreExitTargets(
+  room: Room,
+  targets: Map<String, String>,
+  knownRoom: (Label) -> Boolean,
+) {
+  for ((dir, target) in targets) {
+    val exit = room.exits.values.firstOrNull { it.direction.name == dir } ?: continue
+    if (exit.perCrossing || exit.door != null) continue
+    val label = Label(target)
+    if (knownRoom(label)) exit.restoreTo(label)
+  }
+}
+
+internal fun applyRoom(room: Room, p: RoomPayload, knownRoom: (Label) -> Boolean) {
   for ((dir, state) in p.doors) room.exits.values
     .firstOrNull { it.direction.name == dir }
     ?.door
     ?.let { it.state = restoredState(state, it.key) }
+  restoreExitTargets(room, p.exitTargets, knownRoom)
   room.customAttributes.clear()
   room.customAttributes.putAll(p.attrs.toAttrs())
   restoreTimers(room, p.timers)

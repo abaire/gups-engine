@@ -444,6 +444,13 @@ Before building individual rooms, sketch the macro-structure that connects zones
        `room("trailhead", ..., exits = {"west": exit(to = "//zones/haven:east_gate")})` in `rooms.star`), **or**
     2. **Leave the cross-zone exit out** (or behind a sealed/commented door) until the adjacent zone is created, wiring
        both sides of the boundary exit in the same change.
+- **Trick exits:**
+  - Retarget an ordinary exit with `set_exit_to(room, dir, to)` for destinations driven by world state (tides, timers,
+    quests), restoring it from `on_reset` if a zone reset should undo it. Use `to = [...]` or `{label: weight}`
+    (optionally with `pick = fn`) for a room picked per crossing. Per-crossing exits are one-way unless `one_way =
+    False`, cannot have doors, are skipped by mob pathing and perception, and show as an unmapped stub in Mudlet. See
+    the tutorial's gravel path in
+    [`template-world/zones/tutorial/rooms.star`](../template-world/zones/tutorial/rooms.star) for both kinds.
 - **Cross-Zone `regions`:**
   - Any `room()` can declare `regions = ["indoors", "underground"]`.
   - Regions can span multiple zones and carry rule modifiers (`region("underwater", modifiers = {"move_cost": ...})`) or

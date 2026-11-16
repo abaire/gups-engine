@@ -370,6 +370,7 @@ class World(
   internal val pathCache = HashMap<Pair<EntityId, EntityId>, List<gups.core.model.Direction>?>()
   internal var inboundCache: HashMap<Room, MutableList<Pair<Room, gups.core.model.Exit>>>? = null
   internal val homeAreaCache = HashMap<Pair<EntityId, Int>, Set<Room>>()
+  internal var bubbleGraphChanged = false
 
   /** Forgets everything derived from the room graph, after doors, exits or rooms change. */
   internal fun graphChanged() {
@@ -391,8 +392,10 @@ class World(
     }
     for (room in roomsByLabel.values) {
       for (exit in room.exits.values) {
-        require(exit.to in roomsByLabel) {
-          "${room.label} exit ${exit.direction} leads to unknown room ${exit.to}"
+        for (label in exit.reachable()) {
+          require(label in roomsByLabel) {
+            "${room.label} exit ${exit.direction} leads to unknown room $label"
+          }
         }
       }
       for (rule in room.proto.spawns) {

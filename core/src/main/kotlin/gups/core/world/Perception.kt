@@ -70,7 +70,7 @@ internal fun World.inbound(room: Room): List<Pair<Room, Exit>> {
       ?: HashMap<Room, MutableList<Pair<Room, Exit>>>().also { idx ->
         for (r in roomsByLabel.values) {
           for (e in r.exits.values) {
-            val to = roomsByLabel[e.to] ?: continue
+            val to = e.to?.let(roomsByLabel::get) ?: continue
             if (to !== r) idx.getOrPut(to) { mutableListOf() } += r to e
           }
         }

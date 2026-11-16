@@ -25,13 +25,25 @@
         {
           "symbol": "exit.to",
           "name": "to",
-          "type": "label",
+          "type": "label | list[label] | dict[label, int]",
           "positional": true,
           "keyword": true,
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "Destination room label.",
+          "doc": "Destination room label, or a list of candidate labels or dict of label to weight for an exit picked per crossing.",
+          "since": 1
+        },
+        {
+          "symbol": "exit.pick",
+          "name": "pick",
+          "type": "function",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "fn(ctx) choosing a destination per crossing, from ctx.candidates.",
           "since": 1
         },
         {
@@ -80,7 +92,7 @@
           "required": false,
           "default": "False",
           "allowed_values": [],
-          "doc": "True if this exit intentionally has no return exit.",
+          "doc": "True if this exit intentionally has no return exit (defaults to True when picked per crossing, else False).",
           "since": 1
         }
       ]
@@ -380,6 +392,12 @@
         "symbol": "ctx.args",
         "name": "args",
         "doc": "A command's argument text, or a timer's keyword arguments as a dict.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.candidates",
+        "name": "candidates",
+        "doc": "For an exit's pick function: the candidate room labels, in declared order.",
         "since": 1
       },
       {
@@ -3221,6 +3239,44 @@
         ]
       },
       {
+        "symbol": "ctx.set_exit_to",
+        "name": "set_exit_to",
+        "doc": "Points the exit in direction dir at room to; None restores its declared destination.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.set_exit_to.room",
+            "name": "room",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Room, or room label, that has the exit."
+          },
+          {
+            "symbol": "ctx.set_exit_to.dir",
+            "name": "dir",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Direction of the exit."
+          },
+          {
+            "symbol": "ctx.set_exit_to.to",
+            "name": "to",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Destination room, room label, or None to restore the declared destination."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.set_item_name",
         "name": "set_item_name",
         "doc": "Renames an item: name, a single line of 1 to 80 characters, replaces its prototype's name, or None restores it. Keywords don't change. Returns whether the name changed.",
@@ -4046,6 +4102,12 @@
       "since": 1,
       "fields": [
         {
+          "symbol": "view:exit.candidates",
+          "name": "candidates",
+          "doc": "Candidate room labels in declared order, or [] for an ordinary exit.",
+          "since": 1
+        },
+        {
           "symbol": "view:exit.direction",
           "name": "direction",
           "doc": "The exit's direction name.",
@@ -4077,6 +4139,12 @@
           "since": 1
         },
         {
+          "symbol": "view:exit.original_to",
+          "name": "original_to",
+          "doc": "The declared destination room's label, or None when it is picked per crossing.",
+          "since": 1
+        },
+        {
           "symbol": "view:exit.passable",
           "name": "passable",
           "doc": "False while a door is closed or locked.",
@@ -4091,7 +4159,13 @@
         {
           "symbol": "view:exit.to",
           "name": "to",
-          "doc": "The destination room's label.",
+          "doc": "The current destination room's label, or None when it is picked per crossing.",
+          "since": 1
+        },
+        {
+          "symbol": "view:exit.weights",
+          "name": "weights",
+          "doc": "Candidate room labels mapped to weights, or {} for an ordinary exit.",
           "since": 1
         }
       ],

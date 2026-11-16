@@ -77,6 +77,25 @@ fun World.setDoor(room: Room, dir: Direction, state: DoorState) {
 }
 
 /**
+ * Points [room]'s exit [dir] at [to], or back at its declared destination when [to] is null.
+ * Silent. Fails on an exit with a door or one picked per crossing.
+ */
+fun World.setExitTo(room: Room, dir: Direction, to: Room?) {
+  val exit = requireNotNull(room.exits[dir]) { "${room.label} has no exit $dir" }
+  require(!exit.perCrossing) {
+    "${room.label} exit $dir is picked per crossing and can't be retargeted"
+  }
+  require(exit.door == null) { "${room.label} exit $dir has a door and can't be retargeted" }
+  val label = to?.label ?: exit.originalTo!!
+  if (label == exit.to) return
+  exit.to = label
+  room.dirty = true
+  graphChanged()
+  inboundCache = null
+  bubbleGraphChanged = true
+}
+
+/**
  * Shortest walk from [from] to [to] over passable exits, as exit directions; empty if they are the
  * same room, null if [to] can't be reached. Breadth-first over the whole room graph in exit
  * declaration order, so ties resolve the same way every time. Results are cached per `(from, to)`
@@ -106,7 +125,10 @@ private fun World.searchPath(from: Room, to: Room): List<Direction>? {
 
 /** The rooms [room]'s passable exits lead to, each with the exit's direction. */
 private fun World.passableExits(room: Room): Sequence<Pair<Room, Direction>> =
-  room.exits.values.asSequence().filter { it.passable }.map { room(it.to) to it.direction }
+  room.exits.values
+    .asSequence()
+    .filter { it.passable && !it.perCrossing }
+    .map { room(it.to!!) to it.direction }
 
 /** The directions from [from] to [to], following the search's [via] links back from [to]. */
 private fun unwindPath(

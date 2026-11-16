@@ -76,8 +76,15 @@ internal fun World.ball(from: Room): List<Room> {
   return seen.keys.toList()
 }
 
-private fun World.neighbours(room: Room): List<Room> =
-  room.exits.values.mapNotNull { roomsByLabel[it.to] }
+private fun World.neighbours(room: Room): List<Room> {
+  val out = ArrayList<Room>(room.exits.size)
+  for (exit in room.exits.values) {
+    val to = exit.to
+    if (to != null) roomsByLabel[to]?.let(out::add)
+    else for (label in exit.candidates.keys) roomsByLabel[label]?.let(out::add)
+  }
+  return out
+}
 
 /** The active rooms computed from scratch, for checking the incremental bookkeeping. */
 fun World.activeRoomsFromScratch(): Set<Room> {
@@ -107,6 +114,11 @@ private fun World.cover(room: Room, delta: Int, changed: MutableSet<Room>) {
  */
 internal fun World.maintainBubble() {
   if (!config.bubble) return
+  if (bubbleGraphChanged) {
+    bubbleGraphChanged = false
+    recomputeBubble()
+    return
+  }
   val now = HashMap<EntityId, Room>()
   for (e in entities.values) anchorRoom(e)?.let { now[e.id] = it }
   val changed = LinkedHashSet<Room>()

@@ -1,5 +1,6 @@
 package gups.script
 
+import gups.core.Label
 import gups.core.model.Actor
 import gups.core.model.Entity
 import gups.core.model.Memory
@@ -28,6 +29,8 @@ internal class CtxExtras(
   val commandTarget: Actor? = null,
   val targets: List<Actor>? = null,
   val power: Int? = null,
+  /** For an exit's pick function: the labels it may choose, in declared order. */
+  val candidates: List<Label>? = null,
 )
 
 /**

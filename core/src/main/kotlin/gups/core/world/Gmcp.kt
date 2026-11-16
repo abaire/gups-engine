@@ -231,7 +231,7 @@ private fun World.roomInfoPayload(p: Player): Map<String, Any?> {
   val doors = LinkedHashMap<String, String>()
   for (x in room.exits.values) {
     val key = exitKey(x.direction)
-    exits[key] = protos.roomNumbers[x.to]
+    exits[key] = x.to?.let { protos.roomNumbers[it] }
     val door = x.door
     if (door != null) doors[key] = doorWord(door.state)
   }

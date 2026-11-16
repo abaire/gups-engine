@@ -47,6 +47,7 @@ class WorldDescriberTest {
             flags = ["dead_end_ok"], exits = [
             exit(DIR.south, to = ":gate"),
             exit(DIR.east, to = ":vault", door = door(state = DOOR.locked, key = ":key", tags = ["creaky"])),
+            exit(DIR.west, to = {":vault": 3, ":gate": 1}),
         ])
         room("gate", name = "The Gate", exits = [exit(DIR.north, to = ":hall")])
         room("vault", name = "The Vault", exits = [exit(DIR.west, to = ":hall", door = door())])
@@ -133,10 +134,33 @@ class WorldDescriberTest {
     assertEquals(listOf("a", "b"), hall.getValue("tags").strings())
     assertEquals(listOf("dead_end_ok"), hall.getValue("flags").strings())
     val exits = hall.list("exits")
-    assertEquals(listOf("south", "east"), exits.map { it.getValue("dir").jsonPrimitive.content })
+    assertEquals(
+      listOf("south", "east", "west"),
+      exits.map { it.getValue("dir").jsonPrimitive.content },
+    )
+    assertEquals(
+      listOf("dir", "to", "candidates", "weights", "one_way", "tags", "door"),
+      exits[0].keys.toList(),
+    )
     assertEquals("//zones/a:gate", exits[0].getValue("to").jsonPrimitive.content)
+    assertEquals(emptyList<String>(), exits[0].getValue("candidates").strings())
+    assertEquals(JsonObject(emptyMap()), exits[0].getValue("weights"))
     assertEquals(false, exits[0].getValue("one_way").jsonPrimitive.boolean)
     assertEquals(JsonNull, exits[0].getValue("door"))
+    assertEquals(JsonNull, exits[2].getValue("to"))
+    assertEquals(
+      listOf("//zones/a:vault", "//zones/a:gate"),
+      exits[2].getValue("candidates").strings(),
+    )
+    assertEquals(
+      3,
+      exits[2].getValue("weights").jsonObject.getValue("//zones/a:vault").jsonPrimitive.int,
+    )
+    assertEquals(
+      1,
+      exits[2].getValue("weights").jsonObject.getValue("//zones/a:gate").jsonPrimitive.int,
+    )
+    assertEquals(true, exits[2].getValue("one_way").jsonPrimitive.boolean)
     val door = exits[1].getValue("door").jsonObject
     assertEquals(listOf("state", "key", "tags"), door.keys.toList())
     assertEquals("locked", door.getValue("state").jsonPrimitive.content)

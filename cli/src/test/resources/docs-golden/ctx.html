@@ -36,6 +36,7 @@
 <tr id="ctx.affect"><td><code>affect</code></td><td>1</td><td>The affect, for affect on_tick and on_expire.</td></tr>
 <tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The total of the vital losses a damage event caused, for on_damage.</td></tr>
 <tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
+<tr id="ctx.candidates"><td><code>candidates</code></td><td>1</td><td>For an exit's pick function: the candidate room labels, in declared order.</td></tr>
 <tr id="ctx.channel"><td><code>channel</code></td><td>1</td><td>For on_perceive: the channel the event travelled on, such as 'sound'.</td></tr>
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
 <tr id="ctx.count"><td><code>count</code></td><td>1</td><td>How many mobs are being summoned, for before_summon.</td></tr>
@@ -996,6 +997,18 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.set_exit_to" class="entry">
+<h4><code>set_exit_to(room, dir, to)</code> <span class="since">since api_version 1</span></h4>
+<p>Points the exit in direction dir at room to; None restores its declared destination.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.set_exit_to.room"><td><code>room</code></td><td>positional or named</td><td></td><td>Room, or room label, that has the exit.</td></tr>
+<tr id="ctx.set_exit_to.dir"><td><code>dir</code></td><td>positional or named</td><td></td><td>Direction of the exit.</td></tr>
+<tr id="ctx.set_exit_to.to"><td><code>to</code></td><td>positional or named</td><td></td><td>Destination room, room label, or None to restore the declared destination.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.set_item_name" class="entry">
 <h4><code>set_item_name(item, name)</code> <span class="since">since api_version 1</span></h4>
 <p>Renames an item: name, a single line of 1 to 80 characters, replaces its prototype's name, or None restores it. Keywords don't change. Returns whether the name changed.</p>
@@ -1257,14 +1270,17 @@
 <table>
 <thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
 <tbody>
+<tr id="view-exit.candidates"><td><code>candidates</code></td><td>1</td><td>Candidate room labels in declared order, or [] for an ordinary exit.</td></tr>
 <tr id="view-exit.direction"><td><code>direction</code></td><td>1</td><td>The exit's direction name.</td></tr>
 <tr id="view-exit.door"><td><code>door</code></td><td>1</td><td>The exit's door, or None without one.</td></tr>
 <tr id="view-exit.entry_index"><td><code>entry_index</code> <span class="badge feature">feature: track</span></td><td>1</td><td>Destination track index where travellers arrive, or -1 for the back.</td></tr>
 <tr id="view-exit.key"><td><code>key</code></td><td>1</td><td>The door's key label, or None.</td></tr>
 <tr id="view-exit.one_way"><td><code>one_way</code></td><td>1</td><td>True if this exit intentionally has no return exit.</td></tr>
+<tr id="view-exit.original_to"><td><code>original_to</code></td><td>1</td><td>The declared destination room's label, or None when it is picked per crossing.</td></tr>
 <tr id="view-exit.passable"><td><code>passable</code></td><td>1</td><td>False while a door is closed or locked.</td></tr>
 <tr id="view-exit.tags"><td><code>tags</code></td><td>1</td><td>Tags declared on exit(tags = [...]), sorted.</td></tr>
-<tr id="view-exit.to"><td><code>to</code></td><td>1</td><td>The destination room's label.</td></tr>
+<tr id="view-exit.to"><td><code>to</code></td><td>1</td><td>The current destination room's label, or None when it is picked per crossing.</td></tr>
+<tr id="view-exit.weights"><td><code>weights</code></td><td>1</td><td>Candidate room labels mapped to weights, or {} for an ordinary exit.</td></tr>
 </tbody>
 </table>
 </section>

@@ -190,7 +190,7 @@ class PetCombatTest(private val fs: FixtureSchema) {
 
     f.w.startCombat(wolf, dummy)
     val exit = f.w.room(T.HALL).exits[Direction.NORTH]!!
-    f.w.transition(ann, exit)
+    f.w.transition(ann, exit, f.w.room(exit.to!!))
 
     assertFalse(wolf.isEngaged, "pet is disengaged after owner leaves room")
     assertFalse(dummy.isEngaged, "opponent is disengaged")

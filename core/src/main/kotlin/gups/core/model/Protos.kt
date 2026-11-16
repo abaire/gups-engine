@@ -4,6 +4,7 @@ import gups.core.HookRef
 import gups.core.Label
 import gups.core.THINK_DEFAULT_PULSES
 import gups.core.world.Behavior
+import gups.core.world.ExitPicker
 import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
 import gups.core.world.ZoneCommand
@@ -104,17 +105,28 @@ data class DoorProto(
 data class ExitProto(
   /** Compass direction or movement transition for this exit. */
   val direction: Direction,
-  /** Prototype label of the destination room. */
-  val to: Label,
+  /** Declared destination, or null for an exit whose destination is picked per crossing. */
+  val to: Label?,
   /** Arrival track index in the destination room; `-1` defaults to the back slot. */
   val entryIndex: Int = 0,
   /** Free-form tags inspected by rules and perception (e.g. `soundproof`). */
   val tags: Set<String> = emptySet(),
   /** Door blocking this exit, or null if open passage. */
   val door: DoorProto? = null,
-  /** True if this exit cannot be traversed in reverse. */
+  /** Effective one-way flag (a per-crossing exit defaults to true). */
   val oneWay: Boolean = false,
-)
+  /** Candidate destinations with their weights, in declared order; empty for an ordinary exit. */
+  val candidates: Map<Label, Int> = emptyMap(),
+  /** Chooses among [candidates] per crossing; null rolls by weight. */
+  val pick: ExitPicker? = null,
+) {
+  init {
+    require((to == null) == candidates.isNotEmpty()) { "an exit has either to or candidates" }
+  }
+
+  /** Every room this exit's declaration can lead to: its `to`, or each candidate. */
+  fun destinations(): Collection<Label> = to?.let(::listOf) ?: candidates.keys
+}
 
 /** Rule governing periodic spawning of mobs into a room. */
 data class SpawnRule(

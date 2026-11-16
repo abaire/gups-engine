@@ -9,6 +9,7 @@ import gups.core.SessionId
 import gups.core.world.Action
 import gups.core.world.Behavior
 import gups.core.world.Castable
+import gups.core.world.ExitPicker
 import gups.core.world.HeldEffects
 import gups.core.world.SpawnState
 import gups.core.world.TickCommand
@@ -89,8 +90,18 @@ class Exit(proto: ExitProto) {
   /** Direction or transition keyword used to traverse this exit. */
   val direction: Direction = proto.direction
 
-  /** Destination room prototype label. */
-  val to: Label = proto.to
+  /** The declared destination, or null for a per-crossing exit. */
+  val originalTo: Label? = proto.to
+
+  /** The current destination, or null for a per-crossing exit. */
+  var to: Label? = proto.to
+    internal set
+
+  /** Candidate destinations with their weights, in declared order; empty for an ordinary exit. */
+  val candidates: Map<Label, Int> = proto.candidates
+
+  /** Chooses among [candidates] per crossing; null rolls by weight. */
+  val pick: ExitPicker? = proto.pick
 
   /** Slot index on the destination room track where arriving actors land. */
   val entryIndex: Int = proto.entryIndex
@@ -104,9 +115,22 @@ class Exit(proto: ExitProto) {
   /** True if this exit cannot be traversed in reverse. */
   val oneWay: Boolean = proto.oneWay
 
+  /** True when the destination is picked per crossing. */
+  val perCrossing: Boolean
+    get() = candidates.isNotEmpty()
+
   /** True if this exit can currently be traversed (no door, or door is open). */
   val passable: Boolean
     get() = door == null || door.state == DoorState.OPEN
+
+  /** The rooms this exit can lead to now: its current destination, or every candidate. */
+  fun reachable(): Collection<Label> = to?.let(::listOf) ?: candidates.keys
+
+  /** Restores a saved retarget; callers have checked [label] names a loaded room. */
+  fun restoreTo(label: Label) {
+    require(!perCrossing && door == null) { "exit $direction can't be retargeted" }
+    to = label
+  }
 }
 
 /** Live simulated room entity. */

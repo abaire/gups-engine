@@ -74,12 +74,40 @@ class FacadeDoorsTest {
     val door = ex.door!!
     assertEquals("north", ex.direction)
     assertEquals("//zones/z:b", ex.to)
+    assertEquals("//zones/z:b", ex.originalTo)
+    assertEquals(emptyList(), ex.candidates)
+    assertEquals(emptyMap(), ex.weights)
     assertEquals("closed", door.state)
     assertEquals("//zones/z:key", ex.key)
     assertEquals(emptyList(), ex.tags)
     assertEquals(emptyList(), door.tags)
     assertEquals(false, ex.passable)
     assertEquals(false, ex.oneWay)
+  }
+
+  @Test
+  fun `exit exposes per-crossing candidates and weights`() {
+    val w =
+      world(
+        files =
+          mapOf(
+            "zones/z/package.star" to "package(api_version = 1, kind = \"zone\")\n",
+            "zones/z/rooms.star" to
+              """
+              room("start", exits = [exit("north", to = {":a": 3, ":b": 1})])
+              room("a")
+              room("b")
+              """,
+          )
+      )
+    val f = WorldFacade(w, "weather") {}
+    val start = f.room("//zones/z:start")!!
+    val ex = start.exit("north")!!
+    assertNull(ex.to)
+    assertNull(ex.originalTo)
+    assertEquals(listOf("//zones/z:a", "//zones/z:b"), ex.candidates)
+    assertEquals(mapOf("//zones/z:a" to 3, "//zones/z:b" to 1), ex.weights)
+    assertTrue(ex.oneWay)
   }
 
   @Test
@@ -116,6 +144,49 @@ class FacadeDoorsTest {
     assertNull(stick.containerState)
     val e = assertFailsWith<IllegalArgumentException> { facade.openContainer(stick) }
     assertTrue(e.message!!.contains("is not a container"), e.message)
+  }
+
+  @Test
+  fun `setExitTo retargets an ordinary exit, restores on null, and rejects invalid exits`() {
+    val w =
+      world(
+        files =
+          mapOf(
+            "zones/z/package.star" to "package(api_version = 1, kind = \"zone\")\n",
+            "zones/z/rooms.star" to
+              """
+              room("start", exits = [
+                  exit("down", ":grotto", one_way = True),
+                  exit("north", ":vault", door = door(state = "closed"), one_way = True),
+                  exit("west", [":grotto", ":cave"]),
+              ])
+              room("grotto")
+              room("cave")
+              room("vault")
+              """,
+          )
+      )
+    val f = WorldFacade(w, "weather") {}
+    val start = f.room("//zones/z:start")!!
+
+    f.setExitTo(start, "down", "//zones/z:cave")
+    assertEquals("//zones/z:cave", start.exit("down")!!.to)
+    assertEquals("//zones/z:grotto", start.exit("down")!!.originalTo)
+
+    f.setExitTo(start, "down", null)
+    assertEquals("//zones/z:grotto", start.exit("down")!!.to)
+
+    val doorErr =
+      assertFailsWith<IllegalArgumentException> { f.setExitTo(start, "north", "//zones/z:cave") }
+    assertTrue(doorErr.message!!.contains("has a door"), doorErr.message)
+
+    val crossErr =
+      assertFailsWith<IllegalArgumentException> { f.setExitTo(start, "west", "//zones/z:cave") }
+    assertTrue(crossErr.message!!.contains("picked per crossing"), crossErr.message)
+
+    val unknownErr =
+      assertFailsWith<IllegalArgumentException> { f.setExitTo(start, "down", "//zones/z:nope") }
+    assertTrue(unknownErr.message!!.contains("unknown room //zones/z:nope"), unknownErr.message)
   }
 
   companion object {

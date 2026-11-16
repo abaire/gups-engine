@@ -47,6 +47,7 @@ import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Dict
 import net.starlark.java.eval.EvalException
 import net.starlark.java.eval.Starlark
+import net.starlark.java.eval.StarlarkList
 import net.starlark.java.eval.StarlarkThread
 import net.starlark.java.eval.Tuple
 
@@ -132,28 +133,90 @@ internal class DeclarationBuiltins(
   fun exit(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "exit")
     return EXIT_SPEC.bind(args, kwargs, features = features) { d ->
-      val dir = Direction.parse(d.reqStr("direction", "exit() direction"))
-      if (!Regex("[a-z][a-z0-9_]*").matches(dir.name))
-        fail("exit(): '${dir.name}' is not a valid exit name")
-      if (dir.name in ctx.engineVerbs)
-        fail("exit(): '${dir.name}' is a reserved keyword: it is an engine command")
-      val to = label(d.reqStr("to", "exit() destination"), ctx.pkg.path, d.what("to"))
+      val dir = parseExitDir(d, ctx.engineVerbs)
+      val rawTo = d["to"]
+      val to = if (rawTo is String) label(rawTo, ctx.pkg.path, d.what("to")) else null
+      val candidates =
+        if (rawTo is String) emptyMap() else parseExitCandidates(rawTo, ctx.pkg.path, d.what("to"))
+      val door = parseExitDoor(d, candidates.isNotEmpty())
+      val pick = parseExitPick(d, to != null, ctx.pkg.path)
       val proto =
         ExitProto(
           direction = dir,
           to = to,
           entryIndex = d.int("entry_index") ?: 0,
           tags = parseTags(d),
-          door =
-            d["door"]?.let {
-              (it as? DoorDecl)?.proto
-                ?: fail("exit(door): expected door(...), got ${typeName(it)}")
-            },
-          oneWay = d.bool("one_way") ?: false,
+          door = door,
+          oneWay = d.bool("one_way") ?: candidates.isNotEmpty(),
+          candidates = candidates,
+          pick = pick,
         )
       if (proto.entryIndex < -1) fail("exit(entry_index): must be -1 (the back) or a track index")
       ExitDecl(proto)
     }
+  }
+
+  private fun parseExitDir(d: ParsedDecl, engineVerbs: Set<String>): Direction {
+    val dir = Direction.parse(d.reqStr("direction", "exit() direction"))
+    if (!Regex("[a-z][a-z0-9_]*").matches(dir.name)) {
+      fail("exit(): '${dir.name}' is not a valid exit name")
+    }
+    if (dir.name in engineVerbs) {
+      fail("exit(): '${dir.name}' is a reserved keyword: it is an engine command")
+    }
+    return dir
+  }
+
+  private fun parseExitDoor(d: ParsedDecl, perCrossing: Boolean): DoorProto? {
+    val door =
+      d["door"]?.let {
+        (it as? DoorDecl)?.proto ?: fail("exit(door): expected door(...), got ${typeName(it)}")
+      }
+    if (perCrossing && door != null) {
+      fail("exit(door): an exit whose destination is picked per crossing can't have a door")
+    }
+    return door
+  }
+
+  private fun parseExitPick(d: ParsedDecl, hasSingleTo: Boolean, pkg: String): ScriptExitPicker? {
+    val pickVal = d["pick"]?.takeUnless(::isNone) ?: return null
+    if (hasSingleTo) fail("exit(pick): needs a list or dict of rooms in to")
+    return ScriptExitPicker(hookRef(pickVal, d.what("pick")), pkg)
+  }
+
+  private fun parseExitCandidates(raw: Any?, pkg: String, what: String): Map<Label, Int> {
+    val entries: List<Pair<Label, Int>> =
+      when (raw) {
+        is StarlarkList<*> -> raw.map { elem -> label(str(elem, what), pkg, what) to 1 }
+        is Dict<*, *> -> raw.entries.map { (k, v) -> parseCandidateWeight(k, v, pkg, what) }
+        else ->
+          fail(
+            "exit(to): expected a room label, a list of labels or a dict of label to weight, got ${typeName(raw)}"
+          )
+      }
+    if (entries.size < 2) fail("exit(to): a list or dict needs at least two rooms")
+    // The crossing rolls 1..total, which must stay inside Int.
+    if (entries.sumOf { it.second.toLong() } >= Int.MAX_VALUE) {
+      fail("exit(to): weights must add up to less than ${Int.MAX_VALUE}")
+    }
+    val out = LinkedHashMap<Label, Int>(entries.size)
+    for ((lbl, weight) in entries) {
+      if (lbl in out) fail("exit(to): room $lbl is listed twice")
+      out[lbl] = weight
+    }
+    return out
+  }
+
+  private fun parseCandidateWeight(
+    rawKey: Any?,
+    rawWeight: Any?,
+    pkg: String,
+    what: String,
+  ): Pair<Label, Int> {
+    val lbl = label(str(rawKey, what), pkg, what)
+    val weight = int(rawWeight, what)
+    if (weight < 1) fail("exit(to): weight for $lbl must be a positive int")
+    return lbl to weight
   }
 
   @StarlarkMethod(

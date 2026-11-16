@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.Label
+import gups.core.model.ExitProto
 import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Prototypes
@@ -161,37 +162,7 @@ class Linter(
 
       // Exits reverse check and doors match
       for (exit in room.exits) {
-        if (exit.oneWay) continue
-        val opp = exit.direction.opposite
-        val targetRoom = protos.rooms[exit.to]
-        if (targetRoom == null) continue // loader already reports missing room
-
-        if (opp == null) {
-          findings +=
-            Finding(
-              Finding.Severity.ERROR,
-              "exit '${exit.direction}' to ${exit.to} has no opposite direction and is not marked one_way",
-              label = room.label,
-            )
-          continue
-        }
-
-        val reverse = targetRoom.exits.firstOrNull { it.direction == opp && it.to == room.label }
-        if (reverse == null) {
-          findings +=
-            Finding(
-              Finding.Severity.ERROR,
-              "exit '${exit.direction}' to ${exit.to} has no reverse exit in ${exit.to} leading '$opp' back to ${room.label}",
-              label = room.label,
-            )
-        } else if (exit.door != reverse.door) {
-          findings +=
-            Finding(
-              Finding.Severity.ERROR,
-              "doors do not match between ${room.label} exit '${exit.direction}' and ${exit.to} exit '$opp'",
-              label = room.label,
-            )
-        }
+        if (!exit.oneWay) findings += reverseFindings(protos, room, exit)
       }
     }
 
@@ -248,8 +219,66 @@ class Linter(
     return Report(findings)
   }
 
+  private fun reverseFindings(protos: Prototypes, room: RoomProto, exit: ExitProto): List<Finding> {
+    // A per-crossing exit gets one error for this, not one per candidate.
+    if (exit.to == null && exit.direction.opposite == null) {
+      return listOf(
+        Finding(
+          Finding.Severity.ERROR,
+          "exit '${exit.direction}' has no opposite direction and is not marked one_way",
+          label = room.label,
+        )
+      )
+    }
+    return exit.destinations().mapNotNull { checkReverse(protos, room, exit, it) }
+  }
+
+  private fun checkReverse(
+    protos: Prototypes,
+    room: RoomProto,
+    exit: ExitProto,
+    target: Label,
+  ): Finding? {
+    val opp = exit.direction.opposite
+    val targetRoom = protos.rooms[target] ?: return null // loader already reports missing room
+
+    if (opp == null) {
+      return Finding(
+        Finding.Severity.ERROR,
+        "exit '${exit.direction}' to $target has no opposite direction and is not marked one_way",
+        label = room.label,
+      )
+    }
+
+    val reverse =
+      targetRoom.exits.firstOrNull {
+        it.direction == opp && (it.to == room.label || room.label in it.candidates)
+      }
+    if (reverse == null) {
+      return Finding(
+        Finding.Severity.ERROR,
+        "exit '${exit.direction}' to $target has no reverse exit in $target leading '$opp' back to ${room.label}",
+        label = room.label,
+      )
+    }
+    if (exit.door != reverse.door) {
+      return Finding(
+        Finding.Severity.ERROR,
+        "doors do not match between ${room.label} exit '${exit.direction}' and $target exit '$opp'",
+        label = room.label,
+      )
+    }
+    return null
+  }
+
   private fun RoomProto.withoutPresentation() =
-    copy(name = "", desc = "", commands = emptyMap(), version = 0)
+    copy(
+      name = "",
+      desc = "",
+      commands = emptyMap(),
+      exits = exits.map { it.copy(pick = null) },
+      version = 0,
+    )
 
   private fun MobProto.withoutPresentation() =
     copy(name = "", desc = "", keywords = emptyList(), think = null, version = 0)

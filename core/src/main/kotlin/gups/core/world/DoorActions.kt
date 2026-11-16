@@ -108,7 +108,7 @@ private class DoorAction(private val dir: Direction, private val verb: DoorVerb)
       Sound(intensity, w.msg(KernelMsg.DOOR_HEARD.getValue(verb)).takeIf { intensity > 0 })
     announceHere(w, actor, sound)
     w.reverseExit(actor.room, exit)?.let { announceOtherSide(w, actor, it, sound) }
-    w.makeNoise(verb, actor, intensity, w.room(exit.to))
+    w.makeNoise(verb, actor, intensity, exit.to?.let(w::room))
     w.dispatch(verb.after, null, actor.room, hookContext(actor))
     return 0
   }

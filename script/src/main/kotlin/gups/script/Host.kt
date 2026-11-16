@@ -6,12 +6,15 @@ import gups.core.Label
 import gups.core.Rng
 import gups.core.model.Actor
 import gups.core.model.Entity
+import gups.core.model.Exit
 import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.ModifierPoint
+import gups.core.model.Room
 import gups.core.rules.RulesContext
 import gups.core.world.Action
 import gups.core.world.Diagnostic
+import gups.core.world.ExitPicker
 import gups.core.world.FastCommand
 import gups.core.world.Feature
 import gups.core.world.HookContext
@@ -439,6 +442,53 @@ class StarlarkHost(
     }
   }
 
+  internal fun pickExit(
+    world: World,
+    hc: HookContext,
+    exit: Exit,
+    picker: ScriptExitPicker,
+  ): Label? {
+    val room = hc.room!!
+    val site = Site(picker.pkg, room.protoLabel, "pick", vetoable = false, room.id)
+    var lastCtx: Ctx? = null
+    val result =
+      call(
+        world,
+        site,
+        picker.ref,
+        { f ->
+          Ctx(f, room, hc, CtxExtras(candidates = exit.candidates.keys.toList())).also {
+            lastCtx = it
+          }
+        },
+      )
+    val value = (result as? CallResult.Ok)?.value ?: return null
+    if (isNone(value)) return null
+    val chosen = pickedLabel(value, picker.pkg)
+    val problem =
+      when {
+        value !is String && value !is RoomView ->
+          "pick must return a candidate label, a room or None"
+        chosen == null || chosen !in exit.candidates ->
+          "pick returned $value, which is not one of the exit's candidates"
+        else -> return chosen
+      }
+    report(world, site, "script_error", problem, null, lastCtx)
+    return null
+  }
+
+  private fun pickedLabel(value: Any, pkg: String): Label? =
+    when (value) {
+      is String ->
+        try {
+          label(value, pkg, "pick")
+        } catch (_: EvalException) {
+          null
+        }
+      is RoomView -> value.room.label
+      else -> null
+    }
+
   internal fun resolve(
     world: World,
     caster: Actor,
@@ -860,6 +910,19 @@ internal data class ScriptCommand(
 internal data class ScriptThink(private val ref: HookRef, private val pkg: String) : ThinkFn {
   override fun think(world: World, mob: Mob, proposals: List<Proposal>): ThinkResult =
     hostOf(world).think(world, mob, proposals, ref, pkg)
+}
+
+/** A per-crossing exit's `pick` function. */
+internal data class ScriptExitPicker(internal val ref: HookRef, internal val pkg: String) :
+  ExitPicker {
+  override fun pick(world: World, actor: Actor, room: Room, exit: Exit): Label? =
+    hostOf(world)
+      .pickExit(
+        world,
+        HookContext(actor = actor, direction = exit.direction, room = room),
+        exit,
+        this,
+      )
 }
 
 /** A skill's custom `resolve(ctx)`. */

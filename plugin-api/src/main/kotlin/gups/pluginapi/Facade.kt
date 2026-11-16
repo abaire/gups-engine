@@ -430,6 +430,13 @@ interface PluginWorld : PluginGmcpWorld {
   fun unlockDoor(room: PluginRoom, dir: String): Unit =
     throw UnsupportedOperationException("unlockDoor is not supported")
 
+  /**
+   * Points [room]'s exit [dir] at the room labelled [to], or back at its declared destination when
+   * null.
+   */
+  fun setExitTo(room: PluginRoom, dir: String, to: String?): Unit =
+    throw UnsupportedOperationException("setExitTo is not supported")
+
   /** Opens [item], a container, even if locked. */
   fun openContainer(item: PluginItem): Unit =
     throw UnsupportedOperationException("openContainer is not supported")
@@ -730,8 +737,8 @@ interface PluginRoom : PluginEntity {
   val affects: List<String>
     get() = throw UnsupportedOperationException("affects is not supported")
 
-  /** Direction → destination room label. */
-  val exits: Map<String, String>
+  /** Direction → current destination label, or null when it is picked per crossing. */
+  val exits: Map<String, String?>
   val actors: List<PluginActor>
   val items: List<PluginItem>
 
@@ -1015,7 +1022,10 @@ data class PluginItemAffect(
 /** An exit as a plugin sees it; read when the view is taken. */
 data class PluginExit(
   val direction: String,
-  val to: String,
+  val to: String?,
+  val originalTo: String?,
+  val candidates: List<String>,
+  val weights: Map<String, Int>,
   val tags: List<String>,
   val door: PluginDoor?,
   val key: String?,

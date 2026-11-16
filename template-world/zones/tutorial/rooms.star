@@ -87,13 +87,58 @@ def _crunch(ctx):
     if ctx.actor.is_player:
         ctx.emit("sound", "crunch", intensity = 3, text = "Gravel crunches loudly somewhere to the west.")
 
+TIDE_PULSES = 240
+
+def _tide(ctx, _elapsed = 0):
+    # The stair is the template's example of a retargetable exit: on_tick, on_reset, and
+    # on_wake keep it in sync with the pulse, and set_exit_to is a no-op when unchanged.
+    high = (ctx.pulse // TIDE_PULSES) % 2 == 1
+    ctx.set_exit_to(ctx.self, "down", ":drowned_cave" if high else None)
+
 room("gravel",
     name = "The Gravel Path",
-    desc = "Loose stones shift and crunch with every step.",
+    desc = "Loose stones shift and crunch with every step. A shifting passage leads west, and a stone stair leads down.",
     size = SIZE.normal,
-    exits = [exit(DIR.east, to = ":tar_pit")],
+    exits = [
+        exit(DIR.east, to = ":tar_pit"),
+        # One-way unless one_way = False; each hollow walks back east.
+        exit(DIR.west, to = [":hollow_a", ":hollow_b"]),
+        exit(DIR.down, to = ":grotto"),
+    ],
     spawns = [spawn(":squirrel")],
     on_enter = _crunch,
+    on_tick = _tide,
+    on_reset = _tide,
+    on_wake = _tide,
+)
+
+room("hollow_a",
+    name = "A Mossy Hollow",
+    desc = "Cool moss carpets a quiet hollow. The path back east seems to shift behind you.",
+    size = SIZE.normal,
+    exits = [exit(DIR.east, to = ":gravel")],
+)
+
+room("hollow_b",
+    name = "A Fern Hollow",
+    desc = "Tall ferns crowd a dim hollow. The path back east seems to shift behind you.",
+    size = SIZE.normal,
+    exits = [exit(DIR.east, to = ":gravel")],
+)
+
+room("grotto",
+    name = "A Dry Grotto",
+    desc = "Salt-crusted stone walls surround a dry grotto at the foot of the tide stair.",
+    size = SIZE.normal,
+    exits = [exit(DIR.up, to = ":gravel")],
+)
+
+room("drowned_cave",
+    name = "A Drowned Cave",
+    desc = "Cold seawater laps at the lower steps of the tide stair.",
+    size = SIZE.normal,
+    # :gravel's declared down exit names :grotto, so lint cannot see this return without one_way.
+    exits = [exit(DIR.up, to = ":gravel", one_way = True)],
 )
 
 def _stock_armory(ctx):

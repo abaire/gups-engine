@@ -156,6 +156,39 @@ class GmcpTest(private val fs: FixtureSchema) {
   }
 
   @Test
+  fun `Room Info maps per-crossing exit to null`() {
+    val customRoom = Label("//t:nexus")
+    val base = T.protos(fs)
+    val protos =
+      Prototypes(
+        rooms =
+          base.rooms.values +
+            RoomProto(
+              customRoom,
+              "The Nexus",
+              exits =
+                listOf(
+                  ExitProto(
+                    Direction.NORTH,
+                    to = null,
+                    candidates = mapOf(T.HALL to 1, T.YARD to 1),
+                    oneWay = true,
+                  )
+                ),
+            ),
+        mobs = base.mobs.values.toList(),
+        items = T.items,
+        skills = base.skills.values.toList(),
+        zones = listOf(ZoneProto("t", title = "Test Zone")),
+      )
+    val f = Fixture(protos = protos)
+    val (p, _) = f.gmcpPlayer("Ann", at = customRoom)
+    f.run()
+    @Suppress("UNCHECKED_CAST") val payload = f.w.gmcpPayload(p, "Room.Info") as Map<String, Any?>
+    assertEquals(mapOf("n" to null), payload["exits"])
+  }
+
+  @Test
   fun `plugin producers send deltas, and a failing one is recorded and skipped`() {
     val f = Fixture()
     var temp = 10

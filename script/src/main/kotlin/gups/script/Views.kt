@@ -667,8 +667,35 @@ internal constructor(private val scope: ViewScope, private val room: Room, priva
   @StarlarkMethod(name = "direction", structField = true, doc = "The exit's direction name.")
   fun direction(): Any = read { exit.direction.name }
 
-  @StarlarkMethod(name = "to", structField = true, doc = "The destination room's label.")
-  fun to(): Any = read { exit.to.v }
+  @StarlarkMethod(
+    name = "to",
+    structField = true,
+    doc = "The current destination room's label, or None when it is picked per crossing.",
+  )
+  fun to(): Any = read { exit.to?.v ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "original_to",
+    structField = true,
+    doc = "The declared destination room's label, or None when it is picked per crossing.",
+  )
+  fun originalTo(): Any = read { exit.originalTo?.v ?: Starlark.NONE }
+
+  @StarlarkMethod(
+    name = "candidates",
+    structField = true,
+    doc = "Candidate room labels in declared order, or [] for an ordinary exit.",
+  )
+  fun candidates(): Any = read { sList(exit.candidates.keys.map { it.v }) }
+
+  @StarlarkMethod(
+    name = "weights",
+    structField = true,
+    doc = "Candidate room labels mapped to weights, or {} for an ordinary exit.",
+  )
+  fun weights(): Any = read {
+    sDict(exit.candidates.entries.associate { it.key.v to sInt(it.value) })
+  }
 
   @StarlarkMethod(
     name = "entry_index",

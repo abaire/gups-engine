@@ -215,7 +215,7 @@ class MemoryWitnessTest {
     val watcher = f.mob(watcherLabel, at = T.YARD)
     val mover = f.player("Ann", at = T.HALL)
 
-    f.w.transition(mover, f.w.room(T.HALL).exits.values.first { it.to == T.YARD })
+    f.w.transition(mover, f.w.room(T.HALL).exits.values.first { it.to == T.YARD }, f.w.room(T.YARD))
     val immediate = f.w.memoriesOf(watcher, subject = mover, event = "enter")
     assertEquals(1, immediate.size)
     assertEquals(1, immediate.single().count)

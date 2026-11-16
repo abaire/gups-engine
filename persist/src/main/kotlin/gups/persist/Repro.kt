@@ -91,7 +91,9 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
   val rows = bundle.entities.map { it.row() }
   for (row in rows.filter { it.kind == "room" }) {
     world.roomOrNull(Label(row.protoLabel))?.let {
-      applyRoom(it, JSON.decodeFromString(RoomPayload.serializer(), row.payload))
+      applyRoom(it, JSON.decodeFromString(RoomPayload.serializer(), row.payload)) { label ->
+        world.roomOrNull(label) != null
+      }
     }
   }
   for (row in rows.filter { it.kind == "mob" }) {

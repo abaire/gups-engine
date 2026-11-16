@@ -78,7 +78,7 @@ class DisengageTest(private val fs: FixtureSchema) {
     val dummy = f.mob(T.DUMMY)
     f.w.startCombat(ann, dummy)
     val exit = f.w.room(T.HALL).exits[gups.core.model.Direction.NORTH]!!
-    f.w.transition(ann, exit)
+    f.w.transition(ann, exit, f.w.room(exit.to!!))
     assertEquals(setOf("Ann" to "stop", "a training dummy" to "stop"), r.events)
   }
 
@@ -155,7 +155,7 @@ class DisengageTest(private val fs: FixtureSchema) {
     reengage(r) { ann }
     f.w.startCombat(ann, dummy)
     val exit = f.w.room(T.HALL).exits[gups.core.model.Direction.NORTH]!!
-    f.w.transition(ann, exit)
+    f.w.transition(ann, exit, f.w.room(exit.to!!))
     assertTrue(r.host.calls.any { it.startsWith("on_disengage:") }, "the hook still fires")
     assertTrue(ann.room !== dummy.room)
     assertFalse(ann.isEngaged || dummy.isEngaged, "no engagement spans two rooms")

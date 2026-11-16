@@ -433,8 +433,10 @@ the world graph:
 **Exit and Door** ([`Exit`](../core/src/main/kotlin/gups/core/model/Entities.kt),
 [`Door`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
-- **Exit:** cardinal `direction`, target room destination `to` label, `entryIndex` on the destination track (default
-  `0`, `-1` for end of track), queryable `tags` (e.g. `soundproof`, `sealed`), optional `door`, and `oneWay` flag.
+- **Exit:** cardinal `direction`; a destination `to` label, or, for an exit whose destination is picked per crossing,
+  weighted `candidates` and an optional `pick` function (§4.2); `entryIndex` on the destination track (default `0`, `-1`
+  for end of track); queryable `tags` (e.g. `soundproof`, `sealed`); optional `door`; and the `oneWay` flag. An ordinary
+  exit's current destination starts as its declared `to` and can be changed at run time (§4.5 `set_exit_to`).
 - **Door:** state (`OPEN`, `CLOSED`, `LOCKED`), optional `keyLabel`, and `tags` (e.g. `heavy`, `transparent`).
 - **Transmission costs:** exits and doors do not hardcode channel blockage; `rules.sense_cost` (§4.6) evaluates exit
   tags and door state dynamically to determine crossing costs per channel.
@@ -661,8 +663,9 @@ The engine persists world state and account information to SQLite in WAL mode
 - **JSON payloads and delta encoding:** Payloads are serialized using delta encoding
   ([Codec.kt](../persist/src/main/kotlin/gups/persist/Codec.kt)). Each payload carries a `format_version` integer for
   engine schema evolution:
-  - Rooms store modified door states, custom attributes, running timers, and affects. A door saved locked whose
-    prototype no longer has a `key` is restored closed.
+  - Rooms store modified door states, retargeted exit destinations (`set_exit_to`), custom attributes, running timers,
+    and affects. A door saved locked whose prototype no longer has a `key` is restored closed. A retarget to a room that
+    no longer exists, or on an exit that now has a door or is picked per crossing, is dropped.
   - Mobs store position, current vitals, XP, home room, spawn rule bindings, `summonedBy`, `owner`, a leash override
     (§4.5 `set_leash`), and personal standing records with their history. Modifiable stats, vitals maxima, resists,
     skills, and behavior cadences are persisted only when differing from prototype definitions.
@@ -913,6 +916,7 @@ room("entrance",
                       tags=["creaky"])),  # free-form words the rules read (§4.6)
        exit(DIR.east, to=":long_hall", tags=["sealed"]),  # the template's sense_cost never carries anything
        exit(DIR.south, to="//zones/forest:clearing", entry_index=-1),  # arrive at back
+       exit(DIR.west, to={":vault_a": 3, ":vault_b": 1}, pick=_pick_vault),  # picked per crossing (one-way unless one_way=False)
      ],
      spawns=[spawn(":goblin_scout", count=2, respawn_pulses=1200, at_index=2)],
      modifiers={},  # §4.6
@@ -976,6 +980,15 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   by keyword. `exit` takes `direction` positionally and `to` positionally or by keyword; `global_command` takes `name`,
   `fn` and `lane` either way. Unknown arguments are errors with a spelling suggestion. A package targeting a different
   `api_version` gets the version-mismatch diagnostic before any unknown-argument error.
+- **Exits picked per crossing:** `to` may be a list of room labels (equally likely) or a dict from label to a positive
+  int weight, the weights adding up to less than 2147483647, with at least two distinct labels; every label must
+  resolve. Such an exit picks its room each time someone crosses it (§5.5). `pick = fn` (only with such a `to`) names a
+  top-level function called once per crossing with `ctx.self` and `ctx.room` the room being left, `ctx.actor`,
+  `ctx.direction` and `ctx.candidates` (the labels, in declared order); it returns one of the candidates, as a label or
+  a room, or `None` to roll by weight. An error in it, or an answer that isn't a candidate, is a script error, and the
+  engine rolls instead. Such an exit can't have a `door`. It is `one_way` unless declared `one_way = False`, which asks
+  the reverse-exit gate to find a way back from every candidate (§7.3). It is never part of a path (§5.9), carries no
+  perception toward its own room (§5.7), and `Room.Info` sends no destination for it (§4.10).
 - **Defaults:** the display `name` defaults to the identifier with `_` as spaces. `keywords` default to the display
   name's words minus articles, or else the identifier. An item may also give `plural` (for example `plural = "gold
   coins"`), used when showing stacks of 2 or more; a blank `plural` fails to load. Players can name an item by the words
@@ -1369,15 +1382,16 @@ views are implemented in [Ctx.kt](../script/src/main/kotlin/gups/script/Ctx.kt) 
 each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`, `args`, `event`, `source_room`,
-`via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `parts`, `proposals`, `elapsed_pulses`, `from_room`,
-`to_room`, `old_level`, `new_level`, `old_encumbrance_level`, `new_encumbrance_level`, `affect` (affect hooks; for an
-item affect's hooks, `self` is the item), `reason` (affect `on_expire`: `"expired"` when the affect reached its expiry
-pulse, else `"removed"` for `remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as
-expired), `targets` (`on_combat_tick`, `on_summon` and `on_skill_use`, the actors a cast landed on), `label` (the
-summoned prototype's label, in `before_summon`), `count` (in `before_summon`), `outcome` (in `on_skill_use`, how the
-skill use went: `"fail"`, `"resist"`, `"success"` or `"report"`), `power` (in a skill's custom `resolve`, the cast's
-power percentage, or `None` elsewhere; `skills` feature), `task` (the task view, in a timed task's callbacks and in
-`interrupt_check` for a task), `pulse`, `rng`.
+`via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `parts`, `proposals`, `candidates` (an exit's `pick`
+function: the labels it may choose), `elapsed_pulses`, `from_room`, `to_room`, `old_level`, `new_level`,
+`old_encumbrance_level`, `new_encumbrance_level`, `affect` (affect hooks; for an item affect's hooks, `self` is the
+item), `reason` (affect `on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"` for
+`remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as expired), `targets`
+(`on_combat_tick`, `on_summon` and `on_skill_use`, the actors a cast landed on), `label` (the summoned prototype's
+label, in `before_summon`), `count` (in `before_summon`), `outcome` (in `on_skill_use`, how the skill use went:
+`"fail"`, `"resist"`, `"success"` or `"report"`), `power` (in a skill's custom `resolve`, the cast's power percentage,
+or `None` elsewhere; `skills` feature), `task` (the task view, in a timed task's callbacks and in `interrupt_check` for
+a task), `pulse`, `rng`.
 
 - **Commands:** `ctx.args` is the argument text, `ctx.target` the actor in the room matching the first argument word,
   and `ctx.item` the item for item commands. `ctx.self` is the room or item, or the actor for global commands.
@@ -1422,8 +1436,11 @@ power percentage, or `None` elsewhere; `skills` feature), `task` (the task view,
 
 - **Identity:** `label`, `name`, `desc`, `size`, `track_size`, `regions`, `flags`, `tags` (the effective tags, §3.3).
 - **Contents:** `exits()`, `actors()`, `items()`, `contents()`, `affects` (the live affects, by id).
-- **Exits:** `exit(dir)`, an exit view with its `tags` and `door`: a door view (`state`, `key`, `tags`), or `None`
-  without a door.
+- **Exits:** `exit(dir)`, an exit view with `direction`, `to` (the current destination's label, or `None` for an exit
+  picked per crossing), `original_to` (the declared `to`, or `None` for an exit picked per crossing), `candidates` (in
+  declared order, `[]` for any other exit), `weights` (label to weight, `{}` for any other exit), `entry_index`, `tags`,
+  `one_way` (an exit picked per crossing reports `True` unless declared otherwise), `passable`, `key` and `door`: a door
+  view (`state`, `key`, `tags`), or `None` without a door.
 
 **Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `charges` and `max_charges` (`None`
 when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`,
@@ -1448,7 +1465,7 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 | Items             | `spawn(label, at, index=0, count=1)`, `grant_item(actor, label_or_item, count=None)`, `move_item(item, to, index=0, count=None)`, `destroy(item, count=None)`, `merge_stack(item)`, `set_charges(item, charges)`, `add_tag(item, tag)`, `remove_tag(item, tag)`, `transform(item, label)`, `set_item_name(item, name)`, `wear(actor, item, wield=False)`, `remove_worn(actor, item)`, `fits(item_or_label, to, count=None)`                                                                                                                                                                                                                      |
 | Restrictions      | `may_wear(actor, item, wield=False)`, `may_remove(actor, item)`, `may_drop(actor, item)`, `may_give(actor, item, to)`, `may_put(actor, item, container)`, `may_enter(actor, room)`, `may_learn(actor, skill, proficiency)`: each returns the refusal message or `None`. See **Restriction queries** below.                                                                                                                                                                                                                                                                                                                                       |
 | Perception        | `emit(channel, event, intensity=1, text=None, room=None, actor=None)`: raises a perceivable event (§5.7). `room` defaults to `ctx.room` and `actor` to `ctx.actor`; an intensity of 0 or less emits nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Doors and exits   | `open_door(room, dir)`, `close_door`, `lock_door`, `unlock_door`, `set_exit_to(room, dir, to)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Containers        | `open_container(item)`, `close_container`, `lock_container`, `unlock_container`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | State             | `set_attr(entity, key, value)`, `get_attr(entity, key, default=None)`, `del_attr(entity, key)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | Hooks             | `call_hook(entity, name, **args)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -1632,6 +1649,13 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
   door locked; `lock_door` closes the door and fails on a door without a `key`, since only a door with a key has a lock;
   `unlock_door` leaves it closed. Content that keeps a door shut without a lock (a bar, a portcullis) vetoes `open` with
   `before_open`.
+- **Exits:** `set_exit_to(room, dir, to)` makes an ordinary exit lead to `to`, a room or label, and `to = None` restores
+  its declared destination. It prints nothing. Everything that reads the exit follows the new destination at once:
+  walking, views, perception, pathfinding, mob movement, the reality bubble and `Room.Info`. The change is saved with
+  the room; a zone reset doesn't undo it, so content that wants that calls it from `on_reset`. A reload keeps it while
+  the exit still has a single destination and no door and the room still exists, and otherwise restores the declared
+  destination. It is an error on an exit with a door, since a door's two sides are paired through the destination, and
+  on an exit picked per crossing. Kernel.
 - **Containers:** container verbs print nothing. `open_container` also unlocks; `close_container` leaves a locked
   container locked; `lock_container` closes the container and fails on one whose prototype has no `key`, since only a
   container with a key has a lock; `unlock_container` leaves it closed.
@@ -2122,20 +2146,20 @@ works again when a later re-check allows it.
 
 Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin/gups/core/world/Behaviors.kt).
 
-|                                                                    Behavior                                                                    | Default priority |                                                                                                                                    What it does                                                                                                                                    |
-|------------------------------------------------------------------------------------------------------------------------------------------------|------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `wander(radius=3, chance=10, priority=10)`                                                                                                     | 10               | Moves randomly within `radius` exits of the home room, counted through open doors, and never past the mob's leash. Outside that area it steps toward home instead. `chance` is the percent probability per think.                                                                  |
-| `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, disposition_below=None, prefer=None, priority=60)` | 60               | Looks for a target on each think with probability `chance` percent. Attacks the matching target it notices that `target_order` picks, or else the lowest-id one. `combat` feature; the level arguments also need `leveling`.                                                       |
-| `assist(allies, disposition_above=None, prefer=None, priority=50)`                                                                             | 50               | Attacks an ally's primary target, or else its lowest-id opponent; with `prefer`, the opponent `target_order` picks. `combat` feature.                                                                                                                                              |
-| `retarget(prefer, toward="players", disposition_below=None, chance=100, priority=55)`                                                          | 55               | While engaged, with probability `chance` percent on each think, asks `target_order` (§4.6) whom to fight and attacks its pick if that is not its primary target. `combat` feature.                                                                                                 |
-| `flee(below=vitals(...), priority=100)`                                                                                                        | 100              | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature.                                                                                                                                     |
-| `guard(exit, allies="mobs", disposition_above=None)`                                                                                           | —                | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act.                                                                                             |
-| `follow(target, disposition_above=None, priority=30)`                                                                                          | 30               | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader. While its leader is outside the mob's leash it proposes nothing, and it follows again if the leader comes back inside it.                                                   |
-| `pursue(target, range=10, disposition_below=None, priority=40)`                                                                                | 40               | Heads for the nearest simulated match within `range` exits (through open doors; `None` for no limit) by path length, then lowest id. One search per think, in exit declaration order, so its first step is the one `path_to` takes. It searches only rooms inside the mob's leash. |
-| `sentinel()`                                                                                                                                   | —                | Never leaves its room: removes movement and flee proposals.                                                                                                                                                                                                                        |
-| `scavenge(priority=5)`                                                                                                                         | 5                | Takes the first reachable, carriable ground item that isn't a corpse.                                                                                                                                                                                                              |
-| `heel(priority=30)`                                                                                                                            | 30               | Follows its owner by the shortest path, however far. Proposes nothing for a mob without an owner in the world.                                                                                                                                                                     |
-| `defend(group=True, priority=50)`                                                                                                              | 50               | Attacks the primary target of its owner, if the owner is in its room and engaged, else the owner's lowest-id opponent; with `group`, then the same for each in-room group member of the owner, in ascending id. `combat` feature.                                                  |
+|                                                                    Behavior                                                                    | Default priority |                                                                                                                                        What it does                                                                                                                                        |
+|------------------------------------------------------------------------------------------------------------------------------------------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `wander(radius=3, chance=10, priority=10)`                                                                                                     | 10               | Moves randomly within `radius` exits of the home room, counted through open doors, and never past the mob's leash. It never steps through an exit whose destination is picked per crossing. Outside that area it steps toward home instead. `chance` is the percent probability per think. |
+| `aggressive(toward="players", unless_level_above=None, unless_level_below=None, chance=100, disposition_below=None, prefer=None, priority=60)` | 60               | Looks for a target on each think with probability `chance` percent. Attacks the matching target it notices that `target_order` picks, or else the lowest-id one. `combat` feature; the level arguments also need `leveling`.                                                               |
+| `assist(allies, disposition_above=None, prefer=None, priority=50)`                                                                             | 50               | Attacks an ally's primary target, or else its lowest-id opponent; with `prefer`, the opponent `target_order` picks. `combat` feature.                                                                                                                                                      |
+| `retarget(prefer, toward="players", disposition_below=None, chance=100, priority=55)`                                                          | 55               | While engaged, with probability `chance` percent on each think, asks `target_order` (§4.6) whom to fight and attacks its pick if that is not its primary target. `combat` feature.                                                                                                         |
+| `flee(below=vitals(...), priority=100)`                                                                                                        | 100              | Flees, engaged or not, when any listed vital is at or below that percentage of its maximum: `flee(below = vitals(hp = 20))`. `combat` feature.                                                                                                                                             |
+| `guard(exit, allies="mobs", disposition_above=None)`                                                                                           | —                | Denies the exit to non-allies with "<Guard> blocks your way." A built-in `before_exit` observer that runs before the scripted ones, only while the guard is simulated and able to act.                                                                                                     |
+| `follow(target, disposition_above=None, priority=30)`                                                                                          | 30               | Takes the first match it sees as leader and follows it within 3 exits; farther, it forgets the leader. While its leader is outside the mob's leash it proposes nothing, and it follows again if the leader comes back inside it.                                                           |
+| `pursue(target, range=10, disposition_below=None, priority=40)`                                                                                | 40               | Heads for the nearest simulated match within `range` exits (through open doors; `None` for no limit) by path length, then lowest id. One search per think, in exit declaration order, so its first step is the one `path_to` takes. It searches only rooms inside the mob's leash.         |
+| `sentinel()`                                                                                                                                   | —                | Never leaves its room: removes movement and flee proposals.                                                                                                                                                                                                                                |
+| `scavenge(priority=5)`                                                                                                                         | 5                | Takes the first reachable, carriable ground item that isn't a corpse.                                                                                                                                                                                                                      |
+| `heel(priority=30)`                                                                                                                            | 30               | Follows its owner by the shortest path, however far. Proposes nothing for a mob without an owner in the world.                                                                                                                                                                             |
+| `defend(group=True, priority=50)`                                                                                                              | 50               | Attacks the primary target of its owner, if the owner is in its room and engaged, else the owner's lowest-id opponent; with `group`, then the same for each in-room group member of the owner, in ascending id. `combat` feature.                                                          |
 
 - **Priority:** `priority` is any int; proposals sort by it, then by declaration order (§5.8).
 - **Owned mobs:** while a mob has an owner (§4.5 `set_owner`), it runs its owned behavior list instead of its
@@ -2144,7 +2168,8 @@ Built-in mob behaviors are implemented in [Behaviors.kt](../core/src/main/kotlin
   list, an owned mob's `aggressive`, `assist` and `retarget` never pick its owner, its owner's group members, or a pet
   of any of them.
 - **Leash:** a mob's `leash` (§3.4, §4.5 `set_leash`) is the most exits from its home room, through open doors, that its
-  own movement goes. `wander`, `follow` and `pursue` stay inside it; past it, `follow` and `pursue` propose nothing.
+  own movement goes. Exits whose destination is picked per crossing don't count as a way: rooms reached only through one
+  are outside the leash. `wander`, `follow` and `pursue` stay inside it; past it, `follow` and `pursue` propose nothing.
   `flee`, `heel`, `defend`, owned mobs and moves a script makes ignore it. A leash of `None` (the default) never limits
   anything.
 - **Going home:** a leashed mob's *home ground* is its first `wander` behavior's area, or its home room if it has no
@@ -2656,11 +2681,12 @@ endpoints, static assets, cookies, and WebSocket framing are handled by
     warmup; `fighting` lists names; plus the character's own initiative.
   - `Char.Affects`: `remaining` is whole seconds, or null for an affect that never ends; `flags` are sorted.
   - `Room.Info`: `num` is the room's map number (below). `area` is `//` and the room's package path, and `area_name` is
-    that package's zone `title` (the package path when it has none). `exits` maps every exit to its destination's `num`,
-    or null when that room isn't loaded; the ten standard directions are keyed by their short names (`n`, `ne`, `e`,
-    `se`, `s`, `sw`, `w`, `nw`, `u`, `d`) and other exits by their own. `doors` maps each exit that has a door, under
-    the same key, to `"open"`, `"closed"` or `"locked"`. `regions` are sorted. Nothing is hidden: every exit `look`
-    lists is here, with its destination.
+    that package's zone `title` (the package path when it has none). `exits` maps every exit to its current
+    destination's `num`, or null when that room isn't loaded or the exit's destination is picked per crossing; the ten
+    standard directions are keyed by their short names (`n`, `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `u`, `d`) and other
+    exits by their own. `doors` maps each exit that has a door, under the same key, to `"open"`, `"closed"` or
+    `"locked"`. `regions` are sorted. Nothing is hidden: every exit `look` lists is here, with its current destination,
+    or null for an exit whose destination is picked per crossing.
   - **Room map numbers:** a room's `num` is FNV-1a (32-bit) over the UTF-8 bytes of its label, with the top bit cleared;
     a result of 0 becomes 1. Rooms are numbered in ascending label order, and a room whose number is taken tries its
     label followed by `#1`, `#2`, … until one is free. The numbers are recomputed whenever prototypes load or reload and
@@ -3084,8 +3110,8 @@ subsystems (`core` or `script`). It consists of three primary components:
   `wear`, `removeWorn`, `setAttr`, `delAttr`, `setChoices`, `grantTrait`, `removeTrait`, `setSkill`, `removeSkill`,
   `reportSkillUse`, `skillRoll` (needs `skills`), `startTask`, `stopTask`, `setItemName`, `setBaseStat`,
   `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `openDoor`, `closeDoor`, `lockDoor`,
-  `unlockDoor`, `openContainer`, `closeContainer`, `lockContainer`, `unlockContainer`, `say`, `emote`, `emit`,
-  `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding`, `roll`, `spawnMob`, `act`, `actMove`,
+  `unlockDoor`, `setExitTo`, `openContainer`, `closeContainer`, `lockContainer`, `unlockContainer`, `say`, `emote`,
+  `emit`, `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding`, `roll`, `spawnMob`, `act`, `actMove`,
   `actAttack`, `actCast`, `moveToward`, `summon`, `setOwner`, `clearOwner`, `despawn`, `setLeash`, `resetLeash`,
   `startCombat`, `stopCombat`, `clearContributions`, `groupAdd`, `groupRemove`, `groupSetLeader`, `groupDisband`,
   `rules`), query methods (`mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`,
@@ -3097,17 +3123,18 @@ subsystems (`core` or `script`). It consists of three primary components:
   (§4.5), named in camelCase, except the track fields. `PluginActor.task` and `isBusy` report a timed task of either
   kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`, `removeWorn`, `teleport`, `may*`, `fits`, `task`
   and `isBusy` follow the same rules as the script verbs. `teleport` returns the refusal or veto, or null once the actor
-  has moved. The item custody verbs `spawnItem`, `moveItem`, `destroy` and `mergeStack` follow `ctx.spawn` (items only),
-  `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack` (§4.5): they skip the item restrictions and the commands' limits,
-  and an item placed in a room lies at track index 0. `spawnItem` returns a list: one stack for a stackable label, and
-  `count` items otherwise. `spawnMob(label, room, count)` makes `count` mobs as `ctx.spawn` does for a mob label and
-  returns them: no owner, no leash override and no spawn rule, a home room equal to `room`, at track index 0.
-  `despawn(mob)` removes a mob as `ctx.despawn` does. The mob actions queue tick-lane actions for a mob, never a player,
-  and return whether the action was queued. The door and container verbs follow `ctx` (§4.5): they run no hook, take no
-  key and print nothing, and locking fails on a door or container without a `key`. There is no `grantItem`: `moveItem`
-  or `spawnItem` with an actor as the destination puts the items in its inventory. All facade mutations execute
-  synchronously on the world thread with invariant checking. `PluginWorld` extends `PluginGmcpWorld`, which holds the
-  reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it is what GMCP input handlers receive.
+  has moved. `setExitTo` follows `set_exit_to`. The item custody verbs `spawnItem`, `moveItem`, `destroy` and
+  `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack` (§4.5): they skip
+  the item restrictions and the commands' limits, and an item placed in a room lies at track index 0. `spawnItem`
+  returns a list: one stack for a stackable label, and `count` items otherwise. `spawnMob(label, room, count)` makes
+  `count` mobs as `ctx.spawn` does for a mob label and returns them: no owner, no leash override and no spawn rule, a
+  home room equal to `room`, at track index 0. `despawn(mob)` removes a mob as `ctx.despawn` does. The mob actions queue
+  tick-lane actions for a mob, never a player, and return whether the action was queued. The door and container verbs
+  follow `ctx` (§4.5): they run no hook, take no key and print nothing, and locking fails on a door or container without
+  a `key`. There is no `grantItem`: `moveItem` or `spawnItem` with an actor as the destination puts the items in its
+  inventory. All facade mutations execute synchronously on the world thread with invariant checking. `PluginWorld`
+  extends `PluginGmcpWorld`, which holds the reads (except `rng`), `send`, `gmcp`, `getAttr`, `diagnose` and `log`; it
+  is what GMCP input handlers receive.
 
 **Parity with `ctx`:** every `ctx` verb and every field of the actor, item and room views has a facade counterpart that
 behaves the same way, named in camelCase (`open_door` → `openDoor`, `home_room` → `homeRoom`). The exceptions are the
@@ -4154,6 +4181,12 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
     actions, and it isn't saved. Moving with `teleport` adds none.
   - Arrivals are placed at the exit's `entryIndex`: by default `0`, and `-1` maps to `trackSize−1`. When the destination
     is smaller, the index is clamped.
+  - **Exits picked per crossing:** an exit whose destination is picked per crossing (§4.2) chooses the room once, when
+    the move is checked: its `pick` function's answer, or else a roll by the candidates' weights. That room is the
+    destination for the whole crossing: `before_exit` sees it as `ctx.to_room`, the `enter` restriction and
+    `before_enter` are asked of it, and the actor arrives there at the exit's `entryIndex`, clamped to that room's
+    track. Otherwise the crossing is an ordinary walk, with its `move_cost`, pace and messages. A refusal denies the
+    crossing; no other candidate is tried.
 - **Pinning and exits:**
   - A normal exit command works from any index **unless a hostile is at the actor's index**.
   - A pinned actor must `retreat` first, or `flee`.
@@ -4165,9 +4198,10 @@ Player A sees:  [MELEE] (nobody)   [NEAR] Goblin 1   [FAR] Goblin Archer
 - **`flee`:**
   - Warmup 0. It rolls `flee_chance` and ignores pinning.
   - **On success:** the actor picks a random passable exit (closed or locked doors are excluded). The exit is then
-    checked like a walk: guards (§4.7), then `before_exit` and `before_enter`. If they allow it, the actor leaves
-    through it and engagement ends; a denial shows its message and counts as a failure, so combat can't be used to slip
-    past them. A successful flee adds movement debt like a walk, and a queued `flee` waits for the debt like a walk.
+    checked like a walk (an exit picked per crossing picks its room first): guards (§4.7), then `before_exit` and
+    `before_enter`. If they allow it, the actor leaves through it and engagement ends; a denial shows its message and
+    counts as a failure, so combat can't be used to slip past them. A successful flee adds movement debt like a walk,
+    and a queued `flee` waits for the debt like a walk.
   - **On failure:** lag from `rules.flee_fail_lag` and its modifier chain (§4.6).
 - **Items on the ground:**
   - Items sit at the dropper's index.
@@ -4268,9 +4302,11 @@ A `say` has no sight alternative, and `shout` has its own delivery.
   price blocks the hop; otherwise it adds to the cost of the path, and 0 is a free hop. Each room is reached by its
   cheapest path of at most `BUBBLE_RADIUS` exits, so a cheaper but longer path never hides a dearer one that is within
   range. The exit priced is the listener's own exit toward the source, so a one-way exit into the source room carries
-  events and one out of it doesn't. The template's `sense_cost` blocks `sight` through a closed door unless its tags say
-  `transparent`, muffles `sound` by the door's extra cost, and blocks everything through an exit tagged `sealed` (and
-  `sound` through one tagged `soundproof`); the engine itself reads no tags.
+  events and one out of it doesn't. An exit whose destination is picked per crossing carries nothing toward its own
+  room, since no single room lies behind it: it is never a listener's `via_exit` and never priced by `sense_cost`. The
+  template's `sense_cost` blocks `sight` through a closed door unless its tags say `transparent`, muffles `sound` by the
+  door's extra cost, and blocks everything through an exit tagged `sealed` (and `sound` through one tagged
+  `soundproof`); the engine itself reads no tags.
 - **Who perceives:** for each simulated actor in each reached room (the room of the event, at cost 0, included), the
   engine asks `rules.can_perceive` whenever the answer would be used: for a mob with an `on_perceive` hook, and for a
   player in another room or, for a `shout`, in the event's own room. The template needs a score above 0, and in other
@@ -4362,7 +4398,8 @@ The reality bubble and room simulation lifecycle are implemented in
 - **Anchors:** Every in-world player (including link-dead ones), plus every entity with a non-empty `anchorReasons`.
 - **Active set:** All rooms within `BUBBLE_RADIUS` exits
   ([TimeConstants.kt](../core/src/main/kotlin/gups/core/TimeConstants.kt)) of any anchor's room. Exit tags and door
-  state are ignored when computing it. Rooms flagged `always_active` are always in the set.
+  state are ignored when computing it. An exit whose destination is picked per crossing counts as leading to every one
+  of its candidates. Rooms flagged `always_active` are always in the set.
 - **Simulated entities:** Players, and entities with non-empty `activeReasons` or `anchorReasons`, wherever they are.
   Anything else is simulated when its room (following carriers and containers) is active. A mob with an owner gets the
   reason `owner:<player_id>` while its owner is in the world.
@@ -4435,8 +4472,9 @@ The reality bubble and room simulation lifecycle are implemented in
   - Nothing that would have happened while dormant is replayed. In particular, there's no offscreen wandering.
 
 - **Pathfinding:** `ctx.path_to` runs a BFS over the full room graph, over exits in declaration order (so ties resolve
-  the same way every time) and through open doors only: closed and locked doors block. Results are cached per `(source,
-  dest)`. A door change and a reload clear the cache.
+  the same way every time) and through open doors only: closed and locked doors block. Exits whose destination is picked
+  per crossing are never part of a path. Results are cached per `(source, dest)`. A door change and a reload clear the
+  cache.
 
 ### 5.10 Hot Reload and Deploy
 
@@ -4997,11 +5035,14 @@ template's `.github/workflows/gates.yml`.
 2. **Lint:**
 
 - No dead-end rooms (0 exits) unless flagged `dead_end_ok` (error).
-- Every exit has a reverse unless `one_way`, and doors match on both sides (error).
+- Every exit has a reverse unless `one_way`, and doors match on both sides (error). An exit picked per crossing needs a
+  reverse from each candidate when it is declared `one_way = False`, and is otherwise one-way. It also counts as the
+  reverse of an exit leading into its room from any of its candidates. Only an exit's declared `to` is checked, never
+  one set at run time.
 - A prototype whose declaration changed since `--base` needs a `version` bump (error). Presentation and code don't
-  count: `name`, `desc`, `keywords`, hooks, `commands`, `think` and `resolve`. The comparison clears those fields by
-  construction, so new fields are tracked automatically. If `--base` fails to load, the lint fails rather than passing.
-  `--base` is staged in a temporary git worktree.
+  count: `name`, `desc`, `keywords`, hooks, `commands`, `think`, `resolve` and an exit's `pick`. The comparison clears
+  those fields by construction, so new fields are tracked automatically. If `--base` fails to load, the lint fails
+  rather than passing. `--base` is staged in a temporary git worktree.
 - Warn on attribute keys that are written (`set_attr` string literals) but never read anywhere in the repo. Dynamic keys
   are skipped.
 - Warn on regions applied to rooms but never declared, and declared regions never applied.

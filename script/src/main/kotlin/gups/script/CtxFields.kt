@@ -245,6 +245,15 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   }
 
   @StarlarkMethod(
+    name = "candidates",
+    structField = true,
+    doc = "For an exit's pick function: the candidate room labels, in declared order.",
+  )
+  fun candidates(): Any = field {
+    extras.candidates?.let { sList(it.map { l -> l.v }) } ?: Starlark.NONE
+  }
+
+  @StarlarkMethod(
     name = "elapsed_pulses",
     structField = true,
     doc = "Pulses spent dormant, for on_wake.",

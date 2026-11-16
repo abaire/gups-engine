@@ -276,7 +276,9 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
         deleted += row.id
         continue
       }
-      applyRoom(room, JSON.decodeFromString(RoomPayload.serializer(), row.payload))
+      applyRoom(room, JSON.decodeFromString(RoomPayload.serializer(), row.payload)) {
+        world.roomOrNull(it) != null
+      }
       room.protoVersion = row.protoVersion
       world.upgrade(room, room.proto.version)
       room.dirty = room.protoVersion != row.protoVersion

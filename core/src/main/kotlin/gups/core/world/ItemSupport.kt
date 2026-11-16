@@ -128,7 +128,8 @@ internal fun Actor.hasKey(key: Label): Boolean =
 
 /** The other side of [exit], if it leads back here with a door. */
 internal fun World.reverseExit(room: Room, exit: Exit): Pair<Room, Exit>? {
-  val other = room(exit.to)
+  val to = exit.to ?: return null
+  val other = room(to)
   val back =
     other.exits.values.firstOrNull { it.to == room.label && it.door != null } ?: return null
   return other to back

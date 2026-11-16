@@ -4,6 +4,22 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Trick exits
+
+- An exit may have no single destination: `exit.to` and `PluginExit.to` are `None`/null for an exit whose destination is
+  picked per crossing, and `PluginRoom.exits` maps such an exit to null. GMCP `Room.Info` sends null for it.
+- Walking or fleeing through an exit picked per crossing picks the room once, then is an ordinary walk to it: the hooks,
+  restriction, cost, pace and arrival all use that room, and a refusal denies the crossing.
+- `exit(to = [...])` or `exit(to = {label: weight})` declares an exit whose destination is picked per crossing,
+  optionally by a `pick = fn` function; such an exit is one-way unless `one_way = False`, and can't have a door.
+- Exit views gain `original_to`, `candidates` and `weights`; `PluginExit` gains `originalTo`, `candidates` and
+  `weights`.
+- The reverse-exit gate checks every candidate of an exit picked per crossing that is declared `one_way = False`, and
+  accepts such an exit as the way back from any of its candidates.
+- New verb `set_exit_to(room, dir, to)` (and `PluginWorld.setExitTo`) changes where an ordinary exit leads until set
+  back with `None`; the change is saved and survives zone resets.
+- The template's tutorial zone has a shifting passage west of the gravel path and a tide stair down from it.
+
 ### Mudlet automapper
 
 - GMCP `Room.Info` gains `num` (a stable map number per room), `area` and `area_name`; `exits` now maps each direction

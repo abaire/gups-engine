@@ -150,7 +150,8 @@ class MemoryTest {
     assertEquals(1, spawnArrive.count)
 
     w.runPulses(5)
-    w.transition(m, w.room(start).exits.getValue(Direction.NORTH))
+    val exit = w.room(start).exits.getValue(Direction.NORTH)
+    w.transition(m, exit, w.room(exit.to!!))
     val moveArrive = w.memoriesOf(m, event = "arrive").single()
     assertEquals(3L, moveArrive.firstPulse)
     assertEquals(8L, moveArrive.pulse)

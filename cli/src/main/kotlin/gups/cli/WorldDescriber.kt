@@ -158,7 +158,9 @@ private fun roomJson(room: RoomProto): JsonObject = buildJsonObject {
 
 private fun exitJson(exit: ExitProto): JsonObject = buildJsonObject {
   put("dir", exit.direction.name)
-  put("to", exit.to.v)
+  put("to", exit.to?.v)
+  put("candidates", strings(exit.candidates.keys.map { it.v }))
+  put("weights", intMap(exit.candidates.mapKeys { it.key.v }))
   put("one_way", exit.oneWay)
   put("tags", strings(exit.tags.sorted()))
   val door = exit.door

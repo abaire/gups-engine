@@ -103,6 +103,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/foundry:gate",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -110,6 +112,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/foundry:control",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -117,6 +121,8 @@
                 {
                     "dir": "south",
                     "to": "//zones/foundry:vault",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -134,6 +140,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/foundry:assembly",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -151,6 +159,8 @@
                 {
                     "dir": "north",
                     "to": "//zones/foundry:gate",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -168,6 +178,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/foundry:scrapyard",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -175,6 +187,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/foundry:assembly",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -182,6 +196,8 @@
                 {
                     "dir": "south",
                     "to": "//zones/foundry:furnace",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -199,6 +215,8 @@
                 {
                     "dir": "north",
                     "to": "//zones/foundry:whisper_hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -216,6 +234,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/foundry:gate",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -233,6 +253,8 @@
                 {
                     "dir": "north",
                     "to": "//zones/foundry:assembly",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -240,6 +262,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/foundry:whisper_hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [
                         "psionic_proof"
@@ -259,6 +283,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/foundry:vault",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -266,6 +292,8 @@
                 {
                     "dir": "south",
                     "to": "//zones/foundry:reactor",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null

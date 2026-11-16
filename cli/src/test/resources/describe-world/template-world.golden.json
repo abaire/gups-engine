@@ -129,6 +129,8 @@
                 {
                     "dir": "south",
                     "to": "//zones/tutorial:hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -146,6 +148,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/tutorial:hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": {
@@ -159,7 +163,28 @@
                 {
                     "dir": "east",
                     "to": "//zones/tutorial:shop",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:drowned_cave",
+            "name": "A Drowned Cave",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "up",
+                    "to": "//zones/tutorial:gravel",
+                    "candidates": [],
+                    "weights": {},
+                    "one_way": true,
                     "tags": [],
                     "door": null
                 }
@@ -176,6 +201,8 @@
                 {
                     "dir": "north",
                     "to": "//zones/tutorial:hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -193,6 +220,51 @@
                 {
                     "dir": "east",
                     "to": "//zones/tutorial:tar_pit",
+                    "candidates": [],
+                    "weights": {},
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "west",
+                    "to": null,
+                    "candidates": [
+                        "//zones/tutorial:hollow_a",
+                        "//zones/tutorial:hollow_b"
+                    ],
+                    "weights": {
+                        "//zones/tutorial:hollow_a": 1,
+                        "//zones/tutorial:hollow_b": 1
+                    },
+                    "one_way": true,
+                    "tags": [],
+                    "door": null
+                },
+                {
+                    "dir": "down",
+                    "to": "//zones/tutorial:grotto",
+                    "candidates": [],
+                    "weights": {},
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:grotto",
+            "name": "A Dry Grotto",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "up",
+                    "to": "//zones/tutorial:gravel",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -210,6 +282,8 @@
                 {
                     "dir": "south",
                     "to": "//zones/tutorial:gate",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -217,6 +291,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/tutorial:tar_pit",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -224,6 +300,8 @@
                 {
                     "dir": "north",
                     "to": "//zones/tutorial:arena",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -231,6 +309,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/tutorial:armory",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": {
@@ -240,6 +320,44 @@
                             "creaky"
                         ]
                     }
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:hollow_a",
+            "name": "A Mossy Hollow",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:gravel",
+                    "candidates": [],
+                    "weights": {},
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
+                }
+            ]
+        },
+        {
+            "label": "//zones/tutorial:hollow_b",
+            "name": "A Fern Hollow",
+            "size": "normal",
+            "regions": [],
+            "tags": [],
+            "flags": [],
+            "exits": [
+                {
+                    "dir": "east",
+                    "to": "//zones/tutorial:gravel",
+                    "candidates": [],
+                    "weights": {},
+                    "one_way": false,
+                    "tags": [],
+                    "door": null
                 }
             ]
         },
@@ -265,6 +383,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/tutorial:armory",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -272,6 +392,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/tutorial:smithy",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -300,6 +422,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/tutorial:shop",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -319,6 +443,8 @@
                 {
                     "dir": "east",
                     "to": "//zones/tutorial:hall",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null
@@ -326,6 +452,8 @@
                 {
                     "dir": "west",
                     "to": "//zones/tutorial:gravel",
+                    "candidates": [],
+                    "weights": {},
                     "one_way": false,
                     "tags": [],
                     "door": null

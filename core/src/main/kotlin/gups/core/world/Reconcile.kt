@@ -272,10 +272,11 @@ private fun World.rebind(room: Room, p: RoomProto, was: RoomProto?) {
   room.exits =
     p.exits.associateTo(LinkedHashMap()) { ep ->
       val exit = Exit(ep)
-      val wasProto = was?.exits?.firstOrNull { it.direction == ep.direction }
-      if (wasProto != null) {
-        val live = oldExits[ep.direction]
-        if (live != null) preserveDoorState(exit, live, wasProto)
+      val live = oldExits[ep.direction]
+      if (live != null) {
+        val wasProto = was?.exits?.firstOrNull { it.direction == ep.direction }
+        if (wasProto != null) preserveDoorState(exit, live, wasProto)
+        preserveExitTarget(exit, live)
       }
       ep.direction to exit
     }
@@ -293,6 +294,16 @@ private fun preserveDoorState(exit: Exit, live: Exit, wasProto: ExitProto) {
     door.state =
       if (liveDoor.state == DoorState.LOCKED && door.key == null) DoorState.CLOSED
       else liveDoor.state
+}
+
+/**
+ * Keeps a retargeted exit destination while the exit stays single-destination, doorless, and valid.
+ */
+private fun World.preserveExitTarget(exit: Exit, live: Exit) {
+  val target = live.to ?: return
+  if (target == live.originalTo) return
+  if (exit.perCrossing || exit.door != null) return
+  if (target in protos.rooms) exit.to = target
 }
 
 /** Moves [e] to prototype [version], running the package's `migrate` if it went up. */

@@ -218,7 +218,7 @@ private fun World.roomLines(e: Room): List<String> {
         .joinToString(", ") { x ->
           x.direction.name +
             (x.door?.let { " (${it.state.name.lowercase()})" } ?: "") +
-            " -> ${x.to}"
+            " -> ${x.reachable().joinToString(" | ")}"
         }
         .ifEmpty { "none" },
     if (tags.isEmpty()) null else "Tags: " + tags.sorted().joinToString(", "),

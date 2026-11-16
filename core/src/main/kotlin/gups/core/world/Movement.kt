@@ -17,25 +17,48 @@ fun entryIndexFor(exit: Exit, to: Room): Int =
   (if (exit.entryIndex < 0) to.trackSize - 1 else exit.entryIndex).coerceIn(0, to.trackSize - 1)
 
 /**
- * Moves [actor] through [exit]: ends its engagements, places it at the entry index, and fires
- * `on_disengage` with [reason] for whoever that freed, then `on_exit`/`on_enter`. Callers inside an
- * initiative tier go through [deferRemoval].
+ * The room [actor] goes to through [exit]: the current destination, or for a per-crossing exit the
+ * `pick` answer when it names a candidate, else a roll by weight.
+ */
+internal fun World.destinationFor(actor: Actor, exit: Exit): Room {
+  if (!exit.perCrossing) return room(exit.to!!)
+  val picked = exit.pick?.pick(this, actor, actor.room, exit)
+  if (picked != null && picked in exit.candidates) return room(picked)
+  val total = exit.candidates.values.sum()
+  var r = rng.int(1, total)
+  for ((label, weight) in exit.candidates) {
+    r -= weight
+    if (r <= 0) return room(label)
+  }
+  return room(exit.candidates.keys.last())
+}
+
+internal enum class TransitionKind(val leave: Msg, val reason: String) {
+  WALK(KernelMsg.MOVE_LEAVES, "stop"),
+  FLEE(CombatMsg.FLEE_ROOM, "flee"),
+}
+
+/**
+ * Moves [actor] through [exit] into [to]: ends its engagements, places it at the entry index, and
+ * fires `on_disengage` with [kind]'s reason for whoever that freed, then `on_exit`/`on_enter`.
+ * Callers inside an initiative tier go through [deferRemoval].
  */
 internal fun World.transition(
   actor: Actor,
   exit: Exit,
-  leave: Msg = KernelMsg.MOVE_LEAVES,
-  reason: String = "stop",
+  to: Room,
+  kind: TransitionKind = TransitionKind.WALK,
 ) {
   if (!actor.inWorld) return
   val from = actor.room
-  val to = room(exit.to)
   val freed = unlinkAll(actor)
   tellPerceivers(
     from,
     "exit",
     actor,
-    mapOf(Channel.SIGHT to msg(leave, "actor" to actor.name.cap(), "direction" to exit.direction)),
+    mapOf(
+      Channel.SIGHT to msg(kind.leave, "actor" to actor.name.cap(), "direction" to exit.direction)
+    ),
     exclude = arrayOf(actor),
   )
   placeActor(actor, to, entryIndexFor(exit, to))
@@ -50,7 +73,7 @@ internal fun World.transition(
   if (actor is Player) send(actor, describeRoom(actor))
   perceive("exit", Channel.SIGHT, from, actor)
   announceArrival(actor, to)
-  fireDisengage(freed, reason)
+  fireDisengage(freed, kind.reason)
   dispatch(
     HookName.ON_EXIT,
     null,
@@ -132,12 +155,11 @@ fun World.teleport(actor: Actor, to: Room, index: Int? = null): String? {
 }
 
 /**
- * Guard denial, then `before_exit` on the room [actor] is in and `before_enter` on the room through
- * [dir]; null to allow, else the denial message. Walking and fleeing both check it.
+ * Guard denial, then `before_exit` on the room [actor] is in and `before_enter` on [to]; null to
+ * allow, else the denial message. Walking and fleeing both check it.
  */
-internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
+internal fun World.exitDenial(actor: Actor, dir: Direction, to: Room): String? {
   val from = roomOf(actor)
-  val to = room(from.exits.getValue(dir).to)
   val req =
     gups.core.model.RestrictionRequest(
       point = gups.core.model.RestrictionPoint.ENTER,
@@ -165,6 +187,9 @@ internal fun World.exitDenial(actor: Actor, dir: Direction): String? {
 
 /** Walking through an exit: one action plus the vitals `move_cost` spends. */
 internal class MoveAction(private val dir: Direction) : Action {
+  /** The room chosen when the move was checked; the crossing goes there. */
+  private var destination: Room? = null
+
   override fun validate(w: World, actor: Actor): String? {
     val exit = w.roomOf(actor).exits[dir] ?: return w.msg(KernelMsg.MOVE_NO_EXIT)
     if (!exit.passable) return w.msg(KernelMsg.MOVE_CLOSED, "direction" to dir)
@@ -174,10 +199,16 @@ internal class MoveAction(private val dir: Direction) : Action {
     return null
   }
 
-  override fun veto(w: World, actor: Actor): String? = w.exitDenial(actor, dir)
+  override fun veto(w: World, actor: Actor): String? {
+    val exit = w.roomOf(actor).exits.getValue(dir)
+    val to = w.destinationFor(actor, exit)
+    destination = to
+    return w.exitDenial(actor, dir, to)
+  }
 
   override fun resolve(w: World, actor: Actor): Int {
     val exit = w.roomOf(actor).exits.getValue(dir)
+    val to = destination ?: w.destinationFor(actor, exit)
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) {
       if (!actor.inWorld) return@deferRemoval
       // A hostile that pinned the walker in this tier cancels the walk: no vitals, no debt.
@@ -187,7 +218,7 @@ internal class MoveAction(private val dir: Direction) : Action {
       }
       w.changeVitals(actor, w.moveCost(RulesContext(w, actor)).mapValues { -it.value })
       w.chargeMove(actor, exit)
-      w.transition(actor, exit)
+      w.transition(actor, exit, to)
     }
     return 0
   }

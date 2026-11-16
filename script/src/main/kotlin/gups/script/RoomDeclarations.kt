@@ -53,7 +53,7 @@ private fun roomExits(d: ParsedDecl, ctx: LoadCtx, thread: StarlarkThread): List
     .groupBy { it.direction }
     .forEach { (dir, same) -> if (same.size > 1) fail("room(exits): two exits lead $dir") }
   for (e in exits) {
-    ctx.ref(e.to, RefKind.ROOM, thread)
+    for (dest in e.destinations()) ctx.ref(dest, RefKind.ROOM, thread)
     e.door?.key?.let { ctx.ref(it, RefKind.ITEM, thread) }
   }
   return exits

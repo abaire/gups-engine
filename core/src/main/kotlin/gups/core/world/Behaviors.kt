@@ -99,9 +99,10 @@ data class Wander(val radius: Int, val chance: Int, val priority: Int = PRIORITY
   }
 
   private fun openExit(world: World, room: Room, exit: Exit, area: Set<Room>): Boolean {
-    if (!exit.passable) return false
-    if (world.roomOrNull(exit.to) !in area) return false
-    return exit.to != room.label
+    if (exit.perCrossing || !exit.passable) return false
+    val to = exit.to ?: return false
+    if (world.roomOrNull(to) !in area) return false
+    return to != room.label
   }
 }
 
@@ -124,8 +125,8 @@ private fun World.addWithinNeighbors(
   queue: ArrayDeque<Room>,
 ) {
   for (e in room.exits.values) {
-    if (!e.passable) continue
-    val next = roomOrNull(e.to) ?: continue
+    if (!e.passable || e.perCrossing) continue
+    val next = e.to?.let(::roomOrNull) ?: continue
     if (next !in seen) {
       seen[next] = depth + 1
       queue.addLast(next)
@@ -181,8 +182,8 @@ private fun World.expandLevel(
 }
 
 private fun World.openRoom(exit: Exit): Room? {
-  if (!exit.passable) return null
-  return roomOrNull(exit.to)
+  if (!exit.passable || exit.perCrossing) return null
+  return exit.to?.let(::roomOrNull)
 }
 
 /** The lowest-id actor [accept] takes anywhere in [level], with the direction to enter it from. */

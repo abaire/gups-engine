@@ -84,7 +84,11 @@ internal class KillAction(val target: Actor) : Action {
  */
 internal object FleeAction : Action {
   override fun validate(w: World, actor: Actor): String? =
-    if (w.roomOf(actor).exits.values.none { it.passable }) w.msg(CombatMsg.FLEE_NOWHERE) else null
+    if (w.roomOf(actor).exits.values.none { it.passable }) {
+      w.msg(CombatMsg.FLEE_NOWHERE)
+    } else {
+      null
+    }
 
   override fun resolve(w: World, actor: Actor): Int {
     if (w.rng.int(1, 100) > w.rules.fleeChance(RulesContext(w, actor))) {
@@ -92,14 +96,15 @@ internal object FleeAction : Action {
       return w.fleeFailLagOf(RulesContext(w, actor))
     }
     val exit = w.rng.choice(actor.room.exits.values.filter { it.passable })
-    w.exitDenial(actor, exit.direction)?.let {
+    val to = w.destinationFor(actor, exit)
+    w.exitDenial(actor, exit.direction, to)?.let {
       w.send(actor, it)
       return w.fleeFailLagOf(RulesContext(w, actor))
     }
     w.tell(actor, CombatMsg.FLEE_SELF, "direction" to exit.direction)
     w.deferRemoval(actor, Deferred.Kind.TRANSITION) {
       w.chargeMove(actor, exit)
-      w.transition(actor, exit, CombatMsg.FLEE_ROOM, reason = "flee")
+      w.transition(actor, exit, to, TransitionKind.FLEE)
     }
     return 0
   }

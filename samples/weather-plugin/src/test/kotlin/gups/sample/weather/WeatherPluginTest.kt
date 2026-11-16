@@ -195,6 +195,9 @@ class WeatherPluginTest {
       return PluginExit(
         dir,
         to,
+        to,
+        emptyList(),
+        emptyMap(),
         emptyList(),
         door?.let { PluginDoor(it.state, it.key, emptyList()) },
         door?.key,

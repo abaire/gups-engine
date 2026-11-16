@@ -1,6 +1,7 @@
 package gups.core.world
 
 import gups.core.EntityId
+import gups.core.Label
 import gups.core.model.ActivityState
 import gups.core.model.Actor
 import gups.core.model.Entity
@@ -10,6 +11,7 @@ import gups.core.model.Item
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.QueuedAction
+import gups.core.model.Room
 import gups.core.model.SkillProto
 import gups.core.model.ThinkOrigin
 import gups.core.rules.RulesContext
@@ -249,6 +251,13 @@ sealed interface ThinkResult {
 /** A mob's `think` hook. */
 fun interface ThinkFn {
   fun think(world: World, mob: Mob, proposals: List<Proposal>): ThinkResult
+}
+
+/**
+ * A per-crossing exit's `pick` function: the chosen candidate's label, or null to roll by weight.
+ */
+fun interface ExitPicker {
+  fun pick(world: World, actor: Actor, room: Room, exit: Exit): Label?
 }
 
 /** A zone verb attached to a room or item; runs in the tick lane with no lag. */

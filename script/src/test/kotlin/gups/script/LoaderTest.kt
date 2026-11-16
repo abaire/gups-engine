@@ -754,4 +754,107 @@ class LoaderTest {
     assertEquals(gups.core.model.TargetKind.SELF, salve.useTarget)
     assertEquals(2, salve.useLag)
   }
+
+  @Test
+  fun `per-crossing exit from list or dict of candidates`() {
+    val r =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            room("start", exits = [
+                exit("north", to = [":a", ":b"]),
+                exit("east", to = {":a": 3, ":b": 1}, one_way = False),
+            ])
+            room("a")
+            room("b")
+            """,
+        )
+      )
+    assertTrue(r.ok, r.report())
+    val start = r.prototypes().rooms.getValue(Label("//zones/z:start"))
+    val north = start.exits.first { it.direction == Direction.NORTH }
+    assertEquals(null, north.to)
+    assertEquals(
+      listOf(Label("//zones/z:a") to 1, Label("//zones/z:b") to 1),
+      north.candidates.entries.map { it.key to it.value },
+    )
+    assertTrue(north.oneWay)
+
+    val east = start.exits.first { it.direction == Direction.EAST }
+    assertEquals(null, east.to)
+    assertEquals(
+      listOf(Label("//zones/z:a") to 3, Label("//zones/z:b") to 1),
+      east.candidates.entries.map { it.key to it.value },
+    )
+    assertEquals(false, east.oneWay)
+  }
+
+  @Test
+  fun `per-crossing exit validation errors`() {
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = 42)])",
+      "exit(to): expected a room label, a list of labels or a dict of label to weight, got int",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = [\":a\"])])",
+      "exit(to): a list or dict needs at least two rooms",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = {\":a\": 1})])",
+      "exit(to): a list or dict needs at least two rooms",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = [\":a\", \"//zones/z:a\"])])",
+      "exit(to): room //zones/z:a is listed twice",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = {\":a\": 0, \":b\": 1})])",
+      "exit(to): weight for //zones/z:a must be a positive int",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = {\":a\": 2000000000, \":b\": 2000000000})])",
+      "exit(to): weights must add up to less than 2147483647",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = {\":a\": 2147483646, \":b\": 1})])",
+      "exit(to): weights must add up to less than 2147483647",
+    )
+    expectItemFailure(
+      "room(\"start\", exits = [exit(\"north\", to = [\":a\", \":b\"], door = door())])",
+      "exit(door): an exit whose destination is picked per crossing can't have a door",
+    )
+    expectItemFailure(
+      """
+      def _pick(ctx):
+          return ":a"
+      room("start", exits = [exit("north", to = ":a", pick = _pick)])
+      """
+        .trimIndent(),
+      "exit(pick): needs a list or dict of rooms in to",
+    )
+  }
+
+  @Test
+  fun `per-crossing exit loads cross-package candidates`() {
+    val r =
+      load(
+        mapOf(
+          "zones/a/package.star" to zonePkg(),
+          "zones/a/rooms.star" to
+            """
+            room("start", exits = [exit("east", to = [":here", "//zones/b:there"])])
+            room("here")
+            """
+              .trimIndent(),
+          "zones/b/package.star" to zonePkg(),
+          "zones/b/rooms.star" to """room("there")""",
+        ),
+        "zones/a",
+      )
+    assertTrue(r.ok, r.report())
+    val p = r.prototypes()
+    assertTrue(Label("//zones/b:there") in p.rooms)
+  }
 }
