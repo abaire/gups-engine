@@ -3,6 +3,8 @@ package gups.core.world
 import gups.core.Label
 import gups.core.model.Effect
 import gups.core.model.Mob
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import kotlin.test.Test
@@ -76,7 +78,7 @@ class OwnersTest {
             RoomProto(
               den,
               "A Den",
-              spawns = listOf(SpawnRule(T.GOBLIN, count = 1, respawnPulses = 100)),
+              spawns = listOf(SpawnRule(T.GOBLIN, max = 1, respawn = Respawn.Timed(Roll.of(100)))),
             )
           )
       )

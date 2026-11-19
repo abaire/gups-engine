@@ -21,10 +21,13 @@ import gups.core.world.HookContext
 import gups.core.world.HookName
 import gups.core.world.HookOutcome
 import gups.core.world.Lane
+import gups.core.world.PlaceHook
+import gups.core.world.PoolPicker
 import gups.core.world.Proposal
 import gups.core.world.ReloadResult
 import gups.core.world.ScriptHost
 import gups.core.world.SkillResolver
+import gups.core.world.SpawnKey
 import gups.core.world.ThinkFn
 import gups.core.world.ThinkResult
 import gups.core.world.TickCommand
@@ -477,6 +480,60 @@ class StarlarkHost(
     return null
   }
 
+  /**
+   * Calls a spawner's `pick` function with `ctx.self` and `ctx.room` set to the first usable pool
+   * room, `ctx.candidates` to the usable room labels in declared order, `ctx.spawner` to the rule's
+   * handle, plus `ctx.rng` and `ctx.pulse`. Returns the chosen candidate label, or null to roll by
+   * weight.
+   */
+  internal fun pickPoolRoom(
+    world: World,
+    rule: SpawnKey,
+    candidates: List<Label>,
+    picker: ScriptPoolPicker,
+  ): Label? {
+    val owner = world.room(candidates.first())
+    val id = (rule as? SpawnKey.Named)?.id
+    val site = Site(picker.pkg, id, "pick", vetoable = false, owner.id)
+    val hc = HookContext(room = owner)
+    val extras = CtxExtras(candidates = candidates, spawner = spawnerHandle(world, rule))
+    var lastCtx: Ctx? = null
+    val result =
+      call(world, site, picker.ref, { f -> Ctx(f, owner, hc, extras).also { lastCtx = it } })
+    val value = (result as? CallResult.Ok)?.value ?: return null
+    if (isNone(value)) return null
+    val chosen = pickedLabel(value, picker.pkg)
+    val problem =
+      when {
+        value !is String && value !is RoomView ->
+          "pick must return a candidate label, a room or None"
+        chosen == null || chosen !in candidates ->
+          "pick returned $value, which is not one of the spawner's rooms"
+        else -> return chosen
+      }
+    report(world, site, "script_error", problem, null, lastCtx)
+    return null
+  }
+
+  /**
+   * Calls a spawn rule's `on_place` hook after a copy is placed and its `on_spawn` has run, with
+   * `ctx.self` and `ctx.item` (or `ctx.actor`) set to the copy, `ctx.room` to its room and
+   * `ctx.spawner` to the rule's handle.
+   */
+  internal fun placed(
+    world: World,
+    copy: Entity,
+    room: Room,
+    rule: SpawnKey,
+    hook: ScriptPlaceHook,
+  ) {
+    val label = (rule as? SpawnKey.Named)?.id ?: (rule as? SpawnKey.InRoom)?.room
+    val site = Site(hook.pkg, label, "on_place", vetoable = false, copy.id)
+    val hc = HookContext(room = room, item = copy as? Item, actor = copy as? Actor)
+    val extras = CtxExtras(spawner = spawnerHandle(world, rule))
+    call(world, site, hook.ref, { Ctx(it, copy, hc, extras) })
+  }
+
   private fun pickedLabel(value: Any, pkg: String): Label? =
     when (value) {
       is String ->
@@ -923,6 +980,20 @@ internal data class ScriptExitPicker(internal val ref: HookRef, internal val pkg
         exit,
         this,
       )
+}
+
+/** A spawner's `pick` function. */
+internal data class ScriptPoolPicker(internal val ref: HookRef, internal val pkg: String) :
+  PoolPicker {
+  override fun pick(world: World, rule: SpawnKey, candidates: List<Label>): Label? =
+    hostOf(world).pickPoolRoom(world, rule, candidates, this)
+}
+
+/** A spawn rule's `on_place` function. */
+internal data class ScriptPlaceHook(internal val ref: HookRef, internal val pkg: String) :
+  PlaceHook {
+  override fun placed(world: World, copy: Entity, room: Room, rule: SpawnKey) =
+    hostOf(world).placed(world, copy, room, rule, this)
 }
 
 /** A skill's custom `resolve(ctx)`. */

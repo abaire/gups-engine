@@ -15,6 +15,8 @@ import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Player
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.TrackSize
@@ -42,7 +44,7 @@ object P {
         "The Hall",
         size = TrackSize.LARGE,
         exits = listOf(ExitProto(Direction.SOUTH, VAULT, door = DoorProto(DoorState.CLOSED))),
-        spawns = listOf(SpawnRule(RAT, count = 2, respawnPulses = 300)),
+        spawns = listOf(SpawnRule(RAT, max = 2, respawn = Respawn.Timed(Roll.of(300)))),
       ),
       RoomProto(
         VAULT,
@@ -77,7 +79,7 @@ object P {
           ItemProto(BAG, "a bag", listOf("bag"), container = ContainerProto()),
           ItemProto(GEM, "a gem", listOf("gem")).takeIf { withGem },
         ),
-      zones = listOf(ZoneProto("t", resetPulses = 600)),
+      zones = listOf(ZoneProto("t", resetTicks = Roll.of(5))),
     )
 }
 

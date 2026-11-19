@@ -68,6 +68,7 @@ class HelpCommandTest {
     )
     assertTrue("@goto" in specialCommands)
     assertTrue("@spawn" in specialCommands)
+    assertTrue("@spawners" in specialCommands)
     assertTrue("@stat" in specialCommands)
     assertTrue("@errors" in specialCommands)
     assertTrue("@where" in specialCommands)

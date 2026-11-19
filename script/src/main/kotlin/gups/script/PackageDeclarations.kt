@@ -1,6 +1,7 @@
 package gups.script
 
 import gups.core.WORLD_TICK_PULSES
+import gups.core.model.Roll
 import gups.core.world.Feature
 import gups.core.world.Features
 
@@ -15,7 +16,7 @@ internal fun fillPackage(p: ScriptPackage, d: ParsedDecl, features: Features) {
     fail(FeatureOwnership.refusal("package kind 'skills'", Feature.SKILLS))
   }
   p.title = d.str("title") ?: p.path
-  p.resetPulses = resetPulses(d)
+  p.resetTicks = resetTicks(d)
   p.sharedNamespaces = sharedNamespaces(d, p.kind)
   p.modifiers = modifiers(d["modifiers"], d.what("modifiers"), features)
   p.expectedTombstones = labels(d, "expected_tombstones", p.path)
@@ -23,11 +24,11 @@ internal fun fillPackage(p: ScriptPackage, d: ParsedDecl, features: Features) {
 }
 
 /** Counted in world ticks so a reset always lands on a world-tick boundary. */
-private fun resetPulses(d: ParsedDecl): Int? =
-  d.int("reset_world_ticks")?.let {
-    if (it < 1) fail("package(reset_world_ticks): must be at least 1")
-    if (it > Int.MAX_VALUE / WORLD_TICK_PULSES) fail("package(reset_world_ticks): too large")
-    it * WORLD_TICK_PULSES
+private fun resetTicks(d: ParsedDecl): Roll? =
+  d["reset_world_ticks"]?.let { raw ->
+    parseRoll(raw, d.what("reset_world_ticks"), 1).also {
+      if (it.max > Int.MAX_VALUE / WORLD_TICK_PULSES) fail("package(reset_world_ticks): too large")
+    }
   }
 
 private fun sharedNamespaces(d: ParsedDecl, kind: PackageKind): List<String> {

@@ -257,7 +257,7 @@ internal fun World.wake(room: Room) {
   val items = sleepers.filterIsInstance<Item>()
   for (m in mobs) guarded("dormant recovery of $m") { recover(m, since) }
   expireMissedAffects(room, mobs, items)
-  replayMissedSpawns(room)
+  placeHeldCopies(room)
   for (i in items) {
     val at = i.decayAt ?: continue
     if (at <= pulse && i.id in entities) guarded("decay of $i") { decay(i) }
@@ -284,18 +284,6 @@ private fun World.expireMissedAffects(room: Room, mobs: List<Mob>, items: List<I
       .flatMap { i -> i.affects.filter { it.expiresAt <= pulse }.map { i to it } }
       .sortedWith(compareBy({ it.second.expiresAt }, { it.second.id }))
   for ((i, a) in onItems) guarded("expiry of ${a.name} on $i") { expireItemAffect(i, a) }
-}
-
-private fun World.replayMissedSpawns(room: Room) {
-  if (room.resetMissed) {
-    room.resetMissed = false
-    for (s in spawnStates) if (s.room === room) guarded("reset of ${room.label}") { fillSpawn(s) }
-    invokeOn(room, HookName.ON_RESET, HookContext(room = room))
-  }
-  for (s in spawnStates) {
-    val at = s.respawnAt ?: continue
-    if (s.room === room && at <= pulse) guarded("respawn in ${room.label}") { fillSpawn(s) }
-  }
 }
 
 private fun World.fireWakeHooks(room: Room, elapsed: Long, mobs: List<Mob>, items: List<Item>) {

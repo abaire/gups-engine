@@ -36,7 +36,7 @@
 <tr id="ctx.affect"><td><code>affect</code></td><td>1</td><td>The affect, for affect on_tick and on_expire.</td></tr>
 <tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The total of the vital losses a damage event caused, for on_damage.</td></tr>
 <tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
-<tr id="ctx.candidates"><td><code>candidates</code></td><td>1</td><td>For an exit's pick function: the candidate room labels, in declared order.</td></tr>
+<tr id="ctx.candidates"><td><code>candidates</code></td><td>1</td><td>For an exit's or a spawner's pick function: the candidate room labels, in declared order.</td></tr>
 <tr id="ctx.channel"><td><code>channel</code></td><td>1</td><td>For on_perceive: the channel the event travelled on, such as 'sound'.</td></tr>
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
 <tr id="ctx.count"><td><code>count</code></td><td>1</td><td>How many mobs are being summoned, for before_summon.</td></tr>
@@ -65,6 +65,7 @@
 <tr id="ctx.self"><td><code>self</code></td><td>1</td><td>The hook's owner.</td></tr>
 <tr id="ctx.skill"><td><code>skill</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_perceive: the room the event happened in.</td></tr>
+<tr id="ctx.spawner"><td><code>spawner</code></td><td>1</td><td>The rule's handle, in on_place and a spawner's pick; None elsewhere.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
 <tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.</td></tr>
 <tr id="ctx.task"><td><code>task</code></td><td>1</td><td>The task view, struct(name, started_at, ends_at, remaining, interrupt), in a timed task's callbacks; None elsewhere.</td></tr>
@@ -838,6 +839,17 @@
 </tbody>
 </table>
 </article>
+<article id="ctx.refill" class="entry">
+<h4><code>refill(rule, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Adds one batch (or count copies) to a spawn rule now, capped by max, whatever its respawn mode. Leaves any pending timer alone. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.refill.rule"><td><code>rule</code></td><td>positional or named</td><td></td><td>Rule label (relative or absolute) or spawner handle.</td></tr>
+<tr id="ctx.refill.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Copies to add (at least 1), or None for one batch.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.remember" class="entry">
 <h4><code>remember(mob, subject, event, skill = None, amount = None, target = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Records or merges a combat memory on mob.</p>
@@ -1089,6 +1101,16 @@
 <tr id="ctx.spawn.at"><td><code>at</code></td><td>positional or named</td><td></td><td>Room or room label, actor, or container item.</td></tr>
 <tr id="ctx.spawn.index"><td><code>index</code> <span class="badge feature">feature: track</span></td><td>positional or named</td><td><code>0</code></td><td>Track index when spawning into a room.</td></tr>
 <tr id="ctx.spawn.count"><td><code>count</code></td><td>positional or named</td><td><code>1</code></td><td>Number to spawn; more than 1 returns a list.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="ctx.spawner_info" class="entry">
+<h4><code>spawner_info(rule)</code> <span class="since">since api_version 1</span></h4>
+<p>A spawn rule's current state: struct(live, held, max, next_at, ran). live includes copies carried by logged-out players.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.spawner_info.rule"><td><code>rule</code></td><td>positional or named</td><td></td><td>Rule label (relative or absolute) or spawner handle.</td></tr>
 </tbody>
 </table>
 </article>

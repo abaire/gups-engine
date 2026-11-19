@@ -422,7 +422,7 @@ the world graph:
 - **Tactical layout:** `trackSize` (`1`, `3`, or `5`; always `1` without the `track` feature, §3.10).
 - **Spatial connectivity:** outward `exits` map keyed by cardinal `Direction`.
 - **Classification and tags:** builder `regions`, queryable effective `tags`, and frozen prototype `modifiers`.
-- **Spawns and commands:** mob `spawns` rules, zone `commands` map, and simulation flags (`always_active`,
+- **Spawns and commands:** `spawns` rules (§4.2), zone `commands` map, and simulation flags (`always_active`,
   `dead_end_ok`).
 - **Affects:** timed `affects`, the same `Affect` as actors and items have. A room affect carries `modifiers`, `flags`,
   `addTags`, `removeTags`, hooks and `power`, and no stat, sense, vital or resist deltas. A room's effective `tags` are
@@ -502,6 +502,7 @@ the world graph:
   container keeps its open or closed state across a transform, and its locked state only when the new prototype has a
   `key`; otherwise a locked container ends up closed. A container that becomes a non-container drops its contents on the
   ground of the room it is in, and a stack that becomes a non-stackable item keeps one of its count.
+- **Spawn binding:** the spawn rule that placed the item, if any, and the room it placed it in.
 
 **Affect** ([`Affect`](../core/src/main/kotlin/gups/core/model/Entities.kt)):
 
@@ -576,7 +577,14 @@ the world graph:
   - Rooms: door states follow the same rule, except that a locked door whose new prototype has no `key` ends up closed.
   - Items read everything from their prototype, so they switch to the new one.
   - Actors forget skills whose prototype is gone.
-  - Spawn rules carry their live mobs over by label. New rooms fill their spawns, then get `on_load`.
+  - Spawn rules carry their state over by label (or, without one, by room, prototype and position; §4.2): tracked, held
+    and away copies, the pending deadline and whether the rule has run, whatever settings changed. Lowering `max`
+    removes nothing; the rule just doesn't refill until it is below the new cap. A changed timer applies from the next
+    deadline. A copy whose room left the pool stays and keeps counting. A held copy whose room no longer exists is
+    dropped. A copy of the wrong kind (a mob after the rule's label became an item, or the reverse) is let go,
+    uncounted.
+  - A rule the reload removed lets go of its copies, which stay in the world uncounted, and drops its held copies. A new
+    rule does its first fill. New rooms then get `on_load`.
 - **Deleted prototypes:**
   - Mobs from a deleted prototype are despawned, and so are items that aren't in a player's custody.
   - Items in player inventories, equipment, or player-owned containers become inert **tombstone** items: kind
@@ -650,7 +658,7 @@ The engine persists world state and account information to SQLite in WAL mode
 | `restrictions`   | `id`, `account_id`, `capability`, `until`, `reason`, `set_by`, `created_at`, `lifted_by`, `lifted_at`                                           | temporary and permanent account capability bans (§4.9)                                                                                                                                     |
 | `players`        | `id`, `account_id`, `name`, `payload_json`, `updated_pulse`                                                                                     | character stats, skills, affects, attributes, position, `choices`, `grantedTraits` (§4.19), and `levelGains`                                                                               |
 | `world_entities` | `id`, `kind`, `proto_label`, `proto_version`, `location_json`, `payload_json`, `updated_pulse`                                                  | rooms, mobs, and **all items**, including carried and contained items                                                                                                                      |
-| `zone_states`    | `package`, `payload_json`                                                                                                                       | reset and respawn deadlines, package quarantine flags                                                                                                                                      |
+| `zone_states`    | `package`, `payload_json`                                                                                                                       | zone reset deadlines, spawn rule state (pending deadlines, whether each rule has run, held copies), package quarantine flags                                                               |
 | `item_events`    | `id`, `item_id`, `pulse`, `wall_time`, `from_json`, `to_json`, `cause`                                                                          | custody audit trail for player-involved items (cause: `spawn`, `move`, `split` for a new item moved off part of a stack, `reduce` for a stack destroyed in part, `destroy`)                |
 | `diagnostics`    | `id`, `pulse`, `wall_time`, `package`, `label`, `hook`, `file`, `line`, `kind`, `message`, `stack`, `ctx_json`, `seed`, `repro_json`            | runtime script exceptions and diagnostics                                                                                                                                                  |
 | `standings`      | `holder`, `subject`, `amount`, `updated_pulse`, `history_json`                                                                                  | faction standing records (§5.14); `subject` is `actor:<id>` or a faction label; history older than `standing_history_pulses` is pruned at each checkpoint                                  |
@@ -669,10 +677,15 @@ The engine persists world state and account information to SQLite in WAL mode
   - Mobs store position, current vitals, XP, home room, spawn rule bindings, `summonedBy`, `owner`, a leash override
     (§4.5 `set_leash`), and personal standing records with their history. Modifiable stats, vitals maxima, resists,
     skills, and behavior cadences are persisted only when differing from prototype definitions.
+  - Zones store the next reset pulse and, for each spawn rule the package declares that has run, its pending deadline
+    and its held copies (each with its picked room and rolled stack size), so a restart rolls nothing again. Copies in a
+    logged-out player's custody count toward their rule: restore counts them from the player-held item rows without
+    placing them.
   - Schema-keyed stats, vitals, and resists are stored as JSON maps, recording current values, base maxima, and
     negative-vital pulse markers.
-  - Items store stack counts, decay deadlines, name overrides, container state, attributes, and timers. A container
-    saved locked whose prototype no longer has a `key` is restored closed.
+  - Items store stack counts, decay deadlines, name overrides, container state, the spawn rule binding and the room the
+    rule placed the item in, attributes, and timers. A container saved locked whose prototype no longer has a `key` is
+    restored closed.
   - Players store complete character state, including base attributes, choices, granted traits, and level progression
     deltas. Restored traits are computed before vitals are applied so trait bonuses are preserved without truncation.
   - Active and anchor reasons are persisted across restarts (§5.9).
@@ -889,7 +902,7 @@ package(
   api_version=1,
   kind="zone",  # zone | lib | rules | skills
   title="Goblin Caves",
-  reset_world_ticks=60,  # zone reset interval (30 min); fires on_reset
+  reset_world_ticks=60,  # zone reset interval in world ticks (30 min), or a (min, max) range; fires on_reset
   modifiers={},  # zone-wide modifiers (§4.6)
   shared_namespaces=[],  # privileged packages only (§3.7)
   expected_tombstones=[],  # §7.3 gate 5
@@ -899,6 +912,9 @@ package(
 
 Modifier functions a `package()` names are top-level `def`s in `package.star` itself, above the `package()` call,
 because `package.star` can't load anything.
+
+`reset_world_ticks` is an int of at least 1, or an inclusive `(min, max)` range rolled with even odds after every reset,
+from the pulse the reset ran on. Leaving it out means the zone never resets.
 
 ### 4.2 Content Declarations
 
@@ -918,7 +934,7 @@ room("entrance",
        exit(DIR.south, to="//zones/forest:clearing", entry_index=-1),  # arrive at back
        exit(DIR.west, to={":vault_a": 3, ":vault_b": 1}, pick=_pick_vault),  # picked per crossing (one-way unless one_way=False)
      ],
-     spawns=[spawn(":goblin_scout", count=2, respawn_pulses=1200, at_index=2)],
+     spawns=[spawn(":goblin_scout", max=2, respawn=1200, at_index=2)],  # spawn rules (below)
      modifiers={},  # §4.6
      commands={"read": _read_sign},  # zone verbs, tick lane
      before_exit=_guard_check,  # hooks by name, §4.4
@@ -964,6 +980,8 @@ item("satchel", container=container(capacity=10, max_weight=20,
                                     state="closed", key=None))
 
 region("null_field", modifiers={...})  # region-wide modifiers (§4.6)
+spawner("rare_sword", ":rare_sword", rooms={":vault": 1, "//zones/forest:hollow": 3},  # a pool of rooms
+        respawn=(14400, 43200))  # 1-3 hours after the last copy left
 faction("goblins", standing={":orcs": -80})  # declared factions and standing (§5.14)
 gmcp_package("Shop.Stock", doc="Items for sale where the player stands.")  # lib and rules only (§4.10)
 
@@ -989,6 +1007,56 @@ def migrate(old_version, attrs):  # optional, per package (§3.4)
   engine rolls instead. Such an exit can't have a `door`. It is `one_way` unless declared `one_way = False`, which asks
   the reverse-exit gate to find a way back from every candidate (§7.3). It is never part of a path (§5.9), carries no
   perception toward its own room (§5.7), and `Room.Info` sends no destination for it (§4.10).
+- **Spawn rules:** `spawn(label, id = None, max = 1, batch = None, respawn = 1200, until = None, stack = None, container
+  = None, at_index = 0, on_place = None)` keeps up to `max` copies of the mob or item `label` in the room. Copies from
+  loot, quests, `ctx.spawn` or `@spawn` never count toward a rule. A rule counts only the copies it made itself.
+  - `respawn` says when it adds more:
+    - `"never"`: nothing after the first fill;
+    - `"reset"`: one batch at each of the package's zone resets, and only then;
+    - pulses, or a `(min, max)` range: one batch when that many pulses have passed since the rule first fell short. Zone
+      resets don't refill a timed rule.
+  - `batch` (an int or `(min, max)`; by default as many as are missing) is how many copies one refill adds, never above
+    `max`. The first fill (when the world starts) always goes straight to `max`.
+  - **Ranges** are inclusive and rolled with even odds from the world RNG. `min <= max`, `max >= 1`, `batch >= 1` and
+    pulses `>= 1` are checked at load.
+  - **Naming a rule:** `spawn(..., id = "x")` gives a rule the label `//pkg:x`. Without one, a rule is known by its
+    room, its prototype label and its position among rules with that label in the room. Two rules of a package with the
+    same id fail its load. A rule keeps its copies, held copies, pending deadline and whether it has run across reloads
+    and restarts for as long as its label (or, without one, its room, prototype and position) stays the same.
+  - **Mobs** count until they leave the world (death, `despawn`) or get an owner (`set_owner`).
+  - **Items:**
+    - **`until = "gone"`** (the default): an item counts wherever it ends up, a logged-out player's pack included, until
+      it leaves the world: destroyed, decayed, used up, merged into another stack, or turned into a tombstone.
+      `transform` keeps it counting.
+    - **`until = "taken"`:** an item counts while its location chain ends in the room it was placed in, as `find(...,
+      scope = "room")` counts, checked at each world tick.
+    - **Stacks:** a copy is one item. `stack` (an int or `(min, max)`, default 1) sets a stackable copy's size; `max`
+      and `batch` count items, not units. Taking part of a stack splits off a new item that doesn't count. The rest
+      keeps counting.
+    - **Containers:** `container = ":chest"` puts the copy into the first container of that prototype lying in the room
+      (lowest id), whether open, closed or locked. Without one, or when `fits` refuses, the copy is held and tried again
+      at each world tick while the room isn't dormant. It is never left on the floor instead. `at_index` is ignored with
+      `container`.
+    - **Mob rules:** `until`, `stack` and `container` are load errors on a mob rule. `stack` is also a load error on an
+      item that doesn't stack.
+  - **Pools:** `spawner(id, label, rooms, pick = None, ...)`, a top-level declaration of a `zone` package, takes the
+    same arguments as `spawn` and keeps its copies across a pool of rooms. It is the rule `//pkg:id`, in the same
+    namespace as `spawn(id = ...)`.
+    - `rooms` is a list of room labels (equally likely) or a dict from label to a positive int weight. Rooms may belong
+      to any package, and every label must resolve.
+    - **Picking:** each copy of a batch picks its room on its own, and that room is its home, for `until = "taken"` and
+      for a mob's home room. A room that already holds a copy isn't avoided.
+    - **`pick = fn`:** names a top-level function called once per copy, with `ctx.candidates` the usable rooms' labels
+      in declared order, and `ctx.self` and `ctx.room` the first of them. It returns one of them, as a label or a room,
+      or `None` to roll by weight. An error in it, or an answer that isn't a candidate, is a script error, and the
+      engine rolls instead.
+    - **Unusable rooms:** a room that doesn't exist or whose package is quarantined isn't picked, and is reported once.
+      A pool with no usable room places nothing.
+    - **Resets:** a `"reset"` pool refills at its own package's resets, after the package's room rules, in declaration
+      order. `at_index` is clamped to each room's track.
+  - **`on_place = fn`** (on `spawn` and `spawner`) names a top-level function called once per copy, after the copy is
+    placed and its own `on_spawn` hooks have run. `ctx.self` and `ctx.item` (or `ctx.actor`) are the copy, `ctx.room`
+    its room and `ctx.spawner` the rule. A held copy runs it when it is finally placed.
 - **Defaults:** the display `name` defaults to the identifier with `_` as spaces. `keywords` default to the display
   name's words minus articles, or else the identifier. An item may also give `plural` (for example `plural = "gold
   coins"`), used when showing stacks of 2 or more; a blank `plural` fails to load. Players can name an item by the words
@@ -1227,6 +1295,7 @@ other return value means "allow". The return values of `on_*` hooks are ignored.
 |---------------------------------------------------------------|-----------|---------------------------------------|-----------------------------------------------------------------------------------------------|
 | `on_load`                                                     | —         | Room, Mob, Item                       | `self`                                                                                        |
 | `on_spawn`                                                    | —         | Room, Mob, Item                       | `self`, `item`                                                                                |
+| `on_place`                                                    | —         | Spawn rule (`spawn`, `spawner`)       | `self` and `item` or `actor` (the copy), `room`, `spawner`                                    |
 | `on_reset`                                                    | —         | Room (zone reset)                     | `self`                                                                                        |
 | `on_wake(ctx, elapsed_pulses)`                                | —         | Room, Mob, Item                       | `self`, `elapsed_pulses`                                                                      |
 | `before_enter` / `on_enter`                                   | ✓ / —     | Room, Mob (observer)                  | `actor`, `direction`, `from_room`                                                             |
@@ -1382,16 +1451,16 @@ views are implemented in [Ctx.kt](../script/src/main/kotlin/gups/script/Ctx.kt) 
 each verb and applies it immediately, on the world thread.
 
 **Context fields:** `self`, `actor`, `target`, `item`, `room`, `direction`, `text`, `args`, `event`, `source_room`,
-`via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `parts`, `proposals`, `candidates` (an exit's `pick`
-function: the labels it may choose), `elapsed_pulses`, `from_room`, `to_room`, `old_level`, `new_level`,
-`old_encumbrance_level`, `new_encumbrance_level`, `affect` (affect hooks; for an item affect's hooks, `self` is the
-item), `reason` (affect `on_expire`: `"expired"` when the affect reached its expiry pulse, else `"removed"` for
-`remove_affect` or `dispel`; an affect removed on or after its expiry pulse counts as expired), `targets`
-(`on_combat_tick`, `on_summon` and `on_skill_use`, the actors a cast landed on), `label` (the summoned prototype's
-label, in `before_summon`), `count` (in `before_summon`), `outcome` (in `on_skill_use`, how the skill use went:
-`"fail"`, `"resist"`, `"success"` or `"report"`), `power` (in a skill's custom `resolve`, the cast's power percentage,
-or `None` elsewhere; `skills` feature), `task` (the task view, in a timed task's callbacks and in `interrupt_check` for
-a task), `pulse`, `rng`.
+`via_exit`, `skill`, `weapon`, `amount`, `type`, `losses`, `parts`, `proposals`, `candidates` (an exit's or a spawner's
+`pick` function: the labels it may choose), `spawner` (the rule's handle, in `on_place` and a spawner's `pick`),
+`elapsed_pulses`, `from_room`, `to_room`, `old_level`, `new_level`, `old_encumbrance_level`, `new_encumbrance_level`,
+`affect` (affect hooks; for an item affect's hooks, `self` is the item), `reason` (affect `on_expire`: `"expired"` when
+the affect reached its expiry pulse, else `"removed"` for `remove_affect` or `dispel`; an affect removed on or after its
+expiry pulse counts as expired), `targets` (`on_combat_tick`, `on_summon` and `on_skill_use`, the actors a cast landed
+on), `label` (the summoned prototype's label, in `before_summon`), `count` (in `before_summon`), `outcome` (in
+`on_skill_use`, how the skill use went: `"fail"`, `"resist"`, `"success"` or `"report"`), `power` (in a skill's custom
+`resolve`, the cast's power percentage, or `None` elsewhere; `skills` feature), `task` (the task view, in a timed task's
+callbacks and in `interrupt_check` for a task), `pulse`, `rng`.
 
 - **Commands:** `ctx.args` is the argument text, `ctx.target` the actor in the room matching the first argument word,
   and `ctx.item` the item for item commands. `ctx.self` is the room or item, or the actor for global commands.
@@ -1419,7 +1488,8 @@ a task), `pulse`, `rng`.
 - **Creation:** (§4.19): `choices`, a dict of choice id → option id (known answers only; empty for mobs), `traits`, the
   sorted names of the traits the actor carries, and `has_trait(name)`.
 - **Life:** `condition`, one of `"ok"`, `"incapacitated"` and `"dead"`.
-- **Ownership:** `owner`, the view of the in-world player that owns the actor, or `None`.
+- **Ownership:** `owner`, the view of the in-world player that owns the actor, or `None`; `spawned_by`, the handle of
+  the spawn rule that placed the mob, or `None`.
 - **Leveling:** (`leveling` feature): `level`, `xp`, and `pending_levels`: how many levels the actor has the XP for and
   has not been given (§5.4). Reading it without `leveling` is an error, like `level`.
 - **Position:** `room`, `track_index` and `band_of(other)` (`track` feature), `home_room`, `leash` (a mob's effective
@@ -1445,7 +1515,8 @@ a task), `pulse`, `rng`.
 **Item view:** `id`, `label`, `name`, `plural`, `keywords`, `desc`, `kind`, `count`, `charges` and `max_charges` (`None`
 when unlimited), `weight`, `value`, `location`, `attrs`, `container_state`, `contents()`, `dice`, `damage_type`,
 `range`, `wear`, `slot_cost`, `stat_deltas`, `sense_deltas`, `max_vital_deltas`, `resist_deltas`, `inactive`, `affects`,
-`has_tag(tag)`, `variants`, `tags`, `in_world`. `tags` are the effective tags.
+`has_tag(tag)`, `variants`, `tags`, `in_world`, `spawned_by` (the handle of the spawn rule that placed the item, or
+`None`). `tags` are the effective tags.
 
 **Affect view:** `id`, `name`, `host`, `expires_at`, `remaining`, `flags`, `stat_deltas`, `sense_deltas`,
 `max_vital_deltas`, `resist_deltas`, `source`, `origin`, `applies`, `power`. `host` is the actor, item or room the
@@ -1474,6 +1545,7 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
 | Simulation        | `set_active(entity, reason)`, `clear_active(entity, reason)`, `set_anchor(entity, reason)`, `clear_anchor(entity, reason)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Pets              | `set_owner(mob, player)`, `clear_owner(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Mobs              | `despawn(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Spawn rules       | `spawner_info(rule)`, `refill(rule, count=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Leash             | `set_leash(mob, leash)`, `reset_leash(mob)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Standing          | `standing_event(affected, actor, event, amount=0, item=None)`, `adjust_standing(holder, subject, amount)`, `clear_standing(holder, subject=None)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Queries           | `here(keyword)`, `find(label, scope="room")`, `enemies_near(actor, band)`, `allies_near(actor, band)`, `path_to(target) -> [dir]`, `roll(dice) -> int`, `has_feature(name) -> bool`, `skill_info(label) -> skill | None`, `group_of(actor) -> group | None`, `group_members(actor) -> [actor]`, `plan(facts, actions, goal, max_expansions=1024) -> [name] | None`, `disposition(holder, subject) -> int`, `standing(holder, subject) -> int`, `factions_of(actor) -> [str]`, `standing_history(holder, subject, since=0, via=None, event=None) -> struct(gained, lost)`, `memories(mob, subject=None, event=None, since=0)`, `item_info(label)` |
@@ -1548,6 +1620,28 @@ affect is on. `power` is the percent strength the affect was applied at (§4.3);
   moves it off the mob first. A mob a spawn rule tracks leaves its rule, which respawns it on schedule (§5.4). An owned
   pet is gone for good, as at death, and `on_owner_change` doesn't fire. A player, an actor not in the world, or a mob
   whose death is running is an error; despawning a mob whose `on_despawn` hooks are running does nothing. Kernel.
+- **Spawn rules:** `rule` is a rule's label (`":vault_key"` or `"//pkg:vault_key"`) or its handle.
+  - **The handle** is a value of type `spawner`. It has the fields:
+
+    - `id`: the rule's label, or `None` for a room rule without one;
+    - `label`: the prototype it places;
+    - `room`: the declaring room, or `None` for a `spawner`;
+    - `rooms`: the pool's labels, in declared order.
+
+    It prints as `spawner("//pkg:id")`, or `spawner(room="//pkg:room", label="//pkg:proto", n=0)` for a room rule
+    without a label. Two handles are equal when they name the same rule, and a handle names the same rule across
+    reloads.
+
+  - **`ctx.spawner_info(rule)`** returns `struct(live, held, max, next_at, ran)`:
+
+    - `live`: copies it tracks, those in a logged-out player's custody included;
+    - `held`: copies waiting for a dormant room or a container;
+    - `next_at`: the pulse of its next refill of its own: a timed rule's deadline, or for a `"reset"` rule that is below
+      `max` the package's next reset; otherwise `None`;
+    - `ran`: whether it has done its first fill.
+  - **`ctx.refill(rule, count = None)`** adds one batch now, or `count` copies, capped by `max`, through the usual
+    picking, holding and `on_place`, whatever the rule's `respawn`. A pending timer is left alone. It returns `None`.
+  - **Errors:** a label or handle that names no rule is an error for both verbs. Kernel.
 - **`set_skill`, `remove_skill` and `skill_info`:** `set_skill` gives `actor` the skill `skill` (a label or skill view)
   at `proficiency` (0 to 100), or changes the proficiency it has. It first asks the `learn` restrictions (§4.19) and
   returns the refusal message, changing nothing, or `None` once the skill is set. `remove_skill` forgets the skill and
@@ -2483,6 +2577,7 @@ outside `core` are tools, and an `@` prefix only matches other `@` commands.
 | `@trace [all\|zone [pkg]\|entity <target>\|hook <name>\|rules\|off]` | Stream hook execution (§5.13).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `@errors [package]`                                                  | Show the last 10 diagnostics.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `@where`                                                             | Show your track index and bands numerically (`track` feature).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `@spawners [label]`                                                  | Show the spawn rules of your room, or one rule and its copies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `@eval <expr>`                                                       | Starlark REPL; `--dev` only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 - **Ownership:** a builder owns the packages in their scope. Rooms belong to their package, mobs and items to their
@@ -2501,6 +2596,10 @@ outside `core` are tools, and an `@` prefix only matches other `@` commands.
   - A debug mob fades away as a summon does (§4.3), and is despawned as by `despawn` (§4.5), at the first world tick
     after its spawner is gone, or after 30 minutes. It also goes when its spawner logs out.
   - Killing a debug mob awards no XP. Everything it drops (inventory, loot, corpse) is `debug` too.
+- **`@spawners`:** lists every rule declared in the builder's room or with the room in its pool, one line each: the
+  rule's handle, `live/max`, held copies, its `respawn`, and the pulses until `next_at` (§4.5). With a label, it shows
+  that rule and then each copy in the world (id, name, room) and each copy away with a logged-out player. Only rules of
+  the builder's packages are shown.
 
 **Instructor commands** (global):
 
@@ -2549,9 +2648,9 @@ role.
 | `@unrestrict <account> <capability>`                 | Lifts the active restriction, permanent or not. The history stays.         |
 | `@restrictions [account]`                            | Restrictions in effect, or one account's full history.                     |
 
-- **Capabilities:** `goto_player`, `goto`, `spawn`, `stat`, `where`, `trace`, `errors` and `gossip`; the list grows as
-  commands are added. Each builder-command capability guards that command, `gossip` guards the `gossip` command, and
-  `goto_player` guards going to a player with `@goto`.
+- **Capabilities:** `goto_player`, `goto`, `spawn`, `spawners`, `stat`, `where`, `trace`, `errors` and `gossip`; the
+  list grows as commands are added. Each builder-command capability guards that command, `gossip` guards the `gossip`
+  command, and `goto_player` guards going to a player with `@goto`.
 - **Scope:** instructors and admins can't be restricted.
 - **Effect:** the command still exists for a restricted player, unlike a missing role.
 - **Lengths:** `<n>m`, `<n>h`, `<n>d`, `<n>w` or `permanent`. A third word that isn't a length starts the reason.
@@ -2901,11 +3000,11 @@ maximum, with `type` defaulting to the unarmed damage type.
   mob from `w.spawn` carries its prototype's traits.
 - Player handles have `choices`, `traits` and `has_trait` as view fields.
 
-|      Object       |                                                                                                                                                                                                                                                                                             API                                                                                                                                                                                                                                                                                             |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None, steps=None)`, `spawn`, `run(pulses)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `ctx(self=None)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
-| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|      Object       |                                                                                                                                                                                                                                                                                                        API                                                                                                                                                                                                                                                                                                         |
+|-------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `t`               | `world(seed, packages=<this package>, rules=None, bubble=False)`, `eq`, `ne`, `true`, `false`, `contains`, `not_contains`, `fail`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `w`               | `spawn_player(name, at, level, vitals, stats, skills, index, choices, gmcp=None, steps=None)`, `spawn`, `run(pulses)`, `reset(package=None)`, `damage(target, vital, amount=None, pct=None, type)`, `set_attr`, `get_attr`, `set_choices(player, changes)`, `grant_trait(actor, name)`, `remove_trait(actor, name)`, `set_skill(actor, skill, proficiency)`, `remove_skill(actor, skill)`, `award_xp(actor, amount)`, `take_xp(actor, amount)`, `level_up(actor)`, `level_down(actor, count=1)`, `act(mob, command_line)`, `ctx(self=None)`, `room(label)`, `trace(on)`, `diagnostics()`, `quarantined()`, `pulse` |
+| player handle `p` | `do(line) -> output`, `output()`, `gmcp(package=None)`, plus view fields                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 - The rules package is always loaded implicitly. `rules` names a rules package to use instead of `//rules`.
   `bubble=True` keeps a reality bubble; without it every room is always simulated, so a mob can flee with no player
@@ -2921,6 +3020,8 @@ maximum, with `type` defaulting to the unarmed damage type.
   sets up state with it instead of typing commands or adding fixture commands: `c = w.ctx()`, then `c.wear(dummy,
   c.grant_item(dummy, ":amulet"))` or `c.teleport(p, ":vault")`, or `w.ctx(self = mage).apply_affect(p, ...)` for an
   affect whose source is the mage.
+- **`w.reset(package = None)`** runs a zone reset of `package` (by default the test's own) now, exactly as a due one
+  runs (§5.4), and rolls the next from this pulse. A package without `reset_world_ticks` is an error.
 - **`p.do(line)`** submits the line directly, bypassing the session rate limiter. It runs pulses until the player's
   queue is empty and it isn't casting (at most 1000; more is an error), and returns all output since the last `do()` or
   `output()`.
@@ -3112,23 +3213,26 @@ subsystems (`core` or `script`). It consists of three primary components:
   `setBaseMaxVital`, `setBaseResist`, `awardXp`, `takeXp`, `levelUp`, `levelDown`, `openDoor`, `closeDoor`, `lockDoor`,
   `unlockDoor`, `setExitTo`, `openContainer`, `closeContainer`, `lockContainer`, `unlockContainer`, `say`, `emote`,
   `emit`, `setActive`, `clearActive`, `setAnchor`, `clearAnchor`, `clearStanding`, `roll`, `spawnMob`, `act`, `actMove`,
-  `actAttack`, `actCast`, `moveToward`, `summon`, `setOwner`, `clearOwner`, `despawn`, `setLeash`, `resetLeash`,
-  `startCombat`, `stopCombat`, `clearContributions`, `groupAdd`, `groupRemove`, `groupSetLeader`, `groupDisband`,
-  `rules`), query methods (`mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`, `mayEnter` and `mayLearn`, `fits`,
-  `standingHistory`, `enemiesNear`, `alliesNear`, `pathTo`, `plan`, `groupOf`, `groupMembers`, and including
-  `skill(label)`, a loaded skill's `PluginSkill` view or null, and `itemInfo(label)`, an item prototype's
-  `PluginItemInfo` or null), RNG access (`rng.int`, `rng.chance` and `rng.choice(list)`), and read-only views of live
-  entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`, `PluginExit`, `PluginDoor`, `PluginGroup`,
-  `PluginStandingTotals`, `PluginPlanAction`); the views carry the fields of the `ctx` actor, room and item views
-  (§4.5), named in camelCase, except the track fields. `PluginActor.task` and `isBusy` report a timed task of either
-  kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`, `removeWorn`, `teleport`, `may*`, `fits`, `task`
-  and `isBusy` follow the same rules as the script verbs. `teleport` returns the refusal or veto, or null once the actor
-  has moved. `setExitTo` follows `set_exit_to`. The item custody verbs `spawnItem`, `moveItem`, `destroy` and
-  `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`, `ctx.destroy` and `ctx.merge_stack` (§4.5): they skip
-  the item restrictions and the commands' limits, and an item placed in a room lies at track index 0. `spawnItem`
-  returns a list: one stack for a stackable label, and `count` items otherwise. `spawnMob(label, room, count)` makes
-  `count` mobs as `ctx.spawn` does for a mob label and returns them: no owner, no leash override and no spawn rule, a
-  home room equal to `room`, at track index 0. `despawn(mob)` removes a mob as `ctx.despawn` does. The mob actions queue
+  `actAttack`, `actCast`, `moveToward`, `summon`, `setOwner`, `clearOwner`, `despawn`, `spawnerInfo`, `refill`,
+  `setLeash`, `resetLeash`, `startCombat`, `stopCombat`, `clearContributions`, `groupAdd`, `groupRemove`,
+  `groupSetLeader`, `groupDisband`, `rules`), query methods (`mayWear`, `mayRemove`, `mayDrop`, `mayGive`, `mayPut`,
+  `mayEnter` and `mayLearn`, `fits`, `standingHistory`, `enemiesNear`, `alliesNear`, `pathTo`, `plan`, `groupOf`,
+  `groupMembers`, and including `skill(label)`, a loaded skill's `PluginSkill` view or null, and `itemInfo(label)`, an
+  item prototype's `PluginItemInfo` or null), RNG access (`rng.int`, `rng.chance` and `rng.choice(list)`), and read-only
+  views of live entities (`PluginRoom`, `PluginActor`, `PluginItem`, `PluginSkill`, `PluginExit`, `PluginDoor`,
+  `PluginGroup`, `PluginStandingTotals`, `PluginPlanAction`, `PluginSpawner`, `PluginSpawnerInfo`); the views carry the
+  fields of the `ctx` actor, room and item views (§4.5), named in camelCase, except the track fields. `PluginActor.task`
+  and `isBusy` report a timed task of either kind. `startTask`, `stopTask`, `skillRoll`, `setItemName`, `wear`,
+  `removeWorn`, `teleport`, `may*`, `fits`, `task` and `isBusy` follow the same rules as the script verbs. `teleport`
+  returns the refusal or veto, or null once the actor has moved. `setExitTo` follows `set_exit_to`. The item custody
+  verbs `spawnItem`, `moveItem`, `destroy` and `mergeStack` follow `ctx.spawn` (items only), `ctx.move_item`,
+  `ctx.destroy` and `ctx.merge_stack` (§4.5): they skip the item restrictions and the commands' limits, and an item
+  placed in a room lies at track index 0. `spawnItem` returns a list: one stack for a stackable label, and `count` items
+  otherwise. `spawnMob(label, room, count)` makes `count` mobs as `ctx.spawn` does for a mob label and returns them: no
+  owner, no leash override and no spawn rule, a home room equal to `room`, at track index 0. `despawn(mob)` removes a
+  mob as `ctx.despawn` does. `spawnerInfo` and `refill` take a rule's full label or a `PluginSpawner`, and follow
+  `ctx.spawner_info` and `ctx.refill`. A `PluginSpawner` has the handle's `id`, `label`, `room` and `rooms`, plus `n`,
+  the position a room rule without a label has among the room's rules for the same prototype. The mob actions queue
   tick-lane actions for a mob, never a player, and return whether the action was queued. The door and container verbs
   follow `ctx` (§4.5): they run no hook, take no key and print nothing, and locking fails on a door or container without
   a `key`. There is no `grantItem`: `moveItem` or `spawnItem` with an actor as the destination puts the items in its
@@ -3859,7 +3963,7 @@ Pulse boundaries come from `System.nanoTime()`.
 
      - Regenerate vitals via `rules.regen` and the modifier chain. Actors with a `no_regen` affect are skipped.
      - Fire `on_tick` for active entities.
-     - Process zone resets and respawns that are due.
+     - Run the zone resets that are due, then the spawn rules' timed batches that are due (§5.4).
      - Advance item decay.
      - Capture a periodic checkpoint if the checkpoint interval has passed (§5.11).
 
@@ -4090,9 +4194,18 @@ and work with or without it (§3.10). Combat resolution is implemented in
   subtracts gains it did not give. Entries for other levels are never touched. One call applies at most 100 levels. A
   player whose level changes, up or down, is sent `Char.Status` at once, with the message, rather than at the end of the
   pulse.
-- **Respawns:** a spawn rule's respawn deadline is set when its first live instance leaves the world. The rule refills
-  to `count` at the first world tick at or after the deadline. A fresh world's rooms fill their spawns when the world
-  starts (§4.11).
+- **Respawns:** a spawn rule (§4.2) is short when it tracks fewer than `max` copies. Copies a refill picks into a
+  dormant room are *held*: they count at once and are placed when the room wakes (§5.9). A rule's first fill places its
+  copies whether or not the room is dormant.
+  - **Timed rules:** a timed rule that is short and has no deadline rolls one. That happens when it first falls short,
+    and again after a timed batch that leaves it short. Another copy leaving doesn't move a pending deadline. At the
+    first world tick at or after the deadline, the rule adds one batch.
+  - **A zone reset:**
+    1. Every `"reset"` rule of the package adds one batch: room rules by room id, in declaration order within a room,
+       then the package's `spawner`s in declaration order.
+    2. `on_reset` then fires on the package's rooms that aren't dormant, ascending id.
+    3. A dormant room of the package is marked, and runs the `on_reset` it missed when it wakes.
+  - **Starting:** a fresh world fills every rule to `max` when it starts (§4.11).
 - **Dormancy:** Combat never continues in a dormant room. When a room goes dormant, its NPCs disengage. How their vitals
   recover is set per mob by `dormant_recovery` (§5.9).
 
@@ -4436,11 +4549,11 @@ The reality bubble and room simulation lifecycle are implemented in
   3. Affects that ran out are removed, firing `on_expire` in expiry order, then id: first the room's own affects, then
      each mob's own affects, mob by mob, then the affects of every item in the room (on the ground, inside containers,
      or carried by its mobs).
-  4. A missed zone reset is applied to the room, after the room's expired affects are gone: its spawns, then `on_reset`.
-  5. Respawns that are due fill.
-  6. Items that decayed go, firing `on_destroy` (§4.4).
-  7. `on_wake(ctx, elapsed_pulses)` fires on the room, then its mobs, then its items (each ascending id), as they were
-     before the respawns.
+  4. The room's held spawn copies are placed, in the order they were held, with their hooks (§5.4); then, if the room
+     missed a zone reset, its `on_reset` runs once.
+  5. Items that decayed go, firing `on_destroy` (§4.4).
+  6. `on_wake(ctx, elapsed_pulses)` fires on the room, then its mobs, then its items (each ascending id), as they were
+     before the held copies were placed.
   - **Mob vitals** recover according to the mob's `dormant_recovery`:
 
     |       Mode       |                                                           On wake                                                           |
@@ -4594,8 +4707,10 @@ State persistence, checkpoints, and crash consistency are implemented in
   - Room rows whose room is gone (or got a different id) are deleted.
   - Items are placed after their holders, containers before contents. Rows that can't be placed are dropped.
   - Mobs and ground items of deleted prototypes are dropped.
-  - Saved spawn bindings and respawn deadlines are restored. A rule that is short with no respawn pending (for example a
-    new rule) fills at once.
+  - Saved spawn bindings, deadlines and held copies are restored, whatever the rule's `max` now is. A held copy whose
+    room no longer exists is dropped. A rule that has never run (a new rule) does its first fill. A timed rule that is
+    short with no deadline rolls one. Items bound to a rule and held by a saved player count toward it while the player
+    is logged out.
   - Quarantine is restored from `zone_states`.
   4. Reconcile all instances against prototypes.
   5. Set `pulse` from `meta`.

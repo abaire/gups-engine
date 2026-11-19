@@ -4,6 +4,20 @@ Script-facing changes are listed per `api_version`, with before/after snippets f
 
 ## api_version 1 (unreleased)
 
+### Spawn rules
+
+- `spawn()` takes `max`, `batch` and `respawn` (pulses, a `(min, max)` range, `"never"` or `"reset"`). Zone resets no
+  longer refill timed rules: a timed rule refills only on its own timer. `count` and `respawn_pulses` are gone.
+- `package(reset_world_ticks = ...)` also takes a `(min, max)` range, rolled after every reset.
+- `spawn(id = ...)` names a rule, so its state survives edits that reorder a room's rules.
+- Spawn rules can place items: `until`, `stack` and `container`. A copy carried off by a player who logs out keeps
+  counting.
+- `spawner(id, label, rooms, ...)` keeps a rule's copies across a pool of rooms, picked by weight or by a `pick`
+  function.
+- `on_place` on spawn rules; `spawned_by` on item and actor views; `ctx.spawner_info`, `ctx.refill`, and their facade
+  counterparts `spawnerInfo` and `refill`; `PluginItem.spawnedBy` and `PluginActor.spawnedBy`. Tests can run a zone
+  reset with `w.reset()`.
+
 ### Trick exits
 
 - An exit may have no single destination: `exit.to` and `PluginExit.to` are `None`/null for an exit whose destination is

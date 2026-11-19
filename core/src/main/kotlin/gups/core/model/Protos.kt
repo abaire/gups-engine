@@ -2,9 +2,12 @@ package gups.core.model
 
 import gups.core.HookRef
 import gups.core.Label
+import gups.core.Rng
 import gups.core.THINK_DEFAULT_PULSES
 import gups.core.world.Behavior
 import gups.core.world.ExitPicker
+import gups.core.world.PlaceHook
+import gups.core.world.PoolPicker
 import gups.core.world.SkillResolver
 import gups.core.world.ThinkFn
 import gups.core.world.ZoneCommand
@@ -128,16 +131,68 @@ data class ExitProto(
   fun destinations(): Collection<Label> = to?.let(::listOf) ?: candidates.keys
 }
 
-/** Rule governing periodic spawning of mobs into a room. */
+/** A fixed value, or an inclusive range rolled with even odds. */
+data class Roll(val min: Int, val max: Int) {
+  init {
+    require(min <= max) { "a range needs min <= max, got ($min, $max)" }
+  }
+
+  fun roll(rng: Rng): Int = if (min == max) min else rng.int(min, max)
+
+  companion object {
+    fun of(n: Int) = Roll(n, n)
+  }
+}
+
+/** When a spawn rule adds copies after its first fill. */
+sealed interface Respawn {
+  data object Never : Respawn
+
+  data object Reset : Respawn
+
+  data class Timed(val pulses: Roll) : Respawn
+}
+
+/** When a placed item stops counting toward its rule. */
+enum class Until(val word: String) {
+  GONE("gone"),
+  TAKEN("taken"),
+}
+
+/** Rule governing spawning and replenishment of mobs or items. */
 data class SpawnRule(
-  /** Prototype label of the mob to spawn. */
+  /** Prototype label of the mob or item to place. */
   val label: Label,
-  /** Maximum number of live instances spawned by this rule concurrently, defaulting to 1. */
-  val count: Int = 1,
-  /** Interval in game pulses between respawn attempts, defaulting to 1200 (5 minutes). */
-  val respawnPulses: Int = 1200,
-  /** Track index in the room where spawned mobs appear. */
+  /** The rule's own label, or null for an unnamed room rule. */
+  val id: Label? = null,
+  /** Maximum number of tracked copies maintained by this rule. */
+  val max: Int = 1,
+  /** Copies one refill adds; null adds as many as are missing. */
+  val batch: Roll? = null,
+  /** When the rule adds copies after its first fill. */
+  val respawn: Respawn = Respawn.Timed(Roll.of(1200)),
+  /** When a placed item stops counting toward its rule; null means [Until.GONE] for item rules. */
+  val until: Until? = null,
+  /** Stack size of a stackable item copy; null means 1. */
+  val stack: Roll? = null,
+  /** Container prototype label the copy goes into, if any. */
+  val container: Label? = null,
+  /** Track index in the room where spawned copies appear. */
   val atIndex: Int = 0,
+  /** Called once per copy after placement and `on_spawn`, or null. */
+  val onPlace: PlaceHook? = null,
+)
+
+/** Pool spawn rule declared at top level in a zone package. */
+data class SpawnerProto(
+  /** The rule's label, `//pkg:id`. */
+  val id: Label,
+  /** The shared settings; `rule.id == id`. */
+  val rule: SpawnRule,
+  /** Pool rooms with weights, in declared order. */
+  val rooms: Map<Label, Int>,
+  /** Chooses among usable pool rooms per copy; null rolls by weight. */
+  val pick: PoolPicker? = null,
 )
 
 /** Immutable prototype defining the static properties of a room. */
@@ -492,8 +547,8 @@ data class ZoneProto(
   val pkg: String,
   /** User-facing display title of the zone, defaulting to [pkg]. */
   val title: String = pkg,
-  /** Periodic reset interval in game pulses, or null if the zone does not reset automatically. */
-  val resetPulses: Int? = null,
+  /** Reset interval in world ticks, or null if the zone never resets. */
+  val resetTicks: Roll? = null,
   /** Environmental rules modifiers applied across all rooms in the zone. */
   val modifiers: Modifiers = emptyMap(),
 )
@@ -510,7 +565,10 @@ class Prototypes(
   zones: List<ZoneProto> = emptyList(),
   regions: List<RegionProto> = emptyList(),
   factions: List<FactionProto> = emptyList(),
+  spawners: List<SpawnerProto> = emptyList(),
 ) {
+  /** Pool spawn rules in declaration order across packages. */
+  val spawners: List<SpawnerProto> = spawners.toList()
   /** Zone prototypes indexed by package path. */
   val zones: Map<String, ZoneProto> = zones.associateBy { it.pkg }
 

@@ -34,7 +34,7 @@ room("scrapyard",
     name = "The Scrapyard",
     desc = "Heaps of twisted chassis. Something metallic rattles inside.",
     exits = [exit(DIR.east, to = ":gate")],
-    spawns = [spawn(":rust_hound", count = 1)],
+    spawns = [spawn(":rust_hound", max = 1)],
 )
 
 room("furnace",
@@ -51,7 +51,7 @@ room("assembly",
         exit(DIR.east, to = ":control"),
         exit(DIR.south, to = ":vault"),
     ],
-    spawns = [spawn(":welder_drone", count = 1)],
+    spawns = [spawn(":welder_drone", max = 1)],
 )
 
 room("control",
@@ -76,7 +76,7 @@ room("whisper_hall",
         exit(DIR.west, to = ":vault"),
         exit(DIR.south, to = ":reactor"),
     ],
-    spawns = [spawn(":whisperer", count = 1)],
+    spawns = [spawn(":whisperer", max = 1)],
 )
 
 room("reactor",

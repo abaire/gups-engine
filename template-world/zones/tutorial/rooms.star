@@ -36,11 +36,6 @@ def _hall_enter(ctx):
         # A library helper: it stores the quest in the player's attributes and tells them.
         quest.start(ctx, ctx.actor, FIRST_STEPS)
 
-def _stock_hall(ctx):
-    if not [i for i in ctx.self.items() if i.label.endswith(":satchel")]:
-        s = ctx.spawn(":satchel", ctx.self)
-        ctx.spawn(":brass_key", s)
-
 room("hall",
     name = "The Hall of Lessons",
     desc = "A long, bright hall. Doors lead east and north, a dark passage west; the gate is south.",
@@ -55,17 +50,16 @@ room("hall",
         # door twice as loud to open and close, so people next door hear it.
         exit(DIR.east, to = ":armory", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"])),
     ],
-    # Spawns refill on zone reset, and respawn_pulses after the last one leaves the world.
-    spawns = [spawn(":guide", at_index = 2)],
+    # Spawn rules place mobs and items alike. The guide respawns on the default 1200-pulse
+    # timer; the satchel and its key are placed once when the world first starts (respawn =
+    # "never"), with the satchel rule first so it is there to receive the key.
+    spawns = [
+        spawn(":guide", at_index = 2),
+        spawn(":satchel", respawn = "never"),
+        spawn(":brass_key", respawn = "never", container = ":satchel"),
+    ],
     on_enter = _hall_enter,
-    on_load = _stock_hall,
-    on_reset = _stock_hall,
 )
-
-def _stock_tar_pit(ctx):
-    # Keep one pinecone on the floor for the squirrel on the gravel path (forager.star).
-    if not [i for i in ctx.self.items() if i.label == "//zones/tutorial:pinecone"]:
-        ctx.spawn(":pinecone", ctx.self)
 
 # The engine gives tags no meaning. The `sticky_floor` tag does something here only because
 # rules/combat.star (`_footing`) doubles the advance and retreat lag in rooms that carry it.
@@ -75,8 +69,10 @@ room("tar_pit",
     size = SIZE.normal,
     tags = ["sticky_floor"],
     exits = [exit(DIR.east, to = ":hall"), exit(DIR.west, to = ":gravel")],
-    on_load = _stock_tar_pit,
-    on_reset = _stock_tar_pit,
+    # Keep one pinecone on the floor for the squirrel on the gravel path (forager.star):
+    # until = "taken" stops counting a copy once it leaves the room, and respawn = "reset"
+    # places another at the next zone reset.
+    spawns = [spawn(":pinecone", respawn = "reset", until = "taken")],
 )
 
 def _crunch(ctx):
@@ -141,15 +137,6 @@ room("drowned_cave",
     exits = [exit(DIR.up, to = ":gravel", one_way = True)],
 )
 
-def _stock_armory(ctx):
-    # on_load runs once when the world starts; on_reset at every zone reset. Both keep a
-    # practice sword and a volatile flask on the armory floor without ever stacking up duplicates.
-    # (ctx.find(":practice_sword") would also count swords carried by players in the room.)
-    for label in (":practice_sword", ":volatile_flask"):
-        on_floor = [i for i in ctx.self.items() if i.label.endswith(label)]
-        if not on_floor:
-            ctx.spawn(label, ctx.self)
-
 room("armory",
     name = "The Armory",
     desc = "A cramped closet of racks, mostly empty. A passage leads east to a shop.",
@@ -158,8 +145,12 @@ room("armory",
         exit(DIR.west, to = ":hall", door = door(state = DOOR.locked, key = ":brass_key", tags = ["creaky"])),
         exit(DIR.east, to = ":shop"),
     ],
-    on_load = _stock_armory,
-    on_reset = _stock_armory,
+    # respawn = "reset" with until = "taken" keeps one practice sword and one volatile flask
+    # here across zone resets without stacking duplicates while a copy is still in the room.
+    spawns = [
+        spawn(":practice_sword", respawn = "reset", until = "taken"),
+        spawn(":volatile_flask", respawn = "reset", until = "taken"),
+    ],
 )
 
 room("shop",
@@ -220,3 +211,6 @@ room("arena",
     on_reset = _stock_arena,
     on_destroy = _arena_destroy,
 )
+
+# One ring lies in one of these rooms; 10–20 minutes after it leaves the world, another turns up.
+spawner("stray_ring", ":copper_ring", rooms = {":gravel": 3, ":tar_pit": 1}, respawn = (2400, 4800))

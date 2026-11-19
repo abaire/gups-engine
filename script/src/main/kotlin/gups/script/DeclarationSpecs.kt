@@ -153,8 +153,8 @@ internal object DeclarationSpecs {
           ),
           DeclParam(
             "reset_world_ticks",
-            "int",
-            "World ticks (30 s each) between zone resets, or None for no periodic reset.",
+            "int | tuple[int, int]",
+            "World ticks (30 s each) between zone resets, or a (min, max) range, or None for no periodic reset.",
             default = "None",
           ),
           DeclParam(
@@ -353,40 +353,137 @@ internal object DeclarationSpecs {
         ),
     )
 
+  /** Parameters `spawn()` and `spawner()` share, in documented order. */
+  private val SPAWN_RULE_PARAMS =
+    listOf(
+      DeclParam(
+        "max",
+        "int",
+        "Maximum number of tracked copies maintained by this rule.",
+        default = "1",
+      ),
+      DeclParam(
+        "batch",
+        "int | tuple[int, int]",
+        "Copies added per refill, or a (min, max) range; None adds as many as are missing.",
+        default = "None",
+      ),
+      DeclParam(
+        "respawn",
+        "int | tuple[int, int] | str",
+        "When to refill: pulses, a (min, max) range, 'never' or 'reset'.",
+        default = "1200",
+      ),
+      DeclParam(
+        "until",
+        "str",
+        "Item rules only: when a placed item stops counting ('gone' or 'taken').",
+        default = "None",
+        allowedValues = listOf("gone", "taken"),
+      ),
+      DeclParam(
+        "stack",
+        "int | tuple[int, int]",
+        "Item rules only: stack size of a stackable copy, or a (min, max) range; None means 1.",
+        default = "None",
+      ),
+      DeclParam(
+        "container",
+        "label",
+        "Item rules only: container item prototype label in the room to place copies into.",
+        default = "None",
+      ),
+    )
+
+  private val ON_PLACE_PARAM =
+    DeclParam(
+      "on_place",
+      "function",
+      "fn(ctx) called once per copy after placement and on_spawn, with ctx.spawner set to this rule.",
+      default = "None",
+    )
+
   val SPAWN_SPEC =
     DeclSpec(
       name = "spawn",
       doc = "A spawn rule, for room(spawns=[...]).",
-      positionalError = "spawn() takes the mob's label as its only positional argument",
+      positionalError = "spawn() takes the mob or item label as its only positional argument",
       params =
         listOf(
           DeclParam(
             "label",
             "label",
-            "Mob prototype label to spawn.",
+            "Mob or item prototype label to spawn.",
             positional = true,
             keyword = false,
             required = true,
           ),
           DeclParam(
-            "count",
-            "int",
-            "Maximum number of instances maintained by this rule.",
-            default = "1",
+            "id",
+            "str",
+            "Optional rule name within the package, resolved to //pkg:<id>.",
+            default = "None",
+          ),
+        ) +
+          SPAWN_RULE_PARAMS +
+          listOf(
+            DeclParam(
+              "at_index",
+              "int",
+              "Track index in the room where the copy spawns; ignored with container.",
+              default = "0",
+            ),
+            ON_PLACE_PARAM,
+          ),
+    )
+
+  val SPAWNER_SPEC =
+    DeclSpec(
+      name = "spawner",
+      doc =
+        "Declares a pool spawn rule that places copies across a set of rooms. Zone packages only.",
+      positionalError = "spawner() takes an id and an optional label",
+      params =
+        listOf(
+          DeclParam(
+            "id",
+            "str",
+            "The rule's name within the package, resolved to //pkg:<id>.",
+            positional = true,
+            keyword = false,
+            required = true,
           ),
           DeclParam(
-            "respawn_pulses",
-            "int",
-            "Pulses before a slain mob respawns.",
-            default = "1200",
+            "label",
+            "label",
+            "Mob or item prototype label to spawn.",
+            positional = true,
+            keyword = true,
+            required = true,
           ),
           DeclParam(
-            "at_index",
-            "int",
-            "Track index in the room where the mob spawns.",
-            default = "0",
+            "rooms",
+            "list[label] | dict[label, int]",
+            "Pool of room labels (equally likely) or dict of room label to positive int weight.",
+            required = true,
           ),
-        ),
+          DeclParam(
+            "pick",
+            "function",
+            "fn(ctx) choosing a room per copy from ctx.candidates, or None to roll by weight.",
+            default = "None",
+          ),
+        ) +
+          SPAWN_RULE_PARAMS +
+          listOf(
+            DeclParam(
+              "at_index",
+              "int",
+              "Track index in the room where the copy spawns (clamped per room); ignored with container.",
+              default = "0",
+            ),
+            ON_PLACE_PARAM,
+          ),
     )
 
   val LOOT_SPEC =
@@ -1183,6 +1280,7 @@ internal object DeclarationSpecs {
       EXIT_SPEC,
       DOOR_SPEC,
       SPAWN_SPEC,
+      SPAWNER_SPEC,
       LOOT_SPEC,
       CONTAINER_SPEC,
       ITEM_AFFECT_SPEC,

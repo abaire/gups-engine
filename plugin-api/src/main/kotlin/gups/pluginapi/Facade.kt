@@ -575,6 +575,24 @@ interface PluginWorld : PluginGmcpWorld {
   fun resetLeash(mob: PluginActor): Unit =
     throw UnsupportedOperationException("resetLeash is not supported")
 
+  // Spawn rules, as `ctx.spawner_info` and `ctx.refill`.
+
+  /** Current state of the spawn rule named by the full label [rule]. */
+  fun spawnerInfo(rule: String): PluginSpawnerInfo =
+    throw UnsupportedOperationException("spawnerInfo is not supported")
+
+  /** Current state of the spawn rule identified by [rule]. */
+  fun spawnerInfo(rule: PluginSpawner): PluginSpawnerInfo =
+    throw UnsupportedOperationException("spawnerInfo is not supported")
+
+  /** Adds one batch (or [count] copies) to the spawn rule named by [rule], capped at `max`. */
+  fun refill(rule: String, count: Int? = null): Unit =
+    throw UnsupportedOperationException("refill is not supported")
+
+  /** Adds one batch (or [count] copies) to the spawn rule identified by [rule], capped at `max`. */
+  fun refill(rule: PluginSpawner, count: Int? = null): Unit =
+    throw UnsupportedOperationException("refill is not supported")
+
   // Combat and groups, as `ctx` engages and manages them.
 
   /**
@@ -902,6 +920,10 @@ interface PluginActor : PluginEntity {
   /** A player's recall room, or null for a mob. */
   val recallRoom: PluginRoom?
     get() = throw UnsupportedOperationException("recallRoom is not supported")
+
+  /** The spawn rule that placed this mob, or null. */
+  val spawnedBy: PluginSpawner?
+    get() = throw UnsupportedOperationException("spawnedBy is not supported")
 }
 
 interface PluginItem : PluginEntity {
@@ -958,6 +980,10 @@ interface PluginItem : PluginEntity {
 
   /** Display name for stacks of 2 or more, such as `gold coins`, or null to show `name (count)`. */
   val plural: String?
+
+  /** The spawn rule that placed this item, or null. */
+  val spawnedBy: PluginSpawner?
+    get() = throw UnsupportedOperationException("spawnedBy is not supported")
 
   /** The stack's size, at least 1; 1 for an item that doesn't stack. */
   val count: Int
@@ -1042,3 +1068,22 @@ interface PluginSkill {
   val kind: String
   val tags: List<String>
 }
+
+/** A spawn rule handle, as a plugin sees it. */
+data class PluginSpawner(
+  val id: String?,
+  val label: String,
+  val room: String?,
+  val rooms: List<String>,
+  /** Position among the room's rules with the same label; ignored when [id] is set. */
+  val n: Int = 0,
+)
+
+/** Snapshot of a spawn rule's current state, as returned by [PluginWorld.spawnerInfo]. */
+data class PluginSpawnerInfo(
+  val live: Int,
+  val held: Int,
+  val max: Int,
+  val nextAt: Long?,
+  val ran: Boolean,
+)

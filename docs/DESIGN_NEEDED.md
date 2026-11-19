@@ -38,152 +38,15 @@ corpse. A player corpse decays like any other and drops its contents on the grou
 players loot a player's corpse? - Does a player corpse last longer than a mob's, or is it protected? - Should the owner
 be able to recover their corpse after logging out?
 
-### Item placements and one spawn-rule model for mobs and items (designed, awaiting a milestone plan)
-
-**Spec:** §3.1 (`WORLD_TICK_PULSES`), §3.3 (entities, item locations), §3.4 (reload: spawn rules carry their live mobs
-over by label), §3.6 (`zone_states`, the saved mob spawn binding), §4.1 (`reset_world_ticks`), §4.2 (`room(spawns=)`,
-`spawn()`), §4.4 (`on_spawn`, `on_reset`, the hook catalog), §4.5 (`ctx.spawn`, `ctx.find`, `despawn`, `set_owner`),
-§4.12 (harness `w`), §4.15 (plugin facade), §5.1 (world tick: resets and respawns), §5.4 (Respawns), §5.9 (dormancy and
-the wake order), §5.11 (checkpoints).
-
-**Today:** `room(spawns=[spawn(label, count, respawn_pulses, at_index)])` places mobs only (`SpawnRule` in
-[Protos.kt](../core/src/main/kotlin/gups/core/model/Protos.kt), parsed in
-[Declarations.kt](../script/src/main/kotlin/gups/script/Declarations.kt)). A rule refills to `count` at every zone reset
-and again `respawn_pulses` after its first live mob leaves the world (`SpawnState` and `fillSpawn` in
-[World.kt](../core/src/main/kotlin/gups/core/world/World.kt), `resetZone` and `respawnPulse` there too; release on owner
-change in [Owners.kt](../core/src/main/kotlin/gups/core/world/Owners.kt); reload carry-over in
-[Reconcile.kt](../core/src/main/kotlin/gups/core/world/Reconcile.kt); restore in
-[Restore.kt](../core/src/main/kotlin/gups/core/world/Restore.kt)). Items are placed only by script, in `on_load` and
-`on_reset` with a "does the room already have one?" check (the tutorial's pinecone in
-[rooms.star](../template-world/zones/tutorial/rooms.star)). That cannot express:
-
-- a one-time item: a key placed once and never again, even after a player picks it up, because the room no longer has
-  one at the next reset;
-- an item that respawns on its own timer rather than the zone's reset;
-- a placement in one of several rooms, picked at random;
-- "only while the copy this placement made is gone": `ctx.find` sees only a room or a zone, and only items whose
-  location chain ends there, so a key in a player's pack in another zone is invisible.
-
-Timers are fixed numbers everywhere (`respawn_pulses`, `reset_world_ticks`), so players can time respawns and resets.
-The engine already keeps every item in memory, including those carried by logged-out players (all `world_entities` rows
-load at start), so tracking copies world-wide is cheap.
-
-**Example:** a vault key placed once in the antechamber; a rare sword that appears in one of five rooms across two
-zones, 1–3 hours after the last one was destroyed; a goblin camp of up to 6 that refills 1–3 goblins at a time; a
-wandering merchant who turns up in one of three villages; a stack of 15–25 arrows in a chest at each zone reset.
-
-**Agreed design (settled with the maintainer, one decision at a time; needs a milestone plan and exact `SPEC.md`
-wording, which the maintainer approves before the spec changes):**
-
-1. **One rule type for mobs and items, one implementation.** The prototype the label names decides whether a rule places
-   mobs or items. Mob spawn rules move onto the new model; there is no separate item mechanism.
-2. **Two ways to declare it.** `room(spawns=[spawn(label, ...)])` for one room, and a top-level `spawner(id, label,
-   rooms=..., pick=None, ...)` beside `room()`, `mob()` and `item()` for a pool of rooms. A room rule is a pool of one.
-3. **Counting: a rule counts only its own copies.** Copies from loot, quest rewards, `ctx.spawn` or admins never count
-   toward or block a rule. Two rules for the same prototype don't affect each other. A limit on every copy of a
-   prototype from any source is a separate design (the next entry).
-4. **When a copy stops counting (`until`, items only).** `until = "gone"` (default): the copy counts wherever it ends up
-   (a pack, a chest in another zone, a logged-out player) until it leaves the world: destroyed, decayed, used up, merged
-   into another stack, or its prototype deleted. `until = "taken"`: it counts until its location chain no longer ends in
-   the room it was placed in (as `find(..., scope="room")` counts, so an item in a container or carried by a mob in that
-   room still counts). Mobs have no `until`: a mob counts until it leaves the world or leaves its rule as today
-   (`set_owner`, `despawn`).
-5. **Respawn modes (`respawn`).** `"never"`: the first fill and nothing after. That it has run is saved, so restarts
-   don't place again; `--fresh` does. `"reset"`: refilled at the declaring package's zone reset, and only then. `pulses`
-   or `(min, max)`: refilled only by the rule's own timer. **Zone resets no longer refill timed rules**, including mob
-   rules: this is a deliberate change from today. Modes don't combine. Default `1200`, as `respawn_pulses` is today.
-6. **Cap and batches.** `max` (renamed from `count`, no alias) caps tracked copies, held copies included. `batch` (int
-   or `(min, max)`, default: up to `max`) is how many one refill adds, never above `max`. The world-start fill (and a
-   new rule's first fill at a reload) goes straight to `max`; every later refill (a timer, or a reset in `"reset"` mode)
-   adds one batch. The timer starts when the rule first drops below `max`; another copy leaving doesn't restart a
-   running timer. If the rule is still below `max` after a timed batch, the next timer is rolled at once.
-7. **Ranges.** Wherever a range is allowed (`respawn`, `batch`, `stack`, `reset_world_ticks`), it is an inclusive `(min,
-   max)` tuple rolled with even odds from the seeded world RNG (as `rng.int(lo, hi)`). A plain int is a fixed value. The
-   loader checks `min <= max` and each setting's own bounds. A rolled deadline is saved, so a restart doesn't roll
-   again. Timed deadlines still land at the first world tick at or after them.
-8. **`reset_world_ticks` takes a range.** Each reset rolls the next interval from the pulse it ran on and saves it in
-   `zone_states`.
-9. **Pools across packages.** `rooms` may name rooms in any package, checked at load like exit labels. `"reset"` mode
-   follows the declaring package's resets. A pool room that is missing after a reload, or whose package is quarantined,
-   is skipped when picking, with one diagnostic; a pool with no usable room waits.
-10. **Picking.** `rooms = [...]` gives even odds, `{label: weight}` weighted odds, and `pick = fn` a script choice, the
-    same forms as random exits (M57). Each copy in a batch is picked on its own, and the room it is placed in is its
-    home (for `until = "taken"`, mob leashes and going home). Picks are purely random: a room that already holds a copy
-    is not avoided; weights or `pick` control clumping.
-11. **Held copies.** A copy picked into a dormant room is held: it counts toward `max` at once and is placed (with its
-    hooks) when the room wakes, with the room's other catch-up. This is today's single-room behavior extended to pools,
-    so dormant rooms still run no hooks. A held copy is not an entity yet: `find` and world counts don't see it.
-12. **Containers.** `container = ":chest"` places the copy into the first container of that prototype in the picked
-    room, lowest id, whether open, closed or locked (an engine placement, not a player's `put`). If the room has none,
-    or `fits` refuses, the copy is held and retried at each world tick, still counting toward `max`; it is never dropped
-    on the floor. A container gone for good means a held copy forever, so a container that must exist needs its own
-    rule. `at_index` (floor or track position) is ignored with `container`.
-13. **Stacks.** A copy is one item entity. `stack` (int or `(min, max)`, default 1) sets a stackable copy's size; `max`
-    and `batch` count entities. A partial take splits off a new, untracked item (the existing `split` custody event) and
-    the remainder keeps counting, so the rule refills only once the last of the stack is gone or taken.
-14. **Identity across reloads and restarts.** A rule is identified by its label when it has one (a `spawner` id, or a
-    room rule's `id`), otherwise by room plus prototype label plus its order among same-label rules in that room, as
-    today. Under the same identity a reload keeps tracked copies, held copies, the pending deadline and the `"never"`
-    ran-flag, whatever settings changed: lowering `max` removes nothing (no refill until below the cap); a changed timer
-    applies from the next deadline; a copy whose room left the pool stays and keeps counting. A removed rule releases
-    its copies (they stay, untracked) and drops its held copies. A new rule does its first fill at the reload. Renaming
-    a label or id makes a new rule. Items get the saved "placed by" binding that mobs already have. `--fresh` starts
-    every rule from nothing.
-15. **`on_place` hook.** `spawn()` and `spawner()` take `on_place = fn`, fired once per copy after the copy is placed
-    and its own `on_spawn` hooks have run, with `ctx.item` or `ctx.actor` the copy, `ctx.room` its room and
-    `ctx.spawner` the rule handle. A held copy fires it when finally placed. It joins the hook catalog and the load-time
-    dry run.
-16. **`spawned_by` view field** on items and mobs: the rule handle, or `None`. Same field on the plugin views.
-17. **Script verbs.** `ctx.spawner(rule)` returns `struct(live, held, max, next_at, ran)`. `ctx.refill(rule,
-    count=None)` adds one batch now (or `count` copies), capped by `max`, through the normal picking, holding and
-    `on_place` path, in every mode, so a quest can bring back a destroyed `"never"` key. It doesn't cancel or reset a
-    pending timer. Both get `PluginWorld` counterparts (facade parity, `CtxParityTest`).
-18. **Naming rules.** A `spawner` is `//pkg:id` (relative `":id"` in scripts). `spawn(..., id="x")` gives a room rule a
-    label in the same namespace; duplicates across both are a load error. A room rule without `id` is reachable only
-    through its handle (`spawned_by`, `on_place`'s `ctx.spawner`). `ctx.spawner` and `ctx.refill` take a label or a
-    handle.
-19. **Signatures.**
-
-    ```python
-    spawn(label, id=None, max=1, batch=None, respawn=1200, until=None,
-          stack=None, container=None, at_index=0, on_place=None)
-
-    spawner(id, label, rooms=[...], pick=None, max=1, batch=None, respawn=1200,
-            until=None, stack=None, container=None, at_index=0, on_place=None)
-    ```
-
-    `in` is reserved in Starlark, hence `container`. On a `spawner`, `at_index` is clamped to each pool room's track.
-    `until=None` means `"gone"` for an item rule. Passing `until` or `stack` on a mob rule is a load error, and so is
-    `stack` on a non-stackable item.
-
-**Left for the milestone plan:**
-
-- The exact `SPEC.md` wording for §4.1, §4.2, §4.4, §4.5, §5.4 and §5.9, and the order a reset runs in now that timed
-  rules skip it (`"reset"` rules, then `on_reset`, as today?).
-- **Name clash to settle:** item 15 makes `ctx.spawner` the rule-handle field in `on_place`, and item 17 makes
-  `ctx.spawner(rule)` the read verb; one `ctx` cannot have both. Options: rename the field (for example `ctx.rule`) or
-  the verb (for example `ctx.spawner_info` or `ctx.rule_state`).
-- The rule handle's Starlark type and what it prints; the shape of the read verb's `next_at` for held copies.
-- Where saved rule state lives (`zone_states` per package for deadlines, the `"never"` flag and held copies; the item
-  and mob binding on their own `world_entities` rows) and its payload format.
-- Whether a held copy waiting for a container is retried in a dormant room, or only once the room wakes.
-- The harness API (§4.12): whether `w` gets `spawner`/`refill` for tests, and how a scenario inspects held copies.
-- Admin visibility (an `@spawners` command or a `@where` extension), if any.
-- In-repo callers of `count=` and `respawn_pulses=` to update: template world zones, tutorials (`05_mobs_and_behaviors`
-  section 6, `03_items_and_equipment` on reset restocking), `samples/robot-world`, Kotlin tests, `DocExamples.kt`,
-  `DeclarationSpecs.kt`, the API golden files and `docs/api/api-1.json`. The tutorial's `on_reset` item restocking
-  becomes a `spawn(..., respawn="reset")` example. Pre-release: no `api_version` bump.
-
 ### A world-wide limit on copies of an item prototype
 
 **Spec:** §4.2 (`item()`), §4.5 (`ctx.spawn`, `grant_item`), §5.4 (loot), §4.15 (plugin facade). **Today:** nothing
-limits how many copies of a prototype exist. Spawn rules (previous entry) cap only their own copies, so a unique item
-can still be duplicated by loot, quest rewards, `ctx.spawn`, `grant_item` or an admin. **Questions:** - Is the limit an
-`item()` property (for example `max_in_world=1`) enforced on every path that creates an item? - What does a creation
-over the limit do: fail silently, return `None`, raise a script error, or skip a loot roll? - Do held copies of spawn
-rules count toward it? - Does a copy in a logged-out player's custody count (it is loaded, so it can), and what about
-items in a deleted character's custody? - How does `transform` into a limited prototype behave? - Do admin spawns bypass
-it?
+limits how many copies of a prototype exist. Spawn rules (§4.2) cap only their own copies, so a unique item can still be
+duplicated by loot, quest rewards, `ctx.spawn`, `grant_item` or an admin. **Questions:** - Is the limit an `item()`
+property (for example `max_in_world=1`) enforced on every path that creates an item? - What does a creation over the
+limit do: fail silently, return `None`, raise a script error, or skip a loot roll? - Do held copies of spawn rules count
+toward it? - Does a copy in a logged-out player's custody count (it is loaded, so it can), and what about items in a
+deleted character's custody? - How does `transform` into a limited prototype behave? - Do admin spawns bypass it?
 
 ## Perception and the world
 

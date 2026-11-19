@@ -6,23 +6,27 @@ import gups.core.model.Item
 import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.world.World
+import gups.core.world.bindSpawn
 import gups.core.world.custodian
 import gups.core.world.restoreItem
 import gups.core.world.settleRestoredHoldings
 import gups.core.world.tombstone
 import gups.core.world.upgrade
 
+/** How restored items handle missing prototypes and saved spawn bindings. */
+internal data class PlaceMode(val tombstones: Boolean, val fromAway: Boolean = false)
+
 /**
  * Restores item rows whose holders exist, containers before contents. Rows that can't be placed, or
- * whose prototype is gone (unless [tombstones]), are deleted.
+ * whose prototype is gone (unless `tombstones`), are deleted.
  */
 internal fun placeItems(
   world: World,
   rows: List<EntityRow>,
-  tombstones: Boolean,
+  mode: PlaceMode,
   deleted: MutableSet<Long>,
   notes: MutableList<String>,
-): List<Item> = ItemPlacer(world, tombstones, deleted, notes).place(rows)
+): List<Item> = ItemPlacer(world, mode, deleted, notes).place(rows)
 
 private val ARTICLES = setOf("a", "an", "the")
 
@@ -34,7 +38,7 @@ private enum class Outcome {
 
 private class ItemPlacer(
   private val world: World,
-  private val tombstones: Boolean,
+  private val mode: PlaceMode,
   private val deleted: MutableSet<Long>,
   private val notes: MutableList<String>,
 ) {
@@ -106,7 +110,7 @@ private class ItemPlacer(
   private fun protoFor(row: EntityRow, payload: ItemPayload, known: ItemProto?): ItemProto? =
     when {
       known != null && payload.tombstone == null -> known
-      tombstones -> tombstone(standIn(row, payload))
+      mode.tombstones -> tombstone(standIn(row, payload))
       else -> null
     }
 
@@ -130,14 +134,25 @@ private class ItemPlacer(
   ) {
     val item = world.restoreItem(EntityId(row.id), proto, at, payload.count)
     applyItem(item, payload)
-    if (known == null || payload.tombstone != null) {
-      item.savedPayload = payload.tombstone ?: row.payload
-      if (payload.tombstone == null) notes += "item ${row.protoLabel} #${row.id} is now a tombstone"
-    } else {
-      item.protoVersion = row.protoVersion
-      world.upgrade(item, known.version)
-    }
-    item.dirty = known == null || item.protoVersion != row.protoVersion
+    val bindingDropped =
+      if (known == null || payload.tombstone != null) {
+        item.savedPayload = payload.tombstone ?: row.payload
+        if (payload.tombstone == null)
+          notes += "item ${row.protoLabel} #${row.id} is now a tombstone"
+        false
+      } else {
+        item.protoVersion = row.protoVersion
+        world.upgrade(item, known.version)
+        bindRestoredItem(item, payload.spawn)
+      }
+    item.dirty = known == null || item.protoVersion != row.protoVersion || bindingDropped
     placed += item
+  }
+
+  /** Rebinds [item] from its saved [spawn] payload; returns true if a saved binding was dropped. */
+  private fun bindRestoredItem(item: Item, spawn: SpawnJson?): Boolean {
+    if (spawn == null) return false
+    val key = spawn.toKey() ?: return true
+    return !world.bindSpawn(item, key, spawn.home?.let(::Label), fromAway = mode.fromAway)
   }
 }

@@ -174,7 +174,7 @@ class FacadeMobsTest {
             "zones/z/rooms.star" to
               """
               room("a", name = "Glade", desc = "A glade.", flags = ["dead_end_ok"],
-                   spawns = [spawn(":wolf", respawn_pulses = 2)])
+                   spawns = [spawn(":wolf", respawn = 2)])
               mob("wolf", name = "a wolf", keywords = ["wolf"])
               """,
           )

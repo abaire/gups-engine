@@ -61,9 +61,9 @@ item("rusty_lever",
      )
 ```
 
-Spawn the lever in its room from the room's `on_reset` hook (`ctx.spawn(":rusty_lever", ctx.self)`), as the template's
-armory does with its practice sword. A player standing in the room can then type `use lever` to pull it and open the
-door, and `before_get` keeps anyone from carrying it off.
+Place the lever in its room with a one-time spawn rule (`spawns = [spawn(":rusty_lever", respawn = "never")]`). A player
+standing in the room can then type `use lever` to pull it and open the door, and `before_get` keeps anyone from carrying
+it off.
 
 ---
 

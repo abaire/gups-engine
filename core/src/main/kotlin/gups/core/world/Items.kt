@@ -15,19 +15,46 @@ import gups.core.rules.RulesContext
 
 /** The `spawn` verb for items. */
 fun World.spawnItem(label: Label, at: ItemLocation, count: Int = 1, debug: Boolean = false): Item {
+  val item = registerNewItem(label, at, count, debug)
+  finishSpawnItem(item, at)
+  return item
+}
+
+/** Spawns an item and runs [prepare] right after registration, before `on_spawn`. */
+internal fun World.spawnItem(
+  label: Label,
+  at: ItemLocation,
+  count: Int = 1,
+  prepare: (Item) -> Unit,
+): Item {
+  val item = registerNewItem(label, at, count, debug = false)
+  prepare(item)
+  finishSpawnItem(item, at)
+  return item
+}
+
+private fun World.registerNewItem(
+  label: Label,
+  at: ItemLocation,
+  count: Int,
+  debug: Boolean,
+): Item {
   val proto = protos.item(label)
   val item = Item(allocateId(), proto, at, if (proto.stackable) count else 1)
   item.debug = debug
   proto.decayPulses?.let { item.decayAt = pulse + it }
   checkTarget(item, at)
   register(item)
+  return item
+}
+
+private fun World.finishSpawnItem(item: Item, at: ItemLocation) {
   index(item, at)
   // Debug items are never saved, so they have no audit trail.
-  if (custodian(item) is Player && !debug)
+  if (custodian(item) is Player && !item.debug)
     itemEvents += ItemEvent(item.id, pulse, null, at, "spawn")
   custodian(item)?.let { refreshHoldings(it) }
   invokeOn(item, HookName.ON_SPAWN, HookContext(item = item))
-  return item
 }
 
 /**
@@ -274,6 +301,7 @@ internal fun World.removeItem(item: Item) {
     itemEvents += ItemEvent(item.id, pulse, item.location, null, "destroy")
   unindex(item)
   markRemoved(item)
+  departTree(item, away = false)
   forgetItemTree(item)
   holder?.let { refreshHoldings(it) }
 }

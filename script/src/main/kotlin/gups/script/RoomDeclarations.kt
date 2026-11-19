@@ -70,7 +70,11 @@ private fun roomSpawns(
       (it as? SpawnDecl)?.rule ?: fail("room(spawns): expected spawn(...), got ${typeName(it)}")
     }
   for (s in spawns) {
-    ctx.ref(s.label, RefKind.MOB, thread)
+    s.id?.let { id ->
+      if (!ctx.pkg.spawnRuleIds.add(id)) fail("spawn(id): $id is already a spawn rule id")
+    }
+    ctx.spawnRef(s, thread)
+    s.container?.let { ctx.ref(it, RefKind.ITEM, thread) }
     if (s.atIndex !in 0 until size.slots) {
       fail("room(spawns): at_index ${s.atIndex} is outside this ${size.name.lowercase()} room")
     }

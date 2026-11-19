@@ -1,11 +1,12 @@
 package gups.script
 
 import gups.core.Label
-import gups.core.WORLD_TICK_PULSES
 import gups.core.model.Direction
 import gups.core.model.DoorState
 import gups.core.model.Effect
 import gups.core.model.EmptyAction
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.TrackSize
 import gups.core.world.HookName
 import gups.script.testing.TestWorlds
@@ -76,7 +77,7 @@ class LoaderTest {
                     room("start", name = "Start", size = SIZE.large,
                         exits = [exit("north", to = ":hall", entry_index = -1,
                                       door = door(state = "locked", key = ":key"))],
-                        spawns = [spawn(":rat", count = 2, at_index = 4)])
+                        spawns = [spawn(":rat", max = 2, at_index = 4)])
                     room("hall", exits = [exit("south", ":start")])
                 """,
           "zones/z/things.star" to
@@ -98,14 +99,14 @@ class LoaderTest {
     assertEquals(-1, north.entryIndex)
     assertEquals(DoorState.LOCKED, north.door!!.state)
     assertEquals(Label("//zones/z:key"), north.door!!.key)
-    assertEquals(2, start.spawns.single().count)
+    assertEquals(2, start.spawns.single().max)
     assertEquals("hall", p.rooms.getValue(Label("//zones/z:hall")).name)
     assertEquals(listOf("fat", "rat"), p.mob(Label("//zones/z:rat")).keywords)
     assertEquals(listOf("brass", "key"), p.item(Label("//zones/z:key")).keywords)
     val loaf = p.item(Label("//zones/z:loaf"))
     assertEquals("loaves of bread", loaf.plural)
     assertEquals(listOf("loaf", "of", "bread"), loaf.keywords)
-    assertEquals(600, p.zones.getValue("zones/z").resetPulses)
+    assertEquals(Roll.of(5), p.zones.getValue("zones/z").resetTicks)
   }
 
   @Test
@@ -393,7 +394,7 @@ class LoaderTest {
   @Test
   fun `zone reset intervals are whole world ticks`() {
     val ok = loadPackage(zonePkg(", reset_world_ticks = 3"))
-    assertEquals(3 * WORLD_TICK_PULSES, ok.prototypes().zones.getValue("zones/z").resetPulses)
+    assertEquals(Roll.of(3), ok.prototypes().zones.getValue("zones/z").resetTicks)
     val pulses = loadPackage(zonePkg(", reset_pulses = 7200"))
     assertContains(only(pulses).message, "reset_pulses")
     val zero = loadPackage(zonePkg(", reset_world_ticks = 0"))
@@ -856,5 +857,183 @@ class LoaderTest {
     assertTrue(r.ok, r.report())
     val p = r.prototypes()
     assertTrue(Label("//zones/b:there") in p.rooms)
+  }
+
+  @Test
+  fun `spawn parses max, batch and respawn in int, tuple and string forms`() {
+    val r =
+      loadItem(
+        """
+        mob("rat", name = "a rat")
+        room("a", spawns = [
+            spawn(":rat"),
+            spawn(":rat", max = 3, batch = 2, respawn = 600),
+            spawn(":rat", max = 4, batch = (1, 3), respawn = (100, 200)),
+            spawn(":rat", max = 2, respawn = "never"),
+            spawn(":rat", max = 5, respawn = "reset"),
+        ])
+        """
+          .trimIndent()
+      )
+    assertTrue(r.ok, r.report())
+    val spawns = r.prototypes().rooms.getValue(Label("//zones/z:a")).spawns
+    assertEquals(5, spawns.size)
+
+    assertEquals(1, spawns[0].max)
+    assertNull(spawns[0].batch)
+    assertEquals(Respawn.Timed(Roll.of(1200)), spawns[0].respawn)
+
+    assertEquals(3, spawns[1].max)
+    assertEquals(Roll.of(2), spawns[1].batch)
+    assertEquals(Respawn.Timed(Roll.of(600)), spawns[1].respawn)
+
+    assertEquals(4, spawns[2].max)
+    assertEquals(Roll(1, 3), spawns[2].batch)
+    assertEquals(Respawn.Timed(Roll(100, 200)), spawns[2].respawn)
+
+    assertEquals(2, spawns[3].max)
+    assertEquals(Respawn.Never, spawns[3].respawn)
+
+    assertEquals(5, spawns[4].max)
+    assertEquals(Respawn.Reset, spawns[4].respawn)
+  }
+
+  @Test
+  fun `spawn rejects invalid and unknown arguments`() {
+    fun badSpawn(args: String, message: String) {
+      expectItemFailure("mob(\"x\")\nroom(\"a\", spawns = [spawn(\":x\", $args)])", message)
+    }
+
+    badSpawn("count = 2", "spawn(): unexpected argument 'count'")
+    badSpawn("max = 0", "spawn(max): must be at least 1")
+    badSpawn("batch = 0", "spawn(batch): must be at least 1")
+    badSpawn("batch = (3, 1)", "spawn(batch): min must not exceed max")
+    badSpawn("batch = \"two\"", "spawn(batch): expected an int or a (min, max) tuple")
+    badSpawn("batch = (1, 2, 3)", "spawn(batch): expected an int or a (min, max) tuple")
+    badSpawn("respawn = 0", "spawn(respawn): must be at least 1")
+    badSpawn("respawn = (20, 10)", "spawn(respawn): min must not exceed max")
+    badSpawn("respawn = (0, 10)", "spawn(respawn): must be at least 1")
+    badSpawn(
+      "respawn = \"later\"",
+      "spawn(respawn): expected pulses, a (min, max) range, \"never\" or \"reset\"",
+    )
+    badSpawn("respawn = [1, 2]", "spawn(respawn): expected an int or a (min, max) tuple")
+  }
+
+  @Test
+  fun `reset_world_ticks accepts an int or range and validates bounds`() {
+    val range = loadPackage(zonePkg(", reset_world_ticks = (2, 4)"))
+    assertTrue(range.ok, range.report())
+    assertEquals(Roll(2, 4), range.prototypes().zones.getValue("zones/z").resetTicks)
+
+    val inverted = loadPackage(zonePkg(", reset_world_ticks = (2, 1)"))
+    assertContains(only(inverted).message, "package(reset_world_ticks): min must not exceed max")
+
+    val badType = loadPackage(zonePkg(", reset_world_ticks = \"fast\""))
+    assertContains(
+      only(badType).message,
+      "package(reset_world_ticks): expected an int or a (min, max) tuple",
+    )
+
+    val zeroRange = loadPackage(zonePkg(", reset_world_ticks = (0, 2)"))
+    assertContains(only(zeroRange).message, "package(reset_world_ticks): must be at least 1")
+  }
+
+  @Test
+  fun `spawn id resolves to the package and rejects duplicates across a package`() {
+    val ok =
+      loadItem(
+        """
+        mob("rat")
+        room("a", spawns = [spawn(":rat", id = "entry_rats")])
+        room("b", spawns = [spawn(":rat", id = "back_rats")])
+        """
+          .trimIndent()
+      )
+    assertTrue(ok.ok, ok.report())
+    assertEquals(
+      Label("//zones/z:entry_rats"),
+      ok.prototypes().rooms.getValue(Label("//zones/z:a")).spawns.single().id,
+    )
+
+    val dupSameRoom =
+      loadItem(
+        """
+        mob("rat")
+        room("a", spawns = [spawn(":rat", id = "rats"), spawn(":rat", id = "rats")])
+        """
+          .trimIndent()
+      )
+    assertContains(
+      only(dupSameRoom).message,
+      "spawn(id): //zones/z:rats is already a spawn rule id",
+    )
+
+    val dupAcrossFiles =
+      load(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/a.star" to
+            """
+            mob("rat")
+            room("a", spawns = [spawn(":rat", id = "rats")])
+            """
+              .trimIndent(),
+          "zones/z/b.star" to
+            """
+            room("b", spawns = [spawn(":rat", id = "rats")])
+            """
+              .trimIndent(),
+        )
+      )
+    assertContains(
+      only(dupAcrossFiles).message,
+      "spawn(id): //zones/z:rats is already a spawn rule id",
+    )
+  }
+
+  @Test
+  fun `item spawn rules parse until, stack and container`() {
+    val ok =
+      loadItem(
+        """
+        item("arrow", stackable = True)
+        item("chest", container = container())
+        room("a", spawns = [
+          spawn(":arrow", until = "taken", stack = (3, 5), container = ":chest"),
+          spawn(":arrow", until = "gone", stack = 2),
+        ])
+        """
+          .trimIndent()
+      )
+    assertTrue(ok.ok, ok.report())
+    val spawns = ok.prototypes().rooms.getValue(Label("//zones/z:a")).spawns
+    assertEquals(2, spawns.size)
+    assertEquals(gups.core.model.Until.TAKEN, spawns[0].until)
+    assertEquals(Roll(3, 5), spawns[0].stack)
+    assertEquals(Label("//zones/z:chest"), spawns[0].container)
+    assertEquals(gups.core.model.Until.GONE, spawns[1].until)
+    assertEquals(Roll.of(2), spawns[1].stack)
+  }
+
+  @Test
+  fun `item spawn rules reject invalid mob and item parameter combinations`() {
+    val base = "mob(\"rat\")\nitem(\"rock\")\nitem(\"chest\", container = container())\n"
+    fun bad(spawnExpr: String, message: String) =
+      expectItemFailure("${base}room(\"a\", spawns = [$spawnExpr])", message)
+
+    bad("spawn(\":rat\", until = \"taken\")", "spawn(until): only item rules have until")
+    bad("spawn(\":rat\", stack = 2)", "spawn(stack): only item rules have stack")
+    bad(
+      "spawn(\":rat\", container = \":chest\")",
+      "spawn(container): only item rules have container",
+    )
+    bad("spawn(\":rock\", stack = 2)", "spawn(stack): //zones/z:rock doesn't stack")
+    bad("spawn(\":rock\", until = \"forever\")", "spawn(until)")
+    bad(
+      "spawn(\":rock\", container = \":rock\")",
+      "spawn(container): //zones/z:rock is not a container",
+    )
+    bad("spawn(\":rock\", container = \":missing\")", "//zones/z:missing doesn't resolve")
   }
 }

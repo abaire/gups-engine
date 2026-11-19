@@ -28,11 +28,15 @@ import gups.core.model.Room
 import gups.core.model.ScriptTimer
 import gups.core.model.StandingChange
 import gups.core.model.StandingRecord
+import gups.core.world.HeldCopy
+import gups.core.world.SavedSpawner
+import gups.core.world.SpawnKey
 import gups.core.world.VitalState
 import gups.core.world.World
 import gups.core.world.restoreActorNumbers
 import gups.core.world.restoreOwner
-import gups.core.world.spawnOf
+import gups.core.world.spawnHomeOf
+import gups.core.world.spawnKeyOf
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -89,10 +93,10 @@ import kotlinx.serialization.json.longOrNull
  *   proficiencies, creation choices, granted traits, `levelGains`, custom attributes, timers,
  *   affects, and active/anchor reasons. During restore, traits are evaluated before vitals so
  *   effective vital maximums correctly accommodate trait modifiers.
- * - **Zones ([ZonePayload]):** Persists zone reset deadlines, pending spawn respawn rules with
- *   deadlines, and package quarantine status.
+ * - **Zones ([ZonePayload]):** Persists the zone reset deadline, each spawn rule's saved state
+ *   (deadline, ran flag, held copies), and package quarantine status.
  */
-const val FORMAT_VERSION = 3
+const val FORMAT_VERSION = 1
 
 internal val JSON = Json {
   ignoreUnknownKeys = true
@@ -173,7 +177,25 @@ data class LocationJson(
   val contained: Long? = null,
 )
 
-@Serializable data class SpawnJson(val room: String, val rule: Int)
+@Serializable
+data class SpawnJson(
+  val id: String? = null,
+  val room: String? = null,
+  val label: String? = null,
+  val n: Int? = null,
+  /** Items only: the room the copy was placed in. */
+  val home: String? = null,
+)
+
+@Serializable data class HeldJson(val room: String, val stack: Int? = null, val seq: Long)
+
+@Serializable
+data class SpawnerStateJson(
+  val key: SpawnJson,
+  val at: Long? = null,
+  val ran: Boolean = true,
+  val held: List<HeldJson> = emptyList(),
+)
 
 /**
  * A vital as saved. A mob stores [max] only where it differs from its prototype's declared maximum;
@@ -291,6 +313,8 @@ data class ItemPayload(
   val stackable: Boolean = false,
   /** The prototype's plural name, kept so a tombstone stack still reads the same. */
   val plural: String? = null,
+  /** Spawn rule binding and home room, if this item was placed by a spawn rule. */
+  val spawn: SpawnJson? = null,
 )
 
 @Serializable
@@ -319,16 +343,40 @@ data class PlayerPayload(
   val anchor: List<String> = emptyList(),
 )
 
-@Serializable data class RespawnJson(val room: String, val rule: Int, val at: Long)
-
-/** A `zone_states` payload: reset and respawn deadlines, and quarantine. */
+/** A `zone_states` payload: reset deadline, saved spawn rule state, and quarantine. */
 @Serializable
 data class ZonePayload(
   @EncodeDefault @SerialName("format_version") val formatVersion: Int = FORMAT_VERSION,
   val resetAt: Long? = null,
   val quarantined: Boolean = false,
-  val respawns: List<RespawnJson> = emptyList(),
+  val spawners: List<SpawnerStateJson> = emptyList(),
 )
+
+internal fun SpawnKey.toJson(home: Label? = null): SpawnJson =
+  when (this) {
+    is SpawnKey.Named -> SpawnJson(id = id.v, home = home?.v)
+    is SpawnKey.InRoom -> SpawnJson(room = room.v, label = label.v, n = n, home = home?.v)
+  }
+
+internal fun SpawnJson.toKey(): SpawnKey? =
+  when {
+    id != null -> SpawnKey.Named(Label(id))
+    room != null && label != null && n != null -> SpawnKey.InRoom(Label(room), Label(label), n)
+    else -> null
+  }
+
+internal fun SavedSpawner.toJson(): SpawnerStateJson =
+  SpawnerStateJson(
+    key = key.toJson(),
+    at = at,
+    ran = ran,
+    held = held.map { HeldJson(it.room.v, it.stack, it.seq) },
+  )
+
+internal fun SpawnerStateJson.toSaved(): SavedSpawner? =
+  key.toKey()?.let { k ->
+    SavedSpawner(k, at, ran, held.map { HeldCopy(Label(it.room), it.stack, it.seq) })
+  }
 
 // ---- Attribute values
 // ----------------------------------------------------------------------------
@@ -502,7 +550,7 @@ internal fun World.encode(e: Entity): EntityRow? =
           condition = e.condition.word,
           xp = e.xp,
           home = e.homeRoom.v.takeIf { e.homeRoom != e.room.label },
-          spawn = spawnOf(e)?.let { (room, rule) -> SpawnJson(room.v, rule) },
+          spawn = spawnKeyOf(e)?.toJson(),
           summonedBy = e.summonedBy?.v,
           owner = e.owner?.v,
           level = delta(e.level, p.level),
@@ -548,45 +596,45 @@ internal fun World.encode(e: Entity): EntityRow? =
         pulse,
       )
     }
-    is Item -> {
-      if (e.debug) {
-        null
-      } else {
-        val payload =
-          ItemPayload(
-            name = e.proto.name,
-            count = e.count,
-            charges = e.charges,
-            decayAt = e.decayAt,
-            nameOverride = e.nameOverride,
-            containerState =
-              e.container?.state?.takeIf { it != e.proto.container?.state }?.name?.lowercase(),
-            attrs = attrsJson(e.customAttributes),
-            timers = timersJson(e),
-            tombstone = e.savedPayload,
-            active = e.activeReasons.toList(),
-            anchor = e.anchorReasons.toList(),
-            affects = e.affects.map(::affectJson),
-            addedTags = e.addedTags.toList(),
-            removedTags = e.removedTags.toList(),
-            container = e.proto.container?.let(::containerJson),
-            weight = e.proto.weight,
-            stackable = e.proto.stackable,
-            plural = e.proto.plural,
-          )
-        EntityRow(
-          e.id.v,
-          "item",
-          e.protoLabel.v,
-          e.protoVersion,
-          JSON.encodeToString(LocationJson.serializer(), locationJson(e.location)),
-          JSON.encodeToString(ItemPayload.serializer(), payload),
-          pulse,
-        )
-      }
-    }
+    is Item -> encodeItem(e)
     is Player -> null
   }
+
+private fun World.encodeItem(e: Item): EntityRow? {
+  if (e.debug) return null
+  val payload =
+    ItemPayload(
+      name = e.proto.name,
+      count = e.count,
+      charges = e.charges,
+      decayAt = e.decayAt,
+      nameOverride = e.nameOverride,
+      containerState =
+        e.container?.state?.takeIf { it != e.proto.container?.state }?.name?.lowercase(),
+      attrs = attrsJson(e.customAttributes),
+      timers = timersJson(e),
+      tombstone = e.savedPayload,
+      active = e.activeReasons.toList(),
+      anchor = e.anchorReasons.toList(),
+      affects = e.affects.map(::affectJson),
+      addedTags = e.addedTags.toList(),
+      removedTags = e.removedTags.toList(),
+      container = e.proto.container?.let(::containerJson),
+      weight = e.proto.weight,
+      stackable = e.proto.stackable,
+      plural = e.proto.plural,
+      spawn = spawnKeyOf(e)?.toJson(spawnHomeOf(e)),
+    )
+  return EntityRow(
+    e.id.v,
+    "item",
+    e.protoLabel.v,
+    e.protoVersion,
+    JSON.encodeToString(LocationJson.serializer(), locationJson(e.location)),
+    JSON.encodeToString(ItemPayload.serializer(), payload),
+    pulse,
+  )
+}
 
 internal fun World.encodePlayer(p: Player): PlayerRow {
   val payload =

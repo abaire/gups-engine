@@ -29,8 +29,10 @@ internal class CtxExtras(
   val commandTarget: Actor? = null,
   val targets: List<Actor>? = null,
   val power: Int? = null,
-  /** For an exit's pick function: the labels it may choose, in declared order. */
+  /** For an exit's or a spawner's pick function: the labels it may choose, in declared order. */
   val candidates: List<Label>? = null,
+  /** For `on_place` and a spawner's `pick` function: the rule's handle. */
+  val spawner: SpawnerHandle? = null,
 )
 
 /**

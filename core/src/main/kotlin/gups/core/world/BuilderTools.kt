@@ -9,6 +9,7 @@ import gups.core.model.Band
 import gups.core.model.Entity
 import gups.core.model.ItemLocation
 import gups.core.model.Player
+import gups.core.model.Respawn
 import gups.core.model.SkillProto
 
 /** A debug mob despawns this long after `@spawn`, if its spawner hasn't logged out first. */
@@ -40,6 +41,12 @@ internal object BuilderTools {
         Role.BUILDER,
         "Spawn debug mobs or items from a prototype.\nUsage: @spawn <label> [n]",
         ::spawn,
+      ),
+      staffCommand(
+        "@spawners",
+        Role.BUILDER,
+        "Show spawn rules here, or one rule's copies.\nUsage: @spawners [label]",
+        ::spawners,
       ),
       staffCommand(
         "@errors",
@@ -172,6 +179,70 @@ internal object BuilderTools {
 
   private fun whereLine(p: Player, name: String, id: Long, index: Int): String =
     "  $name #$id: index $index, ${Band.between(p.trackIndex, index).name.lowercase()}"
+
+  private fun spawners(c: CommandCall) {
+    val w = c.world
+    val p = c.actor as? Player ?: return
+    if (w.refuseRestricted(p, "spawners")) return
+    val arg = c.args.trim()
+    if (arg.isNotEmpty()) return spawnerDetail(w, p, arg)
+    val room = p.room
+    if (!p.owns(room.label.pkg)) return w.send(p, NOT_YOURS)
+    val rules =
+      w.spawnStates.filter { (it.room === room || room.label in it.pool) && p.owns(it.pkg) }
+    if (rules.isEmpty()) return w.send(p, "No spawn rules here.")
+    w.send(p, rules.joinToString("\n") { spawnerLine(w, it) })
+  }
+
+  private fun spawnerDetail(w: World, p: Player, arg: String) {
+    val label = labelArg(arg, p)
+    val s =
+      label?.let { w.spawnState(SpawnKey.Named(it)) }
+        ?: return w.send(p, "No spawn rule ${label ?: arg}.")
+    if (!p.owns(s.pkg)) return w.send(p, NOT_YOURS)
+    w.send(p, spawnerDetailLines(w, s).joinToString("\n"))
+  }
+
+  private fun spawnerDetailLines(w: World, s: SpawnState): List<String> = buildList {
+    add(spawnerLine(w, s))
+    for (id in s.live) {
+      w.entity(id)?.let {
+        add("  #${id.v} ${it.name} in ${w.roomOfEntity(it)?.label ?: "nowhere"}")
+      }
+    }
+    for (id in s.away) add("  #${id.v} away")
+    for (held in s.held) add("  held for ${held.room}")
+  }
+
+  private fun spawnerLine(w: World, s: SpawnState): String {
+    val info = w.spawnerInfo(s)
+    val mode = spawnerMode(s.rule.respawn)
+    val next = spawnerNext(w, s.rule.respawn, info)
+    return "${spawnerRepr(s.key)} ${info.live}/${info.max}, ${info.held} held, $mode, $next"
+  }
+
+  private fun spawnerMode(r: Respawn): String =
+    when (r) {
+      Respawn.Never -> "never"
+      Respawn.Reset -> "reset"
+      is Respawn.Timed ->
+        if (r.pulses.min == r.pulses.max) "every ${r.pulses.min} pulses"
+        else "every ${r.pulses.min}-${r.pulses.max} pulses"
+    }
+
+  private fun spawnerNext(w: World, r: Respawn, info: SpawnerInfo): String =
+    when (r) {
+      Respawn.Never -> if (info.ran) "ran" else "not run"
+      else ->
+        info.nextAt?.let { "next in ${(it - w.pulse).coerceAtLeast(0)} pulses" }
+          ?: "nothing pending"
+    }
+
+  private fun spawnerRepr(key: SpawnKey): String =
+    when (key) {
+      is SpawnKey.Named -> "spawner(\"${key.id.v}\")"
+      is SpawnKey.InRoom -> "spawner(room=\"${key.room.v}\", label=\"${key.label.v}\", n=${key.n})"
+    }
 
   /** `@errors [package]`: recent diagnostics, only of a builder's own packages. */
   private fun errors(c: CommandCall) {

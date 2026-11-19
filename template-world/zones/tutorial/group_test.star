@@ -55,7 +55,7 @@ def test_solo_kill_pays_full_pool(t):
     w, p = _player(t, "Tess", ":armory")
     w.spawn(":practice_sword", at = p)    # the arena halves unarmed damage
     p.do("wield sword")
-    victim = _victim(w, hp = 30)
+    victim = _victim(w)
     L = victim.level
     p.do("kill dummy")
     w.run(pulses = 500)
@@ -66,7 +66,7 @@ def test_out_of_room_member_gets_nothing(t):
     member = w.spawn_player("Bo", at = ":armory")
     w.spawn(":practice_sword", at = fighter)
     fighter.do("wield sword")
-    victim = _victim(w, hp = 30)
+    victim = _victim(w)
     _group(w, fighter, member)
     member.do("east")                     # the shop: out of the fight's room
     fighter.do("kill dummy")
@@ -78,7 +78,7 @@ def test_out_of_band_member_gets_nothing(t):
     w, fighter = _player(t, "Tess", ":armory")
     w.spawn(":practice_sword", at = fighter)
     fighter.do("wield sword")
-    victim = _victim(w, hp = 30)
+    victim = _victim(w)
     member = w.spawn_player("Bo", at = ":armory", level = victim.level + 11)
     _group(w, fighter, member)
     fighter.do("kill dummy")

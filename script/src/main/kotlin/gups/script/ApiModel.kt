@@ -538,6 +538,7 @@ object ScriptApi {
       RngView::class.java,
       RoomView::class.java,
       SkillView::class.java,
+      SpawnerHandle::class.java,
       StandingDeltaValue::class.java,
     )
 

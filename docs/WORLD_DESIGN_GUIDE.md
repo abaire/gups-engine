@@ -545,6 +545,13 @@ functions or constants from earlier files with `load("helpers.star", "...")`. Fo
 | `helpers.star`                    | Shared helper functions used across multiple files in the zone.                                                                                             |
 | `*_test.star` & `*_testdata.star` | Automated zone tests (`gups test`) and test-only fixtures.                                                                                                  |
 
+Spawn rules (`room(spawns = [spawn(...)])` for one room, or a top-level `spawner(id, label, rooms = ...)` for a pool of
+rooms picked by weights or a `pick` function) place both mobs and items. `respawn` selects a pulse timer or `(min, max)`
+range, `"reset"` (refilled at zone resets), or `"never"` (placed only on the first fill); item rules also take `until`
+(`"gone"` or `"taken"`), `stack`, and `container`, and any rule can run an `on_place` hook per placed copy with
+`ctx.spawner` set. To make a copy stop counting when it changes, destroy it and spawn the new item; `transform` keeps it
+counting.
+
 ### 2. Rapid Prototyping with `gups-builder`
 
 The `gups-builder` CLI tool pairs a **logic** LLM (for room graphs, numbers, effects, and Starlark structure) with a

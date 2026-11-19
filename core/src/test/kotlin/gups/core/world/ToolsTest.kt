@@ -1,9 +1,11 @@
 package gups.core.world
 
 import gups.core.Capabilities
+import gups.core.EntityId
 import gups.core.Label
 import gups.core.Restriction
 import gups.core.Role
+import gups.core.WORLD_TICK_PULSES
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.AffectScope
 import gups.core.model.Channel
@@ -13,8 +15,13 @@ import gups.core.model.ItemLocation
 import gups.core.model.ItemProto
 import gups.core.model.Mob
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
 import gups.core.model.RestrictionPoint
+import gups.core.model.Roll
 import gups.core.model.RoomProto
+import gups.core.model.SpawnRule
+import gups.core.model.SpawnerProto
+import gups.core.model.ZoneProto
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -40,8 +47,10 @@ class ToolsTest {
     val f = fixture()
     val b = f.builder()
     val reg = f.w.commands
-    assertEquals("@spawn", reg.resolve(b, "@sp")?.name)
-    assertNull(reg.resolve(b, "@s"), "@stat and @spawn")
+    assertEquals("@spawn", reg.resolve(b, "@spawn")?.name)
+    assertNull(reg.resolve(b, "@sp"), "@spawn and @spawners")
+    assertEquals("@spawners", reg.resolve(b, "@spawne")?.name)
+    assertNull(reg.resolve(b, "@s"), "@stat, @spawn and @spawners")
     // @stats needs an instructor, so for a builder @sta can only mean @stat.
     assertEquals("@stat", reg.resolve(b, "@sta")?.name)
     b.role = Role.INSTRUCTOR
@@ -400,5 +409,171 @@ class ToolsTest {
     assertEquals(1, out.lines().count { "[alert]" in it })
     assertEquals("zones/b", f.w.busiestPackage()?.first)
     assertNull(PulseStats(4).also { it.record(1, true) }.overrunFraction.takeIf { it > 0 })
+  }
+
+  private val poolId = Label("//t:patrol")
+  private val foreignPoolId = Label("//u:intruder")
+  private val neverId = Label("//t:once")
+
+  private fun spawnersFixture(): Fixture {
+    val hallProto =
+      RoomProto(
+        T.HALL,
+        "The Great Hall",
+        spawns =
+          listOf(
+            SpawnRule(T.GOBLIN, max = 2, respawn = Respawn.Timed(Roll.of(1200))),
+            SpawnRule(T.KEY, id = neverId, max = 1, respawn = Respawn.Never),
+          ),
+      )
+    val yardProto =
+      RoomProto(
+        T.YARD,
+        "The Courtyard",
+        spawns = listOf(SpawnRule(T.GOBLIN, max = 2, respawn = Respawn.Reset)),
+      )
+    val protos =
+      Prototypes(
+        rooms =
+          listOf(hallProto, yardProto, RoomProto(T.VAULT, "The Vault"), RoomProto(shed, "A Shed")),
+        mobs = T.mobs,
+        items = T.items,
+        skills = T.skills,
+        zones = listOf(ZoneProto("t", resetTicks = Roll.of(5)), ZoneProto("u")),
+        spawners =
+          listOf(
+            SpawnerProto(
+              id = poolId,
+              rule =
+                SpawnRule(
+                  label = T.GOBLIN,
+                  id = poolId,
+                  max = 2,
+                  respawn = Respawn.Timed(Roll(100, 200)),
+                ),
+              rooms = linkedMapOf(T.HALL to 1, T.YARD to 1),
+            ),
+            SpawnerProto(
+              id = foreignPoolId,
+              rule =
+                SpawnRule(label = T.GOBLIN, id = foreignPoolId, max = 1, respawn = Respawn.Never),
+              rooms = linkedMapOf(T.HALL to 1),
+            ),
+          ),
+      )
+    return Fixture(protos = protos)
+  }
+
+  @Test
+  fun `spawners lists room and pool rules in every mode`() {
+    val f = spawnersFixture()
+    val b = f.builder()
+
+    f.w.teleport(b, f.w.room(T.VAULT))
+    f.w.flushOutput()
+    f.out(b)
+    f.input(b, "@spawners")
+    assertEquals("No spawn rules here.\n", f.out(b))
+
+    f.w.teleport(b, f.w.room(T.HALL))
+    f.w.flushOutput()
+    f.out(b)
+    f.input(b, "@spawners")
+    assertEquals(
+      """
+      spawner(room="//t:hall", label="//t:goblin", n=0) 2/2, 0 held, every 1200 pulses, nothing pending
+      spawner("//t:once") 1/1, 0 held, never, ran
+      spawner("//t:patrol") 2/2, 0 held, every 100-200 pulses, nothing pending
+      """
+        .trimIndent() + "\n",
+      f.out(b),
+    )
+
+    val hallRuleState =
+      f.w.spawnStates.first { it.key is SpawnKey.InRoom && it.room?.label == T.HALL }
+    f.hurt(f.w.actor(hallRuleState.live.first())!!, 1000)
+    f.runTo(200)
+    f.out(b)
+    f.input(b, "@spawners")
+    assertContains(
+      f.out(b),
+      "spawner(room=\"//t:hall\", label=\"//t:goblin\", n=0) 1/2, 0 held, every 1200 pulses, next in 1000 pulses",
+    )
+
+    f.w.teleport(b, f.w.room(T.YARD))
+    f.w.flushOutput()
+    f.out(b)
+    f.input(b, "@spawners")
+    assertContains(
+      f.out(b),
+      "spawner(room=\"//t:yard\", label=\"//t:goblin\", n=0) 2/2, 0 held, reset, nothing pending",
+    )
+    val yardRuleState =
+      f.w.spawnStates.first { it.key is SpawnKey.InRoom && it.room?.label == T.YARD }
+    f.hurt(f.w.actor(yardRuleState.live.first())!!, 1000)
+    f.out(b)
+    f.input(b, "@spawners")
+    val nextResetIn = 5L * WORLD_TICK_PULSES - f.w.pulse
+    assertContains(
+      f.out(b),
+      "spawner(room=\"//t:yard\", label=\"//t:goblin\", n=0) 1/2, 0 held, reset, next in $nextResetIn pulses",
+    )
+  }
+
+  @Test
+  fun `spawners with a label lists copies and enforces ownership and restrictions`() {
+    val f = spawnersFixture()
+    val b = f.builder()
+
+    f.w.teleport(b, f.w.room(shed))
+    f.w.flushOutput()
+    f.out(b)
+    f.input(b, "@spawners")
+    assertEquals("That isn't one of your packages.\n", f.out(b))
+
+    f.w.teleport(b, f.w.room(T.HALL))
+    f.w.flushOutput()
+    f.out(b)
+    val neverState = f.w.spawnState(SpawnKey.Named(neverId))!!
+    neverState.ran = false
+    f.input(b, "@spawners :once")
+    val onceKey = f.w.item(neverState.live.single())!!
+    assertEquals(
+      """
+      spawner("//t:once") 1/1, 0 held, never, not run
+        #${onceKey.id.v} a brass key in //t:hall
+      """
+        .trimIndent() + "\n",
+      f.out(b),
+    )
+
+    val patrolState = f.w.spawnState(SpawnKey.Named(poolId))!!
+    patrolState.away.add(EntityId(999))
+    patrolState.held.addLast(HeldCopy(T.YARD, null, 42))
+    val liveMobs = patrolState.live.map { f.w.actor(it)!! }
+    f.input(b, "@spawners :patrol")
+    val expectedPatrol =
+      buildList {
+          add("spawner(\"//t:patrol\") 3/2, 1 held, every 100-200 pulses, nothing pending")
+          for (m in liveMobs) add("  #${m.id.v} ${m.name} in ${m.room.label}")
+          add("  #999 away")
+          add("  held for //t:yard")
+        }
+        .joinToString("\n") + "\n"
+    assertEquals(expectedPatrol, f.out(b))
+    patrolState.away.clear()
+    patrolState.held.clear()
+
+    f.input(b, "@spawners :missing")
+    assertEquals("No spawn rule //t:missing.\n", f.out(b))
+    f.input(b, "@spawners //u:intruder")
+    assertEquals("That isn't one of your packages.\n", f.out(b))
+
+    assertTrue("spawners" in Capabilities.ALL)
+    val now = 1_000_000L
+    f.w.wallClock = { now }
+    f.w.accountRestrictions = listOf(Restriction(1, 1, "spawners", null, null, 9, now))
+    f.input(b, "@spawners")
+    assertEquals("You can't do that right now.\n", f.out(b))
   }
 }

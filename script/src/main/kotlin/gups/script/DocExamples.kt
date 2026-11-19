@@ -420,13 +420,34 @@ object DocExamples {
                 room("den",
                     desc = "A den that smells of wet fur.",
                     flags = ["dead_end_ok"],
-                    spawns = [spawn(":wolf", count = 2, respawn_pulses = 600, at_index = 1)],
+                    spawns = [spawn(":wolf", max = 2, respawn = 600, at_index = 1)],
                 )
             """,
           test =
             """
                 w = t.world(seed = 1)
                 t.eq(len(w.room(":den").actors()), 2)
+            """,
+        ),
+      "spawner" to
+        ex(
+          pkg =
+            """
+                item("relic", name = "an ancient relic")
+
+                room("vault", flags = ["dead_end_ok"])
+                room("hollow", flags = ["dead_end_ok"])
+
+                spawner("relic", ":relic",
+                    rooms = {":vault": 1, ":hollow": 3},
+                    respawn = (600, 1200),
+                )
+            """,
+          test =
+            """
+                w = t.world(seed = 1)
+                total = len(w.room(":vault").items()) + len(w.room(":hollow").items())
+                t.eq(total, 1)
             """,
         ),
       "struct" to

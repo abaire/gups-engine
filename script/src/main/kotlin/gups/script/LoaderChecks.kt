@@ -2,6 +2,7 @@ package gups.script
 
 import gups.core.Label
 import gups.core.model.Direction
+import gups.core.model.ItemProto
 import gups.core.model.Prototypes
 import gups.core.model.didYouMean
 import gups.core.world.gmcpOverlaps
@@ -70,6 +71,77 @@ internal class LoadChecks(
       else ->
         "${ref.label} doesn't resolve: //${ref.label.pkg} declares no ${ref.kind.word} named '${ref.label.name}'" +
           fixtureNote(ref.label)
+    }
+
+  /** Every spawn rule resolves to a mob or item and respects mob/item parameter rules. */
+  fun checkSpawns() {
+    val index = declarationIndex()
+    val items = HashMap<Label, ItemProto>()
+    for (st in live) st.pkg.items.forEach { items[it.label] = it }
+    items[Prototypes.CORPSE.label] = Prototypes.CORPSE
+    for (st in live) {
+      for (ref in st.pkg.spawnRefs) {
+        val why = spawnRuleError(ref, index, items) ?: continue
+        st.errors +=
+          LoadError(
+            st.pkg.path,
+            "label",
+            why,
+            ref.file,
+            ref.line,
+            ref.column,
+            snippet(dir, ref.file, ref.line, ref.column),
+          )
+      }
+    }
+  }
+
+  private fun spawnRuleError(
+    ref: SpawnRef,
+    index: Map<Label, RefKind>,
+    items: Map<Label, ItemProto>,
+  ): String? {
+    val rule = ref.rule
+    return when (val found = index[rule.label]) {
+      RefKind.MOB -> mobSpawnError(rule)
+      RefKind.ITEM -> itemSpawnError(rule, items)
+      null -> missingSpawnLabel(rule.label)
+      else -> "${rule.label} is a ${found.word}, not a mob or item"
+    }
+  }
+
+  private fun mobSpawnError(rule: gups.core.model.SpawnRule): String? =
+    when {
+      rule.until != null -> "spawn(until): only item rules have until"
+      rule.stack != null -> "spawn(stack): only item rules have stack"
+      rule.container != null -> "spawn(container): only item rules have container"
+      else -> null
+    }
+
+  private fun itemSpawnError(
+    rule: gups.core.model.SpawnRule,
+    items: Map<Label, ItemProto>,
+  ): String? {
+    val item = items[rule.label] ?: return null
+    if (rule.stack != null && !item.stackable) {
+      return "spawn(stack): ${rule.label} doesn't stack"
+    }
+    val containerLabel = rule.container
+    if (containerLabel != null) {
+      val cp = items[containerLabel]
+      if (cp != null && cp.container == null) {
+        return "spawn(container): $containerLabel is not a container"
+      }
+    }
+    return null
+  }
+
+  private fun missingSpawnLabel(label: Label): String =
+    if (!dir.hasPackage(label.pkg)) {
+      "$label doesn't resolve: there is no package //${label.pkg}"
+    } else {
+      "$label doesn't resolve: //${label.pkg} declares no mob or item named '${label.name}'" +
+        fixtureNote(label)
     }
 
   /** Every faction reference in mob(factions=) or faction(standing=) resolves. */

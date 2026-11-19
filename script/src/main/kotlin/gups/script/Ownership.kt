@@ -91,7 +91,14 @@ object FeatureOwnership {
       "apply_affect.procs",
       "ctx.apply_affect.procs",
     )
-    owns(Feature.TRACK, "room.size", "exit.entry_index", "spawn.at_index", "item.range")
+    owns(
+      Feature.TRACK,
+      "room.size",
+      "exit.entry_index",
+      "spawn.at_index",
+      "spawner.at_index",
+      "item.range",
+    )
     owns(Feature.TRACK, "SIZE")
     owns(Feature.TRACK, "ctx.act_advance", "ctx.act_retreat")
     owns(Feature.TRACK, "ctx.teleport.index", "ctx.spawn.index", "ctx.move_item.index")

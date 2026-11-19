@@ -32,6 +32,7 @@ import gups.core.world.movePaceOf
 import gups.core.world.ownerOf
 import gups.core.world.pendingLevels
 import gups.core.world.roomOfEntity
+import gups.core.world.spawnKeyOf
 import gups.core.world.taskOf
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkBuiltin
@@ -165,6 +166,15 @@ open class ActorView(scope: ViewScope, val actor: Actor) : EntityView(scope, act
     doc = "The in-world player that owns this mob (a pet), or None.",
   )
   fun owner(): Any = read { view(scope, scope.world.ownerOf(actor)) }
+
+  @StarlarkMethod(
+    name = "spawned_by",
+    structField = true,
+    doc = "The handle of the spawn rule that placed this mob, or None.",
+  )
+  fun spawnedBy(): Any = read {
+    scope.world.spawnKeyOf(actor)?.let { spawnerHandle(scope.world, it) } ?: Starlark.NONE
+  }
 
   @StarlarkMethod(name = "level", structField = true, doc = "The actor's level.")
   fun level(): Any = read("actor.level") { sInt(actor.level) }
@@ -857,6 +867,15 @@ class ItemView(scope: ViewScope, val item: Item) : EntityView(scope, item) {
 
   @StarlarkMethod(name = "contents", doc = "Items inside this container, ascending id.")
   fun contents(): Any = read { sList(item.contents.map { ItemView(scope, it) }) }
+
+  @StarlarkMethod(
+    name = "spawned_by",
+    structField = true,
+    doc = "The handle of the spawn rule that placed this item, or None.",
+  )
+  fun spawnedBy(): Any = read {
+    scope.world.spawnKeyOf(item)?.let { spawnerHandle(scope.world, it) } ?: Starlark.NONE
+  }
 
   @StarlarkMethod(
     name = "dice",

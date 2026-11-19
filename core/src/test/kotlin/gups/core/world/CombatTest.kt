@@ -17,6 +17,8 @@ import gups.core.model.MobProto
 import gups.core.model.ModifierPoint
 import gups.core.model.Player
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.ZoneProto
@@ -175,7 +177,7 @@ class CombatTest(private val fs: FixtureSchema) {
             RoomProto(
               den,
               "A Den",
-              spawns = listOf(SpawnRule(T.GOBLIN, count = 1, respawnPulses = 100)),
+              spawns = listOf(SpawnRule(T.GOBLIN, max = 1, respawn = Respawn.Timed(Roll.of(100)))),
             )
           )
       )

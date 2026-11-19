@@ -932,6 +932,11 @@ class Item(
   /** Saved serialization payload preserved for tombstone items when their prototype was deleted. */
   var savedPayload: String? = null
 
+  internal var spawnedBy: SpawnState? = null
+
+  /** The room the rule placed this copy in; `until = "taken"` and the saved binding read it. */
+  internal var spawnHome: Label? = null
+
   /** Instance affects on this item, in application order. */
   val affects: MutableList<Affect> = mutableListOf()
 

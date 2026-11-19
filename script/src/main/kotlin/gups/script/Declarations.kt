@@ -13,8 +13,11 @@ import gups.core.model.FactionProto
 import gups.core.model.ItemAffect
 import gups.core.model.LootRule
 import gups.core.model.RegionProto
+import gups.core.model.Respawn
 import gups.core.model.SpawnRule
+import gups.core.model.SpawnerProto
 import gups.core.model.StandingDelta
+import gups.core.model.Until
 import gups.core.model.WorldSchema
 import gups.core.world.ENGINE_GMCP_PACKAGES
 import gups.core.world.Features
@@ -39,6 +42,7 @@ import gups.script.DeclarationSpecs.PROC_SPEC
 import gups.script.DeclarationSpecs.REGION_SPEC
 import gups.script.DeclarationSpecs.ROOM_SPEC
 import gups.script.DeclarationSpecs.SKILL_SPEC
+import gups.script.DeclarationSpecs.SPAWNER_SPEC
 import gups.script.DeclarationSpecs.SPAWN_SPEC
 import gups.script.DeclarationSpecs.STANDING_DELTA_SPEC
 import gups.script.DeclarationSpecs.STRUCT_SPEC
@@ -184,30 +188,42 @@ internal class DeclarationBuiltins(
     return ScriptExitPicker(hookRef(pickVal, d.what("pick")), pkg)
   }
 
-  private fun parseExitCandidates(raw: Any?, pkg: String, what: String): Map<Label, Int> {
+  private class RoomPoolSpec(
+    val minRooms: Int,
+    val minError: String,
+    val typeError: (Any?) -> String,
+    val dupError: (Label) -> String,
+  )
+
+  private fun parseExitCandidates(raw: Any?, pkg: String, what: String): Map<Label, Int> =
+    parseWeightedRooms(raw, pkg, what, EXIT_POOL_SPEC)
+
+  private fun parseWeightedRooms(
+    raw: Any?,
+    pkg: String,
+    what: String,
+    spec: RoomPoolSpec,
+  ): Map<Label, Int> {
     val entries: List<Pair<Label, Int>> =
       when (raw) {
         is StarlarkList<*> -> raw.map { elem -> label(str(elem, what), pkg, what) to 1 }
-        is Dict<*, *> -> raw.entries.map { (k, v) -> parseCandidateWeight(k, v, pkg, what) }
-        else ->
-          fail(
-            "exit(to): expected a room label, a list of labels or a dict of label to weight, got ${typeName(raw)}"
-          )
+        is Dict<*, *> -> raw.entries.map { (k, v) -> parseRoomWeight(k, v, pkg, what) }
+        else -> fail(spec.typeError(raw))
       }
-    if (entries.size < 2) fail("exit(to): a list or dict needs at least two rooms")
-    // The crossing rolls 1..total, which must stay inside Int.
+    if (entries.size < spec.minRooms) fail(spec.minError)
+    // Rolling 1..total must stay inside Int.
     if (entries.sumOf { it.second.toLong() } >= Int.MAX_VALUE) {
-      fail("exit(to): weights must add up to less than ${Int.MAX_VALUE}")
+      fail("$what: weights must add up to less than ${Int.MAX_VALUE}")
     }
     val out = LinkedHashMap<Label, Int>(entries.size)
     for ((lbl, weight) in entries) {
-      if (lbl in out) fail("exit(to): room $lbl is listed twice")
+      if (lbl in out) fail(spec.dupError(lbl))
       out[lbl] = weight
     }
     return out
   }
 
-  private fun parseCandidateWeight(
+  private fun parseRoomWeight(
     rawKey: Any?,
     rawWeight: Any?,
     pkg: String,
@@ -215,7 +231,7 @@ internal class DeclarationBuiltins(
   ): Pair<Label, Int> {
     val lbl = label(str(rawKey, what), pkg, what)
     val weight = int(rawWeight, what)
-    if (weight < 1) fail("exit(to): weight for $lbl must be a positive int")
+    if (weight < 1) fail("$what: weight for $lbl must be a positive int")
     return lbl to weight
   }
 
@@ -251,17 +267,80 @@ internal class DeclarationBuiltins(
   fun spawn(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
     val ctx = contentCtx(thread, "spawn")
     return SPAWN_SPEC.bind(args, kwargs, features = features) { d ->
-      val def = SpawnRule(Label("//engine:none"))
-      val rule =
-        SpawnRule(
-          label = label(d.reqStr("label", "spawn() label"), ctx.pkg.path, "spawn() label"),
-          count = d.int("count") ?: def.count,
-          respawnPulses = d.int("respawn_pulses") ?: def.respawnPulses,
-          atIndex = d.int("at_index") ?: def.atIndex,
-        )
-      if (rule.count < 1) fail("spawn(count): must be at least 1")
-      if (rule.respawnPulses < 1) fail("spawn(respawn_pulses): must be at least 1")
-      SpawnDecl(rule)
+      val id = d.str("id")?.let { label(":$it", ctx.pkg.path, "spawn(id)") }
+      SpawnDecl(parseSpawnRule(d, ctx.pkg.path, id))
+    }
+  }
+
+  @StarlarkMethod(
+    name = "spawner",
+    doc =
+      "Declares a pool spawn rule that places copies across a set of rooms. Zone packages only.",
+    extraPositionals = Param(name = "args"),
+    extraKeywords = Param(name = "kwargs"),
+    useStarlarkThread = true,
+  )
+  fun spawner(args: Tuple, kwargs: Dict<String, Any>, thread: StarlarkThread): Any {
+    val ctx = contentCtx(thread, "spawner")
+    if (ctx.pkg.kind != PackageKind.ZONE) {
+      fail("spawner(): only zone packages declare spawners")
+    }
+    return SPAWNER_SPEC.bind(args, kwargs, features = features) { d ->
+      val id = label(":${d.reqStr("id", "spawner() id")}", ctx.pkg.path, "spawner() id")
+      val rooms = parseSpawnerRooms(d["rooms"], ctx.pkg.path, d.what("rooms"))
+      val pick = d["pick"]?.let { ScriptPoolPicker(hookRef(it, d.what("pick")), ctx.pkg.path) }
+      val rule = parseSpawnRule(d, ctx.pkg.path, id)
+      if (rule.atIndex < 0) fail("spawner(at_index): must be at least 0")
+      if (!ctx.pkg.spawnRuleIds.add(id)) fail("spawner(id): $id is already a spawn rule id")
+      for (roomLabel in rooms.keys) ctx.ref(roomLabel, RefKind.ROOM, thread)
+      ctx.spawnRef(rule, thread)
+      rule.container?.let { ctx.ref(it, RefKind.ITEM, thread) }
+      ctx.pkg.spawnerList += SpawnerProto(id = id, rule = rule, rooms = rooms, pick = pick)
+      Starlark.NONE
+    }
+  }
+
+  private fun parseSpawnRule(d: ParsedDecl, pkg: String, id: Label?): SpawnRule {
+    val def = SpawnRule(Label("//engine:none"))
+    val max = parseSpawnMax(d, def.max)
+    val batch = d["batch"]?.let { parseRoll(it, d.what("batch"), 1) }
+    val respawn = parseSpawnRespawn(d, def.respawn)
+    val until = d.choice("until")?.let { Until.valueOf(it.uppercase()) }
+    val stack = d["stack"]?.let { parseRoll(it, d.what("stack"), 1) }
+    val container = d.str("container")?.let { label(it, pkg, d.what("container")) }
+    val atIndex = d.int("at_index") ?: def.atIndex
+    val onPlace = d["on_place"]?.let { ScriptPlaceHook(hookRef(it, d.what("on_place")), pkg) }
+    return SpawnRule(
+      label = label(d.reqStr("label", "${d.fn}() label"), pkg, "${d.fn}() label"),
+      id = id,
+      max = max,
+      batch = batch,
+      respawn = respawn,
+      until = until,
+      stack = stack,
+      container = container,
+      atIndex = atIndex,
+      onPlace = onPlace,
+    )
+  }
+
+  private fun parseSpawnerRooms(raw: Any?, pkg: String, what: String): Map<Label, Int> =
+    parseWeightedRooms(raw, pkg, what, SPAWNER_POOL_SPEC)
+
+  private fun parseSpawnMax(d: ParsedDecl, default: Int): Int {
+    val max = d.int("max") ?: return default
+    if (max < 1) fail("${d.fn}(max): must be at least 1")
+    return max
+  }
+
+  private fun parseSpawnRespawn(d: ParsedDecl, default: Respawn): Respawn {
+    val respawnRaw = d["respawn"] ?: return default
+    return when (respawnRaw) {
+      "never" -> Respawn.Never
+      "reset" -> Respawn.Reset
+      is String ->
+        fail("${d.fn}(respawn): expected pulses, a (min, max) range, \"never\" or \"reset\"")
+      else -> Respawn.Timed(parseRoll(respawnRaw, d.what("respawn"), 1))
     }
   }
 
@@ -596,6 +675,26 @@ internal class DeclarationBuiltins(
   }
 
   companion object {
+    private val EXIT_POOL_SPEC =
+      RoomPoolSpec(
+        minRooms = 2,
+        minError = "exit(to): a list or dict needs at least two rooms",
+        typeError = {
+          "exit(to): expected a room label, a list of labels or a dict of label to weight, got ${typeName(it)}"
+        },
+        dupError = { "exit(to): room $it is listed twice" },
+      )
+
+    private val SPAWNER_POOL_SPEC =
+      RoomPoolSpec(
+        minRooms = 1,
+        minError = "spawner(rooms): a list or dict needs at least one room",
+        typeError = {
+          "spawner(rooms): expected a list of labels or a dict of label to weight, got ${typeName(it)}"
+        },
+        dupError = { "spawner(rooms): $it is listed twice" },
+      )
+
     val CONSTANTS: Map<String, Any>
       get() = DeclarationSpecs.CONSTANTS
 

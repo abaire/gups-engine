@@ -7,8 +7,11 @@ import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Modifiers
 import gups.core.model.RegionProto
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SkillProto
+import gups.core.model.SpawnRule
+import gups.core.model.SpawnerProto
 import gups.core.world.HookName
 import gups.core.world.Lane
 import java.io.IOException
@@ -160,7 +163,7 @@ class ScriptPackage internal constructor(val path: String) {
   var apiVersion: Int = 0
     internal set
 
-  var resetPulses: Int? = null
+  var resetTicks: Roll? = null
     internal set
 
   var sharedNamespaces: List<String> = emptyList()
@@ -178,6 +181,7 @@ class ScriptPackage internal constructor(val path: String) {
   internal val rulesExports = LinkedHashMap<String, HookRef>()
 
   internal val roomList = mutableListOf<RoomProto>()
+  internal val spawnerList = mutableListOf<SpawnerProto>()
   internal val mobList = mutableListOf<MobProto>()
   internal val itemList = mutableListOf<ItemProto>()
   internal val skillList = mutableListOf<SkillProto>()
@@ -191,6 +195,9 @@ class ScriptPackage internal constructor(val path: String) {
 
   /** Declaration names mapped to the declaration kinds (e.g. mob, room) declaring them. */
   internal val declKinds = HashMap<String, MutableSet<String>>()
+
+  /** Spawn rule ids declared anywhere in this package, to reject duplicates across files. */
+  internal val spawnRuleIds = HashSet<Label>()
 
   /** The package's `migrate(old_version, attrs)`, if one of its files defines it. */
   var migrate: HookRef? = null
@@ -213,8 +220,14 @@ class ScriptPackage internal constructor(val path: String) {
   /** The slots its items are worn in, checked once the rules have named the slots. */
   internal val wearRefs = mutableListOf<WearRef>()
 
+  /** Spawn rules declared in this package, checked once every package has loaded. */
+  internal val spawnRefs = mutableListOf<SpawnRef>()
+
   val rooms: List<RoomProto>
     get() = roomList
+
+  val spawners: List<SpawnerProto>
+    get() = spawnerList
 
   val mobs: List<MobProto>
     get() = mobList
@@ -284,6 +297,14 @@ internal data class WearRef(
   val item: Label,
   val param: String,
   val wear: String,
+  val file: String?,
+  val line: Int?,
+  val column: Int?,
+)
+
+/** A spawn rule's prototype references, checked once every package has loaded. */
+internal data class SpawnRef(
+  val rule: SpawnRule,
   val file: String?,
   val line: Int?,
   val column: Int?,

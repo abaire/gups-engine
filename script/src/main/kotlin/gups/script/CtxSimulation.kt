@@ -4,20 +4,24 @@ import gups.core.model.Entity
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.world.HookContext
+import gups.core.world.SpawnKey
 import gups.core.world.clearActive
 import gups.core.world.clearAnchor
 import gups.core.world.clearOwner
 import gups.core.world.despawn
 import gups.core.world.isDying
+import gups.core.world.refillRule
 import gups.core.world.resetLeash
 import gups.core.world.setActive
 import gups.core.world.setAnchor
 import gups.core.world.setLeash
 import gups.core.world.setOwner
+import gups.core.world.spawnerInfo
 import net.starlark.java.annot.Param
 import net.starlark.java.annot.StarlarkMethod
 import net.starlark.java.eval.Starlark
 import net.starlark.java.eval.StarlarkInt
+import net.starlark.java.eval.StarlarkThread
 
 /** Activation, ownership, leashes and anchors. */
 abstract class CtxSimulation
@@ -179,4 +183,101 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   )
   fun clearAnchor(entity: Any, reason: Any): Any =
     reason(entity, reason, "clear_anchor") { e, r -> world.clearAnchor(e, r) }
+
+  private fun resolveSpawnRule(
+    rule: Any,
+    fn: String,
+    thread: StarlarkThread,
+  ): Pair<SpawnKey, String> =
+    when (rule) {
+      is String -> {
+        val l = label(rule, pkgOf(thread), "$fn(rule)")
+        SpawnKey.Named(l) to l.v
+      }
+      is SpawnerHandle -> rule.key to Starlark.repr(rule)
+      else -> fail("$fn(rule): expected a label or spawner handle, got ${typeName(rule)}")
+    }
+
+  private fun readSpawnerInfo(rule: Any, thread: StarlarkThread): Any {
+    val (key, printed) = resolveSpawnRule(rule, "spawner_info", thread)
+    val info =
+      try {
+        world.spawnerInfo(key)
+      } catch (_: IllegalArgumentException) {
+        fail("spawner_info: no spawn rule $printed")
+      }
+    return StructValue(
+      linkedMapOf(
+        "live" to sInt(info.live),
+        "held" to sInt(info.held),
+        "max" to sInt(info.max),
+        "next_at" to (info.nextAt?.let(::sInt) ?: Starlark.NONE),
+        "ran" to info.ran,
+      )
+    )
+  }
+
+  private fun refillSpawner(rule: Any, count: Any, thread: StarlarkThread) {
+    val (key, printed) = resolveSpawnRule(rule, "refill", thread)
+    val n =
+      when (count) {
+        Starlark.NONE -> null
+        is StarlarkInt -> {
+          val v = count.toInt("refill(count)")
+          if (v < 1) fail("refill(count): must be at least 1")
+          v
+        }
+        else -> fail("refill(count): expected an int or None, got ${typeName(count)}")
+      }
+    try {
+      world.refillRule(key, n)
+    } catch (_: IllegalArgumentException) {
+      fail("refill: no spawn rule $printed")
+    }
+  }
+
+  @StarlarkMethod(
+    name = "spawner_info",
+    doc =
+      "A spawn rule's current state: struct(live, held, max, next_at, ran). live includes copies" +
+        " carried by logged-out players.",
+    parameters =
+      [
+        Param(
+          name = "rule",
+          named = true,
+          doc = "Rule label (relative or absolute) or spawner handle.",
+        )
+      ],
+    useStarlarkThread = true,
+  )
+  fun spawnerInfo(rule: Any, thread: StarlarkThread): Any =
+    verb("spawner_info", "$rule") { readSpawnerInfo(rule, thread) }
+
+  @StarlarkMethod(
+    name = "refill",
+    doc =
+      "Adds one batch (or count copies) to a spawn rule now, capped by max, whatever its respawn" +
+        " mode. Leaves any pending timer alone. Returns None.",
+    parameters =
+      [
+        Param(
+          name = "rule",
+          named = true,
+          doc = "Rule label (relative or absolute) or spawner handle.",
+        ),
+        Param(
+          name = "count",
+          named = true,
+          defaultValue = "None",
+          doc = "Copies to add (at least 1), or None for one batch.",
+        ),
+      ],
+    useStarlarkThread = true,
+  )
+  fun refill(rule: Any, count: Any, thread: StarlarkThread): Any =
+    verb("refill", "$rule") {
+      refillSpawner(rule, count, thread)
+      Starlark.NONE
+    }
 }

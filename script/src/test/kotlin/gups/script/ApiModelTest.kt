@@ -215,7 +215,7 @@ class ApiModelTest {
             listOf(
               it.kind,
               it.title,
-              it.resetPulses,
+              it.resetTicks,
               it.sharedNamespaces,
               it.modifiers,
               it.expectedTombstones,
@@ -238,6 +238,13 @@ class ApiModelTest {
       "spawn" to
         Case(zone, { "mob(\"m\")\nroom(\"r\", spawns = [spawn(\":m\"${it.after()})])" }) {
           it.pkg(zone).roomList.single().spawns.single()
+        },
+      "spawner" to
+        Case(
+          zone,
+          { "mob(\"m\")\nroom(\"r\")\nspawner(\"s\", \":m\", rooms = [\":r\"]${it.after()})" },
+        ) {
+          it.pkg(zone).spawnerList.single()
         },
       "loot" to
         Case(zone, { "item(\"i\")\nmob(\"m\", loot = [loot(\":i\"${it.after()})])" }) {

@@ -397,7 +397,7 @@
       {
         "symbol": "ctx.candidates",
         "name": "candidates",
-        "doc": "For an exit's pick function: the candidate room labels, in declared order.",
+        "doc": "For an exit's or a spawner's pick function: the candidate room labels, in declared order.",
         "since": 1
       },
       {
@@ -571,6 +571,12 @@
         "symbol": "ctx.source_room",
         "name": "source_room",
         "doc": "For on_perceive: the room the event happened in.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.spawner",
+        "name": "spawner",
+        "doc": "The rule's handle, in on_place and a spawner's pick; None elsewhere.",
         "since": 1
       },
       {
@@ -2788,6 +2794,34 @@
         ]
       },
       {
+        "symbol": "ctx.refill",
+        "name": "refill",
+        "doc": "Adds one batch (or count copies) to a spawn rule now, capped by max, whatever its respawn mode. Leaves any pending timer alone. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.refill.rule",
+            "name": "rule",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Rule label (relative or absolute) or spawner handle."
+          },
+          {
+            "symbol": "ctx.refill.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Copies to add (at least 1), or None for one batch."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.remember",
         "feature": "combat",
         "name": "remember",
@@ -3533,6 +3567,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Number to spawn; more than 1 returns a list."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.spawner_info",
+        "name": "spawner_info",
+        "doc": "A spawn rule's current state: struct(live, held, max, next_at, ran). live includes copies carried by logged-out players.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.spawner_info.rule",
+            "name": "rule",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Rule label (relative or absolute) or spawner handle."
           }
         ]
       },

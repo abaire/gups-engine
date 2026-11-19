@@ -536,12 +536,18 @@ Items are created and transferred through several mechanisms:
 
   Spawns a new instance of `:brass_key` straight into the player's inventory (used in quests and NPC rewards).
 
-* **Placing in a room at reset:** Rooms can restock items during their `on_reset` hook:
+* **Placing in a room with a spawn rule:** Rooms keep items in stock with `spawns`, using `respawn` (`"reset"`,
+  `"never"`, or a pulse timer), `until` (`"taken"` to stop counting once a copy leaves the room, or `"gone"` to track it
+  until destroyed), and `container` (to place copies inside a container in the room):
 
   ```python
-  def _restock_armory(ctx):
-    if not ctx.room_has_item(":practice_sword"):
-          ctx.spawn(":practice_sword", at = ctx.self)
+  room("armory",
+      # ...
+      spawns = [
+          spawn(":practice_sword", respawn = "reset", until = "taken"),
+          spawn(":volatile_flask", respawn = "reset", until = "taken"),
+      ],
+  )
   ```
 * **Custody Logging:** Every item transfer between rooms, containers, and players is recorded in SQLite (`item_events`)
   to prevent item duplication or loss.

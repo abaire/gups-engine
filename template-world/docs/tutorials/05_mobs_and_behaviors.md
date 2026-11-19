@@ -268,7 +268,8 @@ ctx.apply_affect(ctx.actor, "haste", 100, stat_deltas=stats(speed=50))
 
 ## 6. Spawns and Zone Resets
 
-Mobs are placed into rooms through the `spawns` list on a `room()`:
+Mobs and items are placed into rooms through the `spawns` list on a `room()`, or across a pool of rooms with a top-level
+`spawner()`:
 
 ```python
 room("arena",
@@ -276,17 +277,30 @@ room("arena",
      desc="A wide circular arena with sand on the floor.",
      size=SIZE.large,
      spawns=[
-         spawn(":training_dummy", count=1, at_index=2),
+         spawn(":training_dummy", max=1, respawn=1200, at_index=2),
      ],
      )
 ```
 
 ### Parameters for `spawn()`:
 
-* **Target label:** Positionally passed (e.g. `":training_dummy"`).
-* **`count`:** Maximum number of living instances allowed in the room.
-* **`at_index`:** Which track slot on the room's spatial track the mob spawns at (0 = front, 2 = center, -1 = back).
-* **`respawn_pulses`:** Optional timer to respawn individually after death.
+* **Target label:** Positionally passed mob or item prototype label (e.g. `":training_dummy"`).
+* **`max`:** Maximum number of tracked copies maintained by this rule (default `1`). The initial fill when the world
+  starts always fills straight to `max`.
+* **`batch`:** Copies added by a single refill (an int or an inclusive `(min, max)` tuple; defaults to as many as are
+  missing), never exceeding `max`.
+* **`respawn`:** When the rule refills after falling below `max` (default `1200` pulses):
+  * **Timed (`int` or `(min, max)` pulses):** Adds one batch after that many pulses have passed since the rule first
+    fell short. Zone resets do **not** refill timed rules.
+  * **`"reset"`:** Adds one batch at each of the package's zone resets, and only then.
+  * **`"never"`:** Places copies on the first fill only and never refills on its own.
+* **`at_index`:** Which track slot on the room's spatial track the copy spawns at (`0` = front, `2` = center; clamped to
+  the room's track size).
+* **Item parameters (`until`, `stack`, `container`):** For item rules, `until` is `"gone"` (default: counts until the
+  item leaves the world) or `"taken"` (counts while the item's location chain ends in its spawn room), `stack` sets a
+  stackable item's count (int or `(min, max)`), and `container` places copies into a container prototype in the room.
+* **`id` and `on_place`:** `id` gives a room rule a stable package label (`//pkg:id`) across edits, and `on_place` runs
+  a hook after each copy is placed with `ctx.spawner` set to the rule's handle.
 
 ### Zone Resets (`reset_world_ticks`)
 
@@ -295,14 +309,15 @@ In [`package.star`](../../zones/tutorial/package.star):
 ```python
 package(
     kind="zone",
-    reset_world_ticks=10,  # Every 10 world ticks (5 minutes)
+    reset_world_ticks=10,  # Every 10 world ticks (5 minutes), or a (min, max) range
 )
 ```
 
 When a zone reset triggers:
 
-1. Every spawn list in the zone refills up to its `count`.
-2. Every room's `on_reset` hook runs (allowing custom chest restocking, puzzle resets, or door relocking).
+1. Every `respawn = "reset"` rule in the package (room rules first, then `spawner()` pools) adds one batch up to `max`.
+   Timed rules and `"never"` rules are untouched.
+2. Every awake room's `on_reset` hook runs (dormant rooms run the missed `on_reset` when they wake).
 
 ---
 

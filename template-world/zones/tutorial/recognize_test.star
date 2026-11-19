@@ -19,7 +19,7 @@ def test_unrecognized_spark_is_anonymous(t):
 
 def test_recognized_spark_is_named(t):
     # Keen's chance is 50%; this seed's roll succeeds.
-    (w, mentor, target, _, keen) = _scene(t, 2)
+    (w, mentor, target, _, keen) = _scene(t, 1)
     w.act(mentor, "cast spark Tess")
     w.run(pulses = 4)
     out = keen.output()

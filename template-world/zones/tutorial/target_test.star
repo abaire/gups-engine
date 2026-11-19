@@ -144,7 +144,7 @@ def test_pacify_does_not_start_a_fight(t):
     a = _caster(w, "Ash")
     w.ctx().apply_affect(a, "hidden", 200, flags = ["hidden"])
     brute = w.spawn(":test_brute", at = ":target_test_room")
-    t.contains(_cast_pacify(w, a, [1]), "calms")
+    t.contains(_cast_pacify(w, a, [100, 1]), "calms")
     w.run(pulses = 12)
     t.false(_fights(a), "the caster isn't engaged")
     t.eq(len(brute.fighting()), 0, "the brute isn't engaged")

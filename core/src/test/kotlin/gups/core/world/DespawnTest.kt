@@ -5,6 +5,8 @@ import gups.core.fixtures.FixtureSchema
 import gups.core.fixtures.FixtureSchemas
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import kotlin.test.Test
@@ -46,7 +48,7 @@ class DespawnTest(private val fs: FixtureSchema) {
             RoomProto(
               den,
               "A Den",
-              spawns = listOf(SpawnRule(T.GOBLIN, count = 1, respawnPulses = 100)),
+              spawns = listOf(SpawnRule(T.GOBLIN, max = 1, respawn = Respawn.Timed(Roll.of(100)))),
             )
           )
       )

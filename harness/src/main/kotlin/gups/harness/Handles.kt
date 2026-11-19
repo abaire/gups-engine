@@ -29,6 +29,7 @@ import gups.core.world.levelDown
 import gups.core.world.levelUpAndNotify
 import gups.core.world.removeSkill
 import gups.core.world.removeTrait
+import gups.core.world.resetZoneNow
 import gups.core.world.runStepsHeadless
 import gups.core.world.setChoices
 import gups.core.world.setSkill
@@ -433,6 +434,33 @@ internal constructor(
     val n = int(pulses, "run(pulses)")
     if (n < 0) evalFail("run(pulses): can't be negative")
     repeat(n) { world.runPulse() }
+    return Starlark.NONE
+  }
+
+  @StarlarkMethod(
+    name = "reset",
+    doc =
+      "Runs a zone reset of package (by default the test's own) now, and rolls the next reset" +
+        " from this pulse. Errors when the package has no reset_world_ticks.",
+    parameters =
+      [
+        Param(
+          name = "package",
+          named = true,
+          defaultValue = "None",
+          doc = "Package path (such as '//zones/tutorial'), or None for the test's own package.",
+        )
+      ],
+    useStarlarkThread = true,
+  )
+  fun reset(pkgArg: Any, thread: StarlarkThread): Any {
+    val target =
+      if (isNone(pkgArg)) pkgOf(thread) else str(pkgArg, "reset(package)").removePrefix("//")
+    try {
+      world.resetZoneNow(target)
+    } catch (e: IllegalArgumentException) {
+      evalFail("reset(): ${e.message}")
+    }
     return Starlark.NONE
   }
 

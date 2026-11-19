@@ -247,11 +247,19 @@ internal constructor(frame: Frame, owner: Entity, hc: HookContext, extras: CtxEx
   @StarlarkMethod(
     name = "candidates",
     structField = true,
-    doc = "For an exit's pick function: the candidate room labels, in declared order.",
+    doc =
+      "For an exit's or a spawner's pick function: the candidate room labels, in declared order.",
   )
   fun candidates(): Any = field {
     extras.candidates?.let { sList(it.map { l -> l.v }) } ?: Starlark.NONE
   }
+
+  @StarlarkMethod(
+    name = "spawner",
+    structField = true,
+    doc = "The rule's handle, in on_place and a spawner's pick; None elsewhere.",
+  )
+  fun spawner(): Any = field { extras.spawner ?: Starlark.NONE }
 
   @StarlarkMethod(
     name = "elapsed_pulses",

@@ -1,5 +1,6 @@
 package gups.core.world
 
+import gups.core.EntityId
 import gups.core.model.Channel
 import gups.core.model.DoorState
 import gups.core.model.Entity
@@ -12,9 +13,9 @@ import gups.core.model.Mob
 import gups.core.model.MobProto
 import gups.core.model.Player
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
 import gups.core.model.Room
 import gups.core.model.RoomProto
-import gups.core.model.SpawnRule
 
 /** What a prototype swap did to live instances, for the reload report. */
 data class ReconcileReport(val created: List<Room>, val notes: List<String>)
@@ -41,7 +42,7 @@ fun World.applyPrototypes(next: Prototypes): ReconcileReport {
   val refill = rebindMobs(next, old, notes)
   pruneSkillsAndRecomputeTraits(next)
   reconcileItems(next, notes)
-  refillCreatedSpawns(created)
+  rebuildSpawns(next)
   retireZoneResets(next)
   invalidateCaches()
   notes += dropOrphanStanding(checkActors = false)
@@ -158,6 +159,10 @@ private fun World.reconcileItems(next: Prototypes, notes: MutableList<String>) {
       item.proto.kind == TOMBSTONE -> Unit
       custodian(item) is Player -> {
         item.proto = tombstone(item.proto)
+        item.spawnedBy?.let { s ->
+          releaseCopy(s, item.id)
+          item.unbindSpawn()
+        }
         notes += "item ${item.protoLabel} ($item) became a tombstone"
       }
       else -> {
@@ -169,19 +174,13 @@ private fun World.reconcileItems(next: Prototypes, notes: MutableList<String>) {
   }
 }
 
-/** Rebuilds the spawn states from the rooms' new rules, then refills the newly created rooms. */
-private fun World.refillCreatedSpawns(created: List<Room>) {
-  rebuildSpawns()
-  for (room in created) for (s in spawnStates) if (s.room === room) fillSpawn(s)
-}
-
 /** Keeps zone resets only for zones that still exist, seeding a first reset for a new interval. */
 private fun World.retireZoneResets(next: Prototypes) {
   zoneResets.keys.retainAll(next.zones.keys)
   for (zone in next.zones.values) {
-    val every = zone.resetPulses
-    if (every == null) zoneResets.remove(zone.pkg)
-    else zoneResets.putIfAbsent(zone.pkg, pulse + every)
+    val ticks = zone.resetTicks
+    if (ticks == null) zoneResets.remove(zone.pkg)
+    else if (zone.pkg !in zoneResets) zoneResets[zone.pkg] = nextZoneReset(ticks)
   }
 }
 
@@ -349,49 +348,53 @@ private fun World.rebind(m: Mob, p: MobProto, was: MobProto): Set<String> {
   return full
 }
 
-/** New spawn states from the rooms' current rules; live mobs carry over by label, in order. */
-private fun World.rebuildSpawns() {
-  val old = spawnStates.toList()
-  spawnStates.clear()
-  val claimed = HashSet<SpawnState>()
-  for (room in roomsByLabel.values) {
-    for (rule in room.proto.spawns) {
-      val s = SpawnState(room, rule)
-      val prev = findCarryOver(room, rule, old, claimed)
-      if (prev != null) {
-        claimed += prev
-        carryOverMobs(prev, s)
-        updateRespawn(prev, s, rule)
-      }
-      spawnStates += s
-    }
+/**
+ * Rebuilds spawn states from [next], carrying state over by key, releasing removed rules' copies,
+ * and doing a first fill on every newly added rule.
+ */
+private fun World.rebuildSpawns(next: Prototypes) {
+  val oldByKey = spawnStates.associateBy { it.key }
+  val fresh = buildSpawnStates(next)
+  replaceSpawnStates(fresh)
+  val (kept, added) = fresh.partition { it.key in oldByKey }
+  for (s in kept) carryOverSpawn(oldByKey.getValue(s.key), s)
+  val keptKeys = kept.mapTo(HashSet(kept.size)) { it.key }
+  oldByKey.filterKeys { it !in keptKeys }.values.forEach(::releaseRemovedSpawn)
+  added.forEach(::firstFill)
+}
+
+/** Moves a carried-over rule's tracked copies, deadline and run flag into [s]. */
+private fun World.carryOverSpawn(prev: SpawnState, s: SpawnState) {
+  s.ran = prev.ran
+  s.away.addAll(prev.away)
+  prev.held.filterTo(s.held) { it.room in roomsByLabel }
+  prev.live.forEach { rebindLiveCopy(it, s) }
+  s.respawnAt = prev.respawnAt.takeIf { s.rule.respawn is Respawn.Timed }
+  armTimer(s)
+}
+
+/** Re-points a carried copy at [s]; a copy of the other kind than [s] places is let go instead. */
+private fun World.rebindLiveCopy(id: EntityId, s: SpawnState) {
+  val e = entity(id)
+  when {
+    e is Mob && !s.isItemRule -> e.spawnedBy = s
+    e is Item && s.isItemRule -> e.spawnedBy = s
+    else -> return clearSpawnBinding(id)
   }
-  releaseOrphans(old, claimed)
+  s.live += id
 }
 
-/** The old spawn state a new one inherits from: same room, same rule label, and not yet claimed. */
-private fun findCarryOver(
-  room: Room,
-  rule: SpawnRule,
-  old: List<SpawnState>,
-  claimed: Set<SpawnState>,
-): SpawnState? =
-  old.firstOrNull { it.room === room && it.rule.label == rule.label && it !in claimed }
+/** Releases a removed rule's live copies and drops its away and held copies. */
+private fun World.releaseRemovedSpawn(prev: SpawnState) {
+  prev.live.forEach(::clearSpawnBinding)
+  prev.away.clear()
+  prev.held.clear()
+}
 
-/** Moves a carried-over state's live mobs into [s], re-pointing their spawn reference. */
-private fun World.carryOverMobs(prev: SpawnState, s: SpawnState) {
-  for (id in prev.live) (actor(id) as? Mob)?.let { m ->
-    s.live += id
-    m.spawnedBy = s
+private fun World.clearSpawnBinding(id: EntityId) {
+  when (val e = entity(id)) {
+    is Mob -> e.spawnedBy = null
+    is Item -> e.unbindSpawn()
+    else -> Unit
   }
-}
-
-/** Keeps a pending respawn, or schedules one if the carried-in mobs leave the rule under full. */
-private fun World.updateRespawn(prev: SpawnState, s: SpawnState, rule: SpawnRule) {
-  s.respawnAt = prev.respawnAt ?: if (s.live.size < rule.count) pulse + rule.respawnPulses else null
-}
-
-/** Unhooks live mobs from spawn states the reload dropped, so they no longer respawn. */
-private fun World.releaseOrphans(old: List<SpawnState>, claimed: Set<SpawnState>) {
-  for (s in old) if (s !in claimed) for (id in s.live) (actor(id) as? Mob)?.spawnedBy = null
 }

@@ -682,7 +682,7 @@ class HostTest {
                         ctx.act(ctx.actor, "say hi")
 
                     room("start", on_load = _loaded, on_reset = _reset, commands = {"make": _make},
-                         spawns = [spawn(":rat")])
+                         spawns = [spawn(":rat", respawn = "reset")])
                     mob("rat")
                 """,
         )

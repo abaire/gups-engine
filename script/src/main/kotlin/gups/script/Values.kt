@@ -7,6 +7,7 @@ import gups.core.model.Actor
 import gups.core.model.Mob
 import gups.core.model.Player
 import gups.core.model.Prototypes
+import gups.core.model.Roll
 import gups.core.model.StandingHolder
 import gups.core.model.StandingSubject
 import gups.core.model.didYouMean
@@ -53,6 +54,27 @@ internal fun int(v: Any?, what: String): Int =
   }
 
 internal fun intOrNull(v: Any?, what: String): Int? = if (isNone(v)) null else int(v, what)
+
+internal fun parseRoll(raw: Any, what: String, minAllowed: Int): Roll {
+  if (raw is StarlarkInt) {
+    val n = raw.toInt(what)
+    if (n < minAllowed) fail("$what: must be at least $minAllowed")
+    return Roll.of(n)
+  }
+  return parseRollTuple(raw, what, minAllowed)
+}
+
+private fun parseRollTuple(raw: Any, what: String, minAllowed: Int): Roll {
+  if (raw !is Tuple || raw.size != 2) fail("$what: expected an int or a (min, max) tuple")
+  val a = rollBound(raw[0], what)
+  val b = rollBound(raw[1], what)
+  if (a > b) fail("$what: min must not exceed max")
+  if (a < minAllowed) fail("$what: must be at least $minAllowed")
+  return Roll(a, b)
+}
+
+private fun rollBound(v: Any, what: String): Int =
+  (v as? StarlarkInt)?.toInt(what) ?: fail("$what: expected an int or a (min, max) tuple")
 
 internal fun long(v: Any?, what: String): Long =
   when (v) {

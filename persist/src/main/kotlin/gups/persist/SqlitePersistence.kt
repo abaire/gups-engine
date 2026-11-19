@@ -18,23 +18,26 @@ import gups.core.world.Features
 import gups.core.world.ItemHistory
 import gups.core.world.Persistence
 import gups.core.world.SavedCharacter
+import gups.core.world.SpawnKey
 import gups.core.world.World
+import gups.core.world.bindAwaySpawn
 import gups.core.world.bindSpawn
 import gups.core.world.clampVitals
 import gups.core.world.clearInputs
 import gups.core.world.drainItemEvents
 import gups.core.world.drainRemoved
+import gups.core.world.dropAwaySpawns
 import gups.core.world.dropOrphanStanding
-import gups.core.world.fillMissingSpawns
 import gups.core.world.forgetActorSlots
 import gups.core.world.pruneStanding
 import gups.core.world.recentInputs
-import gups.core.world.respawnDeadlines
 import gups.core.world.restoreMob
 import gups.core.world.restorePet
 import gups.core.world.restorePlayer
-import gups.core.world.setRespawn
+import gups.core.world.restoreSpawner
+import gups.core.world.savedSpawners
 import gups.core.world.setZoneReset
+import gups.core.world.settleRestoredSpawns
 import gups.core.world.upgrade
 import gups.core.world.zoneResetDeadlines
 import java.nio.file.Path
@@ -235,14 +238,21 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
     var restored = restoreRooms(world, world0, deleted)
     restored += restoreMobs(world, world0, deleted, notes)
     restored +=
-      placeItems(world, world0.filter { it.kind == "item" }, tombstones = false, deleted, notes)
+      placeItems(
+          world,
+          world0.filter { it.kind == "item" },
+          PlaceMode(tombstones = false),
+          deleted,
+          notes,
+        )
         .size
     for (a in world.actors) {
       world.forgetActorSlots(a)
       world.clampVitals(a)
     }
     restoreZoneStates(world)
-    world.fillMissingSpawns()
+    rebuildAwaySpawns(world, deleted)
+    world.settleRestoredSpawns()
     pendingDeletes += deleted
     if (Feature.STANDING in world.features) {
       world.loadStanding(db.standings())
@@ -306,7 +316,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
       }
       val m = world.restoreMob(EntityId(row.id), proto, room, p.index)
       applyMob(world, m, p)
-      p.spawn?.let { s -> world.roomOrNull(Label(s.room))?.let { world.bindSpawn(m, it, s.rule) } }
+      p.spawn?.toKey()?.let { world.bindSpawn(m, it) }
       m.protoVersion = row.protoVersion
       world.upgrade(m, proto.version)
       m.dirty = m.protoVersion != row.protoVersion
@@ -332,9 +342,27 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
 
   private fun applyZoneTimers(world: World, pkg: String, z: ZonePayload) {
     z.resetAt?.let { world.setZoneReset(pkg, it) }
-    for (r in z.respawns) world.roomOrNull(Label(r.room))?.let {
-      world.setRespawn(it, r.rule, r.at)
+    for (s in z.spawners) s.toSaved()?.let { world.restoreSpawner(it) }
+  }
+
+  /**
+   * Counts saved player-held items (directly or via a pet) toward their `gone` rules so those rules
+   * don't refill while the player is logged out.
+   */
+  private fun rebuildAwaySpawns(world: World, deleted: Set<Long>) {
+    for (row in entityRows.values) {
+      val key = awaySpawnKey(row, deleted) ?: continue
+      world.bindAwaySpawn(EntityId(row.id), key)
     }
+  }
+
+  private fun awaySpawnKey(row: EntityRow, deleted: Set<Long>): SpawnKey? {
+    if (row.kind != "item" || row.id in deleted) return null
+    val owner = ownerOf(row)
+    if (owner == null || owner !in playerRows) return null
+    val payload = JSON.decodeFromString(ItemPayload.serializer(), row.payload)
+    if (payload.tombstone != null) return null
+    return payload.spawn?.toKey()
   }
 
   private fun putRow(row: EntityRow) {
@@ -377,13 +405,9 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
 
     val restoredPets = restorePets(world, player, deleted, notes)
 
-    placeItems(
-      world,
-      entityRows.values.filter { it.kind == "item" && ownerOf(it) == row.id },
-      tombstones = true,
-      deleted,
-      notes,
-    )
+    val itemRows = entityRows.values.filter { it.kind == "item" && ownerOf(it) == row.id }
+    placeItems(world, itemRows, PlaceMode(tombstones = true, fromAway = true), deleted, notes)
+    world.dropAwaySpawns(itemRows.map { EntityId(it.id) })
     world.forgetActorSlots(player)
     world.clampVitals(player)
     for (m in restoredPets) {
@@ -539,7 +563,6 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
 
   private fun zoneStates(world: World): Map<String, String> {
     val resets = world.zoneResetDeadlines()
-    val respawns = world.respawnDeadlines()
     val quarantined = world.scripts.quarantinedPackages
     return (world.protos.zones.keys +
         quarantined +
@@ -550,10 +573,7 @@ class SqlitePersistence private constructor(val db: Database, private val log: (
           ZonePayload(
             resetAt = resets[pkg],
             quarantined = pkg in quarantined,
-            respawns =
-              respawns
-                .filterKeys { it.first.pkg == pkg }
-                .map { (k, at) -> RespawnJson(k.first.v, k.second, at) },
+            spawners = world.savedSpawners(pkg).map { it.toJson() },
           ),
         )
       }

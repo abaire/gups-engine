@@ -66,7 +66,7 @@ class FixtureFilesTest {
     assertEquals("label", err.kind)
     assertContains(
       err.message,
-      "//zones/z:dummy doesn't resolve: //zones/z declares no mob named 'dummy'",
+      "//zones/z:dummy doesn't resolve: //zones/z declares no mob or item named 'dummy'",
     )
     assertContains(err.message, "//zones/z:probe_testdata.star")
     assertContains(err.message, "test fixture")
@@ -77,7 +77,7 @@ class FixtureFilesTest {
   fun `an unresolved label not declared by a fixture gets no fixture note`() {
     val files = zone + ("zones/z/rooms.star" to "room(\"start\", spawns = [spawn(\":nobody\")])")
     val err = load(files, fixtures = false).errors.single { it.pkg == "zones/z" }
-    assertContains(err.message, "declares no mob named 'nobody'")
+    assertContains(err.message, "declares no mob or item named 'nobody'")
     assertFalse("fixture" in err.message, err.message)
   }
 

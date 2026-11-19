@@ -12,6 +12,8 @@ import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.ModifierPoint
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.ZoneProto
@@ -39,7 +41,7 @@ object C {
     recovery: DormantRecovery = DormantRecovery.FULL,
     flags: Map<Int, Set<String>> = emptyMap(),
     spawns: Map<Int, List<SpawnRule>> = emptyMap(),
-    resetPulses: Int? = null,
+    resetTicks: Roll? = null,
     think: ThinkFn? = null,
   ) =
     Prototypes(
@@ -69,7 +71,7 @@ object C {
           )
         ),
       items = listOf(ItemProto(CRUMB, "a crumb", listOf("crumb"))),
-      zones = listOf(ZoneProto("c", resetPulses = resetPulses)),
+      zones = listOf(ZoneProto("c", resetTicks = resetTicks)),
     )
 }
 
@@ -228,8 +230,8 @@ class BubbleTest(private val fs: FixtureSchema) {
       Fixture(
         protos =
           C.protos(
-            spawns = mapOf(9 to listOf(SpawnRule(C.RAT, respawnPulses = 100))),
-            resetPulses = 500,
+            spawns = mapOf(9 to listOf(SpawnRule(C.RAT, respawn = Respawn.Timed(Roll.of(100))))),
+            resetTicks = Roll.of(4),
           ),
         scripts = host,
         bubble = true,

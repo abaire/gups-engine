@@ -260,6 +260,16 @@ fun interface ExitPicker {
   fun pick(world: World, actor: Actor, room: Room, exit: Exit): Label?
 }
 
+/** A spawner's `pick` function: a candidate's label, or null to roll by weight. */
+fun interface PoolPicker {
+  fun pick(world: World, rule: SpawnKey, candidates: List<Label>): Label?
+}
+
+/** A spawn rule's `on_place` function, called once a copy is placed. */
+fun interface PlaceHook {
+  fun placed(world: World, copy: Entity, room: Room, rule: SpawnKey)
+}
+
 /** A zone verb attached to a room or item; runs in the tick lane with no lag. */
 fun interface ZoneCommand {
   fun run(world: World, actor: Actor, args: String, owner: Entity)

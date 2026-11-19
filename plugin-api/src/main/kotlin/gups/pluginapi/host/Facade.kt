@@ -36,6 +36,7 @@ import gups.core.world.Feature
 import gups.core.world.GMCP_PACKAGE_NAME
 import gups.core.world.HeldAffect
 import gups.core.world.STANDING_EVENT_NAME
+import gups.core.world.SpawnKey
 import gups.core.world.StandingEvent
 import gups.core.world.TaskSpec
 import gups.core.world.World
@@ -58,6 +59,7 @@ import gups.core.world.clearOwner
 import gups.core.world.clearStanding
 import gups.core.world.custodian
 import gups.core.world.damage
+import gups.core.world.declaringRoomOf
 import gups.core.world.despawn
 import gups.core.world.destroy
 import gups.core.world.disposition
@@ -99,7 +101,9 @@ import gups.core.world.ownerOf
 import gups.core.world.pathTo
 import gups.core.world.pendingLevels
 import gups.core.world.perceive
+import gups.core.world.poolOf
 import gups.core.world.raiseStandingEvent
+import gups.core.world.refillRule
 import gups.core.world.remember
 import gups.core.world.removeAffect
 import gups.core.world.removeItemAffect
@@ -126,6 +130,9 @@ import gups.core.world.setLeash
 import gups.core.world.setOwner
 import gups.core.world.setSkill
 import gups.core.world.spawnItem
+import gups.core.world.spawnKeyOf
+import gups.core.world.spawnLabelOf
+import gups.core.world.spawnerInfo
 import gups.core.world.stack
 import gups.core.world.standing
 import gups.core.world.standingHistory
@@ -160,6 +167,8 @@ import gups.pluginapi.PluginRoom
 import gups.pluginapi.PluginSchema
 import gups.pluginapi.PluginSkill
 import gups.pluginapi.PluginSkillRoll
+import gups.pluginapi.PluginSpawner
+import gups.pluginapi.PluginSpawnerInfo
 import gups.pluginapi.PluginStandingTotals
 import gups.pluginapi.PluginTask
 import gups.pluginapi.PluginTaskCall
@@ -378,15 +387,15 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
     get() = actor.flags.toSortedSet()
 
   override val choices: Map<String, String>
-    get() =
-      if (actor is Player) {
-        val provider = world.creation
-        if (provider == null) emptyMap()
-        else
-          actor.choices.filter { (cid, oid) ->
-            provider.choices.any { c -> c.id == cid && c.options.any { o -> o.id == oid } }
-          }
-      } else emptyMap()
+    get() = validChoices()
+
+  private fun validChoices(): Map<String, String> {
+    if (actor !is Player) return emptyMap()
+    val provider = world.creation ?: return emptyMap()
+    return actor.choices.filter { (cid, oid) ->
+      provider.choices.any { c -> c.id == cid && c.options.any { o -> o.id == oid } }
+    }
+  }
 
   override val traits: List<String>
     get() = actor.traits.map { it.name }.sorted()
@@ -503,6 +512,9 @@ internal class ActorFacade(val actor: Actor, private val world: World) :
   override val recallRoom: PluginRoom?
     get() =
       (actor as? Player)?.recallRoom?.let { world.roomOrNull(it) }?.let { RoomFacade(it, world) }
+
+  override val spawnedBy: PluginSpawner?
+    get() = world.pluginSpawnerOf(actor)
 }
 
 internal class ItemFacade(val item: Item, private val world: World) :
@@ -570,17 +582,19 @@ internal class ItemFacade(val item: Item, private val world: World) :
     get() = item.count
 
   override val location: PluginItemLocation
-    get() =
-      when (val l = item.location) {
-        is ItemLocation.InRoom ->
-          PluginItemLocation.InRoom(RoomFacade(world.entity(l.room) as Room, world))
-        is ItemLocation.Carried ->
-          PluginItemLocation.Carried(ActorFacade(world.actor(l.actor)!!, world))
-        is ItemLocation.Equipped ->
-          PluginItemLocation.Equipped(ActorFacade(world.actor(l.actor)!!, world), l.slot)
-        is ItemLocation.Contained ->
-          PluginItemLocation.InContainer(ItemFacade(world.item(l.container)!!, world))
-      }
+    get() = itemLocation()
+
+  private fun itemLocation(): PluginItemLocation =
+    when (val l = item.location) {
+      is ItemLocation.InRoom ->
+        PluginItemLocation.InRoom(RoomFacade(world.entity(l.room) as Room, world))
+      is ItemLocation.Carried ->
+        PluginItemLocation.Carried(ActorFacade(world.actor(l.actor)!!, world))
+      is ItemLocation.Equipped ->
+        PluginItemLocation.Equipped(ActorFacade(world.actor(l.actor)!!, world), l.slot)
+      is ItemLocation.Contained ->
+        PluginItemLocation.InContainer(ItemFacade(world.item(l.container)!!, world))
+    }
 
   override val inWorld: Boolean
     get() = world.item(item.id) === item
@@ -596,7 +610,24 @@ internal class ItemFacade(val item: Item, private val world: World) :
 
   override val senseDeltas: Map<String, Int>
     get() = item.proto.senseDeltas.mapKeys { it.key.name }
+
+  override val spawnedBy: PluginSpawner?
+    get() = world.pluginSpawnerOf(item)
 }
+
+private fun World.pluginSpawnerOf(e: gups.core.model.Entity): PluginSpawner? {
+  val key = spawnKeyOf(e) ?: return null
+  return pluginSpawner(key)
+}
+
+private fun World.pluginSpawner(key: SpawnKey): PluginSpawner =
+  PluginSpawner(
+    id = (key as? SpawnKey.Named)?.id?.v,
+    label = spawnLabelOf(key).v,
+    room = declaringRoomOf(key)?.v,
+    rooms = poolOf(key).map { it.v },
+    n = (key as? SpawnKey.InRoom)?.n ?: 0,
+  )
 
 internal fun toPlugin(ha: HeldAffect): PluginItemAffect =
   PluginItemAffect(
@@ -1747,6 +1778,34 @@ internal class WorldFacade(
 
   override fun itemInfo(label: String): PluginItemInfo? =
     runCatching { Label(label) }.getOrNull()?.let { world.protos.items[it] }?.let(::itemInfoOf)
+
+  override fun spawnerInfo(rule: String): PluginSpawnerInfo =
+    spawnerInfoFor(SpawnKey.Named(fullLabel(rule, "spawnerInfo(rule)")))
+
+  override fun spawnerInfo(rule: PluginSpawner): PluginSpawnerInfo =
+    spawnerInfoFor(spawnKeyFor(rule, "spawnerInfo"))
+
+  override fun refill(rule: String, count: Int?) =
+    world.refillRule(SpawnKey.Named(fullLabel(rule, "refill(rule)")), count)
+
+  override fun refill(rule: PluginSpawner, count: Int?) =
+    world.refillRule(spawnKeyFor(rule, "refill"), count)
+
+  private fun spawnerInfoFor(key: SpawnKey): PluginSpawnerInfo =
+    world.spawnerInfo(key).let { PluginSpawnerInfo(it.live, it.held, it.max, it.nextAt, it.ran) }
+
+  private fun fullLabel(raw: String, what: String): Label =
+    runCatching { Label(raw) }.getOrNull()
+      ?: throw IllegalArgumentException("$what: '$raw' is not a full label")
+
+  private fun spawnKeyFor(rule: PluginSpawner, fn: String): SpawnKey {
+    if (rule.id != null) return SpawnKey.Named(fullLabel(rule.id, "$fn(rule)"))
+    val room =
+      rule.room?.let { fullLabel(it, "$fn(rule)") }
+        ?: throw IllegalArgumentException("$fn(rule): unnamed PluginSpawner needs room")
+    val label = fullLabel(rule.label, "$fn(rule)")
+    return SpawnKey.InRoom(room, label, rule.n)
+  }
 
   override fun rules(name: String, fields: Map<String, Any?>, default: Any): Any {
     val type = Facades.rulesExportsOf(world, pluginId)[name]

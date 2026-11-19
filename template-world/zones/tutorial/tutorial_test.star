@@ -68,8 +68,10 @@ def test_a_reset_restocks_the_armory(t):
     t.eq(len(armory.items()), 2)
     p = w.spawn_player("Tess", at = ":armory")
     p.do("get sword")
+    p.do("east")
+    w.run(pulses = 120)
     t.eq(len(armory.items()), 1)
-    w.run(pulses = 1200)
+    w.reset()
     t.eq(len(armory.items()), 2)
 
 def test_hooks_never_crash_quietly(t):
@@ -402,8 +404,8 @@ def test_shadow_cloak_blurs_and_wards(t):
     t.true(cloaked_hp_lost < bare_hp_lost)
 
 def test_siphon_amulet_turns_pain_into_mana(t):
-    (hp_lost, mana_with) = _dummy_fight(t, item = ":siphon_amulet", mana = 0)
-    (_, mana_without) = _dummy_fight(t, mana = 0)
+    (hp_lost, mana_with) = _dummy_fight(t, item = ":siphon_amulet", pulses = 110, mana = 0)
+    (_, mana_without) = _dummy_fight(t, pulses = 110, mana = 0)
     t.true(hp_lost > 0)
     # Both runs start at 0 mana and regen the same amount; the amulet's siphon adds more.
     t.true(mana_with > mana_without)

@@ -84,8 +84,7 @@ fun World.isOwnerSide(mob: Mob, a: Actor): Boolean {
 /** Takes [m] off its spawn rule so the zone respawns another; no-op when unbound. */
 internal fun World.releaseSpawn(m: Mob) {
   val s = m.spawnedBy ?: return
-  s.live.remove(m.id)
-  if (s.respawnAt == null) s.respawnAt = pulse + s.rule.respawnPulses
+  releaseCopy(s, m.id)
   m.spawnedBy = null
 }
 

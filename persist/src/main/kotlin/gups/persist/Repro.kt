@@ -111,7 +111,13 @@ fun restoreBundle(world: World, bundle: ReproBundle): List<String> {
     val room = world.roomOrNull(Label(p.room)) ?: continue
     applyPlayer(world, world.restorePlayer(EntityId(pl.id), pl.name, room, p.index, room.label), p)
   }
-  placeItems(world, rows.filter { it.kind == "item" }, tombstones = true, LinkedHashSet(), notes)
+  placeItems(
+    world,
+    rows.filter { it.kind == "item" },
+    PlaceMode(tombstones = true),
+    LinkedHashSet(),
+    notes,
+  )
   for (a in world.actors) {
     world.forgetActorSlots(a)
     world.clampVitals(a)

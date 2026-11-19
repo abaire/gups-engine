@@ -89,7 +89,33 @@ fun World.invariantViolations(): List<Violation> {
       if (e is gups.core.model.Actor && e.isEngaged) out += "$e: fighting in dormant ${room.label}"
     }
   }
+  checkSpawnInvariants(out)
   return out.list
+}
+
+/**
+ * Checks that every tracked spawn id appears in at most one `live` or `away` set across all rules,
+ * and that every item's `spawnedBy` matches its rule's `live` set.
+ */
+private fun World.checkSpawnInvariants(out: ViolationList) {
+  val seen = HashSet<EntityId>()
+  val rules = spawnStates.toSet()
+  for (s in spawnStates) {
+    for (id in s.live) {
+      if (!seen.add(id)) out += "spawn $id tracked by more than one rule"
+      if (s.isItemRule && item(id)?.spawnedBy !== s) {
+        out += "spawn rule ${s.key} lists stray item $id"
+      }
+    }
+    for (id in s.away) {
+      if (!seen.add(id)) out += "spawn $id tracked in both live and away or by more than one rule"
+    }
+  }
+  for (e in entities.values) {
+    if (e !is Item) continue
+    val s = e.spawnedBy ?: continue
+    if (s !in rules || e.id !in s.live) out += "$e: spawnedBy does not list it as live"
+  }
 }
 
 /** Collects `entity: message` lines, remembering the entity. */

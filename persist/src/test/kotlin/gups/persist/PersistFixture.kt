@@ -16,6 +16,8 @@ import gups.core.model.ItemProto
 import gups.core.model.MobProto
 import gups.core.model.Player
 import gups.core.model.Prototypes
+import gups.core.model.Respawn
+import gups.core.model.Roll
 import gups.core.model.RoomProto
 import gups.core.model.SpawnRule
 import gups.core.model.TrackSize
@@ -46,7 +48,7 @@ object P {
         size = TrackSize.LARGE,
         exits =
           listOf(ExitProto(Direction.SOUTH, VAULT, door = DoorProto(DoorState.CLOSED, doorKey))),
-        spawns = listOf(SpawnRule(RAT, count = 2, respawnPulses = 300)),
+        spawns = listOf(SpawnRule(RAT, max = 2, respawn = Respawn.Timed(Roll.of(300)))),
       ),
       RoomProto(
         VAULT,
@@ -99,7 +101,7 @@ object P {
             equipAffects = listOf(gups.core.model.EquipAffect("no_regen")),
           ),
         ),
-      zones = listOf(ZoneProto("t", resetPulses = 600)),
+      zones = listOf(ZoneProto("t", resetTicks = Roll.of(5))),
       factions = extraFactions,
     )
 }
@@ -114,6 +116,7 @@ class PersistWorld(
   val fs: gups.core.fixtures.FixtureSchema = FixtureSchemas.current,
   traits: Map<String, gups.core.model.Trait> = emptyMap(),
   rules: RulesEngine = FixtureRules(fs),
+  bubble: Boolean = false,
 ) {
   val persistence = SqlitePersistence.open(file)
   val boot = persistence.boot(protos, fresh)
@@ -128,6 +131,7 @@ class PersistWorld(
           checkInvariants = true,
           strict = true,
           checkpointPulses = checkpointPulses,
+          bubble = bubble,
         ),
         boot,
       )

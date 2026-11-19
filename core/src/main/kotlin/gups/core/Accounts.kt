@@ -48,7 +48,7 @@ object Capabilities {
 
   /** Complete list of restrictable capability names. */
   val ALL: List<String> =
-    listOf(GOTO_PLAYER, "goto", "spawn", "stat", "where", "trace", "errors", "gossip")
+    listOf(GOTO_PLAYER, "goto", "spawn", "spawners", "stat", "where", "trace", "errors", "gossip")
 }
 
 /**

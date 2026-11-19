@@ -93,9 +93,10 @@ internal constructor(
       mobs = ps.flatMap { it.mobs },
       items = ps.flatMap { it.items },
       skills = ps.flatMap { it.skills },
-      zones = ps.map { ZoneProto(it.path, it.title, it.resetPulses, it.modifiers) },
+      zones = ps.map { ZoneProto(it.path, it.title, it.resetTicks, it.modifiers) },
       regions = ps.flatMap { it.regions },
       factions = ps.flatMap { it.factions },
+      spawners = ps.flatMap { it.spawners },
     )
   }
 
@@ -237,6 +238,7 @@ class ScriptLoader(
       for (file in contentFiles(st.pkg.path)) loadFile(file, st)
       for (ref in st.pkg.refs) dependOn(st, ref.label.pkg)
       for (ref in st.pkg.factionRefs) dependOn(st, ref.label.pkg)
+      for (ref in st.pkg.spawnRefs) dependOn(st, ref.rule.label.pkg)
       findMigrate(st)
       if (st.pkg.kind == PackageKind.RULES) findRulesExports(st)
     }
@@ -587,6 +589,7 @@ class ScriptLoader(
       val checks = LoadChecks(dir, states, pluginGlobals, knownGmcp, engineVerbs, fixtures)
       propagate()
       checks.resolveLabels()
+      checks.checkSpawns()
       checks.checkFactions()
       propagate()
       checks.checkNamespaces()

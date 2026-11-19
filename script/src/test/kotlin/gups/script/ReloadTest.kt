@@ -2,19 +2,26 @@ package gups.script
 
 import gups.core.Label
 import gups.core.Role
+import gups.core.WORLD_TICK_PULSES
 import gups.core.WorldControlEvent
 import gups.core.model.DoorState
 import gups.core.model.ItemLocation
 import gups.core.model.Mob
+import gups.core.world.SpawnKey
 import gups.core.world.TOMBSTONE
 import gups.core.world.changeVital
+import gups.core.world.despawn
 import gups.core.world.handle
+import gups.core.world.savedSpawners
 import gups.core.world.spawnItem
+import gups.core.world.spawnKeyOf
 import kotlin.io.path.deleteExisting
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ReloadTest {
@@ -150,5 +157,247 @@ class ReloadTest {
     reload(f, "zones/y")
     assertTrue(f.w.roomOrNull(Label("//zones/y:shed")) != null)
     assertContains(f.diagnostics("reload").last().message, "//zones/y:shed doesn't resolve")
+  }
+
+  @Test
+  fun `lowering max keeps live copies and arms only when below the new cap`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            mob("rat")
+            room("start", spawns = [spawn(":rat", max = 3, respawn = 120)])
+            """,
+        )
+      )
+    val initialRats = f.w.actors.filterIsInstance<Mob>()
+    assertEquals(3, initialRats.size)
+    assertNull(f.w.savedSpawners("zones/z").single().at)
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      mob("rat")
+      room("start", spawns = [spawn(":rat", max = 1, respawn = 120)])
+      """,
+    )
+    reload(f, "zones/z")
+
+    assertEquals(3, f.w.actors.filterIsInstance<Mob>().size)
+    assertNull(f.w.savedSpawners("zones/z").single().at)
+    f.run(WORLD_TICK_PULSES * 2)
+    assertEquals(3, f.w.actors.filterIsInstance<Mob>().size)
+
+    f.w.despawn(initialRats[0])
+    f.w.despawn(initialRats[1])
+    assertNull(f.w.savedSpawners("zones/z").single().at)
+    f.run(WORLD_TICK_PULSES * 2)
+    assertEquals(1, f.w.actors.filterIsInstance<Mob>().size)
+
+    f.w.despawn(initialRats[2])
+    assertNotNull(f.w.savedSpawners("zones/z").single().at)
+    f.run(WORLD_TICK_PULSES * 2)
+    assertEquals(1, f.w.actors.filterIsInstance<Mob>().size)
+  }
+
+  @Test
+  fun `changing respawn keeps a pending deadline and uses the new interval next`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            mob("rat")
+            room("start", spawns = [spawn(":rat", max = 1, respawn = 100)])
+            """,
+        )
+      )
+    val firstRat = f.w.actors.filterIsInstance<Mob>().single()
+    val t0 = f.w.pulse
+    f.w.despawn(firstRat)
+    val oldDeadline = t0 + 100
+    assertEquals(oldDeadline, f.w.savedSpawners("zones/z").single().at)
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      mob("rat")
+      room("start", spawns = [spawn(":rat", max = 1, respawn = 5000)])
+      """,
+    )
+    reload(f, "zones/z")
+
+    assertEquals(oldDeadline, f.w.savedSpawners("zones/z").single().at)
+    f.run(WORLD_TICK_PULSES)
+    val secondRat = f.w.actors.filterIsInstance<Mob>().single()
+    val t1 = f.w.pulse
+    f.w.despawn(secondRat)
+    assertEquals(t1 + 5000, f.w.savedSpawners("zones/z").single().at)
+  }
+
+  @Test
+  fun `removing a rule leaves its mobs unbound and makes no refill`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            mob("rat")
+            room("start", spawns = [spawn(":rat", max = 2, respawn = 120)])
+            """,
+        )
+      )
+    val rats = f.w.actors.filterIsInstance<Mob>()
+    assertEquals(2, rats.size)
+    assertTrue(rats.all { f.w.spawnKeyOf(it) != null })
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      mob("rat")
+      room("start")
+      """,
+    )
+    reload(f, "zones/z")
+
+    assertEquals(2, f.w.actors.filterIsInstance<Mob>().size)
+    assertTrue(rats.all { f.w.spawnKeyOf(it) == null })
+    assertTrue(f.w.savedSpawners("zones/z").isEmpty())
+
+    rats.forEach(f.w::despawn)
+    f.run(WORLD_TICK_PULSES * 2)
+    assertTrue(f.w.actors.filterIsInstance<Mob>().isEmpty())
+  }
+
+  @Test
+  fun `adding id to an unnamed rule creates a new rule and releases old copies`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            mob("rat")
+            room("start", spawns = [spawn(":rat", max = 1, respawn = 120)])
+            """,
+        )
+      )
+    val oldRat = f.w.actors.filterIsInstance<Mob>().single()
+    assertEquals(
+      SpawnKey.InRoom(Label("//zones/z:start"), Label("//zones/z:rat"), 0),
+      f.w.spawnKeyOf(oldRat),
+    )
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      mob("rat")
+      room("start", spawns = [spawn(":rat", id = "x", max = 1, respawn = 120)])
+      """,
+    )
+    reload(f, "zones/z")
+
+    assertNull(f.w.spawnKeyOf(oldRat))
+    val rats = f.w.actors.filterIsInstance<Mob>()
+    assertEquals(2, rats.size)
+    val newRat = rats.single { it.id != oldRat.id }
+    assertEquals(SpawnKey.Named(Label("//zones/z:x")), f.w.spawnKeyOf(newRat))
+  }
+
+  @Test
+  fun `reordering two rules with different labels in a room carries both`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            mob("rat")
+            mob("bat")
+            room("start", spawns = [spawn(":rat", max = 1, respawn = 120), spawn(":bat", max = 1, respawn = 120)])
+            """,
+        )
+      )
+    val rat = f.w.actors.filterIsInstance<Mob>().single { it.protoLabel.name == "rat" }
+    val bat = f.w.actors.filterIsInstance<Mob>().single { it.protoLabel.name == "bat" }
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      mob("rat")
+      mob("bat")
+      room("start", spawns = [spawn(":bat", max = 1, respawn = 120), spawn(":rat", max = 1, respawn = 120)])
+      """,
+    )
+    reload(f, "zones/z")
+
+    assertEquals(2, f.w.actors.filterIsInstance<Mob>().size)
+    assertEquals(
+      SpawnKey.InRoom(Label("//zones/z:start"), Label("//zones/z:rat"), 0),
+      f.w.spawnKeyOf(rat),
+    )
+    assertEquals(
+      SpawnKey.InRoom(Label("//zones/z:start"), Label("//zones/z:bat"), 0),
+      f.w.spawnKeyOf(bat),
+    )
+  }
+
+  @Test
+  fun `a held copy carries over and one whose room was deleted is dropped and arms timer`() {
+    val f =
+      ScriptFixture(
+        mapOf(
+          "zones/z/package.star" to zonePkg(),
+          "zones/z/rooms.star" to
+            """
+            item("gem")
+            item("chest", container = container(capacity = 5))
+            room("start")
+            room("attic", name = "Old Attic")
+            spawner("stash", ":gem", rooms = [":attic"], max = 1, respawn = 120, container = ":chest")
+            """,
+        )
+      )
+    val initial = f.w.savedSpawners("zones/z").single()
+    assertEquals(1, initial.held.size)
+    assertEquals(Label("//zones/z:attic"), initial.held.single().room)
+    assertNull(initial.at)
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      item("gem")
+      item("chest", container = container(capacity = 5))
+      room("start")
+      room("attic", name = "New Attic")
+      spawner("stash", ":gem", rooms = [":attic"], max = 1, respawn = 120, container = ":chest")
+      """,
+    )
+    reload(f, "zones/z")
+
+    val carried = f.w.savedSpawners("zones/z").single()
+    assertEquals(1, carried.held.size)
+    assertEquals(Label("//zones/z:attic"), carried.held.single().room)
+    assertNull(carried.at)
+
+    f.write(
+      "zones/z/rooms.star",
+      """
+      item("gem")
+      item("chest", container = container(capacity = 5))
+      room("start")
+      spawner("stash", ":gem", rooms = [":start"], max = 1, respawn = 120, container = ":chest")
+      """,
+    )
+    val t = f.w.pulse
+    reload(f, "zones/z")
+
+    val afterDelete = f.w.savedSpawners("zones/z").single()
+    assertTrue(afterDelete.held.isEmpty())
+    assertEquals(t + 120, afterDelete.at)
   }
 }

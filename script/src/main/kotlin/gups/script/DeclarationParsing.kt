@@ -14,6 +14,7 @@ import gups.core.model.Modifiers
 import gups.core.model.Proc
 import gups.core.model.SkillProto
 import gups.core.model.SkillRange
+import gups.core.model.SpawnRule
 import gups.core.model.TAG_REGEX
 import gups.core.model.TargetKind
 import gups.core.model.UNRECOGNIZED_KEYS
@@ -56,6 +57,11 @@ internal class LoadCtx(
   fun factionRef(label: Label, thread: StarlarkThread) {
     val loc = thread.callerLocation
     pkg.factionRefs += FactionRef(label, loc?.file(), loc?.line(), loc?.column())
+  }
+
+  fun spawnRef(rule: SpawnRule, thread: StarlarkThread) {
+    val loc = thread.callerLocation
+    pkg.spawnRefs += SpawnRef(rule, loc?.file(), loc?.line(), loc?.column())
   }
 }
 

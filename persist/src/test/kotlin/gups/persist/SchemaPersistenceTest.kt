@@ -76,7 +76,7 @@ class SchemaPersistenceTest {
     val payload = a.persistence.db.playerRows().single().payload
     assertContains(payload, "\"vitals\":{\"hp\":{\"cur\":20,\"max\":20}")
     assertContains(payload, "\"stats\":{\"str\":10")
-    assertContains(payload, "\"format_version\":3")
+    assertContains(payload, "\"format_version\":1")
     a.close()
   }
 

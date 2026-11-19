@@ -23,7 +23,6 @@ import gups.core.model.Player
 import gups.core.model.Prototypes
 import gups.core.model.Room
 import gups.core.model.ScriptTimer
-import gups.core.model.SpawnRule
 import gups.core.model.StandingRecord
 import gups.core.model.StandingSubject
 import gups.core.model.WorldSchema
@@ -93,12 +92,6 @@ data class Diagnostic(
 
 class InvariantViolation(val violations: List<String>) :
   IllegalStateException("World invariants violated:\n  " + violations.joinToString("\n  "))
-
-/** Tracks the live instances of one room spawn rule and its pending respawn. */
-class SpawnState internal constructor(val room: Room, val rule: SpawnRule) {
-  internal val live = sortedSetOf<EntityId>()
-  internal var respawnAt: Long? = null
-}
 
 /**
  * The world graph and its scheduler. Not thread-safe by design: everything runs on the world
@@ -318,6 +311,8 @@ class World(
   internal val roomsByLabel = LinkedHashMap<Label, Room>()
   internal val sessions = LinkedHashMap<SessionId, Session>()
   internal val spawnStates = mutableListOf<SpawnState>()
+  internal val spawnStatesByKey = HashMap<SpawnKey, SpawnState>()
+  internal var nextHeldSeq: Long = 1
   private val diagnosticLog = mutableListOf<Diagnostic>()
 
   /** Next zone reset per package that declares `reset_world_ticks`. */
@@ -398,12 +393,11 @@ class World(
           }
         }
       }
-      for (rule in room.proto.spawns) {
-        protos.mob(rule.label)
-        spawnStates += SpawnState(room, rule)
-      }
     }
-    for (zone in protos.zones.values) zone.resetPulses?.let { zoneResets[zone.pkg] = pulse + it }
+    initSpawns()
+    for (zone in protos.zones.values) zone.resetTicks?.let {
+      zoneResets[zone.pkg] = nextZoneReset(it)
+    }
     startDormant()
   }
 
@@ -729,22 +723,20 @@ class World(
     removedThisPhase += a.id
     // A player who quits keeps their row and their items' rows; a mob is gone for good unless
     // stowed.
-    if (a is Mob && !stow) {
-      removed += a.id
-      for (item in a.inventoryIndex.values + a.equipmentIndex.values) markRemoved(item)
-    }
-    for (item in a.inventoryIndex.values + a.equipmentIndex.values) forgetItemTree(item)
+    if (a is Mob && !stow) removed += a.id
+    departActorItems(a, stow)
     if (a is Mob && !stow) releaseSpawn(a)
     fireDisengage(freed, "stop")
   }
 
-  internal fun fillSpawn(s: SpawnState) {
-    while (s.live.size < s.rule.count) {
-      val m = spawnMob(s.rule.label, s.room, s.rule.atIndex)
-      m.spawnedBy = s
-      s.live += m.id
+  private fun departActorItems(a: Actor, stow: Boolean) {
+    val permanentMob = a is Mob && !stow
+    val away = !permanentMob
+    for (item in a.inventoryIndex.values + a.equipmentIndex.values) {
+      if (permanentMob) markRemoved(item)
+      departTree(item, away = away)
+      forgetItemTree(item)
     }
-    s.respawnAt = null
   }
 
   // ---- Timers (verbs `after` / `cancel`) ----------------------------------------------------
@@ -1027,8 +1019,10 @@ class World(
   private fun runWorldTick() {
     regenPulse()
     onTickPulse()
+    checkTakenCopies()
     resetPulse()
-    respawnPulse()
+    timedBatchesDue()
+    retryHeldInAwakeRooms()
     decayPulse()
     for (a in actorIndex.values) if (isSimulated(a)) updateEncumbrance(a)
     expireDebugMobs()
@@ -1064,16 +1058,6 @@ class World(
   private fun resetPulse() {
     for ((pkg, at) in zoneResets.entries.toList()) {
       if (at <= pulse) guarded("reset of $pkg") { resetZone(pkg) }
-    }
-  }
-
-  /** Spawn rules whose respawn is due; a dormant room catches up when it wakes. */
-  private fun respawnPulse() {
-    for (s in spawnStates) {
-      val at = s.respawnAt ?: continue
-      if (at > pulse) continue
-      if (s.room.isDormant) continue
-      guarded("respawn in ${s.room.label}") { fillSpawn(s) }
     }
   }
 
@@ -1115,22 +1099,6 @@ class World(
     guarded("checkpoint") { persistence.checkpoint(this, cause, immediate = false) }
   }
 
-  /**
-   * A zone reset: refill every spawn rule in the package, then fire `on_reset` on its rooms,
-   * ascending id.
-   */
-  private fun resetZone(pkg: String) {
-    val interval = protos.zones.getValue(pkg).resetPulses ?: return
-    zoneResets[pkg] = pulse + interval
-    // A dormant room takes its reset when it wakes.
-    val rooms = roomsByLabel.values.filter { it.label.pkg == pkg }
-    for (room in rooms) if (room.isDormant) room.resetMissed = true
-    for (s in spawnStates) if (s.room.label.pkg == pkg && !s.room.isDormant) fillSpawn(s)
-    for (room in rooms.filter { !it.isDormant }.sortedBy { it.id }) {
-      invokeOn(room, HookName.ON_RESET, HookContext(room = room))
-    }
-  }
-
   private val fillSpawnsAtStart = boot.fillSpawns
   private var started = false
 
@@ -1144,7 +1112,7 @@ class World(
   fun start() {
     check(!started) { "The world has already started" }
     started = true
-    if (fillSpawnsAtStart) for (s in spawnStates) fillSpawn(s)
+    if (fillSpawnsAtStart) for (s in spawnStates) firstFill(s)
     for (e in entities.values.sortedBy { it.id }) {
       if (e.id in entities) invokeOn(e, HookName.ON_LOAD, HookContext(room = e as? Room))
     }
