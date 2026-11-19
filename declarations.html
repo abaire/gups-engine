@@ -420,7 +420,7 @@ t.eq(wand.kind, &quot;misc&quot;)</code></pre>
 <tr id="package.api_version"><td><code>api_version</code></td><td><code>int</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>The script API version this package targets.</td></tr>
 <tr id="package.kind"><td><code>kind</code></td><td><code>str</code></td><td>keyword</td><td>yes</td><td></td><td><code>zone</code>, <code>lib</code>, <code>rules</code>, <code>skills</code></td><td>Package kind: 'zone', 'lib', 'rules' or 'skills'.</td></tr>
 <tr id="package.title"><td><code>title</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>package path</code></td><td></td><td>Human-readable title of the package.</td></tr>
-<tr id="package.reset_world_ticks"><td><code>reset_world_ticks</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>World ticks (30 s each) between zone resets, or None for no periodic reset.</td></tr>
+<tr id="package.reset_world_ticks"><td><code>reset_world_ticks</code></td><td><code>int | tuple[int, int]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>World ticks (30 s each) between zone resets, or a (min, max) range, or None for no periodic reset.</td></tr>
 <tr id="package.shared_namespaces"><td><code>shared_namespaces</code></td><td><code>list[str]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Attribute namespaces this privileged (lib or rules) package may write across packages.</td></tr>
 <tr id="package.modifiers"><td><code>modifiers</code></td><td><code>dict[str, function]</code></td><td>keyword</td><td>no</td><td><code>{}</code></td><td><code>to_hit</code>, <code>damage</code>, <code>bonus_damage</code>, <code>defend_hit</code>, <code>receive_damage</code>, <code>mitigate</code>, <code>initiative</code>, <code>cast_allowed</code>, <code>move_cost</code>, <code>move_pace</code>, <code>regen</code>, <code>advance_lag</code>, <code>retreat_lag</code>, <code>retreat_fail_lag</code>, <code>flee_fail_lag</code>, <code>skill_check</code>, <code>skill_power</code>, <code>item_power</code></td><td>Zone-wide rules modifiers by modifier point name.</td></tr>
 <tr id="package.expected_tombstones"><td><code>expected_tombstones</code></td><td><code>list[label]</code></td><td>keyword</td><td>no</td><td><code>[]</code></td><td></td><td>Prototype labels intentionally removed in this version, for migration checks.</td></tr>
@@ -586,10 +586,16 @@ t.contains(p.do(&quot;look&quot;), &quot;The Library&quot;)</code></pre>
 <table>
 <thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
 <tbody>
-<tr id="spawn.label"><td><code>label</code></td><td><code>label</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Mob prototype label to spawn.</td></tr>
-<tr id="spawn.count"><td><code>count</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Maximum number of instances maintained by this rule.</td></tr>
-<tr id="spawn.respawn_pulses"><td><code>respawn_pulses</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1200</code></td><td></td><td>Pulses before a slain mob respawns.</td></tr>
-<tr id="spawn.at_index"><td><code>at_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the room where the mob spawns.</td></tr>
+<tr id="spawn.label"><td><code>label</code></td><td><code>label</code></td><td>positional</td><td>yes</td><td></td><td></td><td>Mob or item prototype label to spawn.</td></tr>
+<tr id="spawn.id"><td><code>id</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Optional rule name within the package, resolved to //pkg:&lt;id&gt;.</td></tr>
+<tr id="spawn.max"><td><code>max</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Maximum number of tracked copies maintained by this rule.</td></tr>
+<tr id="spawn.batch"><td><code>batch</code></td><td><code>int | tuple[int, int]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Copies added per refill, or a (min, max) range; None adds as many as are missing.</td></tr>
+<tr id="spawn.respawn"><td><code>respawn</code></td><td><code>int | tuple[int, int] | str</code></td><td>keyword</td><td>no</td><td><code>1200</code></td><td></td><td>When to refill: pulses, a (min, max) range, 'never' or 'reset'.</td></tr>
+<tr id="spawn.until"><td><code>until</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td><code>gone</code>, <code>taken</code></td><td>Item rules only: when a placed item stops counting ('gone' or 'taken').</td></tr>
+<tr id="spawn.stack"><td><code>stack</code></td><td><code>int | tuple[int, int]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item rules only: stack size of a stackable copy, or a (min, max) range; None means 1.</td></tr>
+<tr id="spawn.container"><td><code>container</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item rules only: container item prototype label in the room to place copies into.</td></tr>
+<tr id="spawn.at_index"><td><code>at_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the room where the copy spawns; ignored with container.</td></tr>
+<tr id="spawn.on_place"><td><code>on_place</code></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>fn(ctx) called once per copy after placement and on_spawn, with ctx.spawner set to this rule.</td></tr>
 </tbody>
 </table>
 <div class="example">
@@ -599,11 +605,48 @@ t.contains(p.do(&quot;look&quot;), &quot;The Library&quot;)</code></pre>
 room(&quot;den&quot;,
     desc = &quot;A den that smells of wet fur.&quot;,
     flags = [&quot;dead_end_ok&quot;],
-    spawns = [spawn(&quot;:wolf&quot;, count = 2, respawn_pulses = 600, at_index = 1)],
+    spawns = [spawn(&quot;:wolf&quot;, max = 2, respawn = 600, at_index = 1)],
 )</code></pre>
 <p class="caption">Test</p>
 <pre><code>w = t.world(seed = 1)
 t.eq(len(w.room(&quot;:den&quot;).actors()), 2)</code></pre>
+</div>
+</section>
+<section id="spawner" class="entry">
+<h3><code>spawner</code> <span class="since">since api_version 1</span></h3>
+<p>Declares a pool spawn rule that places copies across a set of rooms. Zone packages only.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Type</th><th>Passed</th><th>Required</th><th>Default</th><th>Allowed values</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="spawner.id"><td><code>id</code></td><td><code>str</code></td><td>positional</td><td>yes</td><td></td><td></td><td>The rule's name within the package, resolved to //pkg:&lt;id&gt;.</td></tr>
+<tr id="spawner.label"><td><code>label</code></td><td><code>label</code></td><td>positional or keyword</td><td>yes</td><td></td><td></td><td>Mob or item prototype label to spawn.</td></tr>
+<tr id="spawner.rooms"><td><code>rooms</code></td><td><code>list[label] | dict[label, int]</code></td><td>keyword</td><td>yes</td><td></td><td></td><td>Pool of room labels (equally likely) or dict of room label to positive int weight.</td></tr>
+<tr id="spawner.pick"><td><code>pick</code></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>fn(ctx) choosing a room per copy from ctx.candidates, or None to roll by weight.</td></tr>
+<tr id="spawner.max"><td><code>max</code></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>1</code></td><td></td><td>Maximum number of tracked copies maintained by this rule.</td></tr>
+<tr id="spawner.batch"><td><code>batch</code></td><td><code>int | tuple[int, int]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Copies added per refill, or a (min, max) range; None adds as many as are missing.</td></tr>
+<tr id="spawner.respawn"><td><code>respawn</code></td><td><code>int | tuple[int, int] | str</code></td><td>keyword</td><td>no</td><td><code>1200</code></td><td></td><td>When to refill: pulses, a (min, max) range, 'never' or 'reset'.</td></tr>
+<tr id="spawner.until"><td><code>until</code></td><td><code>str</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td><code>gone</code>, <code>taken</code></td><td>Item rules only: when a placed item stops counting ('gone' or 'taken').</td></tr>
+<tr id="spawner.stack"><td><code>stack</code></td><td><code>int | tuple[int, int]</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item rules only: stack size of a stackable copy, or a (min, max) range; None means 1.</td></tr>
+<tr id="spawner.container"><td><code>container</code></td><td><code>label</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>Item rules only: container item prototype label in the room to place copies into.</td></tr>
+<tr id="spawner.at_index"><td><code>at_index</code> <span class="badge feature">feature: track</span></td><td><code>int</code></td><td>keyword</td><td>no</td><td><code>0</code></td><td></td><td>Track index in the room where the copy spawns (clamped per room); ignored with container.</td></tr>
+<tr id="spawner.on_place"><td><code>on_place</code></td><td><code>function</code></td><td>keyword</td><td>no</td><td><code>None</code></td><td></td><td>fn(ctx) called once per copy after placement and on_spawn, with ctx.spawner set to this rule.</td></tr>
+</tbody>
+</table>
+<div class="example">
+<p class="caption">Example</p>
+<pre><code>item(&quot;relic&quot;, name = &quot;an ancient relic&quot;)
+
+room(&quot;vault&quot;, flags = [&quot;dead_end_ok&quot;])
+room(&quot;hollow&quot;, flags = [&quot;dead_end_ok&quot;])
+
+spawner(&quot;relic&quot;, &quot;:relic&quot;,
+    rooms = {&quot;:vault&quot;: 1, &quot;:hollow&quot;: 3},
+    respawn = (600, 1200),
+)</code></pre>
+<p class="caption">Test</p>
+<pre><code>w = t.world(seed = 1)
+total = len(w.room(&quot;:vault&quot;).items()) + len(w.room(&quot;:hollow&quot;).items())
+t.eq(total, 1)</code></pre>
 </div>
 </section>
 <section id="standing_delta" class="entry">

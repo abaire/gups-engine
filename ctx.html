@@ -36,7 +36,7 @@
 <tr id="ctx.affect"><td><code>affect</code></td><td>1</td><td>The affect, for affect on_tick and on_expire.</td></tr>
 <tr id="ctx.amount"><td><code>amount</code></td><td>1</td><td>The total of the vital losses a damage event caused, for on_damage.</td></tr>
 <tr id="ctx.args"><td><code>args</code></td><td>1</td><td>A command's argument text, or a timer's keyword arguments as a dict.</td></tr>
-<tr id="ctx.candidates"><td><code>candidates</code></td><td>1</td><td>For an exit's pick function: the candidate room labels, in declared order.</td></tr>
+<tr id="ctx.candidates"><td><code>candidates</code></td><td>1</td><td>For an exit's or a spawner's pick function: the candidate room labels, in declared order.</td></tr>
 <tr id="ctx.channel"><td><code>channel</code></td><td>1</td><td>For on_perceive: the channel the event travelled on, such as 'sound'.</td></tr>
 <tr id="ctx.cost"><td><code>cost</code></td><td>1</td><td>For on_perceive: how much the event weakened on its way here; 0 in the room it happened in.</td></tr>
 <tr id="ctx.count"><td><code>count</code></td><td>1</td><td>How many mobs are being summoned, for before_summon.</td></tr>
@@ -65,6 +65,7 @@
 <tr id="ctx.self"><td><code>self</code></td><td>1</td><td>The hook's owner.</td></tr>
 <tr id="ctx.skill"><td><code>skill</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>The skill being cast, for before_cast, on_cast_start and on_cast.</td></tr>
 <tr id="ctx.source_room"><td><code>source_room</code></td><td>1</td><td>For on_perceive: the room the event happened in.</td></tr>
+<tr id="ctx.spawner"><td><code>spawner</code></td><td>1</td><td>The rule's handle, in on_place and a spawner's pick; None elsewhere.</td></tr>
 <tr id="ctx.target"><td><code>target</code></td><td>1</td><td>The target actor, or the target item of use and item skills.</td></tr>
 <tr id="ctx.targets"><td><code>targets</code></td><td>1</td><td>Opponents for on_combat_tick, summoned mobs for on_summon, or the actors a cast landed on, for on_skill_use.</td></tr>
 <tr id="ctx.task"><td><code>task</code></td><td>1</td><td>The task view, struct(name, started_at, ends_at, remaining, interrupt), in a timed task's callbacks; None elsewhere.</td></tr>
@@ -1236,6 +1237,17 @@ p = w.spawn_player(&quot;Tess&quot;, at = &quot;:workshop&quot;)
 t.contains(p.do(&quot;solve&quot;), &quot;plan=fetch_key-&gt;unlock_door-&gt;open_door&quot;)</code></pre>
 </div>
 </article>
+<article id="ctx.refill" class="entry">
+<h4><code>refill(rule, count = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Adds one batch (or count copies) to a spawn rule now, capped by max, whatever its respawn mode. Leaves any pending timer alone. Returns None.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.refill.rule"><td><code>rule</code></td><td>positional or named</td><td></td><td>Rule label (relative or absolute) or spawner handle.</td></tr>
+<tr id="ctx.refill.count"><td><code>count</code></td><td>positional or named</td><td><code>None</code></td><td>Copies to add (at least 1), or None for one batch.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.remember" class="entry">
 <h4><code>remember(mob, subject, event, skill = None, amount = None, target = None)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: combat</span></h4>
 <p>Records or merges a combat memory on mob.</p>
@@ -1570,6 +1582,16 @@ for d in w.diagnostics():
 </tbody>
 </table>
 </article>
+<article id="ctx.spawner_info" class="entry">
+<h4><code>spawner_info(rule)</code> <span class="since">since api_version 1</span></h4>
+<p>A spawn rule's current state: struct(live, held, max, next_at, ran). live includes copies carried by logged-out players.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="ctx.spawner_info.rule"><td><code>rule</code></td><td>positional or named</td><td></td><td>Rule label (relative or absolute) or spawner handle.</td></tr>
+</tbody>
+</table>
+</article>
 <article id="ctx.standing" class="entry">
 <h4><code>standing(holder, subject)</code> <span class="since">since api_version 1</span> <span class="badge feature">feature: standing</span></h4>
 <p>The amount of holder's standing record about subject, 0 when there is none; declared faction opinions are not records.</p>
@@ -1837,6 +1859,7 @@ for d in w.diagnostics():
 <tr id="view-actor.senses"><td><code>senses</code></td><td>1</td><td>Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.</td></tr>
 <tr id="view-actor.skills"><td><code>skills</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>Skill label to proficiency (0-100).</td></tr>
 <tr id="view-actor.slots"><td><code>slots</code></td><td>1</td><td>Equipment slots this actor currently has, a subset of equipment_slots().</td></tr>
+<tr id="view-actor.spawned_by"><td><code>spawned_by</code></td><td>1</td><td>The handle of the spawn rule that placed this mob, or None.</td></tr>
 <tr id="view-actor.task"><td><code>task</code></td><td>1</td><td>The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.</td></tr>
 <tr id="view-actor.track_index"><td><code>track_index</code> <span class="badge feature">feature: track</span></td><td>1</td><td>Position along the room's 1D track.</td></tr>
 <tr id="view-actor.traits"><td><code>traits</code></td><td>1</td><td>Sorted names of the known traits the actor carries.</td></tr>
@@ -2036,6 +2059,7 @@ for d in w.diagnostics():
 <tr id="view-item.resist_deltas"><td><code>resist_deltas</code></td><td>1</td><td>Resistance changes while worn.</td></tr>
 <tr id="view-item.sense_deltas"><td><code>sense_deltas</code></td><td>1</td><td>Sense score changes by channel while worn.</td></tr>
 <tr id="view-item.slot_cost"><td><code>slot_cost</code></td><td>1</td><td>How many slots of its family this item takes up when worn; at least 1.</td></tr>
+<tr id="view-item.spawned_by"><td><code>spawned_by</code></td><td>1</td><td>The handle of the spawn rule that placed this item, or None.</td></tr>
 <tr id="view-item.stat_deltas"><td><code>stat_deltas</code></td><td>1</td><td>Stat changes while worn.</td></tr>
 <tr id="view-item.tags"><td><code>tags</code></td><td>1</td><td>Effective tags: the prototype's plus those added, minus those removed, sorted.</td></tr>
 <tr id="view-item.value"><td><code>value</code></td><td>1</td><td>Base price of one item, from its prototype.</td></tr>
@@ -2211,6 +2235,20 @@ for d in w.diagnostics():
 <tr id="view-skill.target"><td><code>target</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>Kind of target the skill accepts.</td></tr>
 <tr id="view-skill.unrecognized"><td><code>unrecognized</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>Lines for onlookers who don't recognize the skill, by key.</td></tr>
 <tr id="view-skill.warmup"><td><code>warmup</code> <span class="badge feature">feature: skills</span></td><td>1</td><td>Casting warmup pulses.</td></tr>
+</tbody>
+</table>
+</section>
+<section id="view-spawner" class="entry">
+<h2><code>spawner</code> <span class="since">since api_version 1</span></h2>
+<p>A spawn rule.</p>
+<h3>Fields</h3>
+<table>
+<thead><tr><th>Field</th><th>Since</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="view-spawner.id"><td><code>id</code></td><td>1</td><td>The rule's label, or None for a room rule without one.</td></tr>
+<tr id="view-spawner.label"><td><code>label</code></td><td>1</td><td>The prototype label this rule places.</td></tr>
+<tr id="view-spawner.room"><td><code>room</code></td><td>1</td><td>The declaring room's label, or None for a spawner.</td></tr>
+<tr id="view-spawner.rooms"><td><code>rooms</code></td><td>1</td><td>The pool's room labels, in declared order.</td></tr>
 </tbody>
 </table>
 </section>

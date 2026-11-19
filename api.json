@@ -1360,13 +1360,13 @@
         {
           "symbol": "package.reset_world_ticks",
           "name": "reset_world_ticks",
-          "type": "int",
+          "type": "int | tuple[int, int]",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "None",
           "allowed_values": [],
-          "doc": "World ticks (30 s each) between zone resets, or None for no periodic reset.",
+          "doc": "World ticks (30 s each) between zone resets, or a (min, max) range, or None for no periodic reset.",
           "since": 1
         },
         {
@@ -1941,31 +1941,91 @@
           "required": true,
           "default": null,
           "allowed_values": [],
-          "doc": "Mob prototype label to spawn.",
+          "doc": "Mob or item prototype label to spawn.",
           "since": 1
         },
         {
-          "symbol": "spawn.count",
-          "name": "count",
+          "symbol": "spawn.id",
+          "name": "id",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Optional rule name within the package, resolved to //pkg:<id>.",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.max",
+          "name": "max",
           "type": "int",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "1",
           "allowed_values": [],
-          "doc": "Maximum number of instances maintained by this rule.",
+          "doc": "Maximum number of tracked copies maintained by this rule.",
           "since": 1
         },
         {
-          "symbol": "spawn.respawn_pulses",
-          "name": "respawn_pulses",
-          "type": "int",
+          "symbol": "spawn.batch",
+          "name": "batch",
+          "type": "int | tuple[int, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Copies added per refill, or a (min, max) range; None adds as many as are missing.",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.respawn",
+          "name": "respawn",
+          "type": "int | tuple[int, int] | str",
           "positional": false,
           "keyword": true,
           "required": false,
           "default": "1200",
           "allowed_values": [],
-          "doc": "Pulses before a slain mob respawns.",
+          "doc": "When to refill: pulses, a (min, max) range, 'never' or 'reset'.",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.until",
+          "name": "until",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": ["gone", "taken"],
+          "doc": "Item rules only: when a placed item stops counting ('gone' or 'taken').",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.stack",
+          "name": "stack",
+          "type": "int | tuple[int, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Item rules only: stack size of a stackable copy, or a (min, max) range; None means 1.",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.container",
+          "name": "container",
+          "type": "label",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Item rules only: container item prototype label in the room to place copies into.",
           "since": 1
         },
         {
@@ -1978,7 +2038,174 @@
           "required": false,
           "default": "0",
           "allowed_values": [],
-          "doc": "Track index in the room where the mob spawns.",
+          "doc": "Track index in the room where the copy spawns; ignored with container.",
+          "since": 1
+        },
+        {
+          "symbol": "spawn.on_place",
+          "name": "on_place",
+          "type": "function",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "fn(ctx) called once per copy after placement and on_spawn, with ctx.spawner set to this rule.",
+          "since": 1
+        }
+      ]
+    },
+    {
+      "symbol": "spawner",
+      "name": "spawner",
+      "doc": "Declares a pool spawn rule that places copies across a set of rooms. Zone packages only.",
+      "hook_owner": null,
+      "extra_keywords": false,
+      "since": 1,
+      "params": [
+        {
+          "symbol": "spawner.id",
+          "name": "id",
+          "type": "str",
+          "positional": true,
+          "keyword": false,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "The rule's name within the package, resolved to //pkg:<id>.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.label",
+          "name": "label",
+          "type": "label",
+          "positional": true,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Mob or item prototype label to spawn.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.rooms",
+          "name": "rooms",
+          "type": "list[label] | dict[label, int]",
+          "positional": false,
+          "keyword": true,
+          "required": true,
+          "default": null,
+          "allowed_values": [],
+          "doc": "Pool of room labels (equally likely) or dict of room label to positive int weight.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.pick",
+          "name": "pick",
+          "type": "function",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "fn(ctx) choosing a room per copy from ctx.candidates, or None to roll by weight.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.max",
+          "name": "max",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "1",
+          "allowed_values": [],
+          "doc": "Maximum number of tracked copies maintained by this rule.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.batch",
+          "name": "batch",
+          "type": "int | tuple[int, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Copies added per refill, or a (min, max) range; None adds as many as are missing.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.respawn",
+          "name": "respawn",
+          "type": "int | tuple[int, int] | str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "1200",
+          "allowed_values": [],
+          "doc": "When to refill: pulses, a (min, max) range, 'never' or 'reset'.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.until",
+          "name": "until",
+          "type": "str",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": ["gone", "taken"],
+          "doc": "Item rules only: when a placed item stops counting ('gone' or 'taken').",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.stack",
+          "name": "stack",
+          "type": "int | tuple[int, int]",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Item rules only: stack size of a stackable copy, or a (min, max) range; None means 1.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.container",
+          "name": "container",
+          "type": "label",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "Item rules only: container item prototype label in the room to place copies into.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.at_index",
+          "feature": "track",
+          "name": "at_index",
+          "type": "int",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "0",
+          "allowed_values": [],
+          "doc": "Track index in the room where the copy spawns (clamped per room); ignored with container.",
+          "since": 1
+        },
+        {
+          "symbol": "spawner.on_place",
+          "name": "on_place",
+          "type": "function",
+          "positional": false,
+          "keyword": true,
+          "required": false,
+          "default": "None",
+          "allowed_values": [],
+          "doc": "fn(ctx) called once per copy after placement and on_spawn, with ctx.spawner set to this rule.",
           "since": 1
         }
       ]
@@ -3219,7 +3446,7 @@
       {
         "symbol": "ctx.candidates",
         "name": "candidates",
-        "doc": "For an exit's pick function: the candidate room labels, in declared order.",
+        "doc": "For an exit's or a spawner's pick function: the candidate room labels, in declared order.",
         "since": 1
       },
       {
@@ -3393,6 +3620,12 @@
         "symbol": "ctx.source_room",
         "name": "source_room",
         "doc": "For on_perceive: the room the event happened in.",
+        "since": 1
+      },
+      {
+        "symbol": "ctx.spawner",
+        "name": "spawner",
+        "doc": "The rule's handle, in on_place and a spawner's pick; None elsewhere.",
         "since": 1
       },
       {
@@ -5610,6 +5843,34 @@
         ]
       },
       {
+        "symbol": "ctx.refill",
+        "name": "refill",
+        "doc": "Adds one batch (or count copies) to a spawn rule now, capped by max, whatever its respawn mode. Leaves any pending timer alone. Returns None.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.refill.rule",
+            "name": "rule",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Rule label (relative or absolute) or spawner handle."
+          },
+          {
+            "symbol": "ctx.refill.count",
+            "name": "count",
+            "positional": true,
+            "named": true,
+            "default": "None",
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Copies to add (at least 1), or None for one batch."
+          }
+        ]
+      },
+      {
         "symbol": "ctx.remember",
         "feature": "combat",
         "name": "remember",
@@ -6355,6 +6616,24 @@
             "varargs": false,
             "kwargs": false,
             "doc": "Number to spawn; more than 1 returns a list."
+          }
+        ]
+      },
+      {
+        "symbol": "ctx.spawner_info",
+        "name": "spawner_info",
+        "doc": "A spawn rule's current state: struct(live, held, max, next_at, ran). live includes copies carried by logged-out players.",
+        "since": 1,
+        "params": [
+          {
+            "symbol": "ctx.spawner_info.rule",
+            "name": "rule",
+            "positional": true,
+            "named": true,
+            "default": null,
+            "varargs": false,
+            "kwargs": false,
+            "doc": "Rule label (relative or absolute) or spawner handle."
           }
         ]
       },
@@ -7116,6 +7395,12 @@
           "since": 1
         },
         {
+          "symbol": "view:actor.spawned_by",
+          "name": "spawned_by",
+          "doc": "The handle of the spawn rule that placed this mob, or None.",
+          "since": 1
+        },
+        {
           "symbol": "view:actor.task",
           "name": "task",
           "doc": "The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.",
@@ -7710,6 +7995,12 @@
           "since": 1
         },
         {
+          "symbol": "view:item.spawned_by",
+          "name": "spawned_by",
+          "doc": "The handle of the spawn rule that placed this item, or None.",
+          "since": 1
+        },
+        {
           "symbol": "view:item.stat_deltas",
           "name": "stat_deltas",
           "doc": "Stat changes while worn.",
@@ -8219,6 +8510,40 @@
           "feature": "skills",
           "name": "warmup",
           "doc": "Casting warmup pulses.",
+          "since": 1
+        }
+      ],
+      "methods": []
+    },
+    {
+      "symbol": "view:spawner",
+      "name": "spawner",
+      "builtin_type": "spawner",
+      "doc": "A spawn rule.",
+      "since": 1,
+      "fields": [
+        {
+          "symbol": "view:spawner.id",
+          "name": "id",
+          "doc": "The rule's label, or None for a room rule without one.",
+          "since": 1
+        },
+        {
+          "symbol": "view:spawner.label",
+          "name": "label",
+          "doc": "The prototype label this rule places.",
+          "since": 1
+        },
+        {
+          "symbol": "view:spawner.room",
+          "name": "room",
+          "doc": "The declaring room's label, or None for a spawner.",
+          "since": 1
+        },
+        {
+          "symbol": "view:spawner.rooms",
+          "name": "rooms",
+          "doc": "The pool's room labels, in declared order.",
           "since": 1
         }
       ],
@@ -10470,6 +10795,12 @@
           "since": 1
         },
         {
+          "symbol": "p.spawned_by",
+          "name": "spawned_by",
+          "doc": "The handle of the spawn rule that placed this mob, or None.",
+          "since": 1
+        },
+        {
           "symbol": "p.task",
           "name": "task",
           "doc": "The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.",
@@ -11300,6 +11631,24 @@
               "varargs": false,
               "kwargs": false,
               "doc": "The trait name."
+            }
+          ]
+        },
+        {
+          "symbol": "w.reset",
+          "name": "reset",
+          "doc": "Runs a zone reset of package (by default the test's own) now, and rolls the next reset from this pulse. Errors when the package has no reset_world_ticks.",
+          "since": 1,
+          "params": [
+            {
+              "symbol": "w.reset.package",
+              "name": "package",
+              "positional": true,
+              "named": true,
+              "default": "None",
+              "varargs": false,
+              "kwargs": false,
+              "doc": "Package path (such as '//zones/tutorial'), or None for the test's own package."
             }
           ]
         },

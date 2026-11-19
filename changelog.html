@@ -29,6 +29,20 @@
 <h1 id="changelog">Changelog</h1>
 <p>Script-facing changes are listed per <code>api_version</code>, with before/after snippets for breaking ones.</p>
 <h2 id="api_version-1">api_version 1 (unreleased)</h2>
+<h3 id="spawn-rules">Spawn rules</h3>
+<ul>
+<li><code>spawn()</code> takes <code>max</code>, <code>batch</code> and <code>respawn</code> (pulses, a <code>(min, max)</code> range, <code>&quot;never&quot;</code> or <code>&quot;reset&quot;</code>). Zone resets no
+longer refill timed rules: a timed rule refills only on its own timer. <code>count</code> and <code>respawn_pulses</code> are gone.</li>
+<li><code>package(reset_world_ticks = ...)</code> also takes a <code>(min, max)</code> range, rolled after every reset.</li>
+<li><code>spawn(id = ...)</code> names a rule, so its state survives edits that reorder a room's rules.</li>
+<li>Spawn rules can place items: <code>until</code>, <code>stack</code> and <code>container</code>. A copy carried off by a player who logs out keeps
+counting.</li>
+<li><code>spawner(id, label, rooms, ...)</code> keeps a rule's copies across a pool of rooms, picked by weight or by a <code>pick</code>
+function.</li>
+<li><code>on_place</code> on spawn rules; <code>spawned_by</code> on item and actor views; <code>ctx.spawner_info</code>, <code>ctx.refill</code>, and their facade
+counterparts <code>spawnerInfo</code> and <code>refill</code>; <code>PluginItem.spawnedBy</code> and <code>PluginActor.spawnedBy</code>. Tests can run a zone
+reset with <code>w.reset()</code>.</li>
+</ul>
 <h3 id="trick-exits">Trick exits</h3>
 <ul>
 <li>An exit may have no single destination: <code>exit.to</code> and <code>PluginExit.to</code> are <code>None</code>/null for an exit whose destination is

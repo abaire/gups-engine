@@ -102,6 +102,7 @@ t.eq(p.hp, 30)</code></pre>
 <tr id="p.senses"><td><code>senses</code></td><td>1</td><td>Effective sense score on every channel, with traits, affects and equipment applied: senses['sound']. 0 senses nothing on that channel.</td></tr>
 <tr id="p.skills"><td><code>skills</code></td><td>1</td><td>Skill label to proficiency (0-100).</td></tr>
 <tr id="p.slots"><td><code>slots</code></td><td>1</td><td>Equipment slots this actor currently has, a subset of equipment_slots().</td></tr>
+<tr id="p.spawned_by"><td><code>spawned_by</code></td><td>1</td><td>The handle of the spawn rule that placed this mob, or None.</td></tr>
 <tr id="p.task"><td><code>task</code></td><td>1</td><td>The running timed task, struct(name, started_at, ends_at, remaining, interrupt), or None.</td></tr>
 <tr id="p.track_index"><td><code>track_index</code></td><td>1</td><td>Position along the room's 1D track.</td></tr>
 <tr id="p.traits"><td><code>traits</code></td><td>1</td><td>Sorted names of the known traits the actor carries.</td></tr>
@@ -459,6 +460,16 @@ t.eq(w.get_attr(p, &quot;visits&quot;), 1)</code></pre>
 <tbody>
 <tr id="w.remove_trait.actor"><td><code>actor</code></td><td>positional or named</td><td></td><td>The actor to remove the trait from.</td></tr>
 <tr id="w.remove_trait.name"><td><code>name</code></td><td>positional or named</td><td></td><td>The trait name.</td></tr>
+</tbody>
+</table>
+</article>
+<article id="w.reset" class="entry">
+<h4><code>reset(package = None)</code> <span class="since">since api_version 1</span></h4>
+<p>Runs a zone reset of package (by default the test's own) now, and rolls the next reset from this pulse. Errors when the package has no reset_world_ticks.</p>
+<table>
+<thead><tr><th>Parameter</th><th>Passed</th><th>Default</th><th>Doc</th></tr></thead>
+<tbody>
+<tr id="w.reset.package"><td><code>package</code></td><td>positional or named</td><td><code>None</code></td><td>Package path (such as '//zones/tutorial'), or None for the test's own package.</td></tr>
 </tbody>
 </table>
 </article>
